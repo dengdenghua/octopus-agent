@@ -31,7 +31,10 @@ import {
 } from "@/core/agents/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
-import { localPartnerBadge } from "./local-agent-status";
+import {
+  localPartnerBadge,
+  localPartnerSetupSteps,
+} from "./local-agent-status";
 
 const PARTNER_ICONS: Record<string, typeof BotIcon> = {
   "claude-code": TerminalSquareIcon,
@@ -226,6 +229,7 @@ export function LocalAgentConnectDialog({
                 partner.registered ||
                 registerMutation.isPending;
               const badge = localPartnerBadge(partner, partnerBadgeLabels);
+              const setupSteps = localPartnerSetupSteps(partner);
               const probeResult = probeResults[partner.id];
               const isProbing = probingId === partner.id;
               const commandRows = [
@@ -323,11 +327,44 @@ export function LocalAgentConnectDialog({
                     ) : null}
                     {partner.setup_hint ||
                     partner.interaction_hint ||
+                    setupSteps.length > 0 ||
                     commandRows.length > 0 ? (
                       <span
                         className="mt-2 block space-y-1 rounded-md border border-border-default/70 bg-muted/20 p-2"
                         onClick={(event) => event.stopPropagation()}
                       >
+                        {setupSteps.length > 0 ? (
+                          <span className="block space-y-1">
+                            <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                              连接步骤
+                            </span>
+                            {setupSteps.map((step, index) => (
+                              <span
+                                key={`${partner.id}-setup-${step.label}`}
+                                className={cn(
+                                  "flex gap-2 rounded border px-2 py-1 text-[10px]",
+                                  step.tone === "ready"
+                                    ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                                    : step.tone === "blocked"
+                                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                                      : "border-border-default/60 bg-background/70 text-muted-foreground",
+                                )}
+                              >
+                                <span className="grid size-4 shrink-0 place-items-center rounded-full bg-background/80 font-mono text-[9px]">
+                                  {index + 1}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block font-medium">
+                                    {step.label}
+                                  </span>
+                                  <span className="block opacity-85">
+                                    {step.detail}
+                                  </span>
+                                </span>
+                              </span>
+                            ))}
+                          </span>
+                        ) : null}
                         {partner.setup_hint ? (
                           <span className="block text-[11px] text-muted-foreground">
                             {partner.setup_hint}
