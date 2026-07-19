@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LocalAgentPartner } from "@/core/agents/api";
 
-import { localPartnerBadge } from "./local-agent-connect-dialog";
+import { localPartnerBadge } from "./local-agent-status";
 
 const LABELS = {
   connected: "已连接",

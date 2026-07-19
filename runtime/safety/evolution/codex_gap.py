@@ -60,13 +60,24 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
             required_terms=(
                 "probeLocalAgentPartner",
                 "command_hints",
-                "effective_status",
                 "interaction_hint",
+                "localPartnerBadge",
                 "native_launch_cwd",
-                "已连接 · 需修复",
                 "健康检查",
                 "打开原生 CLI",
                 "修复建议",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="local_partner_connect_ui_badge_contract",
+            title="Connect dialog badge helper uses effective status and repair states",
+            path="frontend/src/components/workspace/agents/local-agent-status.ts",
+            required_terms=(
+                "localPartnerBadge",
+                "effective_status",
+                "已连接 · 需修复",
+                "model_unconfigured",
+                "launcher_only",
             ),
         ),
         GapBehaviorCheck(
