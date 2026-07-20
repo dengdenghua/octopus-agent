@@ -51,6 +51,7 @@ _DUPLICATE_LINE_RUN_RE = re.compile(r"(.+)(\n\1){3,}")
 # embed stdout as a "stdout" field literally write "\n" not a real
 # newline — a regex that only sees real \n misses these).
 _DUPLICATE_ESCAPED_LINE_RUN_RE = re.compile(r"(.+?)(\\n\1){3,}")
+_PARALLEL_SECTION_HEADER_RE = re.compile(r"(?m)^\[\d+/\d+ [^\]\n]+\]")
 
 
 @dataclass(frozen=True)
@@ -181,6 +182,26 @@ def _hard_cap(text: str, max_chars: int) -> str:
     return f"{head}\n\n…(已压缩中段 {len(text) - head_n - tail_n} 字符)…\n\n{tail}"
 
 
+def _hard_cap_parallel_sections(text: str, max_chars: int) -> str:
+    """Cap each parallel-tool result independently so no receipt disappears."""
+
+    matches = list(_PARALLEL_SECTION_HEADER_RE.finditer(text))
+    if len(matches) < 2 or len(text) <= max_chars:
+        return text
+    prefix = text[: matches[0].start()].rstrip()
+    separator_chars = 2 * (len(matches) - 1)
+    available = max_chars - len(prefix) - separator_chars
+    if available < len(matches) * 256:
+        return text
+    per_section = max(256, available // len(matches) - 32)
+    sections: list[str] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        sections.append(_hard_cap(text[match.start() : end].rstrip(), per_section))
+    joined = "\n\n".join(sections)
+    return f"{prefix}\n{joined}".lstrip() if prefix else joined
+
+
 def juice(
     text: str,
     *,
@@ -232,6 +253,10 @@ def juice(
             passes.append("dedup")
             out = new
     if enable_cap and len(out) > max_chars:
+        new = _hard_cap_parallel_sections(out, max_chars)
+        if new != out:
+            passes.append("parallel-cap")
+            out = new
         new = _hard_cap(out, max_chars)
         if new != out:
             passes.append("cap")

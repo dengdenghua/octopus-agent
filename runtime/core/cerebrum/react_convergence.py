@@ -43,6 +43,27 @@ class ExplicitReadScopeConstraint:
         )
 
 
+def ordered_explicit_read_groups(goal: str) -> tuple[tuple[str, ...], ...]:
+    """Recover user-authored read batches while preserving textual order."""
+
+    requested = _explicit_source_paths(goal)
+    if not requested:
+        return ()
+    groups = [
+        tuple(_explicit_source_paths(segment))
+        for segment in re.split(r"[；;。\n]+", str(goal or ""))
+    ]
+    groups = [group for group in groups if group]
+    flattened = [path for group in groups for path in group]
+    if len(groups) >= 2 and flattened == requested:
+        return tuple(groups)
+    if re.search(r"(?:依次|逐个)\s*(?:读取|阅读|核对|检查)", goal):
+        return tuple((path,) for path in requested)
+    if re.search(r"(?:并行|同时)\s*(?:读取|阅读|核对|检查)", goal):
+        return (tuple(requested),)
+    return ()
+
+
 _BOUNDED_ANSWER_RE = re.compile(
     r"(?:"
     r"(?:只|仅)(?:用|需|要)?\s*(?:一|1)\s*(?:句|句话|行)"
@@ -156,6 +177,7 @@ def constrain_explicit_read_scope(
     steps: list[ReActStep],
     actions: list[str],
     read_only: bool,
+    enforce_order: bool = False,
 ) -> ExplicitReadScopeConstraint | None:
     """Filter duplicate and out-of-scope reads after explicit coverage begins.
 
@@ -178,11 +200,18 @@ def constrain_explicit_read_scope(
         for path in requested
         if any(_path_evidence_matches(path, candidate) for candidate in observed)
     ]
-    if not covered:
+    if not covered and not enforce_order:
         return None
     missing = tuple(path for path in requested if path not in covered)
     if not missing:
         return None
+    allowed_missing = missing
+    if enforce_order:
+        for group in ordered_explicit_read_groups(goal):
+            group_missing = tuple(path for path in group if path in missing)
+            if group_missing:
+                allowed_missing = group_missing
+                break
 
     path_inspection_tools = {
         "bb_read",
@@ -215,7 +244,10 @@ def constrain_explicit_read_scope(
             kept.append(action)
             continue
         if all(
-            any(_path_evidence_matches(requested_path, target) for requested_path in missing)
+            any(
+                _path_evidence_matches(requested_path, target)
+                for requested_path in allowed_missing
+            )
             for target in targets
         ):
             kept.append(action)
@@ -226,7 +258,7 @@ def constrain_explicit_read_scope(
         return None
     return ExplicitReadScopeConstraint(
         actions=tuple(kept),
-        missing=missing,
+        missing=allowed_missing,
         skipped=tuple(dict.fromkeys(skipped)),
     )
 
@@ -419,6 +451,7 @@ __all__ = [
     "build_direct_answer_directive",
     "build_evidence_digest",
     "constrain_explicit_read_scope",
+    "ordered_explicit_read_groups",
     "evidence_answer_conflicts_with_goal",
     "read_only_evidence_convergence",
 ]

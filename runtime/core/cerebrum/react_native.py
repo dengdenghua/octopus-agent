@@ -98,6 +98,7 @@ def build_loop_tool_specs(
     agent: Any = None,
     goal: str = "",
     user_context: dict[str, Any] | None = None,
+    strict_explicit_reads: bool = False,
 ) -> list[Any]:
     """Build the native ``ToolSpec`` catalog from the loop's skill registry.
 
@@ -111,13 +112,24 @@ def build_loop_tool_specs(
     try:
         from runtime.execution.tool_spec_builder import build_anthropic_tool_specs
 
-        specs = build_anthropic_tool_specs(
-            registry,
-            agent=agent,
-            goal=goal,
-            user_context=user_context,
+        specs = list(
+            build_anthropic_tool_specs(
+                registry,
+                agent=agent,
+                goal=goal,
+                user_context=user_context,
+            )
+            or []
         )
-        return list(specs or [])
+        if strict_explicit_reads:
+            allowed = {
+                "bb_read",
+                "grep_text",
+                "read_file",
+                "read_file_range",
+            }
+            specs = [spec for spec in specs if getattr(spec, "name", "") in allowed]
+        return specs
     except Exception:  # noqa: BLE001 — spec build is best-effort; fall back to text
         return []
 

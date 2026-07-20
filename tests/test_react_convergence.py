@@ -3,6 +3,7 @@ from runtime.core.cerebrum.react_convergence import (
     build_evidence_digest,
     constrain_explicit_read_scope,
     evidence_answer_conflicts_with_goal,
+    ordered_explicit_read_groups,
     read_only_evidence_convergence,
 )
 from runtime.core.cerebrum.react_types import ReActStep
@@ -76,6 +77,37 @@ def test_explicit_scope_waits_for_first_successful_requested_read() -> None:
     )
 
     assert constraint is None
+
+
+def test_ordered_read_groups_preserve_parallel_batches() -> None:
+    goal = (
+        "按证据顺序：先并行读取 src/a.py 与 src/b.ts；"
+        "再并行读取 src/c.tsx 与 src/d.py；最后读取 src/e.ts。"
+    )
+
+    assert ordered_explicit_read_groups(goal) == (
+        ("src/a.py", "src/b.ts"),
+        ("src/c.tsx", "src/d.py"),
+        ("src/e.ts",),
+    )
+
+
+def test_ordered_scope_rejects_later_batch_before_first_evidence() -> None:
+    constraint = constrain_explicit_read_scope(
+        goal="先并行读取 src/a.py 与 src/b.ts；再并行读取 src/c.ts 与 src/d.py。",
+        read_only=True,
+        enforce_order=True,
+        steps=[],
+        actions=[
+            'read_file({"path":"src/c.ts"})',
+            'read_file({"path":"src/d.py"})',
+        ],
+    )
+
+    assert constraint is not None
+    assert constraint.actions == ()
+    assert constraint.missing == ("src/a.py", "src/b.ts")
+    assert constraint.skipped == ("src/c.ts", "src/d.py")
 
 
 def test_failed_read_is_not_evidence() -> None:

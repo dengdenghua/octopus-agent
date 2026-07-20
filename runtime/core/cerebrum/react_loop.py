@@ -47,6 +47,7 @@ from runtime.core.cerebrum.react_convergence import (
     build_evidence_digest,
     constrain_explicit_read_scope,
     evidence_answer_conflicts_with_goal,
+    ordered_explicit_read_groups,
     read_only_evidence_convergence,
 )
 from runtime.core.cerebrum.react_execution import (
@@ -780,6 +781,28 @@ def _explicit_read_only_goal(value: str | None) -> bool:
             r"不(?=修改|改动|更改|编辑|写入|创建|新增|添加|删除|提交))\s*"
             r"(?:修改|改动|更改|编辑|写入|创建|新增|添加|删除|提交))",
             text,
+        )
+    )
+
+
+def _explicit_observed_read_sequence(value: str | None) -> bool:
+    """Whether the user requires visible, ordered evidence-gathering beats."""
+
+    text = str(value or "")
+    if not _explicit_source_paths(text):
+        return False
+    return bool(
+        re.search(r"(?:每批|逐批)[^。；;\n]{0,40}(?:证据|读取|阅读|核对|检查)", text)
+        or re.search(r"(?:依次|逐个)\s*(?:并行)?\s*(?:读取|阅读|核对|检查)", text)
+        or re.search(
+            r"按[^。；;\n]{0,40}顺序[^。\n]{0,1000}先[^。\n]{0,1000}(?:再|然后|最后)",
+            text,
+        )
+        or re.search(
+            r"\b(?:after\s+each\s+batch|read\s+in\s+(?:this\s+)?order|"
+            r"first\b[^\n]{0,1000}\bthen\b)",
+            text,
+            re.IGNORECASE,
         )
     )
 
@@ -1919,6 +1942,11 @@ def stream_react_loop(
             agent=agent,
             goal=_native_goal,
             user_context=intent.user_context,
+            strict_explicit_reads=bool(
+                _explicit_read_only_goal(_native_goal)
+                and _explicit_source_paths(_native_goal)
+                and not _browser_operation_requested(intent.user_context)
+            ),
         )
         if _native_mode
         else []
@@ -2041,6 +2069,14 @@ def stream_react_loop(
     _is_goal_mode = _wm.is_goal
     _is_code_mode = _wm.is_code
     _read_only_turn = _explicit_read_only_goal(str(intent.normalized_goal or intent.raw or ""))
+    _observed_read_sequence = _read_only_turn and _explicit_observed_read_sequence(
+        str(intent.normalized_goal or intent.raw or "")
+    )
+    _observed_read_groups = (
+        ordered_explicit_read_groups(str(intent.normalized_goal or intent.raw or ""))
+        if _observed_read_sequence
+        else ()
+    )
     if _read_only_turn:
         system_parts.append(
             "\n<read-only-contract>\n"
@@ -2072,7 +2108,13 @@ def stream_react_loop(
                     )
                 ),
             )
-            if _cb:
+            # An explicitly observable read sequence must obtain its source
+            # text from the requested tool batches. Injecting the same file
+            # bodies here duplicates tens of thousands of characters and can
+            # also tempt the model to claim a batch completed before its tool
+            # calls are visible to the user. Keep the located path metadata
+            # below, but withhold the duplicate startup excerpts.
+            if _cb and not _observed_read_sequence:
                 volatile_parts.append(_cb)
         except Exception:  # noqa: BLE001 — grounding must never break the loop
             _grounding_sources = []
@@ -2082,16 +2124,38 @@ def stream_react_loop(
         if source.get("kind") == "source" and source.get("path")
     )
     if _read_only_turn and _grounded_source_paths:
-        volatile_parts.append(
-            "<grounded-source-contract>\n"
-            "The RELEVANT SOURCE chunks below were deterministically read from "
-            "the repository before this model call; they are real source evidence, "
-            "not wiki summaries. For a read-only comparison, if those chunks contain "
-            "the requested definitions, answer from them directly and do not call "
-            "read_file merely to prove the same read again. Use a file tool only when "
-            "the injected chunk genuinely omits information needed for the answer.\n"
-            "</grounded-source-contract>"
-        )
+        if _observed_read_sequence:
+            _first_read_group = ", ".join(_observed_read_groups[0]) if _observed_read_groups else ""
+            volatile_parts.append(
+                "<grounded-source-contract>\n"
+                "The repository grounder located the requested paths, but their source "
+                "bodies are intentionally withheld from startup context. The user explicitly "
+                "asked to observe ordered file-reading batches and receive a useful update "
+                "after each batch. Call file-reading tools for every named path in the requested "
+                "order, keep independent files in the same parallel batch, and let each "
+                "later public update state what the preceding evidence confirmed.\n"
+                + (
+                    "No requested batch is complete yet. The first file calls must be: "
+                    f"{_first_read_group}. Do not describe startup grounding as a completed batch.\n"
+                    if _first_read_group
+                    else ""
+                )
+                + "</grounded-source-contract>"
+            )
+        else:
+            volatile_parts.append(
+                "<grounded-source-contract>\n"
+                "The RELEVANT SOURCE chunks below were deterministically read from "
+                "the repository before this model call; they are real source evidence, "
+                "not wiki summaries. For a read-only comparison, if those chunks contain "
+                "the requested definitions, answer from them directly and do not call "
+                "read_file merely to prove the same read again. Use a file tool only when "
+                "the injected chunk genuinely omits information needed for the answer.\n"
+                "</grounded-source-contract>"
+            )
+    _final_guard_grounded_source_paths = (
+        frozenset() if _observed_read_sequence else _grounded_source_paths
+    )
     _browser_regression_enabled = bool(
         _uc.get("browser_regression_enabled") or _metadata.get("browser_regression_enabled")
     )
@@ -4005,7 +4069,7 @@ def stream_react_loop(
                 tools_active=tools_active,
                 goal=intent.normalized_goal,
                 browser_operation_mode=_browser_operation_mode,
-                grounded_source_paths=_grounded_source_paths,
+                grounded_source_paths=_final_guard_grounded_source_paths,
                 categories=(
                     None
                     if (_browser_operation_mode or _is_code_mode)
@@ -4156,7 +4220,7 @@ def stream_react_loop(
                             tools_active=tools_active,
                             goal=intent.normalized_goal,
                             browser_operation_mode=_browser_operation_mode,
-                            grounded_source_paths=_grounded_source_paths,
+                            grounded_source_paths=_final_guard_grounded_source_paths,
                             categories=(
                                 None
                                 if (_browser_operation_mode or _is_code_mode)
@@ -4261,6 +4325,7 @@ def stream_react_loop(
                 steps=steps,
                 actions=_candidate_actions,
                 read_only=_read_only_turn,
+                enforce_order=_observed_read_sequence,
             )
             if _scope_constraint is not None:
                 step.actions = list(_scope_constraint.actions)
@@ -5140,7 +5205,7 @@ def stream_react_loop(
                 tools_active=tools_active,
                 goal=intent.normalized_goal,
                 browser_operation_mode=_browser_operation_mode,
-                grounded_source_paths=_grounded_source_paths,
+                grounded_source_paths=_final_guard_grounded_source_paths,
             )
             if _guard_hit is not None:
                 _guard_label, _guard_message = _guard_hit
@@ -5470,11 +5535,14 @@ def stream_react_loop(
                     juice as _juice,
                 )
 
-                if _juice_enabled():
-                    _juiced, _stats = _juice(step.observation)
+                if _observed_read_sequence or _juice_enabled():
+                    _juiced, _stats = _juice(
+                        step.observation,
+                        max_chars=6000,
+                    )
                     if _stats.passes:
                         _obs_for_model = _juiced
-                        _logger.debug(
+                        (_logger.info if _observed_read_sequence else _logger.debug)(
                             "token_juice iter %d · %d→%d chars (%.1f%% saved) passes=%s",
                             i + 1,
                             _stats.before,
@@ -5640,7 +5708,7 @@ def stream_react_loop(
                     tools_active=tools_active,
                     goal=intent.normalized_goal,
                     browser_operation_mode=_browser_operation_mode,
-                    grounded_source_paths=_grounded_source_paths,
+                    grounded_source_paths=_final_guard_grounded_source_paths,
                 )
                 if _guard_hit is not None:
                     _guard_label, _guard_message = _guard_hit

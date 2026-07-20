@@ -1551,6 +1551,61 @@ def test_explicit_point_count_rewrites_underfilled_grounded_answer(tmp_path) -> 
     )
 
 
+def test_ordered_read_request_does_not_finish_from_startup_grounding(
+    tmp_path, monkeypatch
+) -> None:
+    (tmp_path / "a.py").write_text("A = 1\n", encoding="utf-8")
+    (tmp_path / "b.ts").write_text("export const B = 2;\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "runtime.memory.hemolymph.repo_context.build_codebase_context",
+        lambda _goal, **_kwargs: (
+            "EXPLICITLY REQUESTED SOURCE excerpts",
+            [
+                {"kind": "source", "title": "a.py", "path": "a.py:1"},
+                {"kind": "source", "title": "b.ts", "path": "b.ts:1"},
+            ],
+        ),
+    )
+    router = _CapturingRouter(
+        [
+            "Final Answer: 我直接根据启动上下文回答。",
+            (
+                "Thought: honor the requested observable read\n"
+                'Action: read_file({"path":"a.py"})\n'
+                'Action: read_file({"path":"b.ts"})'
+            ),
+            "Final Answer: 两个指定文件已按要求读取并完成对比。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent(
+        "只读按顺序先并行读取 a.py 与 b.ts，每批证据后告诉我确认了什么；不要修改文件。"
+    )
+    intent.user_context.update({"mode": "code", "workspace_path": str(tmp_path)})
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=4)
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == "两个指定文件已按要求读取并完成对比。"
+    assert router.calls == 3
+    first_request_text = "\n".join(
+        str(message.content) for message in router.requests[0].messages
+    )
+    assert "EXPLICITLY REQUESTED SOURCE excerpts" not in first_request_text
+    assert "source bodies are intentionally withheld" in first_request_text
+    started = [
+        event.get("input_preview", {}).get("path")
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "read_file"
+    ]
+    assert started == ["a.py", "b.ts"]
+    assert any(
+        "inspection-evidence guard" in step.observation for step in result.steps
+    )
+
+
 def test_bounded_multi_file_turn_narrates_coverage_before_final_answer(tmp_path) -> None:
     (tmp_path / "backend.py").write_text("phase_id = 'phaseId'\n", encoding="utf-8")
     (tmp_path / "frontend.ts").write_text(

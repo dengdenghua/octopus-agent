@@ -113,6 +113,41 @@ def test_browser_surface_keeps_late_registered_browser_tools_in_native_specs() -
     assert {"browser_navigate", "browser_state", "browser_type", "browser_click"} <= names
 
 
+def test_strict_explicit_reads_remove_unrelated_native_tool_schemas() -> None:
+    registry = SkillRegistry()
+    for name in (
+        "read_file",
+        "read_file_range",
+        "grep_text",
+        "edit_file",
+        "exec_shell",
+        "git_commit",
+        "browser_navigate",
+        "web_search",
+    ):
+        registry.register(
+            Skill(
+                name=name,
+                trusted_source=f"skill://test/{name}",
+                handler=lambda **_kw: {},
+            ),
+            verify_tests=False,
+        )
+
+    specs = build_loop_tool_specs(
+        SimpleNamespace(registry=registry),
+        goal="只读比较 src/a.py 与 src/b.ts，不要修改文件。",
+        user_context={"mode": "code"},
+        strict_explicit_reads=True,
+    )
+
+    assert [spec.name for spec in specs] == [
+        "grep_text",
+        "read_file",
+        "read_file_range",
+    ]
+
+
 # ── unit: tool_calls → step synthesis ────────────────────────────────
 
 

@@ -192,7 +192,27 @@ def test_protected_parallel_batch_header_survives() -> None:
     )
     out, _stats = juice(raw, max_chars=400)
     assert "[1/3 read_file]" in out
+    assert "[2/3 read_file]" in out
     assert "[3/3 read_file]" in out
+    assert len(out) < len(raw)
+
+
+def test_parallel_success_receipts_are_capped_per_file() -> None:
+    raw = "\n\n".join(
+        f"[{index}/3 read_file]\n(real tool execution succeeded) read_file\n"
+        + marker * 1800
+        + f"\nTAIL-{index}"
+        for index, marker in enumerate(("a", "b", "c"), start=1)
+    )
+
+    out, stats = juice(raw, max_chars=2400)
+
+    assert "parallel-cap" in stats.passes
+    assert len(out) < len(raw)
+    for index in range(1, 4):
+        assert f"[{index}/3 read_file]" in out
+        assert f"TAIL-{index}" in out
+    assert out.count("(real tool execution succeeded)") == 3
 
 
 def test_combined_passes_compose() -> None:
