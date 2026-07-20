@@ -881,6 +881,75 @@ describe("MessageList stalled-run warning", () => {
     expect(screen.queryByText('str = ""')).not.toBeInTheDocument();
   });
 
+  test("keeps late process callbacks above the interrupted terminal receipt", () => {
+    const agentMetadata = {
+      agent_id: "general",
+      agent_display_name: "Eve",
+    };
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "Inspect the runtime"),
+        {
+          id: "assistant-progress",
+          type: "ai",
+          content: "Starting the inspection.",
+          additional_kwargs: {
+            public_progress: true,
+            ...agentMetadata,
+          },
+        } as AIMessage,
+        {
+          id: "assistant-interrupted",
+          type: "ai",
+          content: "",
+          additional_kwargs: {
+            response_state: "interrupted",
+            ...agentMetadata,
+          },
+        } as AIMessage,
+        {
+          id: "assistant-late-tool",
+          type: "ai",
+          content: "",
+          additional_kwargs: agentMetadata,
+          tool_calls: [
+            {
+              id: "read-late",
+              name: "read_file",
+              args: { path: "runtime/late.ts" },
+            },
+          ],
+        } as AIMessage,
+        {
+          id: "tool-late",
+          type: "tool",
+          content: "late result",
+          tool_call_id: "read-late",
+        },
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      currentAgent: {
+        name: "general",
+        display_name: "Eve",
+        avatar_url: "/api/agents/general/avatar",
+      },
+    });
+
+    const execution = screen.getByTestId("process-timeline-event-execution");
+    const receipt = screen.getByText(
+      /This response was interrupted during generation/i,
+    );
+    expect(execution).toHaveTextContent("late.ts");
+    expect(
+      execution.compareDocumentPosition(receipt) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+  });
+
   test("does not leave an orphan assistant avatar for hidden auto-verification steps", () => {
     const thread = mockThread({
       messages: [

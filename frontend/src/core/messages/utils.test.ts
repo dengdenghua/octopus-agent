@@ -167,6 +167,93 @@ describe("groupMessages", () => {
     expect(result[1]?.messages).toHaveLength(2);
   });
 
+  it("returns late tool results to the process group after interruption", () => {
+    const result = groupMessages(
+      [
+        { id: "user-1", type: "human", content: "inspect" },
+        {
+          id: "ai-process",
+          type: "ai",
+          content: "",
+          tool_calls: [
+            { id: "read-1", name: "read_file", args: { path: "a.ts" } },
+          ],
+        },
+        {
+          id: "ai-interrupted",
+          type: "ai",
+          content: "",
+          additional_kwargs: { response_state: "interrupted" },
+        },
+        {
+          id: "tool-late",
+          type: "tool",
+          content: "late result",
+          tool_call_id: "read-1",
+        },
+      ] as Message[],
+      (group) => group,
+    );
+
+    expect(result.map((group) => group.type)).toEqual([
+      "human",
+      "assistant:processing",
+      "assistant",
+    ]);
+    expect(result[1]?.messages.map((message) => message.id)).toEqual([
+      "ai-process",
+      "tool-late",
+    ]);
+    expect(result.at(-1)?.id).toBe("ai-interrupted");
+  });
+
+  it("folds late tool calls before an interrupted terminal receipt", () => {
+    const result = groupMessages(
+      [
+        { id: "user-1", type: "human", content: "inspect" },
+        {
+          id: "ai-process",
+          type: "ai",
+          content: "",
+          additional_kwargs: { public_progress: true },
+        },
+        {
+          id: "ai-interrupted",
+          type: "ai",
+          content: "",
+          additional_kwargs: { response_state: "interrupted" },
+        },
+        {
+          id: "ai-late-call",
+          type: "ai",
+          content: "",
+          tool_calls: [
+            { id: "shell-1", name: "shell", args: { command: "pwd" } },
+          ],
+        },
+        {
+          id: "tool-late",
+          type: "tool",
+          content: "/workspace",
+          tool_call_id: "shell-1",
+        },
+      ] as Message[],
+      (group) => group,
+    );
+
+    expect(result.map((group) => group.type)).toEqual([
+      "human",
+      "assistant:processing",
+      "assistant",
+    ]);
+    expect(result[1]?.messages.map((message) => message.id)).toEqual([
+      "ai-process",
+      "ai-late-call",
+      "tool-late",
+    ]);
+    expect(result.at(-1)?.id).toBe("ai-interrupted");
+  });
+
   it("groups present_files as a separate group", () => {
     const result = groupMessages(
       [

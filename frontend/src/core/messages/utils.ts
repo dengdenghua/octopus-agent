@@ -102,6 +102,52 @@ export function groupMessages<T>(
     return null;
   }
 
+  // Terminal receipts (interrupted/failed/final answer) can be reduced before
+  // an in-flight tool callback reaches the client. Keep looking within the
+  // current human turn so those late process events return to the original
+  // process lane instead of opening a new row below the terminal answer.
+  function lastProcessingGroupInCurrentTurn() {
+    for (let index = groups.length - 1; index >= 0; index -= 1) {
+      const group = groups[index]!;
+      if (group.type === "human") break;
+      if (group.type === "assistant:processing") return group;
+    }
+    return null;
+  }
+
+  function groupOwningToolCall(toolCallId: string | undefined) {
+    if (!toolCallId) return null;
+    let fallback: MessageGroup | null = null;
+    for (let index = groups.length - 1; index >= 0; index -= 1) {
+      const group = groups[index]!;
+      if (group.type === "human") break;
+      const ownsCall = group.messages.some(
+        (candidate) =>
+          candidate.type === "ai" &&
+          (candidate as AIMessage).tool_calls?.some(
+            (toolCall) => toolCall.id === toolCallId,
+          ),
+      );
+      if (!ownsCall) continue;
+      if (group.type === "assistant:processing") return group;
+      fallback ??= group;
+    }
+    return fallback;
+  }
+
+  function appendToCurrentProcessingGroup(message: Message) {
+    const current = lastProcessingGroupInCurrentTurn();
+    if (current) {
+      current.messages.push(message);
+      return;
+    }
+    groups.push({
+      id: message.id,
+      type: "assistant:processing",
+      messages: [message],
+    });
+  }
+
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index]!;
     if (isHiddenFromUIMessage(message)) {
@@ -134,7 +180,10 @@ export function groupMessages<T>(
           messages: [message],
         });
       } else {
-        const open = lastOpenGroup();
+        const open =
+          groupOwningToolCall((message as ToolMessage).tool_call_id) ??
+          lastProcessingGroupInCurrentTurn() ??
+          lastOpenGroup();
         if (open) {
           open.messages.push(message);
         } else {
@@ -167,16 +216,7 @@ export function groupMessages<T>(
         // Public checkpoints are answer-like prose, but they belong to the
         // chronological process lane rather than becoming standalone final
         // answer bubbles with a repeated assistant header.
-        const lastGroup = groups[groups.length - 1];
-        if (lastGroup?.type !== "assistant:processing") {
-          groups.push({
-            id: message.id,
-            type: "assistant:processing",
-            messages: [message],
-          });
-        } else {
-          lastGroup.messages.push(message);
-        }
+        appendToCurrentProcessingGroup(message);
       } else if (hasToolCalls(message)) {
         // Tool-call message: render public thinking / execution first.
         // If this same message carries a long final answer, append it
@@ -184,16 +224,7 @@ export function groupMessages<T>(
         // Tool-call message → processing group (rendered as ChainOfThought
         // by MessageGroup, which shows the tool steps + a collapsed fold
         // for the reasoning trace).
-        const lastGroup = groups[groups.length - 1];
-        if (lastGroup?.type !== "assistant:processing") {
-          groups.push({
-            id: message.id,
-            type: "assistant:processing",
-            messages: [message],
-          });
-        } else {
-          lastGroup.messages.push(message);
-        }
+        appendToCurrentProcessingGroup(message);
         if (hasContent(message) && isLikelyFinalAnswerContent(message)) {
           groups.push({
             id: message.id,
@@ -219,16 +250,7 @@ export function groupMessages<T>(
         hasContent(message) &&
         isDuplicatedProcessPrelude(message, index, messages)
       ) {
-        const lastGroup = groups[groups.length - 1];
-        if (lastGroup?.type !== "assistant:processing") {
-          groups.push({
-            id: message.id,
-            type: "assistant:processing",
-            messages: [message],
-          });
-        } else {
-          lastGroup.messages.push(message);
-        }
+        appendToCurrentProcessingGroup(message);
       } else if (hasContent(message)) {
         // Plain AI response (with or without reasoning). Render as a
         // normal assistant message — MessageListItem will draw a
@@ -240,16 +262,7 @@ export function groupMessages<T>(
         // Reasoning-only intermediate message (no content, no tool
         // calls yet). Group as processing so the user sees a fold for
         // the partial chain of thought.
-        const lastGroup = groups[groups.length - 1];
-        if (lastGroup?.type !== "assistant:processing") {
-          groups.push({
-            id: message.id,
-            type: "assistant:processing",
-            messages: [message],
-          });
-        } else {
-          lastGroup.messages.push(message);
-        }
+        appendToCurrentProcessingGroup(message);
       }
     }
   }
