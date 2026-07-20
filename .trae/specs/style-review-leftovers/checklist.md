@@ -29,4 +29,4 @@
 - [x] grep `text-\[(7|8|17|22)px\]` 在 `frontend/src/` 0 命中
 - [x] grep `window\.(confirm|alert|prompt)` 在 `frontend/src/` 仅 2 处注释命中
 - [x] 受影响单测退出码 0
-- [ ] commit message: `style(workspace): fix leftover prompt, shimmer, and non-standard font sizes`
+- [x] commit `a4b1e4aca`: `style(workspace): fix leftover prompt, shimmer, and non-standard font sizes`（12 files +90/-60）

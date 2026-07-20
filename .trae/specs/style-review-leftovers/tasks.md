@@ -41,5 +41,5 @@
   - [x] SubTask 6.4: grep `window\.(confirm|alert|prompt)` 在 `frontend/src/` 仅 2 处注释命中
   - [x] SubTask 6.5: 受影响单测退出码 0
 
-- [ ] Task 7: 提交 commit
-  - [ ] SubTask 7.1: commit message: `style(workspace): fix leftover prompt, shimmer, and non-standard font sizes`
+- [x] Task 7: 提交 commit
+  - [x] SubTask 7.1: commit `a4b1e4aca` — `style(workspace): fix leftover prompt, shimmer, and non-standard font sizes`（12 files +90/-60，含 shimmer.tsx 删除）
