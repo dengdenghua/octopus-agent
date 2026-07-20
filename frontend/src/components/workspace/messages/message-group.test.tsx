@@ -995,7 +995,7 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText("执行中")).not.toBeInTheDocument();
   });
 
-  it("uses tool targets without synthetic action badges", () => {
+  it("collapses consecutive tool targets into one quiet evidence row", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -1030,16 +1030,32 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(screen.queryByText("已浏览目录")).not.toBeInTheDocument();
     expect(screen.queryByText("已读取")).not.toBeInTheDocument();
+    const execution = screen.getByTestId("process-timeline-event-execution");
+    expect(execution).toHaveTextContent("src · app.tsx · plan.md");
     expect(
       screen.getAllByTestId("process-timeline-event-execution"),
-    ).toHaveLength(3);
+    ).toHaveLength(1);
+
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(execution);
+
+    expect(opened.at(-1)?.detail.processEvent).toMatchObject({
+      kind: "execution",
+      count: 3,
+    });
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain("src/app.tsx");
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain("plan.md");
 
     fireEvent.click(screen.getByTitle("过程细节"));
 
     expect(screen.queryByText("已浏览目录")).not.toBeInTheDocument();
     expect(screen.queryByText("已读取")).not.toBeInTheDocument();
-    expect(screen.getAllByText(/src$/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/src\/app\.tsx/).length).toBeGreaterThan(0);
+    expect(opened.at(-1)?.detail.processEvent).toMatchObject({ count: 3 });
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain("src/app.tsx");
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain("plan.md");
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 });
 
@@ -1154,12 +1170,27 @@ describe("MessageGroup streaming lifecycle", () => {
     const visibleExecutions = screen.getAllByTestId(
       "process-timeline-event-execution",
     );
-    expect(visibleExecutions).toHaveLength(3);
-    expect(
-      visibleExecutions.map((element) =>
-        element.getAttribute("data-process-event-id"),
-      ),
-    ).toEqual(["read-5", "read-6", "read-7"]);
+    expect(visibleExecutions).toHaveLength(1);
+    expect(visibleExecutions[0]).toHaveAttribute(
+      "data-process-event-id",
+      "read-7",
+    );
+    expect(visibleExecutions[0]).toHaveTextContent(
+      "file-5.ts · file-6.ts · file-7.ts +5",
+    );
+
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(visibleExecutions[0]!);
+    expect(opened.at(-1)?.detail.processEvent).toMatchObject({ count: 8 });
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain(
+      "src/file-0.ts",
+    );
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain(
+      "src/file-7.ts",
+    );
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
   it("transitions from streaming to completed without losing tool calls", () => {

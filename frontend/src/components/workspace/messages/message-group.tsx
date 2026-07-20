@@ -60,6 +60,7 @@ import { useArtifacts } from "../artifacts";
 import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 import { FlipDisplay } from "../flip-display";
 import { isAutoVerificationToolName } from "../process-trace-events";
+import { isFileMutationToolName, isReadToolName } from "../tool-name-groups";
 import { Tooltip } from "../tooltip";
 
 import { ClarificationChoiceCard } from "./clarification-choice-card";
@@ -576,16 +577,17 @@ export function MessageGroup({
   // Keep process events on the same chronological lane as the answer while
   // letting the answer retain visual priority. The main transcript shows only
   // compact public summaries; complete event payloads live in the workbench.
-  const hasTimelineCommentary = timelineItems.some(
-    (item) => item.type === "commentary",
-  );
   const compactTimelineItems = retainIndeterminateToolCalls(
     timelineItems,
-    // Once the model is narrating evidence in plain language, only the current
-    // execution event belongs beside it. Older tool rows remain available in
-    // replay/workbench instead of restating the same file reads four times.
-    selectCompactTimelineItems(timelineItems, hasTimelineCommentary ? 1 : 4),
+    // The main conversation keeps the latest public thought and latest action.
+    // Earlier process events remain in the right workbench. This is structural
+    // and independent of model wording, language, or hard-coded phase names.
+    selectCompactTimelineItems(timelineItems),
     receiptsByCallId,
+  );
+  const compactExecutionCoverage = executionCoverageByVisibleItem(
+    timelineItems,
+    compactTimelineItems,
   );
   const hasPublicCommentary = compactTimelineItems.some(
     (item) => item.type === "commentary",
@@ -705,31 +707,45 @@ export function MessageGroup({
         );
       }
       const isThinking = item.type === "reasoningGroup";
+      const coveredItems =
+        compactExecutionCoverage.get(item.id) ?? ([item] as TimelineItem[]);
+      const groupedTargetSummary =
+        summarizeCompactExecutionTargets(coveredItems);
       const summary =
         item.type === "reasoningGroup"
           ? summarizeReasoningGroup(item, t)
           : item.type === "actionCallbackGroup"
             ? summarizeActionGroup(item, t)
-            : summarizeCurrentStep(item.step, t);
-      const count = item.type === "toolCall" ? 1 : item.steps.length;
+            : (groupedTargetSummary ?? summarizeCurrentStep(item.step, t));
+      const count = coveredItems.reduce(
+        (total, coveredItem) =>
+          total +
+          (coveredItem.type === "toolCall" || coveredItem.type === "commentary"
+            ? 1
+            : coveredItem.steps.length),
+        0,
+      );
       const workbenchEventId =
         item.type === "toolCall" ? item.step.id : step.messageId;
       const effectReceipt =
         (item.type === "toolCall" ? item.step.effectReceipt : undefined) ??
         (workbenchEventId ? receiptsByCallId.get(workbenchEventId) : undefined);
       const needsEffectReview = effectReceipt?.state === "indeterminate";
-      const processEventDetail =
-        item.type === "reasoningGroup"
-          ? item.steps
-              .map((reasoningStep) => reasoningStep.reasoning?.trim())
-              .filter((value): value is string => Boolean(value))
-              .join("\n\n")
-          : item.type === "actionCallbackGroup"
-            ? item.steps
-                .map((actionStep) => actionStep.actionText.trim())
+      const processEventDetail = dedupeTimelineChunks(
+        coveredItems.flatMap((coveredItem) =>
+          coveredItem.type === "reasoningGroup"
+            ? coveredItem.steps
+                .map((reasoningStep) => reasoningStep.reasoning?.trim() ?? "")
                 .filter(Boolean)
-                .join("\n\n")
-            : summary;
+            : coveredItem.type === "actionCallbackGroup"
+              ? coveredItem.steps
+                  .map((actionStep) => actionStep.actionText.trim())
+                  .filter(Boolean)
+              : coveredItem.type === "toolCall"
+                ? [summarizeCurrentStep(coveredItem.step, t)]
+                : [coveredItem.step.commentary],
+        ),
+      ).join("\n");
 
       return (
         <div
@@ -799,7 +815,7 @@ export function MessageGroup({
             </span>
             <span className="flex min-w-0 flex-1 items-center gap-1">
               <span className="truncate">{summary}</span>
-              {count > 1 && (
+              {count > 1 && !groupedTargetSummary && (
                 <span className="shrink-0 tabular-nums opacity-60">
                   ×{count}
                 </span>
@@ -2018,29 +2034,66 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
   return items;
 }
 
-function selectCompactTimelineItems(
-  items: TimelineItem[],
-  limit: number,
-): TimelineItem[] {
-  const processItems = items.filter((item) => item.type !== "commentary");
-  if (processItems.length <= limit) return items;
-  const tail = processItems.slice(-limit);
-  let compactProcess = tail;
-  if (!tail.some((item) => item.type === "reasoningGroup")) {
-    // Long tool runs used to push every thinking summary out of the
-    // transcript. Preserve the latest public thinking checkpoint as a quiet
-    // anchor while keeping execution density bounded.
-    const latestThinking = [...processItems]
-      .reverse()
-      .find((item) => item.type === "reasoningGroup");
-    if (latestThinking) {
-      compactProcess = [latestThinking, ...tail.slice(-(limit - 1))];
-    }
-  }
-  const selected = new Set(compactProcess);
+function selectCompactTimelineItems(items: TimelineItem[]): TimelineItem[] {
+  const latestThinking = [...items]
+    .reverse()
+    .find((item) => item.type === "reasoningGroup");
+  const latestExecution = [...items]
+    .reverse()
+    .find(
+      (item) => item.type === "toolCall" || item.type === "actionCallbackGroup",
+    );
+  const selected = new Set<TimelineItem>();
+  if (latestThinking) selected.add(latestThinking);
+  if (latestExecution) selected.add(latestExecution);
   return items.filter(
     (item) => item.type === "commentary" || selected.has(item),
   );
+}
+
+function executionCoverageByVisibleItem(
+  allItems: TimelineItem[],
+  visibleItems: TimelineItem[],
+): Map<string, TimelineItem[]> {
+  const visibleExecution = [...visibleItems]
+    .reverse()
+    .find(
+      (item) => item.type === "toolCall" || item.type === "actionCallbackGroup",
+    );
+  if (!visibleExecution) return new Map();
+  const executionItems = allItems.filter(
+    (item) => item.type === "toolCall" || item.type === "actionCallbackGroup",
+  );
+  return new Map([[visibleExecution.id, executionItems]]);
+}
+
+function compactToolTarget(step: CoTToolCallStep): string | null {
+  const target =
+    extractPathFromArgs(step.args) ?? extractTeamCallTarget(step.args);
+  if (!target) return null;
+  if (isReadToolName(step.name) || isFileMutationToolName(step.name)) {
+    return target.split(/[\\/]/).filter(Boolean).at(-1) ?? target;
+  }
+  return compactReasoningSummary(target, 64);
+}
+
+function summarizeCompactExecutionTargets(
+  items: TimelineItem[],
+): string | null {
+  if (items.length < 2 || !items.every((item) => item.type === "toolCall")) {
+    return null;
+  }
+  const targets = Array.from(
+    new Set(
+      items
+        .map((item) => compactToolTarget((item as ToolCallTimelineItem).step))
+        .filter((target): target is string => Boolean(target)),
+    ),
+  );
+  if (targets.length < 2) return null;
+  const visibleTargets = targets.slice(-3);
+  const hiddenCount = targets.length - visibleTargets.length;
+  return `${visibleTargets.join(" · ")}${hiddenCount > 0 ? ` +${hiddenCount}` : ""}`;
 }
 
 function retainIndeterminateToolCalls(
