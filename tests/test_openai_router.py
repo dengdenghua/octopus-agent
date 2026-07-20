@@ -179,6 +179,19 @@ class TestRequestShape:
         assert payload["reasoning_effort"] == "high"
         assert payload["thinking"] == {"type": "enabled"}
 
+    def test_reasoning_effort_can_bound_default_thinking_without_enabling_it(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+        r.call(
+            _req(content="summarize completed evidence").model_copy(
+                update={"enable_thinking": False, "reasoning_effort": "low"},
+            ),
+        )
+
+        payload = fake.calls[0]["json"]
+        assert payload["reasoning_effort"] == "low"
+        assert "thinking" not in payload
+
     def test_thinking_400_retries_without_openai_extension_fields(self):
         fake = _FakeClient(
             responses=[

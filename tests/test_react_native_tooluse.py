@@ -119,6 +119,7 @@ def test_strict_explicit_reads_remove_unrelated_native_tool_schemas() -> None:
         "read_file",
         "read_file_range",
         "grep_text",
+        "bb_read",
         "edit_file",
         "exec_shell",
         "git_commit",
@@ -179,6 +180,8 @@ def test_native_tool_schema_requires_model_authored_public_update() -> None:
     assert augmented.input_schema["properties"]["public_update"]["type"] == "string"
     assert augmented.input_schema["properties"]["public_update"]["maxLength"] == 420
     assert "later rounds" in augmented.input_schema["properties"]["public_update"]["description"]
+    assert "concrete fact" in augmented.input_schema["properties"]["public_update"]["description"]
+    assert "only says the next files" in augmented.input_schema["properties"]["public_update"]["description"]
     assert "public_update" not in original.input_schema["properties"]
 
 
@@ -459,6 +462,63 @@ def test_every_native_tool_round_requires_a_fresh_public_update() -> None:
         "我先核对后端事件定义，确认时间线的源字段。",
         "后端字段已经确认；我再核对前端映射，确定两端是否逐项对应。",
     ]
+
+
+def test_observed_read_sequence_requires_public_updates_without_ui_flags() -> None:
+    from runtime.core.cerebrum.react_loop import run_react_loop
+
+    router = _Router(
+        [
+            (
+                "",
+                [
+                    ToolCall(
+                        id="t1",
+                        name="read_file",
+                        input={
+                            "path": "backend.py",
+                            "public_update": "我先核对两个指定文件的实际定义。",
+                        },
+                    ),
+                    ToolCall(
+                        id="t2",
+                        name="read_file",
+                        input={"path": "frontend.ts"},
+                    ),
+                ],
+            ),
+            ("Final Answer: 两个文件已经按要求核对。", []),
+        ]
+    )
+    fake_spec = ToolSpec(
+        name="read_file",
+        input_schema={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    )
+    intent = _intent(
+        "只读按证据顺序先并行读取 backend.py 与 frontend.ts；"
+        "每批证据后自然告诉我确认了什么。"
+    )
+
+    with (
+        patch(
+            "runtime.core.cerebrum.react_native.native_tool_use_active",
+            return_value=True,
+        ),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            return_value=[fake_spec],
+        ),
+    ):
+        result = run_react_loop(_Stack(router), intent, agent=None, max_iterations=3)
+
+    first_request = router.requests[0]
+    assert first_request.tools
+    assert "public_update" in first_request.tools[0].input_schema["required"]
+    assert result is not None and result.success
 
 
 def test_native_provider_omission_gets_private_safe_public_repair() -> None:

@@ -410,8 +410,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
             payload["tool_choice"] = (
                 "required" if request.require_tool_use else "auto"
             )
-        if request.enable_thinking:
+        # Some compatible reasoning models deliberate by default even when
+        # ``thinking`` is omitted.  Let callers bound that work without also
+        # enabling a vendor-specific thinking envelope.
+        if request.reasoning_effort is not None:
             payload["reasoning_effort"] = _openai_reasoning_effort(request.reasoning_effort)
+        if request.enable_thinking:
             payload["thinking"] = {"type": "enabled"}
         return normalize_openai_compat_payload(
             payload,

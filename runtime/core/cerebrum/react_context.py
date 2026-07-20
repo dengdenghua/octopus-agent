@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
@@ -307,6 +308,7 @@ def _format_skill_catalog(
     user_context: dict | None = None,
     agent: Any = None,
     goal: str = "",
+    include_names: Collection[str] | None = None,
 ) -> str:
     try:
         names = list(registry.all_names())
@@ -351,6 +353,9 @@ def _format_skill_catalog(
             return True
 
     names = [n for n in names if n not in hidden_in_react and _enabled(n)]
+    if include_names is not None:
+        allowed_names = frozenset(include_names)
+        names = [name for name in names if name in allowed_names]
 
     if agent is not None:
         allowed: set[str] | None

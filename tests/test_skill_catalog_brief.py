@@ -164,6 +164,29 @@ def test_empty_registry_returns_empty_string() -> None:
     assert _format_skill_catalog(reg) == ""
 
 
+def test_include_names_removes_unavailable_tool_noise() -> None:
+    reg = _FakeRegistry(
+        [
+            _FakeSkill(name="read_file", summary="read source"),
+            _FakeSkill(name="grep_text", summary="search source"),
+            _FakeSkill(name="edit_file", summary="edit source"),
+            _FakeSkill(name="exec_shell", summary="run command"),
+            _FakeSkill(name="web_search", summary="search web"),
+        ]
+    )
+
+    out = _format_skill_catalog(
+        reg,
+        include_names={"read_file", "grep_text", "read_file_range"},
+    )
+
+    assert "  - read_file:" in out
+    assert "  - grep_text:" in out
+    assert "edit_file" not in out
+    assert "exec_shell" not in out
+    assert "web_search" not in out
+
+
 def test_goal_activation_promotes_relevant_catalog_entries() -> None:
     names = [
         *(f"filler_{i}" for i in range(80)),

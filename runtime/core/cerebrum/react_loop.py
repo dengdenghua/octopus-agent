@@ -565,9 +565,10 @@ def _stream_public_evidence_narrative(
                 ),
             ),
         ],
-        max_tokens=180,
+        max_tokens=512,
         temperature=0.35,
         enable_thinking=False,
+        reasoning_effort="low",
         tools=[],
     )
 
@@ -871,6 +872,25 @@ def _model_post_tool_timeout_s(base_timeout_s: float) -> float:
         value = 45.0
     post_tool_ceiling = max(10.0, min(value, 180.0))
     return min(base_timeout_s, post_tool_ceiling)
+
+
+def _model_evidence_synthesis_timeout_s(base_timeout_s: float) -> float:
+    """Bound a normal evidence-complete answer without treating it as recovery.
+
+    Reasoning providers can spend more than the 30-second failure-recovery
+    ceiling reading a large completed observation set before their first answer
+    token.  This round is expected synthesis, not a retry after a stall, so give
+    it a modest dedicated window while keeping it well below the initial deep
+    reasoning allowance.
+    """
+
+    raw = os.environ.get("OCTOPUS_REACT_EVIDENCE_SYNTHESIS_TIMEOUT_S", "60")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 60.0
+    synthesis_ceiling = max(15.0, min(value, 180.0))
+    return min(base_timeout_s, synthesis_ceiling)
 
 
 _MODEL_STREAM_DEADLINE = object()
@@ -1927,6 +1947,7 @@ def stream_react_loop(
     # advertised capability; otherwise the text protocol + its regex fallback
     # run byte-identically to before. Specs are built once per turn.
     from runtime.core.cerebrum.react_native import (
+        STRICT_EXPLICIT_READ_TOOL_NAMES,
         build_loop_tool_specs,
         native_tool_use_active,
         require_public_update_on_tool_specs,
@@ -1936,17 +1957,21 @@ def stream_react_loop(
 
     _native_mode = bool(tools_active) and native_tool_use_active(router, effective_model)
     _native_goal = getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or ""
+    _strict_explicit_reads = bool(
+        _explicit_read_only_goal(_native_goal)
+        and _explicit_source_paths(_native_goal)
+        and not _browser_operation_requested(intent.user_context)
+    )
+    _native_observed_read_sequence = bool(
+        _strict_explicit_reads and _explicit_observed_read_sequence(_native_goal)
+    )
     _native_tool_specs = (
         build_loop_tool_specs(
             executor,
             agent=agent,
             goal=_native_goal,
             user_context=intent.user_context,
-            strict_explicit_reads=bool(
-                _explicit_read_only_goal(_native_goal)
-                and _explicit_source_paths(_native_goal)
-                and not _browser_operation_requested(intent.user_context)
-            ),
+            strict_explicit_reads=_strict_explicit_reads,
         )
         if _native_mode
         else []
@@ -1962,6 +1987,7 @@ def stream_react_loop(
             and bool(
                 (intent.user_context or {}).get("realtime_public_orientation")
                 or (intent.user_context or {}).get("realtime_public_narrative")
+                or _native_observed_read_sequence
             )
         )
         else _native_tool_specs
@@ -2050,8 +2076,9 @@ def stream_react_loop(
             "the sentence as normal text immediately before the first tool calls. In "
             "addition, whenever a native tool schema contains a public_update field, "
             "fill it on every tool round; after the first round, briefly state the new "
-            "fact established by the preceding result and what the next action will "
-            "clarify. Do not repeat the previous sentence. The runtime displays each "
+            "concrete fact established by the preceding result and what the next action "
+            "will clarify. Merely announcing the next files without a preceding evidence "
+            "fact is not a valid update. Do not repeat the previous sentence. The runtime displays each "
             "update once and removes it before tool execution. In "
             "the text protocol, put it in Update: immediately before the first Action:. "
             "Skip it when answering directly without tools.\n"
@@ -2806,11 +2833,12 @@ def stream_react_loop(
             agent=agent,
             user_context=_uc,
             goal=intent.normalized_goal,
+            include_names=(
+                STRICT_EXPLICIT_READ_TOOL_NAMES if _strict_explicit_reads else None
+            ),
         )
         if catalog:
-            _file_inspection_tools_visible = (
-                "  - list_cwd:" in catalog and "  - read_file:" in catalog
-            )
+            _file_inspection_tools_visible = "  - read_file:" in catalog
             _todo_protocol_visible = "  - todo_write:" in catalog
             system_parts.append(catalog)
             if _todo_protocol_visible:
@@ -3410,7 +3438,9 @@ def stream_react_loop(
                 ),
                 temperature=temperature,
                 enable_thinking=_wants_thinking and not _iteration_recovery_mode,
-                reasoning_effort=_reasoning_effort,
+                reasoning_effort=(
+                    "low" if _iteration_recovery_mode else _reasoning_effort
+                ),
                 thinking_budget=(
                     1024
                     if _iteration_recovery_mode
@@ -3458,7 +3488,11 @@ def stream_react_loop(
                 executed_beak_steps
                 or any(prior_step.action_results for prior_step in steps)
             )
-            if _iteration_recovery_mode:
+            if _iteration_recovery_mode and _evidence_convergence_active is not None:
+                _iteration_timeout = _model_evidence_synthesis_timeout_s(
+                    _base_iteration_timeout
+                )
+            elif _iteration_recovery_mode:
                 _iteration_timeout = _model_recovery_timeout_s(_base_iteration_timeout)
             elif _has_tool_evidence:
                 _iteration_timeout = _model_post_tool_timeout_s(_base_iteration_timeout)

@@ -41,6 +41,13 @@ from runtime.core.cerebrum.react_types import ReActStep
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _FALSY = {"0", "false", "no", "off"}
+STRICT_EXPLICIT_READ_TOOL_NAMES = frozenset(
+    {
+        "grep_text",
+        "read_file",
+        "read_file_range",
+    }
+)
 
 
 def native_tool_use_flag_enabled() -> bool:
@@ -122,13 +129,11 @@ def build_loop_tool_specs(
             or []
         )
         if strict_explicit_reads:
-            allowed = {
-                "bb_read",
-                "grep_text",
-                "read_file",
-                "read_file_range",
-            }
-            specs = [spec for spec in specs if getattr(spec, "name", "") in allowed]
+            specs = [
+                spec
+                for spec in specs
+                if getattr(spec, "name", "") in STRICT_EXPLICIT_READ_TOOL_NAMES
+            ]
         return specs
     except Exception:  # noqa: BLE001 — spec build is best-effort; fall back to text
         return []
@@ -153,8 +158,10 @@ def require_public_update_on_tool_specs(specs: list[Any]) -> list[Any]:
             "description": (
                 "One short user-facing sentence in the user's language. On the first "
                 "tool round, name the concrete scope being inspected or changed. On "
-                "later rounds, state the useful fact the previous result confirmed or "
-                "changed and what this next action will establish. Do not include hidden "
+                "later rounds, the sentence MUST contain at least one concrete fact from "
+                "the preceding result, followed by what this next action will establish. "
+                "A sentence that only says the next files are being read is invalid. "
+                "Do not include hidden "
                 "reasoning, stage labels, tool or protocol names, generic status filler, "
                 "repeated wording, or an unsupported completion claim."
             ),

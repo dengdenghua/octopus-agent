@@ -1124,8 +1124,9 @@ def test_realtime_quiet_tool_result_gets_model_authored_evidence_checkpoint() ->
     assert events.index(public[0]) < event_types.index("text_delta")
     checkpoint_request = router.requests[1]
     assert checkpoint_request.tools == []
-    assert checkpoint_request.max_tokens == 180
+    assert checkpoint_request.max_tokens == 512
     assert checkpoint_request.enable_thinking is False
+    assert checkpoint_request.reasoning_effort == "low"
     checkpoint_input = "\n".join(
         str(message.content) for message in checkpoint_request.messages
     )
@@ -1465,6 +1466,8 @@ def test_read_only_evidence_convergence_suppresses_scope_expansion(tmp_path) -> 
     assert result.final_answer == "项目名称是 octopus-frontend。"
     assert router.calls == 3
     assert router.requests[1].tools == []
+    assert router.requests[1].enable_thinking is False
+    assert router.requests[1].reasoning_effort == "low"
     synthesis_context = "\n".join(str(message.content) for message in router.requests[1].messages)
     assert "[bounded-read-evidence]" in synthesis_context
     assert "package.json" in synthesis_context
@@ -2074,6 +2077,7 @@ def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeyp
     assert result.final_answer == "recovered from the stalled reasoning round"
     assert router.calls == 2
     assert router.requests[1].enable_thinking is False
+    assert router.requests[1].reasoning_effort == "low"
     assert router.requests[1].thinking_budget == 1024
     assert any(event["type"] == "commentary_delta" for event in events)
 
@@ -2083,6 +2087,15 @@ def test_post_tool_model_round_uses_tighter_timeout(monkeypatch) -> None:
 
     assert _model_post_tool_timeout_s(120.0) == 45.0
     assert _model_post_tool_timeout_s(20.0) == 20.0
+
+
+def test_evidence_synthesis_has_more_time_than_failure_recovery(monkeypatch) -> None:
+    from runtime.core.cerebrum.react_loop import _model_evidence_synthesis_timeout_s
+
+    monkeypatch.setenv("OCTOPUS_REACT_EVIDENCE_SYNTHESIS_TIMEOUT_S", "60")
+
+    assert _model_evidence_synthesis_timeout_s(120.0) == 60.0
+    assert _model_evidence_synthesis_timeout_s(20.0) == 20.0
 
 
 def test_hidden_reasoning_timeout_switches_to_backup_model(monkeypatch) -> None:
