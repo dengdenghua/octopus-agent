@@ -47,6 +47,7 @@ import type {
 } from "@/core/teach-repeat/types";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -118,6 +119,7 @@ function RecordingIndicator({
         ({status.step_count} {t.teachRepeat.steps})
       </span>
       <button
+        type="button"
         onClick={onStop}
         className="text-destructive hover:text-destructive/80 ml-auto text-xs underline"
       >
@@ -177,6 +179,7 @@ function StartRecordingDialog({
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="border-input bg-background w-full rounded-lg border px-3 py-1.5 text-sm"
+          aria-label={t.teachRepeat.workflowNamePlaceholder}
           autoFocus
         />
         <textarea
@@ -190,6 +193,7 @@ function StartRecordingDialog({
       {error && <p className="text-destructive text-xs">{error}</p>}
       <div className="flex gap-2">
         <button
+          type="button"
           onClick={() => void handleStart()}
           disabled={!name.trim() || loading}
           className="bg-destructive text-destructive-foreground hover:bg-destructive/90 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
@@ -202,6 +206,7 @@ function StartRecordingDialog({
           {t.teachRepeat.startRecording}
         </button>
         <button
+          type="button"
           onClick={onCancel}
           className="text-muted-foreground hover:text-foreground text-xs"
         >
@@ -302,6 +307,7 @@ function ReplayDialog({
                   onChange={(e) =>
                     setParamValues({ ...paramValues, [p.name]: e.target.value })
                   }
+                  aria-label={p.name}
                   className="border-input bg-background w-full rounded-lg border px-3 py-1.5 text-sm"
                 />
               )}
@@ -311,6 +317,7 @@ function ReplayDialog({
       )}
       <div className="flex flex-wrap gap-2">
         <button
+          type="button"
           onClick={() => handleReplay(false)}
           className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
         >
@@ -318,6 +325,7 @@ function ReplayDialog({
           {t.teachRepeat.replay}
         </button>
         <button
+          type="button"
           onClick={() => handleReplay(true)}
           className="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium"
         >
@@ -325,6 +333,7 @@ function ReplayDialog({
           {t.teachRepeat.adaptiveReplay}
         </button>
         <button
+          type="button"
           onClick={onCancel}
           className="text-muted-foreground hover:text-foreground text-xs"
         >
@@ -368,7 +377,9 @@ function ReplayResultsView({
           <StatusBadge status={result.status} />
         </div>
         <button
+          type="button"
           onClick={onClose}
+          aria-label="Close"
           className="text-muted-foreground hover:text-foreground"
         >
           <XCircleIcon className="size-4" />
@@ -389,6 +400,7 @@ function ReplayResultsView({
         {result.step_results.map((sr: StepResult) => (
           <div key={sr.step_id} className="rounded-lg border text-xs">
             <button
+              type="button"
               onClick={() => toggle(sr.step_id)}
               className="hover:bg-muted/50 flex w-full items-center gap-2 px-2 py-1.5 text-left"
             >
@@ -466,11 +478,14 @@ function TemplateLibrary({
             placeholder={t.teachRepeat.searchWorkflows}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label={t.teachRepeat.searchWorkflows}
             className="w-full bg-transparent text-sm outline-none"
           />
         </div>
         <button
+          type="button"
           onClick={onRefresh}
+          aria-label="Refresh"
           className="text-muted-foreground hover:text-foreground"
           title="Refresh"
         >
@@ -516,30 +531,36 @@ function TemplateLibrary({
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect(t);
                 }}
+                aria-label="Replay"
                 title="Replay"
                 className="text-muted-foreground hover:text-foreground rounded p-1"
               >
                 <PlayIcon className="size-3.5" />
               </button>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDuplicate(t.id);
                 }}
+                aria-label="Duplicate"
                 title="Duplicate"
                 className="text-muted-foreground hover:text-foreground rounded p-1"
               >
                 <CopyIcon className="size-3.5" />
               </button>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete(t.id);
                 }}
+                aria-label="Delete"
                 title="Delete"
                 className="text-muted-foreground hover:text-destructive rounded p-1"
               >
@@ -573,6 +594,7 @@ export function TeachRepeatPanel({
   className,
 }: TeachRepeatPanelProps) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [view, setView] = useState<PanelView>("library");
   const [templates, setTemplates] = useState<WorkflowTemplateListItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -671,6 +693,17 @@ export function TeachRepeatPanel({
   };
 
   const handleDelete = async (id: string) => {
+    const template = templates.find((tpl) => tpl.id === id);
+    if (
+      !(await confirm({
+        title: t.teachRepeat.deleteConfirmTitle,
+        description: template
+          ? t.teachRepeat.deleteConfirmDescription(template.name)
+          : t.teachRepeat.deleteConfirmDescriptionUnknown,
+        confirmLabel: t.common.delete,
+      }))
+    )
+      return;
     try {
       await deleteTemplate(id);
       setTemplates((prev) => prev.filter((t) => t.id !== id));
@@ -781,6 +814,7 @@ export function TeachRepeatPanel({
           )}
         </>
       )}
+      {confirmDialog}
     </div>
   );
 }

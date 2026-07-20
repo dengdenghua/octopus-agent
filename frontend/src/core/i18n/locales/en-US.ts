@@ -1470,6 +1470,9 @@ export const enUS: Translations = {
     removing: "Removing...",
     pingAria: (name) => `Ping ${name}`,
     removeAria: (name) => `Remove ${name}`,
+    removeConfirmTitle: (name) => `Remove remote backend "${name}"?`,
+    removeConfirmDescription:
+      "This backend will be removed from the list. You can add it again later if needed.",
   },
 
   invariantsPanel: {
@@ -3636,6 +3639,7 @@ export const enUS: Translations = {
       port: "Port",
       thinkingLabel: "Thinking",
       visionLabel: "Vision",
+      millionContextLabel: "1M context",
       backendUrlHint:
         "Current gateway URL. Use VITE_BACKEND_BASE_URL env var to change.",
       connectionHelp: "If the connection is abnormal, try the following:",
@@ -3890,6 +3894,13 @@ export const enUS: Translations = {
     active: "Active",
     analyzing: "Analyzing...",
     generatingPlan: "Generating plan...",
+    rejectConfirmTitle: "Reject this plan?",
+    rejectConfirmDescription:
+      "Rejecting will discard the current plan. You'll need to start a new quest.",
+    cancelConfirmTitle: "Cancel this quest?",
+    cancelConfirmDescription:
+      "Cancelling will stop all in-progress steps. Completed work will be preserved.",
+    cancelConfirmLabel: "Cancel quest",
     verifyingResults: "Verifying results...",
     generatingReport: "Generating report...",
     newQuest: "New Quest",
@@ -4833,6 +4844,8 @@ Strategy:
     toastModifyFailed: "Failed to modify plan",
     toastRejected: "Plan rejected",
     toastRejectFailed: "Failed to reject plan",
+    removeStepAria: "Remove this step",
+    stepDescriptionAria: "Step description",
   },
 
   // Mode Selector
@@ -5121,6 +5134,9 @@ Strategy:
     toastStartIndexingFailed: "Failed to start indexing",
     toastIndexCleared: "Index cleared",
     toastClearIndexFailed: "Failed to clear index",
+    clearIndexConfirmTitle: "Clear codebase index?",
+    clearIndexConfirmDescription:
+      "All indexed files, chunks, and vectors will be deleted. The next indexing run will rebuild from scratch.",
   },
 
   // Teach & Repeat
@@ -5149,6 +5165,11 @@ Strategy:
     used: "used",
     noDescription: "No description",
     duplicate: "Duplicate",
+    deleteConfirmTitle: "Delete this workflow template?",
+    deleteConfirmDescription: (name) =>
+      `Permanently delete "${name}" and all its steps and parameters. This cannot be undone.`,
+    deleteConfirmDescriptionUnknown:
+      "Permanently delete this template and all its steps and parameters. This cannot be undone.",
   },
 
   // Parallel Agents
@@ -7148,6 +7169,9 @@ Strategy:
     pause: "Pause",
     resume: "Resume",
     clear: "Clear",
+    clearConfirmTitle: "Clear current log?",
+    clearConfirmDescription:
+      "This will empty the displayed event list. New events will continue to stream in.",
     noEvents: "No events",
     noEventsHint:
       "Wait for journal events to appear · Make a request to start.",
@@ -7401,6 +7425,9 @@ Strategy:
     linesSuffix: (n: number) => `${n}`,
     forgetLineTitle: "Forget this line (make the system unlearn it)",
     forgetLineButton: "Forget",
+    forgetConfirmTitle: "Forget this learning?",
+    forgetConfirmDescription:
+      "Removes it from learned rules/memories. The system won't reference it on similar tasks next time.",
     nextRunImpact: "Used automatically the next time a similar task appears.",
     failureReadBeforeWrite: "read-before-write was required",
     failureTypeError: "a type error",
@@ -8534,5 +8561,90 @@ Strategy:
       fileArchived: (name, folder) => `Archived "${name}" to ${folder}`,
       trashed: (name) => `Moved “${name}” to trash`,
     },
+  },
+
+  remoteWorkspace: {
+    switcherTitle: "Workspaces",
+    switcherAria: "Switch workspace",
+    searchPlaceholder: "Search workspaces...",
+    empty: "No workspaces registered.",
+    loading: "Loading workspaces...",
+    loadFailed: (error) => `Failed to load workspaces: ${error}`,
+    addWorkspace: "Add workspace",
+    switchWorkspaceAria: (name) => `Switch to ${name}`,
+    activeWorkspace: "Active",
+    typeLocal: "Local",
+    typeSmb: "SMB",
+    typeNfs: "NFS",
+    typeWebdav: "WebDAV",
+    typeSftp: "SFTP",
+    typeS3: "S3",
+    mountTarget: "Mount target",
+
+    mountDialog: {
+      title: "Add workspace",
+      nameLabel: "Name",
+      namePlaceholder: "Workspace name",
+      protocolLabel: "Protocol",
+      pathLabel: "Path",
+      pathPlaceholder: "/absolute/path/to/folder",
+      hostLabel: "Host",
+      shareLabel: "Share",
+      usernameLabel: "Username",
+      passwordLabel: "Password",
+      domainLabel: "Domain",
+      exportPathLabel: "Export path",
+      urlLabel: "URL",
+      portLabel: "Port",
+      identityFileLabel: "Identity file",
+      endpointUrlLabel: "Endpoint URL",
+      bucketLabel: "Bucket",
+      accessKeyLabel: "Access key",
+      secretKeyLabel: "Secret key",
+      regionLabel: "Region",
+      testConnection: "Test connection",
+      testing: "Testing...",
+      testOk: "Connection OK",
+      testFailed: (error) => `Connection failed: ${error}`,
+      create: "Create",
+      creating: "Creating...",
+      createFailed: (error) => `Failed to create workspace: ${error}`,
+      credentialsHint:
+        "Credentials are sent to the backend only — they are not persisted in the browser.",
+    },
+
+    members: {
+      title: "Members",
+      loading: "Loading members...",
+      empty: "No members yet.",
+      addMember: "Add member",
+      addMemberPlaceholder: "Member ID",
+      roleOwner: "Owner",
+      roleEditor: "Editor",
+      roleReviewer: "Reviewer",
+      roleViewer: "Viewer",
+      changeRoleAria: (name) => `Change role of ${name}`,
+      removeMemberAria: (name) => `Remove ${name}`,
+      editingFile: (file) => `Editing ${file}`,
+      editingNone: "Idle",
+      addFailed: (error) => `Failed to add member: ${error}`,
+      removeFailed: (error) => `Failed to remove member: ${error}`,
+      roleChangeFailed: (error) => `Failed to change role: ${error}`,
+    },
+
+    lease: {
+      locked: "Locked",
+      lockedBy: (name) => `Locked by ${name}`,
+      remaining: (seconds) => `${Math.max(0, Math.round(seconds))}s left`,
+      requestTakeover: "Request takeover",
+      takeoverSent: "Takeover request sent",
+      takeoverFailed: (error) => `Takeover failed: ${error}`,
+    },
+
+    localTab: "Local folder",
+    remoteTab: "Remote mount",
+    remoteEmpty: "No remote workspaces registered.",
+    remoteLoading: "Loading remote workspaces...",
+    remoteLoadFailed: (error) => `Failed to load remote workspaces: ${error}`,
   },
 };

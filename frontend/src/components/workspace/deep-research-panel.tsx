@@ -41,6 +41,7 @@ import {
   type SubagentRouteDecision,
   type TaskResult,
 } from "@/core/parallel-agents/api";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 interface DeepResearchPanelProps {
@@ -56,6 +57,7 @@ export function DeepResearchPanel({
   error,
   onClose,
 }: DeepResearchPanelProps) {
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [currentJob, setCurrentJob] = useState(job);
   const [batch, setBatch] = useState<BatchResult | null>(null);
   const [liveEvents, setLiveEvents] = useState<BatchStreamEvent[]>([]);
@@ -126,6 +128,14 @@ export function DeepResearchPanel({
 
   const handleCancel = useCallback(async () => {
     if (!cancellableTasks.length || canceling) return;
+    if (
+      !(await confirm({
+        title: "Cancel agent run?",
+        description: `This will cancel ${cancellableTasks.length} active agent task${cancellableTasks.length === 1 ? "" : "s"}. Partial progress will be discarded.`,
+        confirmLabel: "Cancel run",
+      }))
+    )
+      return;
     setCanceling(true);
     try {
       await Promise.all(
@@ -136,7 +146,7 @@ export function DeepResearchPanel({
     } finally {
       setCanceling(false);
     }
-  }, [cancellableTasks, canceling, refreshBatch, refreshJob]);
+  }, [cancellableTasks, canceling, confirm, refreshBatch, refreshJob]);
 
   const handleCopyReport = useCallback(async () => {
     if (!currentJob.final_report) return;
@@ -443,6 +453,7 @@ export function DeepResearchPanel({
                   <button
                     type="button"
                     onClick={handleCopyReport}
+                    aria-label={copied ? "Copied" : "Copy Markdown"}
                     className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
                     title={copied ? "Copied" : "Copy Markdown"}
                   >
@@ -455,6 +466,7 @@ export function DeepResearchPanel({
                   <button
                     type="button"
                     onClick={handleDownloadReport}
+                    aria-label="Download Markdown"
                     className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
                     title="Download Markdown"
                   >
@@ -476,6 +488,7 @@ export function DeepResearchPanel({
           </div>
         ) : null}
       </div>
+      {confirmDialog}
     </div>
   );
 }

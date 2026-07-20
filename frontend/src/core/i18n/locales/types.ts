@@ -1260,6 +1260,8 @@ export interface Translations {
     removing: string;
     pingAria: (name: string) => string;
     removeAria: (name: string) => string;
+    removeConfirmTitle: (name: string) => string;
+    removeConfirmDescription: string;
   };
 
   // Invariants panel
@@ -2982,6 +2984,7 @@ export interface Translations {
       port: string;
       thinkingLabel: string;
       visionLabel: string;
+      millionContextLabel: string;
       backendUrlHint: string;
       connectionHelp: string;
       connectionHelpReconnect: string;
@@ -3216,6 +3219,11 @@ export interface Translations {
     active: string;
     analyzing: string;
     generatingPlan: string;
+    rejectConfirmTitle: string;
+    rejectConfirmDescription: string;
+    cancelConfirmTitle: string;
+    cancelConfirmDescription: string;
+    cancelConfirmLabel: string;
     verifyingResults: string;
     generatingReport: string;
     newQuest: string;
@@ -4021,6 +4029,8 @@ export interface Translations {
     toastModifyFailed: string;
     toastRejected: string;
     toastRejectFailed: string;
+    removeStepAria: string;
+    stepDescriptionAria: string;
   };
 
   // Mode Selector
@@ -4288,6 +4298,8 @@ export interface Translations {
     toastStartIndexingFailed: string;
     toastIndexCleared: string;
     toastClearIndexFailed: string;
+    clearIndexConfirmTitle: string;
+    clearIndexConfirmDescription: string;
   };
 
   // Teach & Repeat
@@ -4315,6 +4327,9 @@ export interface Translations {
     used: string;
     noDescription: string;
     duplicate: string;
+    deleteConfirmTitle: string;
+    deleteConfirmDescription: (name: string) => string;
+    deleteConfirmDescriptionUnknown: string;
   };
 
   // Parallel Agents
@@ -6162,6 +6177,8 @@ export interface Translations {
     pause: string;
     resume: string;
     clear: string;
+    clearConfirmTitle: string;
+    clearConfirmDescription: string;
     noEvents: string;
     noEventsHint: string;
     eventActionFile: string;
@@ -6383,6 +6400,8 @@ export interface Translations {
     linesSuffix: (n: number) => string;
     forgetLineTitle: string;
     forgetLineButton: string;
+    forgetConfirmTitle: string;
+    forgetConfirmDescription: string;
     nextRunImpact: string;
     failureReadBeforeWrite: string;
     failureTypeError: string;
@@ -7363,5 +7382,91 @@ export interface Translations {
       fileArchived: (name: string, folder: string) => string;
       trashed: (name: string) => string;
     };
+  };
+
+  // Remote Workspace collaboration (Task 8–11)
+  remoteWorkspace: {
+    switcherTitle: string;
+    switcherAria: string;
+    searchPlaceholder: string;
+    empty: string;
+    loading: string;
+    loadFailed: (error: string) => string;
+    addWorkspace: string;
+    switchWorkspaceAria: (name: string) => string;
+    activeWorkspace: string;
+    typeLocal: string;
+    typeSmb: string;
+    typeNfs: string;
+    typeWebdav: string;
+    typeSftp: string;
+    typeS3: string;
+    mountTarget: string;
+
+    mountDialog: {
+      title: string;
+      nameLabel: string;
+      namePlaceholder: string;
+      protocolLabel: string;
+      pathLabel: string;
+      pathPlaceholder: string;
+      hostLabel: string;
+      shareLabel: string;
+      usernameLabel: string;
+      passwordLabel: string;
+      domainLabel: string;
+      exportPathLabel: string;
+      urlLabel: string;
+      portLabel: string;
+      identityFileLabel: string;
+      endpointUrlLabel: string;
+      bucketLabel: string;
+      accessKeyLabel: string;
+      secretKeyLabel: string;
+      regionLabel: string;
+      testConnection: string;
+      testing: string;
+      testOk: string;
+      testFailed: (error: string) => string;
+      create: string;
+      creating: string;
+      createFailed: (error: string) => string;
+      credentialsHint: string;
+    };
+
+    members: {
+      title: string;
+      loading: string;
+      empty: string;
+      addMember: string;
+      addMemberPlaceholder: string;
+      roleOwner: string;
+      roleEditor: string;
+      roleReviewer: string;
+      roleViewer: string;
+      changeRoleAria: (name: string) => string;
+      removeMemberAria: (name: string) => string;
+      editingFile: (file: string) => string;
+      editingNone: string;
+      addFailed: (error: string) => string;
+      removeFailed: (error: string) => string;
+      roleChangeFailed: (error: string) => string;
+    };
+
+    lease: {
+      locked: string;
+      lockedBy: (name: string) => string;
+      remaining: (seconds: number) => string;
+      requestTakeover: string;
+      takeoverSent: string;
+      takeoverFailed: (error: string) => string;
+    };
+
+    // WorkDirSelector remote-tab labels (Task 12)
+    localTab: string;
+    remoteTab: string;
+    remoteEmpty: string;
+    remoteLoading: string;
+    remoteLoadFailed: (error: string) => string;
   };
 }

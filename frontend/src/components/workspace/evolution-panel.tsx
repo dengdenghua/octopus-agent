@@ -25,6 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   forgetMemory,
@@ -142,7 +143,7 @@ export function EvolutionPanel({ status, trigger }: EvolutionPanelProps) {
               disabled={reflectMutation.isPending}
               className={cn(
                 "flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium",
-                "bg-foreground text-background transition-colors hover:bg-foreground/90 active:scale-[0.98]",
+                "bg-foreground text-background transition-colors hover:bg-foreground/90",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
               )}
             >
@@ -410,6 +411,7 @@ function LearningList({
   title: string;
 }) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const learningCopy = {
     failureGeneric: t.evolutionPanel.failureGeneric,
     failureReadBeforeWrite: t.evolutionPanel.failureReadBeforeWrite,
@@ -453,7 +455,18 @@ function LearningList({
               </div>
               <button
                 type="button"
-                onClick={() => onDelete(i)}
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: t.evolutionPanel.forgetConfirmTitle,
+                      description:
+                        t.evolutionPanel.forgetConfirmDescription,
+                      confirmLabel: t.evolutionPanel.forgetLineButton,
+                    }))
+                  )
+                    return;
+                  onDelete(i);
+                }}
                 disabled={isDeletingIndex !== undefined}
                 className={cn(
                   "flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-xs",
@@ -470,6 +483,7 @@ function LearningList({
           ))}
         </ul>
       )}
+      {confirmDialog}
     </section>
   );
 }

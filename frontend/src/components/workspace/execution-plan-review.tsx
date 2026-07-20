@@ -128,6 +128,7 @@ function StepEditor({
           onChange={(e) => onUpdate(index, { description: e.target.value })}
           className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/40"
           placeholder="Step description..."
+          aria-label={t.executionPlan.stepDescriptionAria}
         />
         <div className="flex flex-wrap items-center gap-1.5">
           <select
@@ -168,8 +169,10 @@ function StepEditor({
         </div>
       </div>
       <button
+        type="button"
+        aria-label={t.executionPlan.removeStepAria}
         onClick={() => onRemove(index)}
-        className="mt-0.5 rounded p-0.5 text-muted-foreground/40 hover:bg-red-500/10 hover:text-red-500"
+        className="mt-0.5 rounded p-0.5 text-muted-foreground/40 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Trash2Icon className="size-3" />
       </button>
@@ -223,6 +226,7 @@ function PlanStepRow({
       )}
     >
       <button
+        type="button"
         onClick={onToggle}
         className="flex w-full items-start gap-2.5 text-left"
       >
@@ -593,6 +597,7 @@ export function ExecutionPlanReview({
     >
       {/* Header */}
       <button
+        type="button"
         onClick={() => setIsCollapsed(!shouldCollapse)}
         className="flex w-full items-center justify-between px-4 py-3"
       >
@@ -681,6 +686,7 @@ export function ExecutionPlanReview({
                   />
                 ))}
                 <button
+                  type="button"
                   onClick={addEditableStep}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border-default py-2 text-xs text-muted-foreground hover:border-primary/30 hover:text-primary"
                 >

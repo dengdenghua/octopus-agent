@@ -10,6 +10,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   WorkspaceBody,
   WorkspaceContainer,
@@ -19,6 +20,7 @@ import {
 const DESKTOP_ORGANIZER_ENABLED_KEY = "octopus:desktop-organizer-enabled";
 
 export default function DesktopOrganizerPage() {
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState<"install" | "remove" | null>(null);
   const [contextMenuMessage, setContextMenuMessage] = useState("");
@@ -47,6 +49,14 @@ export default function DesktopOrganizerPage() {
   };
 
   const removeContextMenu = async () => {
+    if (
+      !(await confirm({
+        title: "移除系统右键菜单？",
+        description: "将从 Windows 桌面右键菜单中移除 Octopus 一键整理命令。",
+        confirmLabel: "移除",
+      }))
+    )
+      return;
     setBusy("remove");
     setContextMenuMessage("");
     const result = await window.octopus?.desktop?.removeContextMenu?.();
@@ -66,7 +76,7 @@ export default function DesktopOrganizerPage() {
           <section className="workspace-panel flex flex-col gap-5 p-4 md:p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-[var(--shadow-xs)]">
+                <div className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <FolderKanbanIcon className="size-5" />
                 </div>
                 <div>
@@ -160,6 +170,7 @@ export default function DesktopOrganizerPage() {
           </section>
         </div>
       </WorkspaceBody>
+      {confirmDialog}
     </WorkspaceContainer>
   );
 }

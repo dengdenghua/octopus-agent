@@ -1464,6 +1464,9 @@ export const koKR: Translations = {
     removing: "Removing...",
     pingAria: (name) => `Ping ${name}`,
     removeAria: (name) => `Remove ${name}`,
+    removeConfirmTitle: (name) => `원격 백엔드 "${name}"을(를) 제거하시겠습니까?`,
+    removeConfirmDescription:
+      "이 백엔드는 목록에서 삭제됩니다. 필요하면 나중에 다시 추가할 수 있습니다.",
   },
 
   invariantsPanel: {
@@ -3627,6 +3630,7 @@ export const koKR: Translations = {
       port: "Port",
       thinkingLabel: "Thinking",
       visionLabel: "Vision",
+      millionContextLabel: "1M context",
       backendUrlHint:
         "Current gateway URL. Use VITE_BACKEND_BASE_URL env var to change.",
       connectionHelp: "If the connection is abnormal, try the following:",
@@ -3879,6 +3883,13 @@ export const koKR: Translations = {
     active: "Active",
     analyzing: "Analyzing...",
     generatingPlan: "Generating plan...",
+    rejectConfirmTitle: "이 계획을 거부하시겠습니까?",
+    rejectConfirmDescription:
+      "거부하면 현재 계획이 폐기됩니다. 새 퀘스트를 시작해야 합니다.",
+    cancelConfirmTitle: "이 퀘스트를 취소하시겠습니까?",
+    cancelConfirmDescription:
+      "취소하면 진행 중인 모든 단계가 중지됩니다. 완료된 작업은 유지됩니다.",
+    cancelConfirmLabel: "퀘스트 취소",
     verifyingResults: "Verifying results...",
     generatingReport: "Generating report...",
     newQuest: "New Quest",
@@ -4820,6 +4831,8 @@ Strategy:
     toastModifyFailed: "Failed to modify plan",
     toastRejected: "Plan rejected",
     toastRejectFailed: "Failed to reject plan",
+    removeStepAria: "이 단계 제거",
+    stepDescriptionAria: "단계 설명",
   },
 
   // Mode Selector
@@ -5108,6 +5121,9 @@ Strategy:
     toastStartIndexingFailed: "Failed to start indexing",
     toastIndexCleared: "Index cleared",
     toastClearIndexFailed: "Failed to clear index",
+    clearIndexConfirmTitle: "코드베이스 인덱스를 비우시겠습니까?",
+    clearIndexConfirmDescription:
+      "인덱싱된 모든 파일, 청크, 벡터가 삭제됩니다. 다음 인덱싱 시 처음부터 다시 구축됩니다.",
   },
 
   // Teach & Repeat
@@ -5136,6 +5152,11 @@ Strategy:
     used: "used",
     noDescription: "No description",
     duplicate: "Duplicate",
+    deleteConfirmTitle: "이 워크플로 템플릿을 삭제하시겠습니까?",
+    deleteConfirmDescription: (name) =>
+      `"${name}"과(와) 모든 단계·매개변수를 영구히 삭제합니다. 되돌릴 수 없습니다.`,
+    deleteConfirmDescriptionUnknown:
+      "이 템플릿과 모든 단계·매개변수를 영구히 삭제합니다. 되돌릴 수 없습니다.",
   },
 
   // Parallel Agents
@@ -7131,6 +7152,9 @@ Strategy:
     pause: "Pause",
     resume: "Resume",
     clear: "Clear",
+    clearConfirmTitle: "현재 로그를 비우시겠습니까?",
+    clearConfirmDescription:
+      "표시된 이벤트 목록을 비웁니다. 새 이벤트는 계속 들어옵니다.",
     noEvents: "No events",
     noEventsHint:
       "Wait for journal events to appear · Make a request to start.",
@@ -7384,6 +7408,9 @@ Strategy:
     linesSuffix: (n: number) => `${n}`,
     forgetLineTitle: "Forget this line (make the system unlearn it)",
     forgetLineButton: "Forget",
+    forgetConfirmTitle: "이 학습 기록을 잊으시겠습니까?",
+    forgetConfirmDescription:
+      "학습된 규칙/기억에서 삭제합니다. 다음에 비슷한 작업을 만나면 참조하지 않습니다.",
     nextRunImpact: "Used automatically the next time a similar task appears.",
     failureReadBeforeWrite: "read-before-write was required",
     failureTypeError: "a type error",
@@ -8516,5 +8543,90 @@ Strategy:
         `"${name}"을(를) ${folder}(으)로 보관했습니다`,
       trashed: (name) => `“${name}”을(를) 휴지통으로 이동했습니다`,
     },
+  },
+
+  remoteWorkspace: {
+    switcherTitle: "워크스페이스",
+    switcherAria: "워크스페이스 전환",
+    searchPlaceholder: "워크스페이스 검색...",
+    empty: "등록된 워크스페이스가 없습니다.",
+    loading: "워크스페이스를 불러오는 중...",
+    loadFailed: (error) => `워크스페이스 불러오기 실패: ${error}`,
+    addWorkspace: "워크스페이스 추가",
+    switchWorkspaceAria: (name) => `${name}(으)로 전환`,
+    activeWorkspace: "사용 중",
+    typeLocal: "로컬",
+    typeSmb: "SMB",
+    typeNfs: "NFS",
+    typeWebdav: "WebDAV",
+    typeSftp: "SFTP",
+    typeS3: "S3",
+    mountTarget: "마운트 대상",
+
+    mountDialog: {
+      title: "워크스페이스 추가",
+      nameLabel: "이름",
+      namePlaceholder: "워크스페이스 이름",
+      protocolLabel: "프로토콜",
+      pathLabel: "경로",
+      pathPlaceholder: "/절대경로/폴더",
+      hostLabel: "호스트",
+      shareLabel: "공유 이름",
+      usernameLabel: "사용자 이름",
+      passwordLabel: "비밀번호",
+      domainLabel: "도메인",
+      exportPathLabel: "내보내기 경로",
+      urlLabel: "URL",
+      portLabel: "포트",
+      identityFileLabel: "ID 파일",
+      endpointUrlLabel: "엔드포인트 URL",
+      bucketLabel: "버킷",
+      accessKeyLabel: "액세스 키",
+      secretKeyLabel: "시크릿 키",
+      regionLabel: "리전",
+      testConnection: "연결 테스트",
+      testing: "테스트 중...",
+      testOk: "연결 정상",
+      testFailed: (error) => `연결 실패: ${error}`,
+      create: "만들기",
+      creating: "만드는 중...",
+      createFailed: (error) => `워크스페이스 생성 실패: ${error}`,
+      credentialsHint:
+        "자격 증명은 백엔드로만 전송되며 브라우저에 저장되지 않습니다.",
+    },
+
+    members: {
+      title: "멤버",
+      loading: "멤버를 불러오는 중...",
+      empty: "아직 멤버가 없습니다.",
+      addMember: "멤버 추가",
+      addMemberPlaceholder: "멤버 ID",
+      roleOwner: "소유자",
+      roleEditor: "편집자",
+      roleReviewer: "검토자",
+      roleViewer: "조회자",
+      changeRoleAria: (name) => `${name}의 역할 변경`,
+      removeMemberAria: (name) => `${name} 제거`,
+      editingFile: (file) => `${file} 편집 중`,
+      editingNone: "유휴",
+      addFailed: (error) => `멤버 추가 실패: ${error}`,
+      removeFailed: (error) => `멤버 제거 실패: ${error}`,
+      roleChangeFailed: (error) => `역할 변경 실패: ${error}`,
+    },
+
+    lease: {
+      locked: "잠김",
+      lockedBy: (name) => `${name}님이 편집 중`,
+      remaining: (seconds) => `${Math.max(0, Math.round(seconds))}초 남음`,
+      requestTakeover: "인계 요청",
+      takeoverSent: "인계 요청을 보냈습니다",
+      takeoverFailed: (error) => `인계 실패: ${error}`,
+    },
+
+    localTab: "로컬 폴더",
+    remoteTab: "원격 마운트",
+    remoteEmpty: "등록된 원격 워크스페이스가 없습니다.",
+    remoteLoading: "원격 워크스페이스를 불러오는 중…",
+    remoteLoadFailed: (error) => `원격 워크스페이스 불러오기 실패: ${error}`,
   },
 };

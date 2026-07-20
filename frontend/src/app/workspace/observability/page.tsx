@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   WorkspaceBody,
   WorkspaceContainer,
@@ -125,7 +126,7 @@ export default function ObservabilityPage({
           <section className="workspace-panel px-6 py-5">
             <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
               <div className="flex items-center gap-4">
-                <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-violet-500/20">
+                <div className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <ActivityIcon className="size-5" />
                 </div>
                 <div className="flex-1">
@@ -663,9 +664,23 @@ interface JournalEvent {
 
 function JournalPanel() {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [events, setEvents] = useState<JournalEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const [paused, setPaused] = useState(false);
+
+  const handleClear = useCallback(async () => {
+    if (events.length === 0) return;
+    if (
+      !(await confirm({
+        title: t.observabilityPage.clearConfirmTitle,
+        description: t.observabilityPage.clearConfirmDescription,
+        confirmLabel: t.observabilityPage.clear,
+      }))
+    )
+      return;
+    setEvents([]);
+  }, [confirm, events.length, t.observabilityPage.clearConfirmTitle, t.observabilityPage.clearConfirmDescription, t.observabilityPage.clear]);
 
   useEffect(() => {
     const base = getBackendBaseURL();
@@ -715,7 +730,12 @@ function JournalPanel() {
             >
               {paused ? t.observabilityPage.resume : t.observabilityPage.pause}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setEvents([])}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleClear}
+              disabled={events.length === 0}
+            >
               {t.observabilityPage.clear}
             </Button>
           </div>
@@ -875,6 +895,7 @@ function JournalPanel() {
             ))}
         </div>
       </CardContent>
+      {confirmDialog}
     </Card>
   );
 }

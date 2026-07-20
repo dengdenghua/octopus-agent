@@ -19,6 +19,7 @@ import { swallow } from "@/core/utils/log";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -189,8 +190,10 @@ function SearchResultCard({
     <div className="group rounded-lg border bg-card p-2 text-[11px] transition-colors hover:border-primary/30">
       <div className="flex items-start justify-between gap-2">
         <button
+          type="button"
           className="flex min-w-0 flex-1 items-start gap-1.5 text-left"
           onClick={() => onOpenFile?.(result.file_path, result.start_line)}
+          aria-label={`Open ${result.file_path}:${result.start_line}`}
           title={`Open ${result.file_path}:${result.start_line}`}
         >
           <CodeIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
@@ -225,6 +228,7 @@ function SearchResultCard({
         </div>
       )}
       <button
+        type="button"
         className="mt-1 text-[10px] text-primary/70 hover:text-primary"
         onClick={() => setExpanded(!expanded)}
       >
@@ -382,6 +386,7 @@ export default function CodebaseIndexPanel({
   onOpenFile?: (path: string, line: number) => void;
 }) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [tab, setTab] = useState<PanelTab>("search");
   const [status, setStatus] = useState<IndexStatus | null>(null);
   const [stats, setStats] = useState<IndexStats | null>(null);
@@ -466,6 +471,14 @@ export default function CodebaseIndexPanel({
   );
 
   const handleClear = useCallback(async () => {
+    if (
+      !(await confirm({
+        title: t.codebaseIndex.clearIndexConfirmTitle,
+        description: t.codebaseIndex.clearIndexConfirmDescription,
+        confirmLabel: t.codebaseIndex.clearIndex,
+      }))
+    )
+      return;
     try {
       await api.clearIndex();
       toast.success(t.codebaseIndex.toastIndexCleared);
@@ -478,7 +491,11 @@ export default function CodebaseIndexPanel({
       );
     }
   }, [
+    confirm,
     refreshStatus,
+    t.codebaseIndex.clearIndexConfirmTitle,
+    t.codebaseIndex.clearIndexConfirmDescription,
+    t.codebaseIndex.clearIndex,
     t.codebaseIndex.toastIndexCleared,
     t.codebaseIndex.toastClearIndexFailed,
   ]);
@@ -525,24 +542,30 @@ export default function CodebaseIndexPanel({
         </div>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => handleStartIndex(false)}
             disabled={isRunning}
+            aria-label={t.codebaseIndex.indexIncremental}
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
             title={t.codebaseIndex.indexIncremental}
           >
             <SparklesIcon className="size-3.5" />
           </button>
           <button
+            type="button"
             onClick={() => handleStartIndex(true)}
             disabled={isRunning}
+            aria-label={t.codebaseIndex.rebuildFull}
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
             title={t.codebaseIndex.rebuildFull}
           >
             <RefreshCwIcon className="size-3.5" />
           </button>
           <button
+            type="button"
             onClick={handleClear}
             disabled={isRunning || !isIndexed}
+            aria-label={t.codebaseIndex.clearIndex}
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive disabled:opacity-40"
             title={t.codebaseIndex.clearIndex}
           >
@@ -555,6 +578,7 @@ export default function CodebaseIndexPanel({
       <div className="flex border-b text-[11px]">
         {(["search", "status", "stats"] as PanelTab[]).map((t) => (
           <button
+            type="button"
             key={t}
             onClick={() => setTab(t)}
             className={cn(
@@ -584,6 +608,7 @@ export default function CodebaseIndexPanel({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={t.codebaseIndex.searchPlaceholder}
+                aria-label={t.codebaseIndex.searchPlaceholder}
                 className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/50"
               />
               {searching && (
@@ -614,6 +639,7 @@ export default function CodebaseIndexPanel({
                   <div className="mt-0.5">{t.codebaseIndex.notIndexedHint}</div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => handleStartIndex(false)}
                   className="mt-1 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 >
@@ -756,6 +782,7 @@ export default function CodebaseIndexPanel({
         {/* ---- STATS TAB ---- */}
         {tab === "stats" && <StatsSection stats={stats} />}
       </div>
+      {confirmDialog}
     </div>
   );
 }

@@ -134,6 +134,15 @@ describe("RemoteBackendsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Remove prod/i }));
 
     await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: /Remove remote backend/i }),
+      ).toBeInTheDocument();
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Remove$/i }),
+    );
+
+    await waitFor(() => {
       const del = fetchMock.mock.calls.find(
         (c) => (c[1] as RequestInit | undefined)?.method === "DELETE",
       );

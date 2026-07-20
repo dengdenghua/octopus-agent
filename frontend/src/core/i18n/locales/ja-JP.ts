@@ -1468,6 +1468,9 @@ export const jaJP: Translations = {
     removing: "Removing...",
     pingAria: (name) => `Ping ${name}`,
     removeAria: (name) => `Remove ${name}`,
+    removeConfirmTitle: (name) => `リモートバックエンド「${name}」を削除しますか？`,
+    removeConfirmDescription:
+      "このバックエンドはリストから削除されます。必要に応じて後で再追加できます。",
   },
 
   invariantsPanel: {
@@ -3636,6 +3639,7 @@ export const jaJP: Translations = {
       port: "Port",
       thinkingLabel: "Thinking",
       visionLabel: "Vision",
+      millionContextLabel: "1M context",
       backendUrlHint:
         "Current gateway URL. Use VITE_BACKEND_BASE_URL env var to change.",
       connectionHelp: "If the connection is abnormal, try the following:",
@@ -3890,6 +3894,13 @@ export const jaJP: Translations = {
     active: "Active",
     analyzing: "Analyzing...",
     generatingPlan: "Generating plan...",
+    rejectConfirmTitle: "この計画を却下しますか？",
+    rejectConfirmDescription:
+      "却下すると現在の計画が破棄されます。新しいクエストを開始する必要があります。",
+    cancelConfirmTitle: "このクエストをキャンセルしますか？",
+    cancelConfirmDescription:
+      "キャンセルすると進行中のすべてのステップが停止します。完了した作業は保持されます。",
+    cancelConfirmLabel: "クエストをキャンセル",
     verifyingResults: "Verifying results...",
     generatingReport: "Generating report...",
     newQuest: "New Quest",
@@ -4838,6 +4849,8 @@ Strategy:
     toastModifyFailed: "Failed to modify plan",
     toastRejected: "Plan rejected",
     toastRejectFailed: "Failed to reject plan",
+    removeStepAria: "このステップを削除",
+    stepDescriptionAria: "ステップの説明",
   },
 
   // Mode Selector
@@ -5126,6 +5139,9 @@ Strategy:
     toastStartIndexingFailed: "Failed to start indexing",
     toastIndexCleared: "Index cleared",
     toastClearIndexFailed: "Failed to clear index",
+    clearIndexConfirmTitle: "コードベースのインデックスを消去しますか？",
+    clearIndexConfirmDescription:
+      "インデックスされたすべてのファイル、チャンク、ベクターが削除されます。次回のインデックス作成で再構築されます。",
   },
 
   // Teach & Repeat
@@ -5154,6 +5170,11 @@ Strategy:
     used: "used",
     noDescription: "No description",
     duplicate: "Duplicate",
+    deleteConfirmTitle: "このワークフローテンプレートを削除しますか？",
+    deleteConfirmDescription: (name) =>
+      `「${name}」とそのすべてのステップ・パラメータを完全に削除します。元に戻せません。`,
+    deleteConfirmDescriptionUnknown:
+      "このテンプレートとそのすべてのステップ・パラメータを完全に削除します。元に戻せません。",
   },
 
   // Parallel Agents
@@ -7148,6 +7169,9 @@ Strategy:
     pause: "Pause",
     resume: "Resume",
     clear: "Clear",
+    clearConfirmTitle: "現在のログを消去しますか？",
+    clearConfirmDescription:
+      "表示中のイベントリストを空にします。新しいイベントは引き続き流れてきます。",
     noEvents: "No events",
     noEventsHint:
       "Wait for journal events to appear · Make a request to start.",
@@ -7401,6 +7425,9 @@ Strategy:
     linesSuffix: (n: number) => `${n}`,
     forgetLineTitle: "Forget this line (make the system unlearn it)",
     forgetLineButton: "Forget",
+    forgetConfirmTitle: "この学習記録を忘れますか？",
+    forgetConfirmDescription:
+      "学習したルール/記憶から削除します。次回同様のタスクでは参照されません。",
     nextRunImpact: "Used automatically the next time a similar task appears.",
     failureReadBeforeWrite: "read-before-write was required",
     failureTypeError: "a type error",
@@ -8545,5 +8572,90 @@ Strategy:
         `"${name}" を ${folder} にアーカイブしました`,
       trashed: (name) => `「${name}」をゴミ箱に移動しました`,
     },
+  },
+
+  remoteWorkspace: {
+    switcherTitle: "ワークスペース",
+    switcherAria: "ワークスペースを切り替え",
+    searchPlaceholder: "ワークスペースを検索...",
+    empty: "登録されたワークスペースはありません。",
+    loading: "ワークスペースを読み込み中...",
+    loadFailed: (error) => `ワークスペースの読み込みに失敗しました: ${error}`,
+    addWorkspace: "ワークスペースを追加",
+    switchWorkspaceAria: (name) => `${name} に切り替え`,
+    activeWorkspace: "使用中",
+    typeLocal: "ローカル",
+    typeSmb: "SMB",
+    typeNfs: "NFS",
+    typeWebdav: "WebDAV",
+    typeSftp: "SFTP",
+    typeS3: "S3",
+    mountTarget: "マウント先",
+
+    mountDialog: {
+      title: "ワークスペースを追加",
+      nameLabel: "名前",
+      namePlaceholder: "ワークスペース名",
+      protocolLabel: "プロトコル",
+      pathLabel: "パス",
+      pathPlaceholder: "/絶対パス/フォルダ",
+      hostLabel: "ホスト",
+      shareLabel: "共有名",
+      usernameLabel: "ユーザー名",
+      passwordLabel: "パスワード",
+      domainLabel: "ドメイン",
+      exportPathLabel: "エクスポートパス",
+      urlLabel: "URL",
+      portLabel: "ポート",
+      identityFileLabel: "ID ファイル",
+      endpointUrlLabel: "エンドポイント URL",
+      bucketLabel: "バケット",
+      accessKeyLabel: "アクセスキー",
+      secretKeyLabel: "シークレットキー",
+      regionLabel: "リージョン",
+      testConnection: "接続テスト",
+      testing: "テスト中...",
+      testOk: "接続 OK",
+      testFailed: (error) => `接続失敗: ${error}`,
+      create: "作成",
+      creating: "作成中...",
+      createFailed: (error) => `ワークスペースの作成に失敗しました: ${error}`,
+      credentialsHint:
+        "認証情報はバックエンドにのみ送信され、ブラウザには保存されません。",
+    },
+
+    members: {
+      title: "メンバー",
+      loading: "メンバーを読み込み中...",
+      empty: "メンバーはまだいません。",
+      addMember: "メンバーを追加",
+      addMemberPlaceholder: "メンバー ID",
+      roleOwner: "オーナー",
+      roleEditor: "編集者",
+      roleReviewer: "レビューアー",
+      roleViewer: "閲覧者",
+      changeRoleAria: (name) => `${name} のロールを変更`,
+      removeMemberAria: (name) => `${name} を削除`,
+      editingFile: (file) => `${file} を編集中`,
+      editingNone: "アイドル",
+      addFailed: (error) => `メンバーの追加に失敗しました: ${error}`,
+      removeFailed: (error) => `メンバーの削除に失敗しました: ${error}`,
+      roleChangeFailed: (error) => `ロールの変更に失敗しました: ${error}`,
+    },
+
+    lease: {
+      locked: "ロック中",
+      lockedBy: (name) => `${name} が編集中`,
+      remaining: (seconds) => `残り ${Math.max(0, Math.round(seconds))} 秒`,
+      requestTakeover: "引き継ぎを要求",
+      takeoverSent: "引き継ぎ要求を送信しました",
+      takeoverFailed: (error) => `引き継ぎに失敗しました: ${error}`,
+    },
+
+    localTab: "ローカルフォルダ",
+    remoteTab: "リモートマウント",
+    remoteEmpty: "登録されたリモートワークスペースがありません。",
+    remoteLoading: "リモートワークスペースを読み込み中…",
+    remoteLoadFailed: (error) => `リモートワークスペースの読み込みに失敗しました: ${error}`,
   },
 };

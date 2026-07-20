@@ -17,6 +17,7 @@ import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
 import { authedEventSource } from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangleIcon,
@@ -446,6 +447,7 @@ function PlanReview({
               className="rounded-lg border border-border-default bg-card text-card-foreground"
             >
               <button
+                type="button"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-accent/40"
                 onClick={() => toggleStep(step.step_id)}
               >
@@ -491,12 +493,14 @@ function PlanReview({
 
       <div className="flex justify-end gap-2 pt-1">
         <button
+          type="button"
           onClick={onReject}
           className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
           {t.questMode.reject}
         </button>
         <button
+          type="button"
           onClick={onApprove}
           className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] shadow-primary/10 transition-colors"
         >
@@ -849,6 +853,7 @@ function QuestStartForm({
           Ctrl+Enter to start
         </span>
         <button
+          type="button"
           onClick={handleSubmit}
           disabled={!requirement.trim()}
           className={cn(
@@ -884,6 +889,7 @@ export function QuestPanel({
   workspacePath,
 }: QuestPanelProps) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [questId, setQuestId] = useState<string | null>(null);
   const quest = useQuestStream(questId);
 
@@ -912,23 +918,39 @@ export function QuestPanel({
 
   const handleReject = useCallback(async () => {
     if (!questId) return;
+    if (
+      !(await confirm({
+        title: t.questMode.rejectConfirmTitle,
+        description: t.questMode.rejectConfirmDescription,
+        confirmLabel: t.questMode.reject,
+      }))
+    )
+      return;
     try {
       await rejectPlan(questId);
       setQuestId(null);
     } catch (err) {
       console.error("Failed to reject plan:", err);
     }
-  }, [questId]);
+  }, [questId, confirm, t.questMode.rejectConfirmTitle, t.questMode.rejectConfirmDescription, t.questMode.reject]);
 
   const handleCancel = useCallback(async () => {
     if (!questId) return;
+    if (
+      !(await confirm({
+        title: t.questMode.cancelConfirmTitle,
+        description: t.questMode.cancelConfirmDescription,
+        confirmLabel: t.questMode.cancelConfirmLabel,
+      }))
+    )
+      return;
     try {
       await cancelQuest(questId);
       setQuestId(null);
     } catch (err) {
       console.error("Failed to cancel quest:", err);
     }
-  }, [questId]);
+  }, [questId, confirm, t.questMode.cancelConfirmTitle, t.questMode.cancelConfirmDescription, t.questMode.cancelConfirmLabel]);
 
   const handleNewQuest = useCallback(() => {
     setQuestId(null);
@@ -945,7 +967,7 @@ export function QuestPanel({
   return (
     <div
       className={cn(
-        "bg-popover text-popover-foreground w-96 overflow-hidden rounded-lg border border-border-default shadow-2xl shadow-black/5",
+        "bg-popover text-popover-foreground w-96 overflow-hidden rounded-lg border border-border-default shadow-sm",
         className,
       )}
     >
@@ -965,7 +987,9 @@ export function QuestPanel({
         <div className="flex items-center gap-1">
           {isActive && (
             <button
+              type="button"
               onClick={handleCancel}
+              aria-label="Cancel quest"
               className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
               title="Cancel quest"
             >
@@ -973,7 +997,9 @@ export function QuestPanel({
             </button>
           )}
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
           >
             <XIcon className="size-3.5" />
@@ -1064,6 +1090,7 @@ export function QuestPanel({
                 )}
                 <div className="flex justify-center px-4 pb-3 pt-1">
                   <button
+                    type="button"
                     onClick={handleNewQuest}
                     className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] shadow-primary/10 transition-colors"
                   >
@@ -1083,6 +1110,7 @@ export function QuestPanel({
                   {t.questMode.cancelled}
                 </p>
                 <button
+                  type="button"
                   onClick={handleNewQuest}
                   className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] shadow-primary/10 transition-colors"
                 >
@@ -1093,6 +1121,7 @@ export function QuestPanel({
           </>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }
@@ -1115,6 +1144,7 @@ export function QuestButton({
   const { t } = useI18n();
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
         "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-[var(--shadow-xs)] transition-colors transition-shadow duration-200",
