@@ -743,7 +743,7 @@ function AgentCoreVisual({
                   className={cn(
                     "object-contain drop-shadow-2xl",
                     isAvatarOnly
-                      ? "h-[300px] w-[300px] rounded-[32px] border border-white/10 bg-white/95 object-center p-0 mix-blend-normal xl:h-[360px] xl:w-[360px]"
+                      ? "h-[300px] w-[300px] rounded-md border border-white/10 bg-white/95 object-center p-0 mix-blend-normal xl:h-[360px] xl:w-[360px]"
                       : "max-h-full w-full object-center",
                   )}
                   fallback={

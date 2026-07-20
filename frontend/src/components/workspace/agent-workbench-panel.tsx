@@ -1126,10 +1126,9 @@ export function AgentWorkbenchPanel({
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-gradient-to-b from-background/20 to-background/50 px-6 text-center">
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-muted/30 px-6 text-center">
               <div className="relative mb-3.5">
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent blur-lg" />
-                <div className="relative flex size-12 items-center justify-center rounded-2xl border border-border-default/50 bg-gradient-to-br from-card to-muted/20 shadow-[var(--shadow-xs)]">
+                <div className="relative flex size-12 items-center justify-center rounded-lg border border-border bg-card">
                   <MonitorIcon
                     className="size-5 text-muted-foreground/50"
                     strokeWidth={1.5}

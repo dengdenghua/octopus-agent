@@ -79,11 +79,10 @@ export function WorkbenchEmptyPage({
   title: string;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center bg-gradient-to-b from-background/50 to-background/80 p-6 text-center">
+    <div className="flex min-h-0 flex-1 items-center justify-center bg-muted/30 p-6 text-center">
       <div className="flex max-w-xs flex-col items-center gap-3">
         <div className="relative">
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent blur-lg" />
-          <div className="relative flex size-12 items-center justify-center rounded-2xl border border-border-default/60 bg-gradient-to-br from-card to-muted/30 shadow-[var(--shadow-xs)]">
+          <div className="relative flex size-12 items-center justify-center rounded-lg border border-border bg-card">
             <MonitorIcon
               className="size-5 text-muted-foreground/60"
               strokeWidth={1.5}
@@ -1484,7 +1483,7 @@ export function AgentCreationCard({
             aria-hidden="true"
             className="absolute -top-3 left-1/2 z-20 h-5 w-16 -translate-x-1/2 rounded-full border-4 border-foreground bg-background"
           />
-          <div className="relative min-h-[28rem] rounded-lg border border-border-default bg-background px-5 py-5 shadow-xl shadow-black/10">
+          <div className="relative min-h-[28rem] rounded-lg border border-border-default bg-background px-5 py-5">
             {showBrief ? (
               <div className="flex h-full min-h-[25rem] flex-col">
                 <div className="flex items-center gap-3">

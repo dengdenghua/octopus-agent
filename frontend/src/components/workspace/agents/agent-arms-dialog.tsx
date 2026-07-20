@@ -27,7 +27,7 @@ export function AgentArmsDialog({
   const { t } = useI18n();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] overflow-hidden rounded-sm border-border bg-background p-0 shadow-2xl sm:max-w-5xl">
+      <DialogContent className="max-h-[88vh] overflow-hidden rounded-sm border-border bg-background p-0 sm:max-w-5xl">
         <div className="relative overflow-hidden border-b border-border bg-card/90 px-5 py-4">
           <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(90deg,hsl(var(--border)/0.35)_1px,transparent_1px),linear-gradient(180deg,hsl(var(--border)/0.28)_1px,transparent_1px)] [background-size:28px_28px]" />
           <div className="pointer-events-none absolute left-0 top-0 h-5 w-5 border-l border-t border-primary/60" />

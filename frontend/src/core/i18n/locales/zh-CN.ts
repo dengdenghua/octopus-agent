@@ -1698,6 +1698,9 @@ export const zhCN: Translations = {
       taskDeleted: "任务已删除",
       deleteFailed: "删除任务失败",
     },
+    deleteConfirmTitle: "删除任务",
+    deleteConfirmDescription: (title: string) =>
+      `确定要删除任务「${title}」吗？此操作不可撤销。`,
     events: {
       runStarted: "任务已启动",
       roleStarted: (role) => (role ? `${role} 开始执行` : "角色开始执行"),

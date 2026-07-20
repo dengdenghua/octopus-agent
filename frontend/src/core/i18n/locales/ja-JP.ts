@@ -1754,6 +1754,9 @@ export const jaJP: Translations = {
       taskDeleted: "Task deleted",
       deleteFailed: "Failed to delete task",
     },
+    deleteConfirmTitle: "タスクを削除",
+    deleteConfirmDescription: (title: string) =>
+      `タスク「${title}」を削除しますか？この操作は元に戻せません。`,
     events: {
       runStarted: "Task started",
       roleStarted: (role) => (role ? `${role} started` : "Role started"),

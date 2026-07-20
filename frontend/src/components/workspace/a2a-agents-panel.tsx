@@ -592,7 +592,7 @@ function AgentDetailView({
                     {skill.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="rounded bg-muted px-1 py-0.5 text-[9px]"
+                        className="rounded bg-muted px-1 py-0.5 text-[10px]"
                       >
                         {tag}
                       </span>

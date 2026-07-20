@@ -1754,6 +1754,9 @@ export const enUS: Translations = {
       taskDeleted: "Task deleted",
       deleteFailed: "Failed to delete task",
     },
+    deleteConfirmTitle: "Delete task",
+    deleteConfirmDescription: (title: string) =>
+      `Delete task "${title}"? This action cannot be undone.`,
     events: {
       runStarted: "Task started",
       roleStarted: (role) => (role ? `${role} started` : "Role started"),

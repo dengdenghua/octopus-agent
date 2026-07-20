@@ -33,8 +33,7 @@ export function AgentWelcome({
       )}
     >
       <div className="relative">
-        <div className="absolute -inset-3 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/8 to-transparent blur-2xl" />
-        <div className="relative flex size-[80px] items-center justify-center overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-muted/50 shadow-[var(--shadow-lg)]">
+        <div className="relative flex size-[80px] items-center justify-center overflow-hidden rounded-lg border border-border bg-card">
           {agent?.avatar_url ? (
             <img
               src={`${getBackendBaseURL()}${withAgentAvatarVersion(agent.avatar_url)}`}
@@ -42,18 +41,18 @@ export function AgentWelcome({
               className="h-full w-full object-cover"
             />
           ) : (
-            <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/15 to-primary/5">
-              <BotIcon className="text-primary h-9 w-9 drop-shadow-sm" strokeWidth={1.5} />
+            <span className="flex h-full w-full items-center justify-center bg-muted/40">
+              <BotIcon className="text-primary h-9 w-9" strokeWidth={1.5} />
             </span>
           )}
         </div>
-        <span className="absolute -right-1.5 -bottom-1.5 flex h-5.5 items-center gap-1 rounded-lg border border-border bg-background/95 px-2 text-[10px] font-semibold tracking-wide text-muted-foreground/90 shadow-[var(--shadow-sm)] backdrop-blur-sm">
-          <span className="size-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+        <span className="absolute -right-1.5 -bottom-1.5 flex h-5.5 items-center gap-1 rounded-lg border border-border bg-background px-2 text-[10px] font-semibold tracking-wide text-muted-foreground/90">
+          <span className="size-1.5 rounded-full bg-emerald-500" />
           {typeBadge}
         </span>
       </div>
       <div className="space-y-2">
-        <h2 className="bg-gradient-to-r from-foreground via-foreground to-foreground/80 bg-clip-text text-[22px] font-bold tracking-tight text-transparent">
+        <h2 className="text-[22px] font-bold tracking-tight text-foreground">
           {displayName}
         </h2>
         {description ? (

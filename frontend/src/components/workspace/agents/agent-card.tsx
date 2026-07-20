@@ -1,6 +1,5 @@
 import { BotIcon, MessageSquareIcon, Trash2Icon } from "lucide-react";
 
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -13,14 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AuthenticatedImage } from "@/components/ui/authenticated-image";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useDeleteAgent } from "@/core/agents";
@@ -39,7 +31,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const deleteAgent = useDeleteAgent();
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   function handleChat() {
     navigate(taskWorkspaceRoute({ agentId: agent.name }));
@@ -49,7 +41,6 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
     try {
       await deleteAgent.mutateAsync(agent.name);
       toast.success(t.agents.deleteSuccess);
-      setDeleteOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
@@ -75,7 +66,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
                     <AuthenticatedImage
                       src={withAgentAvatarVersion(agent.avatar_url)}
                       alt={displayName}
-                      className="h-full w-full bg-white object-cover [image-rendering:pixelated]"
+                      className="h-full w-full bg-muted object-cover [image-rendering:pixelated]"
                       fallback={
                         agent.icon ? (
                           <span className="flex h-full w-full items-center justify-center rounded-lg bg-muted text-foreground/80">
@@ -138,9 +129,17 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
                 size="icon"
                 variant="ghost"
                 className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 w-8 shrink-0"
-                onClick={(event) => {
+                onClick={async (event) => {
                   event.stopPropagation();
-                  setDeleteOpen(true);
+                  if (
+                    await confirm({
+                      title: t.agentCard.deleteTitle(displayName),
+                      description: t.agentCard.deleteConfirm(displayName),
+                      confirmLabel: t.common.delete,
+                    })
+                  ) {
+                    void handleDelete();
+                  }
                 }}
                 title={t.agentCard.deleteAriaLabel(displayName)}
                 aria-label={t.agentCard.deleteAriaLabel(displayName)}
@@ -152,38 +151,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
         </CardFooter>
       </Card>
 
-      {/* Delete Confirm */}
-      <Dialog
-        open={deleteOpen}
-        onOpenChange={(open) => {
-          if (!deleteAgent.isPending) setDeleteOpen(open);
-        }}
-      >
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>{t.agentCard.deleteTitle(displayName)}</DialogTitle>
-            <DialogDescription>
-              {t.agentCard.deleteConfirm(displayName)}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={deleteAgent.isPending}
-            >
-              {t.common.cancel}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteAgent.isPending}
-            >
-              {deleteAgent.isPending ? t.common.loading : t.common.delete}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {confirmDialog}
     </>
   );
 }

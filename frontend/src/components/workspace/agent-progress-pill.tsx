@@ -300,7 +300,7 @@ export function AgentProgressPill({
         aria-live="polite"
         aria-atomic="true"
         className={cn(
-          "relative z-20 flex min-h-9 w-full items-center gap-2 rounded-t-lg border border-b-0 border-border-default bg-background/95 px-3 py-1.5 text-[13px] shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl",
+          "relative z-20 flex min-h-9 w-full items-center gap-2 rounded-t-lg border border-b-0 border-border-default bg-background/95 px-3 py-1.5 text-[13px]",
           className,
         )}
       >
@@ -393,7 +393,7 @@ export function AgentProgressPill({
       className={cn("relative z-20 flex w-full flex-col", className)}
     >
       {expanded ? (
-        <div className="rounded-t-lg border border-b-0 border-border-default bg-background/95 p-2 shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl">
+        <div className="rounded-t-lg border border-b-0 border-border-default bg-background/95 p-2">
           <div className="max-h-44 space-y-0.5 overflow-y-auto pr-1">
             {visiblePhases.map((phase) => {
               const active = phase.id === displayPhase.id;
@@ -455,7 +455,7 @@ export function AgentProgressPill({
       ) : null}
       <div
         className={cn(
-          "group flex w-full items-center gap-2 border border-border-default bg-background/95 px-3 py-2 text-left shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl transition-colors hover:bg-muted/40",
+          "group flex w-full items-center gap-2 border border-border-default bg-background/95 px-3 py-2 text-left transition-colors hover:bg-muted/40",
           expanded ? "border-b-0" : "rounded-t-lg border-b-0",
         )}
       >

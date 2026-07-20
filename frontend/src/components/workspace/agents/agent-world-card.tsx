@@ -188,13 +188,12 @@ export function AgentWorldCard({
     <Card
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-200 ease-out sm:min-h-[176px]",
-        "hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_0_24px_hsl(var(--primary)/0.10)]",
+        "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[var(--shadow-sm)]",
         "before:pointer-events-none before:absolute before:left-0 before:top-0 before:h-3 before:w-3 before:border-l before:border-t before:border-primary/45",
-        "after:pointer-events-none after:absolute after:bottom-0 after:right-0 after:h-3 after:w-3 after:border-b after:border-r after:border-primary/30",
+        "after:pointer-events-none after:absolute after:bottom-0 after:right-0 after:h-3 after:w-3 after:border-b after:border-r before:border-primary/30",
       )}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-primary/35" />
-      <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity [background-image:linear-gradient(180deg,transparent_0,transparent_94%,hsl(var(--primary)/0.16)_95%,transparent_100%)] [background-size:100%_18px] group-hover:opacity-100" />
 
       <button
         type="button"

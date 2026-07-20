@@ -1749,6 +1749,9 @@ export const koKR: Translations = {
       taskDeleted: "Task deleted",
       deleteFailed: "Failed to delete task",
     },
+    deleteConfirmTitle: "작업 삭제",
+    deleteConfirmDescription: (title: string) =>
+      `작업 "${title}"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`,
     events: {
       runStarted: "Task started",
       roleStarted: (role) => (role ? `${role} started` : "Role started"),

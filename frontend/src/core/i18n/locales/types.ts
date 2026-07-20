@@ -1537,6 +1537,8 @@ export interface Translations {
       taskDeleted: string;
       deleteFailed: string;
     };
+    deleteConfirmTitle: string;
+    deleteConfirmDescription: (title: string) => string;
     events: {
       runStarted: string;
       roleStarted: (role?: string | null) => string;

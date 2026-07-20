@@ -408,7 +408,7 @@ function AgentCard({
             <span className="truncate text-xs font-medium">
               {task.subagent_name || `Agent-${index}`}
             </span>
-            <span className="text-muted-foreground font-mono text-[9px]">
+            <span className="text-muted-foreground font-mono text-[10px]">
               #{String(index).padStart(2, "0")}
             </span>
           </div>

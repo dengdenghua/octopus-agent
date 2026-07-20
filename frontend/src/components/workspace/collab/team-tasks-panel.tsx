@@ -15,6 +15,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Progress } from "@/components/ui/progress";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -51,6 +52,7 @@ export function TeamTasksPanel({
   canManageTasks = true,
 }: TeamTasksPanelProps) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [filter, setFilter] = useState<"all" | TeamTaskStatus>("all");
   const [createOpen, setCreateOpen] = useState(false);
   const tasksQuery = useTeamTasks(roomId ?? null);
@@ -156,6 +158,14 @@ export function TeamTasksPanel({
   };
 
   const handleDelete = async (task: TeamTask) => {
+    if (
+      !(await confirm({
+        title: t.teamTasksPanel.deleteConfirmTitle,
+        description: t.teamTasksPanel.deleteConfirmDescription(task.title),
+        confirmLabel: t.common.delete,
+      }))
+    )
+      return;
     try {
       await deleteTask.mutateAsync({ taskId: task.id });
       toast.success(t.teamTasksPanel.toast.taskDeleted);
@@ -300,6 +310,7 @@ export function TeamTasksPanel({
         roomId={roomId}
         team={team}
       />
+      {confirmDialog}
     </div>
   );
 
