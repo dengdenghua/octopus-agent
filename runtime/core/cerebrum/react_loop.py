@@ -203,6 +203,10 @@ def _safe_public_update(value: str | None) -> str:
         value,
         flags=re.IGNORECASE,
     ).strip()
+    cleaned = re.sub(r"^#{1,6}\s+", "", cleaned).strip()
+    for marker in ("**", "__"):
+        if cleaned.startswith(marker) and cleaned.endswith(marker) and len(cleaned) > 4:
+            cleaned = cleaned[len(marker) : -len(marker)].strip()
     if not cleaned or _PUBLIC_UPDATE_PROTOCOL_RE.search(cleaned):
         return ""
     if _PUBLIC_UPDATE_TOOL_CALL_RE.search(cleaned) or _looks_like_special_tool_envelope(cleaned):
@@ -460,6 +464,39 @@ def _build_public_evidence_narrative_input(
     return "\n\n".join(part for part in sections if part)
 
 
+def _build_public_action_orientation_input(*, goal: str, step: ReActStep) -> str:
+    """Build a privacy-safe scope snapshot for a missing public update.
+
+    The working model's private thought is deliberately excluded.  A focused
+    repair request only needs the user's request and non-sensitive targets from
+    the already-proposed actions to author one ordinary progress sentence.
+    """
+    actions = step.actions or ([step.action] if step.action else [])
+    targets: list[str] = []
+    for action in actions:
+        parsed = _parse_action(action)
+        if parsed is None:
+            continue
+        _name, args = parsed
+        target = _public_tool_target(args if isinstance(args, dict) else {})
+        if target and target not in targets:
+            targets.append(target)
+    sections = [
+        "[original-user-request]",
+        (goal or "").strip()[:1600],
+        "[/original-user-request]",
+    ]
+    if targets:
+        sections.extend(
+            [
+                "[next-public-scope]",
+                ", ".join(targets[:8]),
+                "[/next-public-scope]",
+            ]
+        )
+    return "\n\n".join(sections)
+
+
 def _stream_public_evidence_narrative(
     router: Any,
     *,
@@ -471,38 +508,57 @@ def _stream_public_evidence_narrative(
     iteration: int,
     previous_key: str = "",
     succeeded: bool | None = None,
+    pending_action: bool = False,
 ) -> Generator[dict[str, Any], None, str]:
-    """Stream one evidence-grounded public update into a single timeline item.
+    """Stream one model-authored public update into a single timeline item.
 
-    The narrator is tools-disabled and receives completed evidence only. A
+    The tools-disabled narrator receives either completed evidence or, when a
+    provider omitted its required update, only the pending public scope. A
     short prefix gate prevents control values such as ``SKIP`` from flashing
     in the conversation, then later deltas extend the same commentary item
     instead of manufacturing one avatar/message per provider chunk.
     """
     from runtime.platform.models.llm import Message, ModelRequest
 
+    system_content = (
+        (
+            "Write exactly one brief public progress update for the next concrete "
+            "action. Use a natural sentence in the user's language. Name the specific "
+            "scope when it is supplied and say what checking or changing it will "
+            "establish. Do not expose hidden reasoning, mention tool or protocol names, "
+            "refer to yourself as the system, use markdown emphasis, use a heading/list/"
+            "stage label, repeat the request, or claim a result before the action has "
+            "completed. Output only the user-facing sentence."
+        )
+        if pending_action
+        else (
+            "Write a brief public progress update from completed evidence only. "
+            "Use one or two natural sentences in the user's language. State one "
+            "concrete thing now known and the next decision, correction, or action. "
+            "Do not expose hidden reasoning, mention tool names or internal protocols, "
+            "use a heading/list, repeat the request, or pretend this is the final answer. "
+            "Never claim anything absent from the evidence. If there is no meaningful "
+            "user-facing result, output exactly SKIP."
+        )
+    )
     request = ModelRequest(
         model=model,
         messages=[
             Message(
                 role="system",
-                content=(
-                    "Write a brief public progress update from completed evidence only. "
-                    "Use one or two natural sentences in the user's language. State one "
-                    "concrete thing now known and the next decision, correction, or action. "
-                    "Do not expose hidden reasoning, mention tool names or internal protocols, "
-                    "use a heading/list, repeat the request, or pretend this is the final answer. "
-                    "Never claim anything absent from the evidence. If there is no meaningful "
-                    "user-facing result, output exactly SKIP."
-                ),
+                content=system_content,
             ),
             Message(
                 role="user",
-                content=_build_public_evidence_narrative_input(
-                    goal=goal,
-                    step=step,
-                    convergence=convergence,
-                    evidence_steps=evidence_steps,
+                content=(
+                    _build_public_action_orientation_input(goal=goal, step=step)
+                    if pending_action
+                    else _build_public_evidence_narrative_input(
+                        goal=goal,
+                        step=step,
+                        convergence=convergence,
+                        evidence_steps=evidence_steps,
+                    )
                 ),
             ),
         ],
@@ -4290,6 +4346,31 @@ def stream_react_loop(
         # De-duplicate retries that repeat the same checkpoint verbatim.
         step.public_update = _safe_public_update(step.public_update)
         _checkpoint_actions = step.actions or [step.action]
+        if (
+            not step.public_update
+            and tool_action_requested
+            and maybe_final is None
+            and _realtime_public_orientation
+        ):
+            try:
+                _repaired_public_update = yield from _stream_public_evidence_narrative(
+                    router,
+                    model=effective_model,
+                    goal=intent.normalized_goal,
+                    step=step,
+                    convergence=None,
+                    iteration=i + 1,
+                    previous_key=_last_public_update_key,
+                    pending_action=True,
+                )
+            except Exception as exc:  # noqa: BLE001 — optional public narration
+                _logger.warning("public action orientation repair failed: %s", exc)
+                _repaired_public_update = ""
+            if _repaired_public_update:
+                step.public_update = _repaired_public_update
+                _last_public_update_key = (
+                    re.sub(r"\s+", " ", _repaired_public_update).strip().casefold()
+                )
         _model_supplied_update = bool(step.public_update)
         _public_update_key = re.sub(r"\s+", " ", step.public_update).strip().casefold()
         if (

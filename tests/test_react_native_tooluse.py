@@ -426,6 +426,78 @@ def test_every_native_tool_round_requires_a_fresh_public_update() -> None:
     ]
 
 
+def test_native_provider_omission_gets_private_safe_public_repair() -> None:
+    from runtime.core.cerebrum.react_loop import stream_react_loop
+
+    orientation = "我先核对配置文件的实际内容，确认最终结论所需的依据。"
+    router = _Router(
+        [
+            (
+                "",
+                [
+                    ToolCall(
+                        id="t1",
+                        name="read_file",
+                        input={"path": "config.yaml"},
+                    )
+                ],
+            ),
+            (orientation, []),
+            ("Final Answer: 配置依据已经确认。", []),
+        ]
+    )
+    fake_spec = ToolSpec(
+        name="read_file",
+        input_schema={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    )
+    intent = _intent("只读核对 config.yaml 并说明结论")
+    intent.user_context.update(
+        {
+            "realtime_public_narrative": True,
+            "realtime_public_orientation": True,
+        }
+    )
+
+    with (
+        patch(
+            "runtime.core.cerebrum.react_native.native_tool_use_active",
+            return_value=True,
+        ),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            return_value=[fake_spec],
+        ),
+    ):
+        stream = stream_react_loop(_Stack(router), intent, agent=None, max_iterations=4)
+        events: list[dict[str, Any]] = []
+        while True:
+            try:
+                events.append(next(stream))
+            except StopIteration as stop:
+                result = stop.value
+                break
+
+    assert result is not None and result.final_answer == "配置依据已经确认。"
+    assert result.steps[0].public_update == orientation
+    repair_request = router.requests[1]
+    assert repair_request.tools == []
+    assert repair_request.enable_thinking is False
+    repair_input = "\n".join(str(message.content) for message in repair_request.messages)
+    assert "config.yaml" in repair_input
+    assert "read_file" not in repair_input
+    model_updates = [
+        event["delta"]
+        for event in events
+        if event.get("type") == "commentary_delta"
+        and event.get("progress_source") == "model"
+    ]
+    assert "".join(model_updates) == orientation
+
+
 def test_escape_hatch_forces_text_mode(monkeypatch) -> None:
     from runtime.core.cerebrum.react_loop import run_react_loop
 

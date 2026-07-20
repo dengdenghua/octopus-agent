@@ -2181,11 +2181,11 @@ def test_quiet_realtime_tool_batch_gets_model_generated_public_update(
         def call_stream(self, request):
             self.requests.append(request)
             is_progress_request = any(
-                "[PUBLIC PROGRESS UPDATE]" in str(message.content) for message in request.messages
+                "[PUBLIC ACTION UPDATE]" in str(message.content) for message in request.messages
             )
             if is_progress_request:
                 update = (
-                    "目录内容已经读取，evidence.txt 已确认存在；我接下来核对其中的标记并整理结论。"
+                    "我先核对工作区目录和 evidence.txt，再根据实际内容整理结论。"
                 )
                 yield ModelStreamEvent(type="text_delta", delta=update)
                 yield ModelStreamEvent(
@@ -2225,10 +2225,11 @@ def test_quiet_realtime_tool_batch_gets_model_generated_public_update(
 
     events = list(stream_agentic_fallback(_stack(router), intent, _agent()))
 
+    tool_start_index = next(i for i, event in enumerate(events) if event[0] == "tool_start")
     tool_end_index = next(i for i, event in enumerate(events) if event[0] == "tool_end")
     commentary_index = next(i for i, event in enumerate(events) if event[0] == "commentary")
     text_index = next(i for i, event in enumerate(events) if event[0] == "text")
-    assert tool_end_index < commentary_index < text_index
+    assert commentary_index < tool_start_index < tool_end_index < text_index
     assert "evidence.txt" in events[commentary_index][1]
     assert [event[0] for event in events].count("commentary") == 1
     assert len(router.requests) == 3
@@ -2245,11 +2246,11 @@ def test_fast_realtime_tool_batch_gets_evidence_progress_by_default(tmp_path):
         def call_stream(self, request):
             self.requests.append(request)
             is_progress_request = any(
-                "[PUBLIC PROGRESS UPDATE]" in str(message.content)
+                "[PUBLIC ACTION UPDATE]" in str(message.content)
                 for message in request.messages
             )
             if is_progress_request:
-                update = "目录已经读取完成；我现在根据其中的内容收束最终结论。"
+                update = "我先读取目录内容，确认哪些信息能够支撑最终结论。"
                 yield ModelStreamEvent(type="text_delta", delta=update)
                 yield ModelStreamEvent(type="done", final=ModelResponse(text=update))
                 return
@@ -2287,6 +2288,9 @@ def test_fast_realtime_tool_batch_gets_evidence_progress_by_default(tmp_path):
 
     assert len(router.requests) == 3
     assert [event[0] for event in events].count("commentary") == 1
+    commentary_index = next(i for i, event in enumerate(events) if event[0] == "commentary")
+    tool_start_index = next(i for i, event in enumerate(events) if event[0] == "tool_start")
+    assert commentary_index < tool_start_index
     assert events[-1] == ("done", "", "Fast result complete.")
 
 
@@ -2303,6 +2307,24 @@ def test_long_tool_classification_covers_commands_agents_and_browser():
     assert not tool_bridge._batch_needs_live_public_narrative(
         [ToolCall(id="read", name="read_file", input={"path": "README.md"})]
     )
+
+
+def test_structured_public_update_is_removed_before_native_dispatch():
+    calls, checkpoint = tool_bridge._native_calls_with_public_checkpoint(
+        [
+            ToolCall(
+                id="read",
+                name="read_file",
+                input={
+                    "path": "README.md",
+                    "public_update": "**我先核对 README.md 的实际说明，再整理结论。**",
+                },
+            )
+        ]
+    )
+
+    assert checkpoint == "我先核对 README.md 的实际说明，再整理结论。"
+    assert calls[0].input == {"path": "README.md"}
 
 
 def test_likely_long_tool_gets_model_update_while_execution_is_open(
@@ -2346,7 +2368,6 @@ def test_likely_long_tool_gets_model_update_while_execution_is_open(
                 batch_index = self.action_updates
                 self.action_updates += 1
                 narration_started[batch_index].set()
-                assert tool_started[batch_index].wait(timeout=1)
                 update = (
                     "我正在核对一手资料的关键差异，结果会决定下一步是否继续扩展来源。"
                     if batch_index == 0
@@ -2416,7 +2437,7 @@ def test_likely_long_tool_gets_model_update_while_execution_is_open(
     tool_end_indexes = [i for i, event in enumerate(events) if event[0] == "tool_end"]
     assert len(tool_start_indexes) == len(commentary_indexes) == len(tool_end_indexes) == 2
     assert all(
-        start < commentary < end
+        commentary < start < end
         for start, commentary, end in zip(
             tool_start_indexes,
             commentary_indexes,

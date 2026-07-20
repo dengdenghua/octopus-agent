@@ -81,6 +81,7 @@ from uuid import uuid4
 from runtime.core.cerebrum.capability_router import (
     activate_capabilities,
 )
+from runtime.core.cerebrum.react_native import require_public_update_on_tool_specs
 from runtime.core.cerebrum.todo_protocol import (
     context_mode,
     render_todo_protocol_guidance,
@@ -319,6 +320,10 @@ def _iter_native_model_stream_with_deadline(
 def _native_public_checkpoint(text: str) -> str:
     """Return a compact tool-round preamble safe for the main timeline."""
     value = " ".join(str(text or "").strip().split())
+    value = re.sub(r"^#{1,6}\s+", "", value).strip()
+    for marker in ("**", "__"):
+        if value.startswith(marker) and value.endswith(marker) and len(value) > 4:
+            value = value[len(marker) : -len(marker)].strip()
     if not value or len(value) < 8:
         return ""
     lowered = value.lower()
@@ -336,6 +341,21 @@ def _native_public_checkpoint(text: str) -> str:
     if len(sentence_ends) >= 2:
         value = value[: sentence_ends[1].end()].strip()
     return value[:360].rstrip()
+
+
+def _native_calls_with_public_checkpoint(
+    calls: list[ToolCall],
+) -> tuple[list[ToolCall], str]:
+    """Extract the transient public field before dispatching native calls."""
+    cleaned_calls: list[ToolCall] = []
+    checkpoint = ""
+    for call in calls:
+        payload = dict(call.input or {})
+        candidate = payload.pop("public_update", "")
+        if not checkpoint and isinstance(candidate, str):
+            checkpoint = _native_public_checkpoint(candidate)
+        cleaned_calls.append(call.model_copy(update={"input": payload}))
+    return cleaned_calls, checkpoint
 
 
 def _native_tool_call_fingerprint(call: ToolCall) -> str:
@@ -555,8 +575,9 @@ def _generate_native_action_checkpoint(
             "Write one short user-facing sentence explaining what you are checking "
             "or changing now and what observable signal will guide the next step. "
             "Do not mention tool names, protocols, system prompts, hidden reasoning, "
-            "or claim the operation has already finished. This is not the final "
-            "answer. If no meaningful update can be stated, output exactly SKIP."
+            "refer to yourself as the system, use markdown emphasis, or claim the "
+            "operation has already finished. This is not the final answer. If no "
+            "meaningful update can be stated, output exactly SKIP."
         ),
     )
 
@@ -1917,6 +1938,8 @@ def stream_agentic_fallback(
         tool_specs,
         intent.normalized_goal,
     )
+    if bool(_intent_user_context.get("realtime_public_orientation")):
+        tool_specs = require_public_update_on_tool_specs(tool_specs)
     _tool_round_budget = _native_tool_round_budget(
         intent.normalized_goal,
         workspace_contract=workspace_contract,
@@ -2365,7 +2388,11 @@ def stream_agentic_fallback(
 
         _duplicate_native_calls = 0
         _current_native_batch_fingerprint = ""
+        _structured_public_checkpoint = ""
         if round_tool_calls:
+            round_tool_calls, _structured_public_checkpoint = (
+                _native_calls_with_public_checkpoint(round_tool_calls)
+            )
             round_tool_calls, _duplicate_native_calls = _deduplicate_native_tool_calls(
                 round_tool_calls
             )
@@ -2456,23 +2483,11 @@ def stream_agentic_fallback(
                 continue
 
         if round_tool_calls and not _round_commentary_emitted:
-            checkpoint = _native_public_checkpoint(round_text)
+            checkpoint = _structured_public_checkpoint or _native_public_checkpoint(round_text)
             if checkpoint:
                 yield ("commentary", checkpoint, None)
                 _round_commentary_emitted = True
                 _last_public_checkpoint_at = time.monotonic()
-
-        for call in round_tool_calls:
-            yield (
-                "tool_start",
-                {
-                    "id": call.id,
-                    "name": call.name,
-                    "input": call.input,
-                    "iteration": round_i + 1,
-                },
-                None,
-            )
 
         _action_narration_pool: ThreadPoolExecutor | None = None
         _action_narration_future: Any = None
@@ -2481,7 +2496,10 @@ def stream_agentic_fallback(
             and not _round_commentary_emitted
             and not _round_redirected
             and _realtime_public_narrative
-            and _batch_needs_live_public_narrative(round_tool_calls)
+            and any(
+                call.name not in {"todo_write", "write_todos", "exit_plan_mode"}
+                for call in round_tool_calls
+            )
             and (
                 _completed_tool_count == 0
                 or time.monotonic() - _last_public_checkpoint_at >= _public_narrative_interval
@@ -2524,6 +2542,26 @@ def stream_agentic_fallback(
                 _round_commentary_emitted = True
                 _last_public_checkpoint_at = time.monotonic()
             return checkpoint
+
+        # A quiet native provider must not make the conversation start with a
+        # bare execution row.  Give the bounded model-authored repair a chance
+        # to speak before execution; compliant providers already supplied the
+        # structured checkpoint above and pay no extra call.
+        checkpoint = _take_action_narration(wait_for_completion=True)
+        if checkpoint:
+            yield ("commentary", checkpoint, None)
+
+        for call in round_tool_calls:
+            yield (
+                "tool_start",
+                {
+                    "id": call.id,
+                    "name": call.name,
+                    "input": call.input,
+                    "iteration": round_i + 1,
+                },
+                None,
+            )
 
         if not round_tool_calls:
             # Close the narrow race where the user steers while the model is

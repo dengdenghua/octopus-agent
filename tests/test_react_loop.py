@@ -112,6 +112,12 @@ def test_safe_public_update_rejects_private_protocol_and_empty_status() -> None:
     )
     assert _safe_public_update('Action: echo({"text": "secret"})') == ""
     assert _safe_public_update("正在处理。") == ""
+    assert _safe_public_update("**已确认消息顺序，接下来核对渲染层。**") == (
+        "已确认消息顺序，接下来核对渲染层。"
+    )
+    assert _safe_public_update("## 已确认消息顺序，接下来核对渲染层。") == (
+        "已确认消息顺序，接下来核对渲染层。"
+    )
 
 
 def test_result_checkpoint_selection_uses_tool_evidence_not_phase_labels() -> None:
@@ -1036,6 +1042,49 @@ def test_missing_public_update_does_not_invent_runtime_commentary() -> None:
     commentary = [event["delta"] for event in events if event["type"] == "commentary_delta"]
     assert commentary == []
     assert any(event["type"] == "tool_start" for event in events)
+
+
+def test_realtime_missing_public_update_gets_model_authored_orientation() -> None:
+    private_thought = "PRIVATE: inspect the source with an internal hypothesis"
+    orientation = "我先核对消息桥接层的实际输出，确认公开进展是否先于执行证据出现。"
+    router = _CapturingRouter(
+        [
+            f'Thought: {private_thought}\nAction: echo({{"text": "timeline evidence"}})',
+            orientation,
+            "Final Answer: 公开进展顺序已经确认。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("核对消息桥接层的公开进展顺序")
+    intent.user_context.update(
+        {
+            "mode": "react",
+            "realtime_public_narrative": True,
+            "realtime_public_orientation": True,
+        }
+    )
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
+
+    assert result is not None and result.final_answer == "公开进展顺序已经确认。"
+    public = [
+        event
+        for event in events
+        if event["type"] == "commentary_delta"
+        and event.get("progress_source") == "model"
+    ]
+    assert "".join(event["delta"] for event in public) == orientation
+    assert events.index(public[-1]) < next(
+        index for index, event in enumerate(events) if event["type"] == "tool_start"
+    )
+    assert result.steps[0].public_update == orientation
+    repair_request = router.requests[1]
+    assert repair_request.tools == []
+    assert repair_request.enable_thinking is False
+    repair_input = "\n".join(str(message.content) for message in repair_request.messages)
+    assert "核对消息桥接层的公开进展顺序" in repair_input
+    assert private_thought not in repair_input
+    assert "timeline evidence" not in repair_input
 
 
 def test_realtime_quiet_tool_result_gets_model_authored_evidence_checkpoint() -> None:
