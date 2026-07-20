@@ -321,38 +321,41 @@ function getTurnScrollViewport(node: Element | null): HTMLElement | Window {
   return window;
 }
 
-const PHASE_TOOL_RE = /todo|plan|phase|task|subagent|workflow|milestone/i;
-
-const PHASE_TURN_RE =
-  /\bphase\s*\d+\b|\bphase\s*[:：-]|todo-phase|第\s*[一二三四五六七八九十0-9]+\s*阶段|阶段\s*[0-9一二三四五六七八九十]+|分阶段/i;
-
 export function turnMarkerKindFromMessages(
   messages: Message[],
 ): "dot" | "phase" {
-  const searchText = messages.map(extractTurnMarkerSearchText).join("\n");
-  if (PHASE_TURN_RE.test(searchText)) return "phase";
-
-  let executionSignals = 0;
   for (const message of messages) {
-    if (message.type === "tool") {
-      executionSignals += 1;
-      continue;
-    }
     if (message.type !== "ai") continue;
     const aiMessage = message as AIMessage;
-    if (aiMessage.additional_kwargs?.thinking_plan) return "phase";
-    if (aiMessage.additional_kwargs?.workbenchSnapshot) return "phase";
-    if (aiMessage.additional_kwargs?.phases) return "phase";
+    const additional = aiMessage.additional_kwargs;
+    if (
+      typeof additional?.phase_id === "string" &&
+      additional.phase_id.trim()
+    ) {
+      return "phase";
+    }
+    if (additional?.thinking_plan) return "phase";
+    if (Array.isArray(additional?.phases) && additional.phases.length > 0) {
+      return "phase";
+    }
+    const workbenchSnapshot = additional?.workbenchSnapshot;
+    if (
+      workbenchSnapshot &&
+      typeof workbenchSnapshot === "object" &&
+      Array.isArray(
+        (workbenchSnapshot as { phases?: unknown }).phases,
+      ) &&
+      ((workbenchSnapshot as { phases: unknown[] }).phases.length ?? 0) > 0
+    ) {
+      return "phase";
+    }
     for (const toolCall of aiMessage.tool_calls ?? []) {
-      executionSignals += 1;
-      if (PHASE_TOOL_RE.test(toolCall.name)) return "phase";
-      if (PHASE_TURN_RE.test(stringifyTurnMarkerValue(toolCall.args))) {
+      if (typeof toolCall.phaseId === "string" && toolCall.phaseId.trim()) {
         return "phase";
       }
     }
   }
-
-  return executionSignals >= 4 || messages.length >= 6 ? "phase" : "dot";
+  return "dot";
 }
 
 /**
@@ -1914,32 +1917,4 @@ function TurnLocatorLimitButton({
       <Icon aria-hidden="true" className="size-4" />
     </button>
   );
-}
-
-function extractTurnMarkerSearchText(message: Message) {
-  const parts = [extractTextFromMessage(message)];
-  if (message.type === "ai") {
-    const aiMessage = message as AIMessage;
-    for (const toolCall of aiMessage.tool_calls ?? []) {
-      parts.push(toolCall.name);
-      parts.push(stringifyTurnMarkerValue(toolCall.args));
-    }
-  }
-  const reasoningContent = message.additional_kwargs?.reasoning_content;
-  if (typeof reasoningContent === "string") {
-    parts.push(reasoningContent);
-  }
-  const phases = message.additional_kwargs?.phases;
-  if (phases) {
-    parts.push(stringifyTurnMarkerValue(phases));
-  }
-  return parts.join("\n");
-}
-
-function stringifyTurnMarkerValue(value: unknown) {
-  try {
-    return JSON.stringify(value)?.slice(0, 4000) ?? "";
-  } catch {
-    return "";
-  }
 }

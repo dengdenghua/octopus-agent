@@ -227,7 +227,7 @@ describe("MessageList scroll-to-latest affordance", () => {
     expect(turns[1]?.key).toMatch(/^human:/);
   });
 
-  test("renders phased turns as quiet bars and short turns as dots", () => {
+  test("renders explicitly phased turns as quiet bars and short turns as dots", () => {
     const messages: Message[] = [
       { id: "user-1", type: "human", content: "large research task" },
       {
@@ -235,7 +235,7 @@ describe("MessageList scroll-to-latest affordance", () => {
         type: "ai",
         content: "Working through the plan.",
         additional_kwargs: {
-          reasoning_content: "Phase 1: plan\nPhase 2: execute",
+          phase_id: "phase-1",
         },
       },
       { id: "user-2", type: "human", content: "quick follow-up" },
@@ -326,10 +326,10 @@ describe("MessageList scroll-to-latest affordance", () => {
     ).toBeTruthy();
   });
 
-  test("treats plan-like tool turns as phased locator bars", () => {
+  test("does not infer phased locator bars from tool names or prose", () => {
     expect(
       turnMarkerKindFromMessages([
-        { id: "user-1", type: "human", content: "build the whole feature" },
+        { id: "user-1", type: "human", content: "第 2 阶段：实现界面" },
         {
           id: "assistant-1",
           type: "ai",
@@ -344,6 +344,27 @@ describe("MessageList scroll-to-latest affordance", () => {
                   { content: "Implement", status: "in_progress" },
                 ],
               },
+            },
+          ],
+        },
+      ]),
+    ).toBe("dot");
+  });
+
+  test("uses explicit timeline coordinates for phased locator bars", () => {
+    expect(
+      turnMarkerKindFromMessages([
+        { id: "user-1", type: "human", content: "build the whole feature" },
+        {
+          id: "assistant-1",
+          type: "ai",
+          content: "",
+          tool_calls: [
+            {
+              id: "read-1",
+              name: "read_file",
+              args: { path: "src/app.tsx" },
+              phaseId: "phase-2",
             },
           ],
         },

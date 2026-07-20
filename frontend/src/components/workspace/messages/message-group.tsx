@@ -60,7 +60,12 @@ import { useArtifacts } from "../artifacts";
 import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 import { FlipDisplay } from "../flip-display";
 import { isAutoVerificationToolName } from "../process-trace-events";
-import { isFileMutationToolName, isReadToolName } from "../tool-name-groups";
+import {
+  isFileMutationToolName,
+  isReadToolName,
+  isShellToolName,
+  shellCommandFromInput,
+} from "../tool-name-groups";
 import { Tooltip } from "../tooltip";
 
 import { ClarificationChoiceCard } from "./clarification-choice-card";
@@ -2010,13 +2015,83 @@ function executionCoverageByVisibleItem(
 }
 
 function compactToolTarget(step: CoTToolCallStep): string | null {
-  const target =
-    extractPathFromArgs(step.args) ?? extractTeamCallTarget(step.args);
-  if (!target) return null;
-  if (isReadToolName(step.name) || isFileMutationToolName(step.name)) {
-    return target.split(/[\\/]/).filter(Boolean).at(-1) ?? target;
+  const targets = compactToolTargets(step);
+  return targets.length > 0 ? targets.join(" · ") : null;
+}
+
+function compactToolTargets(step: CoTToolCallStep): string[] {
+  if (isShellToolName(step.name)) {
+    const command = shellCommandFromInput(step.args, step.name);
+    if (!command) return [];
+    const targets = shellEvidenceTargets(command);
+    // One command can contain transport destinations or temporary copies.
+    // The first concrete subject is the stable evidence anchor; every other
+    // operand remains inspectable in the workbench.
+    if (targets.length > 0) return targets.slice(0, 1);
+    return [compactReasoningSummary(command, 48)];
   }
-  return compactReasoningSummary(target, 64);
+  const target = isReadToolName(step.name)
+    ? extractReadEvidenceTarget(step.args)
+    : (extractPathFromArgs(step.args) ?? extractTeamCallTarget(step.args));
+  if (!target) return [];
+  if (
+    isReadToolName(step.name) ||
+    isFileMutationToolName(step.name) ||
+    isPathLikeEvidence(target)
+  ) {
+    return [target.split(/[\\/]/).filter(Boolean).at(-1) ?? target];
+  }
+  return [compactReasoningSummary(target, 64)];
+}
+
+function extractReadEvidenceTarget(
+  args: Record<string, unknown>,
+): string | undefined {
+  // Search/glob tools commonly carry both a broad root and a specific query.
+  // The specific object is the useful transcript evidence; the complete root
+  // remains available in the workbench trace.
+  for (const key of [
+    "file_path",
+    "filepath",
+    "filename",
+    "pattern",
+    "query",
+    "url",
+    "path",
+    "root",
+    "directory",
+    "cwd",
+  ]) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function isPathLikeEvidence(target: string): boolean {
+  return !/^https?:\/\//i.test(target) && /[\\/]/.test(target);
+}
+
+// Shell commands are evidence, not prose. In the main conversation prefer
+// the concrete files/directories they touched and leave the full command in
+// the workbench. This prevents machine-local paths and transport workarounds
+// such as `cat /Users/...` / `cp /Users/...` from taking over the dialogue.
+function shellEvidenceTargets(command: string): string[] {
+  const targets: string[] = [];
+  const seen = new Set<string>();
+  const pathPattern =
+    /(?:^|[\s"'=])((?:~|\.{1,2})?\/[\w.@+%:,\-\/]+|[\w.@+%:,\-]+(?:\/[\w.@+%:,\-]+)+)(?=$|[\s"'`;|&<>()[\]{}])/g;
+  for (const match of command.matchAll(pathPattern)) {
+    const raw = match[1]?.replace(/[,:]+$/, "");
+    if (!raw) continue;
+    const target = raw.split("/").filter(Boolean).at(-1)?.trim();
+    if (!target || target === "." || target === "..") continue;
+    const key = target.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    targets.push(target);
+  }
+  return targets;
 }
 
 function summarizeCompactExecutionTargets(
@@ -2028,14 +2103,28 @@ function summarizeCompactExecutionTargets(
   const targets = Array.from(
     new Set(
       items
-        .map((item) => compactToolTarget((item as ToolCallTimelineItem).step))
+        .flatMap((item) =>
+          compactToolTargets((item as ToolCallTimelineItem).step),
+        )
         .filter((target): target is string => Boolean(target)),
     ),
   );
   if (targets.length < 2) return null;
-  const visibleTargets = targets.slice(-3);
+  // Long exploratory runs also touch roots, `..`, and search scopes. Once the
+  // row has more candidates than it can show, prefer concrete file artifacts
+  // so the summary reflects what the user can actually inspect.
+  const artifactTargets = targets.filter(isFileArtifactEvidence);
+  const visibleTargets = (
+    targets.length > 3 && artifactTargets.length >= 2
+      ? artifactTargets
+      : targets
+  ).slice(-3);
   const hiddenCount = targets.length - visibleTargets.length;
   return `${visibleTargets.join(" · ")}${hiddenCount > 0 ? ` +${hiddenCount}` : ""}`;
+}
+
+function isFileArtifactEvidence(target: string): boolean {
+  return /(?:^|[\\/])[\w@+%:,\-]+\.[a-z0-9]{1,12}$/i.test(target);
 }
 
 function retainIndeterminateToolCalls(

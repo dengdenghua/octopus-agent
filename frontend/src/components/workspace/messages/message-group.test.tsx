@@ -1116,6 +1116,78 @@ describe("MessageGroup reasoning grouping", () => {
     expect(opened.at(-1)?.detail.processEvent.detail).toContain("plan.md");
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
+
+  it("reduces shell workarounds to concrete evidence without leaking local paths", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "root-1",
+            name: "list_cwd",
+            args: { path: "../.." },
+          },
+          {
+            id: "read-group-1",
+            name: "read_file",
+            args: {
+              path: "/Users/dangbei/Public/octopus/octopus-agent/frontend/src/components/workspace/messages/message-group.tsx",
+            },
+          },
+          {
+            id: "read-1",
+            name: "read_file",
+            args: {
+              path: "/Users/dangbei/Public/octopus/octopus-agent/runtime/protocol/items.py",
+            },
+          },
+          {
+            id: "cat-1",
+            name: "exec_shell",
+            args: {
+              command:
+                "cat /Users/dangbei/Public/octopus/octopus-agent/runtime/protocol/items.py",
+            },
+          },
+          {
+            id: "copy-1",
+            name: "exec_shell",
+            args: {
+              command:
+                "cp /Users/dangbei/Public/octopus/octopus-agent/runtime/protocol/items.py /tmp/_items_readonly_copy.py",
+            },
+          },
+          {
+            id: "read-reducer-1",
+            name: "exec_shell",
+            args: {
+              command:
+                "sed -n '1,240p' /Users/dangbei/Public/octopus/octopus-agent/frontend/src/core/realtime/reducer.ts",
+            },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} isLoading />, {
+      locale: "zh-CN",
+    });
+
+    const execution = screen.getByTestId("process-timeline-event-execution");
+    expect(execution).toHaveTextContent(
+      "message-group.tsx · items.py · reducer.ts",
+    );
+    expect(execution).not.toHaveTextContent("/Users/");
+    expect(execution).not.toHaveTextContent("../..");
+    expect(execution).not.toHaveTextContent("cat ");
+    expect(execution).not.toHaveTextContent("cp ");
+    expect(execution).not.toHaveTextContent("_items_readonly_copy.py");
+    expect(
+      screen.getAllByTestId("process-timeline-event-execution"),
+    ).toHaveLength(1);
+  });
 });
 
 describe("MessageGroup streaming lifecycle", () => {
