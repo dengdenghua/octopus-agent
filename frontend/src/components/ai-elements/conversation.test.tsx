@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const stickState = vi.hoisted(() => ({
+  escapedFromLock: true,
   isAtBottom: false,
   scrollToBottom: vi.fn(),
 }));
@@ -24,8 +25,29 @@ import { ConversationScrollButton } from "./conversation";
 
 describe("ConversationScrollButton", () => {
   beforeEach(() => {
+    stickState.escapedFromLock = true;
     stickState.isAtBottom = false;
     stickState.scrollToBottom.mockReset();
+  });
+
+  it("keeps following streamed activity until the reader explicitly escapes", () => {
+    stickState.escapedFromLock = false;
+    const { rerender } = render(
+      <ConversationScrollButton activityKey="chunk-1">
+        Latest
+      </ConversationScrollButton>,
+    );
+
+    rerender(
+      <ConversationScrollButton activityKey="chunk-2">
+        Latest
+      </ConversationScrollButton>,
+    );
+
+    expect(stickState.scrollToBottom).toHaveBeenCalledWith({
+      animation: "instant",
+      ignoreEscapes: true,
+    });
   });
 
   it("keeps one unseen-content signal while the reader is away from the bottom", () => {

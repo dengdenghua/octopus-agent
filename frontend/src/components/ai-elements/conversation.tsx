@@ -91,19 +91,29 @@ export const ConversationScrollButton = ({
   children,
   ...props
 }: ConversationScrollButtonProps) => {
-  const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  const { escapedFromLock, isAtBottom, scrollToBottom } =
+    useStickToBottomContext();
   const previousActivityKey = useRef(activityKey);
   const [pendingActivityCount, setPendingActivityCount] = useState(0);
 
   useEffect(() => {
     if (Object.is(previousActivityKey.current, activityKey)) return;
     previousActivityKey.current = activityKey;
+    // The underlying ResizeObserver can briefly lose its bottom lock when a
+    // streamed response grows from shorter than the viewport to taller than
+    // it. That left a brand-new task parked at scrollTop=0 even though the
+    // reader never moved away. Preserve the library's explicit escape signal:
+    // only force-follow when no wheel/selection/up-scroll released the lock.
+    if (!escapedFromLock) {
+      void scrollToBottom({ animation: "instant", ignoreEscapes: true });
+      return;
+    }
     // activityKey can advance once per streamed frame. Treat unseen activity
     // as a boolean signal instead of counting transport chunks; otherwise a
     // long answer produces labels such as "685 new updates" and keeps
     // re-rendering this control while the reader is browsing older content.
     if (!isAtBottom) setPendingActivityCount(1);
-  }, [activityKey, isAtBottom]);
+  }, [activityKey, escapedFromLock, isAtBottom, scrollToBottom]);
 
   useEffect(() => {
     if (isAtBottom) setPendingActivityCount(0);
