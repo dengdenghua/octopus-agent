@@ -1974,26 +1974,40 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
   return items;
 }
 
+const MAX_PUBLIC_PROGRESS_ANCHORS = 4;
+
+function representativeCommentaryAnchors(
+  commentary: CommentaryTimelineItem[],
+): CommentaryTimelineItem[] {
+  if (commentary.length <= MAX_PUBLIC_PROGRESS_ANCHORS) return commentary;
+
+  const lastIndex = commentary.length - 1;
+  return Array.from({ length: MAX_PUBLIC_PROGRESS_ANCHORS }, (_, slot) => {
+    const index = Math.round(
+      (slot * lastIndex) / (MAX_PUBLIC_PROGRESS_ANCHORS - 1),
+    );
+    return commentary[index]!;
+  });
+}
+
 function selectCompactTimelineItems(items: TimelineItem[]): TimelineItem[] {
   const commentary = items.filter((item) => item.type === "commentary");
-  const firstCommentary = commentary[0];
-  const latestCommentary = commentary[commentary.length - 1];
+  const visibleCommentary = representativeCommentaryAnchors(commentary);
   const latestThinking = [...items]
     .reverse()
     .find((item) => item.type === "reasoningGroup");
   const selected = new Set<TimelineItem>();
-  // A long run can emit many retry/checkpoint updates. The conversation lane
-  // keeps the opening intent and the latest finding; the complete event chain
-  // remains available in the workbench. This preserves a human conversational
-  // rhythm without turning transient retries into a permanent wall of text.
-  if (firstCommentary) selected.add(firstCommentary);
-  if (latestCommentary) selected.add(latestCommentary);
+  // Keep short conversations intact. For genuinely long runs, retain four
+  // evenly spaced public checkpoints instead of reducing the model's whole
+  // side of the conversation to only an opening and a closing sentence. This
+  // is based on event position, not model wording or hard-coded phase labels;
+  // the complete event chain still remains available in the workbench.
+  visibleCommentary.forEach((item) => selected.add(item));
   if (latestThinking) selected.add(latestThinking);
   // Preserve one quiet execution anchor in every visible conversational
   // interval. A long run then reads naturally as “said → did → said → did”
   // without expanding every tool call into a transcript row.
-  const visibleCommentaryIndexes = [firstCommentary, latestCommentary]
-    .filter((item): item is CommentaryTimelineItem => Boolean(item))
+  const visibleCommentaryIndexes = visibleCommentary
     .map((item) => items.indexOf(item))
     .filter(
       (index, position, indexes) =>

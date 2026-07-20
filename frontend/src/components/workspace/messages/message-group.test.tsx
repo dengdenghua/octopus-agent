@@ -322,12 +322,15 @@ describe("MessageGroup reasoning grouping", () => {
     ).not.toHaveTextContent(/^执行(?:\s|·)/);
   });
 
-  it("keeps opening intent and latest finding while folding retry chatter", () => {
+  it("keeps representative public progress while bounding a long run", () => {
     const updates = [
       "先确认时间线的数据来源。",
       "第一次读取失败，正在切换路径。",
       "第二次读取仍失败，继续尝试。",
-      "已经找到真实仓库位置。",
+      "已经找到真实仓库位置，开始核对适配层。",
+      "适配层已确认，继续检查渲染层。",
+      "渲染层证据已齐，准备收束。",
+      "全部证据已经完成。",
     ];
     const messages: AIMessage[] = updates.map((content, index) => ({
       id: `progress-${index + 1}`,
@@ -344,11 +347,14 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "zh-CN",
     });
 
-    expect(screen.getAllByTestId("public-progress-event")).toHaveLength(2);
+    expect(screen.getAllByTestId("public-progress-event")).toHaveLength(4);
     expect(screen.getByText(updates[0]!)).toBeInTheDocument();
-    expect(screen.getByText(updates[3]!)).toBeInTheDocument();
+    expect(screen.getByText(updates[2]!)).toBeInTheDocument();
+    expect(screen.getByText(updates[4]!)).toBeInTheDocument();
+    expect(screen.getByText(updates[6]!)).toBeInTheDocument();
     expect(screen.queryByText(updates[1]!)).not.toBeInTheDocument();
-    expect(screen.queryByText(updates[2]!)).not.toBeInTheDocument();
+    expect(screen.queryByText(updates[3]!)).not.toBeInTheDocument();
+    expect(screen.queryByText(updates[5]!)).not.toBeInTheDocument();
   });
 
   it("deduplicates replayed checkpoints and tool ids in the main transcript", () => {
