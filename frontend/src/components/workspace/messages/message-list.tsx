@@ -1212,7 +1212,7 @@ export function MessageList({
                 {displayName}
               </span>
               {agentRole === "tl" && (
-                <span className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-1.5 py-0 text-[10px] leading-4 font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-1.5 py-0 text-xs leading-4 font-medium text-emerald-600 dark:text-emerald-400">
                   队长
                 </span>
               )}
@@ -1689,13 +1689,13 @@ export function MessageList({
                       : t.message.taskFailed}
                   </span>
                   {!isNetworkError && failedCompletedFileCount > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-background/60 px-2 py-0.5 text-[11px] font-normal text-foreground/70">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-background/60 px-2 py-0.5 text-xs font-normal text-foreground/70">
                       {t.message.completedChanges} · {failedCompletedFileCount}
                     </span>
                   )}
                 </div>
                 {!isNetworkError && (
-                  <div className="text-[13px] opacity-80">
+                  <div className="text-sm opacity-80">
                     {errorBannerText}
                   </div>
                 )}
@@ -1723,7 +1723,7 @@ export function MessageList({
                           },
                         });
                       }}
-                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border-default bg-background/60 px-2.5 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-background/90"
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border-default bg-background/60 px-2.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-background/90"
                     >
                       <PlayCircleIcon className="size-3" />
                       {t.message.viewProcess}
@@ -1763,7 +1763,7 @@ export function MessageList({
           <button
             type="button"
             onClick={() => void thread.stop()}
-            className="rounded-md border border-amber-300/80 px-2 py-1 text-[11px] font-medium text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-700/60 dark:text-amber-200 dark:hover:bg-amber-900/70"
+            className="rounded-md border border-amber-300/80 px-2 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-700/60 dark:text-amber-200 dark:hover:bg-amber-900/70"
           >
             {t.common.stop}
           </button>

@@ -83,7 +83,7 @@ export function WorkstationSeat({
     <span
       className={cn(
         "relative grid shrink-0 place-items-center overflow-hidden rounded-lg bg-muted leading-none",
-        iconOnly && iconCaption ? "size-6 text-[12px]" : "size-7 text-[14px]",
+        iconOnly && iconCaption ? "size-6 text-xs" : "size-7 text-sm",
       )}
     >
       {avatarUrl ? (
@@ -97,7 +97,7 @@ export function WorkstationSeat({
       ) : avatarNode ? (
         avatarNode
       ) : (
-        <span className="text-[11px] font-semibold text-muted-foreground">
+        <span className="text-xs font-semibold text-muted-foreground">
           {(fallbackInitial ?? name.charAt(0)).toUpperCase()}
         </span>
       )}
@@ -136,7 +136,7 @@ export function WorkstationSeat({
       {avatarElement}
       {iconStatusDot}
       {iconCaption ? (
-        <span className="max-w-full truncate text-[9px] font-medium leading-none text-muted-foreground">
+        <span className="max-w-full truncate text-xs font-medium leading-none text-muted-foreground">
           {iconCaption}
         </span>
       ) : null}
@@ -146,7 +146,7 @@ export function WorkstationSeat({
       {avatarElement}
       <span
         className={cn(
-          "truncate text-[13px] font-medium",
+          "truncate text-sm font-medium",
           compactName && "max-w-28",
         )}
       >

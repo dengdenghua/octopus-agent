@@ -531,7 +531,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   <p className="text-sm font-medium">
                     {accountName ?? t.auth.notLoggedIn}
                   </p>
-                  <p className="text-muted-foreground truncate text-[11px]">
+                  <p className="text-muted-foreground truncate text-xs">
                     {isGuest
                       ? t.auth.guestMode.title
                       : user?.email && user.email !== accountName
@@ -593,7 +593,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 </Button>
               ) : null}
             </div>
-            <div className="text-muted-foreground mb-1 flex items-center justify-between px-1.5 text-[10px] font-medium uppercase">
+            <div className="text-muted-foreground mb-1 flex items-center justify-between px-1.5 text-xs font-medium uppercase">
               <span>{t.settings.dialog.sectionsLabel}</span>
               {normalizedSettingsQuery ? (
                 <span>
@@ -637,7 +637,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                             {label}
                           </span>
                           {disabled && (
-                            <span className="rounded border border-border-default px-1 py-0.5 text-[9px] font-medium leading-none text-muted-foreground">
+                            <span className="rounded border border-border-default px-1 py-0.5 text-xs font-medium leading-none text-muted-foreground">
                               {t.common.guest}
                             </span>
                           )}

@@ -330,7 +330,7 @@ function ReportCover({
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.55),transparent_28%),radial-gradient(circle_at_78%_35%,rgba(99,102,241,0.42),transparent_30%),linear-gradient(135deg,rgba(15,23,42,1),rgba(17,24,39,0.92))]" />
       <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.12)_1px,transparent_1px)] [background-size:28px_28px]" />
-      <div className="absolute left-2 top-2 rounded-md bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/90">
+      <div className="absolute left-2 top-2 rounded-md bg-black/45 px-1.5 py-0.5 text-xs font-medium text-white/90">
         {t.intelligencePanel.aiGenerated}
       </div>
       <div className="absolute bottom-2 left-2 right-2 line-clamp-2 text-xs font-semibold leading-5">
@@ -365,7 +365,7 @@ function ReportTimelineItem({
         <div className="text-base font-semibold leading-none text-foreground">
           {date.time}
         </div>
-        <div className="mt-1 text-[11px] text-muted-foreground">
+        <div className="mt-1 text-xs text-muted-foreground">
           {date.shortDate}
         </div>
         <span className="mt-2 size-2.5 rounded-full bg-foreground" />
@@ -401,7 +401,7 @@ function ReportTimelineItem({
                 >
                   {headline}
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                   <span>
                     {date.monthDay} {date.weekday}
                   </span>
@@ -417,7 +417,7 @@ function ReportTimelineItem({
                   )}
                 </div>
               </div>
-              <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-muted px-2 text-[11px] text-muted-foreground transition-colors group-hover:text-foreground">
+              <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-muted px-2 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
                 {t.intelligencePanel.view}
                 <ArrowRightIcon className="size-3" />
               </span>
@@ -770,7 +770,7 @@ export function IntelligencePanel() {
                     type="button"
                     onClick={() => handleUseExample(example)}
                     aria-label={example}
-                    className="rounded-full border border-border-default bg-background/70 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+                    className="rounded-full border border-border-default bg-background/70 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
                   >
                     {example.slice(0, 18)}...
                   </button>
@@ -795,7 +795,7 @@ export function IntelligencePanel() {
               {draft ? (
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <Label htmlFor={draftNameId} className="text-[11px]">
+                    <Label htmlFor={draftNameId} className="text-xs">
                       {t.intelligencePanel.subscriptionName}
                     </Label>
                     <Input
@@ -816,7 +816,7 @@ export function IntelligencePanel() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor={draftKeywordsId} className="text-[11px]">
+                    <Label htmlFor={draftKeywordsId} className="text-xs">
                       {t.intelligencePanel.keywords}
                     </Label>
                     <Input
@@ -840,7 +840,7 @@ export function IntelligencePanel() {
                   </div>
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     <div className="space-y-1">
-                      <Label htmlFor={draftCadenceId} className="text-[11px]">
+                      <Label htmlFor={draftCadenceId} className="text-xs">
                         {t.intelligencePanel.cadence}
                       </Label>
                       <Select
@@ -867,7 +867,7 @@ export function IntelligencePanel() {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor={draftSourcesId} className="text-[11px]">
+                      <Label htmlFor={draftSourcesId} className="text-xs">
                         {t.intelligencePanel.sources}
                       </Label>
                       <Input
@@ -894,7 +894,7 @@ export function IntelligencePanel() {
                     <div className="space-y-1">
                       <Label
                         htmlFor={draftTimeId}
-                        className="flex items-center gap-1 text-[10px] text-muted-foreground"
+                        className="flex items-center gap-1 text-xs text-muted-foreground"
                       >
                         <ClockIcon className="size-3" />
                         {t.intelligencePanel.runTime}
@@ -923,7 +923,7 @@ export function IntelligencePanel() {
                     <div className="space-y-1">
                       <Label
                         htmlFor={draftDayId}
-                        className="text-[10px] text-muted-foreground"
+                        className="text-xs text-muted-foreground"
                       >
                         {draft.cadence === t.intelligencePanel.cadenceMonthly
                           ? t.intelligencePanel.monthlyDate
@@ -990,7 +990,7 @@ export function IntelligencePanel() {
                     <div className="space-y-1">
                       <Label
                         htmlFor={draftTimezoneId}
-                        className="text-[10px] text-muted-foreground"
+                        className="text-xs text-muted-foreground"
                       >
                         {t.intelligencePanel.timezone}
                       </Label>
@@ -1008,13 +1008,13 @@ export function IntelligencePanel() {
                       />
                     </div>
                   </div>
-                  <div className="rounded-md border border-border-default bg-background/50 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                  <div className="rounded-md border border-border-default bg-background/50 px-2.5 py-1.5 text-xs text-muted-foreground">
                     {t.intelligencePanel.expectedRun(scheduleText(draft, t))}
                   </div>
                   <div className="space-y-1">
                     <Label
                       htmlFor={draftInstructionsId}
-                      className="text-[11px]"
+                      className="text-xs"
                     >
                       {t.intelligencePanel.instructions}
                     </Label>
@@ -1121,7 +1121,7 @@ export function IntelligencePanel() {
                       key={example}
                       type="button"
                       onClick={() => handleUseExample(example)}
-                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border-default bg-background/70 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border-default bg-background/70 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
                     >
                       <SparklesIcon className="size-3 shrink-0 text-primary/70" />
                       <span className="truncate">{example}</span>
@@ -1174,7 +1174,7 @@ export function IntelligencePanel() {
                             </div>
                             <Badge
                               variant={enabled ? "secondary" : "outline"}
-                              className="rounded-full px-2 py-0.5 text-[10px]"
+                              className="rounded-full px-2 py-0.5 text-xs"
                             >
                               {enabled
                                 ? t.intelligence.enabled
@@ -1303,7 +1303,7 @@ export function IntelligencePanel() {
             </div>
             <Badge
               variant="secondary"
-              className="rounded-md px-2 py-0.5 text-[11px]"
+              className="rounded-md px-2 py-0.5 text-xs"
             >
               {t.intelligencePanel.newsFeed}
             </Badge>
@@ -1400,7 +1400,7 @@ export function IntelligencePanel() {
                 )}
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+                <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
                   <span>{t.intelligencePanel.todayPush}</span>
                   <span>
                     {reportDateParts(selectedReport.created_at, t).monthDay}
@@ -1475,7 +1475,7 @@ export function IntelligencePanel() {
                             className="rounded-lg border border-border-default bg-background/80 p-3"
                           >
                             <div className="flex items-center gap-2">
-                              <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                                 {source.source ?? t.intelligence.web}
                               </span>
                               {source.url ? (
@@ -1521,7 +1521,7 @@ export function IntelligencePanel() {
           className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-[15px]">
+            <DialogTitle className="text-base">
               {t.intelligence.deleteConfirmTitle}
             </DialogTitle>
             <DialogDescription className="text-[12.5px] leading-5">

@@ -66,12 +66,12 @@ export function PresenceDots({
           />
         ))}
         {extra > 0 && (
-          <span className="pl-1.5 text-[10px] text-muted-foreground">
+          <span className="pl-1.5 text-xs text-muted-foreground">
             +{extra}
           </span>
         )}
       </div>
-      <span className="shrink-0 text-[11px] text-muted-foreground">
+      <span className="shrink-0 text-xs text-muted-foreground">
         {online} {t.coworkCollab.online}
       </span>
     </div>
@@ -82,7 +82,7 @@ export function PresenceDots({
 export function SearchHitList({ hits, t }: { hits: CoworkSearchHit[]; t: T }) {
   if (hits.length === 0) {
     return (
-      <div className="px-1 py-3 text-center text-[11px] text-muted-foreground">
+      <div className="px-1 py-3 text-center text-xs text-muted-foreground">
         {t.coworkCollab.noResults}
       </div>
     );
@@ -102,12 +102,12 @@ export function SearchHitList({ hits, t }: { hits: CoworkSearchHit[]; t: T }) {
                 <span className="truncate text-xs font-medium text-foreground">
                   {hit.title}
                 </span>
-                <span className="shrink-0 text-[10px] text-muted-foreground">
+                <span className="shrink-0 text-xs text-muted-foreground">
                   {kindLabel(hit.kind, t)}
                 </span>
               </div>
               {hit.snippet && (
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-xs text-muted-foreground">
                   {hit.snippet}
                 </p>
               )}
@@ -169,7 +169,7 @@ export function CoworkCollabBar({
       {trimmed.length > 0 && (
         <div className="mt-1.5 max-h-64 overflow-y-auto">
           {search.isLoading ? (
-            <div className="px-1 py-3 text-center text-[11px] text-muted-foreground">
+            <div className="px-1 py-3 text-center text-xs text-muted-foreground">
               …
             </div>
           ) : (

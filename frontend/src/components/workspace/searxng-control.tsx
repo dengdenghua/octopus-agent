@@ -122,27 +122,27 @@ export function SearxngControl() {
               aria-hidden="true"
             />
             <h4 className="text-sm font-medium">{t.title}</h4>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {t[state]}
             </span>
           </div>
           {isError ? (
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <p role="alert" className="text-[11px] text-destructive">
+              <p role="alert" className="text-xs text-destructive">
                 {t.unavailable}
               </p>
               <Button
                 type="button"
                 variant="link"
                 size="sm"
-                className="h-auto p-0 text-[11px]"
+                className="h-auto p-0 text-xs"
                 onClick={refetch}
               >
                 {t.retry}
               </Button>
             </div>
           ) : (
-            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+            <p className="mt-1 text-xs leading-snug text-muted-foreground">
               {dockerMissing ? t.needDocker : t.desc}
             </p>
           )}

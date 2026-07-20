@@ -192,7 +192,7 @@ export function ClarificationChoiceCard({
               <span className="block text-xs font-semibold">
                 {choice.label}
               </span>
-              <span className="block truncate text-[11px] opacity-80">
+              <span className="block truncate text-xs opacity-80">
                 {choice.detail}
               </span>
             </span>

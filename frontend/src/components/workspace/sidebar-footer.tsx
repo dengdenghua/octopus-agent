@@ -111,8 +111,8 @@ export function AgentAvatar({
     <span
       aria-hidden="true"
       className={cn(
-        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border-default bg-muted text-[13px] leading-none",
-        !emoji && !avatar && "font-semibold text-muted-foreground text-[11px]",
+        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border-default bg-muted text-sm leading-none",
+        !emoji && !avatar && "font-semibold text-muted-foreground text-xs",
         className,
       )}
     >
@@ -236,12 +236,12 @@ export function AgentFooter() {
           isActive && "bg-muted/35 opacity-100",
         )}
       >
-        <AgentAvatar agent={a} className="size-8 rounded-lg text-[11px]" />
+        <AgentAvatar agent={a} className="size-8 rounded-lg text-xs" />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate font-medium leading-none">
             {a.display_name || a.name}
           </span>
-          <span className="truncate text-[10px] font-normal leading-tight text-muted-foreground">
+          <span className="truncate text-xs font-normal leading-tight text-muted-foreground">
             {isActive
               ? t.sidebar.currentAgent
               : a.description || t.sidebar.soloChat}
@@ -320,19 +320,19 @@ export function AgentFooter() {
           sideOffset={6}
           className="max-h-[calc(100vh-1rem)] w-72 overflow-y-auto overscroll-contain rounded-lg border-border-default p-1.5 shadow-xl shadow-black/10"
         >
-          <DropdownMenuLabel className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
             {t.sidebar.switchAgentMenuTitle}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {personaAgents.length > 0 ? (
             personaAgents.map(renderAgentItem)
           ) : (
-            <div className="px-2 py-2 text-[11px] text-muted-foreground">
+            <div className="px-2 py-2 text-xs text-muted-foreground">
               {t.sidebar.noAgents}
             </div>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="flex items-center gap-2 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          <DropdownMenuLabel className="flex items-center gap-2 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
             <span className="min-w-0 flex-1 truncate">
               {t.sidebar.localCliPartners}
             </span>
@@ -358,15 +358,15 @@ export function AgentFooter() {
           </DropdownMenuLabel>
           <div aria-live="polite">
             {cliAgentsFailed ? (
-              <div className="px-2.5 py-2 text-[11px] text-destructive">
+              <div className="px-2.5 py-2 text-xs text-destructive">
                 {t.localAgentConnect.detectFailed}
               </div>
             ) : isFetchingCliAgents && cliPartnerAgents.length === 0 ? (
-              <div className="px-2.5 py-2 text-[11px] text-muted-foreground">
+              <div className="px-2.5 py-2 text-xs text-muted-foreground">
                 {t.localAgentConnect.detecting}
               </div>
             ) : cliPartnerAgents.length === 0 ? (
-              <div className="px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              <div className="px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
                 {t.localAgentConnect.noPartnersAvailable}
               </div>
             ) : null}
@@ -399,7 +399,7 @@ export function AgentFooter() {
                 <span className="min-w-0 flex-1 truncate">
                   {t.sidebar.remainingCredits}
                 </span>
-                <span className="shrink-0 text-[11px] font-mono text-foreground/80">
+                <span className="shrink-0 text-xs font-mono text-foreground/80">
                   {typeof credits === "number" ? credits.toLocaleString() : "—"}
                 </span>
               </DropdownMenuItem>

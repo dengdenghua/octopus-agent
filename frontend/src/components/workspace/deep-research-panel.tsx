@@ -42,6 +42,7 @@ import {
   type TaskResult,
 } from "@/core/parallel-agents/api";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 interface DeepResearchPanelProps {
@@ -57,6 +58,7 @@ export function DeepResearchPanel({
   error,
   onClose,
 }: DeepResearchPanelProps) {
+  const { t } = useI18n();
   const { confirm, confirmDialog } = useConfirmDialog();
   const [currentJob, setCurrentJob] = useState(job);
   const [batch, setBatch] = useState<BatchResult | null>(null);
@@ -130,9 +132,11 @@ export function DeepResearchPanel({
     if (!cancellableTasks.length || canceling) return;
     if (
       !(await confirm({
-        title: "Cancel agent run?",
-        description: `This will cancel ${cancellableTasks.length} active agent task${cancellableTasks.length === 1 ? "" : "s"}. Partial progress will be discarded.`,
-        confirmLabel: "Cancel run",
+        title: t.deepResearchPanel.cancelRunConfirmTitle,
+        description: t.deepResearchPanel.cancelRunConfirmDescription(
+          cancellableTasks.length,
+        ),
+        confirmLabel: t.deepResearchPanel.cancelRunConfirmLabel,
       }))
     )
       return;
@@ -146,7 +150,7 @@ export function DeepResearchPanel({
     } finally {
       setCanceling(false);
     }
-  }, [cancellableTasks, canceling, confirm, refreshBatch, refreshJob]);
+  }, [cancellableTasks, canceling, confirm, refreshBatch, refreshJob, t]);
 
   const handleCopyReport = useCallback(async () => {
     if (!currentJob.final_report) return;
@@ -155,9 +159,9 @@ export function DeepResearchPanel({
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("Failed to copy report");
+      toast.error(t.deepResearchPanel.copyReportFailedToast);
     }
-  }, [currentJob.final_report]);
+  }, [currentJob.final_report, t]);
 
   const handleDownloadReport = useCallback(() => {
     if (!currentJob.final_report) return;
@@ -212,8 +216,10 @@ export function DeepResearchPanel({
         <div className="flex min-w-0 items-center gap-2">
           <TelescopeIcon className="size-4 text-primary" />
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium">Agent</div>
-            <div className="truncate text-[11px] text-muted-foreground">
+            <div className="truncate text-sm font-medium">
+              {t.deepResearchPanel.title}
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
               {currentJob.topic}
             </div>
           </div>
@@ -229,7 +235,7 @@ export function DeepResearchPanel({
                 "hover:bg-muted/60 hover:text-foreground",
                 "disabled:cursor-not-allowed disabled:opacity-40",
               )}
-              title="Cancel agent run"
+              title={t.deepResearchPanel.cancelAgentRunTitle}
             >
               {canceling ? (
                 <Loader2Icon className="size-3.5 animate-spin" />
@@ -263,36 +269,44 @@ export function DeepResearchPanel({
         <div className="grid grid-cols-3 gap-2">
           <Metric
             icon={<UsersIcon className="size-3.5" />}
-            label="Roles"
+            label={t.deepResearchPanel.metricRoles}
             value={roleCount}
           />
           <Metric
             icon={<GlobeIcon className="size-3.5" />}
-            label="Sources"
+            label={t.deepResearchPanel.metricSources}
             value={sourceCount}
           />
           <Metric
             icon={<FileTextIcon className="size-3.5" />}
-            label="Materials"
+            label={t.deepResearchPanel.metricMaterials}
             value={materialCount}
           />
         </div>
 
         <div className="mt-3 rounded-lg border border-border-default bg-muted/20 p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="text-xs font-medium">Agent Budget</div>
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <div className="text-xs font-medium">
+              {t.deepResearchPanel.agentBudget}
+            </div>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <SearchIcon className="size-3" />
-              {currentJob.max_searches} searches
+              {t.deepResearchPanel.searchesCount(currentJob.max_searches)}
             </div>
           </div>
           {batch && (
-            <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
+            <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>{batch.status}</span>
               <span>
-                {batch.completed_tasks}/{batch.total_tasks} completed
+                {t.deepResearchPanel.batchProgress(
+                  batch.completed_tasks,
+                  batch.total_tasks,
+                )}
                 {(batch.failed_tasks > 0 || batch.cancelled_tasks > 0) &&
-                  ` · ${batch.failed_tasks} failed · ${batch.cancelled_tasks} cancelled`}
+                  ` · ${t.deepResearchPanel.batchFailedCancelled(
+                    batch.failed_tasks,
+                    batch.cancelled_tasks,
+                  )}`}
               </span>
             </div>
           )}
@@ -305,9 +319,11 @@ export function DeepResearchPanel({
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="mt-2 truncate text-[11px] text-muted-foreground">
+          <div className="mt-2 truncate text-xs text-muted-foreground">
             {currentJob.dispatch_batch_id
-              ? `Batch ${currentJob.dispatch_batch_id}`
+              ? t.deepResearchPanel.batchIdLabel(
+                  currentJob.dispatch_batch_id,
+                )
               : currentJob.status}
           </div>
         </div>
@@ -315,9 +331,11 @@ export function DeepResearchPanel({
         {liveEvents.length > 0 && (
           <div className="mt-4 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-xs font-medium">Live Agent Stream</div>
-              <div className="text-[11px] text-muted-foreground">
-                {liveEvents.length} events
+              <div className="text-xs font-medium">
+                {t.deepResearchPanel.liveAgentStream}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {t.deepResearchPanel.eventsCount(liveEvents.length)}
               </div>
             </div>
             <div className="space-y-1.5">
@@ -334,9 +352,14 @@ export function DeepResearchPanel({
         {prefetchLogs.length > 0 && (
           <div className="mt-4 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-xs font-medium">Prefetch</div>
-              <div className="text-[11px] text-muted-foreground">
-                {prefetchLogs.length} runs · {prefetchEvidenceCount} evidence
+              <div className="text-xs font-medium">
+                {t.deepResearchPanel.prefetch}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {t.deepResearchPanel.prefetchStats(
+                  prefetchLogs.length,
+                  prefetchEvidenceCount,
+                )}
               </div>
             </div>
             <div className="space-y-1.5">
@@ -348,7 +371,9 @@ export function DeepResearchPanel({
         )}
 
         <div className="mt-4 space-y-2">
-          <div className="text-xs font-medium">Execution Steps</div>
+          <div className="text-xs font-medium">
+            {t.deepResearchPanel.executionSteps}
+          </div>
           {activeSteps.map((step, index) => (
             <StepRow
               key={step.id}
@@ -373,7 +398,9 @@ export function DeepResearchPanel({
         </div>
 
         <div className="mt-4 space-y-2">
-          <div className="text-xs font-medium">Search Sources</div>
+          <div className="text-xs font-medium">
+            {t.deepResearchPanel.searchSources}
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {currentJob.sources
               .filter((s) => s.enabled)
@@ -387,10 +414,10 @@ export function DeepResearchPanel({
                   ]
                     .filter(Boolean)
                     .join(" | ")}
-                  className="inline-flex items-center gap-1 rounded-md border border-border-default bg-background px-2 py-1 text-[10px] text-muted-foreground"
+                  className="inline-flex items-center gap-1 rounded-md border border-border-default bg-background px-2 py-1 text-xs text-muted-foreground"
                 >
                   <span>{source.label}</span>
-                  <span className="text-[9px] text-muted-foreground/60">
+                  <span className="text-xs text-muted-foreground/60">
                     {source.provider ?? source.kind}
                   </span>
                 </span>
@@ -402,7 +429,9 @@ export function DeepResearchPanel({
           <>
             {currentJob.evidence.length > 0 && (
               <div className="mt-4 space-y-2">
-                <div className="text-xs font-medium">Evidence</div>
+                <div className="text-xs font-medium">
+                  {t.deepResearchPanel.evidence}
+                </div>
                 <div className="space-y-1.5">
                   {currentJob.evidence.slice(0, 12).map((item) => (
                     <div
@@ -410,7 +439,7 @@ export function DeepResearchPanel({
                       className="rounded-lg border border-border-default bg-background/70 p-2"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 text-[11px] font-medium">
+                        <div className="min-w-0 text-xs font-medium">
                           {item.url ? (
                             <a
                               href={item.url}
@@ -425,15 +454,17 @@ export function DeepResearchPanel({
                             </a>
                           ) : (
                             <span>
-                              {item.title || item.source_kind || "Evidence"}
+                              {item.title ||
+                                item.source_kind ||
+                                t.deepResearchPanel.evidence}
                             </span>
                           )}
                         </div>
-                        <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                           {item.stance} {Math.round(item.confidence * 100)}%
                         </span>
                       </div>
-                      <div className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
+                      <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                         {item.claim || item.quote_or_summary}
                       </div>
                     </div>
@@ -443,22 +474,32 @@ export function DeepResearchPanel({
             )}
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-xs font-medium">Final Report</div>
+                <div className="text-xs font-medium">
+                  {t.deepResearchPanel.finalReport}
+                </div>
                 <div className="flex items-center gap-1.5">
                   {currentJob.memory_written_at && (
-                    <span className="rounded-md bg-green-500/10 px-2 py-0.5 text-[10px] text-green-600 dark:text-green-400">
-                      saved to lead memory
+                    <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-600 dark:text-emerald-400">
+                      {t.deepResearchPanel.savedToLeadMemory}
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={handleCopyReport}
-                    aria-label={copied ? "Copied" : "Copy Markdown"}
+                    aria-label={
+                      copied
+                        ? t.deepResearchPanel.copied
+                        : t.deepResearchPanel.copyMarkdown
+                    }
                     className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                    title={copied ? "Copied" : "Copy Markdown"}
+                    title={
+                      copied
+                        ? t.deepResearchPanel.copied
+                        : t.deepResearchPanel.copyMarkdown
+                    }
                   >
                     {copied ? (
-                      <CheckCircle2Icon className="size-3.5 text-green-500" />
+                      <CheckCircle2Icon className="size-3.5 text-emerald-500" />
                     ) : (
                       <ClipboardIcon className="size-3.5" />
                     )}
@@ -466,23 +507,25 @@ export function DeepResearchPanel({
                   <button
                     type="button"
                     onClick={handleDownloadReport}
-                    aria-label="Download Markdown"
+                    aria-label={t.deepResearchPanel.downloadMarkdown}
                     className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                    title="Download Markdown"
+                    title={t.deepResearchPanel.downloadMarkdown}
                   >
                     <DownloadIcon className="size-3.5" />
                   </button>
                 </div>
               </div>
-              <div className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg border border-primary/20 bg-primary/5 p-3 text-[11px] leading-relaxed">
+              <div className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed">
                 {currentJob.final_report}
               </div>
             </div>
           </>
         ) : batch?.aggregated_content ? (
           <div className="mt-4 space-y-2">
-            <div className="text-xs font-medium">Stage Summary</div>
-            <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border-default bg-background/70 p-3 text-[11px] leading-relaxed text-muted-foreground">
+            <div className="text-xs font-medium">
+              {t.deepResearchPanel.stageSummary}
+            </div>
+            <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border-default bg-background/70 p-3 text-xs leading-relaxed text-muted-foreground">
               {batch.aggregated_content}
             </div>
           </div>
@@ -494,45 +537,48 @@ export function DeepResearchPanel({
 }
 
 function PrefetchLogRow({ item }: { item: ResearchPrefetchLog }) {
+  const { t } = useI18n();
   const subject = item.query || item.url || item.source_label || item.provider;
   const statusClass =
     item.status === "failed"
       ? "border-destructive/30 bg-destructive/10 text-destructive"
       : item.status === "skipped"
         ? "border-border-default bg-muted/30 text-muted-foreground"
-        : "border-green-500/25 bg-green-500/10 text-green-600 dark:text-green-400";
+        : "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
 
   return (
     <div className="rounded-lg border border-border-default bg-background/70 p-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 rounded-md border border-border-default bg-muted/30 px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground">
+            <span className="shrink-0 rounded-md border border-border-default bg-muted/30 px-1.5 py-0.5 text-xs uppercase text-muted-foreground">
               {item.action}
             </span>
-            <span className="truncate text-[11px] font-medium">{subject}</span>
+            <span className="truncate text-xs font-medium">{subject}</span>
             {item.url && (
               <a
                 href={item.url}
                 target="_blank"
                 rel="noreferrer"
                 className="shrink-0 text-primary hover:opacity-80"
-                title="Open URL"
+                title={t.deepResearchPanel.openUrl}
               >
                 <ExternalLinkIcon className="size-3" />
               </a>
             )}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
             <span>{item.source_label || item.source_kind}</span>
             <span>{item.provider}</span>
-            <span>{item.result_count} hits</span>
-            <span>{item.evidence_count} evidence</span>
+            <span>{t.deepResearchPanel.hitsCount(item.result_count)}</span>
+            <span>
+              {t.deepResearchPanel.evidenceCount(item.evidence_count)}
+            </span>
           </div>
         </div>
         <span
           className={cn(
-            "shrink-0 rounded-md border px-1.5 py-0.5 text-[9px]",
+            "shrink-0 rounded-md border px-1.5 py-0.5 text-xs",
             statusClass,
           )}
         >
@@ -540,7 +586,7 @@ function PrefetchLogRow({ item }: { item: ResearchPrefetchLog }) {
         </span>
       </div>
       {item.error && (
-        <div className="mt-1 line-clamp-2 text-[10px] text-destructive">
+        <div className="mt-1 line-clamp-2 text-xs text-destructive">
           {item.error}
         </div>
       )}
@@ -580,6 +626,7 @@ export function routeDecisionFromPayload(
 }
 
 function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
+  const { t } = useI18n();
   const isDone =
     event.status === "completed" ||
     event.status === "failed" ||
@@ -593,22 +640,28 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
     event.status === "timed_out" ||
     Boolean(event.error);
   const routeDecision = routeDecisionFromPayload(event.payload);
+  const fallbackStatus = event.type === "batch_complete"
+    ? t.deepResearchPanel.statusComplete
+    : t.deepResearchPanel.statusUpdated;
   const title =
     event.message ||
     (event.type === "batch_complete"
-      ? `Batch ${event.status ?? "complete"}`
-      : `${event.subagent_name ?? "subagent"} ${event.status ?? "updated"}`);
+      ? t.deepResearchPanel.batchEventTitle(event.status ?? fallbackStatus)
+      : t.deepResearchPanel.subagentEventTitle(
+          event.subagent_name ?? t.deepResearchPanel.subagentFallback,
+          event.status ?? fallbackStatus,
+        ));
   const detail = event.result_preview || event.error || event.description;
 
   return (
     <div
       className={cn(
-        "rounded-lg border p-2 text-[11px]",
+        "rounded-lg border p-2 text-xs",
         isError
           ? "border-destructive/30 bg-destructive/10"
           : isDone
-            ? "border-green-500/25 bg-green-500/10"
-            : "border-blue-500/25 bg-blue-500/10",
+            ? "border-emerald-500/25 bg-emerald-500/10"
+            : "border-primary/25 bg-primary/10",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -618,13 +671,13 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
               <Loader2Icon className="size-3 animate-spin" />
             )}
             {isDone && !isError && (
-              <CheckCircle2Icon className="size-3 text-green-500" />
+              <CheckCircle2Icon className="size-3 text-emerald-500" />
             )}
             {isError && <CircleAlertIcon className="size-3 text-destructive" />}
             <span className="truncate">{title}</span>
           </div>
           {detail && (
-            <div className="mt-1 line-clamp-3 break-words text-[10px] text-muted-foreground">
+            <div className="mt-1 line-clamp-3 break-words text-xs text-muted-foreground">
               {detail}
             </div>
           )}
@@ -632,7 +685,7 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
             <RouteDecisionSummary decision={routeDecision} className="mt-1" />
           )}
         </div>
-        <span className="shrink-0 rounded-md bg-background/70 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+        <span className="shrink-0 rounded-md bg-background/70 px-1.5 py-0.5 text-xs text-muted-foreground">
           {event.phase ?? event.status ?? event.type}
         </span>
       </div>
@@ -647,24 +700,25 @@ function RouteDecisionSummary({
   decision: SubagentRouteDecision;
   className?: string;
 }) {
+  const { t } = useI18n();
   const blocked = decision.action === "block";
   const warning = decision.action === "allow_with_warning";
   const label = blocked
-    ? "Route blocked"
+    ? t.deepResearchPanel.routeBlocked
     : warning
-      ? "Route warning"
-      : "Route allowed";
+      ? t.deepResearchPanel.routeWarning
+      : t.deepResearchPanel.routeAllowed;
   return (
     <div className={cn("space-y-1", className)}>
       <div className="flex flex-wrap items-center gap-1.5">
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px]",
+            "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs",
             blocked
               ? "border-destructive/30 bg-destructive/10 text-destructive"
               : warning
                 ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                : "border-green-500/25 bg-green-500/10 text-green-600 dark:text-green-400",
+                : "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
           )}
         >
           {blocked || warning ? (
@@ -674,12 +728,12 @@ function RouteDecisionSummary({
           )}
           {label}
         </span>
-        <span className="text-[9px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {decision.verdict} · {decision.risk_level}
         </span>
       </div>
       {decision.reason && (
-        <div className="line-clamp-2 break-words text-[10px] text-muted-foreground">
+        <div className="line-clamp-2 break-words text-xs text-muted-foreground">
           {decision.reason}
         </div>
       )}
@@ -698,7 +752,7 @@ function Metric({
 }) {
   return (
     <div className="rounded-lg border border-border-default bg-background/60 px-2.5 py-2">
-      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         {icon}
         {label}
       </div>
@@ -733,6 +787,7 @@ function StepRow({
   running?: boolean;
   synthesis?: boolean;
 }) {
+  const { t } = useI18n();
   const status = task?.status ?? step.status;
   const isRunning = running || status === "running";
   const isCompleted = status === "completed";
@@ -741,11 +796,11 @@ function StepRow({
 
   return (
     <div className="flex gap-2 rounded-lg border border-border-default bg-background/60 p-2.5">
-      <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
+      <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
         {isRunning ? (
           <Loader2Icon className="size-3 animate-spin" />
         ) : isCompleted ? (
-          <CheckCircle2Icon className="size-3 text-green-500" />
+          <CheckCircle2Icon className="size-3 text-emerald-500" />
         ) : isFailed ? (
           <CircleAlertIcon className="size-3 text-destructive" />
         ) : status === "pending" ? (
@@ -756,18 +811,22 @@ function StepRow({
       </div>
       <div className="min-w-0 flex-1">
         <div className="line-clamp-2 text-xs font-medium">{step.title}</div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
-          <span>{synthesis ? "synthesis" : step.role_id}</span>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <span>
+            {synthesis ? t.deepResearchPanel.synthesisRoleLabel : step.role_id}
+          </span>
           <span>{status}</span>
           {step.expected_searches > 0 && (
-            <span>{step.expected_searches} searches</span>
+            <span>
+              {t.deepResearchPanel.searchesCount(step.expected_searches)}
+            </span>
           )}
           {task?.duration_seconds != null && (
             <span>{task.duration_seconds.toFixed(1)}s</span>
           )}
         </div>
         {task?.error && (
-          <div className="mt-1 line-clamp-2 text-[10px] text-destructive">
+          <div className="mt-1 line-clamp-2 text-xs text-destructive">
             {task.error}
           </div>
         )}
@@ -775,7 +834,7 @@ function StepRow({
           <RouteDecisionSummary decision={routeDecision} className="mt-1" />
         )}
         {task?.result && (
-          <div className="mt-1 line-clamp-3 text-[10px] text-muted-foreground">
+          <div className="mt-1 line-clamp-3 text-xs text-muted-foreground">
             {task.result}
           </div>
         )}

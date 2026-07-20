@@ -8647,4 +8647,85 @@ Strategy:
     remoteLoading: "Loading remote workspaces...",
     remoteLoadFailed: (error) => `Failed to load remote workspaces: ${error}`,
   },
+
+  // Deep Research Panel
+  deepResearchPanel: {
+    title: "Agent",
+    cancelAgentRunTitle: "Cancel agent run",
+    cancelRunConfirmTitle: "Cancel agent run?",
+    cancelRunConfirmDescription: (count) =>
+      `This will cancel ${count} active agent task${count === 1 ? "" : "s"}. Partial progress will be discarded.`,
+    cancelRunConfirmLabel: "Cancel run",
+    copyReportFailedToast: "Failed to copy report",
+    metricRoles: "Roles",
+    metricSources: "Sources",
+    metricMaterials: "Materials",
+    agentBudget: "Agent Budget",
+    searchesCount: (n) => `${n} searches`,
+    batchProgress: (completed, total) => `${completed}/${total} completed`,
+    batchFailedCancelled: (failed, cancelled) =>
+      `${failed} failed · ${cancelled} cancelled`,
+    batchIdLabel: (id) => `Batch ${id}`,
+    liveAgentStream: "Live Agent Stream",
+    eventsCount: (n) => `${n} events`,
+    prefetch: "Prefetch",
+    prefetchStats: (runs, evidence) => `${runs} runs · ${evidence} evidence`,
+    executionSteps: "Execution Steps",
+    synthesisRoleLabel: "synthesis",
+    searchSources: "Search Sources",
+    evidence: "Evidence",
+    finalReport: "Final Report",
+    savedToLeadMemory: "saved to lead memory",
+    copied: "Copied",
+    copyMarkdown: "Copy Markdown",
+    downloadMarkdown: "Download Markdown",
+    stageSummary: "Stage Summary",
+    openUrl: "Open URL",
+    hitsCount: (n) => `${n} hits`,
+    evidenceCount: (n) => `${n} evidence`,
+    batchEventTitle: (status) => `Batch ${status}`,
+    subagentEventTitle: (name, status) => `${name} ${status}`,
+    subagentFallback: "subagent",
+    statusComplete: "complete",
+    statusUpdated: "updated",
+    routeBlocked: "Route blocked",
+    routeWarning: "Route warning",
+    routeAllowed: "Route allowed",
+  },
+
+  // Desktop Organizer Page
+  desktopOrganizerPage: {
+    title: "Desktop Assistant",
+    description:
+      "Starts in the workspace by default; enable the transparent desktop assistant when you need to handle system desktop files.",
+    enabledOn: "Enabled",
+    enabledOff: "Disabled",
+    tileNotTakeoverTitle: "Does not take over the desktop",
+    tileNotTakeoverBody:
+      "The transparent layer appears only when you open it; once closed, mouse and window control return to Windows.",
+    tileRightClickTitle: "Invoke assistant via right-click",
+    tileRightClickBody:
+      "Right-click inside the organizer layer to open a drawer of desktop files sorted by type.",
+    tileSafePreviewTitle: "Safe preview first",
+    tileSafePreviewBody:
+      "Currently only collects views and never moves files automatically; moving and organizing will get its own confirmation and undo.",
+    webEnvNotice:
+      "You're in a web environment, so right-click menu install/remove stays disabled. Switch to the desktop app to make these options take effect.",
+    contextMenuTitle: "System right-click menu",
+    contextMenuDescription:
+      'Right-click on the Windows desktop shows "Octopus Organize Desktop".',
+    installButton: "Install right-click command",
+    installingButton: "Installing",
+    removeButton: "Remove",
+    removingButton: "Removing",
+    installSuccess: "System right-click command installed.",
+    installUnsupported: "Current environment does not support installation.",
+    removeSuccess: "System right-click command removed.",
+    removeUnsupported: "Current environment does not support removal.",
+    openAssistant: "Open Desktop Assistant",
+    backToWorkspace: "Back to workspace",
+    confirmRemoveTitle: "Remove system right-click menu?",
+    confirmRemoveDescription:
+      "This will remove the Octopus one-click organize command from the Windows desktop right-click menu.",
+  },
 };

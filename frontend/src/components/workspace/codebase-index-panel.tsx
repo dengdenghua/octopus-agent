@@ -20,6 +20,7 @@ import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -181,13 +182,13 @@ function SearchResultCard({
   const [expanded, setExpanded] = useState(false);
   const similarityColor =
     result.similarity >= 0.7
-      ? "text-green-500"
+      ? "text-emerald-500"
       : result.similarity >= 0.4
-        ? "text-yellow-500"
+        ? "text-amber-500"
         : "text-muted-foreground";
 
   return (
-    <div className="group rounded-lg border bg-card p-2 text-[11px] transition-colors hover:border-primary/30">
+    <div className="group rounded-lg border bg-card p-2 text-xs transition-colors hover:border-primary/30">
       <div className="flex items-start justify-between gap-2">
         <button
           type="button"
@@ -203,39 +204,39 @@ function SearchResultCard({
                 ? result.name
                 : result.file_path.split("/").pop()}
             </div>
-            <div className="truncate text-[10px] text-muted-foreground">
+            <div className="truncate text-xs text-muted-foreground">
               {result.file_path}:{result.start_line}-{result.end_line}
             </div>
           </div>
         </button>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="rounded bg-muted px-1 py-0.5 text-[9px] uppercase text-muted-foreground">
+          <span className="rounded bg-muted px-1 py-0.5 text-xs uppercase text-muted-foreground">
             {result.chunk_type}
           </span>
-          <span className="rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
+          <span className="rounded bg-muted px-1 py-0.5 text-xs text-muted-foreground">
             {result.language}
           </span>
           <span
-            className={cn("text-[10px] font-mono font-medium", similarityColor)}
+            className={cn("text-xs font-mono font-medium", similarityColor)}
           >
             {(result.similarity * 100).toFixed(1)}%
           </span>
         </div>
       </div>
       {result.context_header && (
-        <div className="mt-1 truncate text-[10px] text-muted-foreground/70">
+        <div className="mt-1 truncate text-xs text-muted-foreground/70">
           {result.context_header}
         </div>
       )}
       <button
         type="button"
-        className="mt-1 text-[10px] text-primary/70 hover:text-primary"
+        className="mt-1 text-xs text-primary/70 hover:text-primary"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? t.codebaseIndex.hideCode : t.codebaseIndex.showCode}
       </button>
       {expanded && (
-        <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted/50 p-2 text-[10px] leading-tight">
+        <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted/50 p-2 text-xs leading-tight">
           <code>{result.content}</code>
         </pre>
       )}
@@ -259,14 +260,14 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
   );
 
   return (
-    <div className="space-y-3 text-[11px]">
+    <div className="space-y-3 text-xs">
       {/* Summary row */}
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded border bg-card p-2 text-center">
           <div className="text-lg font-bold text-primary">
             {stats.total_files.toLocaleString()}
           </div>
-          <div className="text-[10px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             {t.codebaseIndex.files}
           </div>
         </div>
@@ -274,7 +275,7 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
           <div className="text-lg font-bold text-primary">
             {stats.total_chunks.toLocaleString()}
           </div>
-          <div className="text-[10px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             {t.codebaseIndex.chunks}
           </div>
         </div>
@@ -282,7 +283,7 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
           <div className="text-lg font-bold text-primary">
             {formatBytes(stats.db_size_bytes)}
           </div>
-          <div className="text-[10px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             {t.codebaseIndex.dbSize}
           </div>
         </div>
@@ -291,7 +292,7 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
       {/* Config */}
       {stats.config && (
         <div className="rounded border bg-card p-2">
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {t.codebaseIndex.configuration}
           </div>
           <div className="space-y-0.5 text-muted-foreground">
@@ -328,14 +329,14 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
       {/* Languages */}
       {langEntries.length > 0 && (
         <div className="rounded border bg-card p-2">
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {t.codebaseIndex.languages}
           </div>
           <div className="flex flex-wrap gap-1">
             {langEntries.map(([lang, count]) => (
               <span
                 key={lang}
-                className="rounded bg-muted px-1.5 py-0.5 text-[10px]"
+                className="rounded bg-muted px-1.5 py-0.5 text-xs"
               >
                 {lang} <span className="text-muted-foreground">{count}</span>
               </span>
@@ -347,14 +348,14 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
       {/* Chunk types */}
       {typeEntries.length > 0 && (
         <div className="rounded border bg-card p-2">
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {t.codebaseIndex.chunkTypes}
           </div>
           <div className="flex flex-wrap gap-1">
             {typeEntries.map(([type, count]) => (
               <span
                 key={type}
-                className="rounded bg-muted px-1.5 py-0.5 text-[10px]"
+                className="rounded bg-muted px-1.5 py-0.5 text-xs"
               >
                 {type} <span className="text-muted-foreground">{count}</span>
               </span>
@@ -365,7 +366,7 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
 
       {/* Last indexed */}
       {stats.last_indexed_at && (
-        <div className="text-center text-[10px] text-muted-foreground">
+        <div className="text-center text-xs text-muted-foreground">
           {t.codebaseIndex.lastIndexed}:{" "}
           {new Date(stats.last_indexed_at).toLocaleString()}
         </div>
@@ -534,7 +535,7 @@ export default function CodebaseIndexPanel({
           <DatabaseIcon className="size-4 text-primary" />
           <span className="text-sm font-medium">{t.codebaseIndex.title}</span>
           {isIndexed && !isRunning && (
-            <CheckCircle2Icon className="size-3.5 text-green-500" />
+            <CheckCircle2Icon className="size-3.5 text-emerald-500" />
           )}
           {isRunning && (
             <Loader2Icon className="size-3.5 animate-spin text-primary" />
@@ -575,7 +576,7 @@ export default function CodebaseIndexPanel({
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b text-[11px]">
+      <div className="flex border-b text-xs">
         {(["search", "status", "stats"] as PanelTab[]).map((t) => (
           <button
             type="button"
@@ -601,7 +602,7 @@ export default function CodebaseIndexPanel({
             {/* Search bar */}
             <div className="flex items-center gap-1.5 rounded-lg border bg-card px-2 py-1.5">
               <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-              <input
+              <Input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
@@ -609,7 +610,7 @@ export default function CodebaseIndexPanel({
                 onKeyDown={handleKeyDown}
                 placeholder={t.codebaseIndex.searchPlaceholder}
                 aria-label={t.codebaseIndex.searchPlaceholder}
-                className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/50"
+                className="flex-1 border-0 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50 focus-visible:ring-0"
               />
               {searching && (
                 <Loader2Icon className="size-3 animate-spin text-primary" />
@@ -630,7 +631,7 @@ export default function CodebaseIndexPanel({
 
             {/* Not indexed notice */}
             {!isIndexed && !isRunning && (
-              <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-4 text-center text-[11px] text-muted-foreground">
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
                 <FileSearchIcon className="size-8 text-muted-foreground/50" />
                 <div>
                   <div className="font-medium text-foreground">
@@ -641,7 +642,7 @@ export default function CodebaseIndexPanel({
                 <button
                   type="button"
                   onClick={() => handleStartIndex(false)}
-                  className="mt-1 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  className="mt-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                   {t.codebaseIndex.startIndexing}
                 </button>
@@ -651,7 +652,7 @@ export default function CodebaseIndexPanel({
             {/* Search results */}
             {searchResults && (
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>
                     {searchResults.total_results} result
                     {searchResults.total_results !== 1 ? "s" : ""} for &quot;
@@ -660,7 +661,7 @@ export default function CodebaseIndexPanel({
                   <span>{searchResults.elapsed_ms.toFixed(0)} ms</span>
                 </div>
                 {searchResults.results.length === 0 ? (
-                  <div className="py-4 text-center text-[11px] text-muted-foreground">
+                  <div className="py-4 text-center text-xs text-muted-foreground">
                     {t.codebaseIndex.noMatchingCode}
                   </div>
                 ) : (
@@ -681,7 +682,7 @@ export default function CodebaseIndexPanel({
 
         {/* ---- STATUS TAB ---- */}
         {tab === "status" && (
-          <div className="space-y-3 text-[11px]">
+          <div className="space-y-3 text-xs">
             {isRunning && status ? (
               <>
                 <div className="text-center">
@@ -694,7 +695,7 @@ export default function CodebaseIndexPanel({
                   </div>
                 </div>
                 <ProgressBar pct={status.progress_pct} />
-                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded border bg-card p-2">
                     <div className="text-muted-foreground">
                       {t.codebaseIndex.files}
@@ -722,7 +723,7 @@ export default function CodebaseIndexPanel({
                     <div className="font-medium">{status.skipped_files}</div>
                   </div>
                 </div>
-                <div className="text-center text-[10px] text-muted-foreground">
+                <div className="text-center text-xs text-muted-foreground">
                   Elapsed: {status.elapsed_seconds.toFixed(1)}s | Progress:{" "}
                   {status.progress_pct.toFixed(1)}%
                 </div>
@@ -734,7 +735,7 @@ export default function CodebaseIndexPanel({
                         {t.codebaseIndex.errors(status.errors.length)}
                       </span>
                     </div>
-                    <div className="max-h-24 overflow-y-auto text-[10px] text-destructive/80">
+                    <div className="max-h-24 overflow-y-auto text-xs text-destructive/80">
                       {status.errors.slice(-5).map((e, i) => (
                         <div key={i} className="truncate">
                           {e}
@@ -746,7 +747,7 @@ export default function CodebaseIndexPanel({
               </>
             ) : status?.status === "complete" ? (
               <div className="flex flex-col items-center gap-2 py-4">
-                <CheckCircle2Icon className="size-8 text-green-500" />
+                <CheckCircle2Icon className="size-8 text-emerald-500" />
                 <div className="text-center">
                   <div className="font-medium text-foreground">
                     {t.codebaseIndex.indexingComplete}

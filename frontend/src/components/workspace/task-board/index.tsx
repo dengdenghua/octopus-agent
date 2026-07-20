@@ -141,7 +141,7 @@ function KanbanColumn({
         </span>
         <Badge
           variant="secondary"
-          className="ml-auto text-[10px] px-1.5 py-0 h-5 min-w-[20px] justify-center"
+          className="ml-auto text-xs px-1.5 py-0 h-5 min-w-[20px] justify-center"
         >
           {tasks.length}
         </Badge>
@@ -364,7 +364,7 @@ function ListView({ tasks }: { tasks: UnifiedTask[] }) {
                   <td className="px-3 py-2.5">
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[10px] font-medium leading-none",
+                        "inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-xs font-medium leading-none",
                         statusCfg.badgeClass,
                       )}
                     >
@@ -461,7 +461,7 @@ function TypeFilterPills({
           {(counts[opt.key] ?? 0) > 0 && (
             <span
               aria-hidden="true"
-              className="ml-1 text-[10px] text-muted-foreground"
+              className="ml-1 text-xs text-muted-foreground"
             >
               {counts[opt.key]}
             </span>

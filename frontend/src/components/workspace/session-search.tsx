@@ -149,7 +149,7 @@ export function SessionSearch({
                     {r.snippet}
                   </div>
                 )}
-                <div className="text-muted-foreground/60 mt-1 text-[10px]">
+                <div className="text-muted-foreground/60 mt-1 text-xs">
                   {r.message_count} messages
                   {r.created_at
                     ? ` · ${new Date(r.created_at).toLocaleDateString()}`
@@ -161,7 +161,7 @@ export function SessionSearch({
         </div>
 
         {/* Footer */}
-        <div className="text-muted-foreground border-t px-4 py-2 text-[10px]">
+        <div className="text-muted-foreground border-t px-4 py-2 text-xs">
           <kbd className="rounded border px-1">Esc</kbd> to close
         </div>
       </div>

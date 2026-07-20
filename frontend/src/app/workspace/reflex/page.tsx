@@ -623,7 +623,7 @@ function RuleRow({
               </div>
             ))}
             {rule.per_actor && (
-              <div className="text-[11px]">
+              <div className="text-xs">
                 {t.reflexPage.perActor}:{" "}
                 {Object.entries(rule.per_actor)
                   .map(([a, vid]) => `${a}→${vid}`)

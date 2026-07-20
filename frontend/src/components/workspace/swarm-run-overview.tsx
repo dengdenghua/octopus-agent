@@ -255,20 +255,20 @@ export function SwarmRunOverview({
             </span>
             <span
               className={cn(
-                "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                "rounded-md px-1.5 py-0.5 text-xs font-medium",
                 agentRunBadgeClass(overview.status),
               )}
             >
               {statusText}
             </span>
           </div>
-          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+          <div className="mt-0.5 truncate text-xs text-muted-foreground">
             {overview.currentAgent
               ? currentAgentLine(overview.currentAgent)
               : t.swarmPanel.noActivity}
           </div>
         </div>
-        <div className="hidden items-center gap-3 text-[11px] text-muted-foreground sm:flex">
+        <div className="hidden items-center gap-3 text-xs text-muted-foreground sm:flex">
           <Stat label={t.swarmPanel.statTotal} value={overview.counts.total} />
           <Stat
             label={t.swarmPanel.statCapacity}
@@ -300,7 +300,7 @@ export function SwarmRunOverview({
         />
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5 text-[11px]">
+      <div className="flex min-w-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5 text-xs">
         <span
           className={cn(
             "size-1.5 shrink-0 rounded-sm",
@@ -329,10 +329,10 @@ export function SwarmRunOverview({
                 phase.status === "running" && "animate-pulse",
               )}
             />
-            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
               {phaseLabel(phase.id, t.swarmPanel)}
             </span>
-            <span className="font-mono text-[10px] text-muted-foreground">
+            <span className="font-mono text-xs text-muted-foreground">
               {phase.count}
             </span>
           </div>
@@ -369,18 +369,18 @@ export function SwarmRunOverview({
                   {agent.name}
                 </span>
                 {agent.role && (
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                  <span className="shrink-0 text-xs text-muted-foreground">
                     {agent.role}
                   </span>
                 )}
               </span>
-              <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                 {agent.currentTool ?? compactDetail(agent.task, 72)}
               </span>
             </span>
             <span
               className={cn(
-                "shrink-0 text-[10px] font-medium",
+                "shrink-0 text-xs font-medium",
                 agentRunTextClass(agent.status),
               )}
             >
@@ -389,7 +389,7 @@ export function SwarmRunOverview({
           </button>
         ))}
         {hiddenCount > 0 && (
-          <div className="flex items-center justify-center rounded-md border border-dashed border-border-default px-2 py-1.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center justify-center rounded-md border border-dashed border-border-default px-2 py-1.5 text-xs text-muted-foreground">
             +{hiddenCount}
           </div>
         )}
@@ -459,7 +459,7 @@ function SynthesisStrip({
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border-subtle px-3 py-2 text-[11px]">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border-subtle px-3 py-2 text-xs">
       <span
         className={cn(
           "rounded-sm px-1.5 py-0.5 font-medium",

@@ -90,7 +90,7 @@ export function InspectOverlay({
       {children}
       <div className="pointer-events-none absolute top-2 right-2 z-10 flex items-center gap-1.5">
         {active && (
-          <span className="pointer-events-none rounded-md bg-primary px-2 py-1 text-[10px] text-primary-foreground">
+          <span className="pointer-events-none rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground">
             Click an element · Esc to cancel
           </span>
         )}

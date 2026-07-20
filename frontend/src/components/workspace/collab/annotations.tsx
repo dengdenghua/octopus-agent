@@ -112,7 +112,7 @@ export function AnnotationThread({
         <div className="flex items-center gap-2">
           {annotation.author && (
             <div
-              className="flex size-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold text-white"
+              className="flex size-6 shrink-0 items-center justify-center rounded-lg text-xs font-semibold text-white"
               style={{ backgroundColor: annotation.author.avatar_color }}
             >
               {initials(annotation.author.display_name)}
@@ -122,7 +122,7 @@ export function AnnotationThread({
             <span className="text-xs font-medium">
               {annotation.author?.display_name ?? t.annotations.anonymous}
             </span>
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {timeAgo(annotation.created_at)}
             </span>
           </div>
@@ -243,7 +243,7 @@ function ReplyBubble({ reply }: { reply: AnnotationReply }) {
     <div className="flex items-start gap-2">
       {reply.author && (
         <div
-          className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-lg text-[9px] font-semibold text-white"
+          className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-lg text-xs font-semibold text-white"
           style={{ backgroundColor: reply.author.avatar_color }}
         >
           {initials(reply.author.display_name)}
@@ -251,10 +251,10 @@ function ReplyBubble({ reply }: { reply: AnnotationReply }) {
       )}
       <div className="flex flex-col">
         <div className="flex items-baseline gap-1.5">
-          <span className="text-[11px] font-medium">
+          <span className="text-xs font-medium">
             {reply.author?.display_name ?? t.annotations.anonymous}
           </span>
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {timeAgo(reply.created_at)}
           </span>
         </div>

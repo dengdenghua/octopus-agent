@@ -261,10 +261,10 @@ function WorkspacePathBar({
       <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border-default bg-muted/25 px-2.5 py-1.5">
         <FolderIcon className="size-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-medium text-muted-foreground">
+          <div className="text-xs font-medium text-muted-foreground">
             {t.collab.workbench.currentWorkspace}
           </div>
-          <div className="truncate font-mono text-[11px] text-foreground">
+          <div className="truncate font-mono text-xs text-foreground">
             {workDir || t.collab.workbench.noDirectorySelected}
           </div>
         </div>

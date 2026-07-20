@@ -56,7 +56,7 @@ export const ReactProgressPill = memo(function ReactProgressPill({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 rounded-full border border-border-default bg-card/50 px-2 py-0.5 text-[11px]",
+        "flex items-center gap-1.5 rounded-full border border-border-default bg-card/50 px-2 py-0.5 text-xs",
         hot
           ? "border-amber-300/60 bg-amber-50/60 dark:border-amber-700/40 dark:bg-amber-950/30"
           : "border-blue-300/60 bg-blue-50/60 dark:border-blue-700/40 dark:bg-blue-950/30",
@@ -83,7 +83,7 @@ export const ReactProgressPill = memo(function ReactProgressPill({
       <Button
         size="sm"
         variant="ghost"
-        className="ml-0.5 h-5 gap-0.5 rounded-full px-1.5 text-[11px] hover:bg-background/60"
+        className="ml-0.5 h-5 gap-0.5 rounded-full px-1.5 text-xs hover:bg-background/60"
         onClick={handlePause}
         disabled={pause.isPending}
         title={b.pauseBtn}

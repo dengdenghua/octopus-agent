@@ -122,6 +122,7 @@ import { useAppearance } from "@/hooks/use-appearance";
 import { basename, isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 import { WorkspaceSurfaceHeader } from "@/components/workspace/workspace-surface-header";
+import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
 
 // Surface modes in the left sidebar. Chat and Company are handled by a
 // dedicated two-panel switch so they feel like peer work surfaces instead
@@ -660,6 +661,42 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     return isAbsolutePath(routeValue) ? routeValue : null;
   }, [activeThread, search]);
 
+  // Tracks the active remote-workspace id (if the thread is bound to one).
+  // Threads bound to a remote workspace carry ``workspace_id`` in their
+  // metadata; threads bound to a plain local path keep ``workspace_path``
+  // and have no ``workspace_id``.
+  const activeWorkspaceId = useMemo(() => {
+    if (!activeThread) return null;
+    const value =
+      activeThread.metadata?.["workspace_id"] ??
+      activeThread.values?.["workspace_id"];
+    return typeof value === "string" && value ? value : null;
+  }, [activeThread]);
+
+  // Switching workspace persists the new ``workspace_id`` (and clears
+  // ``workspace_path``) on the active thread so the rest of the app —
+  // file tree, FS endpoints, members panel — re-targets to the new
+  // workspace. When no thread is active we no-op; the caller can still
+  // see the switch in the trigger label via the ``activeWorkspaceId``
+  // prop, but persistence will happen on the next thread state update.
+  const handleSwitchWorkspace = useCallback(
+    async (workspace: { id: string }) => {
+      if (!activeThreadId) return;
+      try {
+        await apiClient.threads.updateState(activeThreadId, {
+          metadata: {
+            workspace_id: workspace.id,
+            workspace_path: "",
+          },
+        });
+        queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
+      } catch (error) {
+        console.error("Failed to switch workspace", error);
+      }
+    },
+    [activeThreadId, apiClient, queryClient],
+  );
+
   const activeTaskRoomId = activeTeamTaskRoomId(sidebarPathname, activeThread);
 
   const activeWorkDir = useMemo(() => {
@@ -875,6 +912,16 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           sit closer to the header and we win a few rows of vertical
           space back. */}
         <SidebarContent className="gap-1.5 px-2.5 py-2 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5">
+          {/* Workspace switcher — sits at the very top so users can flip
+              between local folders and registered remote mounts without
+              diving into a settings page. Hidden when the sidebar is
+              collapsed to icon-only mode (the trigger label would clip). */}
+          <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:hidden">
+            <WorkspaceSwitcher
+              activeWorkspaceId={activeWorkspaceId}
+              onSwitch={handleSwitchWorkspace}
+            />
+          </SidebarGroup>
           <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
             <SurfaceCreateButton
               agentId={activeAgentId}
@@ -972,7 +1019,7 @@ function NavSection({
   return (
     <SidebarGroup className="p-0 px-1 group-data-[collapsible=icon]:px-0">
       {label && (
-        <div className="px-2 pb-1 pt-2 text-[11px] font-medium text-muted-foreground/72 group-data-[collapsible=icon]:sr-only">
+        <div className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground/72 group-data-[collapsible=icon]:sr-only">
           {label}
         </div>
       )}
@@ -1016,7 +1063,7 @@ function LocalDatabaseSection({
             }
             onClick={() => setOpen((value) => !value)}
             className={cn(
-              "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-[13px]",
+              "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-sm",
               "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
               "data-[active=true]:opacity-100",
               "data-[active=true]:border-primary/14 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_76%,transparent)]",
@@ -1083,7 +1130,7 @@ function StorageLibraryRow({
         isActive={active}
         tooltip={item.label}
         className={cn(
-          "group/nav relative h-8 w-full opacity-72 transition-[opacity,background-color,border-color] text-[12px]",
+          "group/nav relative h-8 w-full opacity-72 transition-[opacity,background-color,border-color] text-xs",
           "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
           "data-[active=true]:opacity-100 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_58%,transparent)]",
         )}
@@ -1420,7 +1467,7 @@ export function WorkspaceSurfaceSwitch({
             aria-selected={isActive}
             className={cn(
               "relative z-10 flex h-7 items-center justify-center",
-              "text-[11px] font-medium",
+              "text-xs font-medium",
               "transition-colors",
               isActive
                 ? "text-foreground"
@@ -1472,7 +1519,7 @@ function SurfaceCreateButton({
           workspacePath: workspacePath || undefined,
         })
       }
-      className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border-default bg-background/60 px-3 text-[11px] font-medium text-muted-foreground transition-[background-color,border-color,color] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:px-0"
+      className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border-default bg-background/60 px-3 text-xs font-medium text-muted-foreground transition-[background-color,border-color,color] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:px-0"
     >
       <PlusIcon className="size-4" />
       <span className="group-data-[collapsible=icon]:sr-only">
@@ -1492,7 +1539,7 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
         isActive={active}
         tooltip={item.label}
         className={cn(
-          "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-[13px]",
+          "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-sm",
           "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
           "data-[active=true]:opacity-100",
           "data-[active=true]:border-primary/14 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_76%,transparent)]",
@@ -1821,7 +1868,7 @@ function ProjectGroup({
                     aria-current={active ? "page" : undefined}
                     title={thread.title}
                     className={cn(
-                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-3 pr-3 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-12 group-focus-within/thread:pr-12",
+                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-3 pr-3 text-sm text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-12 group-focus-within/thread:pr-12",
                       "hover:bg-muted/40 hover:text-foreground",
                       active &&
                         "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
@@ -1924,7 +1971,7 @@ function ProjectGroup({
           className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-[15px]">
+            <DialogTitle className="text-base">
               {t.common.rename}
             </DialogTitle>
           </DialogHeader>
@@ -1938,7 +1985,7 @@ function ProjectGroup({
               }
             }}
             autoFocus
-            className="h-8 text-[13px]"
+            className="h-8 text-sm"
           />
           <DialogFooter className="mt-1 flex-row justify-end gap-2">
             <Button
@@ -2241,7 +2288,7 @@ function ProjectDraftRow({
         }}
         className={cn(
           "min-w-0 flex-1 rounded-lg border border-primary/40 bg-background px-1.5 py-0.5",
-          "text-[13px] outline-none focus:ring-1 focus:ring-primary/40",
+          "text-sm outline-none focus:ring-1 focus:ring-primary/40",
         )}
       />
     </div>
@@ -2391,7 +2438,7 @@ function ChatsSection({
                       <span className="min-w-0 flex-1 truncate leading-tight">
                         {t.title}
                       </span>
-                      <span className="w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-[10px] text-muted-foreground transition-[width,opacity,color] group-hover/thread:w-0 group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0">
+                      <span className="w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-xs text-muted-foreground transition-[width,opacity,color] group-hover/thread:w-0 group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0">
                         {formatCompactRelativeTimestamp(t.updatedAt)}
                       </span>
                     </Link>
@@ -2449,7 +2496,7 @@ function ChatsSection({
           className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-[15px]">
+            <DialogTitle className="text-base">
               {tr.common.rename}
             </DialogTitle>
           </DialogHeader>
@@ -2463,7 +2510,7 @@ function ChatsSection({
               }
             }}
             autoFocus
-            className="h-8 text-[13px]"
+            className="h-8 text-sm"
           />
           <DialogFooter className="mt-1 flex-row justify-end gap-2">
             <Button
@@ -2528,7 +2575,7 @@ export function CollapseToggle({ compact = false }: { compact?: boolean }) {
 
 function EmptyHint({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-1 rounded-lg border border-dashed border-border-default px-2.5 py-1.5 text-[11px] leading-tight text-muted-foreground/75">
+    <div className="mt-1 rounded-lg border border-dashed border-border-default px-2.5 py-1.5 text-xs leading-tight text-muted-foreground/75">
       {children}
     </div>
   );

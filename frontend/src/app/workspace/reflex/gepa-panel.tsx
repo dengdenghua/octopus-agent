@@ -569,7 +569,7 @@ export function GepaPanel() {
         <CardTitle className="flex items-center gap-2 text-base">
           <Sparkles className="size-4" />
           {t.recipeForge.panelTitle}
-          <Badge variant="outline" className="text-[10px] font-normal">
+          <Badge variant="outline" className="text-xs font-normal">
             {t.recipeForge.reflectionPathBadge}
           </Badge>
         </CardTitle>
@@ -601,7 +601,7 @@ export function GepaPanel() {
                   : "?"}
               </div>
               {applied.content_preview && (
-                <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] text-muted-foreground">
+                <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-xs text-muted-foreground">
                   {applied.content_preview}
                 </pre>
               )}
@@ -634,7 +634,7 @@ export function GepaPanel() {
             min={1}
             max={10}
           />
-          <label className="flex min-w-[180px] flex-col gap-1 text-[11px] text-muted-foreground">
+          <label className="flex min-w-[180px] flex-col gap-1 text-xs text-muted-foreground">
             <span>Optimizer</span>
             <select
               className="h-9 rounded-md border border-border-default bg-background px-2 text-xs text-foreground"
@@ -691,7 +691,7 @@ export function GepaPanel() {
                 {t.recipeForge.elapsedSeconds(run.elapsed_s ?? 0)}
               </span>
             </div>
-            <Badge className="w-fit bg-muted-foreground/15 text-[10px] text-muted-foreground hover:bg-muted-foreground/15">
+            <Badge className="w-fit bg-muted-foreground/15 text-xs text-muted-foreground hover:bg-muted-foreground/15">
               {run.optimizer_backend || "native_gepa"}
             </Badge>
 
@@ -722,7 +722,7 @@ export function GepaPanel() {
               <summary className="cursor-pointer text-muted-foreground">
                 {t.recipeForge.thisRunHistory(run.history?.length ?? 0)}
               </summary>
-              <div className="mt-2 max-h-64 space-y-1 overflow-y-auto font-mono text-[11px]">
+              <div className="mt-2 max-h-64 space-y-1 overflow-y-auto font-mono text-xs">
                 {(run.history ?? []).map((h, i) => (
                   <HistoryRow key={i} entry={h} t={t} />
                 ))}
@@ -771,7 +771,7 @@ export function GepaPanel() {
                 />
               ))}
             </div>
-            <div className="mt-2 text-[10px] text-muted-foreground">
+            <div className="mt-2 text-xs text-muted-foreground">
               {t.recipeForge.addendumGlobalHint}
             </div>
           </div>
@@ -795,7 +795,7 @@ export function GepaPanel() {
               </Button>
             </div>
           </div>
-          <div className="mb-2 text-[10px] text-muted-foreground">
+          <div className="mb-2 text-xs text-muted-foreground">
             {t.recipeForge.canaryCounts(
               canarySummary.active,
               canarySummary.rolledBack,
@@ -996,7 +996,7 @@ function ConvergenceChart({
 
   return (
     <div className="rounded-md border border-border-subtle bg-background/40 p-2">
-      <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
         <TrendingUpIcon className="size-3" />
         Convergence · best-so-far (line) + per-iter score (dots)
       </div>
@@ -1027,13 +1027,13 @@ function CanaryRow({ entry, t }: { entry: CanaryEntry; t: Translations }) {
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Badge className={cn("text-[10px]", phaseColor, "hover:" + phaseColor)}>
+        <Badge className={cn("text-xs", phaseColor, "hover:" + phaseColor)}>
           {t.recipeForge.canaryPhase(entry.phase)}
         </Badge>
-        <span className="min-w-0 max-w-full truncate font-mono text-[11px] text-muted-foreground">
+        <span className="min-w-0 max-w-full truncate font-mono text-xs text-muted-foreground">
           {shortSkill}
         </span>
-        <span className="font-mono text-[11px] text-emerald-400">
+        <span className="font-mono text-xs text-emerald-400">
           {t.recipeForge.canaryRate(entry.current_rate ?? 0)}
         </span>
         <span className="text-muted-foreground">
@@ -1047,7 +1047,7 @@ function CanaryRow({ entry, t }: { entry: CanaryEntry; t: Translations }) {
           <span className="text-muted-foreground">{dt.toLocaleString()}</span>
         )}
       </div>
-      <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+      <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
         {entry.candidate_id && (
           <span>{t.recipeForge.canaryCandidate(entry.candidate_id)}</span>
         )}
@@ -1174,24 +1174,24 @@ function PastRunRow({
     >
       <div className="flex flex-wrap items-center gap-2">
         <Badge
-          className={cn("text-[10px]", triggerColor, "hover:" + triggerColor)}
+          className={cn("text-xs", triggerColor, "hover:" + triggerColor)}
         >
           {run.trigger === "auto_propose"
             ? t.recipeForge.triggerAutoPropose
             : t.recipeForge.triggerManual}
         </Badge>
         {run.recipe_id && (
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-xs text-muted-foreground">
             {t.recipeForge.recipePrefix}: {run.recipe_id.slice(0, 12)}
           </span>
         )}
-        <Badge className="bg-muted-foreground/15 text-[10px] text-muted-foreground hover:bg-muted-foreground/15">
+        <Badge className="bg-muted-foreground/15 text-xs text-muted-foreground hover:bg-muted-foreground/15">
           {run.optimizer_backend || "native_gepa"}
         </Badge>
         {lifecyclePhase && (
           <Badge
             className={cn(
-              "text-[10px]",
+              "text-xs",
               lifecycleColor,
               "hover:" + lifecycleColor,
             )}
@@ -1212,7 +1212,7 @@ function PastRunRow({
         )}
         <div className="flex-1" />
         {run.applied && (
-          <Badge className="bg-emerald-500/15 text-[10px] text-emerald-300 hover:bg-emerald-500/15">
+          <Badge className="bg-emerald-500/15 text-xs text-emerald-300 hover:bg-emerald-500/15">
             <CheckCircleIcon className="mr-1 size-3" />
             {t.recipeForge.addendumLive}
           </Badge>
@@ -1221,7 +1221,7 @@ function PastRunRow({
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 px-2 text-[10px]"
+            className="h-6 px-2 text-xs"
             onClick={() => {
               setDetailOpen((v) => !v);
               void loadDetail();
@@ -1237,7 +1237,7 @@ function PastRunRow({
               <Button
                 size="sm"
                 variant="outline"
-                className="h-6 text-[11px]"
+                className="h-6 text-xs"
                 onClick={onApplyRecipe}
                 title={`${t.recipeForge.recipePrefix} ${run.recipe_id}`}
               >
@@ -1247,7 +1247,7 @@ function PastRunRow({
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 text-[11px]"
+              className="h-6 text-xs"
               onClick={onApplyGlobal}
               title={t.recipeForge.applyGlobalButton}
             >
@@ -1257,7 +1257,7 @@ function PastRunRow({
         )}
       </div>
       {run.winner_rollback_reason && (
-        <div className="mt-1 text-[10px] text-rose-300">
+        <div className="mt-1 text-xs text-rose-300">
           {t.recipeForge.canaryRollbackReason(run.winner_rollback_reason)}
         </div>
       )}
@@ -1266,7 +1266,7 @@ function PastRunRow({
         sandboxReplayCandidate ||
         turnReplayCandidate ||
         llmReplayCandidate) && (
-        <div className="mt-2 rounded-md border border-border-subtle bg-background/40 px-2 py-1.5 text-[10px] text-muted-foreground">
+        <div className="mt-2 rounded-md border border-border-subtle bg-background/40 px-2 py-1.5 text-xs text-muted-foreground">
           <button
             type="button"
             className="flex w-full items-center gap-2 text-left"
@@ -1278,7 +1278,7 @@ function PastRunRow({
               {t.recipeForge.nativeEvidenceTitle}
             </span>
             {nativeEvaluation?.verdict && (
-              <Badge className="bg-emerald-500/10 text-[9px] text-emerald-300 hover:bg-emerald-500/10">
+              <Badge className="bg-emerald-500/10 text-xs text-emerald-300 hover:bg-emerald-500/10">
                 {nativeEvaluation.verdict}
               </Badge>
             )}
@@ -1396,7 +1396,7 @@ function PastRunRow({
         </div>
       )}
       {detailOpen && (
-        <div className="mt-2 rounded-md border border-border-subtle bg-background/50 p-2 text-[10px] text-muted-foreground">
+        <div className="mt-2 rounded-md border border-border-subtle bg-background/50 p-2 text-xs text-muted-foreground">
           {!detail ? (
             <div>{t.recipeForge.proposalDetailsLoading}</div>
           ) : detail.ok && detail.proposal ? (
@@ -1432,7 +1432,7 @@ function PastRunRow({
                     <summary className="cursor-pointer">
                       {t.recipeForge.proposalDetailsMetadata}
                     </summary>
-                    <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[10px]">
+                    <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-xs">
                       {JSON.stringify(detail.proposal.metadata, null, 2)}
                     </pre>
                   </details>
@@ -1485,7 +1485,7 @@ function NumberKnob({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       <input
@@ -1530,14 +1530,14 @@ function CandidateRow({
       <div className="flex items-center gap-2">
         <span className="font-mono text-xs">{candidate.candidate_id}</span>
         {isBest && (
-          <Badge className="bg-emerald-500/15 text-[10px] text-emerald-300 hover:bg-emerald-500/15">
+          <Badge className="bg-emerald-500/15 text-xs text-emerald-300 hover:bg-emerald-500/15">
             {t.recipeForge.bestBadge}
           </Badge>
         )}
         <span className="font-mono text-sm tabular-nums text-emerald-400">
           {candidate.avg_score.toFixed(3)}
         </span>
-        <span className="font-mono text-[11px] text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           [{candidate.task_scores.map((s) => s.toFixed(2)).join(", ")}]
         </span>
         <div className="flex-1" />
@@ -1597,7 +1597,7 @@ function CandidateRow({
         <summary className="cursor-pointer text-muted-foreground">
           {t.recipeForge.promptPreview}
         </summary>
-        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] text-muted-foreground">
+        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-xs text-muted-foreground">
           {candidate.prompt_preview}
         </pre>
       </details>
@@ -1629,13 +1629,13 @@ function AddendumRow({
   return (
     <div className="rounded-md border border-border-default bg-background/40 px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge className={cn("text-[10px]", scopeColor, "hover:" + scopeColor)}>
+        <Badge className={cn("text-xs", scopeColor, "hover:" + scopeColor)}>
           {entry.scope === "global"
             ? t.recipeForge.globalScope
             : t.recipeForge.perRecipeScope}
         </Badge>
         {entry.recipe_id && (
-          <span className="font-mono text-[11px] text-muted-foreground">
+          <span className="font-mono text-xs text-muted-foreground">
             {t.recipeForge.recipePrefix}: {entry.recipe_id}
           </span>
         )}
@@ -1647,7 +1647,7 @@ function AddendumRow({
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 text-[10px]"
+            className="h-6 text-xs"
             onClick={() => setConfirmDelete(true)}
           >
             <XCircleIcon className="mr-1 size-3" />
@@ -1657,7 +1657,7 @@ function AddendumRow({
           <div className="flex items-center gap-1">
             <Button
               size="sm"
-              className="h-6 bg-rose-600 text-[10px] hover:bg-rose-700"
+              className="h-6 bg-rose-600 text-xs hover:bg-rose-700"
               onClick={() => {
                 onDelete();
                 setConfirmDelete(false);
@@ -1668,7 +1668,7 @@ function AddendumRow({
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 text-[10px]"
+              className="h-6 text-xs"
               onClick={() => setConfirmDelete(false)}
             >
               {t.recipeForge.cancelButton}
@@ -1677,10 +1677,10 @@ function AddendumRow({
         )}
       </div>
       <details className="mt-1">
-        <summary className="cursor-pointer text-[10px] text-muted-foreground">
+        <summary className="cursor-pointer text-xs text-muted-foreground">
           {t.recipeForge.previewSummary}
         </summary>
-        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[10px] text-muted-foreground">
+        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-xs text-muted-foreground">
           {entry.preview}
         </pre>
       </details>
@@ -1728,7 +1728,7 @@ function HistoryRow({ entry, t }: { entry: HistoryEntry; t: Translations }) {
       <span>front={entry.front_size}</span>
       {entry.improved && <span>{t.recipeForge.historyImproved}</span>}
       {entry.rationale && (
-        <span className="basis-full pl-12 text-[10px] italic">
+        <span className="basis-full pl-12 text-xs italic">
           “{entry.rationale.slice(0, 120)}”
         </span>
       )}

@@ -197,7 +197,7 @@ export function VariantPerformancePanel() {
           Variant performance · {recipes.length} recipe
           {recipes.length !== 1 ? "s" : ""} with A/B running
           {tickAt && (
-            <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+            <span className="ml-auto text-xs font-normal text-muted-foreground">
               {tickAt.toLocaleTimeString()}
             </span>
           )}
@@ -328,11 +328,11 @@ function RecipeRow({
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
         <span className="font-mono text-xs text-muted-foreground">recipe:</span>
         <span className="font-mono">{summary.recipe_id}</span>
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="text-xs">
           {summary.variant_count} variants · total weight {summary.total_weight}
         </Badge>
         {summary.default_weight > 0 && (
-          <Badge className="bg-muted-foreground/15 text-[10px] text-muted-foreground hover:bg-muted-foreground/15">
+          <Badge className="bg-muted-foreground/15 text-xs text-muted-foreground hover:bg-muted-foreground/15">
             control branch w={summary.default_weight}
           </Badge>
         )}
@@ -344,7 +344,7 @@ function RecipeRow({
 
       {stats && stats.variants.length > 0 && (
         <table className="w-full text-xs">
-          <thead className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <thead className="text-xs uppercase tracking-wide text-muted-foreground">
             <tr className="border-b border-border-subtle">
               <th className="pb-1 text-left font-medium">variant</th>
               <th className="pb-1 text-right font-medium">uses</th>
@@ -446,7 +446,7 @@ function RecipeRow({
                 </span>
               </div>
               <div className="mt-1 italic">"{promote.proposal.rationale}"</div>
-              <div className="mt-1 font-mono text-[10px]">
+              <div className="mt-1 font-mono text-xs">
                 new weights:{" "}
                 {Object.entries(promote.proposal.weights)
                   .map(([k, v]) => `${k}=${v}`)
@@ -513,7 +513,7 @@ function AutoTickBar({
         <span className="font-medium">Auto-promote daemon:</span>
         <Badge
           className={cn(
-            "text-[10px]",
+            "text-xs",
             status.enabled
               ? "bg-emerald-500/15 text-emerald-300"
               : "bg-muted-foreground/15 text-muted-foreground",
@@ -562,7 +562,7 @@ function AutoTickBar({
         </Button>
       </div>
       {(last || nextStr) && (
-        <div className="mt-1 text-[11px] text-muted-foreground">
+        <div className="mt-1 text-xs text-muted-foreground">
           {last && (
             <>
               last ran {lastStr} · scanned {last.recipes_scanned} recipe
@@ -576,7 +576,7 @@ function AutoTickBar({
         </div>
       )}
       {last && last.results.length > 0 && (
-        <details className="mt-2 text-[11px]">
+        <details className="mt-2 text-xs">
           <summary className="cursor-pointer text-muted-foreground">
             last tick actions ({last.results.length})
           </summary>

@@ -194,10 +194,10 @@ function PackCard({
             >
               {pack.name}
             </div>
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
               {pack.display_name}
             </span>
-            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
               {t.metaSkills.steps(pack.step_count ?? pack.steps?.length ?? 0)}
             </span>
           </div>
@@ -207,7 +207,7 @@ function PackCard({
                 "text-muted-foreground",
                 compact
                   ? "line-clamp-1 text-sm leading-5"
-                  : "text-[12px] leading-relaxed",
+                  : "text-xs leading-relaxed",
               )}
             >
               {pack.description}
@@ -218,19 +218,19 @@ function PackCard({
               {pack.affinity.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-300"
+                  className="rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-300"
                 >
                   {tag}
                 </span>
               ))}
             </div>
           ) : !compact ? (
-            <div className="text-[10px] text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               {t.metaSkills.noAffinity}
             </div>
           ) : null}
           {!compact && (
-            <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[11px] text-muted-foreground">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
               <span>
                 <span className="font-medium">{t.metaSkills.budget}:</span>{" "}
                 {t.metaSkills.budgetTokens(pack.budget_tokens ?? 0)} ·{" "}
@@ -269,7 +269,7 @@ function PackCard({
       {expanded && (
         <div className="mt-3 space-y-2 border-t border-border-subtle pt-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {t.metaSkills.directionLabel}:
             </span>
             {DIRECTIONS.map((d) => (
@@ -278,7 +278,7 @@ function PackCard({
                 type="button"
                 onClick={() => setDirection(d)}
                 className={cn(
-                  "rounded border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                  "rounded border px-2 py-0.5 text-xs font-medium transition-colors",
                   direction === d
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border-default text-muted-foreground hover:border-border hover:text-foreground",
@@ -291,7 +291,7 @@ function PackCard({
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 text-[10px]"
+              className="h-6 text-xs"
               onClick={() => void handleCopy()}
               disabled={!mermaid}
             >
@@ -307,12 +307,12 @@ function PackCard({
           </div>
           <div className="min-h-[80px] rounded-md border border-dashed border-border-default bg-muted/20 p-2">
             {loading && (
-              <div className="py-4 text-center text-[11px] text-muted-foreground">
+              <div className="py-4 text-center text-xs text-muted-foreground">
                 {t.metaSkills.diagramLoading}
               </div>
             )}
             {err && !loading && (
-              <div className="flex items-center gap-2 py-3 text-[11px] text-rose-400">
+              <div className="flex items-center gap-2 py-3 text-xs text-rose-400">
                 <XCircleIcon className="size-3.5" />
                 {t.metaSkills.diagramFailed(err)}
               </div>
@@ -382,7 +382,7 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
       >
         <div
           className={cn(
-            "text-[12px] font-medium",
+            "text-xs font-medium",
             compact &&
               "flex shrink-0 items-center gap-1.5 whitespace-nowrap text-muted-foreground",
           )}
@@ -425,12 +425,12 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
         </Button>
       </div>
       {result && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-[12px]">
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs">
           <div className="font-medium text-emerald-700 dark:text-emerald-300">
             {t.metaSkills.matchResult(result.query, result.matched)}
           </div>
           {result.description && (
-            <div className="mt-1 text-[11px] text-muted-foreground">
+            <div className="mt-1 text-xs text-muted-foreground">
               {result.description}
             </div>
           )}
@@ -439,7 +439,7 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
               {result.affinity.map((a) => (
                 <span
                   key={a}
-                  className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-600 dark:text-blue-300"
+                  className="rounded bg-blue-500/10 px-1.5 py-0.5 text-xs text-blue-600 dark:text-blue-300"
                 >
                   {a}
                 </span>
@@ -449,7 +449,7 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
         </div>
       )}
       {err && !result && (
-        <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-[12px] text-rose-600 dark:text-rose-300">
+        <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-600 dark:text-rose-300">
           {err}
         </div>
       )}
@@ -572,12 +572,12 @@ export function SkillPacksTab({
               </div>
               <h2 className="text-base font-bold">{t.metaSkills.title}</h2>
               {packs && (
-                <span className="rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                   {t.metaSkills.count(packs.length)}
                 </span>
               )}
             </div>
-            <p className="mt-1 text-[12px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               {t.metaSkills.subtitle}
             </p>
           </div>

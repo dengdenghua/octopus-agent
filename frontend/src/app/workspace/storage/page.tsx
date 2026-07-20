@@ -1237,7 +1237,7 @@ function ImageAssetTile({ item }: { item: FileItem }) {
         {item.updated} · {item.size}
       </span>
       <div className="mt-3 flex items-center justify-between gap-2 px-3 pb-3">
-        <span className="rounded-md bg-black/[0.04] px-2 py-1 text-[10px] text-muted-foreground">
+        <span className="rounded-md bg-black/[0.04] px-2 py-1 text-xs text-muted-foreground">
           已 OCR
         </span>
         <QuickFileActions compact />
@@ -1466,7 +1466,7 @@ function AppListRow({ item }: { item: AppItem }) {
       <span>
         <Badge
           variant="outline"
-          className="rounded-md border-black/10 bg-white text-[10px]"
+          className="rounded-md border-black/10 bg-white text-xs"
         >
           {item.status}
         </Badge>
@@ -1922,7 +1922,7 @@ function SearchResultsView({
                   <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
                     {hit.snippet}
                   </div>
-                  <div className="mt-1 truncate text-[10px] text-muted-foreground/75">
+                  <div className="mt-1 truncate text-xs text-muted-foreground/75">
                     {hit.path}
                   </div>
                 </div>
@@ -2017,7 +2017,7 @@ function SourceRow({
         <Badge
           variant="outline"
           className={cn(
-            "h-5 px-1.5 text-[10px]",
+            "h-5 px-1.5 text-xs",
             isReady
               ? "border-emerald-300/55 bg-emerald-50 text-emerald-800"
               : "border-amber-300/55 bg-amber-50 text-amber-800",

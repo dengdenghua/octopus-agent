@@ -168,7 +168,7 @@ function CoordinationSummaryNotice({
 
   return (
     <div className="border-b bg-muted/20 px-4 py-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <span className="inline-flex items-center gap-1 font-medium text-foreground">
           <ListChecksIcon className="size-3.5 text-muted-foreground" />
           {labels.coordinationSummary}
@@ -249,7 +249,7 @@ function RecoverySnapshotNotice({
 
   return (
     <div className="border-b bg-amber-500/5 px-4 py-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400">
           <RotateCcwIcon className="size-3.5" />
           {labels.recoveryReady}
@@ -358,7 +358,7 @@ function ProgressRing({
         y={size / 2}
         textAnchor="middle"
         dominantBaseline="central"
-        className="fill-foreground text-[10px] font-bold"
+        className="fill-foreground text-xs font-bold"
       >
         {completed}/{total}
       </text>
@@ -408,16 +408,16 @@ function AgentCard({
             <span className="truncate text-xs font-medium">
               {task.subagent_name || `Agent-${index}`}
             </span>
-            <span className="text-muted-foreground font-mono text-[10px]">
+            <span className="text-muted-foreground font-mono text-xs">
               #{String(index).padStart(2, "0")}
             </span>
           </div>
-          <p className="text-muted-foreground truncate text-[10px]">
+          <p className="text-muted-foreground truncate text-xs">
             {task.result?.slice(0, 60) ?? task.error ?? "Pending..."}
           </p>
         </div>
         {task.duration_seconds !== null && (
-          <span className="text-muted-foreground text-[10px]">
+          <span className="text-muted-foreground text-xs">
             {formatDuration(task.duration_seconds)}
           </span>
         )}
@@ -457,7 +457,7 @@ function AgentCard({
             {getStatusIcon(task.status)}
             <span
               className={cn(
-                "text-[10px] font-medium",
+                "text-xs font-medium",
                 STATUS_COLORS[task.status],
               )}
             >
@@ -467,7 +467,7 @@ function AgentCard({
               )}
             </span>
             {task.duration_seconds !== null && (
-              <span className="text-muted-foreground ml-auto flex items-center gap-0.5 text-[10px]">
+              <span className="text-muted-foreground ml-auto flex items-center gap-0.5 text-xs">
                 <TimerIcon className="size-2.5" />
                 {formatDuration(task.duration_seconds)}
               </span>
@@ -475,7 +475,7 @@ function AgentCard({
           </div>
 
           {/* Task ID */}
-          <p className="text-muted-foreground mt-0.5 font-mono text-[10px]">
+          <p className="text-muted-foreground mt-0.5 font-mono text-xs">
             {task.task_id}
           </p>
 
@@ -562,7 +562,7 @@ function AggregatedResultsView({
             type="button"
             onClick={() => setShowRaw(!showRaw)}
             className={cn(
-              "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
+              "rounded px-2 py-0.5 text-xs font-medium transition-colors",
               showRaw
                 ? "bg-foreground/10 text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -585,7 +585,7 @@ function AggregatedResultsView({
             </span>
           </div>
           {batch.conflicts.map((c, i) => (
-            <p key={i} className="text-muted-foreground mt-1 text-[11px]">
+            <p key={i} className="text-muted-foreground mt-1 text-xs">
               {c}
             </p>
           ))}
@@ -605,7 +605,7 @@ function AggregatedResultsView({
                   </span>
                   {getStatusIcon(r.status)}
                   {r.duration_seconds !== null && (
-                    <span className="text-muted-foreground text-[10px]">
+                    <span className="text-muted-foreground text-xs">
                       {formatDuration(r.duration_seconds)}
                     </span>
                   )}
@@ -726,13 +726,13 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
         </div>
         <div className="flex items-center gap-2">
           {isActive && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600">
+            <span className="inline-flex items-center gap-1 rounded-lg bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600">
               <span className="size-1.5 animate-pulse rounded-lg bg-blue-500" />
               {totalActive} {t.parallelAgents.active}
             </span>
           )}
           {status && (
-            <span className="text-muted-foreground text-[10px]">
+            <span className="text-muted-foreground text-xs">
               {t.parallelAgents.max}: {status.max_concurrency}
             </span>
           )}
@@ -788,7 +788,7 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
             )}
             <div className="min-w-0 flex-1">
               {status && (
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
                   <span className="text-green-500">
                     {status.completed_count} {t.parallelAgents.completed}
                   </span>
@@ -925,7 +925,7 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
           {/* Batch selector (if multiple batches) */}
           {batchCount > 1 && status && (
             <div className="flex items-center gap-1.5 border-t px-3 py-2">
-              <span className="text-muted-foreground text-[10px]">
+              <span className="text-muted-foreground text-xs">
                 {t.parallelAgents.batches}
               </span>
               {Object.entries(status.batches).map(([bid, bstatus]) => (
@@ -934,7 +934,7 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
                   type="button"
                   onClick={() => fetchBatch(bid)}
                   className={cn(
-                    "rounded-lg px-2 py-0.5 text-[10px] font-medium transition-colors",
+                    "rounded-lg px-2 py-0.5 text-xs font-medium transition-colors",
                     activeBatch?.batch_id === bid
                       ? "bg-foreground/10 text-foreground"
                       : "text-muted-foreground hover:text-foreground",

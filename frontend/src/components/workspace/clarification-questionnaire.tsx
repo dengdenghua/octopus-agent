@@ -363,7 +363,7 @@ export function ClarificationQuestionnaire({
                 {optionLetter(index)}
               </span>
               <span className="min-w-0 flex-1 py-0.5">
-                <span className="block text-[15px] font-medium leading-7 text-foreground sm:text-base">
+                <span className="block text-base font-medium leading-7 text-foreground sm:text-base">
                   {option.label}
                 </span>
                 {option.description && (

@@ -248,7 +248,7 @@ export function AgentWorldCard({
             <Badge
               variant="secondary"
               className={cn(
-                "text-[10px] font-medium",
+                "text-xs font-medium",
                 catStyle.bg,
                 catStyle.text,
               )}
@@ -269,7 +269,7 @@ export function AgentWorldCard({
             <div className="mt-2 flex flex-wrap gap-1">
               <Badge
                 variant="outline"
-                className="border-primary/25 bg-primary/5 text-[10px] font-medium text-primary"
+                className="border-primary/25 bg-primary/5 text-xs font-medium text-primary"
               >
                 {t.agentWorld.keySkillCount(keySkillCount)}
               </Badge>

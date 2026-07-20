@@ -1341,7 +1341,7 @@ export function BrowserPreviewPanel({
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder={t.browser.urlPlaceholder}
-              className="h-full w-full bg-transparent pl-7 pr-2 text-[11px] outline-none"
+              className="h-full w-full bg-transparent pl-7 pr-2 text-xs outline-none"
             />
           </div>
         </form>
@@ -1355,7 +1355,7 @@ export function BrowserPreviewPanel({
           }
           disabled={!canLivePreview}
           className={cn(
-            "hidden h-7 shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 text-[10px] font-medium transition-colors sm:inline-flex",
+            "hidden h-7 shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 text-xs font-medium transition-colors sm:inline-flex",
             effectiveSurfaceMode === "live"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:border-border-default hover:bg-muted/65 hover:text-foreground",
@@ -1381,7 +1381,7 @@ export function BrowserPreviewPanel({
             )
           }
           disabled={viewportChanging}
-          className="hidden h-7 max-w-[112px] shrink-0 rounded-md border border-border-default bg-background/70 px-1.5 text-[10px] font-medium text-muted-foreground outline-none hover:text-foreground md:block"
+          className="hidden h-7 max-w-[112px] shrink-0 rounded-md border border-border-default bg-background/70 px-1.5 text-xs font-medium text-muted-foreground outline-none hover:text-foreground md:block"
           title={bp.selectDevicePreset}
         >
           {(Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]).map(
@@ -1417,7 +1417,7 @@ export function BrowserPreviewPanel({
 
         <span
           className={cn(
-            "hidden size-7 shrink-0 place-items-center rounded-md text-[10px] lg:grid",
+            "hidden size-7 shrink-0 place-items-center rounded-md text-xs lg:grid",
             sessionHealthy
               ? "text-muted-foreground"
               : "bg-destructive/10 text-destructive",
@@ -1435,7 +1435,7 @@ export function BrowserPreviewPanel({
         <button
           type="button"
           onClick={openInFullBrowser}
-          className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-primary/15 bg-primary/10 px-2 text-[10px] font-medium text-primary shadow-[var(--shadow-xs)] transition-colors hover:bg-primary/15"
+          className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-primary/15 bg-primary/10 px-2 text-xs font-medium text-primary shadow-[var(--shadow-xs)] transition-colors hover:bg-primary/15"
           title={bp.continueInFullBrowser}
         >
           <ExternalLinkIcon className="size-3" />
@@ -1452,7 +1452,7 @@ export function BrowserPreviewPanel({
       </div>
 
       {!sessionHealthy && sessionIssues.length > 0 && (
-        <div className="flex h-8 shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/8 px-2 text-[11px] text-destructive">
+        <div className="flex h-8 shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/8 px-2 text-xs text-destructive">
           <span className="relative flex size-4 shrink-0 items-center justify-center rounded-full bg-destructive/10">
             <span className="size-1.5 rounded-full bg-destructive" />
           </span>
@@ -1462,7 +1462,7 @@ export function BrowserPreviewPanel({
           <button
             type="button"
             onClick={() => void handleLaunch()}
-            className="h-5 shrink-0 rounded border border-destructive/25 px-1.5 text-[10px] font-medium transition-colors hover:bg-destructive/10"
+            className="h-5 shrink-0 rounded border border-destructive/25 px-1.5 text-xs font-medium transition-colors hover:bg-destructive/10"
           >
             {bp.reconnectButton}
           </button>
@@ -1473,13 +1473,13 @@ export function BrowserPreviewPanel({
         <div className="shrink-0 border-b border-border-subtle bg-background/90 px-2 py-2">
           <div className="mb-1 flex items-center gap-2">
             <FileTextIcon className="size-3.5 text-primary" />
-            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
               {semanticSnapshot.name ||
                 semanticSnapshot.url ||
                 bp.semanticSnapshotFallback}
             </span>
             {semanticSnapshot.truncated && (
-              <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-600">
+              <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-600">
                 {bp.truncatedBadge}
               </span>
             )}
@@ -1492,7 +1492,7 @@ export function BrowserPreviewPanel({
               <XIcon className="size-3" />
             </button>
           </div>
-          <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-md bg-muted/45 p-2 text-[10px] leading-relaxed text-muted-foreground">
+          <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-md bg-muted/45 p-2 text-xs leading-relaxed text-muted-foreground">
             {(semanticSnapshot.text || bp.noReadableText).slice(0, 3000)}
           </pre>
         </div>
@@ -1530,7 +1530,7 @@ export function BrowserPreviewPanel({
             >
               {!electronLiveSurface && !liveFrameLoaded && (
                 <div className="absolute inset-0 z-10 grid place-items-center bg-background/70">
-                  <div className="flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-[11px] text-muted-foreground shadow-[var(--shadow-xs)]">
+                  <div className="flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-[var(--shadow-xs)]">
                     <Loader2Icon className="size-3.5 animate-spin text-primary" />
                     {bp.loadingLivePage}
                   </div>
@@ -1608,7 +1608,7 @@ export function BrowserPreviewPanel({
                 style={{ cursor: "crosshair" }}
               />
               {hoverPoint && screenshotSize.width > 0 && (
-                <div className="pointer-events-none absolute bottom-2 left-2 z-30 rounded-full border border-border-default bg-background/88 px-2 py-1 font-mono text-[10px] text-muted-foreground shadow-[var(--shadow-xs)] backdrop-blur">
+                <div className="pointer-events-none absolute bottom-2 left-2 z-30 rounded-full border border-border-default bg-background/88 px-2 py-1 font-mono text-xs text-muted-foreground shadow-[var(--shadow-xs)] backdrop-blur">
                   x {hoverPoint.x} · y {hoverPoint.y}
                 </div>
               )}
@@ -1637,13 +1637,13 @@ export function BrowserPreviewPanel({
                   <div className="grid size-7 place-items-center rounded-lg bg-primary/10 text-primary">
                     <ServerIcon className="size-3.5" />
                   </div>
-                  <span className="text-[11px] font-semibold text-foreground">
+                  <span className="text-xs font-semibold text-foreground">
                     {bp.localServices}
                   </span>
                   <button
                     onClick={handleRescanPorts}
                     disabled={scanningPorts}
-                    className="ml-auto flex h-6 items-center gap-1 rounded-md border border-border-default px-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                    className="ml-auto flex h-6 items-center gap-1 rounded-md border border-border-default px-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
                   >
                     {scanningPorts ? (
                       <Loader2Icon className="size-3 animate-spin" />
@@ -1676,13 +1676,13 @@ export function BrowserPreviewPanel({
                         <div className="truncate text-sm font-medium text-foreground">
                           {svc.name}
                         </div>
-                        <div className="truncate text-[10px] text-muted-foreground">
+                        <div className="truncate text-xs text-muted-foreground">
                           localhost:{svc.port}
                         </div>
                       </div>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-2 py-0.5 text-[9px] font-medium",
+                          "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
                           svc.type === "frontend"
                             ? "bg-blue-500/10 text-blue-600"
                             : svc.type === "backend"
@@ -1711,7 +1711,7 @@ export function BrowserPreviewPanel({
                 <button
                   onClick={handleRescanPorts}
                   disabled={scanningPorts}
-                  className="mx-auto mt-3 flex h-8 items-center gap-1.5 rounded-md border border-border-default px-3 text-[11px] text-muted-foreground shadow-[var(--shadow-xs)] transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                  className="mx-auto mt-3 flex h-8 items-center gap-1.5 rounded-md border border-border-default px-3 text-xs text-muted-foreground shadow-[var(--shadow-xs)] transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
                 >
                   {scanningPorts ? (
                     <Loader2Icon className="size-3 animate-spin" />
@@ -1730,7 +1730,7 @@ export function BrowserPreviewPanel({
           </div>
         )}
         {screenshotSize.width > 0 && (
-          <span className="text-muted-foreground/50 absolute right-1 bottom-1 text-[9px]">
+          <span className="text-muted-foreground/50 absolute right-1 bottom-1 text-xs">
             {screenshotSize.width}x{screenshotSize.height} · {pointerMode}
           </span>
         )}
@@ -1751,11 +1751,11 @@ export function BrowserPreviewPanel({
                 !actionLogExpanded && "-rotate-90",
               )}
             />
-            <span className="text-muted-foreground truncate text-[10px] font-medium uppercase tracking-wide">
+            <span className="text-muted-foreground truncate text-xs font-medium uppercase tracking-wide">
               {t.browser.actionLog}
             </span>
           </span>
-          <span className="text-muted-foreground/60 shrink-0 text-[10px]">
+          <span className="text-muted-foreground/60 shrink-0 text-xs">
             {t.browser.actions(actionLog.length)}
             {actionFailureCount > 0
               ? ` · ${bp.failureCount(actionFailureCount)}`
@@ -1766,7 +1766,7 @@ export function BrowserPreviewPanel({
           </span>
         </button>
         {selectedAction && (
-          <div className="border-t border-border-subtle bg-primary/5 px-2 py-1.5 text-[10px]">
+          <div className="border-t border-border-subtle bg-primary/5 px-2 py-1.5 text-xs">
             <div className="flex min-w-0 items-center gap-1.5">
               <ActionIcon action={selectedAction.entry.action} />
               <span className="shrink-0 font-semibold text-foreground/85">
@@ -1774,7 +1774,7 @@ export function BrowserPreviewPanel({
               </span>
               <span
                 className={cn(
-                  "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium",
+                  "shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium",
                   actionStatusClass(selectedAction.entry),
                 )}
               >
@@ -1786,7 +1786,7 @@ export function BrowserPreviewPanel({
                   onClick={() =>
                     focusActionEntry(selectedAction.entry, selectedAction.index)
                   }
-                  className="shrink-0 rounded-full border border-primary/25 bg-background/80 px-1.5 py-0.5 font-mono text-[9px] text-primary transition-colors hover:bg-primary/10"
+                  className="shrink-0 rounded-full border border-primary/25 bg-background/80 px-1.5 py-0.5 font-mono text-xs text-primary transition-colors hover:bg-primary/10"
                   title={bp.locateActionTitle}
                 >
                   {actionCoordinateLabel(selectedAction.entry)}
@@ -1809,7 +1809,7 @@ export function BrowserPreviewPanel({
         {actionLogExpanded && (
           <div className="max-h-52 overflow-auto px-2 pb-2 [&::-webkit-scrollbar]:size-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80 [&::-webkit-scrollbar-track]:bg-transparent">
             {actionLog.length === 0 ? (
-              <p className="text-muted-foreground/50 py-2 text-center text-[10px]">
+              <p className="text-muted-foreground/50 py-2 text-center text-xs">
                 {t.browser.noActions}
               </p>
             ) : (
@@ -1825,7 +1825,7 @@ export function BrowserPreviewPanel({
                       type="button"
                       onClick={() => focusActionEntry(entry, absoluteIndex)}
                       className={cn(
-                        "group flex w-full items-start gap-2 rounded-lg border border-border-subtle bg-muted/22 px-2 py-1.5 text-left text-[10px] transition-colors hover:bg-muted/38",
+                        "group flex w-full items-start gap-2 rounded-lg border border-border-subtle bg-muted/22 px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/38",
                         failed && "border-destructive/25 bg-destructive/8",
                         selectedActionKey === entryKey &&
                           "border-primary/35 bg-primary/10",
@@ -1841,18 +1841,18 @@ export function BrowserPreviewPanel({
                           </span>
                           <span
                             className={cn(
-                              "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium",
+                              "shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium",
                               actionStatusClass(entry),
                             )}
                           >
                             {actionStatusLabel(entry, bp)}
                           </span>
                           {coordinateLabel && (
-                            <span className="shrink-0 rounded-full bg-background/75 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+                            <span className="shrink-0 rounded-full bg-background/75 px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
                               {coordinateLabel}
                             </span>
                           )}
-                          <span className="ml-auto shrink-0 font-mono text-[9px] text-muted-foreground/50">
+                          <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground/50">
                             {new Date(
                               entry.timestamp * 1000,
                             ).toLocaleTimeString([], {
@@ -1883,7 +1883,7 @@ export function BrowserPreviewPanel({
 
       {error && (
         <div className="border-destructive/30 bg-destructive/10 shrink-0 border-t px-2 py-1">
-          <p className="text-destructive text-[10px]">{error}</p>
+          <p className="text-destructive text-xs">{error}</p>
         </div>
       )}
     </div>

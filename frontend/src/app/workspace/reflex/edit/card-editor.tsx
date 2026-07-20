@@ -521,7 +521,7 @@ function RuleCard({
               ))}
             </div>
             {card.reply_source === "workflow" && (
-              <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">
+              <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-300">
                 {t.reflexEditor.replySource_slowHint}
               </span>
             )}

@@ -448,28 +448,28 @@ function ReplayCasesTable({
               key={item.case_id}
               className="border-b border-border-subtle align-top"
             >
-              <td className="px-2 py-2 font-mono text-[11px]">
+              <td className="px-2 py-2 font-mono text-xs">
                 {item.case_id}
               </td>
-              <td className="px-2 py-2 font-mono text-[11px] text-muted-foreground">
+              <td className="px-2 py-2 font-mono text-xs text-muted-foreground">
                 {item.fingerprint}
               </td>
-              <td className="px-2 py-2 font-mono text-[11px] text-muted-foreground">
+              <td className="px-2 py-2 font-mono text-xs text-muted-foreground">
                 {item.source.task_id ?? "—"}
               </td>
               <td className="px-2 py-2">
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="text-xs">
                   {item.source.status ?? "—"}
                 </Badge>
               </td>
-              <td className="px-2 py-2 font-mono text-[11px]">
+              <td className="px-2 py-2 font-mono text-xs">
                 {item.replay.step_count ?? 0}
               </td>
               <td className="px-2 py-2">
                 <Badge
                   variant="outline"
                   className={cn(
-                    "text-[10px]",
+                    "text-xs",
                     item.replay.replayable
                       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                       : "border-muted bg-muted/20 text-muted-foreground",
@@ -482,7 +482,7 @@ function ReplayCasesTable({
                 <Badge
                   variant="outline"
                   className={cn(
-                    "text-[10px]",
+                    "text-xs",
                     item.resume.available
                       ? "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300"
                       : "border-muted bg-muted/20 text-muted-foreground",
@@ -539,17 +539,17 @@ function ReplayEvaluationsTable({
               key={item.case_id}
               className="border-b border-border-subtle align-top"
             >
-              <td className="px-2 py-2 font-mono text-[11px]">
+              <td className="px-2 py-2 font-mono text-xs">
                 {item.case_id}
               </td>
-              <td className="px-2 py-2 font-mono text-[11px] text-muted-foreground">
+              <td className="px-2 py-2 font-mono text-xs text-muted-foreground">
                 {item.fingerprint}
               </td>
               <td className="px-2 py-2">
                 <Badge
                   variant="outline"
                   className={cn(
-                    "text-[10px]",
+                    "text-xs",
                     item.passed
                       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                       : "border-destructive/30 bg-destructive/10 text-destructive",
@@ -558,7 +558,7 @@ function ReplayEvaluationsTable({
                   {item.passed ? "pass" : "fail"}
                 </Badge>
               </td>
-              <td className="px-2 py-2 font-mono text-[11px]">
+              <td className="px-2 py-2 font-mono text-xs">
                 {item.score.toFixed(3)}
               </td>
               <td className="px-2 py-2">
@@ -568,7 +568,7 @@ function ReplayEvaluationsTable({
                       key={check.name}
                       variant="outline"
                       className={cn(
-                        "text-[10px]",
+                        "text-xs",
                         check.passed
                           ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300"
                           : "border-destructive/25 bg-destructive/5 text-destructive",
@@ -580,7 +580,7 @@ function ReplayEvaluationsTable({
                   ))}
                 </div>
               </td>
-              <td className="px-2 py-2 font-mono text-[11px] text-muted-foreground">
+              <td className="px-2 py-2 font-mono text-xs text-muted-foreground">
                 {item.source.task_id ?? "—"}
               </td>
             </tr>

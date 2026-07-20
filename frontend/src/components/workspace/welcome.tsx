@@ -54,7 +54,7 @@ export function Welcome({
           {t.welcome.createYourOwnSkillDescription}
         </p>
       ) : isCode ? (
-        <p className="max-w-md text-muted-foreground/80 whitespace-pre-line text-[13px] leading-relaxed">
+        <p className="max-w-md text-muted-foreground/80 whitespace-pre-line text-sm leading-relaxed">
           {t.welcome.description}
         </p>
       ) : (

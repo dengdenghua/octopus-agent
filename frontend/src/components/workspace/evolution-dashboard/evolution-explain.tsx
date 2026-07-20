@@ -245,7 +245,7 @@ export function FitnessExplainCard({ agentId }: { agentId?: string }) {
           <div className="flex items-center gap-2">
             <span
               className={cn(
-                "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+                "inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium",
                 actionBadgeStyle(l2.action),
               )}
             >
@@ -264,7 +264,7 @@ export function FitnessExplainCard({ agentId }: { agentId?: string }) {
         </div>
         <span
           className={cn(
-            "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium capitalize",
+            "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium capitalize",
             verdictStyle(data.verdict),
           )}
         >
@@ -391,14 +391,14 @@ export function DriftExplainCard({ agentId }: { agentId?: string }) {
               <div className="flex items-center gap-2 mb-0.5">
                 <span
                   className={cn(
-                    "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+                    "inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium",
                     kindBadgeStyle(evt.kind),
                   )}
                 >
                   {evt.kind.replace(/_/g, " ")}
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 {evt.detail}
               </p>
             </div>
@@ -463,7 +463,7 @@ export function VariantComparisonTable() {
         </span>
       </div>
       <div className="rounded-md border border-border-subtle overflow-hidden">
-        <table className="w-full text-[11px]">
+        <table className="w-full text-xs">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
               <th className="text-left px-2 py-1">
@@ -509,7 +509,7 @@ export function VariantComparisonTable() {
                   <td className="px-2 py-1 text-right">
                     <span
                       className={cn(
-                        "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+                        "inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium",
                         statusStyle(successRate),
                       )}
                     >

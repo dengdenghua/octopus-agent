@@ -188,7 +188,7 @@ export function TerminalPanel({
       <div className="relative min-h-0 flex-1 bg-background">
         <div ref={containerRef} className="absolute inset-0" />
         {!hasOutput && (
-          <div className="pointer-events-none absolute inset-0 px-6 py-5 font-mono text-[13px] leading-6 text-muted-foreground/70">
+          <div className="pointer-events-none absolute inset-0 px-6 py-5 font-mono text-sm leading-6 text-muted-foreground/70">
             {connectionError
               ? t.codeMode.terminalConnectionFailed
               : connected

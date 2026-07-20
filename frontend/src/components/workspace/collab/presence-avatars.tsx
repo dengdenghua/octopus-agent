@@ -107,11 +107,11 @@ export function PresenceAvatars({
                       className="size-5 rounded object-cover opacity-90"
                     />
                   ) : agent.icon?.trim() ? (
-                    <span className="text-[15px] leading-none opacity-90">
+                    <span className="text-base leading-none opacity-90">
                       {agent.icon}
                     </span>
                   ) : (
-                    <span className="flex size-5 items-center justify-center rounded bg-muted text-[10px] font-semibold text-muted-foreground">
+                    <span className="flex size-5 items-center justify-center rounded bg-muted text-xs font-semibold text-muted-foreground">
                       {name.charAt(0).toUpperCase()}
                     </span>
                   )}

@@ -7,6 +7,7 @@ export interface Model {
   supports_thinking?: boolean;
   supports_vision?: boolean;
   supports_reasoning_effort?: boolean;
+  context_window?: number | null;
   // Provider identification · used to look up ProviderCapabilities for
   // UI gating (e.g. grey out "upload image" for vision-less providers,
   // show a cache-hit badge for cache-supported ones).

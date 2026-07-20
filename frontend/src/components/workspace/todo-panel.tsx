@@ -197,14 +197,14 @@ export function TodoPanel({
             <div className="truncate text-xs font-semibold text-foreground">
               {t.todoPanel.title}
             </div>
-            <div className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+            <div className="shrink-0 text-xs tabular-nums text-muted-foreground">
               {completed}/{total} · {percent}%
             </div>
           </div>
         </button>
         <button
           type="button"
-          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
           onClick={() => setOpen((value) => !value)}
         >
           <span>{open ? t.todoPanel.collapse : t.todoPanel.expand}</span>

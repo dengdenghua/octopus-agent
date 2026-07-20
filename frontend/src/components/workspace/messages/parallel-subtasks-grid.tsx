@@ -123,7 +123,7 @@ function MiniSubtaskRow({
         />
         {task.avatarEmoji && (
           <span
-            className="flex size-6 shrink-0 items-center justify-center rounded-lg text-[11px]"
+            className="flex size-6 shrink-0 items-center justify-center rounded-lg text-xs"
             style={
               task.hue != null
                 ? { background: `hsl(${task.hue} 70% 92%)` }
@@ -139,7 +139,7 @@ function MiniSubtaskRow({
             <span className="truncate font-medium">
               {task.name ?? task.description}
             </span>
-            <span className="shrink-0 rounded bg-muted/50 px-1 py-0.5 text-[9px] font-medium text-muted-foreground">
+            <span className="shrink-0 rounded bg-muted/50 px-1 py-0.5 text-xs font-medium text-muted-foreground">
               {roleName}
             </span>
           </div>
@@ -167,13 +167,13 @@ function MiniSubtaskRow({
               />
             </div>
             {percent !== null ? (
-              <span className="shrink-0 font-mono text-[10px] leading-none tabular-nums text-emerald-600 dark:text-emerald-400">
+              <span className="shrink-0 font-mono text-xs leading-none tabular-nums text-emerald-600 dark:text-emerald-400">
                 {percent}%
               </span>
             ) : isTerminal && task.status !== "completed" ? (
               <span
                 className={cn(
-                  "shrink-0 text-[10px] leading-none",
+                  "shrink-0 text-xs leading-none",
                   task.status === "cancelled"
                     ? "text-amber-500 dark:text-amber-400"
                     : "text-red-500 dark:text-red-400",
@@ -187,7 +187,7 @@ function MiniSubtaskRow({
               type="button"
               onClick={handleToggleIdentity}
               aria-expanded={showIdentity}
-              className="relative z-10 shrink-0 rounded px-1 py-0.5 text-[9px] font-medium text-muted-foreground/70 transition-colors hover:bg-muted/60 hover:text-foreground"
+              className="relative z-10 shrink-0 rounded px-1 py-0.5 text-xs font-medium text-muted-foreground/70 transition-colors hover:bg-muted/60 hover:text-foreground"
               title={t.agentWorkbenchPages.roleDescription}
             >
               {showIdentity
@@ -291,7 +291,7 @@ function SubtaskHoverPreview({
                 read the full prompt for every row. */}
             <div
               id={id}
-              className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground"
+              className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
             >
               <span>{statusLabel}</span>
               <span>·</span>
@@ -352,7 +352,7 @@ function SubtaskHoverPreview({
             {t.message.viewComputer}
           </button>
           {isCompleted && task.result && (
-            <span className="ml-auto text-[11px] text-muted-foreground">
+            <span className="ml-auto text-xs text-muted-foreground">
               {t.message.completedChanges}
             </span>
           )}
@@ -424,7 +424,7 @@ function AgentIdentityCard({
       {/* 角色说明 */}
       {brief && (
         <div className="border-t border-border-subtle px-3 py-2">
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
+          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/60">
             {t.agentWorkbenchPages.roleDescription}
           </div>
           <div className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5 text-foreground/80">
@@ -442,7 +442,7 @@ function AgentIdentityCard({
             {task.skills.slice(0, 3).map((skill) => (
               <span
                 key={skill}
-                className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                className="rounded bg-muted/60 px-1.5 py-0.5 text-xs text-muted-foreground"
               >
                 {skill}
               </span>
@@ -526,7 +526,7 @@ export function ParallelSubtasksGrid({
   return (
     <div className="space-y-2">
       {showSummary && (
-        <div className="flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
           <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-500 dark:bg-emerald-400"
@@ -568,7 +568,7 @@ export function ParallelSubtasksGrid({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-border-default py-1.5 text-[11px] text-muted-foreground transition-colors hover:border-border hover:bg-muted/35 hover:text-foreground"
+          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-border-default py-1.5 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted/35 hover:text-foreground"
         >
           {expanded ? (
             <>

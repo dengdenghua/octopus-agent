@@ -48,6 +48,8 @@ import type {
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -57,14 +59,14 @@ import { cn } from "@/lib/utils";
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     completed:
-      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
     adapted:
       "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    running: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    failed: "bg-destructive/10 text-destructive dark:bg-destructive/30 dark:text-destructive",
+    running: "bg-primary/10 text-primary dark:bg-primary/30 dark:text-primary",
     pending: "bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground/70",
     success:
-      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
     skipped: "bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground/70",
   };
 
@@ -83,11 +85,11 @@ function StatusBadge({ status }: { status: string }) {
 function StepResultIcon({ status }: { status: string }) {
   switch (status) {
     case "success":
-      return <CheckCircle2Icon className="size-3.5 text-green-500" />;
+      return <CheckCircle2Icon className="size-3.5 text-emerald-500" />;
     case "adapted":
       return <WrenchIcon className="size-3.5 text-amber-500" />;
     case "failed":
-      return <XCircleIcon className="size-3.5 text-red-500" />;
+      return <XCircleIcon className="size-3.5 text-destructive" />;
     case "skipped":
       return <CircleIcon className="size-3.5 text-muted-foreground/70" />;
     default:
@@ -173,7 +175,7 @@ function StartRecordingDialog({
         {t.teachRepeat.startRecordingDesc}
       </p>
       <div className="space-y-2">
-        <input
+        <Input
           type="text"
           placeholder={t.teachRepeat.workflowNamePlaceholder}
           value={name}
@@ -182,7 +184,7 @@ function StartRecordingDialog({
           aria-label={t.teachRepeat.workflowNamePlaceholder}
           autoFocus
         />
-        <textarea
+        <Textarea
           placeholder={t.teachRepeat.descriptionOptional}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -518,7 +520,7 @@ function TemplateLibrary({
               <div className="flex items-center gap-1.5">
                 <span className="truncate text-sm font-medium">{t.name}</span>
                 {t.tags.length > 0 && (
-                  <span className="bg-muted rounded px-1 py-0.5 text-[10px]">
+                  <span className="bg-muted rounded px-1 py-0.5 text-xs">
                     {t.tags[0]}
                   </span>
                 )}

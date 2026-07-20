@@ -379,7 +379,7 @@ export function TeamTasksPanel({
                 {task.description}
               </p>
             )}
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
               <span className="rounded-md bg-muted/60 px-1.5 py-0.5">
                 {task.sop_template || t.teamTasksPanel.autoMatch}
               </span>
@@ -418,7 +418,7 @@ export function TeamTasksPanel({
               )}
             </div>
             {recoveryGroups.length > 0 && (
-              <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-[11px] text-amber-900">
+              <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-xs text-amber-900">
                 <div className="font-medium">CLI 恢复分组</div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {recoveryGroups.map((group) => (
@@ -434,7 +434,7 @@ export function TeamTasksPanel({
                         <span className="min-w-0 truncate text-amber-800/80">
                           {group.members.join("、")}
                         </span>
-                        <span className="shrink-0 rounded bg-amber-100 px-1 font-mono text-[10px]">
+                        <span className="shrink-0 rounded bg-amber-100 px-1 font-mono text-xs">
                           {group.count}
                         </span>
                       </span>
@@ -466,7 +466,7 @@ export function TeamTasksPanel({
                   key={String(a.id ?? i)}
                   className="overflow-hidden rounded-md border border-border-default bg-muted/20"
                 >
-                  <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium">
+                  <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium">
                     {ok === true && (
                       <CheckCircle2Icon className="size-3 shrink-0 text-emerald-600" />
                     )}
@@ -475,13 +475,13 @@ export function TeamTasksPanel({
                     )}
                     <span className="truncate">{title}</span>
                     {failureLabel && ok === false && (
-                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
+                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
                         {failureLabel}
                       </span>
                     )}
                   </div>
                   {content && (
-                    <pre className="max-h-48 overflow-auto border-t border-border-subtle px-2 py-1.5 text-[11px] leading-snug whitespace-pre-wrap break-words">
+                    <pre className="max-h-48 overflow-auto border-t border-border-subtle px-2 py-1.5 text-xs leading-snug whitespace-pre-wrap break-words">
                       {content}
                     </pre>
                   )}
@@ -501,7 +501,7 @@ export function TeamTasksPanel({
         )}
 
         {liveStatus && task.status === "running" && (
-          <div className="px-3 pb-2 text-[11px] text-primary">
+          <div className="px-3 pb-2 text-xs text-primary">
             {liveStatus}
             {taskEvent?.completed_roles != null &&
             taskEvent?.total_roles != null
@@ -579,7 +579,7 @@ function TeamTaskTimelinePreview({
   const nodes = (timeline?.timeline ?? []).slice(-8);
   return (
     <div className="border-t border-border-subtle px-3 py-2">
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         <span className="rounded-md bg-muted/60 px-1.5 py-0.5">
           {labels.processCount(timeline?.overview.event_count ?? 0)}
         </span>
@@ -597,11 +597,11 @@ function TeamTaskTimelinePreview({
         )}
       </div>
       {error ? (
-        <div className="mt-2 rounded-md border border-destructive/25 bg-destructive/10 px-2 py-1.5 text-[11px] leading-5 text-destructive">
+        <div className="mt-2 rounded-md border border-destructive/25 bg-destructive/10 px-2 py-1.5 text-xs leading-5 text-destructive">
           {error instanceof Error ? error.message : String(error)}
         </div>
       ) : nodes.length === 0 ? (
-        <div className="mt-2 rounded-md border border-dashed border-border-default bg-muted/15 px-2 py-3 text-center text-[11px] text-muted-foreground">
+        <div className="mt-2 rounded-md border border-dashed border-border-default bg-muted/15 px-2 py-3 text-center text-xs text-muted-foreground">
           {labels.empty}
         </div>
       ) : (
@@ -619,7 +619,7 @@ function TimelineNodeRow({ node }: { node: TeamTaskProcessTimelineNode }) {
   return (
     <div
       className={cn(
-        "grid grid-cols-[4.25rem_1fr] gap-2 rounded-md border px-2 py-1.5 text-[11px] leading-5",
+        "grid grid-cols-[4.25rem_1fr] gap-2 rounded-md border px-2 py-1.5 text-xs leading-5",
         node.severity === "high"
           ? "border-destructive/25 bg-destructive/10"
           : node.lane === "artifact"
@@ -637,7 +637,7 @@ function TimelineNodeRow({ node }: { node: TeamTaskProcessTimelineNode }) {
             {node.title || node.kind}
           </span>
           {node.status && (
-            <span className="shrink-0 rounded bg-background/70 px-1 font-mono text-[10px] text-muted-foreground">
+            <span className="shrink-0 rounded bg-background/70 px-1 font-mono text-xs text-muted-foreground">
               {node.status}
             </span>
           )}

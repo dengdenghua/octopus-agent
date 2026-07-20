@@ -63,7 +63,7 @@ export function PermissionIndicator({
           type="button"
           data-testid="permission-mode-trigger"
           className={cn(
-            "flex items-center gap-1.5 text-[11px] font-medium transition-all duration-200",
+            "flex items-center gap-1.5 text-xs font-medium transition-all duration-200",
             compact
               ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
               : cn("h-8 rounded-lg px-2.5", PERMISSION_TRIGGER_TONE),
@@ -104,7 +104,7 @@ export function PermissionIndicator({
                   <span className="block text-xs font-medium leading-5">
                     {item.label}
                   </span>
-                  <span className="block text-[11px] leading-4 text-muted-foreground">
+                  <span className="block text-xs leading-4 text-muted-foreground">
                     {item.description}
                   </span>
                 </span>

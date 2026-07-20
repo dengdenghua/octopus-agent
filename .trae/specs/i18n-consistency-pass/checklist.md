@@ -1,0 +1,11 @@
+- [x] `deep-research-panel.tsx` 中所有面向用户文案来自 `t.deepResearch.*`，无硬编码英文字符串
+- [x] `desktop-organizer/page.tsx` 中所有面向用户文案来自 `t.desktopOrganizerPage.*`，无硬编码中文字符串
+- [x] `types.ts` 中新增的 `deepResearch` 与 `desktopOrganizerPage` 命名空间下所有 key 在 zh-CN/en-US/ja-JP/ko-KR 四份 locale 文件中均有翻译（39 + 25 = 64 key，5 份文件全部对齐）
+- [x] 9 个次级工作台文件（codebase-index/deep-research/evolution/execution-plan/quest/teach-repeat/remote-backends/observability/desktop-organizer）中无 `text-[9px]/text-[10px]/text-[11px]/text-[13px]/text-[14px]/text-[15px]` 残留
+- [x] 同目录其他文件（约 145 处）的非标准字号全部统一为 `text-xs/text-sm/text-base`（115 文件 350+ 处替换；6 文件含 7/8/17/22px 超出范围未动）
+- [x] 9 个次级工作台文件中无裸 `text-red-500/bg-red-500/text-blue-500/text-green-500` 硬编码色（6 文件 47 处替换为 destructive/emerald/amber/primary token）
+- [x] 9 个次级工作台文件中可替换的原生 `<input>/<textarea>` 已替换为 shadcn `Input`/`Textarea`（3 文件 4 个控件）
+- [x] `pnpm tsc --noEmit` 通过，无 i18n key 缺失或类型不匹配
+- [x] `pnpm vitest run` 受影响单测全部通过（21/21，重点：deep-research-panel/evolution-panel/quest-panel/teach-repeat-panel/remote-backends-panel/observability）
+- [x] 4 份 locale 文件（zh-CN/en-US/ja-JP/ko-KR）与 `types.ts` 顶层 key 数量一致，无遗漏无多余
+- [ ] commit message 遵循 `style(workspace): ...` 风格，仅包含本 spec 涉及的文件

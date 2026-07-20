@@ -201,10 +201,10 @@ export function PartnerModelControl({
         sideOffset={6}
         className="w-64 space-y-2 p-2"
       >
-        <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+        <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
           {copy.title}
         </div>
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           {copy.description}{" "}
           {loadState === "loading"
             ? copy.loading
@@ -216,7 +216,7 @@ export function PartnerModelControl({
         {loadState === "error" ? (
           <button
             type="button"
-            className="text-left text-[11px] text-primary hover:underline"
+            className="text-left text-xs text-primary hover:underline"
             onClick={() => void loadModel()}
           >
             {copy.retry}
@@ -239,7 +239,7 @@ export function PartnerModelControl({
             />
             {modelOptions.length > 0 ? (
               <div className="space-y-1">
-                <div className="text-[10px] text-muted-foreground/70">
+                <div className="text-xs text-muted-foreground/70">
                   {copy.optionsHint}
                 </div>
                 <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto rounded-md border border-border-default/70 bg-muted/20 p-1">
@@ -251,7 +251,7 @@ export function PartnerModelControl({
                         setDraft(model);
                         commit(model);
                       }}
-                      className="max-w-full truncate rounded border border-border-default/70 px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-foreground"
+                      className="max-w-full truncate rounded border border-border-default/70 px-1.5 py-0.5 text-xs text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-foreground"
                       title={model}
                     >
                       {model}
@@ -267,14 +267,14 @@ export function PartnerModelControl({
                   setDraft("");
                   commit("");
                 }}
-                className="text-[11px] text-muted-foreground transition hover:text-foreground"
+                className="text-xs text-muted-foreground transition hover:text-foreground"
               >
                 {copy.useDefault}
               </button>
               <button
                 type="button"
                 onClick={() => commit(draft)}
-                className="rounded-md bg-primary px-2 py-1 text-[11px] text-primary-foreground transition hover:opacity-90"
+                className="rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground transition hover:opacity-90"
               >
                 {copy.apply}
               </button>

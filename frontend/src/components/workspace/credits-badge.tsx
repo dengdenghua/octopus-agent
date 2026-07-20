@@ -39,7 +39,7 @@ export function CreditsBadge({ className }: { className?: string }) {
       }
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full",
-        "bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-foreground/70",
+        "bg-muted/60 px-2.5 py-1 text-xs font-medium text-foreground/70",
         "transition hover:bg-muted hover:text-foreground",
         className,
       )}

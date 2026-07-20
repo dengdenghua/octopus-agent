@@ -1,9 +1,15 @@
 import {
   CheckIcon,
   ChevronDownIcon,
+  CloudIcon,
+  DatabaseIcon,
   FolderIcon,
   FolderOpenIcon,
+  HardDriveIcon,
   Loader2Icon,
+  ServerIcon,
+  TerminalIcon,
+  type LucideIcon,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -16,12 +22,18 @@ import {
 import { createPortal } from "react-dom";
 
 import { swallow } from "@/core/utils/log";
-import { authHeaders } from "@/core/auth/api";
+import { authHeaders, currentActorId } from "@/core/auth/api";
 import type { components } from "@/core/api/openapi-types";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import {
+  listWorkspaces,
+  type MountType,
+  type Workspace,
+} from "@/core/workspace/api";
 import { basename, isAbsolutePath, joinPath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface WorkDirSelectorProps {
   workDir: string;
@@ -31,6 +43,12 @@ interface WorkDirSelectorProps {
   className?: string;
   variant?: "default" | "muted";
   chromeless?: boolean;
+  /** When true, adds a "Remote mount" tab to the dropdown. */
+  enableRemoteTab?: boolean;
+  /** Active remote workspace id, if the thread is bound to one. */
+  workspaceId?: string | null;
+  /** Fired when the user picks a remote workspace in the Remote tab. */
+  onWorkspaceIdChange?: (workspaceId: string) => void;
 }
 
 type FsTreeEntry = components["schemas"]["FsTreeEntry"];
@@ -38,6 +56,16 @@ const RECENT_WORKDIRS_KEY = "octopus:recentWorkdirs";
 const MAX_RECENT_WORKDIRS = 6;
 const MENU_WIDTH = 360;
 const MENU_MARGIN = 12;
+
+// Remote mount type → lucide icon. Mirrors the WorkspaceSwitcher palette.
+const MOUNT_TYPE_ICON: Record<MountType, LucideIcon> = {
+  local: HardDriveIcon,
+  smb: ServerIcon,
+  nfs: ServerIcon,
+  webdav: CloudIcon,
+  sftp: TerminalIcon,
+  s3: DatabaseIcon,
+};
 
 // Native folder picker via the Electron preload bridge.
 async function openNativeFolderPicker(
@@ -214,9 +242,13 @@ export function WorkDirSelector({
   className,
   variant = "default",
   chromeless = false,
+  enableRemoteTab = false,
+  workspaceId,
+  onWorkspaceIdChange,
 }: WorkDirSelectorProps) {
   const isMutedVariant = variant === "muted";
   const { t, locale } = useI18n();
+  const trRemote = t.remoteWorkspace;
   // Native folder picker is only reachable through the Electron preload bridge.
   // In a plain browser there is none — `showDirectoryPicker` can only hand back a
   // folder *name*, never an absolute path the local backend can use — so the
@@ -254,6 +286,17 @@ export function WorkDirSelector({
   // and a one-line hint instead of silently doing nothing. Resets once the
   // user enters a path or closes the menu.
   const [noBridgeHint, setNoBridgeHint] = useState(false);
+  // Remote workspace list (loaded when the Remote tab is enabled and the
+  // menu opens). Stored at the component level so the second open is instant.
+  const [remoteWorkspaces, setRemoteWorkspaces] = useState<Workspace[]>([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  // Active tab inside the dropdown — defaults to "local" so existing
+  // users see the same UI as before. We only switch to "remote" if
+  // the parent has bound the thread to a workspace_id already.
+  const [menuTab, setMenuTab] = useState<"local" | "remote">(
+    workspaceId ? "remote" : "local",
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
@@ -378,6 +421,48 @@ export function WorkDirSelector({
       setBrowseLoading(false);
     }
   }, []);
+
+  // Load remote workspaces from the registry. Cached at component level so
+  // the second menu open is instant — we don't refetch on every tab switch.
+  const loadRemoteWorkspaces = useCallback(async () => {
+    if (!enableRemoteTab) return;
+    setRemoteLoading(true);
+    setRemoteError(null);
+    try {
+      const list = await listWorkspaces(currentActorId());
+      setRemoteWorkspaces(list);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setRemoteError(message);
+      swallow(e);
+    } finally {
+      setRemoteLoading(false);
+    }
+  }, [enableRemoteTab]);
+
+  // When the menu opens with the remote tab enabled, prime the list so
+  // the user isn't staring at an empty state. Subsequent tab switches
+  // reuse the cached list.
+  useEffect(() => {
+    if (!showMenu || !enableRemoteTab) return;
+    if (remoteWorkspaces.length > 0 || remoteLoading) return;
+    void loadRemoteWorkspaces();
+  }, [
+    showMenu,
+    enableRemoteTab,
+    remoteWorkspaces.length,
+    remoteLoading,
+    loadRemoteWorkspaces,
+  ]);
+
+  const handlePickRemote = useCallback(
+    (workspace: Workspace) => {
+      onWorkspaceIdChange?.(workspace.id);
+      setShowMenu(false);
+      setNoBridgeHint(false);
+    },
+    [onWorkspaceIdChange],
+  );
 
   useEffect(() => {
     if (!workDir) return;
@@ -558,7 +643,7 @@ export function WorkDirSelector({
       className={cn(
         "flex w-full items-center gap-2 transition-all",
         isMutedVariant
-          ? "rounded-md px-2 py-1.5 text-[12px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          ? "rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           : "rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-primary",
         opts.disabled
           ? "cursor-not-allowed opacity-50"
@@ -590,13 +675,18 @@ export function WorkDirSelector({
     disabled: isPicking,
   });
 
-  const menuContent = (
+  const localMenuContent = (
     <div
       className={cn(
-        "flex max-h-full flex-col overflow-hidden border border-border-default bg-popover/95 backdrop-blur",
-        isMutedVariant
-          ? "rounded-lg shadow-[var(--shadow-md)]"
-          : "rounded-lg shadow-2xl",
+        "flex max-h-full flex-col overflow-hidden",
+        // When wrapped in Tabs we drop the outer chrome — Tabs adds its own
+        // border/rounded corners. When standalone we keep the original frame.
+        enableRemoteTab
+          ? ""
+          : "border border-border-default bg-popover/95 backdrop-blur " +
+            (isMutedVariant
+              ? "rounded-lg shadow-[var(--shadow-md)]"
+              : "rounded-lg shadow-2xl"),
       )}
     >
       {/* Primary entry point for adding a workspace. Only meaningful with a
@@ -604,7 +694,7 @@ export function WorkDirSelector({
       <div className={cn("shrink-0", isMutedVariant ? "p-1.5" : "p-2.5")}>
         {hasNativePicker && folderPickerCta}
         {isWorkDirLocked && (
-          <div className="mt-1.5 rounded-md border border-primary/15 bg-primary/5 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+          <div className="mt-1.5 rounded-md border border-primary/15 bg-primary/5 px-2 py-1.5 text-xs leading-snug text-muted-foreground">
             {lockedCopy.hint}
           </div>
         )}
@@ -613,7 +703,7 @@ export function WorkDirSelector({
             type="button"
             onClick={clearWorkDir}
             className={cn(
-              "mt-1.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+              "mt-1.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
               !isMutedVariant && "border border-border-default",
             )}
           >
@@ -625,7 +715,7 @@ export function WorkDirSelector({
         )}
 
         {noBridgeHint && (
-          <div className="mt-2 rounded-md border border-border-default bg-muted/40 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+          <div className="mt-2 rounded-md border border-border-default bg-muted/40 px-2 py-1.5 text-xs leading-snug text-muted-foreground">
             {webPickerHint(locale)}
           </div>
         )}
@@ -640,13 +730,13 @@ export function WorkDirSelector({
               value={manualPath}
               onChange={(event) => setManualPath(event.target.value)}
               placeholder={t.codeMode.selectWorkspace}
-              className="min-w-0 flex-1 bg-transparent px-2 py-1.5 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60"
+              className="min-w-0 flex-1 bg-transparent px-2 py-1.5 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
             />
             <button
               type="submit"
               disabled={!isAbsolutePath(manualPath)}
               className={cn(
-                "rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors",
+                "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
                 isAbsolutePath(manualPath)
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "cursor-not-allowed bg-muted text-muted-foreground/45",
@@ -668,7 +758,7 @@ export function WorkDirSelector({
             isMutedVariant ? "px-1.5 py-1.5" : "px-2.5 py-2",
           )}
         >
-          <div className="pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t.codeMode.recentWorkspaces}
           </div>
           {recentWorkdirs.length > 0 ? (
@@ -696,7 +786,7 @@ export function WorkDirSelector({
                   >
                     <span
                       className={cn(
-                        "flex size-7 shrink-0 items-center justify-center rounded-md font-mono text-[12px] font-semibold",
+                        "flex size-7 shrink-0 items-center justify-center rounded-md font-mono text-xs font-semibold",
                         tile.bg,
                         tile.fg,
                       )}
@@ -704,10 +794,10 @@ export function WorkDirSelector({
                       {tile.letter}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <div className="truncate text-[12px] font-medium text-foreground">
+                      <div className="truncate text-xs font-medium text-foreground">
                         {basename(dir) || dir}
                       </div>
-                      <div className="truncate font-mono text-[10px] text-muted-foreground/80">
+                      <div className="truncate font-mono text-xs text-muted-foreground/80">
                         {dir}
                       </div>
                     </span>
@@ -719,7 +809,7 @@ export function WorkDirSelector({
               })}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-border-default bg-muted/20 px-2 py-3 text-center text-[11px] text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border-default bg-muted/20 px-2 py-3 text-center text-xs text-muted-foreground">
               {t.codeMode.noRecentWorkspaces}
             </div>
           )}
@@ -735,7 +825,7 @@ export function WorkDirSelector({
           open={isBrowserOpen}
           onToggle={(event) => setBrowserOpen(event.currentTarget.open)}
         >
-          <summary className="cursor-pointer list-none rounded-md px-1 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground">
+          <summary className="cursor-pointer list-none rounded-md px-1 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground">
             <span className="inline-flex items-center gap-1">
               <ChevronDownIcon className="size-3 transition-transform group-open:rotate-180" />
               {t.codeMode.browseCurrentFolder}
@@ -743,7 +833,7 @@ export function WorkDirSelector({
           </summary>
           <div className="mt-1">
             <div
-              className="px-1 pb-1 text-[10px] font-mono text-muted-foreground/80 truncate"
+              className="px-1 pb-1 text-xs font-mono text-muted-foreground/80 truncate"
               title={browsePath}
             >
               {browsePath || "—"}
@@ -752,13 +842,13 @@ export function WorkDirSelector({
               <button
                 type="button"
                 onClick={() => setBrowsePath(upDir)}
-                className="block w-full rounded-md px-2 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
               >
                 .. / {t.codeMode.parentFolder}
               </button>
             )}
             {browseLoading ? (
-              <div className="flex items-center gap-2 px-2 py-2 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
                 <Loader2Icon className="size-3 animate-spin" />
                 {t.codeMode.loadingFolders}
               </div>
@@ -780,7 +870,7 @@ export function WorkDirSelector({
                       <button
                         type="button"
                         onClick={() => handleEnterDirectory(entry.path)}
-                        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
                         title={nextPath}
                       >
                         <FolderIcon className="size-3 shrink-0" />
@@ -789,7 +879,7 @@ export function WorkDirSelector({
                       <button
                         type="button"
                         onClick={() => applyWorkDir(nextPath)}
-                        className="rounded-md px-2 py-1 text-[10px] text-primary transition-colors hover:bg-primary/10"
+                        className="rounded-md px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/10"
                         title={t.codeMode.chooseWorkspaceFolder}
                       >
                         ✓
@@ -799,7 +889,7 @@ export function WorkDirSelector({
                 })}
               </div>
             ) : (
-              <div className="px-2 py-2 text-[11px] text-muted-foreground">
+              <div className="px-2 py-2 text-xs text-muted-foreground">
                 {t.codeMode.noSubfolders}
               </div>
             )}
@@ -809,6 +899,144 @@ export function WorkDirSelector({
     </div>
   );
 
+  const remoteMenuContent = (
+    <div
+      className={cn(
+        "flex max-h-full flex-col overflow-hidden",
+        enableRemoteTab
+          ? ""
+          : "border border-border-default bg-popover/95 backdrop-blur rounded-lg shadow-2xl",
+      )}
+    >
+      <div
+        className={cn("shrink-0", isMutedVariant ? "p-1.5" : "p-2.5")}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {trRemote.switcherTitle}
+          </span>
+          <button
+            type="button"
+            onClick={() => void loadRemoteWorkspaces()}
+            disabled={remoteLoading}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50"
+            title={trRemote.searchPlaceholder}
+            aria-label={trRemote.searchPlaceholder}
+          >
+            <Loader2Icon
+              className={cn(
+                "size-3",
+                remoteLoading && "animate-spin",
+              )}
+            />
+          </button>
+        </div>
+
+        {remoteError && (
+          <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
+            {trRemote.remoteLoadFailed(remoteError)}
+          </div>
+        )}
+
+        {remoteLoading && remoteWorkspaces.length === 0 ? (
+          <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+            <Loader2Icon className="size-3 animate-spin" />
+            {trRemote.remoteLoading}
+          </div>
+        ) : remoteWorkspaces.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border-default bg-muted/20 px-2 py-3 text-center text-xs text-muted-foreground">
+            {trRemote.remoteEmpty}
+          </div>
+        ) : (
+          <div className="space-y-0.5 overflow-y-auto pr-1 max-h-72">
+            {remoteWorkspaces.map((ws) => {
+              const Icon = MOUNT_TYPE_ICON[ws.mount_type];
+              const active = ws.id === workspaceId;
+              return (
+                <button
+                  key={ws.id}
+                  type="button"
+                  onClick={() => handlePickRemote(ws)}
+                  title={ws.mount_target}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition-colors",
+                    active
+                      ? "bg-primary/10 text-primary"
+                      : "hover:bg-muted/55",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-7 shrink-0 items-center justify-center rounded-md",
+                      active
+                        ? "bg-primary/15 text-primary"
+                        : "bg-muted/40 text-muted-foreground",
+                    )}
+                  >
+                    <Icon className="size-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium text-foreground">
+                      {ws.name}
+                    </span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground/80">
+                      {ws.mount_target}
+                    </span>
+                  </span>
+                  {active && (
+                    <CheckIcon className="size-3.5 shrink-0 text-primary" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // When the remote tab is enabled we wrap the two panels in a shadcn Tabs
+  // so the user can flip between local-folder and remote-mount entry
+  // points. Otherwise we render the local panel as before — no visual
+  // change for existing callers.
+  const menuContent = enableRemoteTab ? (
+    <div
+      className={cn(
+        "flex max-h-full flex-col overflow-hidden rounded-lg border border-border-default bg-popover/95 backdrop-blur",
+        isMutedVariant ? "shadow-[var(--shadow-md)]" : "shadow-2xl",
+      )}
+    >
+      <Tabs
+        value={menuTab}
+        onValueChange={(value) => setMenuTab(value as "local" | "remote")}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <TabsList className="mx-2 mt-2 grid h-8 shrink-0 grid-cols-2 rounded-md bg-muted/50">
+          <TabsTrigger value="local" className="text-xs">
+            {trRemote.localTab}
+          </TabsTrigger>
+          <TabsTrigger value="remote" className="text-xs">
+            {trRemote.remoteTab}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="local"
+          className="mt-0 min-h-0 flex-1 overflow-y-auto"
+        >
+          {localMenuContent}
+        </TabsContent>
+        <TabsContent
+          value="remote"
+          className="mt-0 min-h-0 flex-1 overflow-y-auto"
+        >
+          {remoteMenuContent}
+        </TabsContent>
+      </Tabs>
+    </div>
+  ) : (
+    localMenuContent
+  );
+
   return (
     <div
       ref={containerRef}
@@ -816,7 +1044,7 @@ export function WorkDirSelector({
     >
       <button
         className={cn(
-          "group flex items-center gap-1.5 text-[11px] font-medium shadow-none transition-all duration-200",
+          "group flex items-center gap-1.5 text-xs font-medium shadow-none transition-all duration-200",
           chromeless
             ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",

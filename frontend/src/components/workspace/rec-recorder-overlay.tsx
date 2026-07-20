@@ -192,7 +192,7 @@ export function RecRecorderOverlay({
       {phase === "idle" && (
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-[11px] text-muted-foreground">
+            <label className="mb-1 block text-xs text-muted-foreground">
               {t.recorder.taskNameLabel}
             </label>
             <input
@@ -218,7 +218,7 @@ export function RecRecorderOverlay({
             <CircleDotIcon className="size-3.5" />
             开始录制
           </button>
-          <p className="text-[10px] leading-tight text-muted-foreground">
+          <p className="text-xs leading-tight text-muted-foreground">
             录制本轮操作轨迹,停止后自动提炼成可复用、可回放的技能;敏感操作会被隔离待审。
           </p>
         </div>
@@ -229,7 +229,7 @@ export function RecRecorderOverlay({
           <div className="flex size-16 items-center justify-center rounded-full border-2 border-red-500/60 text-3xl font-semibold text-red-600 dark:text-red-400">
             {countdown > 0 ? countdown : "·"}
           </div>
-          <span className="text-[11px] text-muted-foreground">准备录制…</span>
+          <span className="text-xs text-muted-foreground">准备录制…</span>
         </div>
       )}
 
@@ -240,7 +240,7 @@ export function RecRecorderOverlay({
             <span className="font-mono text-sm font-semibold text-foreground">
               {formatElapsed(elapsed)}
             </span>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               · {stepCount} 步
             </span>
           </div>
@@ -258,7 +258,7 @@ export function RecRecorderOverlay({
       {phase === "stopping" && (
         <div className="flex flex-col items-center justify-center gap-2 py-5">
           <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             正在分析录制、提炼技能…
           </span>
         </div>
@@ -291,8 +291,8 @@ function DoneSummary({ result }: { result: StopRecordingResponse | null }) {
           <SparklesIcon className="size-3.5" />
           已学会技能
         </div>
-        <div className="text-[11px] text-foreground">{forged.join("、")}</div>
-        <p className="mt-1.5 text-[10px] text-muted-foreground">
+        <div className="text-xs text-foreground">{forged.join("、")}</div>
+        <p className="mt-1.5 text-xs text-muted-foreground">
           可在技能库 /record 面板里回放与参数化复用。
         </p>
       </div>
@@ -300,20 +300,20 @@ function DoneSummary({ result }: { result: StopRecordingResponse | null }) {
   }
   if (status === "quarantined") {
     return (
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] text-amber-700 dark:text-amber-300">
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">
         已生成技能候选,含敏感操作,已隔离待人工审批。
       </div>
     );
   }
   if (status === "no_successful_trajectory") {
     return (
-      <div className="rounded-lg border border-border bg-muted/40 p-3 text-[11px] text-muted-foreground">
+      <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
         本轮暂无可提炼的成功操作轨迹,换个更明确的任务再录一次。
       </div>
     );
   }
   return (
-    <div className="rounded-lg border border-border bg-muted/40 p-3 text-[11px] text-muted-foreground">
+    <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
       录制完成{result?.name ? `：${result.name}` : ""}。
     </div>
   );

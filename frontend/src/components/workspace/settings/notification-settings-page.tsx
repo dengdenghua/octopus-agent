@@ -102,7 +102,7 @@ export default function NotificationSettingsPage() {
               </p>
               <Badge
                 variant={permission === "granted" ? "secondary" : "outline"}
-                className="mt-1 text-[10px]"
+                className="mt-1 text-xs"
               >
                 {permission === "granted"
                   ? t.settings.notification.permissionGranted

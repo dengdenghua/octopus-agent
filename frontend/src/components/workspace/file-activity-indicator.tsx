@@ -43,7 +43,7 @@ export function FileActivityIndicator({ className }: Props) {
         <button
           type="button"
           className={cn(
-            "flex items-center gap-1 rounded-md px-2 py-1 text-[11px]",
+            "flex items-center gap-1 rounded-md px-2 py-1 text-xs",
             "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
             "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
             className,
@@ -68,10 +68,10 @@ export function FileActivityIndicator({ className }: Props) {
           </span>
         </button>
       </HoverCardTrigger>
-      <HoverCardContent align="start" className="w-[480px] p-2 text-[12px]">
+      <HoverCardContent align="start" className="w-[480px] p-2 text-xs">
         <div className="font-medium mb-1.5 flex items-center justify-between">
           <span>{t.activityIndicators.fileActivityTitle(events.length)}</span>
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {t.activityIndicators.realtimeLabel}
           </span>
         </div>
@@ -115,10 +115,10 @@ function FileOpRow({ event }: { event: FileOpEvent }) {
           action={event.action}
           className="size-3 text-muted-foreground shrink-0"
         />
-        <span className="flex-1 font-mono text-[10px] truncate">
+        <span className="flex-1 font-mono text-xs truncate">
           {event.path}
         </span>
-        <span className="text-[9px] text-muted-foreground tabular-nums shrink-0">
+        <span className="text-xs text-muted-foreground tabular-nums shrink-0">
           {formatDelta(event.bytes_delta)}
         </span>
       </button>
@@ -132,7 +132,7 @@ function DiffBlock({ diff }: { diff: string }) {
     <pre
       className={cn(
         "m-1 rounded border border-border-subtle bg-background px-2 py-1.5",
-        "text-[10px] font-mono leading-snug whitespace-pre overflow-x-auto",
+        "text-xs font-mono leading-snug whitespace-pre overflow-x-auto",
         "max-h-[320px] overflow-y-auto",
       )}
     >

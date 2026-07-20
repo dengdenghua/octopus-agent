@@ -48,7 +48,7 @@ function ProjectCollapsible({
   return (
     <Collapsible defaultOpen className="group/projects">
       <SidebarGroup className="pt-0">
-        <SidebarGroupLabel className="flex h-6 items-center justify-between px-1.5 text-[11px]">
+        <SidebarGroupLabel className="flex h-6 items-center justify-between px-1.5 text-xs">
           <CollapsibleTrigger className="flex items-center gap-1">
             <ChevronDownIcon className="size-3 transition-transform group-data-[state=closed]/projects:-rotate-90" />
             <span>{t.sidebar.projects}</span>
@@ -70,7 +70,7 @@ function ProjectCollapsible({
               >
                 <SidebarMenuButton asChild>
                   <Link
-                    className="text-muted-foreground text-[13px]"
+                    className="text-muted-foreground text-sm"
                     to="/workspace/realtime/new"
                   >
                     <FolderIcon className="size-4" />
@@ -154,14 +154,14 @@ export function WorkspaceNavChatList({
             <SidebarMenuButton
               isActive={pathname.startsWith("/workspace/skills")}
               asChild
-              className="text-muted-foreground rounded-lg py-1 text-[13px] transition-all duration-150 hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium"
+              className="text-muted-foreground rounded-lg py-1 text-sm transition-all duration-150 hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium"
             >
               <Link to="/workspace/skills">
                 <SparklesIcon className="size-[15px]" />
                 <span className="flex items-center gap-1.5">
                   {t.sidebar.skills}
                   {!skillsSeen && (
-                    <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium leading-none text-primary">
+                    <span className="rounded bg-primary/10 px-1 py-0.5 text-xs font-medium leading-none text-primary">
                       NEW
                     </span>
                   )}

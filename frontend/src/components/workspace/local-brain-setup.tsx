@@ -92,7 +92,7 @@ export default function LocalBrainSetup() {
           {status && (
             <span
               className={cn(
-                "shrink-0 rounded px-1.5 py-0.5 text-[10px]",
+                "shrink-0 rounded px-1.5 py-0.5 text-xs",
                 ready
                   ? "bg-emerald-50 text-emerald-700"
                   : "bg-amber-50 text-amber-700",
@@ -101,7 +101,7 @@ export default function LocalBrainSetup() {
               {ready ? "已就绪" : `待配置 ${pending} 项`}
             </span>
           )}
-          <span className="truncate text-[11px] text-muted-foreground">
+          <span className="truncate text-xs text-muted-foreground">
             {status?.summary ?? (loading ? "检测中…" : "")}
           </span>
           {expanded ? (
@@ -145,7 +145,7 @@ export default function LocalBrainSetup() {
       {expanded && (
         <div className="space-y-1.5 border-t border-border-subtle px-3 py-2">
           {error && (
-            <p className="text-[11px] text-red-600">
+            <p className="text-xs text-red-600">
               检测失败:{error}(后端没起?)
             </p>
           )}
@@ -159,17 +159,17 @@ export default function LocalBrainSetup() {
                 )}
               </span>
               <div className="min-w-0 flex-1">
-                <span className="text-[11px] font-medium">
+                <span className="text-xs font-medium">
                   {i + 1}. {it.label}
                 </span>
-                <span className="ml-1.5 text-[11px] text-muted-foreground">
+                <span className="ml-1.5 text-xs text-muted-foreground">
                   · {it.what}
                 </span>
-                <div className="text-[11px] text-foreground/60">
+                <div className="text-xs text-foreground/60">
                   现状:{it.detail}
                 </div>
                 {!it.ok && it.action && (
-                  <div className="text-[11px] leading-snug text-blue-700">
+                  <div className="text-xs leading-snug text-blue-700">
                     下一步:{it.action}
                   </div>
                 )}

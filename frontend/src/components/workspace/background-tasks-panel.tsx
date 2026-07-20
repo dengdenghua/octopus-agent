@@ -197,11 +197,11 @@ function TaskListItem({
           </p>
           <div className="mt-1.5 flex items-center gap-2">
             <StatusBadge status={task.status} />
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {formatRelativeTime(task.updated_at, t.backgroundTasks)}
             </span>
             {task.started_at && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {formatDuration(task.started_at, task.finished_at)}
               </span>
             )}
@@ -312,7 +312,7 @@ function TaskDetailView({
           </h3>
           <div className="flex items-center gap-2 mt-0.5">
             <StatusBadge status={task.status} />
-            <span className="text-[10px] text-muted-foreground font-mono">
+            <span className="text-xs text-muted-foreground font-mono">
               {task.task_id}
             </span>
           </div>
@@ -432,14 +432,14 @@ function OutputMessageItem({ message }: { message: BackgroundTaskOutput }) {
       )}
     >
       {!isStatus && !isError && (
-        <div className="mb-0.5 text-[10px] font-medium text-muted-foreground uppercase">
+        <div className="mb-0.5 text-xs font-medium text-muted-foreground uppercase">
           {message.role}
         </div>
       )}
       <div className="whitespace-pre-wrap break-words leading-relaxed">
         {message.content}
       </div>
-      <div className="mt-1 text-[10px] text-muted-foreground">
+      <div className="mt-1 text-xs text-muted-foreground">
         {formatRelativeTime(message.timestamp, t.backgroundTasks)}
       </div>
     </div>
@@ -627,7 +627,7 @@ function BackgroundTasksPanelContent() {
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">{t.backgroundTasks.title}</h3>
           {tasks.filter((t) => isActiveStatus(t.status)).length > 0 && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+            <Badge variant="secondary" className="text-xs px-1.5 py-0">
               {t.backgroundTasks.activeCount(
                 tasks.filter((task) => isActiveStatus(task.status)).length,
               )}

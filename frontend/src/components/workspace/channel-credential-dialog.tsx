@@ -596,7 +596,7 @@ export function ChannelCredentialDialog({
               : t.channelCredential.setCredential}{" "}
             {displayName} {t.channelCredential.botSuffix}
           </DialogTitle>
-          <DialogDescription className="text-[12px]">
+          <DialogDescription className="text-xs">
             {t.channelCredential.credentialLocalHint}
             {helpUrl && (
               <>
@@ -615,13 +615,13 @@ export function ChannelCredentialDialog({
         </DialogHeader>
 
         {!supported ? (
-          <div className="rounded-lg border border-dashed border-border-default px-4 py-8 text-center text-[12px] text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border-default px-4 py-8 text-center text-xs text-muted-foreground">
             <div className="mb-2 font-medium">
               {t.channelCredential.comingSoon}
             </div>
             <div>
               {displayName} {t.channelCredential.unsupportedPlatformDesc1}
-              <code className="mx-1 rounded bg-muted/60 px-1 py-0.5 text-[11px]">
+              <code className="mx-1 rounded bg-muted/60 px-1 py-0.5 text-xs">
                 config.yaml
               </code>
               {t.channelCredential.unsupportedPlatformDesc2}
@@ -638,7 +638,7 @@ export function ChannelCredentialDialog({
         ) : (
           <>
             {hasExisting && masked && (
-              <div className="rounded-lg border border-border-subtle bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground space-y-0.5">
+              <div className="rounded-lg border border-border-subtle bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
                 <div className="mb-1 font-medium text-foreground">
                   {t.channelCredential.currentConfigured}
                 </div>
@@ -659,7 +659,7 @@ export function ChannelCredentialDialog({
                 const shown = showSecret[f.key];
                 return (
                   <div key={f.key} className="space-y-1">
-                    <label className="text-[12px] font-medium">
+                    <label className="text-xs font-medium">
                       {f.label}
                       {f.required && (
                         <span className="ml-1 text-rose-500">*</span>
@@ -680,7 +680,7 @@ export function ChannelCredentialDialog({
                         spellCheck={false}
                         className={cn(
                           "w-full rounded-md border border-border-default bg-background/70",
-                          "px-2.5 py-1.5 text-[12px] font-mono outline-none",
+                          "px-2.5 py-1.5 text-xs font-mono outline-none",
                           "placeholder:text-muted-foreground/40",
                           "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
                           isSecret && "pr-9",
@@ -711,7 +711,7 @@ export function ChannelCredentialDialog({
                       )}
                     </div>
                     {f.hint && (
-                      <div className="text-[10px] text-muted-foreground">
+                      <div className="text-xs text-muted-foreground">
                         {f.hint}
                       </div>
                     )}
@@ -730,7 +730,7 @@ export function ChannelCredentialDialog({
                 variant="ghost"
                 size="sm"
                 onClick={handleDelete}
-                className="text-[12px] text-muted-foreground hover:text-destructive"
+                className="text-xs text-muted-foreground hover:text-destructive"
               >
                 <XIcon className="mr-1.5 size-3" />
                 {t.channelCredential.disconnect}
@@ -743,7 +743,7 @@ export function ChannelCredentialDialog({
               variant="outline"
               size="sm"
               onClick={() => onOpenChange(false)}
-              className="h-8 text-[12px]"
+              className="h-8 text-xs"
             >
               {t.common.cancel}
             </Button>
@@ -753,7 +753,7 @@ export function ChannelCredentialDialog({
                 size="sm"
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="h-8 text-[12px]"
+                className="h-8 text-xs"
               >
                 {submitting
                   ? t.channelCredential.saving
@@ -872,7 +872,7 @@ function WeChatQRForm({
   if (!qrCode) {
     return (
       <div className="rounded-lg border border-dashed border-border-default px-4 py-8 text-center">
-        <p className="mb-3 text-[12px] text-muted-foreground">
+        <p className="mb-3 text-xs text-muted-foreground">
           {t.channelCredential.wechatScanInstruction}
         </p>
         <Button
@@ -880,13 +880,13 @@ function WeChatQRForm({
           size="sm"
           onClick={startQr}
           disabled={starting}
-          className="h-8 text-[12px]"
+          className="h-8 text-xs"
         >
           {starting
             ? t.channelCredential.requesting
             : t.channelCredential.getQrCode}
         </Button>
-        {errMsg && <p className="mt-3 text-[11px] text-rose-600">{errMsg}</p>}
+        {errMsg && <p className="mt-3 text-xs text-rose-600">{errMsg}</p>}
       </div>
     );
   }
@@ -922,7 +922,7 @@ function WeChatQRForm({
       )}
       <div
         className={cn(
-          "mt-3 text-[12px] tabular-nums",
+          "mt-3 text-xs tabular-nums",
           status === "confirmed" && "text-emerald-600",
           (status === "expired" ||
             status === "rejected" ||
@@ -945,12 +945,12 @@ function WeChatQRForm({
             setStatus("idle");
             setErrMsg(null);
           }}
-          className="mt-3 h-8 text-[12px]"
+          className="mt-3 h-8 text-xs"
         >
           {t.channelCredential.refreshQr}
         </Button>
       )}
-      {errMsg && <p className="mt-2 text-[11px] text-rose-600">{errMsg}</p>}
+      {errMsg && <p className="mt-2 text-xs text-rose-600">{errMsg}</p>}
     </div>
   );
 }

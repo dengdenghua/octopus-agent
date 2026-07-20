@@ -234,16 +234,16 @@ function ProviderCard({
         <Icon className={cn("size-4", meta.color)} />
         <span className="font-medium">{meta.label}</span>
         {recommended && (
-          <span className="ml-auto rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+          <span className="ml-auto rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
             {t.deploy.recommended}
           </span>
         )}
       </div>
-      <p className="text-muted-foreground text-[11px] leading-tight">
+      <p className="text-muted-foreground text-xs leading-tight">
         {provider.description}
       </p>
       {!provider.configured && provider.requires.length > 0 && (
-        <p className="text-destructive text-[10px]">
+        <p className="text-destructive text-xs">
           {t.deploy.requires}: {provider.requires.join(", ")}
         </p>
       )}
@@ -267,7 +267,7 @@ function ConfigPreview({
 
   return (
     <div className="space-y-1">
-      <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
+      <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
         {t.deploy.generatedConfigs}
       </p>
       {configs.map((cfg, i) => (
@@ -283,14 +283,14 @@ function ConfigPreview({
             )}
             <FileCodeIcon className="text-muted-foreground size-3" />
             <span className="font-medium">{cfg.filename}</span>
-            <span className="text-muted-foreground ml-auto text-[10px]">
+            <span className="text-muted-foreground ml-auto text-xs">
               {cfg.description}
             </span>
           </button>
           {expanded === i && (
             <div className="border-t">
               <textarea
-                className="bg-muted/50 w-full resize-none p-2 font-mono text-[11px] leading-relaxed focus:outline-none"
+                className="bg-muted/50 w-full resize-none p-2 font-mono text-xs leading-relaxed focus:outline-none"
                 rows={Math.min(cfg.content.split("\n").length, 20)}
                 value={cfg.content}
                 onChange={(e) => onEdit?.(i, e.target.value)}
@@ -314,7 +314,7 @@ function DeployLogViewer({ logs }: { logs: string[] }) {
   if (logs.length === 0) return null;
 
   return (
-    <div className="bg-muted/20 max-h-40 overflow-auto rounded-lg border border-border-default p-2 font-mono text-[10px] leading-relaxed">
+    <div className="bg-muted/20 max-h-40 overflow-auto rounded-lg border border-border-default p-2 font-mono text-xs leading-relaxed">
       {logs.map((line, i) => (
         <div key={i} className="text-muted-foreground whitespace-pre-wrap">
           {line}
@@ -360,7 +360,7 @@ function HistoryItem({ record }: { record: DeployRecord }) {
             )}
           />
         </div>
-        <p className="text-muted-foreground truncate text-[10px]">{timeStr}</p>
+        <p className="text-muted-foreground truncate text-xs">{timeStr}</p>
       </div>
       {record.url && (
         <a
@@ -541,7 +541,7 @@ export function DeployPanel({
           <button
             onClick={() => setView("detect")}
             className={cn(
-              "rounded-lg px-2 py-0.5 text-[11px] transition-colors",
+              "rounded-lg px-2 py-0.5 text-xs transition-colors",
               view === "detect"
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -552,7 +552,7 @@ export function DeployPanel({
           <button
             onClick={() => setView("deploy")}
             className={cn(
-              "rounded-lg px-2 py-0.5 text-[11px] transition-colors",
+              "rounded-lg px-2 py-0.5 text-xs transition-colors",
               view === "deploy"
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -567,7 +567,7 @@ export function DeployPanel({
               loadHistory();
             }}
             className={cn(
-              "rounded-lg px-2 py-0.5 text-[11px] transition-colors",
+              "rounded-lg px-2 py-0.5 text-xs transition-colors",
               view === "history"
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -610,22 +610,22 @@ export function DeployPanel({
                     <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                       {detection.framework || detection.project_type}
                     </span>
-                    <span className="text-muted-foreground text-[11px]">
+                    <span className="text-muted-foreground text-xs">
                       {detection.language}
                     </span>
-                    <span className="text-muted-foreground ml-auto text-[10px]">
+                    <span className="text-muted-foreground ml-auto text-xs">
                       {Math.round(detection.confidence * 100)}% confidence
                     </span>
                   </div>
                   {detection.notes.length > 0 && (
-                    <p className="text-muted-foreground text-[11px] leading-tight">
+                    <p className="text-muted-foreground text-xs leading-tight">
                       {detection.notes[0]}
                     </p>
                   )}
                 </div>
 
                 {/* Build info */}
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                   {detection.build_command && (
                     <>
                       <span className="text-muted-foreground">Build:</span>
@@ -655,7 +655,7 @@ export function DeployPanel({
 
                 {/* Provider selection */}
                 <div className="space-y-2">
-                  <p className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
+                  <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
                     {t.deploy.deployTarget}
                   </p>
                   <div className="grid gap-2">
@@ -751,7 +751,7 @@ export function DeployPanel({
                             currentDeploy.state
                           ] as string) ?? stateInfo.label}
                         </p>
-                        <p className="text-muted-foreground text-[11px]">
+                        <p className="text-muted-foreground text-xs">
                           {currentDeploy.project_name} &rarr;{" "}
                           {PROVIDER_META[currentDeploy.provider]?.label ||
                             currentDeploy.provider}
@@ -805,10 +805,10 @@ export function DeployPanel({
                 {/* Meta info */}
                 {Object.keys(currentDeploy.meta).length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+                    <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
                       {t.deploy.details}
                     </p>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
                       {Object.entries(currentDeploy.meta)
                         .filter(([, v]) => v !== "" && v !== 0 && v !== null)
                         .slice(0, 8)

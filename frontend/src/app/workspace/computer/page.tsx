@@ -1694,7 +1694,7 @@ function RuntimeReadinessPanel({ status }: { status: ComputerStatus }) {
                 <span className="font-semibold">{item.title}</span>
                 <span
                   className={cn(
-                    "shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[11px]",
+                    "shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-xs",
                     item.available
                       ? "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-200"
                       : item.critical
@@ -2059,7 +2059,7 @@ function ScreenshotActionOverlay({
           style={{ left: cursorPosition.left, top: cursorPosition.top }}
         >
           <span className="block size-2.5 rounded-full bg-foreground shadow-[var(--shadow-xs)] ring-2 ring-white dark:bg-white dark:ring-background" />
-          <span className="absolute left-3 top-2 whitespace-nowrap rounded-md bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-[var(--shadow-xs)]">
+          <span className="absolute left-3 top-2 whitespace-nowrap rounded-md bg-background/90 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-[var(--shadow-xs)]">
             当前鼠标
           </span>
         </div>
@@ -2091,7 +2091,7 @@ function ScreenshotActionOverlay({
           >
             <MousePointerClickIcon className="size-4" />
           </span>
-          <span className="absolute left-6 top-6 max-w-56 truncate whitespace-nowrap rounded-md border border-border bg-background/95 px-2 py-1 text-[11px] font-medium text-foreground shadow-[var(--shadow-xs)]">
+          <span className="absolute left-6 top-6 max-w-56 truncate whitespace-nowrap rounded-md border border-border bg-background/95 px-2 py-1 text-xs font-medium text-foreground shadow-[var(--shadow-xs)]">
             {target.label}
           </span>
         </div>
@@ -2233,7 +2233,7 @@ function MatchedControlSummary({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold">
             <span className="break-words">UIA 命中：{identity}</span>
             {scoreText !== null ? (
-              <span className="rounded-md border border-emerald-300/80 px-1.5 py-0.5 font-mono text-[11px] dark:border-emerald-700">
+              <span className="rounded-md border border-emerald-300/80 px-1.5 py-0.5 font-mono text-xs dark:border-emerald-700">
                 {scoreText}
               </span>
             ) : null}
@@ -2426,7 +2426,7 @@ function ControlSessionPanel({
           <ShieldCheckIcon className="size-4" />
           控制会话 · {formatControlMode(indicator.mode)}
         </div>
-        <span className="rounded-md border border-current/20 px-1.5 py-0.5 font-mono text-[11px]">
+        <span className="rounded-md border border-current/20 px-1.5 py-0.5 font-mono text-xs">
           {session.surface || "surface"}
         </span>
       </div>
@@ -2453,7 +2453,7 @@ function ControlSessionPanel({
           {latest.map((item) => (
             <div
               key={item.id || `${item.kind}-${item.at}`}
-              className="rounded-lg border border-current/15 bg-background/45 px-2 py-1.5 text-[11px] leading-4 text-foreground"
+              className="rounded-lg border border-current/15 bg-background/45 px-2 py-1.5 text-xs leading-4 text-foreground"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">{item.action || item.kind}</span>
@@ -2508,7 +2508,7 @@ function CountdownChip({ secondsLeft }: { secondsLeft: number }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-mono",
+        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-mono",
         tone,
       )}
       aria-live="polite"

@@ -1763,40 +1763,40 @@
   }
 
   :root[data-material-theme="liquid"] {
-    --global-glass-blur: 10px;
-    --global-glass-saturate: 1.08;
-    --global-glass-contrast: 1.006;
-    --global-glass-depth: 0.42;
-    --global-glass-field-opacity: 0;
-    --global-glass-field-saturate: 1;
-    --global-glass-control-blur: 7px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 18%, transparent);
+    --global-glass-blur: 16px;
+    --global-glass-saturate: 1.32;
+    --global-glass-contrast: 1.012;
+    --global-glass-depth: 0.5;
+    --global-glass-field-opacity: 0.22;
+    --global-glass-field-saturate: 1.12;
+    --global-glass-control-blur: 10px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 14%, transparent);
     --global-glass-surface-strong: color-mix(
       in oklch,
-      var(--card) 28%,
+      var(--card) 22%,
       transparent
     );
     --global-glass-surface-soft: color-mix(
       in oklch,
-      var(--card) 12%,
+      var(--card) 9%,
       transparent
     );
-    --global-glass-border: color-mix(in oklch, var(--border) 26%, white 8%);
-    --global-glass-highlight: color-mix(in oklch, white 22%, transparent);
+    --global-glass-border: color-mix(in oklch, var(--border) 30%, white 14%);
+    --global-glass-highlight: color-mix(in oklch, white 34%, transparent);
     --global-glass-shadow:
-      0 0.5px 0 color-mix(in oklch, white 22%, transparent) inset,
-      0 -0.5px 0 color-mix(in oklch, black 4%, transparent) inset,
-      0 8px 22px rgb(15 23 42 / 0.045);
+      0 0.5px 0 color-mix(in oklch, white 32%, transparent) inset,
+      0 -0.5px 0 color-mix(in oklch, black 3%, transparent) inset,
+      0 12px 30px rgb(15 23 42 / 0.05);
     --liquid-glass-bg: color-mix(in oklch, white 5%, transparent);
     --liquid-glass-thin-bg: color-mix(in oklch, white 3%, transparent);
     --liquid-glass-card-bg: color-mix(in oklch, white 5%, transparent);
     --liquid-glass-dock-bg: color-mix(in oklch, white 5%, transparent);
     --liquid-glass-sheet-bg: color-mix(in oklch, white 7%, transparent);
     --liquid-glass-input-bg: color-mix(in oklch, white 9%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 28%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 34%, transparent);
     --liquid-glass-noise: 0;
     --liquid-glass-displacement: 0.25px;
-    --liquid-glass-shadow: 0 8px 24px rgb(15 23 42 / 0.045);
+    --liquid-glass-shadow: 0 12px 30px rgb(15 23 42 / 0.05);
   }
 
   :root[data-material-theme="liquid"][data-material-intensity="crystal"] {
@@ -2219,30 +2219,30 @@
   }
 
   :root[data-material-theme="liquid"].apple {
-    --global-glass-blur: 10px;
-    --global-glass-saturate: 1.06;
-    --global-glass-contrast: 1.004;
-    --global-glass-field-opacity: 0;
-    --global-glass-field-saturate: 1;
-    --global-glass-surface: color-mix(in oklch, var(--card) 16%, transparent);
+    --global-glass-blur: 15px;
+    --global-glass-saturate: 1.26;
+    --global-glass-contrast: 1.01;
+    --global-glass-field-opacity: 0.2;
+    --global-glass-field-saturate: 1.1;
+    --global-glass-surface: color-mix(in oklch, var(--card) 13%, transparent);
     --global-glass-surface-strong: color-mix(
       in oklch,
-      var(--card) 26%,
+      var(--card) 21%,
       transparent
     );
     --global-glass-surface-soft: color-mix(
       in oklch,
-      var(--card) 10%,
+      var(--card) 8%,
       transparent
     );
-    --global-glass-highlight: color-mix(in oklch, white 20%, transparent);
+    --global-glass-highlight: color-mix(in oklch, white 32%, transparent);
     --liquid-glass-bg: color-mix(in oklch, white 4%, transparent);
     --liquid-glass-thin-bg: color-mix(in oklch, white 2.5%, transparent);
     --liquid-glass-card-bg: color-mix(in oklch, white 4%, transparent);
     --liquid-glass-dock-bg: color-mix(in oklch, white 4%, transparent);
     --liquid-glass-sheet-bg: color-mix(in oklch, white 6%, transparent);
     --liquid-glass-input-bg: color-mix(in oklch, white 8%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 26%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 32%, transparent);
   }
 
   :root[data-material-theme="liquid"][data-material-intensity="crystal"].apple {
@@ -3029,7 +3029,7 @@
       --liquid-glass-card-bg,
       color-mix(in oklch, white 22%, transparent)
     );
-    --glass-border: color-mix(in oklch, white 28%, transparent);
+    --glass-border: color-mix(in oklch, white 12%, transparent);
   }
 
   .octo-liquid-glass--dock {
@@ -3041,8 +3041,8 @@
       --liquid-glass-dock-bg,
       color-mix(in oklch, white 21%, transparent)
     );
-    --glass-border: color-mix(in oklch, white 30%, transparent);
-    --glass-shadow: 0 8px 24px rgb(15 23 42 / 0.045);
+    --glass-border: color-mix(in oklch, white 10%, transparent);
+    --glass-shadow: 0 14px 38px rgb(15 23 42 / 0.08), 0 1px 3px rgb(15 23 42 / 0.04);
   }
 
   .octo-liquid-glass--sheet {

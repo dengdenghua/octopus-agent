@@ -521,7 +521,7 @@ function AppearanceStepSlider<TValue extends AppearanceStepValue>({
         </div>
       </div>
       <div
-        className="mt-2 grid gap-1 text-[10px]"
+        className="mt-2 grid gap-1 text-xs"
         style={{
           gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
         }}
@@ -541,7 +541,7 @@ function AppearanceStepSlider<TValue extends AppearanceStepValue>({
           >
             <span className="block truncate">{option.label}</span>
             {option.preview ? (
-              <span className="mt-0.5 block truncate text-[10px] font-normal text-muted-foreground">
+              <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
                 {option.preview}
               </span>
             ) : null}

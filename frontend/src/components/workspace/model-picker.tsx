@@ -57,6 +57,8 @@ const MIX_META: OfficialMeta = {
  * to nothing.
  */
 function rightHint(m: PickerModel): string {
+  if (m.context_profile === "1m") return "1M";
+  if (m.context_profile === "default") return "256K";
   const probe =
     `${m.name} ${m.model ?? ""} ${m.display_name ?? ""}`.toLowerCase();
   for (const [needle, label] of [
@@ -123,10 +125,10 @@ function ReasoningEffortSetting({
   return (
     <div className="mx-1 mt-1 border-t border-border-default pt-1">
       <div className="mb-0.5 flex items-center justify-between px-1">
-        <span className="text-[10px] font-medium text-muted-foreground/70">
+        <span className="text-xs font-medium text-muted-foreground/70">
           {title}
         </span>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {t.inputBox.reasoningEffortCurrent(reasoningEffortLabel(current, t))}
         </span>
       </div>
@@ -149,7 +151,7 @@ function ReasoningEffortSetting({
                 onChange(effort);
               }}
               className={cn(
-                "h-5 rounded-[5px] px-1 text-[10px] transition-colors",
+                "h-5 rounded-[5px] px-1 text-xs transition-colors",
                 selected
                   ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
@@ -190,7 +192,7 @@ function PickerRow({
         // Match sidebar NavRow language: h-8, opacity-based emphasis,
         // monochrome. No color accent — selection reads via opacity and
         // a 2px leading bar the way active nav items do.
-        "group/row relative flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-[12px] opacity-75 transition-[opacity,background-color]",
+        "group/row relative flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs opacity-75 transition-[opacity,background-color]",
         "hover:opacity-100 hover:bg-muted/40",
         disabled &&
           "cursor-not-allowed opacity-35 hover:opacity-35 hover:bg-transparent",
@@ -204,7 +206,7 @@ function PickerRow({
         {badge}
       </span>
       {right !== undefined && (
-        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/70 group-hover/row:text-muted-foreground transition-colors">
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground/70 group-hover/row:text-muted-foreground transition-colors">
           {right}
         </span>
       )}
@@ -498,7 +500,7 @@ export function ModelPicker({
               </span>
             }
             right={
-              <span className="rounded border border-blue-500/40 px-1 py-0 text-[10px] text-blue-500">
+              <span className="rounded border border-blue-500/40 px-1 py-0 text-xs text-blue-500">
                 {t.modelPicker.autoModelBadge}
               </span>
             }
@@ -527,7 +529,7 @@ export function ModelPicker({
                 // Match sidebar section labels: opacity-based emphasis,
                 // monochrome. Active state is just the text going full
                 // opacity + muted underline — no violet accent.
-                "flex-1 rounded-md text-[10px] font-medium uppercase tracking-wider transition-[opacity,color]",
+                "flex-1 rounded-md text-xs font-medium uppercase tracking-wider transition-[opacity,color]",
                 "text-muted-foreground/60 hover:text-foreground",
                 "data-[state=active]:text-foreground data-[state=active]:opacity-100",
               )}
@@ -543,7 +545,7 @@ export function ModelPicker({
                 officialEntries.length > 0
               }
               className={cn(
-                "flex-1 rounded-md text-[10px] font-medium uppercase tracking-wider transition-[opacity,color]",
+                "flex-1 rounded-md text-xs font-medium uppercase tracking-wider transition-[opacity,color]",
                 "text-muted-foreground/60 hover:text-foreground",
                 "data-[state=active]:text-foreground data-[state=active]:opacity-100",
               )}
@@ -575,15 +577,15 @@ export function ModelPicker({
                       }
                       right={
                         isGuest ? (
-                          <span className="text-[10px] text-muted-foreground/70">
+                          <span className="text-xs text-muted-foreground/70">
                             {t.modelPicker.loginRequired}
                           </span>
                         ) : isEnabling ? (
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t.modelPicker.enabling}
                           </span>
                         ) : unconfigured ? (
-                          <span className="text-[10px] text-muted-foreground/70">
+                          <span className="text-xs text-muted-foreground/70">
                             {t.modelPicker.clickToEnable}
                           </span>
                         ) : (

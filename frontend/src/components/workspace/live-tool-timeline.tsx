@@ -1064,7 +1064,7 @@ function InlineSummaryRow({
   return (
     <div
       className={cn(
-        "mt-1 ml-5 flex min-w-0 items-start gap-2 border-l pl-2 text-[10px] leading-4",
+        "mt-1 ml-5 flex min-w-0 items-start gap-2 border-l pl-2 text-xs leading-4",
         tone === "result"
           ? "border-emerald-500/25 text-emerald-700/85 dark:text-emerald-400/85"
           : "border-border-default text-muted-foreground/85",
@@ -1167,7 +1167,7 @@ function ToolEventRow({
     <div
       className={cn(
         "relative transition-all duration-200",
-        nested ? "py-1 pl-2 text-[11px]" : "py-1.5 pl-2 text-xs",
+        nested ? "py-1 pl-2 text-xs" : "py-1.5 pl-2 text-xs",
         event.status === "error"
           ? "text-muted-foreground"
           : "text-muted-foreground",
@@ -1190,7 +1190,7 @@ function ToolEventRow({
         </span>
 
         {showAgent && event.agentName && (
-          <span className="text-muted-foreground text-[10px]">
+          <span className="text-muted-foreground text-xs">
             · {event.agentName}
           </span>
         )}
@@ -1200,7 +1200,7 @@ function ToolEventRow({
             {researchLog.sources.slice(0, 3).map((source) => (
               <span
                 key={source}
-                className="max-w-20 truncate rounded-full border border-border-default bg-background/80 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                className="max-w-20 truncate rounded-full border border-border-default bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground"
                 title={source}
               >
                 {source}
@@ -1212,7 +1212,7 @@ function ToolEventRow({
         <span className="ml-auto flex items-center gap-1">
           <span
             className={cn(
-              "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+              "rounded-full px-1.5 py-0.5 text-xs font-medium",
               agentRunStatusLightPulseClass(event.status) ?? "",
               statusClassName(event.status),
             )}
@@ -1223,7 +1223,7 @@ function ToolEventRow({
           {event.status === "done" &&
             event.durationMs != null &&
             event.durationMs >= 1 && (
-              <span className="text-muted-foreground text-[10px]">
+              <span className="text-muted-foreground text-xs">
                 {event.durationMs < 1000
                   ? `${event.durationMs}ms`
                   : `${(event.durationMs / 1000).toFixed(1)}s`}
@@ -1280,14 +1280,14 @@ function ToolEventRow({
       )}
 
       {thoughtDetail && event.name !== "agent_thought" && (
-        <div className="mt-1 ml-5 border-l border-violet-500/25 pl-2 text-[11px] leading-5 text-violet-700 dark:text-violet-300">
+        <div className="mt-1 ml-5 border-l border-violet-500/25 pl-2 text-xs leading-5 text-violet-700 dark:text-violet-300">
           <span className="font-medium">{detailTitle(t, "thought")}: </span>
           {compactMiddle(thoughtDetail, 260)}
         </div>
       )}
 
       {observationDetail && (
-        <div className="mt-1 ml-5 border-l border-emerald-500/25 pl-2 text-[11px] leading-5 text-emerald-700 dark:text-emerald-300">
+        <div className="mt-1 ml-5 border-l border-emerald-500/25 pl-2 text-xs leading-5 text-emerald-700 dark:text-emerald-300">
           <span className="font-medium">{detailTitle(t, "observation")}: </span>
           {compactMiddle(observationDetail, 260)}
         </div>
@@ -1309,17 +1309,17 @@ function ToolEventRow({
       )}
 
       {researchSummary && !researchLog && (
-        <div className="mt-1 ml-5 border-l border-sky-500/25 pl-2 text-[10px] leading-4 text-sky-700 dark:text-sky-300">
+        <div className="mt-1 ml-5 border-l border-sky-500/25 pl-2 text-xs leading-4 text-sky-700 dark:text-sky-300">
           {researchSummary}
         </div>
       )}
 
       {open && inputDetail && (
         <div className="mt-2 ml-5 overflow-hidden border-l border-border-default pl-2">
-          <div className="pb-1 text-[10px] font-medium text-muted-foreground">
+          <div className="pb-1 text-xs font-medium text-muted-foreground">
             {detailTitle(t, "input")}
           </div>
-          <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/35 px-2 py-1.5 font-mono text-[10px] leading-4 text-foreground/80">
+          <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/35 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
             {inputDetail}
           </pre>
         </div>
@@ -1327,10 +1327,10 @@ function ToolEventRow({
 
       {open && thoughtDetail && (
         <div className="mt-2 ml-5 overflow-hidden border-l border-violet-500/25 pl-2">
-          <div className="pb-1 text-[10px] font-medium text-muted-foreground">
+          <div className="pb-1 text-xs font-medium text-muted-foreground">
             {detailTitle(t, "thought")}
           </div>
-          <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-violet-500/5 px-2 py-1.5 font-mono text-[10px] leading-4 text-foreground/80">
+          <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-violet-500/5 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
             {thoughtDetail}
           </pre>
         </div>
@@ -1340,12 +1340,12 @@ function ToolEventRow({
         outputDetail &&
         (event.status !== "running" || event.name === "model_reasoning") && (
           <div className="mt-2 ml-5 overflow-hidden border-l border-emerald-500/25 pl-2">
-            <div className="pb-1 text-[10px] font-medium text-muted-foreground">
+            <div className="pb-1 text-xs font-medium text-muted-foreground">
               {event.name === "model_reasoning"
                 ? detailTitle(t, "publicReasoning")
                 : detailTitle(t, "result")}
             </div>
-            <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-500/5 px-2 py-1.5 font-mono text-[10px] leading-4 text-foreground/80">
+            <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-500/5 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
               {outputDetail}
             </pre>
           </div>
@@ -1353,10 +1353,10 @@ function ToolEventRow({
 
       {open && observationDetail && (
         <div className="mt-2 ml-5 overflow-hidden border-l border-emerald-500/25 pl-2">
-          <div className="pb-1 text-[10px] font-medium text-muted-foreground">
+          <div className="pb-1 text-xs font-medium text-muted-foreground">
             {detailTitle(t, "observation")}
           </div>
-          <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-500/5 px-2 py-1.5 font-mono text-[10px] leading-4 text-foreground/80">
+          <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-500/5 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
             {observationDetail}
           </pre>
         </div>
@@ -1364,10 +1364,10 @@ function ToolEventRow({
 
       {open && contentPreview && (
         <div className="mt-2 ml-5 overflow-hidden border-l border-border-default pl-2">
-          <div className="pb-1 text-[10px] font-medium text-muted-foreground">
+          <div className="pb-1 text-xs font-medium text-muted-foreground">
             {detailTitle(t, "preview")}
           </div>
-          <pre className="max-h-36 overflow-hidden whitespace-pre-wrap break-words py-1 font-mono text-[10px] leading-4 text-foreground/80">
+          <pre className="max-h-36 overflow-hidden whitespace-pre-wrap break-words py-1 font-mono text-xs leading-4 text-foreground/80">
             {contentPreview}
           </pre>
         </div>
@@ -1394,7 +1394,7 @@ function SearchResultsInline({
           key={`${result.url ?? result.title}-${index}`}
           className="flex min-w-0 items-start gap-2 text-xs leading-5 text-muted-foreground"
         >
-          <span className="w-4 shrink-0 text-right font-mono text-[10px] text-muted-foreground/70">
+          <span className="w-4 shrink-0 text-right font-mono text-xs text-muted-foreground/70">
             {index + 1}
           </span>
           {result.url ? (
@@ -1420,7 +1420,7 @@ function SearchResultsInline({
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+          className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
           onClick={() => setExpanded(true)}
         >
           <ChevronDownIcon className="size-3" />
@@ -1430,7 +1430,7 @@ function SearchResultsInline({
       {expanded && results.length > collapsedCount && (
         <button
           type="button"
-          className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+          className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
           onClick={() => setExpanded(false)}
         >
           <ChevronDownIcon className="size-3 rotate-180" />
@@ -1477,7 +1477,7 @@ function GroupedTimeline({
             <button
               type="button"
               onClick={() => emitAgentWorkbenchFocus({ agentId })}
-              className="mb-1 flex w-full items-center gap-1.5 rounded-md px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground"
+              className="mb-1 flex w-full items-center gap-1.5 rounded-md px-3 py-1 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground"
             >
               <span className="size-1.5 rounded-lg bg-primary animate-pulse" />
               {group.name}

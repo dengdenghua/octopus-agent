@@ -46,7 +46,7 @@ export function AgentWelcome({
             </span>
           )}
         </div>
-        <span className="absolute -right-1.5 -bottom-1.5 flex h-5.5 items-center gap-1 rounded-lg border border-border bg-background px-2 text-[10px] font-semibold tracking-wide text-muted-foreground/90">
+        <span className="absolute -right-1.5 -bottom-1.5 flex h-5.5 items-center gap-1 rounded-lg border border-border bg-background px-2 text-xs font-semibold tracking-wide text-muted-foreground/90">
           <span className="size-1.5 rounded-full bg-emerald-500" />
           {typeBadge}
         </span>
@@ -56,11 +56,11 @@ export function AgentWelcome({
           {displayName}
         </h2>
         {description ? (
-          <p className="text-muted-foreground/80 max-w-md text-[13px] leading-relaxed">
+          <p className="text-muted-foreground/80 max-w-md text-sm leading-relaxed">
             {description}
           </p>
         ) : (
-          <p className="text-muted-foreground/70 max-w-md text-[13px] leading-relaxed">
+          <p className="text-muted-foreground/70 max-w-md text-sm leading-relaxed">
             Ready for the next turn.
           </p>
         )}

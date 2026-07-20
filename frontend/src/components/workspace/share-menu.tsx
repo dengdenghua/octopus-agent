@@ -97,7 +97,7 @@ export function ShareMenu({
           type="button"
           title={t.share.share}
           className={cn(
-            "flex h-[42px] items-center gap-1.5 border text-[11px] font-medium shadow-none transition-all duration-200 sm:h-7",
+            "flex h-[42px] items-center gap-1.5 border text-xs font-medium shadow-none transition-all duration-200 sm:h-7",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
             iconOnly
               ? "w-[42px] justify-center rounded-lg border-transparent bg-transparent px-0 text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground sm:w-8"

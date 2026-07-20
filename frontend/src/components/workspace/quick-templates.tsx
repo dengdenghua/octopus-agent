@@ -156,7 +156,7 @@ export function QuickTemplates({ onSelect, className }: QuickTemplatesProps) {
 
       {/* Footer hint */}
       <div className="px-3 py-2 border-t border-border-default">
-        <p className="text-[10px] text-muted-foreground/60 text-center">
+        <p className="text-xs text-muted-foreground/60 text-center">
           {t.quickTemplates.hint}
         </p>
       </div>

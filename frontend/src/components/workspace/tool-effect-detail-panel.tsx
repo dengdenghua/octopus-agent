@@ -64,7 +64,7 @@ export function ToolEffectDetailPanel({
         </Button>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-medium">外部动作核对</h2>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             确认真实世界结果后再决定是否重试
           </p>
         </div>

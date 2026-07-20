@@ -301,7 +301,7 @@ export function PersonalModeSelector({
           }
         }}
         className={cn(
-          "group flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground shadow-none transition-all duration-200",
+          "group flex items-center gap-1.5 text-xs font-medium text-muted-foreground shadow-none transition-all duration-200",
           chromeless
             ? "h-8 rounded-lg px-1.5 hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 hover:border-border-subtle hover:bg-muted/55 hover:text-foreground",
@@ -371,7 +371,7 @@ export function PersonalModeSelector({
                         <Icon className="size-4 shrink-0" />
                         <div className="flex min-w-0 items-center gap-2 text-left">
                           <span className="font-semibold">{labels.label}</span>
-                          <span className="truncate text-[10px] opacity-70">
+                          <span className="truncate text-xs opacity-70">
                             {labels.desc}
                           </span>
                         </div>

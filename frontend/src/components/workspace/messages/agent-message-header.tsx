@@ -38,10 +38,10 @@ export function AgentAvatar({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden border border-border-default bg-muted text-[13px] leading-none",
+        "flex shrink-0 items-center justify-center overflow-hidden border border-border-default bg-muted text-sm leading-none",
         !showImage &&
           !emoji &&
-          "text-[11px] font-semibold text-muted-foreground",
+          "text-xs font-semibold text-muted-foreground",
         className,
       )}
     >
@@ -78,7 +78,7 @@ export function AgentMessageHeader({
       {role === "tl" && (
         <Badge
           variant="outline"
-          className="border-emerald-500/50 bg-emerald-500/10 text-emerald-600 px-1.5 py-0 text-[10px] leading-4 dark:text-emerald-400"
+          className="border-emerald-500/50 bg-emerald-500/10 text-emerald-600 px-1.5 py-0 text-xs leading-4 dark:text-emerald-400"
         >
           TL
         </Badge>

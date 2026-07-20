@@ -1125,10 +1125,10 @@ export function ChatInputBox({
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12px] font-medium text-foreground">
+                  <span className="block truncate text-xs font-medium text-foreground">
                     {file.name}
                   </span>
-                  <span className="block truncate text-[10px] text-muted-foreground">
+                  <span className="block truncate text-xs text-muted-foreground">
                     {file.sourceLabel || (file.file ? "Upload" : file.path)}
                   </span>
                 </span>
@@ -1160,7 +1160,7 @@ export function ChatInputBox({
                     />
                   )}
                   {sourceLabel ? (
-                    <div className="absolute bottom-0 left-0 right-0 truncate bg-black/45 px-1 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
+                    <div className="absolute bottom-0 left-0 right-0 truncate bg-black/45 px-1 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
                       {sourceLabel}
                     </div>
                   ) : null}
@@ -1192,16 +1192,16 @@ export function ChatInputBox({
             if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
           }}
           rows={2}
-          className="min-h-[52px] w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/75 disabled:opacity-60 sm:min-h-0 sm:py-1.5"
+          className="min-h-[52px] w-full resize-none bg-transparent px-3 py-2.5 text-sm leading-snug outline-none placeholder:text-muted-foreground/75 disabled:opacity-60 sm:min-h-0 sm:py-1.5"
         />
         {isDeepResearchMode && researchConfigOpen && (
           <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,560px)] overflow-y-auto rounded-lg border border-border-default bg-popover px-3 py-3 shadow-[var(--shadow-xs)]">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium text-foreground">
+              <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground">
                 <SearchIcon className="size-4 text-primary" />
                 <span>{t.chatInputBox.deepResearchConfig}</span>
                 {researchMaterials.length > 0 && (
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
                     {researchMaterials.filter((item) => item.enabled).length}{" "}
                     {t.chatInputBox.materials.toLowerCase()}
                   </span>
@@ -1210,7 +1210,7 @@ export function ChatInputBox({
               <button
                 type="button"
                 onClick={() => setResearchConfigOpen(false)}
-                className="px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                className="px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
               >
                 {t.chatInputBox.collapse}
               </button>
@@ -1223,11 +1223,11 @@ export function ChatInputBox({
                   onChange={(event) => setResearchUrlText(event.target.value)}
                   disabled={isBusy || status === "streaming"}
                   placeholder="https://example.com, https://..."
-                  className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
+                  className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
                 />
               </label>
               <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <SearchIcon className="size-3.5" />
                   <input
                     type="number"
@@ -1242,7 +1242,7 @@ export function ChatInputBox({
                       }
                     }}
                     disabled={isBusy || status === "streaming"}
-                    className="h-7 w-16 rounded-lg border border-border-default bg-background/50 px-1.5 text-center text-[12px] text-foreground outline-none"
+                    className="h-7 w-16 rounded-lg border border-border-default bg-background/50 px-1.5 text-center text-xs text-foreground outline-none"
                   />
                 </label>
               </div>
@@ -1253,7 +1253,7 @@ export function ChatInputBox({
                 onChange={(event) => setResearchNote(event.target.value)}
                 disabled={isBusy || status === "streaming"}
                 placeholder={t.chatInputBox.materialNote}
-                className="h-8 min-w-0 border border-border-default bg-background/40 px-2 text-[12px] outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
+                className="h-8 min-w-0 border border-border-default bg-background/40 px-2 text-xs outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
               />
               <div className="flex items-center gap-1">
                 <button
@@ -1264,7 +1264,7 @@ export function ChatInputBox({
                     isBusy ||
                     status === "streaming"
                   }
-                  className="flex h-8 items-center gap-1 border border-border-default px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                  className="flex h-8 items-center gap-1 border border-border-default px-2 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <PlusIcon className="size-3.5" />
                   {t.chatInputBox.url}
@@ -1273,7 +1273,7 @@ export function ChatInputBox({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isBusy || status === "streaming"}
-                  className="flex h-8 items-center gap-1 border border-border-default px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                  className="flex h-8 items-center gap-1 border border-border-default px-2 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {uploadingMaterials ? (
                     <SearchIcon className="size-3.5 animate-pulse" />
@@ -1290,14 +1290,14 @@ export function ChatInputBox({
                 onChange={(event) => setResearchTextTitle(event.target.value)}
                 disabled={isBusy || status === "streaming"}
                 placeholder={t.chatInputBox.textTitle}
-                className="h-8 min-w-0 border border-border-default bg-background/40 px-2 text-[12px] outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
+                className="h-8 min-w-0 border border-border-default bg-background/40 px-2 text-xs outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
               />
               <input
                 value={researchTextBody}
                 onChange={(event) => setResearchTextBody(event.target.value)}
                 disabled={isBusy || status === "streaming"}
                 placeholder={t.chatInputBox.pasteTextMaterial}
-                className="h-8 min-w-0 border border-border-default bg-background/40 px-2 text-[12px] outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
+                className="h-8 min-w-0 border border-border-default bg-background/40 px-2 text-xs outline-none placeholder:text-muted-foreground/75 disabled:opacity-60"
               />
               <button
                 type="button"
@@ -1305,14 +1305,14 @@ export function ChatInputBox({
                 disabled={
                   !researchTextBody.trim() || isBusy || status === "streaming"
                 }
-                className="flex h-8 items-center gap-1 border border-border-default px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                className="flex h-8 items-center gap-1 border border-border-default px-2 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <FileTextIcon className="size-3.5" />
                 {t.chatInputBox.text}
               </button>
             </div>
             {materialError && (
-              <div className="mt-2 text-[11px] text-destructive">
+              <div className="mt-2 text-xs text-destructive">
                 {materialError}
               </div>
             )}
@@ -1332,13 +1332,13 @@ export function ChatInputBox({
                       title={t.chatInputBox.toggleMaterial}
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[11px] font-medium">
+                      <div className="truncate text-xs font-medium">
                         {item.material.title ||
                           item.material.url ||
                           item.material.path ||
                           "Material"}
                       </div>
-                      <div className="truncate text-[10px] text-muted-foreground">
+                      <div className="truncate text-xs text-muted-foreground">
                         {item.material.kind}
                         {item.material.notes ? ` · ${item.material.notes}` : ""}
                       </div>
@@ -1366,7 +1366,7 @@ export function ChatInputBox({
                     onClick={() => toggleResearchSource(source.kind)}
                     disabled={isBusy || status === "streaming"}
                     className={cn(
-                      "rounded-lg border px-2 py-1 text-[10px] font-medium transition-colors",
+                      "rounded-lg border px-2 py-1 text-xs font-medium transition-colors",
                       active
                         ? "border-primary/30 bg-primary/10 text-primary"
                         : "border-border-default text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -1438,13 +1438,13 @@ export function ChatInputBox({
                 sideOffset={8}
                 className="w-60 rounded-lg border-border-default p-1.5 shadow-[var(--shadow-xs)]"
               >
-                <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+                <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
                   {t.chatInputBox.composerInsertions}
                 </DropdownMenuLabel>
                 <DropdownMenuItem
                   data-testid="chat-insert-codex-plan"
                   onClick={() => insertCodexModeMarker("plan")}
-                  className="gap-2 rounded-lg text-[13px]"
+                  className="gap-2 rounded-lg text-sm"
                 >
                   <MapIcon className="size-4" />
                   {t.chatInputBox.insertCodexPlan}
@@ -1452,7 +1452,7 @@ export function ChatInputBox({
                 <DropdownMenuItem
                   data-testid="chat-insert-codex-spec"
                   onClick={() => insertCodexModeMarker("spec")}
-                  className="gap-2 rounded-lg text-[13px]"
+                  className="gap-2 rounded-lg text-sm"
                 >
                   <ClipboardCheckIcon className="size-4" />
                   {t.chatInputBox.insertCodexSpec}
@@ -1460,7 +1460,7 @@ export function ChatInputBox({
                 <DropdownMenuItem
                   data-testid="chat-insert-codex-goal"
                   onClick={() => insertCodexModeMarker("goal")}
-                  className="gap-2 rounded-lg text-[13px]"
+                  className="gap-2 rounded-lg text-sm"
                 >
                   <TargetIcon className="size-4" />
                   {t.chatInputBox.insertCodexGoal}
@@ -1468,7 +1468,7 @@ export function ChatInputBox({
                 <DropdownMenuItem
                   data-testid="chat-insert-browser-surface"
                   onClick={() => insertBrowserSurfaceMarker("Browser")}
-                  className="gap-2 rounded-lg text-[13px]"
+                  className="gap-2 rounded-lg text-sm"
                 >
                   <MonitorIcon className="size-4" />
                   {t.chatInputBox.insertBrowserSurface}
@@ -1476,7 +1476,7 @@ export function ChatInputBox({
                 <DropdownMenuItem
                   data-testid="chat-insert-chrome-surface"
                   onClick={() => insertBrowserSurfaceMarker("Chrome")}
-                  className="gap-2 rounded-lg text-[13px]"
+                  className="gap-2 rounded-lg text-sm"
                 >
                   <GlobeIcon className="size-4" />
                   {t.chatInputBox.insertChromeSurface}
@@ -1486,7 +1486,7 @@ export function ChatInputBox({
                   <>
                     <DropdownMenuItem
                       onClick={() => setResearchConfigOpen((open) => !open)}
-                      className="gap-2 rounded-lg text-[13px]"
+                      className="gap-2 rounded-lg text-sm"
                     >
                       <SlidersHorizontalIcon className="size-4" />
                       {t.chatInputBox.deepResearchConfig}
@@ -1497,7 +1497,7 @@ export function ChatInputBox({
                 {allowAgentModes && (
                   <DropdownMenuItem
                     onClick={openResearchFilePicker}
-                    className="gap-2 rounded-lg text-[13px]"
+                    className="gap-2 rounded-lg text-sm"
                   >
                     <PaperclipIcon className="size-4" />
                     {t.chatInputBox.addResearchMaterial}
@@ -1505,14 +1505,14 @@ export function ChatInputBox({
                 )}
                 <DropdownMenuItem
                   onClick={() => contextFileInputRef.current?.click()}
-                  className="gap-2 rounded-lg text-[13px]"
+                  className="gap-2 rounded-lg text-sm"
                 >
                   <PaperclipIcon className="size-4" />
                   {t.chatInputBox.file}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => imageInputRef.current?.click()}
-                  className="gap-2 rounded-lg text-[13px]"
+                  className="gap-2 rounded-lg text-sm"
                 >
                   <ImageIcon className="size-4" />
                   {t.chatInputBox.addImage}
@@ -1546,7 +1546,7 @@ export function ChatInputBox({
                   onModeChange?.(mode === "chat" ? "react" : "chat", draft)
                 }
                 className={cn(
-                  "flex size-[42px] items-center justify-center rounded-lg text-[11px] font-medium transition-all duration-200 sm:size-8",
+                  "flex size-[42px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-200 sm:size-8",
                   mode === "chat"
                     ? "bg-primary/10 text-primary hover:bg-primary/15"
                     : "border border-transparent text-muted-foreground hover:border-border-default hover:bg-muted/60 hover:text-foreground",
@@ -1654,7 +1654,7 @@ export function ChatInputBox({
         </div>
       </div>
       {showWorkDirSelector && showStatusStrip && (
-        <div className="flex min-h-7 flex-wrap items-center gap-2 border-t border-border-subtle/60 px-2 pt-1.5 text-[11px] text-muted-foreground">
+        <div className="flex min-h-7 flex-wrap items-center gap-2 border-t border-border-subtle/60 px-2 pt-1.5 text-xs text-muted-foreground">
           <div
             className={cn(
               "inline-flex max-w-full items-center gap-1.5",
@@ -1669,7 +1669,7 @@ export function ChatInputBox({
                   className="inline-flex min-w-0 max-w-[124px] items-center gap-1.5 rounded-full px-2 py-1"
                   title={displayAgentLabel}
                 >
-                  <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-[9px] font-semibold text-muted-foreground">
+                  <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-semibold text-muted-foreground">
                     {displayAgentAvatar ? (
                       <img
                         src={displayAgentAvatar}

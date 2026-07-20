@@ -690,7 +690,7 @@ export function MentionAutocompletePopup({
     >
       {/* Header */}
       <div className="border-b px-3 py-1.5">
-        <div className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider">
+        <div className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider">
           <span>@</span>
           <span>{t.mentions.mentions}</span>
           {mentionQuery && (
@@ -758,17 +758,17 @@ export function MentionAutocompletePopup({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium text-[13px] leading-tight">
+                  <div className="truncate font-medium text-sm leading-tight">
                     {item.label}
                   </div>
                   {item.description && (
-                    <div className="text-muted-foreground truncate text-[11px] leading-tight">
+                    <div className="text-muted-foreground truncate text-xs leading-tight">
                       {item.description}
                     </div>
                   )}
                 </div>
                 {item.value.endsWith(":") && (
-                  <div className="text-muted-foreground/50 text-[10px]">
+                  <div className="text-muted-foreground/50 text-xs">
                     &rsaquo;
                   </div>
                 )}
@@ -780,21 +780,21 @@ export function MentionAutocompletePopup({
 
       {/* Footer hint */}
       <div className="border-t px-3 py-1">
-        <div className="text-muted-foreground/60 flex items-center gap-3 text-[10px]">
+        <div className="text-muted-foreground/60 flex items-center gap-3 text-xs">
           <span>
-            <kbd className="bg-muted rounded px-1 font-mono text-[9px]">
+            <kbd className="bg-muted rounded px-1 font-mono text-xs">
               &uarr;&darr;
             </kbd>{" "}
             {t.mentions.navigate}
           </span>
           <span>
-            <kbd className="bg-muted rounded px-1 font-mono text-[9px]">
+            <kbd className="bg-muted rounded px-1 font-mono text-xs">
               Tab
             </kbd>{" "}
             {t.mentions.select}
           </span>
           <span>
-            <kbd className="bg-muted rounded px-1 font-mono text-[9px]">
+            <kbd className="bg-muted rounded px-1 font-mono text-xs">
               Esc
             </kbd>{" "}
             {t.mentions.close}

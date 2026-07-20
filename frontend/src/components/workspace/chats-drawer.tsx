@@ -241,7 +241,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
             onClick={startNewChat}
             className={cn(
               "group flex h-9 w-full items-center justify-center gap-2",
-              "border border-primary/30 bg-primary/8 text-[13px] font-medium text-primary",
+              "border border-primary/30 bg-primary/8 text-sm font-medium text-primary",
               "transition-colors hover:bg-primary/14 active:scale-[0.99]",
             )}
           >
@@ -260,19 +260,19 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-between px-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+        <div className="mt-3 flex items-center justify-between px-4 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
           <span className="flex items-center gap-1.5">
             <MessageSquareIcon className="size-3" />
             {t.sidebar.recentChats}
           </span>
-          <span className="text-[10px] text-muted-foreground/55">
+          <span className="text-xs text-muted-foreground/55">
             {filteredThreads.length}
           </span>
         </div>
 
         <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {filteredThreads.length === 0 ? (
-            <div className="mt-4 rounded-md border border-dashed border-border-default px-3 py-4 text-center text-[12px] text-muted-foreground/75">
+            <div className="mt-4 rounded-md border border-dashed border-border-default px-3 py-4 text-center text-xs text-muted-foreground/75">
               {query.trim() ? t.sidebar.noMatchingChats : t.sidebar.noChatsYet}
             </div>
           ) : (
@@ -309,7 +309,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                       </span>
                       <span
                         className={cn(
-                          "w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-[10px] text-muted-foreground/65",
+                          "w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-xs text-muted-foreground/65",
                           "transition-[width,opacity] group-hover/thread:w-0 group-hover/thread:opacity-0",
                         )}
                       >
@@ -388,7 +388,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
           className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-[15px]">
+            <DialogTitle className="text-base">
               {t.common.rename}
             </DialogTitle>
           </DialogHeader>
@@ -402,7 +402,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
               }
             }}
             autoFocus
-            className="h-8 text-[13px]"
+            className="h-8 text-sm"
           />
           <DialogFooter className="mt-1 flex-row justify-end gap-2">
             <Button

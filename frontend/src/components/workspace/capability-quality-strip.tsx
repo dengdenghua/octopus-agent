@@ -160,7 +160,7 @@ export function CapabilityQualityStrip({
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
         {summary ? (
           <>
             <QualityPill

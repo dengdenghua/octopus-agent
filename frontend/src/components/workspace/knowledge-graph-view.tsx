@@ -560,9 +560,9 @@ function RangeControl({
 }) {
   return (
     <label className="grid gap-1.5">
-      <span className="flex items-center justify-between text-[11px] text-foreground/80">
+      <span className="flex items-center justify-between text-xs text-foreground/80">
         <span>{label}</span>
-        <span className="font-mono text-[10px] text-muted-foreground/70">
+        <span className="font-mono text-xs text-muted-foreground/70">
           {format(value)}
         </span>
       </span>
@@ -590,7 +590,7 @@ function Section({
 }) {
   return (
     <section className="space-y-2 border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
-      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         <Icon className="size-3.5" />
         {title}
       </div>
@@ -1202,7 +1202,7 @@ function KnowledgeGraph3DContent() {
         >
           <RefreshCwIcon className="size-4" />
         </Button>
-        <div className="rounded-md border border-border-default bg-background/90 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+        <div className="rounded-md border border-border-default bg-background/90 px-2.5 py-1.5 text-xs text-muted-foreground">
           {t.knowledgePanel.nodeAndEdgeStats(
             renderedGraph.nodes.length,
             renderedGraph.edges.length,
@@ -1221,33 +1221,33 @@ function KnowledgeGraph3DContent() {
                   {focusNode.label}
                 </div>
                 {focusNode.fullName !== focusNode.label && (
-                  <div className="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/70">
+                  <div className="mt-0.5 break-words text-xs leading-4 text-muted-foreground/70">
                     {shortText(focusNode.fullName, 96)}
                   </div>
                 )}
               </div>
               <div className="grid grid-cols-3 gap-1.5 text-center">
                 <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-                  <div className="text-[10px] text-muted-foreground/70">
+                  <div className="text-xs text-muted-foreground/70">
                     {controls.degree}
                   </div>
-                  <div className="font-mono text-[11px] text-foreground/90">
+                  <div className="font-mono text-xs text-foreground/90">
                     {focusNode.backendDegree || focusEdges.length}
                   </div>
                 </div>
                 <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-                  <div className="text-[10px] text-muted-foreground/70">
+                  <div className="text-xs text-muted-foreground/70">
                     {controls.confidence}
                   </div>
-                  <div className="font-mono text-[11px] text-foreground/90">
+                  <div className="font-mono text-xs text-foreground/90">
                     {formatConfidence(focusNode.confidenceAvg)}
                   </div>
                 </div>
                 <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-                  <div className="text-[10px] text-muted-foreground/70">
+                  <div className="text-xs text-muted-foreground/70">
                     {controls.updated}
                   </div>
-                  <div className="font-mono text-[11px] text-foreground/90">
+                  <div className="font-mono text-xs text-foreground/90">
                     {formatDateTime(focusNode.lastSeen)}
                   </div>
                 </div>
@@ -1257,7 +1257,7 @@ function KnowledgeGraph3DContent() {
                   {focusNode.sources.slice(0, 3).map((source) => (
                     <span
                       key={source}
-                      className="max-w-full truncate rounded bg-sky-400/10 px-1.5 py-0.5 text-[10px] text-sky-200"
+                      className="max-w-full truncate rounded bg-sky-400/10 px-1.5 py-0.5 text-xs text-sky-200"
                     >
                       {shortText(source, 28)}
                     </span>
@@ -1266,7 +1266,7 @@ function KnowledgeGraph3DContent() {
               )}
               {focusEdges.length > 0 && (
                 <div className="space-y-1 border-t border-white/10 pt-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
                     {controls.evidence}
                   </div>
                   {focusEdges.map((edge) => {
@@ -1278,18 +1278,18 @@ function KnowledgeGraph3DContent() {
                         className="rounded border border-white/10 bg-white/[0.025] px-2 py-1.5"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-[11px] text-foreground/80">
+                          <span className="truncate text-xs text-foreground/80">
                             {outbound ? "->" : "<-"} {shortText(edge.label, 24)}
                           </span>
-                          <span className="font-mono text-[10px] text-muted-foreground/70">
+                          <span className="font-mono text-xs text-muted-foreground/70">
                             {formatConfidence(edge.confidence)}
                           </span>
                         </div>
-                        <div className="mt-0.5 truncate text-[10px] text-muted-foreground/70">
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground/70">
                           {shortText(peer, 48)}
                         </div>
                         {(edge.sourceRef || edge.status !== "active") && (
-                          <div className="mt-1 flex gap-1 text-[10px] text-muted-foreground/50">
+                          <div className="mt-1 flex gap-1 text-xs text-muted-foreground/50">
                             {edge.status !== "active" && (
                               <span>{edge.status}</span>
                             )}
@@ -1329,7 +1329,7 @@ function KnowledgeGraph3DContent() {
                   type="button"
                   onClick={() => toggleType(entityType)}
                   className={cn(
-                    "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors",
+                    "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
                     disabled
                       ? "text-muted-foreground/50 hover:bg-background/80"
                       : "text-foreground/80 hover:bg-muted/70",
@@ -1344,7 +1344,7 @@ function KnowledgeGraph3DContent() {
                       {entityTypeLabel(entityType)}
                     </span>
                   </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/70">
+                  <span className="font-mono text-xs text-muted-foreground/70">
                     {group.count}
                   </span>
                 </button>
@@ -1358,7 +1358,7 @@ function KnowledgeGraph3DContent() {
             {displayToggles.map(([key, label]) => (
               <label
                 key={key}
-                className="flex items-center justify-between gap-3 text-[11px] text-foreground/80"
+                className="flex items-center justify-between gap-3 text-xs text-foreground/80"
               >
                 <span>{label}</span>
                 <Switch

@@ -100,7 +100,7 @@ function RecRow({
           <span className="truncate text-sm font-medium">{rec.label}</span>
           <span
             className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-medium",
+              "rounded px-1.5 py-0.5 text-xs font-medium",
               verdictTone(rec.verdict),
             )}
           >
@@ -108,7 +108,7 @@ function RecRow({
           </span>
         </div>
         <div
-          className="mt-0.5 max-w-full truncate text-[11px] text-muted-foreground"
+          className="mt-0.5 max-w-full truncate text-xs text-muted-foreground"
           title={`${rec.tag} · ${t.estMem}${rec.est_mem_gb} GB${rec.est_tokens_per_s ? ` · ~${rec.est_tokens_per_s} ${t.speedUnit}` : ""}`}
         >
           <code className="inline-block max-w-full truncate align-bottom">
@@ -122,7 +122,7 @@ function RecRow({
         </div>
       </div>
       {rec.installed ? (
-        <span className="shrink-0 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+        <span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">
           {t.installed}
         </span>
       ) : (
@@ -155,12 +155,12 @@ export function ModelCookbook() {
       <div className="flex min-w-0 flex-col items-start justify-between gap-2 sm:flex-row sm:gap-4">
         <div className="min-w-0">
           <h4 className="text-sm font-medium">{t.title}</h4>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {t.subtitle}
           </p>
         </div>
         {snapshot?.hardware && (
-          <span className="max-w-full truncate text-left text-[11px] text-muted-foreground sm:max-w-[45%] sm:shrink-0 sm:text-right">
+          <span className="max-w-full truncate text-left text-xs text-muted-foreground sm:max-w-[45%] sm:shrink-0 sm:text-right">
             {hardwareLine(snapshot.hardware)}
           </span>
         )}
@@ -171,7 +171,7 @@ export function ModelCookbook() {
       ) : (
         <>
           {ollamaDown && (
-            <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+            <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
               {t.noOllama}
             </div>
           )}
@@ -188,7 +188,7 @@ export function ModelCookbook() {
               />
             ))}
           </div>
-          <p className="mt-2 text-[10px] text-muted-foreground/70">
+          <p className="mt-2 text-xs text-muted-foreground/70">
             {snapshot?.source === "huggingface" ? t.sourceLive : t.sourceStatic}{" "}
             · {t.note}
           </p>

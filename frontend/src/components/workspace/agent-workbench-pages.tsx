@@ -90,7 +90,7 @@ export function WorkbenchEmptyPage({
           </div>
         </div>
         <div className="text-sm font-medium text-foreground/90">{title}</div>
-        <p className="text-[12px] leading-relaxed text-muted-foreground/70">
+        <p className="text-xs leading-relaxed text-muted-foreground/70">
           {description}
         </p>
       </div>
@@ -695,7 +695,7 @@ function ReferenceIcon({
           onError={() => setFailed(true)}
         />
       ) : hostInitial ? (
-        <span className="text-[10px] font-semibold text-muted-foreground">
+        <span className="text-xs font-semibold text-muted-foreground">
           {hostInitial}
         </span>
       ) : (
@@ -883,7 +883,7 @@ export function AgentSummaryPage({
             data-process-event-kind={focusedProcessEvent.kind}
             data-process-event-status={focusedProcessEvent.status}
           >
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="relative flex size-2 shrink-0 items-center justify-center">
                 <span
                   className={cn(
@@ -916,7 +916,7 @@ export function AgentSummaryPage({
                 </span>
               )}
               {focusedProcessEvent.phaseId && (
-                <span className="ml-auto truncate font-mono text-[10px] opacity-60">
+                <span className="ml-auto truncate font-mono text-xs opacity-60">
                   {focusedProcessEvent.phaseId}
                 </span>
               )}
@@ -925,7 +925,7 @@ export function AgentSummaryPage({
               {focusedProcessEvent.detail || focusedProcessEvent.summary}
             </div>
             {focusedProcessEvent.timelineSequence != null && (
-              <div className="mt-2 font-mono text-[10px] text-muted-foreground/50">
+              <div className="mt-2 font-mono text-xs text-muted-foreground/50">
                 #{focusedProcessEvent.timelineSequence}
               </div>
             )}
@@ -944,7 +944,7 @@ export function AgentSummaryPage({
                         ? t.agentWorkbenchPages.progress
                         : t.agentWorkbenchPages.dashboardOverview)}
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground/85">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground/85">
                     {phases.length > 0 && (
                       <span>
                         {donePhaseCount}/{phases.length}{" "}
@@ -969,7 +969,7 @@ export function AgentSummaryPage({
                   </div>
                 </div>
                 {contextStats.percentage > 0 && (
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                  <span className="shrink-0 text-xs text-muted-foreground">
                     {t.agentWorkbenchPages.estimatePercentage(
                       contextStats.percentage,
                     )}
@@ -1007,7 +1007,7 @@ export function AgentSummaryPage({
               <h3 className="text-xs font-medium text-foreground">
                 {t.agentWorkbenchPages.progress}
               </h3>
-              <span className="ml-auto truncate text-[10px] text-muted-foreground">
+              <span className="ml-auto truncate text-xs text-muted-foreground">
                 {donePhaseCount}/{phases.length} {phaseStatusText("done")}
                 {errorPhaseCount > 0
                   ? ` · ${errorPhaseCount} ${phaseStatusText("error")}`
@@ -1056,7 +1056,7 @@ export function AgentSummaryPage({
                     <span className="min-w-0 flex-1 truncate text-xs text-foreground">
                       {phase.title}
                     </span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       {phaseStatusText(phase.status)}
                     </span>
                   </li>
@@ -1078,7 +1078,7 @@ export function AgentSummaryPage({
               <h3 className="text-xs font-medium text-foreground">
                 {t.agentWorkbenchPages.artifacts}
               </h3>
-              <span className="ml-auto text-[10px] text-muted-foreground">
+              <span className="ml-auto text-xs text-muted-foreground">
                 {artifactDiffEntries.length > 0
                   ? `${t.agentWorkbenchPages.generatedArtifacts} ${artifactDiffEntries.length}`
                   : ""}
@@ -1103,7 +1103,7 @@ export function AgentSummaryPage({
                       <span className="text-xs font-medium text-muted-foreground">
                         {t.agentWorkbenchPages.generatedArtifacts}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {artifactDiffEntries.length}
                       </span>
                     </div>
@@ -1123,10 +1123,10 @@ export function AgentSummaryPage({
                           "border-t border-border-subtle pt-3",
                       )}
                     >
-                      <span className="text-[11px] font-medium text-foreground">
+                      <span className="text-xs font-medium text-foreground">
                         {t.agentWorkbenchPages.changedFiles}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {changedFileEntries.length}
                       </span>
                     </div>
@@ -1160,7 +1160,7 @@ export function AgentSummaryPage({
               <h3 className="text-xs font-medium text-foreground">
                 {t.agentWorkbenchPages.subagents}
               </h3>
-              <span className="ml-auto text-[10px] text-muted-foreground">
+              <span className="ml-auto text-xs text-muted-foreground">
                 {t.agentWorkbenchPages.subagentsCompleted(
                   agentHealth.done,
                   agentHealth.total,
@@ -1176,7 +1176,7 @@ export function AgentSummaryPage({
               <div className="mt-3">
                 <div
                   className={cn(
-                    "pb-2 text-[11px]",
+                    "pb-2 text-xs",
                     agentHealth.failed > 0 && "text-destructive",
                   )}
                 >
@@ -1258,7 +1258,7 @@ export function AgentSummaryPage({
                         {(tile.resultSummary ??
                           tile.error ??
                           tile.lastThought) && (
-                          <span className="mt-0.5 block line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                          <span className="mt-0.5 block line-clamp-2 text-xs leading-4 text-muted-foreground">
                             {tile.error ??
                               tile.resultSummary ??
                               tile.lastThought}
@@ -1271,7 +1271,7 @@ export function AgentSummaryPage({
                 </ul>
               </div>
             ) : (
-              <div className="mt-2 text-[10px] text-muted-foreground">
+              <div className="mt-2 text-xs text-muted-foreground">
                 {agentHealth.running > 0
                   ? t.agentWorkbenchPages.subagentsRunning(agentHealth.running)
                   : agentHealth.failed > 0
@@ -1297,7 +1297,7 @@ export function AgentSummaryPage({
               <h3 className="text-xs font-medium text-foreground">
                 {t.agentWorkbenchPages.context}
               </h3>
-              <span className="ml-auto truncate text-[10px] text-muted-foreground">
+              <span className="ml-auto truncate text-xs text-muted-foreground">
                 {totalReferenceItems > 0
                   ? t.agentWorkbenchPages.sourceCount(totalReferenceItems)
                   : t.agentWorkbenchPages.noSources}
@@ -1317,7 +1317,7 @@ export function AgentSummaryPage({
               <div className="mt-3">
                 {/* 上下文来源分类（可点击切换）+ 进度条 */}
                 <div>
-                  <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
+                  <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
                     {observedReferenceTabs.length === 0 ? (
                       <span className="text-muted-foreground">
                         {t.agentWorkbenchPages.noSources}
@@ -1352,7 +1352,7 @@ export function AgentSummaryPage({
                             <span>{tab.label}</span>
                             <span
                               className={cn(
-                                "font-mono text-[9px]",
+                                "font-mono text-xs",
                                 isActive
                                   ? "text-foreground/70"
                                   : "text-muted-foreground/60",
@@ -1365,7 +1365,7 @@ export function AgentSummaryPage({
                       })
                     )}
                     {contextStats.totalTokens > 0 && (
-                      <span className="ml-auto font-mono text-[9px] text-muted-foreground/60">
+                      <span className="ml-auto font-mono text-xs text-muted-foreground/60">
                         {t.agentWorkbenchPages.estimatedTokens(
                           contextStats.totalTokens,
                         )}
@@ -1398,7 +1398,7 @@ export function AgentSummaryPage({
                 {/* 上下文列表 */}
                 <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
                   {observedReferenceTabs.length === 0 ? (
-                    <li className="py-4 text-center text-[11px] text-muted-foreground">
+                    <li className="py-4 text-center text-xs text-muted-foreground">
                       {t.agentWorkbenchPages.noObservableReferences}
                     </li>
                   ) : (
@@ -1411,12 +1411,12 @@ export function AgentSummaryPage({
                           tabId={activeRefTab}
                         />
                         <div className="min-w-0 flex-1">
-                          <span className="block truncate text-[11px] text-foreground">
+                          <span className="block truncate text-xs text-foreground">
                             {ref.title}
                           </span>
                         </div>
                         {ref.tag && (
-                          <span className="shrink-0 text-[9px] text-muted-foreground/70">
+                          <span className="shrink-0 text-xs text-muted-foreground/70">
                             {ref.tag}
                           </span>
                         )}
@@ -1436,7 +1436,7 @@ export function AgentSummaryPage({
             <p className="text-xs font-medium text-foreground">
               {t.agentWorkbenchPages.dashboardOverview}
             </p>
-            <p className="mt-1 max-w-[240px] text-[11px] text-muted-foreground">
+            <p className="mt-1 max-w-[240px] text-xs text-muted-foreground">
               {t.agentWorkbenchPages.dashboardOverviewDescription}
             </p>
           </div>
@@ -1677,7 +1677,7 @@ export function friendlyRoleName(role: string | undefined | null): string {
 export function DiffText({ text }: { text: string }) {
   const lines = text.split(/\r?\n/);
   return (
-    <pre className="max-h-[22rem] overflow-auto whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-[11px] leading-5 text-foreground/80">
+    <pre className="max-h-[22rem] overflow-auto whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-xs leading-5 text-foreground/80">
       {lines.map((line, index) => (
         <span
           key={`${index}-${line}`}
@@ -1727,12 +1727,12 @@ export function AgentDiffPage({
             <button
               type="button"
               onClick={onBackToSummary}
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
             >
               <ArrowLeftIcon className="size-3.5" />
               {t.agentWorkbenchPages.dashboardOverview}
             </button>
-            <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+            <span className="min-w-0 truncate text-xs text-muted-foreground">
               {DIFF_TAB_LABEL}
             </span>
           </div>

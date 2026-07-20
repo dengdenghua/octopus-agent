@@ -83,7 +83,7 @@ export function PublicThinkingStatus({
       data-phase={phase}
       data-testid="conversation-activity-pulse"
       className={cn(
-        "my-1.5 ml-11 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground/55",
+        "my-1.5 ml-11 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground/55",
         className,
       )}
     >

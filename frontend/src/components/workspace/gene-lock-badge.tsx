@@ -169,11 +169,11 @@ export function GeneLockBadge() {
         )}
         <span>{g.badgeLabel}</span>
         <span className="tabular-nums">Lv {lvl}</span>
-        <span className="text-[10px] opacity-75">
+        <span className="text-xs opacity-75">
           {panic ? g.panicBadge : (g.levelNames[lvl] ?? "?")}
         </span>
         {status.mode === "production" && (
-          <Badge className="ml-1 h-4 bg-foreground/40 px-1 text-[9px] uppercase tracking-wider text-muted-foreground">
+          <Badge className="ml-1 h-4 bg-foreground/40 px-1 text-xs uppercase tracking-wider text-muted-foreground">
             {g.productionBadge}
           </Badge>
         )}
@@ -204,13 +204,13 @@ export function GeneLockBadge() {
             {panic && (
               <div className="rounded bg-rose-500/10 px-2 py-1 text-rose-300">
                 <div className="font-medium">{g.panicActive}</div>
-                <div className="text-[10px]">
+                <div className="text-xs">
                   {g.panicStartedAt}{" "}
                   {status.panic.since
                     ? new Date(status.panic.since * 1000).toLocaleString()
                     : "?"}
                 </div>
-                <div className="text-[10px]">
+                <div className="text-xs">
                   {g.panicReason}: {status.panic.reason}
                 </div>
               </div>
@@ -263,7 +263,7 @@ export function GeneLockBadge() {
           {msg && (
             <div className="mt-2 text-xs text-muted-foreground">{msg}</div>
           )}
-          <div className="mt-2 border-t border-border-subtle pt-2 text-[10px] text-muted-foreground">
+          <div className="mt-2 border-t border-border-subtle pt-2 text-xs text-muted-foreground">
             {g.levelSummary(
               0,
               g.levelNames[0] ?? "",
@@ -435,7 +435,7 @@ export function GeneLockControlCard({
             <span className="text-xs font-semibold">{g.compactTitle}</span>
             <Badge
               variant={panic ? "destructive" : "outline"}
-              className="h-5 rounded-md px-1.5 text-[11px]"
+              className="h-5 rounded-md px-1.5 text-xs"
             >
               {panic ? g.panicBadge : `Lv ${lvl} · ${g.levelNames[lvl]}`}
             </Badge>
@@ -463,7 +463,7 @@ export function GeneLockControlCard({
                   onClick={() => setMode(mode as "dev" | "production")}
                   aria-pressed={selected}
                   className={cn(
-                    "h-6 rounded-[5px] px-2 text-[11px] transition-colors",
+                    "h-6 rounded-[5px] px-2 text-xs transition-colors",
                     selected
                       ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                       : "text-muted-foreground hover:text-foreground",
@@ -490,7 +490,7 @@ export function GeneLockControlCard({
                 aria-pressed={index === lvl}
                 title={`${name} · ${g.levelDescriptions[index]}`}
                 className={cn(
-                  "h-6 rounded-[5px] px-2 font-mono text-[11px] transition-colors",
+                  "h-6 rounded-[5px] px-2 font-mono text-xs transition-colors",
                   index === lvl
                     ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                     : "text-muted-foreground hover:text-foreground",
@@ -506,7 +506,7 @@ export function GeneLockControlCard({
             type="button"
             size="sm"
             variant={panic ? "secondary" : "outline"}
-            className="h-7 px-2 text-[11px]"
+            className="h-7 px-2 text-xs"
             disabled={busy !== null}
             onClick={() => void setPanic(!panic)}
             aria-pressed={panic}
@@ -526,7 +526,7 @@ export function GeneLockControlCard({
 
           {msg ? (
             <span
-              className="text-[11px] text-muted-foreground"
+              className="text-xs text-muted-foreground"
               role="status"
               aria-live="polite"
             >
@@ -534,7 +534,7 @@ export function GeneLockControlCard({
             </span>
           ) : null}
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-5 text-muted-foreground">
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-muted-foreground">
           <span>{strict ? g.strictHint : g.relaxedHint}</span>
           <span>{g.levelDescriptions[lvl]}</span>
           {panic ? (
@@ -615,7 +615,7 @@ export function GeneLockControlCard({
               {g.modeStrict}
             </Button>
           </div>
-          <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
             {g.modeDescription}
           </p>
         </div>
@@ -623,7 +623,7 @@ export function GeneLockControlCard({
         <div className="rounded-lg border border-border-default bg-muted/20 p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium">{g.levelLabel}</div>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {g.levelDescriptions[lvl]}
             </span>
           </div>
@@ -638,7 +638,7 @@ export function GeneLockControlCard({
                 type="button"
                 size="sm"
                 variant={index === lvl ? "secondary" : "outline"}
-                className="h-auto min-h-10 flex-col gap-0.5 px-1 py-1 text-[11px]"
+                className="h-auto min-h-10 flex-col gap-0.5 px-1 py-1 text-xs"
                 disabled={busy !== null || panic}
                 onClick={() => setLevel(index)}
                 aria-pressed={index === lvl}
@@ -674,7 +674,7 @@ export function GeneLockControlCard({
               </>
             )}
           </Button>
-          <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
             {g.disabledHint}
           </p>
         </div>

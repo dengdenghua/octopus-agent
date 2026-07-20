@@ -411,7 +411,7 @@ function SwarmPanel() {
                 connected ? "bg-emerald-500 animate-pulse" : "bg-muted",
               )}
             />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+            <span className="text-xs text-muted-foreground uppercase tracking-wide">
               {connected
                 ? t.observabilityPage.connected
                 : t.observabilityPage.idle}
@@ -430,7 +430,7 @@ function SwarmPanel() {
               <EmptyDescription>
                 {t.observabilityPage.noConcurrentTasksHint}
                 <br />
-                <span className="text-[11px]">
+                <span className="text-xs">
                   {t.observabilityPage.nestedSseNote}
                 </span>
               </EmptyDescription>
@@ -446,7 +446,7 @@ function SwarmPanel() {
               <div className="text-xs font-mono text-muted-foreground">
                 {t.observabilityPage.taskPrefix}:{taskId.slice(0, 16)}
               </div>
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-xs">
                 {t.observabilityPage.stepsCount(sub.length)}
               </Badge>
             </div>
@@ -454,7 +454,7 @@ function SwarmPanel() {
               {sub.slice(-6).map((s) => (
                 <div
                   key={s.id}
-                  className="flex items-center gap-2 rounded-md bg-background/50 px-2 py-1 text-[11px]"
+                  className="flex items-center gap-2 rounded-md bg-background/50 px-2 py-1 text-xs"
                 >
                   <span
                     className={cn(
@@ -462,12 +462,12 @@ function SwarmPanel() {
                       s.status === "running"
                         ? "bg-amber-500 animate-pulse"
                         : s.status === "error"
-                          ? "bg-red-500"
+                          ? "bg-destructive"
                           : "bg-emerald-500",
                     )}
                   />
                   {s.sub_agent_role && (
-                    <Badge variant="outline" className="text-[9px] font-mono">
+                    <Badge variant="outline" className="text-xs font-mono">
                       {s.sub_agent_role}
                     </Badge>
                   )}
@@ -530,7 +530,7 @@ function BlackboardPanel() {
         </CardHeader>
         <CardContent className="space-y-1">
           {list.data.turns.length === 0 && (
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               {t.observabilityPage.noActiveBlackboard}
             </div>
           )}
@@ -542,17 +542,17 @@ function BlackboardPanel() {
               aria-pressed={selected === tr.turn_id}
               aria-label={`黑板回合 ${tr.turn_id.slice(0, 18)}`}
               className={cn(
-                "h-auto w-full justify-start rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors hover:text-foreground",
+                "h-auto w-full justify-start rounded-md border px-2 py-1.5 text-left text-xs transition-colors hover:text-foreground",
                 selected === tr.turn_id
                   ? "border-primary/40 bg-primary/10 hover:bg-primary/10"
                   : "border-transparent bg-muted/30 hover:bg-muted/60",
               )}
             >
               <div className="w-full">
-                <div className="font-mono text-[10px] truncate">
+                <div className="font-mono text-xs truncate">
                   {tr.turn_id.slice(0, 18)}
                 </div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span>
                     {tr.key_count} {t.observabilityPage.keyCount}
                   </span>
@@ -571,7 +571,7 @@ function BlackboardPanel() {
             <CardTitle className="text-sm font-semibold">
               {t.observabilityPage.snapshot}
               {selected && (
-                <span className="ml-2 font-mono text-[10px] text-muted-foreground">
+                <span className="ml-2 font-mono text-xs text-muted-foreground">
                   {selected.slice(0, 16)}
                 </span>
               )}
@@ -605,18 +605,18 @@ function BlackboardPanel() {
           {selected &&
             snap.data &&
             Object.keys(snap.data.entries).length === 0 && (
-              <div className="py-6 text-center text-[11px] text-muted-foreground">
+              <div className="py-6 text-center text-xs text-muted-foreground">
                 {t.observabilityPage.emptyBlackboard}
               </div>
             )}
           {selected && snap.data && (
             <div className="space-y-2">
               {Object.entries(snap.data.entries).map(([k, v]) => (
-                <div key={k} className="rounded-md bg-muted/30 p-2 text-[11px]">
+                <div key={k} className="rounded-md bg-muted/30 p-2 text-xs">
                   <div className="mb-1 font-mono font-semibold text-primary">
                     {k}
                   </div>
-                  <pre className="whitespace-pre-wrap break-words text-[10px] text-muted-foreground">
+                  <pre className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
                     {formatValue(v)}
                   </pre>
                 </div>
@@ -745,7 +745,7 @@ function JournalPanel() {
             <Badge
               key={kind}
               variant="outline"
-              className="text-[10px] font-mono"
+              className="text-xs font-mono"
             >
               {kind} · {n}
             </Badge>
@@ -766,7 +766,7 @@ function JournalPanel() {
             </EmptyHeader>
           </Empty>
         )}
-        <div className="max-h-[60vh] overflow-auto font-mono text-[11px]">
+        <div className="max-h-[60vh] overflow-auto font-mono text-xs">
           {events
             .slice()
             .reverse()
@@ -779,19 +779,19 @@ function JournalPanel() {
                 )}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground shrink-0">
+                  <span className="text-xs text-muted-foreground shrink-0">
                     {shortTs(e.ts)}
                   </span>
-                  <Badge variant="outline" className="text-[10px]">
+                  <Badge variant="outline" className="text-xs">
                     {e.event_type}
                   </Badge>
                   {e.task_id && (
-                    <span className="text-[10px] text-muted-foreground truncate">
+                    <span className="text-xs text-muted-foreground truncate">
                       {t.observabilityPage.taskPrefix}:{e.task_id.slice(0, 12)}
                     </span>
                   )}
                   {e.path && (
-                    <span className="text-[10px] text-primary truncate">
+                    <span className="text-xs text-primary truncate">
                       {e.action ?? t.observabilityPage.eventActionFile}:{" "}
                       {e.path}
                     </span>
@@ -799,11 +799,11 @@ function JournalPanel() {
                   {/* SubTool events — role + tool + status */}
                   {(e.event_type === "sub_tool_start" ||
                     e.event_type === "sub_tool_end") && (
-                    <span className="text-[10px] truncate flex items-center gap-1.5">
+                    <span className="text-xs truncate flex items-center gap-1.5">
                       {e.role_id && (
                         <Badge
                           variant="outline"
-                          className="text-[9px] font-mono"
+                          className="text-xs font-mono"
                         >
                           {e.role_id}
                         </Badge>
@@ -814,8 +814,8 @@ function JournalPanel() {
                       {e.event_type === "sub_tool_end" && (
                         <span
                           className={cn(
-                            "text-[9px]",
-                            e.is_error ? "text-red-500" : "text-emerald-500",
+                            "text-xs",
+                            e.is_error ? "text-destructive" : "text-emerald-500",
                           )}
                         >
                           {e.is_error
@@ -831,8 +831,8 @@ function JournalPanel() {
                   )}
                   {/* BrowserArtifact — inline thumbnail + caption */}
                   {e.event_type === "browser_artifact" && e.url && (
-                    <span className="text-[10px] truncate flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-[9px]">
+                    <span className="text-xs truncate flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-xs">
                         {e.kind ?? t.observabilityPage.eventArtifactScreenshot}
                       </Badge>
                       <a
@@ -874,7 +874,7 @@ function JournalPanel() {
                         />
                       </a>
                       {e.caption && (
-                        <div className="mt-1 text-[10px] text-muted-foreground italic truncate max-w-[12rem] sm:max-w-[20rem]">
+                        <div className="mt-1 text-xs text-muted-foreground italic truncate max-w-[12rem] sm:max-w-[20rem]">
                           {e.caption}
                         </div>
                       )}
@@ -882,12 +882,12 @@ function JournalPanel() {
                   )}
                 {/* Args / output preview for SubTool events */}
                 {e.event_type === "sub_tool_start" && e.args_preview && (
-                  <div className="mt-1 pl-4 text-[10px] text-muted-foreground truncate">
+                  <div className="mt-1 pl-4 text-xs text-muted-foreground truncate">
                     → {e.args_preview}
                   </div>
                 )}
                 {e.event_type === "sub_tool_end" && e.output_preview && (
-                  <div className="mt-1 pl-4 text-[10px] text-muted-foreground truncate">
+                  <div className="mt-1 pl-4 text-xs text-muted-foreground truncate">
                     ← {e.output_preview}
                   </div>
                 )}
@@ -980,7 +980,7 @@ export function ToolEffectsPanel() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+          <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span className="rounded-full bg-muted px-2.5 py-1">
               后端 · {data.backend}
             </span>
@@ -1019,12 +1019,12 @@ export function ToolEffectsPanel() {
                       </span>
                       <EffectStateBadge state={receipt.state} />
                     </div>
-                    <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                    <div className="mt-1 truncate text-xs text-muted-foreground">
                       任务 {receipt.task_id.slice(0, 12) || "—"} · 步骤{" "}
                       {receipt.step_id} · token {receipt.fencing_token}
                     </div>
                     {receipt.reason && (
-                      <p className="mt-1 line-clamp-2 text-[11px] text-amber-700 dark:text-amber-300">
+                      <p className="mt-1 line-clamp-2 text-xs text-amber-700 dark:text-amber-300">
                         {receipt.reason}
                       </p>
                     )}
@@ -1047,7 +1047,7 @@ export function ToolEffectsPanel() {
                 </div>
               ))}
               {hasCollapsedReceipts && (
-                <div className="px-3 py-2 text-center text-[11px] text-muted-foreground">
+                <div className="px-3 py-2 text-center text-xs text-muted-foreground">
                   已收起历史提交记录，仅保留需关注项与最近 6 条
                 </div>
               )}
@@ -1112,7 +1112,7 @@ function EffectStateBadge({ state }: { state: ToolEffectReceipt["state"] }) {
   return (
     <Badge
       variant={state === "indeterminate" ? "destructive" : "secondary"}
-      className="h-5 px-1.5 text-[10px]"
+      className="h-5 px-1.5 text-xs"
     >
       {labels[state]}
     </Badge>
@@ -1231,14 +1231,14 @@ function RegenerationPanel() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="text-xs">
           {t.observabilityPage.trajectoryTotal} · {data.trajectories.total}
         </Badge>
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="text-xs">
           {t.observabilityPage.failureCount} · {data.trajectories.failures}
         </Badge>
         {Object.entries(data.trajectories.by_strategy).map(([k, n]) => (
-          <Badge key={k} variant="outline" className="text-[10px] font-mono">
+          <Badge key={k} variant="outline" className="text-xs font-mono">
             {k}:{n}
           </Badge>
         ))}
@@ -1259,7 +1259,7 @@ function RegenerationPanel() {
             </CardHeader>
             <CardContent>
               <div className="text-lg font-bold">{p.metric}</div>
-              <div className="mt-1 text-[11px] text-muted-foreground">
+              <div className="mt-1 text-xs text-muted-foreground">
                 {p.hint}
               </div>
             </CardContent>
@@ -1320,7 +1320,7 @@ function HemolymphPanel() {
           <CardTitle className="text-sm font-semibold">
             {t.observabilityPage.latestCompose}
             {latest && (
-              <span className="ml-2 text-[10px] text-muted-foreground">
+              <span className="ml-2 text-xs text-muted-foreground">
                 · {t.observabilityPage.utilizationLabel}{" "}
                 {(latest.utilization * 100).toFixed(1)}%
               </span>
@@ -1343,7 +1343,7 @@ function HemolymphPanel() {
           )}
           {latest && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-[11px]">
+              <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">
                   {t.observabilityPage.total}
                 </span>
@@ -1360,7 +1360,7 @@ function HemolymphPanel() {
                     info.alloc > 0 ? (info.used / info.alloc) * 100 : 0;
                   return (
                     <div key={b} className="rounded-md bg-muted/30 p-2">
-                      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide">
+                      <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide">
                         <span
                           className={cn(
                             "size-1.5 rounded-full",
@@ -1369,7 +1369,7 @@ function HemolymphPanel() {
                         />
                         {bucketLabels[b]}
                       </div>
-                      <div className="mt-1 text-[13px] font-mono">
+                      <div className="mt-1 text-sm font-mono">
                         {info.used}
                         <span className="text-muted-foreground">
                           /{info.alloc}
@@ -1402,7 +1402,7 @@ function HemolymphPanel() {
         </CardHeader>
         <CardContent>
           <div className="max-h-[50vh] overflow-auto">
-            <table className="w-full text-[11px]">
+            <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border text-left text-muted-foreground">
                   <th className="py-1">
@@ -1528,7 +1528,7 @@ function CostPanel() {
           )}
           {data.tasks.length > 0 && (
             <div className="max-h-[60vh] overflow-auto">
-              <table className="w-full text-[11px]">
+              <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
                     <th className="py-1">
@@ -1585,7 +1585,7 @@ function CostPanel() {
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border-default bg-muted/20 p-3">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
       <div className="mt-1 text-xl font-bold font-mono">{value}</div>
@@ -1610,7 +1610,7 @@ function StatusDot({ status }: { status: string }) {
   return (
     <div className="flex items-center gap-1.5">
       <span className={cn("size-1.5 rounded-full", cls)} />
-      <span className="text-[10px] text-muted-foreground uppercase">
+      <span className="text-xs text-muted-foreground uppercase">
         {label}
       </span>
     </div>
@@ -1645,9 +1645,9 @@ function shortTs(ts: string): string {
 }
 
 function eventRowColor(kind: string): string {
-  if (kind === "immune" || kind === "immune_reject") return "bg-red-500/5";
+  if (kind === "immune" || kind === "immune_reject") return "bg-destructive/5";
   if (kind.startsWith("budget")) return "bg-amber-500/5";
-  if (kind === "file_op") return "bg-blue-500/5";
+  if (kind === "file_op") return "bg-primary/5";
   if (kind === "browser_artifact") return "bg-violet-500/5";
   if (kind === "sub_tool_start" || kind === "sub_tool_end")
     return "bg-cyan-500/5";
@@ -1693,7 +1693,7 @@ function PanelGroup({
   return (
     <section className="workspace-panel px-5 py-4">
       <div className="mb-4 space-y-1.5">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           {eyebrow}
         </div>
         <h2 className="text-base font-semibold">{title}</h2>
@@ -1719,7 +1719,7 @@ function ObservabilitySignalCard({
         <span className="text-primary">{icon}</span>
         {title}
       </div>
-      <p className="mt-2 text-[12px] leading-5 text-muted-foreground">
+      <p className="mt-2 text-xs leading-5 text-muted-foreground">
         {description}
       </p>
     </div>

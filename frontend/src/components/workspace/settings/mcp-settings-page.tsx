@@ -341,17 +341,17 @@ export function McpSettingsPage() {
                       <div className="font-medium flex flex-wrap items-center gap-2">
                         {server.name}
                         {!trustKnown ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                             <ShieldAlertIcon className="size-3" />{" "}
                             {copy.trustUnknown}
                           </span>
                         ) : trusted ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                             <ShieldCheckIcon className="size-3" />{" "}
                             {t.mcpSettings.trustedTag}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
                             <ShieldAlertIcon className="size-3" />{" "}
                             {t.mcpSettings.untrustedTag}
                           </span>
@@ -470,7 +470,7 @@ export function McpSettingsPage() {
               <p
                 id="mcp-server-name-error"
                 role="alert"
-                className="text-[11px] leading-snug text-destructive"
+                className="text-xs leading-snug text-destructive"
               >
                 {copy.duplicateName(normalizedAddName)}
               </p>
@@ -501,7 +501,7 @@ export function McpSettingsPage() {
               <p
                 id="mcp-server-url-error"
                 role="alert"
-                className="text-[11px] leading-snug text-destructive"
+                className="text-xs leading-snug text-destructive"
               >
                 {copy.invalidUrl}
               </p>
@@ -526,7 +526,7 @@ export function McpSettingsPage() {
             />
             <p
               id="mcp-server-token-hint"
-              className="text-[11px] leading-snug text-muted-foreground"
+              className="text-xs leading-snug text-muted-foreground"
             >
               {copy.tokenHint}
             </p>
@@ -547,7 +547,7 @@ export function McpSettingsPage() {
           className="w-[min(380px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[380px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-[15px]">
+            <DialogTitle className="text-base">
               {copy.removeTitle}
             </DialogTitle>
             <DialogDescription className="text-[12.5px] leading-5">

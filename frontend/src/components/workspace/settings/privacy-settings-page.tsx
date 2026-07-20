@@ -494,7 +494,7 @@ export default function PrivacySettingsPage() {
         </div>
 
         {statusLoadState === "ready" && status ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <span
               className={cn(
                 "rounded px-1.5 py-0.5 font-medium",
@@ -606,18 +606,18 @@ export default function PrivacySettingsPage() {
                         <span className="text-sm font-medium">{label}</span>
                         <div className="flex items-center gap-1.5">
                           {recommended && (
-                            <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                            <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                               {t.privacySettings.recommendedTag}
                             </span>
                           )}
                           {active && (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
                               {t.privacySettings.enabledTag}
                             </span>
                           )}
                         </div>
                       </div>
-                      <p className="text-[11px] leading-snug text-muted-foreground">
+                      <p className="text-xs leading-snug text-muted-foreground">
                         {description}
                       </p>
                     </button>
@@ -625,7 +625,7 @@ export default function PrivacySettingsPage() {
                 })}
             </div>
             {formatAiModeDevice(aiMode.device, locale) && (
-              <div className="mt-3 text-[11px] text-muted-foreground/80">
+              <div className="mt-3 text-xs text-muted-foreground/80">
                 {t.privacySettings.deviceLabel}{" "}
                 <code>{formatAiModeDevice(aiMode.device, locale)}</code>
               </div>
@@ -751,12 +751,12 @@ export default function PrivacySettingsPage() {
                         {copy.profiles[name].label}
                       </span>
                       {active && (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
                           {copy.active}
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-muted-foreground leading-snug">
+                    <div className="text-xs text-muted-foreground leading-snug">
                       {copy.profiles[name].description}
                     </div>
                   </button>
@@ -767,7 +767,7 @@ export default function PrivacySettingsPage() {
             <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border-default p-3">
               <div className="min-w-0">
                 <div className="text-sm font-medium">{copy.judgeTitle}</div>
-                <div className="text-[11px] text-muted-foreground leading-snug">
+                <div className="text-xs text-muted-foreground leading-snug">
                   {copy.judgeDescription}
                   {judgeLoadState === "ready" && judge && !judge.available && (
                     <span className="mt-1 block text-amber-600 dark:text-amber-400">

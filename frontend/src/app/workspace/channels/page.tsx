@@ -351,7 +351,7 @@ export default function ChannelsPage() {
 
               <div className="grid min-w-[220px] grid-cols-2 gap-2 tabular-nums">
                 <div className="rounded-lg border border-border-default bg-background/62 px-3 py-2">
-                  <div className="text-[11px] text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                     {t.channels.channelCount(rows.length)}
                   </div>
                   <div className="mt-1 text-lg font-semibold">
@@ -359,7 +359,7 @@ export default function ChannelsPage() {
                   </div>
                 </div>
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2">
-                  <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+                  <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
                     <span
                       className={cn(
                         "inline-block size-1.5 rounded-full",
@@ -532,7 +532,7 @@ export default function ChannelsPage() {
               <PlusIcon className="size-4" />
               {t.channels.assignDialogTitle(assignRow?.display_name ?? "")}
             </DialogTitle>
-            <DialogDescription className="text-[12px]">
+            <DialogDescription className="text-xs">
               {t.channels.assignDialogDesc}
             </DialogDescription>
           </DialogHeader>
@@ -577,10 +577,10 @@ export default function ChannelsPage() {
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
-                          <div className="text-[13px] font-medium truncate">
+                          <div className="text-sm font-medium truncate">
                             {a.display_name || a.id}
                           </div>
-                          <div className="text-[11px] text-muted-foreground truncate">
+                          <div className="text-xs text-muted-foreground truncate">
                             {a.id}
                           </div>
                         </div>
@@ -604,7 +604,7 @@ export default function ChannelsPage() {
                   void unassignAgent(assignRow.channel_id);
                   setAssigningId(null);
                 }}
-                className="w-full text-[12px] text-muted-foreground hover:text-destructive"
+                className="w-full text-xs text-muted-foreground hover:text-destructive"
               >
                 <XIcon className="mr-1.5 size-3.5" />
                 {t.channels.unassignCurrent}
@@ -689,7 +689,7 @@ function ChannelCard({
         </div>
         <StatusBadge
           tone={row.connected ? "success" : "idle"}
-          className="h-6 shrink-0 rounded-full px-2 text-[10px]"
+          className="h-6 shrink-0 rounded-full px-2 text-xs"
         >
           {row.connected ? t.channels.connectedBadge : t.channels.notLinked}
         </StatusBadge>
@@ -735,17 +735,17 @@ function ChannelCard({
                   className="size-6 rounded-md object-cover"
                 />
               ) : (
-                <div className="flex size-6 items-center justify-center rounded-md bg-primary/15 text-[10px] font-medium text-primary">
+                <div className="flex size-6 items-center justify-center rounded-md bg-primary/15 text-xs font-medium text-primary">
                   {(assignedAgent?.display_name ?? row.assigned_agent_id)
                     .charAt(0)
                     .toUpperCase()}
                 </div>
               )}
               <div>
-                <div className="text-[12px] font-medium">
+                <div className="text-xs font-medium">
                   {assignedAgent?.display_name ?? row.assigned_agent_id}
                 </div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                   {t.channels.handlingMessages}
                 </div>
               </div>
@@ -765,10 +765,10 @@ function ChannelCard({
             <div className="flex items-center gap-2">
               <PlusIcon className="size-3.5 text-muted-foreground" />
               <div>
-                <div className="text-[12px] font-medium">
+                <div className="text-xs font-medium">
                   {t.channels.configureAgent}
                 </div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                   {t.channels.configureAgentHint}
                 </div>
               </div>
@@ -818,8 +818,8 @@ function Metric({
 }) {
   const body = (
     <>
-      <div className="text-[14px] font-semibold tabular-nums">{value}</div>
-      <div className="mt-0.5 text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-sm font-semibold tabular-nums">{value}</div>
+      <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
     </>
   );
   const baseClass = cn(

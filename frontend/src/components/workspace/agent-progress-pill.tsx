@@ -300,7 +300,7 @@ export function AgentProgressPill({
         aria-live="polite"
         aria-atomic="true"
         className={cn(
-          "relative z-20 flex min-h-9 w-full items-center gap-2 rounded-t-lg border border-b-0 border-border-default bg-background/95 px-3 py-1.5 text-[13px]",
+          "relative z-20 flex min-h-9 w-full items-center gap-2 rounded-t-lg border border-b-0 border-border-default bg-background/95 px-3 py-1.5 text-sm",
           className,
         )}
       >
@@ -410,7 +410,7 @@ export function AgentProgressPill({
                   <StatusIcon status={phase.status} />
                   <span className="min-w-0 flex-1 truncate">{phase.title}</span>
                   {active ? (
-                    <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-primary">
+                    <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-xs font-medium tabular-nums text-primary">
                       {progress.current}/{progress.total}
                     </span>
                   ) : null}
@@ -437,7 +437,7 @@ export function AgentProgressPill({
               </span>
               <span
                 className={cn(
-                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  "shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium",
                   currentBlock.status === "error"
                     ? "bg-destructive/10 text-destructive"
                     : currentBlock.status === "running"
@@ -469,7 +469,7 @@ export function AgentProgressPill({
         >
           <StatusIcon status={displayPhase.status} />
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2 text-[13px] leading-5">
+            <div className="flex min-w-0 items-center gap-2 text-sm leading-5">
               <span
                 className={cn(
                   "min-w-0 flex-1 truncate",
@@ -478,7 +478,7 @@ export function AgentProgressPill({
               >
                 {displayPhase.title}
               </span>
-              <span className="shrink-0 rounded-full bg-muted/70 px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+              <span className="shrink-0 rounded-full bg-muted/70 px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
                 {progressLabel}
               </span>
               <ChevronDownIcon
@@ -489,7 +489,7 @@ export function AgentProgressPill({
               />
             </div>
             {currentBlock && currentBlock.event.name !== "todo_write" ? (
-              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
                 <span
                   className={cn(
                     "size-1.5 shrink-0 rounded-full",
@@ -508,7 +508,7 @@ export function AgentProgressPill({
               </div>
             ) : null}
             {capabilityDisabledInfo ? (
-              <div className="mt-1.5 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700">
+              <div className="mt-1.5 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700">
                 <WifiOffIcon className="size-3 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">
                   {capabilityDisabledInfo.toolName} 被配置关闭
@@ -517,7 +517,7 @@ export function AgentProgressPill({
                   type="button"
                   onClick={handleEnableCapability}
                   disabled={enablingCapability}
-                  className="shrink-0 rounded bg-amber-600 px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
+                  className="shrink-0 rounded bg-amber-600 px-1.5 py-0.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
                 >
                   {enablingCapability ? "启用中…" : "启用"}
                 </button>

@@ -182,8 +182,13 @@ _PUBLIC_UPDATE_BOILERPLATE_RE = re.compile(
     r"(?:think|work|process|analy[sz]e|execute))[。.!！\s]*$",
     re.IGNORECASE,
 )
+_PUBLIC_UPDATE_CODE_RE = re.compile(
+    r"(?:^|\n)\s*(?:async\s+)?(?:def|class|function|const|let|var|return|raise)\b"
+    r"|(?:^|\n)\s*[@#][A-Za-z_]\w*|[{}]\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
-_PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S = 6.0
+_PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S = 8.0
 _PUBLIC_EVIDENCE_STREAM_GATE_CHARS = 24
 _EXPLICIT_READ_RECOVERY_PATH_RE = re.compile(
     r"(?<![\w./-])(?:\.{0,2}/)?(?:[A-Za-z0-9_@.-]+/)*[A-Za-z0-9_@.-]+\."
@@ -216,7 +221,15 @@ def _safe_public_update(value: str | None) -> str:
         return ""
     if _PUBLIC_UPDATE_BOILERPLATE_RE.fullmatch(cleaned):
         return ""
-    return cleaned[:1200].rstrip()
+    # Public progress is a conversational beat, never a source excerpt. Some
+    # OpenAI-compatible providers echo retrieved context as ordinary text next
+    # to a native tool call; reject that channel instead of truncating code into
+    # the transcript and let the evidence narrator repair the missing beat.
+    if len(cleaned) > 420:
+        return ""
+    if cleaned.count("\n") >= 2 and _PUBLIC_UPDATE_CODE_RE.search(cleaned):
+        return ""
+    return cleaned.rstrip()
 
 
 def _narrow_command_direct_answer(
@@ -467,6 +480,80 @@ def _build_public_evidence_narrative_input(
     return "\n\n".join(part for part in sections if part)
 
 
+def _public_narrative_language_instruction(goal: str) -> str:
+    """Make the narrator follow the user's script, not the provider default."""
+
+    text = str(goal or "")
+    if re.search(r"[\uac00-\ud7af]", text):
+        return " The user's language is Korean; write the update in Korean."
+    if re.search(r"[\u3040-\u30ff]", text):
+        return " The user's language is Japanese; write the update in Japanese."
+    if re.search(r"[\u3400-\u9fff]", text):
+        return " The user's language is Simplified Chinese; write the update in Simplified Chinese."
+    return ""
+
+
+def _observed_read_fallback_update(*, goal: str, step: ReActStep) -> str:
+    """Return a truthful conversational handoff when narration times out.
+
+    The fallback only uses the completed read receipt: target, byte size,
+    truncation state, and the next user-named path. It keeps a long ordered
+    read visibly alive without inventing a source-level conclusion.
+    """
+
+    actions = step.actions or ([step.action] if step.action else [])
+    current_path = ""
+    for action in reversed(actions):
+        parsed = _parse_action(action)
+        if parsed is None:
+            continue
+        name, args = parsed
+        candidate = args.get("path") if isinstance(args, dict) else None
+        if name in {"read_file", "read_file_range"} and isinstance(candidate, str):
+            current_path = candidate.replace("\\", "/").lstrip("./")
+            break
+    if not current_path:
+        return ""
+
+    observation = str(step.observation or "")
+    size_match = re.search(r'"size"\s*:\s*(\d+)', observation)
+    complete = bool(re.search(r'"truncated"\s*:\s*false', observation, re.IGNORECASE))
+    size = int(size_match.group(1)) if size_match else None
+    requested = _explicit_source_paths(goal)
+    normalized = [path.replace("\\", "/").lstrip("./") for path in requested]
+    next_path = ""
+    with contextlib.suppress(ValueError, IndexError):
+        next_path = normalized[normalized.index(current_path) + 1]
+
+    current_label = os.path.basename(current_path)
+    next_label = os.path.basename(next_path) if next_path else ""
+    if re.search(r"[\u3400-\u9fff]", str(goal or "")):
+        if size is not None:
+            fact = (
+                f"已完整取得 {current_label} 的 {size:,} 字节内容"
+                if complete
+                else f"已取得 {current_label} 的 {size:,} 字节可用内容"
+            )
+        else:
+            fact = f"已取得 {current_label} 的实际内容"
+        return (
+            f"{fact}；接下来核对 {next_label}。"
+            if next_label
+            else f"{fact}；所需证据已经齐全，现在收束结论。"
+        )
+
+    fact = (
+        f"I now have all {size:,} bytes of {current_label}"
+        if size is not None and complete
+        else f"I now have the actual contents of {current_label}"
+    )
+    return (
+        f"{fact}; next I’ll check {next_label}."
+        if next_label
+        else f"{fact}; the requested evidence is complete, so I’m wrapping up the conclusion."
+    )
+
+
 def _build_public_action_orientation_input(*, goal: str, step: ReActStep) -> str:
     """Build a privacy-safe scope snapshot for a missing public update.
 
@@ -544,8 +631,17 @@ def _stream_public_evidence_narrative(
             "user-facing result, output exactly SKIP."
         )
     )
+    system_content += _public_narrative_language_instruction(goal)
+    # A public checkpoint is latency-sensitive and tool-free. Prefer another
+    # configured lightweight endpoint when available so a slow primary
+    # reasoning model does not leave the conversation silent between batches.
+    narrator_model = next_custom_model_fallback(
+        model,
+        set(),
+        require_tool_use=False,
+    ) or model
     request = ModelRequest(
-        model=model,
+        model=narrator_model,
         messages=[
             Message(
                 role="system",
@@ -565,7 +661,7 @@ def _stream_public_evidence_narrative(
                 ),
             ),
         ],
-        max_tokens=512,
+        max_tokens=192,
         temperature=0.35,
         enable_thinking=False,
         reasoning_effort="low",
@@ -1962,8 +2058,12 @@ def stream_react_loop(
         and _explicit_source_paths(_native_goal)
         and not _browser_operation_requested(intent.user_context)
     )
+    _ordered_result_handoffs = bool(
+        len(_explicit_source_paths(_native_goal)) > 1
+        and _explicit_observed_read_sequence(_native_goal)
+    )
     _native_observed_read_sequence = bool(
-        _strict_explicit_reads and _explicit_observed_read_sequence(_native_goal)
+        _strict_explicit_reads and _ordered_result_handoffs
     )
     _native_tool_specs = (
         build_loop_tool_specs(
@@ -2083,10 +2183,11 @@ def stream_react_loop(
             "filler, or claim that work is already complete. In native tool mode, emit "
             "the sentence as normal text immediately before the first tool calls. In "
             "addition, whenever a native tool schema contains a public_update field, "
-            "fill it on every tool round; after the first round, briefly state the new "
-            "concrete fact established by the preceding result and what the next action "
-            "will clarify. Merely announcing the next files without a preceding evidence "
-            "fact is not a valid update. Do not repeat the previous sentence. The runtime displays each "
+            "fill it on the first tool round. On later rounds the schema instead provides "
+            "confirmed_fact and next_action: fill both separately from the preceding "
+            "evidence and the immediate next scope. Merely announcing the next files "
+            "without a preceding evidence fact is not a valid update. Do not repeat the "
+            "previous sentence. The runtime displays each "
             "update once and removes it before tool execution. In "
             "the text protocol, put it in Update: immediately before the first Action:. "
             "Skip it when answering directly without tools.\n"
@@ -3253,6 +3354,7 @@ def stream_react_loop(
     consecutive_format_violations = 0
     consecutive_llm_errors = 0
     _last_public_update_key = ""
+    _result_handoff_ready = False
     _realtime_public_narrative = bool(intent.user_context.get("realtime_public_narrative"))
     _realtime_public_orientation = _realtime_public_orientation_requested
     _quiet_evidence_steps: list[ReActStep] = []
@@ -3933,6 +4035,7 @@ def stream_react_loop(
                 text=resp.text or "",
                 thinking=getattr(resp, "thinking", "") or "",
                 iteration=i + 1,
+                evidence_round=_request_has_tool_evidence,
             )
             maybe_final = None
             _missing_native_args = _native_tool_calls_missing_required_args(resp.tool_calls)
@@ -4497,11 +4600,22 @@ def stream_react_loop(
         # De-duplicate retries that repeat the same checkpoint verbatim.
         step.public_update = _safe_public_update(step.public_update)
         _checkpoint_actions = step.actions or [step.action]
+        _prior_result_handoff = bool(
+            _ordered_result_handoffs
+            and _result_handoff_ready
+            and tool_action_requested
+        )
+        if _prior_result_handoff:
+            # The evidence narrator already gave the user the preceding fact
+            # and next decision. Do not repeat a stochastic model paraphrase
+            # immediately before the next tool row.
+            step.public_update = ""
         if (
             not step.public_update
             and tool_action_requested
             and maybe_final is None
             and _realtime_public_orientation
+            and not _prior_result_handoff
         ):
             try:
                 _repaired_public_update = yield from _stream_public_evidence_narrative(
@@ -4539,6 +4653,7 @@ def stream_react_loop(
             _last_public_update_key = _public_update_key
 
         if tool_action_requested:
+            _result_handoff_ready = False
             observation = None
             step.observation = ""
             maybe_final = None
@@ -5044,6 +5159,23 @@ def stream_react_loop(
                 succeeded=tool_ok,
             )
         )
+        _observed_result_checkpoint = bool(
+            _ordered_result_handoffs
+            and tool_action_requested
+            and observation
+            and (
+                tool_ok
+                or str(observation).lstrip().startswith(
+                    "(real tool execution succeeded)"
+                )
+                or not re.search(
+                    r"(?:tool execution failed|file not found|no such file|"
+                    r"does not exist|permission denied|读取失败|未找到|不存在)",
+                    str(observation),
+                    re.IGNORECASE,
+                )
+            )
+        )
         if tool_action_requested and _should_accumulate_quiet_evidence(
             step,
             succeeded=tool_ok,
@@ -5055,12 +5187,39 @@ def stream_react_loop(
             _quiet_evidence_steps = _quiet_evidence_steps[-4:]
         _quiet_evidence_due = _quiet_evidence_checkpoint_due(_quiet_evidence_steps)
         _model_result_update = ""
+        if _observed_result_checkpoint and maybe_final is None:
+            # Ordered read tasks need a guaranteed conversational beat between
+            # batches. A second model call can be slow, return SKIP, or finish
+            # after the next action is already visible. Publish the completed
+            # read receipt immediately; it is factual, privacy-safe, and gives
+            # the user a stable fact -> next action rhythm.
+            _model_result_update = _safe_public_update(
+                _observed_read_fallback_update(
+                    goal=intent.normalized_goal,
+                    step=step,
+                )
+            )
+            if _model_result_update:
+                yield {
+                    "type": "commentary_delta",
+                    "delta": _model_result_update,
+                    "progress_source": "runtime",
+                    "public_evidence": True,
+                    "start_new_segment": True,
+                    "iteration": i + 1,
+                }
         if (
-            _realtime_public_narrative
+            (_realtime_public_narrative or _ordered_result_handoffs)
             and maybe_final is None
-            and (not _model_supplied_update or _quiet_evidence_due)
+            and not _model_result_update
+            and (
+                not _model_supplied_update
+                or _quiet_evidence_due
+                or _observed_result_checkpoint
+            )
             and (
                 _meaningful_result_checkpoint
+                or _observed_result_checkpoint
                 or _quiet_evidence_due
                 or (
                     _evidence_convergence_became_active
@@ -5090,14 +5249,16 @@ def stream_react_loop(
             except Exception as exc:  # noqa: BLE001 — optional public narration
                 _logger.warning("public evidence narration failed: %s", exc)
                 _model_result_update = ""
-            if _quiet_evidence_due:
-                # Whether the narrator spoke or returned SKIP, this evidence
-                # window has been considered. Start a fresh window so long
-                # read-only tasks get bounded beats rather than one per file.
-                _quiet_evidence_steps = []
-            _model_result_update_key = re.sub(r"\s+", " ", _model_result_update).strip().casefold()
-            if _model_result_update and _model_result_update_key != _last_public_update_key:
-                _last_public_update_key = _model_result_update_key
+        if _quiet_evidence_due:
+            # Whether the narrator spoke or the deterministic read receipt was
+            # used, this evidence window has been considered. Start a fresh
+            # window so long read-only tasks get bounded conversational beats.
+            _quiet_evidence_steps = []
+        _model_result_update_key = re.sub(r"\s+", " ", _model_result_update).strip().casefold()
+        if _model_result_update and _model_result_update_key != _last_public_update_key:
+            _last_public_update_key = _model_result_update_key
+            if _ordered_result_handoffs:
+                _result_handoff_ready = True
 
         if _is_code_mode and observation and _current_phase in ("execute", "verify"):
             _write_tools = frozenset(

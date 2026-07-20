@@ -102,7 +102,7 @@ export function ChannelPairingsSheet({
           <DialogTitle className="text-base">
             {displayName} · {t.channelPairings.pairingDetails}
           </DialogTitle>
-          <DialogDescription className="text-[12px]">
+          <DialogDescription className="text-xs">
             {t.channelPairings.autoRegisterDesc}
             {t.channelPairings.metadataDesc}
           </DialogDescription>
@@ -123,21 +123,21 @@ export function ChannelPairingsSheet({
         {data && !loading && !error && (
           <Tabs defaultValue="users" className="flex-1 flex flex-col mt-2">
             <TabsList className="w-full grid grid-cols-3 h-9">
-              <TabsTrigger value="users" className="text-[12px] gap-1.5">
+              <TabsTrigger value="users" className="text-xs gap-1.5">
                 <UserIcon className="size-3.5" />
                 {t.channelPairings.users}
                 <span className="text-muted-foreground tabular-nums">
                   {users.length}
                 </span>
               </TabsTrigger>
-              <TabsTrigger value="groups" className="text-[12px] gap-1.5">
+              <TabsTrigger value="groups" className="text-xs gap-1.5">
                 <UsersIcon className="size-3.5" />
                 {t.channelPairings.groups}
                 <span className="text-muted-foreground tabular-nums">
                   {groups.length}
                 </span>
               </TabsTrigger>
-              <TabsTrigger value="pending" className="text-[12px] gap-1.5">
+              <TabsTrigger value="pending" className="text-xs gap-1.5">
                 <InboxIcon className="size-3.5" />
                 {t.channelPairings.pending}
                 <span className="text-muted-foreground tabular-nums">
@@ -173,7 +173,7 @@ export function ChannelPairingsSheet({
                   {pending.map((p, i) => (
                     <li
                       key={i}
-                      className="rounded-md border border-border-subtle bg-muted/30 px-3 py-2 text-[11px] font-mono break-all"
+                      className="rounded-md border border-border-subtle bg-muted/30 px-3 py-2 text-xs font-mono break-all"
                     >
                       {JSON.stringify(p)}
                     </li>
@@ -209,10 +209,10 @@ function IdList({ ids, emptyHint }: { ids: string[]; emptyHint: string }) {
             "bg-muted/30 px-2 py-1.5 hover:border-border-strong transition-colors",
           )}
         >
-          <div className="flex size-6 items-center justify-center rounded-md bg-muted text-[10px] font-medium text-muted-foreground">
+          <div className="flex size-6 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
             {id.charAt(0).toUpperCase()}
           </div>
-          <span className="flex-1 font-mono text-[11px] truncate">{id}</span>
+          <span className="flex-1 font-mono text-xs truncate">{id}</span>
           <button
             type="button"
             onClick={() => {

@@ -41,7 +41,7 @@ export function RateLimitBar({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "text-muted-foreground flex items-center justify-between border-t px-3 py-1 text-[10px]",
+        "text-muted-foreground flex items-center justify-between border-t px-3 py-1 text-xs",
         className,
       )}
     >

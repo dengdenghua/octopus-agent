@@ -136,7 +136,7 @@ export function UserMenu() {
               <span className="truncate">{accountName}</span>
               {remaining !== undefined && (
                 <span
-                  className="ml-auto inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                  className="ml-auto inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300"
                   title={t.credits.remaining(remaining)}
                 >
                   <Coins className="size-3" />
@@ -177,7 +177,7 @@ export function UserMenu() {
                       type="button"
                       onClick={handleRefresh}
                       disabled={refresh.isPending}
-                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
                     >
                       <RefreshCw
                         className={
@@ -194,7 +194,7 @@ export function UserMenu() {
                       {formatCredits(remaining, t)}
                     </span>
                     {remaining !== undefined && remaining >= 1000 && (
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {remaining.toLocaleString()}
                       </span>
                     )}
@@ -207,7 +207,7 @@ export function UserMenu() {
                           .map(([type, v]) => (
                             <div
                               key={type}
-                              className="flex items-center justify-between text-[11px]"
+                              className="flex items-center justify-between text-xs"
                             >
                               <span className="capitalize text-muted-foreground">
                                 {type}
@@ -223,7 +223,7 @@ export function UserMenu() {
                           ))}
                         {expired > 0 && (
                           <div
-                            className="mt-1 flex items-center justify-between border-t border-border-subtle pt-1 text-[11px] text-muted-foreground"
+                            className="mt-1 flex items-center justify-between border-t border-border-subtle pt-1 text-xs text-muted-foreground"
                             title={t.accountSettings.expiredTooltip}
                           >
                             <span>{t.accountSettings.expired}</span>

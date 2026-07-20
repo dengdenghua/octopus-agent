@@ -261,7 +261,7 @@ function StatusBadge({ status }: { status: RunReview["status"] }) {
     <Badge
       variant="outline"
       className={cn(
-        "text-[10px]",
+        "text-xs",
         status === "running" && "border-blue-500/30 text-blue-600",
         status === "error" && "border-red-500/30 text-red-600",
         status === "done" && "border-emerald-500/30 text-emerald-600",
@@ -290,7 +290,7 @@ function SummaryTile({
 }) {
   return (
     <div className="rounded-lg border border-border-default bg-muted/20 p-3">
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
         <Icon className="size-3.5" />
         {label}
       </div>
@@ -348,7 +348,7 @@ export function RunReviewPanel() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
                 <span
                   className={cn(
                     "size-2 rounded-full",
@@ -437,7 +437,7 @@ export function RunReviewPanel() {
                         {run.id}
                       </span>
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
                         <ClockIcon className="size-3" />
                         {formatTime(run.startedAt)} ·{" "}
@@ -455,15 +455,15 @@ export function RunReviewPanel() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-xs">
                       <WrenchIcon className="mr-1 size-3" />
                       {run.toolCount}
                     </Badge>
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-xs">
                       <ShieldCheckIcon className="mr-1 size-3" />
                       {run.approvalCount}
                     </Badge>
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-xs">
                       <FileTextIcon className="mr-1 size-3" />
                       {run.fileCount}
                     </Badge>
@@ -473,7 +473,7 @@ export function RunReviewPanel() {
               <CardContent className="space-y-3 px-4">
                 {run.tools.length > 0 && (
                   <div>
-                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       {t.observabilityPage.runReviewToolSummary}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -481,7 +481,7 @@ export function RunReviewPanel() {
                         <Badge
                           key={tool.name}
                           variant="outline"
-                          className="font-mono text-[10px]"
+                          className="font-mono text-xs"
                         >
                           {tool.name} · {tool.count}
                         </Badge>
@@ -492,14 +492,14 @@ export function RunReviewPanel() {
 
                 {run.files.length > 0 && (
                   <div>
-                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       {t.observabilityPage.runReviewFiles}
                     </div>
                     <div className="grid gap-1 md:grid-cols-2">
                       {run.files.map((file) => (
                         <div
                           key={file}
-                          className="truncate rounded-md border border-border-default bg-muted/20 px-2 py-1 font-mono text-[11px]"
+                          className="truncate rounded-md border border-border-default bg-muted/20 px-2 py-1 font-mono text-xs"
                           title={file}
                         >
                           {file}
@@ -511,7 +511,7 @@ export function RunReviewPanel() {
 
                 {run.risks.length > 0 && (
                   <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2">
-                    <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                    <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
                       <AlertTriangleIcon className="size-3" />
                       {t.observabilityPage.runReviewLearningSignals}
                     </div>
@@ -520,7 +520,7 @@ export function RunReviewPanel() {
                         <Badge
                           key={risk}
                           variant="outline"
-                          className="border-amber-500/30 text-[10px] text-amber-700 dark:text-amber-300"
+                          className="border-amber-500/30 text-xs text-amber-700 dark:text-amber-300"
                         >
                           {risk}
                         </Badge>

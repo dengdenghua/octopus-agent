@@ -100,6 +100,39 @@ describe("<ModelPicker />", () => {
     expect(screen.getByTestId("model-picker-tab-official")).toBeInTheDocument();
   });
 
+  it("shows separate 256K and 1M rows for the same upstream model", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      withRouter(
+        <ModelPicker
+          models={[
+            {
+              name: "deepseek-v4-pro",
+              model: "deepseek-v4-pro",
+              display_name: "DeepSeek V4 Pro",
+              context_profile: "default",
+            },
+            {
+              name: "deepseek-v4-pro::1m",
+              model: "deepseek-v4-pro",
+              display_name: "DeepSeek V4 Pro",
+              context_profile: "1m",
+            },
+          ]}
+          value="deepseek-v4-pro"
+          onChange={onChange}
+        />,
+      ),
+    );
+
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    expect(screen.getByText("256K")).toBeInTheDocument();
+    expect(screen.getByText("1M")).toBeInTheDocument();
+    await user.click(screen.getByText("1M"));
+    expect(onChange).toHaveBeenCalledWith("deepseek-v4-pro::1m");
+  });
+
   it("keeps reasoning effort inside the model dropdown", async () => {
     const user = userEvent.setup();
     const onReasoningEffortChange = vi.fn();

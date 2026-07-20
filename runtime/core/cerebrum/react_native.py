@@ -230,6 +230,7 @@ def step_from_tool_calls(
     text: str = "",
     thinking: str = "",
     iteration: int = 0,
+    evidence_round: bool = False,
 ) -> ReActStep:
     """Synthesise a ``ReActStep`` from native ``tool_calls``.
 
@@ -278,9 +279,15 @@ def step_from_tool_calls(
         thought=thought,
         public_update=(
             structured_evidence_update
-            or (text or "").strip()
-            or structured_public_update
-            or tagged_public_update
+            or (
+                ""
+                if evidence_round
+                else (
+                    structured_public_update
+                    or tagged_public_update
+                    or (text or "").strip()
+                )
+            )
         ),
         action="; ".join(actions),
         observation="",

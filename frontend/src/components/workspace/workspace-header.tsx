@@ -112,7 +112,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
               <SidebarMenuButton
                 isActive={pathname?.endsWith("/new")}
                 asChild
-                className="py-1.5 text-[13px] transition-all hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium text-muted-foreground"
+                className="py-1.5 text-sm transition-all hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium text-muted-foreground"
               >
                 <Link
                   className="flex h-full items-center gap-2"

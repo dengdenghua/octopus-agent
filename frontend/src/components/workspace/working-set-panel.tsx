@@ -96,7 +96,7 @@ function FileItem({ file }: { file: WorkingSetFile }) {
         {shortPath}
       </span>
       {file.tokens_estimated > 0 && (
-        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/50 tabular-nums">
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground/50 tabular-nums">
           ~
           {file.tokens_estimated > 1000
             ? `${Math.round(file.tokens_estimated / 1000)}k`
@@ -172,7 +172,7 @@ function ThinkingPlanMini({ plan }: { plan: ThinkingPlanSnapshot }) {
             Thinking progress
           </span>
         </div>
-        <span className="shrink-0 text-[10px] text-muted-foreground/60 tabular-nums">
+        <span className="shrink-0 text-xs text-muted-foreground/60 tabular-nums">
           {completed}/{steps.length}
         </span>
       </div>
@@ -191,14 +191,14 @@ function ThinkingPlanMini({ plan }: { plan: ThinkingPlanSnapshot }) {
       </div>
       {currentStep && (
         <div className="mt-2 rounded-md bg-muted/40 px-2 py-1.5">
-          <div className="text-[10px] font-medium uppercase text-muted-foreground/55">
+          <div className="text-xs font-medium uppercase text-muted-foreground/55">
             Current
           </div>
           <div className="mt-0.5 truncate text-xs" title={currentStep.title}>
             {currentStep.title}
           </div>
           {currentStep.detail && (
-            <div className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground/65">
+            <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground/65">
               {currentStep.detail}
             </div>
           )}
@@ -208,7 +208,7 @@ function ThinkingPlanMini({ plan }: { plan: ThinkingPlanSnapshot }) {
         {steps.map((step, index) => (
           <li
             key={`${step.title}-${index}`}
-            className="flex min-w-0 gap-1.5 text-[11px]"
+            className="flex min-w-0 gap-1.5 text-xs"
           >
             <ThinkingStepIcon status={step.status} />
             <span
@@ -266,7 +266,7 @@ export function WorkingSetPanel({
 
       {progressSummary && (
         <div className="border-b border-border-default px-3 py-1.5">
-          <p className="text-[11px] text-muted-foreground/70 line-clamp-2">
+          <p className="text-xs text-muted-foreground/70 line-clamp-2">
             {progressSummary}
           </p>
         </div>
@@ -284,7 +284,7 @@ export function WorkingSetPanel({
           <div className="space-y-3">
             {editingFiles.length > 0 && (
               <div>
-                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-violet-600/70 dark:text-violet-400/70">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-violet-600/70 dark:text-violet-400/70">
                   <PencilIcon className="size-2.5" />
                   <span>{t.workingSet?.editing}</span>
                   <span className="text-muted-foreground/40">
@@ -300,7 +300,7 @@ export function WorkingSetPanel({
             )}
             {readingFiles.length > 0 && (
               <div>
-                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/50">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/50">
                   <EyeIcon className="size-2.5" />
                   <span>{t.workingSet?.reading}</span>
                   <span className="text-muted-foreground/40">
@@ -320,7 +320,7 @@ export function WorkingSetPanel({
 
       {files.length > 0 && (
         <div className="border-t border-border-default px-3 py-1.5">
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground/50">
+          <div className="flex items-center justify-between text-xs text-muted-foreground/50">
             <span>
               {editingFiles.length} {t.workingSet?.editing} ·{" "}
               {readingFiles.length} {t.workingSet?.reading}

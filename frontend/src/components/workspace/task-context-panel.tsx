@@ -144,7 +144,7 @@ export function TaskContextPanel({
                       : "bg-blue-400 animate-pulse",
                 )}
               />
-              <span className="text-[10px] font-mono text-muted-foreground truncate">
+              <span className="text-xs font-mono text-muted-foreground truncate">
                 {c.command}
               </span>
             </div>
@@ -168,7 +168,7 @@ function Section({
     <div className="mb-2 last:mb-0">
       <div className="flex items-center gap-1.5 mb-1">
         {icon}
-        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           {label}
         </span>
       </div>
@@ -183,9 +183,9 @@ function FileRow({ path }: { path: string }) {
   return (
     <div className="flex items-center gap-1.5 py-0.5">
       <FolderOpenIcon className="size-2.5 text-muted-foreground/50 shrink-0" />
-      <span className="text-[10px] font-medium truncate">{name}</span>
+      <span className="text-xs font-medium truncate">{name}</span>
       {dir && (
-        <span className="text-[9px] text-muted-foreground/50 truncate">
+        <span className="text-xs text-muted-foreground/50 truncate">
           {dir}
         </span>
       )}

@@ -26,7 +26,7 @@ function Stat({
 }) {
   return (
     <span
-      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground"
       title={label}
     >
       <Icon className="size-3.5" aria-hidden="true" />
@@ -61,7 +61,7 @@ export function CollaborationSessionView({
     >
       <div className="flex min-w-0 items-center gap-2">
         <span
-          className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground"
+          className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs font-medium text-foreground"
           title={modeMeta.description}
         >
           <ModeIcon className="size-3.5" aria-hidden="true" />
@@ -87,7 +87,7 @@ export function CollaborationSessionView({
           data-testid="collab-session-room"
         >
           <span
-            className="inline-flex items-center gap-1 truncate text-[11px] text-muted-foreground"
+            className="inline-flex items-center gap-1 truncate text-xs text-muted-foreground"
             title={`${t.coworkCollab.linkedRoom}: ${session.room_id}`}
           >
             <LinkIcon className="size-3.5 shrink-0" aria-hidden="true" />

@@ -190,7 +190,7 @@ export default function EvolutionSettingsPage() {
                 <Badge
                   key={k}
                   variant="outline"
-                  className="text-[10px] font-mono"
+                  className="text-xs font-mono"
                 >
                   {k}={String(v)}
                 </Badge>
@@ -227,14 +227,14 @@ export default function EvolutionSettingsPage() {
                     <div className="flex items-center gap-2">
                       <Badge
                         variant="outline"
-                        className={`text-[10px] ${SEVERITY_COLOR[r.severity] || ""}`}
+                        className={`text-xs ${SEVERITY_COLOR[r.severity] || ""}`}
                       >
                         {r.severity}
                       </Badge>
-                      <span className="text-[10px] font-mono text-muted-foreground">
+                      <span className="text-xs font-mono text-muted-foreground">
                         {r.sucker_id}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         × {r.hit_count}
                       </span>
                     </div>
@@ -298,7 +298,7 @@ export default function EvolutionSettingsPage() {
                       {fixed(s.avg_step_count, 1)}
                     </td>
                     <td className="px-2 py-1.5">
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-xs">
                         {s.verdict}
                       </Badge>
                     </td>
@@ -322,7 +322,7 @@ export default function EvolutionSettingsPage() {
         <div className="flex items-center gap-2 text-sm font-medium">
           <ActivityIcon className="h-4 w-4" />
           {e.gepaTitle}
-          <Badge variant="outline" className="ml-2 text-[10px]">
+          <Badge variant="outline" className="ml-2 text-xs">
             {gepa?.auto_apply ? e.gepaAutoApplyBadge : e.gepaDryRunBadge}
           </Badge>
         </div>
@@ -339,7 +339,7 @@ export default function EvolutionSettingsPage() {
                   className="rounded-md border border-border-subtle bg-card/20 p-2 text-xs"
                 >
                   <div className="font-mono">{r.recipe_id}</div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     {r.skipped
                       ? `${e.gepaSkippedPrefix} ${r.reason}`
                       : (r.rationale ?? "ok")}
@@ -348,7 +348,7 @@ export default function EvolutionSettingsPage() {
               ))}
             </div>
             {!gepa.auto_apply && (
-              <div className="mt-3 rounded-md border border-amber-300/60 bg-amber-50/60 p-2.5 text-[11px] dark:border-amber-700/40 dark:bg-amber-950/30">
+              <div className="mt-3 rounded-md border border-amber-300/60 bg-amber-50/60 p-2.5 text-xs dark:border-amber-700/40 dark:bg-amber-950/30">
                 {e.gepaDryRunHint}
               </div>
             )}
@@ -369,8 +369,8 @@ export default function EvolutionSettingsPage() {
             variant="outline"
             className={
               camouflage?.enabled
-                ? "ml-2 text-[10px] border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
-                : "ml-2 text-[10px] text-muted-foreground"
+                ? "ml-2 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+                : "ml-2 text-xs text-muted-foreground"
             }
           >
             {camouflage?.enabled
@@ -382,10 +382,10 @@ export default function EvolutionSettingsPage() {
           {e.camouflageDescription}
         </p>
         {!camouflage?.enabled ? (
-          <div className="mt-3 rounded-md border border-amber-300/60 bg-amber-50/60 p-2.5 text-[11px] dark:border-amber-700/40 dark:bg-amber-950/30">
+          <div className="mt-3 rounded-md border border-amber-300/60 bg-amber-50/60 p-2.5 text-xs dark:border-amber-700/40 dark:bg-amber-950/30">
             {e.camouflageDisabledHint}
             {camouflage?.last_error ? (
-              <div className="mt-1 font-mono text-[10px] opacity-70">
+              <div className="mt-1 font-mono text-xs opacity-70">
                 {camouflage.last_error}
               </div>
             ) : null}
@@ -427,7 +427,7 @@ export default function EvolutionSettingsPage() {
               </div>
             </div>
             {camouflage.auto_retire?.last_step_at ? (
-              <div className="mt-2 text-[11px] text-muted-foreground">
+              <div className="mt-2 text-xs text-muted-foreground">
                 {e.camouflageLastStepLabel}{" "}
                 {formatTs(camouflage.auto_retire.last_step_at)}
                 {camouflage.auto_retire.last_step_summary
@@ -455,18 +455,18 @@ export default function EvolutionSettingsPage() {
                       className="flex items-center gap-2 rounded-md border border-border-subtle bg-card/20 px-2 py-1.5 text-xs"
                     >
                       <span className="font-mono">{v.name}</span>
-                      <Badge variant="outline" className="gap-1 text-[10px]">
+                      <Badge variant="outline" className="gap-1 text-xs">
                         {OriginIcon ? (
                           <OriginIcon className="h-3 w-3" aria-hidden />
                         ) : null}
                         {originLabel}
                       </Badge>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         gen={v.generation} · w={fixed(v.weight, 2)} ·{" "}
                         {v.suffix_chars}ch
                       </span>
                       {v.parents.length > 0 ? (
-                        <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+                        <span className="ml-auto font-mono text-xs text-muted-foreground">
                           ← {v.parents.join(", ")}
                         </span>
                       ) : null}

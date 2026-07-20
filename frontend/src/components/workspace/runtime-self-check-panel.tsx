@@ -625,7 +625,7 @@ function SurfaceRow({
       <td className="py-2 pr-3 align-top">
         <div className="font-medium">{title}</div>
         {surface?.schema && (
-          <code className="text-muted-foreground text-[11px]">
+          <code className="text-muted-foreground text-xs">
             {surface.schema}
           </code>
         )}
@@ -649,7 +649,7 @@ function SurfaceRow({
               <Badge
                 key={name}
                 variant="outline"
-                className="font-mono text-[11px]"
+                className="font-mono text-xs"
               >
                 {name}
               </Badge>
@@ -663,7 +663,7 @@ function SurfaceRow({
         {missing.length > 0 ? (
           <div className="flex max-w-[24rem] flex-col gap-1">
             {missing.slice(0, 5).map((item) => (
-              <code key={item} className="break-words text-[11px]">
+              <code key={item} className="break-words text-xs">
                 {item}
               </code>
             ))}

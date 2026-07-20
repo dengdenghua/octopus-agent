@@ -228,7 +228,7 @@ export function ExecutionChecklistPanel({
           <ListChecksIcon className="size-3.5 text-violet-500" />
           {t.executionChecklist.title}
         </div>
-        <div className="text-[11px] tabular-nums text-muted-foreground">
+        <div className="text-xs tabular-nums text-muted-foreground">
           {completed}/{steps.length}
         </div>
       </div>
@@ -250,7 +250,7 @@ export function ExecutionChecklistPanel({
                 {step.label}
               </div>
               {step.detail && (
-                <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground/80">
+                <div className="mt-0.5 text-xs leading-4 text-muted-foreground/80">
                   {step.detail}
                 </div>
               )}

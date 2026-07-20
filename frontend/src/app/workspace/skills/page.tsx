@@ -345,14 +345,14 @@ function SkillCard({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
-          <div className="truncate text-[13px] font-medium">{skill.name}</div>
+          <div className="truncate text-sm font-medium">{skill.name}</div>
           {tested && (
             <span title={t.skillsPage.testedDotTitle}>
               <CheckCircle2Icon className="size-3.5 shrink-0 text-emerald-500" />
             </span>
           )}
           {(skill.market_visibility ?? "market") !== "market" && (
-            <span className="rounded border border-border-default bg-muted/35 px-1 py-0.5 text-[10px] leading-none text-muted-foreground">
+            <span className="rounded border border-border-default bg-muted/35 px-1 py-0.5 text-xs leading-none text-muted-foreground">
               {skill.market_visibility === "duplicate"
                 ? "重复"
                 : skill.market_visibility === "provider"
@@ -363,7 +363,7 @@ function SkillCard({
             </span>
           )}
         </div>
-        <div className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
+        <div className="mt-0.5 line-clamp-1 text-xs leading-snug text-muted-foreground">
           {skill.description || t.skillsPage.noDescription}
         </div>
         {(skill.affinity || []).length > 0 && (
@@ -371,7 +371,7 @@ function SkillCard({
             {(skill.affinity || []).slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="max-w-28 truncate rounded border border-border-default bg-muted/35 px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground"
+                className="max-w-28 truncate rounded border border-border-default bg-muted/35 px-1.5 py-0.5 text-xs leading-none text-muted-foreground"
               >
                 {tag}
               </span>
@@ -427,10 +427,10 @@ export default function SkillsPage() {
                 </div>
                 <h1 className="text-lg font-bold">{t.skillsPage.pageTitle}</h1>
               </div>
-              <p className="mt-1 text-[12px] text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {t.skillsPage.pageSubtitle}
               </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground/80">
+              <p className="mt-0.5 text-xs text-muted-foreground/80">
                 {t.skillsPage.disclaimer}
               </p>
             </div>

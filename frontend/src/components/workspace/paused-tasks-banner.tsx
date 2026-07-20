@@ -196,16 +196,16 @@ export function PausedTasksBanner({ className }: Props) {
             <div className="flex items-center gap-2 text-sm font-medium">
               {b.executing}
               {t.max_iterations > 0 && (
-                <span className="rounded-md border border-border-default bg-background/60 px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
+                <span className="rounded-md border border-border-default bg-background/60 px-1.5 py-0.5 text-xs font-mono font-normal text-muted-foreground">
                   {t.current_iteration}/{t.max_iterations}
                 </span>
               )}
-              <span className="rounded-md border border-border-default bg-background/60 px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
+              <span className="rounded-md border border-border-default bg-background/60 px-1.5 py-0.5 text-xs font-mono font-normal text-muted-foreground">
                 {t.task_id.slice(0, 10)}
               </span>
             </div>
             {(t.max_tokens > 0 || t.max_usd > 0) && (
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                 {t.max_tokens > 0 && (
                   <span>
                     {b.tokensLabel}{" "}
@@ -232,7 +232,7 @@ export function PausedTasksBanner({ className }: Props) {
               </div>
             )}
             {t.thread_id && (
-              <div className="mt-0.5 text-[10px] text-muted-foreground font-mono truncate">
+              <div className="mt-0.5 text-xs text-muted-foreground font-mono truncate">
                 {b.threadLabel} {t.thread_id.slice(0, 16)}…
               </div>
             )}
@@ -240,7 +240,7 @@ export function PausedTasksBanner({ className }: Props) {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 gap-1 text-[12px]"
+                className="h-7 gap-1 text-xs"
                 onClick={() =>
                   handlePauseActive(t.task_id, t.thread_id, t.agent_id)
                 }
@@ -252,7 +252,7 @@ export function PausedTasksBanner({ className }: Props) {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 gap-1 text-[12px] text-muted-foreground"
+                className="h-7 gap-1 text-xs text-muted-foreground"
                 onClick={() => remove.mutate({ taskId: t.task_id })}
                 disabled={remove.isPending}
               >
@@ -273,7 +273,7 @@ export function PausedTasksBanner({ className }: Props) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-sm font-medium">
               {req.confirmed ? b.paused : b.pendingPause}
-              <span className="rounded-md border border-border-default bg-background/60 px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
+              <span className="rounded-md border border-border-default bg-background/60 px-1.5 py-0.5 text-xs font-mono font-normal text-muted-foreground">
                 {req.task_id.slice(0, 10)}
               </span>
             </div>
@@ -282,14 +282,14 @@ export function PausedTasksBanner({ className }: Props) {
               {req.note ? ` · ${req.note}` : ""}
             </div>
             {req.thread_id ? (
-              <div className="mt-0.5 text-[10px] text-muted-foreground font-mono truncate">
+              <div className="mt-0.5 text-xs text-muted-foreground font-mono truncate">
                 {b.threadLabel} {req.thread_id.slice(0, 16)}…
               </div>
             ) : null}
             <div className="mt-2 flex gap-2">
               <Button
                 size="sm"
-                className="h-7 gap-1 text-[12px]"
+                className="h-7 gap-1 text-xs"
                 onClick={() =>
                   req.reason === "budget_near_limit"
                     ? setBudgetDialogTaskId(req.task_id)
@@ -303,7 +303,7 @@ export function PausedTasksBanner({ className }: Props) {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 gap-1 text-[12px] text-muted-foreground"
+                className="h-7 gap-1 text-xs text-muted-foreground"
                 onClick={() => handleClear(req.task_id)}
                 disabled={remove.isPending}
                 title={b.clearTitle}
@@ -329,7 +329,7 @@ export function PausedTasksBanner({ className }: Props) {
           {budgetDialogTask ? (
             <div className="space-y-3">
               <div className="rounded-md border border-border-default bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
-                <div className="font-mono text-[11px]">
+                <div className="font-mono text-xs">
                   {budgetDialogTask.task_id.slice(0, 10)}
                 </div>
                 {budgetDialogTask.note ? (

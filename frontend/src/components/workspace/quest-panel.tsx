@@ -421,13 +421,13 @@ function PlanReview({
         <h4 className="text-sm font-semibold">{t.questMode.executionPlan}</h4>
         <span
           className={cn(
-            "rounded-lg px-2 py-0.5 text-[10px] font-medium",
+            "rounded-lg px-2 py-0.5 text-xs font-medium",
             plan.total_estimated_complexity === "small" &&
               "bg-emerald-500/10 text-emerald-600",
             plan.total_estimated_complexity === "medium" &&
               "bg-amber-500/10 text-amber-600",
             plan.total_estimated_complexity === "large" &&
-              "bg-red-500/10 text-red-600",
+              "bg-destructive/10 text-destructive",
           )}
         >
           {plan.total_estimated_complexity} complexity
@@ -462,13 +462,13 @@ function PlanReview({
                 <span className="flex-1 font-medium">{step.title}</span>
                 <span
                   className={cn(
-                    "rounded px-1.5 py-0.5 text-[10px]",
+                    "rounded px-1.5 py-0.5 text-xs",
                     step.estimated_complexity === "low" &&
                       "bg-emerald-500/10 text-emerald-600",
                     step.estimated_complexity === "medium" &&
                       "bg-amber-500/10 text-amber-600",
                     step.estimated_complexity === "high" &&
-                      "bg-red-500/10 text-red-600",
+                      "bg-destructive/10 text-destructive",
                   )}
                 >
                   {step.estimated_complexity}
@@ -480,7 +480,7 @@ function PlanReview({
                     {step.description}
                   </p>
                   {step.tool_hint && (
-                    <p className="text-muted-foreground mt-1 font-mono text-[10px]">
+                    <p className="text-muted-foreground mt-1 font-mono text-xs">
                       Tool: {step.tool_hint}
                     </p>
                   )}
@@ -576,7 +576,7 @@ function ExecutionProgress({
               ) : isComplete ? (
                 <CheckCircle2Icon className="mt-0.5 size-3.5 text-emerald-500" />
               ) : isFailed ? (
-                <XCircleIcon className="mt-0.5 size-3.5 text-red-500" />
+                <XCircleIcon className="mt-0.5 size-3.5 text-destructive" />
               ) : (
                 <div className="mt-0.5 size-3.5 rounded-lg border border-muted-foreground/30" />
               )}
@@ -592,7 +592,7 @@ function ExecutionProgress({
                   </span>
                   {result?.duration_ms !== undefined &&
                     result.duration_ms > 0 && (
-                      <span className="text-muted-foreground shrink-0 text-[10px]">
+                      <span className="text-muted-foreground shrink-0 text-xs">
                         {result.duration_ms < 1000
                           ? `${result.duration_ms}ms`
                           : `${(result.duration_ms / 1000).toFixed(1)}s`}
@@ -605,7 +605,7 @@ function ExecutionProgress({
                   </p>
                 )}
                 {result?.error && (
-                  <p className="mt-0.5 truncate text-red-500">{result.error}</p>
+                  <p className="mt-0.5 truncate text-destructive">{result.error}</p>
                 )}
               </div>
             </div>
@@ -640,7 +640,7 @@ function VerificationResults({
             : t.questMode.verificationIssues}
         </h4>
         {verification.fix_attempts > 0 && (
-          <span className="text-muted-foreground text-[10px]">
+          <span className="text-muted-foreground text-xs">
             (fix cycle {verification.fix_attempts})
           </span>
         )}
@@ -652,7 +652,7 @@ function VerificationResults({
             <div className="text-sm font-bold">
               {verification.tests_passed}/{verification.tests_run}
             </div>
-            <div className="text-muted-foreground text-[10px]">
+            <div className="text-muted-foreground text-xs">
               {t.questMode.tests}
             </div>
           </div>
@@ -662,17 +662,17 @@ function VerificationResults({
             <div className="text-sm font-bold text-amber-500">
               {verification.lint_errors}
             </div>
-            <div className="text-muted-foreground text-[10px]">
+            <div className="text-muted-foreground text-xs">
               {t.questMode.lintErrors}
             </div>
           </div>
         )}
         {verification.type_errors > 0 && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-2 text-center">
-            <div className="text-sm font-bold text-red-500">
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-center">
+            <div className="text-sm font-bold text-destructive">
               {verification.type_errors}
             </div>
-            <div className="text-muted-foreground text-[10px]">
+            <div className="text-muted-foreground text-xs">
               {t.questMode.typeErrors}
             </div>
           </div>
@@ -681,7 +681,7 @@ function VerificationResults({
 
       {verification.requirement_checks.length > 0 && (
         <div className="space-y-1">
-          <div className="text-muted-foreground text-[10px] font-medium uppercase">
+          <div className="text-muted-foreground text-xs font-medium uppercase">
             {t.questMode.requirementChecks}
           </div>
           {verification.requirement_checks.map((check, i) => (
@@ -689,7 +689,7 @@ function VerificationResults({
               {check.passed ? (
                 <CheckCircle2Icon className="mt-0.5 size-3 text-emerald-500" />
               ) : (
-                <XCircleIcon className="mt-0.5 size-3 text-red-500" />
+                <XCircleIcon className="mt-0.5 size-3 text-destructive" />
               )}
               <span>{check.description}</span>
             </div>
@@ -699,7 +699,7 @@ function VerificationResults({
 
       {verification.issues_found.length > 0 && (
         <div className="space-y-1">
-          <div className="text-muted-foreground text-[10px] font-medium uppercase">
+          <div className="text-muted-foreground text-xs font-medium uppercase">
             {t.questMode.issues}
           </div>
           {verification.issues_found.map((issue, i) => (
@@ -731,12 +731,12 @@ function ReportCard({ report }: { report: QuestReport }) {
         {isSuccess ? (
           <CheckCircle2Icon className="size-5 text-emerald-500" />
         ) : (
-          <XCircleIcon className="size-5 text-red-500" />
+          <XCircleIcon className="size-5 text-destructive" />
         )}
         <h4 className="text-sm font-semibold">
           {isSuccess ? t.questMode.questCompleted : t.questMode.questFailed}
         </h4>
-        <span className="text-muted-foreground text-[10px]">
+        <span className="text-muted-foreground text-xs">
           {report.duration_ms < 1000
             ? `${report.duration_ms}ms`
             : `${(report.duration_ms / 1000).toFixed(1)}s`}
@@ -764,12 +764,12 @@ function ReportCard({ report }: { report: QuestReport }) {
 
       {report.files_changed.length > 0 && (
         <div className="space-y-1">
-          <div className="text-muted-foreground text-[10px] font-medium uppercase">
+          <div className="text-muted-foreground text-xs font-medium uppercase">
             {t.questMode.changedFiles}
           </div>
           <div className="max-h-24 overflow-y-auto">
             {report.files_changed.map((f) => (
-              <div key={f} className="font-mono text-[11px]">
+              <div key={f} className="font-mono text-xs">
                 {f}
               </div>
             ))}
@@ -779,7 +779,7 @@ function ReportCard({ report }: { report: QuestReport }) {
 
       {report.remaining_todos.length > 0 && (
         <div className="space-y-1">
-          <div className="text-muted-foreground text-[10px] font-medium uppercase">
+          <div className="text-muted-foreground text-xs font-medium uppercase">
             {t.questMode.remainingTodos}
           </div>
           {report.remaining_todos.map((todo, i) => (
@@ -795,7 +795,7 @@ function ReportCard({ report }: { report: QuestReport }) {
       )}
 
       {report.error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-500">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
           {report.error}
         </div>
       )}
@@ -849,7 +849,7 @@ function QuestStartForm({
         rows={3}
       />
       <div className="flex items-center justify-between">
-        <span className="text-muted-foreground/50 text-[10px]">
+        <span className="text-muted-foreground/50 text-xs">
           Ctrl+Enter to start
         </span>
         <button
@@ -979,7 +979,7 @@ export function QuestPanel({
           </div>
           <span className="text-sm font-semibold">{t.questMode.title}</span>
           {isActive && (
-            <span className="bg-primary/10 text-primary rounded-lg px-1.5 py-0.5 text-[10px] font-medium">
+            <span className="bg-primary/10 text-primary rounded-lg px-1.5 py-0.5 text-xs font-medium">
               {t.questMode.active}
             </span>
           )}
@@ -1083,7 +1083,7 @@ export function QuestPanel({
                 {quest.report && <ReportCard report={quest.report} />}
                 {quest.error && !quest.report && (
                   <div className="px-4 py-2">
-                    <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-500">
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                       {quest.error}
                     </div>
                   </div>

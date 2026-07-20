@@ -81,6 +81,7 @@ from uuid import uuid4
 from runtime.core.cerebrum.capability_router import (
     activate_capabilities,
 )
+from runtime.core.cerebrum.react_guards import _explicit_source_paths
 from runtime.core.cerebrum.react_native import require_public_update_on_tool_specs
 from runtime.core.cerebrum.todo_protocol import (
     context_mode,
@@ -352,8 +353,18 @@ def _native_calls_with_public_checkpoint(
     for call in calls:
         payload = dict(call.input or {})
         candidate = payload.pop("public_update", "")
-        if not checkpoint and isinstance(candidate, str):
-            checkpoint = _native_public_checkpoint(candidate)
+        confirmed_fact = payload.pop("confirmed_fact", "")
+        next_action = payload.pop("next_action", "")
+        evidence_checkpoint = ""
+        if isinstance(confirmed_fact, str) and isinstance(next_action, str):
+            fact = confirmed_fact.rstrip("。.!！?？；; ")
+            next_step = next_action.lstrip("；;，, ")
+            if fact and next_step:
+                evidence_checkpoint = f"{fact}；{next_step}"
+        if not checkpoint:
+            checkpoint = _native_public_checkpoint(
+                evidence_checkpoint or (candidate if isinstance(candidate, str) else "")
+            )
         cleaned_calls.append(call.model_copy(update={"input": payload}))
     return cleaned_calls, checkpoint
 
@@ -460,6 +471,21 @@ def _public_narrative_silence_s(user_context: dict[str, Any]) -> float:
     return PUBLIC_NARRATIVE_SILENCE_S
 
 
+def _ordered_read_handoffs_requested(goal: str) -> bool:
+    """Whether the user explicitly asked to hear a result between read batches."""
+
+    if len(_explicit_source_paths(goal)) < 2:
+        return False
+    return bool(
+        re.search(
+            r"(?:每(?:一)?批.{0,28}(?:结束|读完|读取后).{0,28}(?:确认|告诉|说出|汇报)|"
+            r"after\s+each\s+(?:read\s+)?batch.{0,40}(?:confirm|tell|report|say))",
+            goal,
+            re.IGNORECASE,
+        )
+    )
+
+
 def _generate_native_public_checkpoint(
     router: Any,
     *,
@@ -468,6 +494,17 @@ def _generate_native_public_checkpoint(
     prompt: str,
 ) -> tuple[str, int, int]:
     """Run one small tools-disabled model continuation for public narration."""
+    message_text = " ".join(
+        str(message.content)
+        for message in messages
+        if isinstance(message.content, str)
+    )
+    if re.search(r"[\uac00-\ud7af]", message_text):
+        prompt += "\nThe user's language is Korean. Write this update in Korean."
+    elif re.search(r"[\u3040-\u30ff]", message_text):
+        prompt += "\nThe user's language is Japanese. Write this update in Japanese."
+    elif re.search(r"[\u3400-\u9fff]", message_text):
+        prompt += "\nThe user's language is Simplified Chinese. Write this update in Simplified Chinese."
     checkpoint_messages = list(messages)
     if (
         checkpoint_messages
@@ -484,8 +521,13 @@ def _generate_native_public_checkpoint(
         checkpoint_messages[-1] = Message(role="user", content=merged_content)
     else:
         checkpoint_messages.append(Message(role="user", content=prompt))
+    narrator_model = _next_custom_model_fallback(
+        model,
+        set(),
+        require_tool_use=False,
+    ) or model
     request = ModelRequest(
-        model=model,
+        model=narrator_model,
         messages=checkpoint_messages,
         max_tokens=180,
         temperature=0.4,
@@ -585,6 +627,8 @@ def _generate_native_action_checkpoint(
 def _native_result_checkpoint(
     calls: list[ToolCall],
     result_blocks: list[dict[str, Any]],
+    *,
+    goal: str = "",
 ) -> str:
     """Build a factual public checkpoint from completed tool results.
 
@@ -648,6 +692,51 @@ def _native_result_checkpoint(
         return (
             f"本轮已完成 {len(successful)} 项资料检索并取得可用结果；"
             "下一步会打开可靠来源正文进行核验。"
+        )
+    local_reads = [
+        (call, output)
+        for call, output in successful
+        if call.name in {"read_file", "read_text_file", "read_file_range"}
+    ]
+    if local_reads:
+        call, output = local_reads[-1]
+        path = str((call.input or {}).get("path") or "").replace("\\", "/")
+        label = os.path.basename(path) or "目标文件"
+        size_match = re.search(r'"size"\s*:\s*(\d+)', output)
+        complete = bool(re.search(r'"truncated"\s*:\s*false', output, re.IGNORECASE))
+        size = int(size_match.group(1)) if size_match else None
+        requested = [
+            item.replace("\\", "/").lstrip("./")
+            for item in _explicit_source_paths(goal)
+        ]
+        current = path.lstrip("./")
+        next_path = ""
+        with contextlib.suppress(ValueError, IndexError):
+            next_path = requested[requested.index(current) + 1]
+        next_label = os.path.basename(next_path) if next_path else ""
+        if re.search(r"[\u3400-\u9fff]", goal):
+            if size is not None:
+                fact = (
+                    f"已完整取得 {label} 的 {size:,} 字节内容"
+                    if complete
+                    else f"已取得 {label} 的 {size:,} 字节可用内容"
+                )
+            else:
+                fact = f"已取得 {label} 的实际内容"
+            return (
+                f"{fact}；接下来核对 {next_label}。"
+                if next_label
+                else f"{fact}；所需证据已经齐全，现在收束结论。"
+            )
+        fact = (
+            f"I now have all {size:,} bytes of {label}"
+            if size is not None and complete
+            else f"I now have the actual contents of {label}"
+        )
+        return (
+            f"{fact}; next I’ll check {next_label}."
+            if next_label
+            else f"{fact}; the requested evidence is complete, so I’m wrapping up the conclusion."
         )
     return ""
 
@@ -1938,8 +2027,14 @@ def stream_agentic_fallback(
         tool_specs,
         intent.normalized_goal,
     )
+    evidence_tool_specs = tool_specs
     if bool(_intent_user_context.get("realtime_public_orientation")):
-        tool_specs = require_public_update_on_tool_specs(tool_specs)
+        base_tool_specs = tool_specs
+        tool_specs = require_public_update_on_tool_specs(base_tool_specs)
+        evidence_tool_specs = require_public_update_on_tool_specs(
+            base_tool_specs,
+            evidence_round=True,
+        )
     _tool_round_budget = _native_tool_round_budget(
         intent.normalized_goal,
         workspace_contract=workspace_contract,
@@ -2010,6 +2105,8 @@ def stream_agentic_fallback(
     _last_public_checkpoint_at = _started_at
     _realtime_public_narrative = bool(_intent_user_context.get("realtime_public_narrative"))
     _public_narrative_interval = _public_narrative_silence_s(_intent_user_context)
+    _ordered_read_handoffs = _ordered_read_handoffs_requested(intent.normalized_goal)
+    _result_handoff_ready = False
     _total_in_tokens = 0
     _total_out_tokens = 0
     _todo_seen = False
@@ -2179,12 +2276,17 @@ def stream_agentic_fallback(
         _round_todo_only_mode = _green_convergence_todo_only
         _round_convergence_mode = _force_convergence_next
         _force_convergence_next = False
+        _round_tool_specs = (
+            evidence_tool_specs if _completed_tool_count > 0 else tool_specs
+        )
         if _round_todo_only_mode:
-            _active_tool_specs = [spec for spec in tool_specs if spec.name == "todo_write"]
+            _active_tool_specs = [
+                spec for spec in _round_tool_specs if spec.name == "todo_write"
+            ]
         elif _round_convergence_mode:
             _active_tool_specs = []
         else:
-            _active_tool_specs = tool_specs
+            _active_tool_specs = _round_tool_specs
         req = ModelRequest(
             model=effective_model,
             messages=messages,
@@ -2482,6 +2584,11 @@ def stream_agentic_fallback(
                     _force_convergence_next = True
                 continue
 
+        _prior_result_handoff = bool(round_tool_calls and _result_handoff_ready)
+        if _prior_result_handoff:
+            # The previous result already supplied the fact and the immediate
+            # next scope, so another pre-tool paraphrase would be duplicate UI.
+            _round_commentary_emitted = True
         if round_tool_calls and not _round_commentary_emitted:
             checkpoint = _structured_public_checkpoint or _native_public_checkpoint(round_text)
             if checkpoint:
@@ -2495,7 +2602,7 @@ def stream_agentic_fallback(
             round_tool_calls
             and not _round_commentary_emitted
             and not _round_redirected
-            and _realtime_public_narrative
+            and (_realtime_public_narrative or _ordered_read_handoffs)
             and any(
                 call.name not in {"todo_write", "write_todos", "exit_plan_mode"}
                 for call in round_tool_calls
@@ -2542,6 +2649,9 @@ def stream_agentic_fallback(
                 _round_commentary_emitted = True
                 _last_public_checkpoint_at = time.monotonic()
             return checkpoint
+
+        if round_tool_calls:
+            _result_handoff_ready = False
 
         # A quiet native provider must not make the conversation start with a
         # bare execution row.  Give the bounded model-authored repair a chance
@@ -3135,11 +3245,23 @@ def stream_agentic_fallback(
             call.name not in {"todo_write", "write_todos", "exit_plan_mode"}
             for call in round_tool_calls
         )
-        if (
-            not _round_commentary_emitted
-            and _realtime_public_narrative
+        result_handoff_required = bool(
+            _ordered_read_handoffs
             and meaningful_batch
-            and time.monotonic() - _last_public_checkpoint_at >= _public_narrative_interval
+            and any(
+                call.name in {"read_file", "read_text_file", "read_file_range"}
+                for call in round_tool_calls
+            )
+        )
+        _result_commentary_emitted = False
+        if (
+            (not _round_commentary_emitted or result_handoff_required)
+            and (_realtime_public_narrative or _ordered_read_handoffs)
+            and meaningful_batch
+            and (
+                result_handoff_required
+                or time.monotonic() - _last_public_checkpoint_at >= _public_narrative_interval
+            )
         ):
             try:
                 checkpoint, checkpoint_in_tokens, checkpoint_out_tokens = (
@@ -3157,12 +3279,18 @@ def stream_agentic_fallback(
             if checkpoint:
                 yield ("commentary", checkpoint, None)
                 _round_commentary_emitted = True
+                _result_commentary_emitted = True
+                if result_handoff_required:
+                    _result_handoff_ready = True
                 _last_public_checkpoint_at = time.monotonic()
 
-        if not _round_commentary_emitted:
+        if not _round_commentary_emitted or (
+            result_handoff_required and not _result_commentary_emitted
+        ):
             checkpoint = _native_result_checkpoint(
                 round_tool_calls,
                 tool_result_blocks,
+                goal=intent.normalized_goal,
             )
             if checkpoint:
                 # Evidence-derived fallback remains useful to non-realtime
@@ -3170,6 +3298,8 @@ def stream_agentic_fallback(
                 # presented as if the model said it.
                 yield ("commentary_runtime", checkpoint, None)
                 _round_commentary_emitted = True
+                if result_handoff_required:
+                    _result_handoff_ready = True
 
         if _pending_code_semantic_nudge:
             messages.append(

@@ -225,6 +225,30 @@ def test_structured_public_update_is_displayed_but_not_sent_to_tool() -> None:
     assert step.action == 'read_file({"path": "x.py"})'
 
 
+def test_structured_public_update_beats_incidental_provider_text() -> None:
+    step = step_from_tool_calls(
+        [
+            ToolCall(
+                id="a",
+                name="read_file",
+                input={
+                    "path": "items.py",
+                    "public_update": "我先核对协议定义，确认事件生命周期。",
+                },
+            )
+        ],
+        text=(
+            "Optional[float] = None\n"
+            "def __post_init__(self):\n"
+            "    raise ValueError('provider context echo')"
+        ),
+        iteration=1,
+    )
+
+    assert step.public_update == "我先核对协议定义，确认事件生命周期。"
+    assert "Optional[float]" not in step.public_update
+
+
 def test_structured_evidence_update_precedes_generic_text_and_is_not_dispatched() -> None:
     step = step_from_tool_calls(
         [
@@ -246,6 +270,18 @@ def test_structured_evidence_update_precedes_generic_text_and_is_not_dispatched(
         "后端 Item 采用 started 到 completed 的统一生命周期；"
         "接着核对前端是否按 itemId 归并"
     )
+    assert step.action == 'read_file({"path": "frontend.ts"})'
+
+
+def test_evidence_round_drops_generic_provider_text_without_structured_fact() -> None:
+    step = step_from_tool_calls(
+        [ToolCall(id="a", name="read_file", input={"path": "frontend.ts"})],
+        text="接下来读取另一个文件。",
+        iteration=2,
+        evidence_round=True,
+    )
+
+    assert step.public_update == ""
     assert step.action == 'read_file({"path": "frontend.ts"})'
 
 

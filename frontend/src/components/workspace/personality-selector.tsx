@@ -128,7 +128,7 @@ export function PersonalitySelector({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-medium">{localizeName(tpl)}</span>
-                <span className="text-muted-foreground rounded bg-muted px-1 py-0.5 text-[10px]">
+                <span className="text-muted-foreground rounded bg-muted px-1 py-0.5 text-xs">
                   {localizeCategory(tpl)}
                 </span>
               </div>

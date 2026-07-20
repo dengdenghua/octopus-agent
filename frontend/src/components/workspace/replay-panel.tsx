@@ -62,7 +62,7 @@ export function MiniStat({
 }) {
   return (
     <div className="rounded-md border border-background/70 bg-background/50 px-2 py-1.5">
-      <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
+      <div className="text-xs uppercase text-muted-foreground">{label}</div>
       <div className="text-xs font-semibold">{value}</div>
     </div>
   );
@@ -85,7 +85,7 @@ export function ReplayMetadataBadge({
         ? metadata.activity_count
         : null;
   return (
-    <Badge variant="outline" className="text-[10px]">
+    <Badge variant="outline" className="text-xs">
       {label}
       {count !== null ? ` ${count}` : ""}
     </Badge>
@@ -121,15 +121,15 @@ export function ReplayGateCard({
               }
             />
             Replay gate
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {gate ? (gate.passed ? "passed" : "blocked") : "loading"}
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {gate?.reason || "Waiting for replay evaluations"}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-right font-mono text-[11px] sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 text-right font-mono text-xs sm:grid-cols-4">
           <GateStat label="cases" value={summary?.total ?? 0} />
           <GateStat label="pass" value={summary?.passed ?? 0} />
           <GateStat label="fail" value={summary?.failed ?? 0} />
@@ -142,7 +142,7 @@ export function ReplayGateCard({
             <Badge
               key={`${item.case_id ?? index}`}
               variant="outline"
-              className="text-[10px]"
+              className="text-xs"
             >
               {String(item.case_id ?? "case")}
             </Badge>
@@ -199,21 +199,21 @@ export function BrowserDesktopReplayReviewCard({
           <div className="flex items-center gap-2 text-sm font-medium">
             <ListChecksIcon className="size-4 text-blue-700 dark:text-blue-300" />
             Browser/Desktop replay review
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {total} pending
             </Badge>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {repairRecipes.recipe_count} recipes
             </Badge>
             <Badge
               variant={repairVerifications.ready ? "outline" : "destructive"}
-              className="text-[10px]"
+              className="text-xs"
             >
               {repairVerifications.verified_count}/{repairVerifications.total}{" "}
               verified
             </Badge>
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
+          <div className="mt-1 text-xs text-muted-foreground">
             Browser sessions and desktop actions that produced replay evidence
             for operator review.
             {` Review rate ${reviewRate}%; stale artifacts ${staleCount}.`}
@@ -227,7 +227,7 @@ export function BrowserDesktopReplayReviewCard({
           <Badge
             variant="outline"
             className={cn(
-              "text-[10px]",
+              "text-xs",
               total > 0
                 ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                 : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
@@ -238,7 +238,7 @@ export function BrowserDesktopReplayReviewCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-[11px]"
+            className="h-7 px-2 text-xs"
             disabled={browserBusy}
             onClick={onQueueBrowser}
           >
@@ -250,7 +250,7 @@ export function BrowserDesktopReplayReviewCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-[11px]"
+            className="h-7 px-2 text-xs"
             disabled={desktopBusy}
             onClick={onQueueDesktop}
           >
@@ -262,7 +262,7 @@ export function BrowserDesktopReplayReviewCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-[11px]"
+            className="h-7 px-2 text-xs"
             disabled={recipeBusy || repairRecipes.recipe_count === 0}
             onClick={onQueueRepairRecipes}
           >
@@ -274,7 +274,7 @@ export function BrowserDesktopReplayReviewCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-[11px]"
+            className="h-7 px-2 text-xs"
             disabled={rerunBusy || repairVerifications.blocked_count === 0}
             onClick={onRerunBlocked}
             aria-label="Rerun blocked browser and desktop repair evidence"
@@ -287,7 +287,7 @@ export function BrowserDesktopReplayReviewCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-[11px]"
+            className="h-7 px-2 text-xs"
             disabled={staleBusy || staleCount === 0}
             onClick={onRejectStale}
           >
@@ -323,19 +323,19 @@ export function BrowserDesktopReplayReviewCard({
                 </div>
                 <Badge
                   className={cn(
-                    "shrink-0 text-[10px]",
+                    "shrink-0 text-xs",
                     priorityClass(item.priority),
                   )}
                 >
                   {item.priority}
                 </Badge>
               </div>
-              <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-muted-foreground">
+              <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
                 {item.text}
               </div>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 <ReplayMetadataBadge item={item} />
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="text-xs">
                   {item.candidate_kind}
                 </Badge>
               </div>
@@ -367,26 +367,26 @@ export function ReplayEvidenceDrilldownCard({
           <div className="flex items-center gap-2 text-xs font-semibold text-blue-800 dark:text-blue-200">
             <ListChecksIcon className="size-3.5" />
             Replay evidence available
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {evidence.replay_ready === false ? "not ready" : "ready"}
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {caseId}
           </div>
           {fingerprint && (
-            <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+            <div className="mt-0.5 font-mono text-xs text-muted-foreground">
               fp {fingerprint}
             </div>
           )}
           <div className="mt-1 flex flex-wrap gap-1.5">
             {evidence.replay_case_url && (
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-xs">
                 {evidence.replay_case_url}
               </Badge>
             )}
             {evidence.queue_url && (
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-xs">
                 {evidence.queue_url}
               </Badge>
             )}
@@ -395,7 +395,7 @@ export function ReplayEvidenceDrilldownCard({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 shrink-0 px-2 text-[11px]"
+          className="h-7 shrink-0 px-2 text-xs"
           disabled={busy || !evidence.queue_url}
           onClick={onQueue}
         >

@@ -412,7 +412,7 @@ export function ModeSelector({
           }
         }}
         className={cn(
-          "group flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground shadow-none transition-all duration-200",
+          "group flex items-center gap-1.5 text-xs font-medium text-muted-foreground shadow-none transition-all duration-200",
           chromeless
             ? "h-8 rounded-lg px-1.5 hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 hover:border-border-default hover:bg-muted/55 hover:text-foreground",
@@ -429,7 +429,7 @@ export function ModeSelector({
           {activeLabel}
         </span>
         {!chromeless && detection && isManualOverride && (
-          <span className="text-[9px] opacity-50">
+          <span className="text-xs opacity-50">
             {t.modes.manualOverrideShort}
           </span>
         )}
@@ -501,7 +501,7 @@ export function ModeSelector({
                         <Icon className="size-4 shrink-0" />
                         <div className="flex min-w-0 items-center gap-2 text-left">
                           <span className="font-semibold">{option.label}</span>
-                          <span className="truncate text-[10px] opacity-70">
+                          <span className="truncate text-xs opacity-70">
                             {option.desc}
                           </span>
                         </div>
@@ -523,7 +523,7 @@ export function ModeSelector({
                             type="button"
                             onClick={() => onAuditIntensityChange?.(level)}
                             className={cn(
-                              "flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+                              "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
                               active
                                 ? "bg-background text-foreground shadow-[var(--shadow-xs)] ring-1 ring-border-subtle"
                                 : "text-muted-foreground hover:text-foreground",
@@ -534,7 +534,7 @@ export function ModeSelector({
                         );
                       })}
                     </div>
-                    <p className="mt-1.5 text-[10px] leading-tight text-muted-foreground">
+                    <p className="mt-1.5 text-xs leading-tight text-muted-foreground">
                       {auditIntensity === "max"
                         ? t.modes.ultraTooltip
                         : t.modes.auditEffect}
@@ -543,12 +543,12 @@ export function ModeSelector({
                 )}
 
                 {modeInfo && (
-                  <div className="border-t px-3 py-2 text-[10px] text-muted-foreground leading-tight">
+                  <div className="border-t px-3 py-2 text-xs text-muted-foreground leading-tight">
                     {modeInfo.description}
                   </div>
                 )}
                 {workspaceLabel && (
-                  <div className="flex min-w-0 items-center gap-2 border-t px-3 py-2 text-[10px] text-muted-foreground">
+                  <div className="flex min-w-0 items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
                     <span
                       className="min-w-0 truncate font-mono text-foreground/75"
                       title={workDir}
@@ -556,7 +556,7 @@ export function ModeSelector({
                       {workspaceLabel}
                     </span>
                     {permissionLabel && (
-                      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                         {permissionLabel}
                       </span>
                     )}

@@ -242,12 +242,12 @@ export function ExecutionTimeline() {
                         : tid.slice(0, 12)}
                     </span>
                     {strategy && (
-                      <StatusBadge tone="paused" className="h-5 text-[10px]">
+                      <StatusBadge tone="paused" className="h-5 text-xs">
                         {strategy}
                       </StatusBadge>
                     )}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     {events.length} {t.executionTimeline.events}
                     {totalTokens > 0 &&
                       ` · ${totalTokens.toLocaleString()} tokens`}
@@ -279,21 +279,21 @@ export function ExecutionTimeline() {
                                 {ev.event_type}
                               </span>
                               {ev.skill_name && (
-                                <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] text-blue-400">
+                                <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-xs text-blue-400">
                                   {ev.skill_name}
                                 </span>
                               )}
                               {ev.iteration != null && (
-                                <span className="text-[10px] text-muted-foreground">
+                                <span className="text-xs text-muted-foreground">
                                   iter {ev.iteration}
                                 </span>
                               )}
-                              <span className="ml-auto text-[10px] text-muted-foreground">
+                              <span className="ml-auto text-xs text-muted-foreground">
                                 {new Date(ev.ts).toLocaleTimeString()}
                               </span>
                             </div>
                             {ev.thought && (
-                              <div className="mt-1 rounded-lg bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                              <div className="mt-1 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
                                 {stripTraceLabelPrefixes(ev.thought).slice(
                                   0,
                                   200,
@@ -301,7 +301,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.action && (
-                              <div className="mt-1 rounded-lg bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-mono text-blue-300">
+                              <div className="mt-1 rounded-lg bg-blue-500/10 px-2.5 py-1.5 text-xs font-mono text-blue-300">
                                 {stripTraceLabelPrefixes(ev.action).slice(
                                   0,
                                   150,
@@ -309,7 +309,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.observation && (
-                              <div className="mt-1 max-h-24 overflow-y-auto rounded-lg bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                              <div className="mt-1 max-h-24 overflow-y-auto rounded-lg bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground">
                                 {stripTraceLabelPrefixes(ev.observation).slice(
                                   0,
                                   300,
@@ -317,7 +317,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.final_answer && (
-                              <div className="mt-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-400">
+                              <div className="mt-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-400">
                                 {stripTraceLabelPrefixes(ev.final_answer).slice(
                                   0,
                                   200,
@@ -325,12 +325,12 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.error && (
-                              <div className="mt-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-400">
+                              <div className="mt-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs text-rose-400">
                                 {ev.error.slice(0, 200)}
                               </div>
                             )}
                             {(ev.tokens_in || ev.tokens_out || ev.model) && (
-                              <div className="mt-1 flex gap-3 text-[10px] text-muted-foreground">
+                              <div className="mt-1 flex gap-3 text-xs text-muted-foreground">
                                 {ev.model && (
                                   <span>
                                     {ev.provider}/{ev.model}

@@ -86,7 +86,7 @@ function BrowserPageBody() {
       {/* Implementation note. */}
       <div className="mx-auto mb-2 flex w-full max-w-6xl flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             {isPhone
               ? t.browser.viewportHint(spec.label, spec.width, spec.height)
               : ""}

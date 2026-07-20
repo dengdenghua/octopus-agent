@@ -42,7 +42,7 @@ export function ChangesPanel({ className, onFileClick }: ChangesPanelProps) {
           <FileEditIcon className="size-4 text-primary" />
           <span className="text-sm font-medium">{t.changesPanel.title}</span>
           {files.length > 0 && (
-            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
               {files.length}
             </span>
           )}
@@ -54,7 +54,7 @@ export function ChangesPanel({ className, onFileClick }: ChangesPanelProps) {
           <div className="flex h-full flex-col items-center justify-center px-4 text-muted-foreground/50">
             <FileIcon className="mb-2 size-8 opacity-30" />
             <span className="text-xs">{t.changesPanel.empty}</span>
-            <span className="mt-1 text-[10px] opacity-60">
+            <span className="mt-1 text-xs opacity-60">
               {t.changesPanel.emptyHint}
             </span>
           </div>
@@ -191,17 +191,17 @@ function ChangeRow({
             {fileName}
           </div>
           {dirPath && (
-            <div className="truncate text-[10px] text-muted-foreground/60">
+            <div className="truncate text-xs text-muted-foreground/60">
               {dirPath}
             </div>
           )}
         </button>
         {hunks.length > 0 && (
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
             {t.codeMode.hunks(hunks.length)}
           </span>
         )}
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+        <span className="shrink-0 font-mono text-xs text-muted-foreground">
           {formatDelta(event.bytes_delta)}
         </span>
         <button
@@ -238,7 +238,7 @@ function ChangeRow({
             <pre
               className={cn(
                 "max-h-[320px] overflow-x-auto overflow-y-auto px-2 py-1.5",
-                "whitespace-pre text-[10px] font-mono leading-snug",
+                "whitespace-pre text-xs font-mono leading-snug",
               )}
             >
               {event.diff}
@@ -277,7 +277,7 @@ function HunkBlock({
         onRejectHunk={() => onReject(hunk)}
       />
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[10px] font-mono leading-snug">
+        <table className="w-full border-collapse text-xs font-mono leading-snug">
           <tbody>
             {hunk.lines.map((line, index) => (
               <tr

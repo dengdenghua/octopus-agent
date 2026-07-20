@@ -403,7 +403,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
             <div className="text-sm font-medium">
               {t.armsEditor.availableArmsLabel}
             </div>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {t.armsEditor.selectedArmsCount(selected.size, arms.length)}
             </Badge>
           </div>
@@ -454,7 +454,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                         <div className="font-medium">
                           {arm.display_name || arm.arm_id}
                         </div>
-                        <Badge variant="outline" className="text-[10px]">
+                        <Badge variant="outline" className="text-xs">
                           {arm.arm_id}
                         </Badge>
                       </div>
@@ -469,7 +469,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                             <Badge
                               key={s}
                               variant="outline"
-                              className="rounded-sm bg-background/60 text-[10px] font-mono"
+                              className="rounded-sm bg-background/60 text-xs font-mono"
                             >
                               {s}
                             </Badge>
@@ -494,7 +494,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
             <div>
               <div className="flex items-center gap-2 text-sm font-medium">
                 {t.armsEditor.privateSkillsLabel}
-                <Badge variant="secondary" className="rounded-sm text-[10px]">
+                <Badge variant="secondary" className="rounded-sm text-xs">
                   {t.armsEditor.skillMarketplaceLabel}
                 </Badge>
               </div>
@@ -502,7 +502,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                 {t.armsEditor.privateSkillsHint}
               </div>
             </div>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {t.armsEditor.selectedSkillsCount(selectedPrivateSkills.size)}
             </Badge>
           </div>
@@ -536,10 +536,10 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
 
           <div className="space-y-2 rounded-sm border border-border bg-card/55 p-2.5">
             <div className="flex items-center justify-between gap-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
                 {t.armsEditor.skillMarketplaceLabel}
               </div>
-              <div className="font-mono text-[10px] text-muted-foreground">
+              <div className="font-mono text-xs text-muted-foreground">
                 {t.armsEditor.visibleSkillsCount(
                   visibleSkills.length,
                   skillCatalog.length,
@@ -570,7 +570,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                   onClick={() => setSkillSourceFilter(String(id))}
                 >
                   <span className="min-w-0 truncate">{label}</span>
-                  <span className="ml-2 font-mono text-[10px] opacity-75">
+                  <span className="ml-2 font-mono text-xs opacity-75">
                     {count}
                   </span>
                 </Button>
@@ -579,7 +579,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
             <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-sm border border-border bg-background/70 px-2.5 py-1.5">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
                     {t.armsEditor.filterAll}
                   </div>
                   <div className="text-sm font-semibold">
@@ -587,7 +587,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                   </div>
                 </div>
                 <div className="rounded-sm border border-border bg-background/70 px-2.5 py-1.5">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
                     {t.armsEditor.filterSelected}
                   </div>
                   <div className="text-sm font-semibold">
@@ -669,7 +669,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                           </div>
                           <Badge
                             variant={skill.enabled ? "outline" : "secondary"}
-                            className="rounded-sm text-[10px]"
+                            className="rounded-sm text-xs"
                           >
                             {skill.enabled
                               ? t.armsEditor.permissionEnabled
@@ -681,7 +681,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                                 permission.enabled ? "outline" : "secondary"
                               }
                               className={cn(
-                                "rounded-sm text-[10px]",
+                                "rounded-sm text-xs",
                                 !permission.enabled &&
                                   "border-destructive/30 text-destructive",
                               )}
@@ -722,7 +722,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                 {t.armsEditor.permissionsHint}
               </div>
             </div>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {t.armsEditor.permissionEffectiveCount(
                 permissionSummary.effective,
                 permissionSummary.total,
@@ -732,7 +732,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
 
           <div className="grid gap-2 md:grid-cols-3">
             <div className="rounded-sm border border-border bg-card/60 px-3 py-2">
-              <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
                 {t.armsEditor.permissionGlobalGate}
               </div>
               <div className="mt-1 text-sm font-semibold">
@@ -740,7 +740,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               </div>
             </div>
             <div className="rounded-sm border border-border bg-card/60 px-3 py-2">
-              <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
                 {t.armsEditor.permissionAgentGrant}
               </div>
               <div className="mt-1 text-sm font-semibold">
@@ -748,7 +748,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               </div>
             </div>
             <div className="rounded-sm border border-border bg-card/60 px-3 py-2">
-              <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
                 {t.armsEditor.permissionEffective}
               </div>
               <div className="mt-1 text-sm font-semibold">
@@ -807,7 +807,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                             variant={
                               permission.available ? "outline" : "secondary"
                             }
-                            className="rounded-sm text-[10px]"
+                            className="rounded-sm text-xs"
                           >
                             {permission.available
                               ? t.armsEditor.permissionAvailable
@@ -818,7 +818,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                               permission.enabled ? "outline" : "secondary"
                             }
                             className={cn(
-                              "rounded-sm text-[10px]",
+                              "rounded-sm text-xs",
                               !permission.enabled &&
                                 "border-destructive/30 text-destructive",
                             )}
@@ -835,7 +835,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                                 : "secondary"
                             }
                             className={cn(
-                              "rounded-sm text-[10px]",
+                              "rounded-sm text-xs",
                               !permission.agentGranted &&
                                 "border-amber-500/30 text-amber-600 dark:text-amber-300",
                             )}
@@ -860,7 +860,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                               <Badge
                                 key={skill}
                                 variant="outline"
-                                className="rounded-sm bg-background/70 text-[10px] font-mono"
+                                className="rounded-sm bg-background/70 text-xs font-mono"
                               >
                                 {skill}
                               </Badge>
@@ -869,7 +869,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                             shownAgentSkills.length ? (
                               <Badge
                                 variant="secondary"
-                                className="rounded-sm text-[10px]"
+                                className="rounded-sm text-xs"
                               >
                                 +
                                 {permission.agentSkills.length -
@@ -878,7 +878,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                             ) : null}
                           </div>
                         ) : permission.defaultGranted ? (
-                          <div className="mt-2 text-[11px] text-muted-foreground">
+                          <div className="mt-2 text-xs text-muted-foreground">
                             {t.armsEditor.permissionDefaultGrantHint}
                           </div>
                         ) : null}
@@ -888,7 +888,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                               <Badge
                                 key={skill}
                                 variant="outline"
-                                className="rounded-sm bg-background/40 text-[10px] font-mono text-muted-foreground"
+                                className="rounded-sm bg-background/40 text-xs font-mono text-muted-foreground"
                               >
                                 {skill}
                               </Badge>
@@ -897,7 +897,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                             shownPermissionSkills.length ? (
                               <Badge
                                 variant="secondary"
-                                className="rounded-sm text-[10px]"
+                                className="rounded-sm text-xs"
                               >
                                 +
                                 {permission.skill_names.length -
@@ -940,13 +940,13 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               <CoinsIcon className="h-4 w-4 text-muted-foreground" />
               {t.armsEditor.budgetLabel}
               {hasBudgetOverride ? (
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="text-xs">
                   {t.armsEditor.budgetOverride}
                 </Badge>
               ) : (
                 <Badge
                   variant="outline"
-                  className="text-[10px] text-muted-foreground"
+                  className="text-xs text-muted-foreground"
                 >
                   {t.armsEditor.budgetDefault}
                 </Badge>
@@ -977,7 +977,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               </div>
             </div>
             {!hasBudgetOverride && (
-              <div className="mt-2 text-[11px] text-muted-foreground">
+              <div className="mt-2 text-xs text-muted-foreground">
                 {t.armsEditor.budgetEditHint(agentId)}
               </div>
             )}

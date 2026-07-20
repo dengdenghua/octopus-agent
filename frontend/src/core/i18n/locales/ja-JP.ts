@@ -8658,4 +8658,85 @@ Strategy:
     remoteLoading: "リモートワークスペースを読み込み中…",
     remoteLoadFailed: (error) => `リモートワークスペースの読み込みに失敗しました: ${error}`,
   },
+
+  // Deep Research Panel
+  deepResearchPanel: {
+    title: "Agent",
+    cancelAgentRunTitle: "エージェント実行をキャンセル",
+    cancelRunConfirmTitle: "エージェント実行をキャンセルしますか？",
+    cancelRunConfirmDescription: (count) =>
+      `進行中のエージェントタスク ${count} 件をキャンセルします。部分的な進捗は破棄されます。`,
+    cancelRunConfirmLabel: "実行をキャンセル",
+    copyReportFailedToast: "レポートのコピーに失敗しました",
+    metricRoles: "ロール",
+    metricSources: "ソース",
+    metricMaterials: "資料",
+    agentBudget: "エージェント予算",
+    searchesCount: (n) => `${n} 件の検索`,
+    batchProgress: (completed, total) => `${completed}/${total} 完了`,
+    batchFailedCancelled: (failed, cancelled) =>
+      `${failed} 件失敗 · ${cancelled} 件キャンセル`,
+    batchIdLabel: (id) => `バッチ ${id}`,
+    liveAgentStream: "ライブエージェントストリーム",
+    eventsCount: (n) => `${n} イベント`,
+    prefetch: "プリフェッチ",
+    prefetchStats: (runs, evidence) => `${runs} 回実行 · ${evidence} 件のエビデンス`,
+    executionSteps: "実行ステップ",
+    synthesisRoleLabel: "統合",
+    searchSources: "検索ソース",
+    evidence: "エビデンス",
+    finalReport: "最終レポート",
+    savedToLeadMemory: "リードメモリに保存済み",
+    copied: "コピー済み",
+    copyMarkdown: "Markdown をコピー",
+    downloadMarkdown: "Markdown をダウンロード",
+    stageSummary: "ステージサマリー",
+    openUrl: "URL を開く",
+    hitsCount: (n) => `${n} 件ヒット`,
+    evidenceCount: (n) => `${n} 件のエビデンス`,
+    batchEventTitle: (status) => `バッチ ${status}`,
+    subagentEventTitle: (name, status) => `${name} ${status}`,
+    subagentFallback: "サブエージェント",
+    statusComplete: "完了",
+    statusUpdated: "更新済み",
+    routeBlocked: "ルートブロック",
+    routeWarning: "ルート警告",
+    routeAllowed: "ルート許可",
+  },
+
+  // Desktop Organizer Page
+  desktopOrganizerPage: {
+    title: "デスクトップアシスタント",
+    description:
+      "デフォルトはワークスペースの起動です。システムデスクトップのファイルを処理する必要がある場合は、透過デスクトップアシスタントを有効にします。",
+    enabledOn: "有効",
+    enabledOff: "無効",
+    tileNotTakeoverTitle: "システムデスクトップを接管しない",
+    tileNotTakeoverBody:
+      "透過レイヤーは開いた時にのみ表示され、閉じるとマウスとウィンドウの制御権は Windows に戻ります。",
+    tileRightClickTitle: "右クリックでアシスタントを呼び出し",
+    tileRightClickBody:
+      "整理レイヤー内で右クリックすると、タイプ別に分類されたデスクトップファイルのドロワーを開きます。",
+    tileSafePreviewTitle: "安全なプレビュー優先",
+    tileSafePreviewBody:
+      "現在はビューの整理のみで、ファイルを自動的に移動しません。移動と整理には確認と取り消しが別途付きます。",
+    webEnvNotice:
+      "現在はウェブ環境のため、右クリックメニューのインストール/削除は無効のままです。デスクトップ版に切り替えると、これら2項目が有効になります。",
+    contextMenuTitle: "システム右クリックメニュー",
+    contextMenuDescription:
+      'Windows デスクトップの空き領域を右クリックすると「Octopus 一括整理デスクトップ」が表示されます。',
+    installButton: "右クリックコマンドをインストール",
+    installingButton: "インストール中",
+    removeButton: "削除",
+    removingButton: "削除中",
+    installSuccess: "システム右クリックコマンドをインストールしました。",
+    installUnsupported: "現在の環境ではインストールできません。",
+    removeSuccess: "システム右クリックコマンドを削除しました。",
+    removeUnsupported: "現在の環境では削除できません。",
+    openAssistant: "デスクトップアシスタントを開く",
+    backToWorkspace: "ワークスペースに戻る",
+    confirmRemoveTitle: "システム右クリックメニューを削除しますか？",
+    confirmRemoveDescription:
+      "Windows デスクトップの右クリックメニューから Octopus 一括整理コマンドを削除します。",
+  },
 };

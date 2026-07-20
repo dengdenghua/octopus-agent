@@ -419,7 +419,7 @@ export function RecentChatList() {
             className={group.project ? "group/project-group" : "group/recent"}
           >
             <SidebarGroup className="pt-0">
-              <SidebarGroupLabel className="flex h-6 items-center justify-between px-1.5 text-[11px]">
+              <SidebarGroupLabel className="flex h-6 items-center justify-between px-1.5 text-xs">
                 <CollapsibleTrigger className="flex items-center gap-1">
                   <ChevronDownIcon
                     className={

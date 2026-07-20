@@ -762,7 +762,7 @@ export function MessageGroup({
               )}
               {needsEffectReview && (
                 <span
-                  className="shrink-0 rounded-full bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                  className="shrink-0 rounded-full bg-amber-500/10 px-1.5 text-xs font-medium text-amber-700 dark:text-amber-300"
                   data-testid="tool-effect-review-badge"
                 >
                   需核对
@@ -856,7 +856,7 @@ export function MessageGroup({
                 setSavedStepsOpen(false);
               }
             }}
-            className="inline-flex items-center gap-1 py-0.5 text-[11px] leading-4 text-muted-foreground/45 transition-colors hover:text-muted-foreground"
+            className="inline-flex items-center gap-1 py-0.5 text-xs leading-4 text-muted-foreground/45 transition-colors hover:text-muted-foreground"
             aria-label={timelineToggleLabel}
             title={timelineToggleLabel}
           >
@@ -904,7 +904,7 @@ export function MessageGroup({
       )}
       {showInterruptedReceipt && (
         <div
-          className="mt-1 text-[11px] leading-5 text-muted-foreground/70"
+          className="mt-1 text-xs leading-5 text-muted-foreground/70"
           data-testid="process-interrupted-receipt"
         >
           {t.conversation.interruptedMessage}
@@ -945,7 +945,7 @@ function ReasoningStepGroup({
       <Collapsible open={open} onOpenChange={onOpenChange}>
         {group.steps.length > 1 && (
           <div className="mb-1 flex min-w-0 items-center gap-2">
-            <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-[11px] leading-4 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
+            <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-4 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
               <ProcessStateDot active={active} />
               <span className="text-muted-foreground/70 shrink-0 text-xs font-medium">
                 {countLabel.trim()}
@@ -1016,7 +1016,7 @@ function ActionCallbackGroup({
       <Collapsible open={open} onOpenChange={onOpenChange}>
         {group.steps.length > 1 && (
           <div className="mb-1 flex min-w-0 items-center gap-2">
-            <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-[11px] leading-4 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
+            <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-4 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
               <ProcessStateDot active={active} />
               <span className="shrink-0 font-medium text-muted-foreground/60">
                 {countLabel.trim()}
@@ -1115,7 +1115,7 @@ function ActionCallbackLabel({
     ? text
     : compactReasoningSummary(stripTraceLabelPrefixes(text), 140);
   return (
-    <div className="max-w-full break-words text-[10px] leading-4 text-muted-foreground/75">
+    <div className="max-w-full break-words text-xs leading-4 text-muted-foreground/75">
       {summary}
     </div>
   );
@@ -1123,7 +1123,7 @@ function ActionCallbackLabel({
 
 function StepNumber({ index }: { index: number }) {
   return (
-    <span className="bg-muted text-muted-foreground flex size-5 items-center justify-center rounded-full font-mono text-[10px]">
+    <span className="bg-muted text-muted-foreground flex size-5 items-center justify-center rounded-full font-mono text-xs">
       {String(index).padStart(2, "0")}
     </span>
   );
@@ -1187,7 +1187,7 @@ function NestedStepDisclosure({
       <CollapsibleTrigger
         className={cn(
           "group/nested-step flex min-w-0 items-start gap-1.5 rounded-md px-1 py-0.5 text-left",
-          "text-[11px] leading-5 text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground",
+          "text-xs leading-5 text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground",
         )}
       >
         <ChevronDownIcon className="mt-1 size-3 shrink-0 -rotate-90 text-muted-foreground transition-transform group-data-[state=open]/nested-step:rotate-0" />
@@ -1214,7 +1214,7 @@ function inlineActionLabel(action: React.ReactNode, detail?: React.ReactNode) {
     <div className="flex min-w-0 items-center gap-2">
       <span className="text-foreground shrink-0">{action}</span>
       {detail && (
-        <span className="text-muted-foreground bg-muted/60 min-w-0 truncate rounded-md px-1.5 py-0.5 font-mono text-[11px]">
+        <span className="text-muted-foreground bg-muted/60 min-w-0 truncate rounded-md px-1.5 py-0.5 font-mono text-xs">
           {detail}
         </span>
       )}

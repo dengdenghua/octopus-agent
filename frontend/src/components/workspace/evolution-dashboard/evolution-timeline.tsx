@@ -56,7 +56,7 @@ function CanaryStatusBadge({ phase }: { phase: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium",
         canaryPhaseStyle(phase),
       )}
     >
@@ -73,7 +73,7 @@ function FitnessDiffCard({ before, after }: { before: number; after: number }) {
   const maxVal = Math.max(safeBefore, safeAfter, 0.01);
 
   return (
-    <div className="flex items-center gap-3 text-[10px]">
+    <div className="flex items-center gap-3 text-xs">
       <div className="flex-1 space-y-1">
         <div className="flex items-center gap-1.5">
           <span className="text-muted-foreground w-9 shrink-0">Before</span>
@@ -149,7 +149,7 @@ function TimelineNode({
           )}
         >
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="inline-flex items-center gap-1 rounded-md bg-foreground/5 px-1.5 py-0.5 text-[10px] font-medium">
+            <span className="inline-flex items-center gap-1 rounded-md bg-foreground/5 px-1.5 py-0.5 text-xs font-medium">
               <GitBranchIcon className="size-3" />
               {record.kind}
             </span>
@@ -157,11 +157,11 @@ function TimelineNode({
             {record.status === "rolled_back" && (
               <AlertTriangleIcon className="size-3 text-red-500" />
             )}
-            <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
+            <span className="ml-auto text-xs text-muted-foreground tabular-nums">
               {new Date(record.ts).toLocaleString()}
             </span>
           </div>
-          <p className="text-[11px] leading-relaxed break-words">
+          <p className="text-xs leading-relaxed break-words">
             {record.description}
           </p>
           {hasFitness && (
@@ -179,7 +179,7 @@ function TimelineNode({
                 onClick={onRollback}
                 disabled={isRollingBack}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px]",
+                  "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs",
                   "text-muted-foreground hover:bg-destructive/10 hover:text-destructive",
                   "disabled:opacity-50 disabled:cursor-not-allowed transition-colors",
                 )}
@@ -196,7 +196,7 @@ function TimelineNode({
       {delta != null && (
         <div
           className={cn(
-            "shrink-0 flex items-center gap-0.5 text-[11px] font-medium tabular-nums pt-2",
+            "shrink-0 flex items-center gap-0.5 text-xs font-medium tabular-nums pt-2",
             improved
               ? "text-emerald-600 dark:text-emerald-400"
               : "text-red-600 dark:text-red-400",
@@ -258,7 +258,7 @@ export function EvolutionTimeline() {
 
   if (ledgerQuery.isLoading) {
     return (
-      <div className="flex items-center justify-center py-8 text-muted-foreground text-[12px]">
+      <div className="flex items-center justify-center py-8 text-muted-foreground text-xs">
         <RotateCcwIcon className="size-4 mr-2 animate-spin" />
         Loading timeline...
       </div>
@@ -269,7 +269,7 @@ export function EvolutionTimeline() {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
         <GitBranchIcon className="size-8 mb-2 opacity-40" />
-        <p className="text-[12px]">No evolution events recorded yet</p>
+        <p className="text-xs">No evolution events recorded yet</p>
       </div>
     );
   }

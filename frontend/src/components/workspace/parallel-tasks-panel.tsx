@@ -142,12 +142,12 @@ export function ParallelTasksPanel({
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium truncate">{task.prompt}</p>
                 {task.error && (
-                  <p className="text-[10px] text-red-500 mt-0.5">
+                  <p className="text-xs text-red-500 mt-0.5">
                     {task.error}
                   </p>
                 )}
                 {task.result && task.status === "completed" && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                     {task.result}
                   </p>
                 )}

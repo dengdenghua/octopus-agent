@@ -193,13 +193,13 @@ function MermaidBlockHeader({
   return (
     <div className="flex h-8 items-center justify-between gap-2 border-b bg-muted/40 px-3">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="font-mono text-[10px] text-muted-foreground uppercase">
+        <span className="font-mono text-xs text-muted-foreground uppercase">
           mermaid
         </span>
         {isStreaming && (
           <>
-            <span className="text-[10px] text-muted-foreground">·</span>
-            <span className="animate-pulse text-[10px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">·</span>
+            <span className="animate-pulse text-xs text-muted-foreground">
               {t.streaming.generating}
             </span>
           </>

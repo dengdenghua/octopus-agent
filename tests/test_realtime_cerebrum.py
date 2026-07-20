@@ -518,6 +518,41 @@ def test_runtime_generated_commentary_is_not_shown_as_model_progress(gateway: An
     assert [(item["text"], item.get("progressKind")) for item in messages] == [("最终答案", None)]
 
 
+def test_grounded_runtime_evidence_is_shown_between_batches(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "commentary_delta",
+                "delta": "已完整取得 items.py 的 21,204 字节内容；接下来核对 reducer.ts。",
+                "progress_source": "runtime",
+                "public_evidence": True,
+                "start_new_segment": True,
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-grounded-runtime-evidence",
+                "input": [{"type": "text", "text": "compare two files in order"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    messages = [
+        item for item in out["response"].result["turn"]["items"] if item["type"] == "agentMessage"
+    ]
+    assert [item["text"] for item in messages] == [
+        "已完整取得 items.py 的 21,204 字节内容；接下来核对 reducer.ts。",
+        "最终答案",
+    ]
+
+
 def test_commentary_without_terminal_event_fails_instead_of_completing(gateway: Any) -> None:
     client, _ = gateway
     _set_script(

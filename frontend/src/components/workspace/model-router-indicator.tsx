@@ -187,7 +187,7 @@ export function ModelRouterIndicator({
             <Badge
               variant="outline"
               className={cn(
-                "ml-0.5 h-4 px-1 text-[10px] font-normal leading-none",
+                "ml-0.5 h-4 px-1 text-xs font-normal leading-none",
                 taskIconCfg.color,
               )}
             >
@@ -219,7 +219,7 @@ export function ModelRouterIndicator({
           {/* Header */}
           <div className="mb-2 flex items-center justify-between">
             <h4 className="text-xs font-semibold">{t.modelRouter.title}</h4>
-            <Badge variant="secondary" className="h-4 text-[10px]">
+            <Badge variant="secondary" className="h-4 text-xs">
               {routingDecision.preference}
             </Badge>
           </div>
@@ -270,14 +270,14 @@ export function ModelRouterIndicator({
           {/* Score breakdown */}
           {sortedScores.length > 0 && (
             <div className="mb-2">
-              <h5 className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wider">
+              <h5 className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wider">
                 {t.modelRouter.modelScores}
               </h5>
               <div className="space-y-0.5">
                 {sortedScores.map(([model, score]) => (
                   <div
                     key={model}
-                    className="flex items-center gap-2 text-[11px]"
+                    className="flex items-center gap-2 text-xs"
                   >
                     <span
                       className={cn(
@@ -300,7 +300,7 @@ export function ModelRouterIndicator({
                         style={{ width: `${Math.min(100, score * 100)}%` }}
                       />
                     </div>
-                    <span className="w-8 text-right font-mono text-[10px]">
+                    <span className="w-8 text-right font-mono text-xs">
                       {formatScore(score)}
                     </span>
                   </div>
@@ -312,7 +312,7 @@ export function ModelRouterIndicator({
           {/* Recent history */}
           {history.length > 0 && (
             <div>
-              <h5 className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wider">
+              <h5 className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wider">
                 {t.modelRouter.recentRouting}
               </h5>
               <div className="max-h-24 space-y-0.5 overflow-y-auto">
@@ -322,7 +322,7 @@ export function ModelRouterIndicator({
                   return (
                     <div
                       key={`${d.timestamp}-${i}`}
-                      className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
                       <Icon size={10} className={meta?.color ?? ""} />
                       <span className="truncate flex-1">
@@ -337,7 +337,7 @@ export function ModelRouterIndicator({
           )}
 
           {loadingHistory && (
-            <p className="text-muted-foreground text-center text-[10px]">
+            <p className="text-muted-foreground text-center text-xs">
               {t.modelRouter.loadingHistory}
             </p>
           )}

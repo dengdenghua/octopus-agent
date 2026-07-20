@@ -53,7 +53,7 @@ export function HunkActions({
       {isDecided ? (
         <span
           className={cn(
-            "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",
+            "flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium",
             hunk.accepted
               ? "bg-green-500/15 text-green-600 dark:text-green-400"
               : "bg-red-500/15 text-red-600 dark:text-red-400",
@@ -75,7 +75,7 @@ export function HunkActions({
         <>
           <button
             onClick={handleAccept}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-green-600 transition-colors hover:bg-green-500/15 dark:text-green-400"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-green-600 transition-colors hover:bg-green-500/15 dark:text-green-400"
             title={t.diffEditor.hunkAccept}
           >
             <CheckIcon className="size-3" />
@@ -83,7 +83,7 @@ export function HunkActions({
           </button>
           <button
             onClick={handleReject}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-500/15 dark:text-red-400"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/15 dark:text-red-400"
             title={t.diffEditor.hunkReject}
           >
             <XIcon className="size-3" />
@@ -119,11 +119,11 @@ export function HunkHeader({
   return (
     <div className="group flex items-center justify-between bg-blue-500/5 px-3 py-1 dark:bg-blue-500/10">
       <div className="flex items-center gap-2 overflow-hidden">
-        <span className="shrink-0 font-mono text-[10px] text-blue-500 dark:text-blue-400">
+        <span className="shrink-0 font-mono text-xs text-blue-500 dark:text-blue-400">
           {hunk.header.split("@@").slice(0, 2).join("@@")}@@
         </span>
         {context && (
-          <span className="truncate font-mono text-[10px] text-muted-foreground">
+          <span className="truncate font-mono text-xs text-muted-foreground">
             {context}
           </span>
         )}

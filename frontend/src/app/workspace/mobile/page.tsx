@@ -523,7 +523,7 @@ function StatusBar() {
       <span className="font-mono">{fmtTime(Date.now() / 1000)}</span>
       <div className="flex items-center gap-1">
         <WifiIcon className="size-3" />
-        <span className="font-mono text-[10px]">5G</span>
+        <span className="font-mono text-xs">5G</span>
         <div className="ml-1 flex items-center">
           <div className="h-2 w-5 rounded-sm border border-foreground">
             <div className="h-full w-4/5 rounded-sm bg-foreground dark:bg-white" />
@@ -567,7 +567,7 @@ function TopBar({
           </h1>
           <button
             onClick={onOpenDeviceSwitcher}
-            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-muted-foreground dark:hover:text-muted-foreground/50"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-muted-foreground dark:hover:text-muted-foreground/50"
           >
             <span
               className={cn(
@@ -698,7 +698,7 @@ function Drawer({
             {/* 最近对话 */}
             {recentList.length > 0 && (
               <>
-                <div className="px-2 pb-1 pt-4 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                <div className="px-2 pb-1 pt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
                   最近对话
                 </div>
                 {recentList.map((c) => (
@@ -726,7 +726,7 @@ function Drawer({
                     />
                     <span
                       className={cn(
-                        "flex-1 truncate text-[13px]",
+                        "flex-1 truncate text-sm",
                         c.isActive
                           ? "font-medium text-blue-600 dark:text-blue-400"
                           : "text-muted-foreground dark:text-muted-foreground",
@@ -811,7 +811,7 @@ function DeviceSwitcher({
         }}
       />
       <div className="absolute left-3 right-3 top-[72px] z-50 overflow-hidden rounded-lg border border-border bg-white shadow-xl dark:border-border dark:bg-card">
-        <div className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+        <div className="px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
           切换设备
         </div>
         <div className="max-h-56 overflow-y-auto">
@@ -840,7 +840,7 @@ function DeviceSwitcher({
             onClick={() => onSelect(PC_DEVICE)}
           />
           {devices.length > 0 && (
-            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/50">
+            <div className="px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground/50">
               其他设备
             </div>
           )}
@@ -905,11 +905,11 @@ function DeviceItem({
         <Icon className="size-3.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium leading-tight">
+        <div className="truncate text-sm font-medium leading-tight">
           {label}
         </div>
         {sub && (
-          <div className="truncate text-[10px] text-muted-foreground/70">
+          <div className="truncate text-xs text-muted-foreground/70">
             {sub}
           </div>
         )}
@@ -1054,16 +1054,16 @@ function PreviewCard({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium leading-tight">
+        <div className="truncate text-sm font-medium leading-tight">
           {label}
         </div>
-        <div className="truncate text-[10px] text-muted-foreground/70">
+        <div className="truncate text-xs text-muted-foreground/70">
           {sub}
         </div>
       </div>
       <div
         className={cn(
-          "rounded-full px-2.5 py-0.5 text-[10px] font-medium transition-colors",
+          "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
           disabled
             ? "bg-muted text-muted-foreground/70 dark:bg-muted"
             : "bg-foreground text-white group-hover:bg-blue-500 dark:bg-white dark:text-foreground",
@@ -1106,7 +1106,7 @@ function BottomTabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
               )}
             >
               <Icon className={cn("size-5", active && "fill-foreground")} />
-              <span className="text-[11px] font-medium">{label}</span>
+              <span className="text-xs font-medium">{label}</span>
             </button>
           );
         })}
@@ -1264,7 +1264,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         )}
       >
         <div className="whitespace-pre-wrap break-words">{message.content}</div>
-        <div className="mt-1 text-[10px] text-muted-foreground/70">
+        <div className="mt-1 text-xs text-muted-foreground/70">
           {fmtTime(message.timestamp)}
         </div>
       </div>
@@ -1350,7 +1350,7 @@ function TasksTab({
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{task.task}</div>
-                      <div className="mt-1 text-[11px] text-muted-foreground">
+                      <div className="mt-1 text-xs text-muted-foreground">
                         {fmtTime(task.timestamp)} · {task.steps} 步 ·{" "}
                         {task.duration_ms}ms
                       </div>
@@ -1442,7 +1442,7 @@ function SkillsTab({
                       {skill.name}
                     </div>
                     {skill.description && (
-                      <div className="truncate text-[11px] text-muted-foreground">
+                      <div className="truncate text-xs text-muted-foreground">
                         {skill.description}
                       </div>
                     )}
@@ -1555,7 +1555,7 @@ function MeTab({
               </div>
               <div
                 className={cn(
-                  "text-[11px]",
+                  "text-xs",
                   pcScreenStats?.running
                     ? "text-green-500"
                     : "text-muted-foreground/70",

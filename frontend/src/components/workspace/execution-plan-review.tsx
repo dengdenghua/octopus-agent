@@ -35,6 +35,7 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
@@ -66,18 +67,18 @@ interface ExecutionPlanReviewProps {
 const RISK_CONFIG = {
   low: {
     color:
-      "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
     icon: ShieldCheckIcon,
     label: "Low Risk",
   },
   medium: {
     color:
-      "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
+      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
     icon: AlertTriangleIcon,
     label: "Medium Risk",
   },
   high: {
-    color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+    color: "bg-destructive/10 text-destructive dark:text-destructive border-destructive/20",
     icon: AlertTriangleIcon,
     label: "High Risk",
   },
@@ -93,8 +94,8 @@ const STATUS_CONFIG = {
   pending: { color: "text-muted-foreground", bgColor: "bg-muted/30" },
   in_progress: { color: "text-primary", bgColor: "bg-primary/5" },
   completed: {
-    color: "text-green-600 dark:text-green-400",
-    bgColor: "bg-green-500/5",
+    color: "text-emerald-600 dark:text-emerald-400",
+    bgColor: "bg-emerald-500/5",
   },
   skipped: { color: "text-muted-foreground/50", bgColor: "bg-muted/10" },
 } as const;
@@ -122,11 +123,11 @@ function StepEditor({
         <GripVerticalIcon className="size-3.5" />
       </div>
       <div className="min-w-0 flex-1 space-y-1.5">
-        <input
+        <Input
           type="text"
           value={step.description}
           onChange={(e) => onUpdate(index, { description: e.target.value })}
-          className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/40"
+          className="w-full border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground/40 focus-visible:ring-0"
           placeholder="Step description..."
           aria-label={t.executionPlan.stepDescriptionAria}
         />
@@ -138,7 +139,7 @@ function StepEditor({
                 risk: e.target.value as ExecutionPlanStep["risk"],
               })
             }
-            className="h-5 rounded border border-border-default bg-muted/30 px-1 text-[10px] outline-none"
+            className="h-5 rounded border border-border-default bg-muted/30 px-1 text-xs outline-none"
           >
             <option value="low">{t.executionPlan.lowRisk}</option>
             <option value="medium">{t.executionPlan.mediumRisk}</option>
@@ -152,7 +153,7 @@ function StepEditor({
                   .value as ExecutionPlanStep["estimated_duration"],
               })
             }
-            className="h-5 rounded border border-border-default bg-muted/30 px-1 text-[10px] outline-none"
+            className="h-5 rounded border border-border-default bg-muted/30 px-1 text-xs outline-none"
           >
             <option value="fast">{t.executionPlan.fast}</option>
             <option value="medium">{t.executionPlan.medium}</option>
@@ -161,7 +162,7 @@ function StepEditor({
           {toolsNeeded.length > 0 && (
             <div className="flex items-center gap-0.5">
               <WrenchIcon className="size-2.5 text-muted-foreground/40" />
-              <span className="text-[10px] text-muted-foreground/60">
+              <span className="text-xs text-muted-foreground/60">
                 {toolsNeeded.join(", ")}
               </span>
             </div>
@@ -220,7 +221,7 @@ function PlanStepRow({
         statusCfg.bgColor,
         step.status === "in_progress" &&
           "border-primary/30 shadow-[var(--shadow-xs)] shadow-primary/5",
-        step.status === "completed" && "border-green-500/20",
+        step.status === "completed" && "border-emerald-500/20",
         step.status === "skipped" && "border-border-subtle opacity-60",
         step.status === "pending" && "border-border-subtle",
       )}
@@ -233,7 +234,7 @@ function PlanStepRow({
         {/* Status icon */}
         <div className="mt-0.5 shrink-0">
           {step.status === "completed" ? (
-            <CheckCircle2Icon className="size-3.5 text-green-500" />
+            <CheckCircle2Icon className="size-3.5 text-emerald-500" />
           ) : step.status === "in_progress" ? (
             <Loader2Icon className="size-3.5 animate-spin text-primary" />
           ) : step.status === "skipped" ? (
@@ -246,7 +247,7 @@ function PlanStepRow({
         {/* Content */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground/40 text-[10px] font-mono tabular-nums">
+            <span className="text-muted-foreground/40 text-xs font-mono tabular-nums">
               {index + 1}
             </span>
             <span
@@ -284,7 +285,7 @@ function PlanStepRow({
           {step.risk !== "low" && (
             <span
               className={cn(
-                "inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[10px] font-medium",
+                "inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-xs font-medium",
                 riskCfg.color,
               )}
             >
@@ -293,7 +294,7 @@ function PlanStepRow({
             </span>
           )}
           {/* Duration */}
-          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground/60">
             <DurationIcon className="size-2.5" />
             {durationLabels[step.estimated_duration] ?? durationCfg.label}
           </span>
@@ -304,7 +305,7 @@ function PlanStepRow({
               {toolsNeeded.map((tool) => (
                 <span
                   key={tool}
-                  className="rounded bg-muted/50 px-1 py-0.5 font-mono text-[9px] text-muted-foreground"
+                  className="rounded bg-muted/50 px-1 py-0.5 font-mono text-xs text-muted-foreground"
                 >
                   {tool}
                 </span>
@@ -559,19 +560,19 @@ export function ExecutionPlanReview({
     if (isReviewable)
       return {
         text: t.executionPlan.awaitingReview,
-        color: "text-yellow-600 dark:text-yellow-400",
+        color: "text-amber-600 dark:text-amber-400",
       };
     if (isApproved || isExecuting)
       return { text: t.executionPlan.executing, color: "text-primary" };
     if (isCompleted)
       return {
         text: t.executionPlan.completed,
-        color: "text-green-600 dark:text-green-400",
+        color: "text-emerald-600 dark:text-emerald-400",
       };
     if (isRejected)
       return {
         text: t.executionPlan.rejected,
-        color: "text-red-600 dark:text-red-400",
+        color: "text-destructive dark:text-destructive",
       };
     return { text: plan.status, color: "text-muted-foreground" };
   }, [
@@ -588,10 +589,10 @@ export function ExecutionPlanReview({
     <div
       className={cn(
         "w-full rounded-lg border transition-colors transition-shadow duration-300",
-        isReviewable && "border-yellow-500/30 bg-yellow-500/[0.02] shadow-[var(--shadow-xs)]",
+        isReviewable && "border-amber-500/30 bg-amber-500/[0.02] shadow-[var(--shadow-xs)]",
         (isExecuting || isApproved) && "border-primary/20 bg-primary/[0.02]",
-        isCompleted && "border-green-500/20 bg-green-500/[0.02]",
-        isRejected && "border-red-500/20 bg-red-500/[0.02] opacity-75",
+        isCompleted && "border-emerald-500/20 bg-emerald-500/[0.02]",
+        isRejected && "border-destructive/20 bg-destructive/[0.02] opacity-75",
         className,
       )}
     >
@@ -605,7 +606,7 @@ export function ExecutionPlanReview({
           <ClipboardCheckIcon className={cn("size-4", headerStatus.color)} />
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold">{plan.title}</span>
-            <span className={cn("text-[10px] font-medium", headerStatus.color)}>
+            <span className={cn("text-xs font-medium", headerStatus.color)}>
               {headerStatus.text}
             </span>
           </div>
@@ -613,14 +614,14 @@ export function ExecutionPlanReview({
         <div className="flex items-center gap-2">
           {/* Progress badge */}
           {(isExecuting || isCompleted) && (
-            <span className="rounded-lg bg-muted px-2 py-0.5 text-[10px] font-medium tabular-nums">
+            <span className="rounded-lg bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
               {completedSteps}/{steps.length}
             </span>
           )}
           {/* Risk badge */}
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[10px] font-medium",
+              "inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-xs font-medium",
               riskCfg.color,
             )}
           >
@@ -649,7 +650,7 @@ export function ExecutionPlanReview({
             <div
               className={cn(
                 "h-full rounded-lg transition-all duration-700 ease-out",
-                isCompleted ? "bg-green-500" : "bg-primary",
+                isCompleted ? "bg-emerald-500" : "bg-primary",
               )}
               style={{ width: `${progressPct}%` }}
             />
@@ -661,7 +662,7 @@ export function ExecutionPlanReview({
       {!shouldCollapse && (
         <div className="space-y-3 px-4 pb-4">
           {/* Meta info */}
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <WrenchIcon className="size-2.5" />~{plan.estimated_actions}{" "}
               actions
@@ -804,7 +805,7 @@ export function ExecutionPlanReview({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-red-500"
+                    className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-destructive"
                     onClick={() => setShowRejectInput(true)}
                     disabled={isProcessing || actionInFlight !== null}
                   >

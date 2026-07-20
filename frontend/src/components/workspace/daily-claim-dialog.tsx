@@ -142,7 +142,7 @@ export function DailyClaimDialog({
           {/* Primary: spin for the draw */}
           <div className="relative mb-3">
             {canClaim && !info.isLoading && (
-              <span className="absolute -top-2 right-3 z-10 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow">
+              <span className="absolute -top-2 right-3 z-10 rounded-full bg-rose-500 px-2 py-0.5 text-xs font-semibold text-white shadow">
                 {t.dailyClaim.drawHint(max)}
               </span>
             )}

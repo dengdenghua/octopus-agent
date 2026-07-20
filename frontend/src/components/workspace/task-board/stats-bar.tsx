@@ -80,13 +80,13 @@ function StatCard({
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <div className="flex items-baseline gap-2">
           <p className="text-lg font-semibold tabular-nums leading-tight">
             {value}
           </p>
           {subValue && (
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {subValue}
             </span>
           )}

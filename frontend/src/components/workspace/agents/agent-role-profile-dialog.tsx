@@ -669,7 +669,7 @@ function AgentCoreVisual({
       <div className="pointer-events-none absolute bottom-[44%] left-[15%] text-sm font-mono uppercase tracking-[0.55em] text-white/[0.045]">
         {t.agentConfig.visualLoadoutLabel}
       </div>
-      <div className="absolute right-8 top-8 z-20 rounded-sm border border-primary/20 bg-black/18 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.32em] text-primary/80">
+      <div className="absolute right-8 top-8 z-20 rounded-sm border border-primary/20 bg-black/18 px-2 py-1 font-mono text-xs uppercase tracking-[0.32em] text-primary/80">
         REC
       </div>
       <div className="absolute right-5 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-3">
@@ -685,7 +685,7 @@ function AgentCoreVisual({
             type="button"
             onClick={() => setView(key)}
           >
-            <span className="absolute left-2 top-2 z-10 font-mono text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
+            <span className="absolute left-2 top-2 z-10 font-mono text-xs uppercase tracking-[0.25em] text-muted-foreground">
               {key}
             </span>
             <span className="flex h-full items-end justify-center overflow-hidden rounded-sm bg-white/[0.035] pb-1">
@@ -699,14 +699,14 @@ function AgentCoreVisual({
                 <Bot className="mb-5 size-6 text-muted-foreground" />
               )}
             </span>
-            <span className="absolute bottom-2 right-2 font-mono text-[9px] uppercase text-muted-foreground">
+            <span className="absolute bottom-2 right-2 font-mono text-xs uppercase text-muted-foreground">
               {label}
             </span>
           </button>
         ))}
         <Button
           aria-label={t.agentConfig.visualGenerateAction}
-          className="h-8 w-[62px] rounded-sm border-primary/35 bg-black/15 px-1 text-[10px] xl:w-[78px]"
+          className="h-8 w-[62px] rounded-sm border-primary/35 bg-black/15 px-1 text-xs xl:w-[78px]"
           disabled={generateVisuals.isPending}
           title={t.agentConfig.visualGenerateAction}
           variant="outline"
@@ -721,7 +721,7 @@ function AgentCoreVisual({
       </div>
       <div className="absolute left-4 top-4 z-20 hidden items-center gap-2 rounded-sm border border-white/10 bg-black/15 px-3 py-2">
         <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary)/0.75)]" />
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        <span className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
           {t.agentConfig.visualTitle}
         </span>
       </div>
@@ -761,12 +761,12 @@ function AgentCoreVisual({
                 <div className="flex size-32 items-center justify-center rounded-sm border border-primary/35 bg-background text-6xl shadow-[var(--shadow-xs)]">
                   {agent.icon || <Bot className="size-16" />}
                 </div>
-                <span className="font-mono text-[10px] uppercase tracking-[0.16em]">
+                <span className="font-mono text-xs uppercase tracking-[0.16em]">
                   {t.agentConfig.visualMissing}
                 </span>
               </div>
             )}
-            <div className="absolute bottom-[52px] left-[6%] right-[6%] h-9 border-y border-[#111]/30 bg-[#f4e86f] text-center font-mono text-[10px] font-semibold uppercase tracking-[0.55em] text-[#232323] shadow-[0_0_24px_rgba(244,232,111,0.18)]">
+            <div className="absolute bottom-[52px] left-[6%] right-[6%] h-9 border-y border-[#111]/30 bg-[#f4e86f] text-center font-mono text-xs font-semibold uppercase tracking-[0.55em] text-[#232323] shadow-[0_0_24px_rgba(244,232,111,0.18)]">
               <div className="flex h-full items-center justify-center gap-4">
                 <span className="h-px w-10 bg-[#232323]/50" />
                 {t.agentConfig.visualSystemOnline}
@@ -866,7 +866,7 @@ function AgentCoreVisual({
                   key={group.id}
                   className="rounded-sm border border-white/8 bg-black/18 p-3"
                 >
-                  <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/44">
+                  <div className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-white/44">
                     {group.label}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -879,7 +879,7 @@ function AgentCoreVisual({
                           key={option.id}
                           type="button"
                           className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] leading-5 transition",
+                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs leading-5 transition",
                             active
                               ? "border-[#f4e86f]/45 bg-[#f4e86f]/12 text-white"
                               : "border-white/10 bg-white/[0.025] text-white/52 hover:border-white/22 hover:text-white/82",
@@ -901,7 +901,7 @@ function AgentCoreVisual({
               ))}
 
               <div className="rounded-sm border border-white/8 bg-black/18 p-3">
-                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/44">
+                <div className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-white/44">
                   {t.agentRoleProfile.customAdditions}
                 </div>
                 <Textarea
@@ -916,10 +916,10 @@ function AgentCoreVisual({
 
               <div className="rounded-sm border border-white/8 bg-black/18 p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/44">
+                  <div className="font-mono text-xs uppercase tracking-[0.16em] text-white/44">
                     {t.agentRoleProfile.referenceImages}
                   </div>
-                  <span className="text-[11px] text-white/36">
+                  <span className="text-xs text-white/36">
                     {t.agentRoleProfile.referenceImagesHint(
                       MAX_VISUAL_REFERENCE_IMAGES,
                     )}
@@ -971,7 +971,7 @@ function AgentCoreVisual({
                           <X className="size-3" />
                         </button>
                         {!image.startsWith("data:") ? (
-                          <span className="absolute bottom-1 left-1 rounded-sm bg-black/62 px-1 text-[9px] text-white/68">
+                          <span className="absolute bottom-1 left-1 rounded-sm bg-black/62 px-1 text-xs text-white/68">
                             <Link className="inline size-2.5" />
                           </span>
                         ) : null}
@@ -982,17 +982,17 @@ function AgentCoreVisual({
               </div>
 
               <div className="rounded-sm border border-white/8 bg-white/[0.025] p-3">
-                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/36">
+                <div className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-white/36">
                   Prompt Preview
                 </div>
                 {referenceImages.length > 0 ? (
-                  <div className="mb-2 text-[11px] text-[#f4e86f]/78">
+                  <div className="mb-2 text-xs text-[#f4e86f]/78">
                     {t.agentRoleProfile.referenceImagesGenerateHint(
                       referenceImages.length,
                     )}
                   </div>
                 ) : null}
-                <p className="max-h-28 overflow-y-auto whitespace-pre-wrap text-[11px] leading-5 text-white/48 [scrollbar-width:thin]">
+                <p className="max-h-28 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-white/48 [scrollbar-width:thin]">
                   {finalVisualPrompt}
                 </p>
               </div>
@@ -1328,7 +1328,7 @@ export function AgentRoleProfileDialog({
                   >
                     <ChevronRight className="size-5 rotate-180" />
                   </Button>
-                  <div className="flex items-center gap-2 rounded-sm border border-white/8 bg-white/[0.025] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <div className="flex items-center gap-2 rounded-sm border border-white/8 bg-white/[0.025] px-2 py-1 font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
                     <span
                       className={cn(
                         "h-1.5 w-1.5 rounded-full",
@@ -1350,7 +1350,7 @@ export function AgentRoleProfileDialog({
                 <div className="min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.22)_transparent]">
                   <div className="max-w-[360px] pb-6">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-primary">
+                      <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.24em] text-primary">
                         <span className="h-px w-6 bg-primary/70" />
                         {t.agentConfig.characterFileLabel}
                       </div>
@@ -1366,7 +1366,7 @@ export function AgentRoleProfileDialog({
                             key={`${label}-${value}`}
                             className="min-w-0 bg-[#2a2a2a]/92 px-2.5 py-2"
                           >
-                            <div className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-white/36">
+                            <div className="truncate font-mono text-xs uppercase tracking-[0.12em] text-white/36">
                               {label}
                             </div>
                             <div className="mt-1 truncate text-xs font-medium leading-4 text-white/88">
@@ -1385,11 +1385,11 @@ export function AgentRoleProfileDialog({
 
                     <div className="mt-6">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                        <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
                           <span className="h-px w-4 bg-white/18" />
                           PERSONA
                         </div>
-                        <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/32">
+                        <span className="font-mono text-xs uppercase tracking-[0.14em] text-white/32">
                           {meta.codeName}
                         </span>
                       </div>
@@ -1399,7 +1399,7 @@ export function AgentRoleProfileDialog({
                     </div>
 
                     <div className="mt-5">
-                      <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                      <div className="mb-2 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
                         <span className="h-px w-4 bg-white/18" />
                         {t.agentConfig.characterBackgroundLabel}
                       </div>
@@ -1409,7 +1409,7 @@ export function AgentRoleProfileDialog({
                     </div>
 
                     <div className="mt-5">
-                      <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-primary">
+                      <div className="mb-2 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-primary">
                         <span className="h-px w-4 bg-primary/60" />
                         {t.agentConfig.characterBestForLabel}
                       </div>
@@ -1427,7 +1427,7 @@ export function AgentRoleProfileDialog({
 
                     <div className="mt-5 grid grid-cols-[1fr_auto] gap-3">
                       <div className="min-w-0 border-l border-primary/45 pl-3">
-                        <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+                        <div className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
                           {t.agentConfig.characterPersonalityLabel}
                         </div>
                         <p className="mt-1 line-clamp-4 text-sm leading-6 text-white/86">
@@ -1438,7 +1438,7 @@ export function AgentRoleProfileDialog({
                         {personaTags.slice(0, 4).map((tag) => (
                           <span
                             key={tag}
-                            className="truncate rounded-sm border border-white/10 bg-white/[0.035] px-2 py-1 text-[10px] leading-4 text-white/66"
+                            className="truncate rounded-sm border border-white/10 bg-white/[0.035] px-2 py-1 text-xs leading-4 text-white/66"
                             title={tag}
                           >
                             {tag}
@@ -1450,10 +1450,10 @@ export function AgentRoleProfileDialog({
                     <div className="mt-5 space-y-4">
                       <div>
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                          <span className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
                             {t.agentConfig.characterVisualKeywordsLabel}
                           </span>
-                          <span className="font-mono text-[10px] text-muted-foreground">
+                          <span className="font-mono text-xs text-muted-foreground">
                             {t.agentConfig.characterPromptHint}
                           </span>
                         </div>
@@ -1470,7 +1470,7 @@ export function AgentRoleProfileDialog({
                       </div>
 
                       <div className="rounded-sm border border-white/10 bg-black/10 px-3 py-2.5">
-                        <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/48">
+                        <div className="mb-2 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-white/48">
                           <span className="h-px w-4 bg-white/18" />
                           {t.agentConfig.characterBoundaryLabel}
                         </div>
@@ -1478,7 +1478,7 @@ export function AgentRoleProfileDialog({
                           {boundaryTags.map((item) => (
                             <span
                               key={item}
-                              className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[11px] leading-5 text-white/62"
+                              className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-xs leading-5 text-white/62"
                             >
                               {item}
                             </span>
@@ -1486,18 +1486,18 @@ export function AgentRoleProfileDialog({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                      <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
                         <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                         {t.agentConfig.characterProfileReady}
                       </div>
 
                       {canAssembleCapabilityPack ? (
                         <div className="rounded-sm border border-primary/20 bg-primary/10 p-2.5">
-                          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-primary">
+                          <div className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-primary">
                             {t.agentConfig.capabilityPackLabel}
                           </div>
                           <button
-                            className="inline-flex items-center gap-1 rounded-sm border border-primary/25 bg-black/15 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-primary transition hover:border-primary/45 hover:bg-primary/15"
+                            className="inline-flex items-center gap-1 rounded-sm border border-primary/25 bg-black/15 px-2 py-1 font-mono text-xs uppercase tracking-[0.12em] text-primary transition hover:border-primary/45 hover:bg-primary/15"
                             disabled={installingPack}
                             type="button"
                             onClick={() => void handleAssembleCapabilityPack()}
@@ -1518,7 +1518,7 @@ export function AgentRoleProfileDialog({
                 <div className="mt-3 shrink-0 border-t border-white/10 bg-[#2a2a2a]/94 pt-2 shadow-[0_-14px_28px_rgba(0,0,0,0.16)] backdrop-blur">
                   <div className="max-w-[360px]">
                     <div className="flex items-center gap-1.5">
-                      <div className="mr-1 flex min-w-0 items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/48">
+                      <div className="mr-1 flex min-w-0 items-center gap-1.5 font-mono text-xs uppercase tracking-[0.12em] text-white/48">
                         <span className="size-1.5 rounded-full bg-primary/80" />
                         <span className="max-w-[72px] truncate">
                           {t.agentConfig.configDockTitle}
@@ -1538,10 +1538,10 @@ export function AgentRoleProfileDialog({
                             >
                               <Icon className="size-3.5 shrink-0 text-primary/82" />
                               <span className="min-w-0 flex-1 text-left">
-                                <span className="block truncate text-[11px] leading-4">
+                                <span className="block truncate text-xs leading-4">
                                   {action.shortLabel}
                                 </span>
-                                <span className="block truncate font-mono text-[9px] leading-3 text-white/42">
+                                <span className="block truncate font-mono text-xs leading-3 text-white/42">
                                   {action.metric}
                                 </span>
                               </span>
@@ -1581,10 +1581,10 @@ export function AgentRoleProfileDialog({
                                   <Icon className="size-3" />
                                 </span>
                                 <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-[11px] font-medium leading-4 text-white/88">
+                                  <span className="block truncate text-xs font-medium leading-4 text-white/88">
                                     {action.label}
                                   </span>
-                                  <span className="line-clamp-1 block text-[10px] leading-4 text-white/38">
+                                  <span className="line-clamp-1 block text-xs leading-4 text-white/38">
                                     {action.metric}
                                   </span>
                                 </span>

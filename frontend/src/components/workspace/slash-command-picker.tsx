@@ -96,7 +96,7 @@ export function SlashCommandPicker({
       className={cn(
         "absolute bottom-full left-0 right-0 mb-2 max-h-64 overflow-y-auto",
         "rounded-lg border border-border-default bg-popover shadow-[var(--shadow-md)]",
-        "text-[12px] z-50",
+        "text-xs z-50",
         className,
       )}
     >
@@ -128,12 +128,12 @@ export function SlashCommandPicker({
                     {cmd.argument_hint}
                   </span>
                 )}
-                <span className="ml-auto text-[10px] text-muted-foreground/70">
+                <span className="ml-auto text-xs text-muted-foreground/70">
                   {cmd.source}
                 </span>
               </div>
               {cmd.description && (
-                <div className="text-[11px] text-muted-foreground truncate">
+                <div className="text-xs text-muted-foreground truncate">
                   {cmd.description}
                 </div>
               )}

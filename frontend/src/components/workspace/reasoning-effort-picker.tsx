@@ -78,7 +78,7 @@ export function ReasoningEffortPicker({
         sideOffset={6}
         className="w-36 p-1"
       >
-        <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+        <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
           {locale === "zh-CN" ? "推理" : "Reasoning"}
         </DropdownMenuLabel>
         {REASONING_EFFORT_OPTIONS.map((effort) => {
@@ -88,7 +88,7 @@ export function ReasoningEffortPicker({
               key={effort}
               onClick={() => onChange?.(effort)}
               className={cn(
-                "flex h-8 items-center justify-between rounded-md text-[13px]",
+                "flex h-8 items-center justify-between rounded-md text-sm",
                 selected && "bg-muted/60 text-foreground",
               )}
             >

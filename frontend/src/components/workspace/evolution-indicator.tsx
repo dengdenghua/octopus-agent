@@ -72,8 +72,8 @@ export function EvolutionIndicator({
     <button
       type="button"
       className={cn(
-        "relative flex items-center gap-1 rounded-lg px-2 py-1 text-[11px]",
-        compact && "size-7 justify-center gap-0 px-0 py-0 text-[10px]",
+        "relative flex items-center gap-1 rounded-lg px-2 py-1 text-xs",
+        compact && "size-7 justify-center gap-0 px-0 py-0 text-xs",
         "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         animating && "text-foreground",
@@ -109,7 +109,7 @@ export function EvolutionIndicator({
           key={`${rules}-${memories}`}
           className={cn(
             "pointer-events-none absolute -top-1 -right-1 rounded-full px-1.5 py-[1px]",
-            "text-[9px] font-semibold leading-none tabular-nums",
+            "text-xs font-semibold leading-none tabular-nums",
             "bg-[color:var(--primary)] text-[color:var(--primary-foreground)]",
             "shadow-[var(--shadow-xs)]",
           )}
@@ -122,7 +122,7 @@ export function EvolutionIndicator({
           key={delta.key}
           className={cn(
             "pointer-events-none absolute -top-2 -right-1 rounded-full px-1.5 py-[1px]",
-            "text-[9px] font-semibold leading-none tabular-nums",
+            "text-xs font-semibold leading-none tabular-nums",
             "bg-[color:var(--primary)] text-[color:var(--primary-foreground)]",
             "shadow-[var(--shadow-xs)] animate-learn-badge",
           )}

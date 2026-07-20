@@ -91,7 +91,7 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
 
   return (
     <div>
-      <div className="mb-2 text-[11px] text-muted-foreground">
+      <div className="mb-2 text-xs text-muted-foreground">
         {t.enterpriseAssetsTab.header(items.length)}
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -107,12 +107,12 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-medium">{a.name}</span>
                 {a.category && (
-                  <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                  <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
                     {a.category}
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+              <div className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted-foreground">
                 {a.description}
               </div>
               {a.tags && a.tags.length > 0 && (
@@ -120,7 +120,7 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
                   {a.tags.slice(0, 4).map((tag) => (
                     <span
                       key={tag}
-                      className="rounded bg-muted/50 px-1 py-0.5 text-[9px] text-muted-foreground"
+                      className="rounded bg-muted/50 px-1 py-0.5 text-xs text-muted-foreground"
                     >
                       {tag}
                     </span>
@@ -132,7 +132,7 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
               type="button"
               onClick={() => handleInstall(a)}
               disabled={installing !== null}
-              className="shrink-0 self-center rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary transition hover:bg-primary/20 disabled:opacity-50"
+              className="shrink-0 self-center rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition hover:bg-primary/20 disabled:opacity-50"
             >
               {installing === a.id
                 ? t.enterpriseAssetsTab.installing

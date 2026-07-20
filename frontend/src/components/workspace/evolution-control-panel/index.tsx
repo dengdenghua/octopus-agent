@@ -234,7 +234,7 @@ function Pill({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+        "inline-flex items-center rounded-lg px-2 py-0.5 text-xs font-medium uppercase tracking-wider",
         tones[tone],
       )}
     >
@@ -353,7 +353,7 @@ function BudgetSection() {
       error={error}
       headerRight={
         snap ? (
-          <span className="rounded-md bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+          <span className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
             {t.evolutionControl.budget.source(
               snap.source ?? "unknown",
               snap.events ?? 0,
@@ -408,7 +408,7 @@ function BudgetSection() {
                     }
                   />
                 </div>
-                <div className="mt-1 text-[10px] text-muted-foreground">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {t.evolutionControl.budget.consecutiveFailures(
                     c.breaker.consecutive_failures,
                     c.budget.max_calls_per_hour,
@@ -416,7 +416,7 @@ function BudgetSection() {
                 </div>
               </div>
               <div className="flex min-w-[220px] flex-1 flex-col gap-1">
-                <div className="flex justify-between text-[10px] text-muted-foreground">
+                <div className="flex justify-between text-xs text-muted-foreground">
                   <span>{t.evolutionControl.budget.perHour}</span>
                   <span className="tabular-nums">
                     {hourly}/{hourlyLimit}
@@ -432,7 +432,7 @@ function BudgetSection() {
                   )}
                 />
               </div>
-              <div className="flex min-w-[180px] flex-col gap-0.5 text-[10px] text-muted-foreground">
+              <div className="flex min-w-[180px] flex-col gap-0.5 text-xs text-muted-foreground">
                 <span>
                   {t.evolutionControl.budget.last24h(
                     c.last_24h.success,
@@ -464,7 +464,7 @@ function BudgetSection() {
                 <button
                   type="button"
                   onClick={() => resetBreaker(c.name)}
-                  className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted"
+                  className="rounded-lg border border-border-default px-2 py-1 text-xs hover:bg-muted"
                 >
                   {t.evolutionControl.budget.resetButton}
                 </button>
@@ -554,12 +554,12 @@ function SkillProposalsSection() {
                   href={p.source_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-[10px] text-primary underline underline-offset-2"
+                  className="text-xs text-primary underline underline-offset-2"
                 >
                   {p.source_url}
                 </a>
               )}
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {p.created_at}
               </span>
             </div>
@@ -644,7 +644,7 @@ function ModelProposalsSection() {
           type="button"
           disabled={running}
           onClick={runBenchmarks}
-          className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
+          className="rounded-lg border border-border-default px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
         >
           {running
             ? t.evolutionControl.models.runningBenchmarks
@@ -673,10 +673,10 @@ function ModelProposalsSection() {
             </div>
             {p.benchmark_notes && (
               <details className="mt-1">
-                <summary className="cursor-pointer text-[10px] text-muted-foreground">
+                <summary className="cursor-pointer text-xs text-muted-foreground">
                   {t.evolutionControl.models.benchmarkNotes}
                 </summary>
-                <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-muted p-2 text-[10px]">
+                <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-muted p-2 text-xs">
                   {p.benchmark_notes}
                 </pre>
               </details>
@@ -758,7 +758,7 @@ function McpProposalsSection() {
         <button
           type="button"
           onClick={vetAll}
-          className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted"
+          className="rounded-lg border border-border-default px-2 py-1 text-xs hover:bg-muted"
         >
           {t.evolutionControl.mcp.vetAll}
         </button>
@@ -776,12 +776,12 @@ function McpProposalsSection() {
             <div className="flex flex-col gap-1">
               <span className="font-mono text-xs">{p.server_name}</span>
               {p.description && (
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {p.description}
                 </span>
               )}
               {p.suggested_cmd && (
-                <code className="rounded-lg bg-muted px-1 py-0.5 text-[10px]">
+                <code className="rounded-lg bg-muted px-1 py-0.5 text-xs">
                   {p.suggested_cmd}
                 </code>
               )}
@@ -804,7 +804,7 @@ function McpProposalsSection() {
                   type="button"
                   disabled={busy === p.server_name}
                   onClick={() => install(p.server_name)}
-                  className="rounded-lg bg-primary/10 px-2 py-1 text-[10px] text-primary hover:bg-primary/20 disabled:opacity-50"
+                  className="rounded-lg bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 disabled:opacity-50"
                 >
                   {t.evolutionControl.mcp.installDisabled}
                 </button>
@@ -885,7 +885,7 @@ function CurriculumSection() {
         <button
           type="button"
           onClick={runCycle}
-          className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted"
+          className="rounded-lg border border-border-default px-2 py-1 text-xs hover:bg-muted"
         >
           {t.evolutionControl.curriculum.runCycle}
         </button>
@@ -901,26 +901,26 @@ function CurriculumSection() {
               <span className="text-sm font-medium">{g.title}</span>
               <div className="flex items-center gap-2">
                 <Pill label={g.category} tone="info" />
-                <span className="text-[10px] text-muted-foreground tabular-nums">
+                <span className="text-xs text-muted-foreground tabular-nums">
                   p={fixed(g.priority, 1)} · n={numberOrZero(g.failure_count)}
                 </span>
               </div>
             </div>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {g.description}
             </span>
             <div className="mt-1 flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => decide(g.id, "in_progress")}
-                className="rounded-lg border border-border-default px-2 py-0.5 text-[10px] hover:bg-muted"
+                className="rounded-lg border border-border-default px-2 py-0.5 text-xs hover:bg-muted"
               >
                 {t.evolutionControl.curriculum.start}
               </button>
               <button
                 type="button"
                 onClick={() => decide(g.id, "dismissed")}
-                className="rounded-lg border border-border-default px-2 py-0.5 text-[10px] hover:bg-muted"
+                className="rounded-lg border border-border-default px-2 py-0.5 text-xs hover:bg-muted"
               >
                 {t.evolutionControl.curriculum.dismiss}
               </button>
@@ -983,12 +983,12 @@ function FrameworkBenchmarksSection() {
               <div className="font-mono text-xs">
                 #{b.id} {b.strategy_a} vs {b.strategy_b}
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-xs text-muted-foreground">
                 {t.evolutionControl.frameworks.baseModelPrefix}
                 {b.base_model}
               </div>
             </div>
-            <div className="flex items-center gap-4 text-[10px] tabular-nums text-muted-foreground">
+            <div className="flex items-center gap-4 text-xs tabular-nums text-muted-foreground">
               <span>A: {b.a_wins}</span>
               <span>B: {b.b_wins}</span>
               <span>
@@ -1112,7 +1112,7 @@ function ProtocolDriftSection() {
             type="button"
             onClick={scan}
             disabled={busy}
-            className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
+            className="rounded-lg border border-border-default px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
           >
             {t.evolutionControl.drift.scanButton}
           </button>
@@ -1120,14 +1120,14 @@ function ProtocolDriftSection() {
             type="button"
             onClick={sweep}
             disabled={busy}
-            className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
+            className="rounded-lg border border-border-default px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
           >
             {t.evolutionControl.drift.sweepButton}
           </button>
         </div>
       }
     >
-      <div className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {t.evolutionControl.drift.eventsHeader}
       </div>
       {!events.length && !loading && (
@@ -1143,18 +1143,18 @@ function ProtocolDriftSection() {
               <div className="flex items-center gap-2">
                 <AlertTriangleIcon className="size-3.5 text-amber-500" />
                 <span className="font-mono text-xs">{ev.protocol_id}</span>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {ev.detected_at}
                 </span>
               </div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">
+              <div className="mt-0.5 text-xs text-muted-foreground">
                 {ev.summary}
               </div>
             </div>
             <button
               type="button"
               onClick={() => acknowledge(ev.id)}
-              className="rounded-lg border border-border-default px-2 py-1 text-[10px] hover:bg-muted"
+              className="rounded-lg border border-border-default px-2 py-1 text-xs hover:bg-muted"
             >
               {t.evolutionControl.drift.acknowledgeButton}
             </button>
@@ -1162,7 +1162,7 @@ function ProtocolDriftSection() {
         ))}
       </div>
 
-      <div className="mt-4 mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {t.evolutionControl.drift.repairsHeader}
       </div>
       {!repairs.length && !loading && (
@@ -1173,18 +1173,18 @@ function ProtocolDriftSection() {
           <div key={r.id} className="flex flex-col gap-1 py-2">
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs">{r.protocol_id}</span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {t.evolutionControl.drift.eventPrefix(r.drift_event_id)}
               </span>
             </div>
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               {r.rationale}
             </div>
             {r.repair_tasks?.length ? (
               <div className="mt-1 rounded-md border border-border-default bg-muted/40 px-2 py-1.5">
                 {r.repair_tasks.slice(0, 2).map((task) => (
                   <div key={task.id} className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="font-medium text-foreground">
                         {task.title}
                       </span>
@@ -1195,7 +1195,7 @@ function ProtocolDriftSection() {
                         {task.target_layer}
                       </span>
                     </div>
-                    <div className="truncate font-mono text-[10px] text-muted-foreground">
+                    <div className="truncate font-mono text-xs text-muted-foreground">
                       {task.target_modules.slice(0, 3).join(" · ")}
                     </div>
                   </div>
@@ -1203,10 +1203,10 @@ function ProtocolDriftSection() {
               </div>
             ) : null}
             <details className="mt-1">
-              <summary className="cursor-pointer text-[10px] text-primary">
+              <summary className="cursor-pointer text-xs text-primary">
                 {t.evolutionControl.drift.diffSummary}
               </summary>
-              <pre className="mt-1 max-h-64 overflow-auto rounded-lg bg-muted p-2 text-[10px]">
+              <pre className="mt-1 max-h-64 overflow-auto rounded-lg bg-muted p-2 text-xs">
                 {r.suggested_diff}
               </pre>
             </details>
@@ -1266,11 +1266,11 @@ function DispatchSection() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-mono text-xs">{b.skill_name}</div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                   {t.evolutionControl.dispatch.testPrefix(test_id.slice(0, 8))}
                 </div>
               </div>
-              <div className="flex gap-4 text-[10px] tabular-nums text-muted-foreground">
+              <div className="flex gap-4 text-xs tabular-nums text-muted-foreground">
                 <span>
                   A: {b.a_assigned} ({b.a_reported})
                 </span>
@@ -1280,7 +1280,7 @@ function DispatchSection() {
               </div>
             </div>
             {Object.keys(b.outcomes).length > 0 && (
-              <div className="mt-1 flex gap-2 text-[10px] text-muted-foreground">
+              <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
                 {Object.entries(b.outcomes).map(([k, v]) => (
                   <span key={k}>
                     {k}: {v}
@@ -1414,7 +1414,7 @@ export function EvolutionControlPanel() {
               onClick={() => setActive(k)}
               aria-pressed={active === k}
               className={cn(
-                "rounded-lg px-3 py-1 text-[11px] transition-colors",
+                "rounded-lg px-3 py-1 text-xs transition-colors",
                 active === k
                   ? "bg-primary text-primary-foreground"
                   : "hover:bg-muted",

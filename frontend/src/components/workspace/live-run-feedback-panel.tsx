@@ -321,7 +321,7 @@ export function LiveRunFeedbackPanel({
           {t.liveRunFeedback.title}
         </span>
         {phaseLabel && (
-          <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+          <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
             {phaseLabel}
           </span>
         )}
@@ -368,19 +368,19 @@ export function LiveRunFeedbackPanel({
         )}
 
         {fallbackFeedback && (
-          <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5 text-[11px] leading-5 text-emerald-700 dark:text-emerald-300">
+          <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5 text-xs leading-5 text-emerald-700 dark:text-emerald-300">
             {fallbackFeedback}
           </div>
         )}
 
         {contentPreview && (
           <div className="overflow-hidden rounded-md border border-border-default bg-background/70">
-            <div className="flex items-center gap-1.5 border-b border-border-subtle px-2 py-1 text-[10px] font-medium text-muted-foreground">
+            <div className="flex items-center gap-1.5 border-b border-border-subtle px-2 py-1 text-xs font-medium text-muted-foreground">
               <FileTextIcon className="size-3" />
               {t.liveRunFeedback.contentPreview}
               {eventPath(contentEvent!) ? ` · ${eventPath(contentEvent!)}` : ""}
             </div>
-            <pre className="max-h-44 overflow-hidden whitespace-pre-wrap break-words px-2 py-1.5 font-mono text-[10px] leading-4 text-foreground/80">
+            <pre className="max-h-44 overflow-hidden whitespace-pre-wrap break-words px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
               {contentPreview}
             </pre>
           </div>

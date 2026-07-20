@@ -645,7 +645,7 @@ export default function NewAgentPage() {
                 >
                   <ArrowLeftIcon className="size-4" />
                 </Button>
-                <div className="flex items-center gap-2 rounded-sm border border-white/8 bg-white/[0.025] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/48">
+                <div className="flex items-center gap-2 rounded-sm border border-white/8 bg-white/[0.025] px-2 py-1 font-mono text-xs uppercase tracking-[0.18em] text-white/48">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                   AGENT BLUEPRINT
                 </div>
@@ -653,7 +653,7 @@ export default function NewAgentPage() {
 
               <div className="min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.22)_transparent]">
                 <div className="max-w-[560px] pb-6">
-                  <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-primary">
+                  <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.24em] text-primary">
                     <span className="h-px w-6 bg-primary/70" />
                     CREATE AGENT
                   </div>
@@ -666,10 +666,10 @@ export default function NewAgentPage() {
 
                   <div className="mt-6 rounded-sm border border-white/10 bg-black/16 p-3">
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/46">
+                      <span className="font-mono text-xs uppercase tracking-[0.16em] text-white/46">
                         SHORT BRIEF
                       </span>
-                      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">
+                      <span className="font-mono text-xs uppercase tracking-[0.14em] text-white/30">
                         Ctrl/⌘ + Enter
                       </span>
                     </div>
@@ -699,7 +699,7 @@ export default function NewAgentPage() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-[82px_1fr] items-center gap-3 rounded-sm border border-white/10 bg-white/[0.035] px-3 py-2">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/42">
+                    <span className="font-mono text-xs uppercase tracking-[0.14em] text-white/42">
                       Agent ID
                     </span>
                     <Input
@@ -751,7 +751,7 @@ export default function NewAgentPage() {
               <div className="relative flex h-full min-h-0 flex-col px-5 py-7">
                 <div className="flex shrink-0 items-center justify-between gap-3">
                   <div>
-                    <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary/82">
+                    <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary/82">
                       GENERATOR LOADOUT
                     </div>
                     <h2 className="mt-2 text-lg font-semibold text-white">
@@ -767,7 +767,7 @@ export default function NewAgentPage() {
 
                 <div className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent]">
                   <div className="rounded-sm border border-white/8 bg-black/10 p-3">
-                    <div className="mb-2 font-mono text-[9px] uppercase tracking-[0.14em] text-white/38">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-white/38">
                       ROLE
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -778,7 +778,7 @@ export default function NewAgentPage() {
                             key={preset.id}
                             type="button"
                             className={cn(
-                              "rounded-full border px-2.5 py-1 text-[11px] leading-4 transition",
+                              "rounded-full border px-2.5 py-1 text-xs leading-4 transition",
                               active
                                 ? "border-[#f4e86f]/45 bg-[#f4e86f]/10 text-white"
                                 : "border-white/10 bg-white/[0.025] text-white/52 hover:border-white/20 hover:text-white/82",
@@ -793,7 +793,7 @@ export default function NewAgentPage() {
                   </div>
 
                   <div className="rounded-sm border border-white/8 bg-black/10 p-3">
-                    <div className="mb-2 font-mono text-[9px] uppercase tracking-[0.14em] text-white/38">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-white/38">
                       SCENE
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -806,7 +806,7 @@ export default function NewAgentPage() {
                             key={preset.id}
                             type="button"
                             className={cn(
-                              "rounded-full border px-2.5 py-1 text-[11px] leading-4 transition",
+                              "rounded-full border px-2.5 py-1 text-xs leading-4 transition",
                               active
                                 ? "border-[#f4e86f]/45 bg-[#f4e86f]/10 text-white"
                                 : "border-white/10 bg-white/[0.025] text-white/52 hover:border-white/20 hover:text-white/82",
@@ -821,7 +821,7 @@ export default function NewAgentPage() {
                   </div>
 
                   <div className="rounded-sm border border-white/8 bg-black/10 p-3">
-                    <div className="mb-2 font-mono text-[9px] uppercase tracking-[0.14em] text-white/38">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-white/38">
                       CAPABILITY PACK
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -834,7 +834,7 @@ export default function NewAgentPage() {
                             key={pack.id}
                             type="button"
                             className={cn(
-                              "rounded-full border px-2.5 py-1 text-[11px] leading-4 transition",
+                              "rounded-full border px-2.5 py-1 text-xs leading-4 transition",
                               active
                                 ? "border-primary/45 bg-primary/10 text-white"
                                 : "border-white/10 bg-white/[0.025] text-white/52 hover:border-white/20 hover:text-white/82",
@@ -852,7 +852,7 @@ export default function NewAgentPage() {
 
                   {selectedScenePresets.length > 0 &&
                   selectedCapabilityPacks.length > 0 ? (
-                    <div className="grid gap-1.5 rounded-sm border border-white/8 bg-black/10 p-3 text-[11px] leading-5 text-white/48">
+                    <div className="grid gap-1.5 rounded-sm border border-white/8 bg-black/10 p-3 text-xs leading-5 text-white/48">
                       <div>
                         ARM:{" "}
                         <span className="text-white/72">
@@ -882,7 +882,7 @@ export default function NewAgentPage() {
                   </Button>
 
                   <div className="mt-1 rounded-sm border border-white/7 bg-white/[0.018] p-3">
-                    <div className="mb-2 font-mono text-[9px] uppercase tracking-[0.14em] text-white/32">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-white/32">
                       TEMPLATE REF
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -893,7 +893,7 @@ export default function NewAgentPage() {
                             key={template.id}
                             type="button"
                             className={cn(
-                              "rounded-full border px-2 py-0.5 text-[10px] leading-4 transition",
+                              "rounded-full border px-2 py-0.5 text-xs leading-4 transition",
                               active
                                 ? "border-[#f4e86f]/30 bg-[#f4e86f]/8 text-white"
                                 : "border-white/8 bg-black/12 text-white/40 hover:border-white/16 hover:text-white/72",
@@ -906,7 +906,7 @@ export default function NewAgentPage() {
                       })}
                     </div>
                     {selectedTemplate ? (
-                      <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-white/34">
+                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/34">
                         {selectedTemplate.description}
                       </p>
                     ) : null}

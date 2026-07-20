@@ -171,12 +171,12 @@ function MainComputerStatusButton({
       </TooltipTrigger>
       <TooltipContent align="start" side="bottom" className="max-w-52">
         <div className="font-medium">{t.agentWorkbenchPanel.mainComputer}</div>
-        <div className="mt-0.5 text-[11px] opacity-80">
+        <div className="mt-0.5 text-xs opacity-80">
           {t.agentWorkbenchPanel.currentConversation}
           {" · "}
           {label}
         </div>
-        <div className="mt-1 text-[11px] opacity-75">{title}</div>
+        <div className="mt-1 text-xs opacity-75">{title}</div>
       </TooltipContent>
     </Tooltip>
   );
@@ -671,7 +671,7 @@ export function AgentWorkbenchPanel({
               type="button"
               onClick={() => setBrowserSourceOverride(source.id)}
               className={cn(
-                "rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors",
+                "rounded-md px-2 py-0.5 text-xs font-medium transition-colors",
                 browserPreviewSource === source.id
                   ? "bg-muted/70 text-foreground"
                   : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
@@ -863,7 +863,7 @@ export function AgentWorkbenchPanel({
             type="button"
             onClick={() => setActivityView(view.id)}
             className={cn(
-              "border-b border-transparent pb-1 text-[11px] font-medium transition-colors",
+              "border-b border-transparent pb-1 text-xs font-medium transition-colors",
               activityView === view.id
                 ? "border-foreground/70 text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -872,7 +872,7 @@ export function AgentWorkbenchPanel({
             {view.label}
           </button>
         ))}
-        <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+        <span className="ml-auto text-xs text-muted-foreground font-mono">
           {selectedRosterSeat
             ? selectedRosterSeat.name
             : (selectedAgent?.label ?? "Agent 01")}
@@ -975,7 +975,7 @@ export function AgentWorkbenchPanel({
                     }`
                   : (currentPhase?.title ?? t.agentWorkbench.computerView)}
               </span>
-              <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
+              <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                 <span>
                   {selectedAgent
                     ? dockAgentStatusLabel(selectedAgent.status, t)
@@ -988,14 +988,14 @@ export function AgentWorkbenchPanel({
           {/* Agent filter chip row — quick switch between main process and sub-agents */}
           {!selectedRosterSeat && agentTiles.length > 0 && (
             <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border-subtle px-5 py-2">
-              <span className="shrink-0 text-[10px] font-medium text-muted-foreground/70">
+              <span className="shrink-0 text-xs font-medium text-muted-foreground/70">
                 {t.agentWorkbenchPanel.filterByAgent}
               </span>
               <button
                 type="button"
                 onClick={openMainProcess}
                 className={cn(
-                  "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors",
+                  "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-medium transition-colors",
                   !selectedAgent
                     ? "border-foreground/40 bg-foreground/10 text-foreground"
                     : "border-border-default bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
@@ -1015,14 +1015,14 @@ export function AgentWorkbenchPanel({
                     type="button"
                     onClick={() => openSubagentProcess(agent.id)}
                     className={cn(
-                      "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors",
+                      "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-medium transition-colors",
                       isActive
                         ? "border-foreground/40 bg-foreground/10 text-foreground"
                         : "border-border-default bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
                     )}
                   >
                     {agent.avatar ? (
-                      <span aria-hidden="true" className="text-[11px]">
+                      <span aria-hidden="true" className="text-xs">
                         {agent.avatar}
                       </span>
                     ) : null}
@@ -1033,7 +1033,7 @@ export function AgentWorkbenchPanel({
                         agentRunDotClass(agent.status),
                       )}
                     />
-                    <span className="max-w-[100px] truncate text-[10px] font-normal opacity-70">
+                    <span className="max-w-[100px] truncate text-xs font-normal opacity-70">
                       {agent.role ? repairMojibakeText(agent.role) : agentLabel}
                     </span>
                   </button>
@@ -1103,7 +1103,7 @@ export function AgentWorkbenchPanel({
                                 agentRunDotClass(agent.status),
                               )}
                             />
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-xs text-muted-foreground">
                               {dockAgentStatusLabel(agent.status, t)}
                             </span>
                           </div>
@@ -1113,7 +1113,7 @@ export function AgentWorkbenchPanel({
                               : agentLabel}
                           </div>
                           {agent.task && (
-                            <div className="mt-1 truncate text-[11px] text-muted-foreground/70">
+                            <div className="mt-1 truncate text-xs text-muted-foreground/70">
                               {repairMojibakeText(agent.task)}
                             </div>
                           )}
@@ -1138,7 +1138,7 @@ export function AgentWorkbenchPanel({
               <p className="text-sm font-medium text-muted-foreground/80">
                 {t.agentWorkbenchPanel.computerViewEmpty}
               </p>
-              <p className="mt-1.5 max-w-xs text-[12px] leading-relaxed text-muted-foreground/55">
+              <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-muted-foreground/55">
                 {t.agentWorkbenchPanel.computerViewEmptyDesc}
               </p>
             </div>
@@ -1492,7 +1492,7 @@ function AgentComputerStatusCard({
           <div className="truncate font-mono text-xs font-semibold text-foreground">
             {title}
           </div>
-          <div className={cn("mt-0.5 truncate text-[11px]", statusClassName)}>
+          <div className={cn("mt-0.5 truncate text-xs", statusClassName)}>
             {status}
           </div>
         </div>
@@ -1530,23 +1530,23 @@ function RosterComputerPlaceholder({
           <div className="mt-3 text-sm font-semibold text-foreground">
             {seat.name}
           </div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">
+          <div className="mt-0.5 text-xs text-muted-foreground">
             {roleLabel}
           </div>
-          <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+          <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
             <span className="size-1 rounded-full bg-emerald-500" />
             {t.agentWorkbenchPanel.dockStatusPresent}
           </span>
           <div className="mt-4 max-w-[240px] rounded-lg border border-dashed border-border-default bg-muted/10 px-4 py-3 text-center">
             <MonitorIcon className="mx-auto size-4 text-muted-foreground/50" />
-            <div className="mt-1.5 text-[11px] font-medium text-foreground">
+            <div className="mt-1.5 text-xs font-medium text-foreground">
               {t.agentWorkbenchPanel.noIndependentProcessActivity}
             </div>
           </div>
           <button
             type="button"
             onClick={onOpenMain}
-            className="mt-3 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="mt-3 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           >
             {t.agentWorkbenchPanel.switchToMainComputer}
           </button>
@@ -1581,11 +1581,11 @@ function ActivityTraceView({
             <div className="truncate text-xs font-semibold text-foreground">
               {title}
             </div>
-            <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
               {subtitle}
             </div>
           </div>
-          <span className="shrink-0 text-[10px] text-muted-foreground">
+          <span className="shrink-0 text-xs text-muted-foreground">
             {t.agentWorkbench.stepCount(blocks.length)}
           </span>
         </div>
@@ -1618,7 +1618,7 @@ function ActivityTraceView({
                       : "border-l-transparent hover:bg-muted/20",
                   )}
                 >
-                  <span className="mt-0.5 w-5 shrink-0 font-mono text-[10px] text-muted-foreground">
+                  <span className="mt-0.5 w-5 shrink-0 font-mono text-xs text-muted-foreground">
                     {index + 1}
                   </span>
                   <StatusGlyph
@@ -1628,7 +1628,7 @@ function ActivityTraceView({
                   <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
-                      <span className="shrink-0 rounded-sm bg-muted/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      <span className="shrink-0 rounded-sm bg-muted/70 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
                         {block.actionLabel}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
@@ -1636,12 +1636,12 @@ function ActivityTraceView({
                       </span>
                     </div>
                     {detail ? (
-                      <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                      <div className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">
                         {compactDetail(detail, 150)}
                       </div>
                     ) : null}
                   </div>
-                  <span className="shrink-0 pt-0.5 text-[10px] text-muted-foreground/70">
+                  <span className="shrink-0 pt-0.5 text-xs text-muted-foreground/70">
                     {statusText(block.status)}
                   </span>
                 </button>
@@ -1794,7 +1794,7 @@ function SubagentProcessView({
                         : "border-l-transparent hover:bg-muted/25",
                     )}
                   >
-                    <span className="mt-0.5 w-5 shrink-0 font-mono text-[10px] text-muted-foreground">
+                    <span className="mt-0.5 w-5 shrink-0 font-mono text-xs text-muted-foreground">
                       {index + 1}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -1808,18 +1808,18 @@ function SubagentProcessView({
                           {block.title}
                         </span>
                         {block.subtitle && (
-                          <span className="max-w-[38%] shrink-0 truncate text-[11px] text-muted-foreground">
+                          <span className="max-w-[38%] shrink-0 truncate text-xs text-muted-foreground">
                             {block.subtitle}
                           </span>
                         )}
                       </div>
                       {detail && (
-                        <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                        <div className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">
                           {compactDetail(detail, 150)}
                         </div>
                       )}
                     </div>
-                    <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                    <span className="shrink-0 text-xs text-muted-foreground/70">
                       {statusText(block.status)}
                     </span>
                   </button>

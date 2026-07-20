@@ -410,7 +410,7 @@ function FinalArtifactCompletionNotice({
         <span className="font-medium">
           {t.realtime.finalArtifact.generated}
         </span>
-        <span className="ml-2 font-mono text-[11px] text-emerald-700/80 dark:text-emerald-200/80">
+        <span className="ml-2 font-mono text-xs text-emerald-700/80 dark:text-emerald-200/80">
           {first.path || first.title}
         </span>
         {extraCount > 0 && (
@@ -419,7 +419,7 @@ function FinalArtifactCompletionNotice({
           </span>
         )}
       </span>
-      <span className="shrink-0 text-[11px] text-emerald-700/75 dark:text-emerald-200/75">
+      <span className="shrink-0 text-xs text-emerald-700/75 dark:text-emerald-200/75">
         {t.realtime.finalArtifact.view}
       </span>
     </button>
@@ -474,10 +474,10 @@ function ChatHeaderAgentBadge({
   if (!label || label === "general") return null;
   return (
     <div
-      className="inline-flex h-8 max-w-[180px] shrink-0 items-center gap-1.5 px-1.5 text-[12px] text-foreground/88 transition-colors hover:bg-muted/45"
+      className="inline-flex h-8 max-w-[180px] shrink-0 items-center gap-1.5 px-1.5 text-xs text-foreground/88 transition-colors hover:bg-muted/45"
       title={label}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+      <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-semibold text-muted-foreground">
         {avatarUrl ? (
           <img src={avatarUrl} alt={label} className="size-full object-cover" />
         ) : icon ? (
@@ -542,7 +542,7 @@ function ChatHeaderRecButton({
       title={recordingTitle}
       aria-label={recordingTitle}
       className={cn(
-        "inline-flex h-[42px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold shadow-none transition-all duration-200 sm:h-8 sm:px-2.5",
+        "inline-flex h-[42px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold shadow-none transition-all duration-200 sm:h-8 sm:px-2.5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         recording
           ? "border-red-500/25 bg-red-500/10 text-red-600 hover:bg-red-500/16 dark:text-red-400"
@@ -552,7 +552,7 @@ function ChatHeaderRecButton({
       <CircleDotIcon className={cn("size-3.5", recording && "animate-pulse")} />
       <span>REC</span>
       {recording && status.step_count > 0 && (
-        <span className="font-mono text-[10px] opacity-70">
+        <span className="font-mono text-xs opacity-70">
           {status.step_count}
         </span>
       )}
@@ -687,7 +687,7 @@ function TaskCollaboratorControl({
         <button
           type="button"
           className={cn(
-            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium shadow-none transition-all duration-200 sm:h-8 sm:px-2",
+            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium shadow-none transition-all duration-200 sm:h-8 sm:px-2",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
             isTeamDraft
               ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
@@ -701,7 +701,7 @@ function TaskCollaboratorControl({
                 <span
                   key={agent.agent_id}
                   className={cn(
-                    "grid size-5 place-items-center overflow-hidden rounded-md border text-[10px] font-semibold transition-all duration-200",
+                    "grid size-5 place-items-center overflow-hidden rounded-md border text-xs font-semibold transition-all duration-200",
                     isTeamDraft
                       ? "border-primary-foreground/40 bg-primary-foreground/20 text-primary-foreground"
                       : "border-border-default bg-muted text-muted-foreground",
@@ -715,7 +715,7 @@ function TaskCollaboratorControl({
                       className="size-full object-cover"
                     />
                   ) : agent.icon?.trim() ? (
-                    <span className="text-[12px] leading-none">
+                    <span className="text-xs leading-none">
                       {agent.icon}
                     </span>
                   ) : (
@@ -726,7 +726,7 @@ function TaskCollaboratorControl({
               {extraRosterCount > 0 && (
                 <span
                   className={cn(
-                    "grid size-5 place-items-center rounded-md border text-[9px] font-semibold transition-all duration-200",
+                    "grid size-5 place-items-center rounded-md border text-xs font-semibold transition-all duration-200",
                     isTeamDraft
                       ? "border-primary/20 bg-primary-foreground/90 text-primary"
                       : "border-border-default bg-muted text-muted-foreground",
@@ -744,7 +744,7 @@ function TaskCollaboratorControl({
           </span>
           <span
             className={cn(
-              "inline-flex items-center gap-1 shrink-0 rounded-md px-1.5 py-0.5 mr-1 text-[10px] transition-all duration-200",
+              "inline-flex items-center gap-1 shrink-0 rounded-md px-1.5 py-0.5 mr-1 text-xs transition-all duration-200",
               isTeamDraft
                 ? "bg-primary-foreground/80 text-primary font-semibold"
                 : hasOnlineMembers
@@ -767,14 +767,14 @@ function TaskCollaboratorControl({
       >
         <div className="border-b border-border-subtle px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium">
+            <div className="flex min-w-0 items-center gap-2 text-xs font-medium">
               <UsersRoundIcon className="size-4 text-primary" />
               <span className="truncate">{t.chatInputBox.collaborators}</span>
             </div>
             <button
               type="button"
               onClick={() => onSelectedAgentIdsChange([])}
-              className="rounded-lg px-2 py-1 text-[11px] text-muted-foreground transition-all duration-200 hover:bg-muted/70 hover:text-foreground"
+              className="rounded-lg px-2 py-1 text-xs text-muted-foreground transition-all duration-200 hover:bg-muted/70 hover:text-foreground"
             >
               {t.chatInputBox.collaboratorsSingle}
             </button>
@@ -792,7 +792,7 @@ function TaskCollaboratorControl({
                   onClick={() => onTeamModeChange(mode)}
                   title={meta.description}
                   className={cn(
-                    "inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-medium transition-all duration-200",
+                    "inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all duration-200",
                     active
                       ? "border-primary/30 bg-primary/10 text-primary"
                       : "border-border-default text-muted-foreground hover:bg-muted/55 hover:text-foreground",
@@ -822,7 +822,7 @@ function TaskCollaboratorControl({
                 };
                 const content = (
                   <>
-                    <span className="grid size-6 shrink-0 place-items-center overflow-hidden rounded-md bg-background text-[10px] font-semibold text-muted-foreground">
+                    <span className="grid size-6 shrink-0 place-items-center overflow-hidden rounded-md bg-background text-xs font-semibold text-muted-foreground">
                       {entry.avatar_url ? (
                         <img
                           src={entry.avatar_url}
@@ -830,18 +830,18 @@ function TaskCollaboratorControl({
                           className="size-full object-cover"
                         />
                       ) : entry.icon?.trim() ? (
-                        <span className="text-[13px] leading-none">
+                        <span className="text-sm leading-none">
                           {entry.icon}
                         </span>
                       ) : (
                         entry.display_name.charAt(0).toUpperCase()
                       )}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium">
                       {entry.display_name}
                     </span>
                     {isLeader ? (
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                      <span className="shrink-0 text-xs text-muted-foreground">
                         {t.agentWorkbenchPanel.mainController}
                       </span>
                     ) : (
@@ -885,7 +885,7 @@ function TaskCollaboratorControl({
               onKeyDown={(event) => event.stopPropagation()}
               placeholder={t.chatInputBox.collaboratorsSearchPlaceholder}
               aria-label={t.chatInputBox.collaboratorsSearchPlaceholder}
-              className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] shadow-none outline-none placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 text-xs shadow-none outline-none placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </label>
           {selectedAgents.length > 0 && (
@@ -895,11 +895,11 @@ function TaskCollaboratorControl({
                   key={agent.name}
                   type="button"
                   onClick={() => toggleAgent(agent)}
-                  className="group inline-flex max-w-full items-center gap-1 rounded-lg border border-primary/20 bg-primary/8 px-1.5 py-0.5 text-[11px] text-primary transition-all duration-200 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
+                  className="group inline-flex max-w-full items-center gap-1 rounded-lg border border-primary/20 bg-primary/8 px-1.5 py-0.5 text-xs text-primary transition-all duration-200 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
                 >
                   <AgentAvatar
                     agent={agent}
-                    className="size-4 rounded text-[9px]"
+                    className="size-4 rounded text-xs"
                   />
                   <span className="truncate">
                     {agent.display_name ?? agent.name}
@@ -926,13 +926,13 @@ function TaskCollaboratorControl({
                   >
                     <AgentAvatar
                       agent={agent}
-                      className="size-7 rounded-md text-[11px]"
+                      className="size-7 rounded-md text-xs"
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[12px] font-medium">
+                      <span className="block truncate text-xs font-medium">
                         {label}
                       </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
+                      <span className="block truncate text-xs text-muted-foreground">
                         {agent.description || agent.name}
                       </span>
                     </span>
@@ -956,7 +956,7 @@ function TaskCollaboratorControl({
           <button
             type="button"
             onClick={() => void handleCopyLink()}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/60 hover:text-foreground"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/60 hover:text-foreground"
           >
             <CopyIcon className="size-3.5" />
             {t.collab.copyLink}
@@ -3207,7 +3207,7 @@ function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
             onClick={() => onPick(item.prompt)}
             title={item.prompt}
             className={cn(
-              "group inline-flex items-center gap-2 rounded-lg border border-transparent bg-transparent px-3.5 py-2 text-[13px] font-medium text-muted-foreground/80",
+              "group inline-flex items-center gap-2 rounded-lg border border-transparent bg-transparent px-3.5 py-2 text-sm font-medium text-muted-foreground/80",
               "transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-default hover:bg-card hover:text-foreground hover:shadow-[var(--shadow-sm)]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0 active:duration-75",
             )}

@@ -145,7 +145,7 @@ function StatusBadge({ status }: { status: BoardStatus }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-[10px] font-medium leading-none",
+        "inline-flex items-center gap-1 rounded-lg border px-1.5 py-0.5 text-xs font-medium leading-none",
         cfg.badgeClass,
       )}
     >
@@ -245,7 +245,7 @@ export function TaskCard({
 
             {/* Phase label for quests */}
             {task.phase && !compact && (
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
                 {task.phase}
               </p>
             )}
@@ -256,10 +256,10 @@ export function TaskCard({
         {isRunning && task.progress_pct > 0 && (
           <div className="mt-2">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {t.taskBoard.progress}
               </span>
-              <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+              <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
                 {Math.round(task.progress_pct)}%
               </span>
             </div>
@@ -270,7 +270,7 @@ export function TaskCard({
         {/* Footer: status + duration */}
         <div className="mt-2 flex items-center justify-between gap-2">
           <StatusBadge status={task.status} />
-          <span className="text-[10px] text-muted-foreground tabular-nums">
+          <span className="text-xs text-muted-foreground tabular-nums">
             {task.duration_ms > 0
               ? formatDurationMs(task.duration_ms)
               : formatRelativeTime(task.updated_at || task.created_at, {

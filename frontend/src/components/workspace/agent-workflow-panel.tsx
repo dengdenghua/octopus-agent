@@ -136,7 +136,7 @@ function StepItem({
                   {step.name}
                 </span>
                 {duration !== null && (
-                  <span className="text-[10px] text-muted-foreground/60">
+                  <span className="text-xs text-muted-foreground/60">
                     {duration}s
                   </span>
                 )}
@@ -147,7 +147,7 @@ function StepItem({
                 </p>
               )}
               {!expanded && step.outputText && (
-                <p className="mt-1 break-all text-[11px] text-emerald-700/80 line-clamp-2 dark:text-emerald-400/80">
+                <p className="mt-1 break-all text-xs text-emerald-700/80 line-clamp-2 dark:text-emerald-400/80">
                   {step.outputText}
                 </p>
               )}
@@ -156,7 +156,7 @@ function StepItem({
               <button
                 type="button"
                 onClick={() => setExpanded((value) => !value)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 {expanded ? (
                   <ChevronDownIcon className="size-3" />
@@ -176,20 +176,20 @@ function StepItem({
             <div className="mt-2 space-y-2 rounded-md border border-border-default bg-muted/30 p-2">
               {step.inputText && (
                 <div className="space-y-1">
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
                     {t.agentWorkflow.input}
                   </div>
-                  <pre className="whitespace-pre-wrap break-all font-mono text-[11px] text-muted-foreground/85">
+                  <pre className="whitespace-pre-wrap break-all font-mono text-xs text-muted-foreground/85">
                     {step.inputText}
                   </pre>
                 </div>
               )}
               {step.outputText && (
                 <div className="space-y-1">
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
                     {t.agentWorkflow.result}
                   </div>
-                  <pre className="whitespace-pre-wrap break-all font-mono text-[11px] text-emerald-700/85 dark:text-emerald-400/85">
+                  <pre className="whitespace-pre-wrap break-all font-mono text-xs text-emerald-700/85 dark:text-emerald-400/85">
                     {step.outputText}
                   </pre>
                 </div>

@@ -12146,6 +12146,8 @@ export interface components {
             max_temperature?: number | null;
             /** Max Tokens */
             max_tokens?: number | null;
+            context_window?: number | null;
+            enable_1m_context?: boolean;
             /** Models */
             models?: string[];
             /** Name */

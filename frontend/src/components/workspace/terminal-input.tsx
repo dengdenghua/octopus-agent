@@ -66,7 +66,7 @@ export function TerminalInput({
           placeholder={finalPlaceholder}
           rows={1}
           className={cn(
-            "text-foreground flex-1 resize-none bg-transparent outline-none text-[13px] leading-snug py-1",
+            "text-foreground flex-1 resize-none bg-transparent outline-none text-sm leading-snug py-1",
             "placeholder:text-muted-foreground/50",
             "disabled:opacity-50",
           )}

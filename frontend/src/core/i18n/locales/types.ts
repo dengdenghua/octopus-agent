@@ -7469,4 +7469,76 @@ export interface Translations {
     remoteLoading: string;
     remoteLoadFailed: (error: string) => string;
   };
+
+  // Deep Research Panel
+  deepResearchPanel: {
+    title: string;
+    cancelAgentRunTitle: string;
+    cancelRunConfirmTitle: string;
+    cancelRunConfirmDescription: (count: number) => string;
+    cancelRunConfirmLabel: string;
+    copyReportFailedToast: string;
+    metricRoles: string;
+    metricSources: string;
+    metricMaterials: string;
+    agentBudget: string;
+    searchesCount: (n: number) => string;
+    batchProgress: (completed: number, total: number) => string;
+    batchFailedCancelled: (failed: number, cancelled: number) => string;
+    batchIdLabel: (id: string) => string;
+    liveAgentStream: string;
+    eventsCount: (n: number) => string;
+    prefetch: string;
+    prefetchStats: (runs: number, evidence: number) => string;
+    executionSteps: string;
+    synthesisRoleLabel: string;
+    searchSources: string;
+    evidence: string;
+    finalReport: string;
+    savedToLeadMemory: string;
+    copied: string;
+    copyMarkdown: string;
+    downloadMarkdown: string;
+    stageSummary: string;
+    openUrl: string;
+    hitsCount: (n: number) => string;
+    evidenceCount: (n: number) => string;
+    batchEventTitle: (status: string) => string;
+    subagentEventTitle: (name: string, status: string) => string;
+    subagentFallback: string;
+    statusComplete: string;
+    statusUpdated: string;
+    routeBlocked: string;
+    routeWarning: string;
+    routeAllowed: string;
+  };
+
+  // Desktop Organizer Page
+  desktopOrganizerPage: {
+    title: string;
+    description: string;
+    enabledOn: string;
+    enabledOff: string;
+    tileNotTakeoverTitle: string;
+    tileNotTakeoverBody: string;
+    tileRightClickTitle: string;
+    tileRightClickBody: string;
+    tileSafePreviewTitle: string;
+    tileSafePreviewBody: string;
+    webEnvNotice: string;
+    contextMenuTitle: string;
+    contextMenuDescription: string;
+    installButton: string;
+    installingButton: string;
+    removeButton: string;
+    removingButton: string;
+    installSuccess: string;
+    installUnsupported: string;
+    removeSuccess: string;
+    removeUnsupported: string;
+    openAssistant: string;
+    backToWorkspace: string;
+    confirmRemoveTitle: string;
+    confirmRemoveDescription: string;
+  };
 }

@@ -29,7 +29,7 @@ export function FloorBar() {
   const nameFor = (id: string) => users.find((u) => u.id === id)?.name ?? id;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle px-3 py-1.5 text-[11px]">
+    <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle px-3 py-1.5 text-xs">
       <MegaphoneIcon className="size-3.5 text-muted-foreground" />
       <span
         className={cn(
@@ -51,7 +51,7 @@ export function FloorBar() {
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 gap-1 px-2 text-[11px]"
+            className="h-6 gap-1 px-2 text-xs"
             onClick={() => yieldFloor()}
           >
             <SkipForwardIcon className="size-3" />
@@ -62,7 +62,7 @@ export function FloorBar() {
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 gap-1 px-2 text-[11px]"
+              className="h-6 gap-1 px-2 text-xs"
               disabled={inQueue}
               onClick={() => raiseHand()}
             >
@@ -83,7 +83,7 @@ export function FloorBar() {
               key={id}
               size="sm"
               variant="outline"
-              className="h-6 px-2 text-[11px]"
+              className="h-6 px-2 text-xs"
               onClick={() => grantFloor(id)}
               title={t.teamFloor.grantFloor}
             >

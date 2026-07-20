@@ -72,11 +72,11 @@ export function MobileJoinSection() {
         </div>
         <div className="min-w-0 flex-1 space-y-2">
           <div>
-            <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               {t.collab.mobileJoin.connectCodeLabel}
             </div>
             <div className="flex gap-2">
-              <code className="min-w-0 flex-1 truncate rounded-md border border-border-default bg-background px-2 py-1.5 text-[11px]">
+              <code className="min-w-0 flex-1 truncate rounded-md border border-border-default bg-background px-2 py-1.5 text-xs">
                 {data.connect_string}
               </code>
               <Button
@@ -93,7 +93,7 @@ export function MobileJoinSection() {
               </Button>
             </div>
           </div>
-          <div className="text-[11px] leading-relaxed text-muted-foreground">
+          <div className="text-xs leading-relaxed text-muted-foreground">
             {t.collab.mobileJoin.manualFillPrefix}{" "}
             <code className="text-foreground">{data.ws_url}</code>
             {data.token ? (

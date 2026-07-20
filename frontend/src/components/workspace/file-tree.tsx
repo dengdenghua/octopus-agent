@@ -344,7 +344,7 @@ export function FileTree({
   return (
     <div className={cn("overflow-y-auto text-xs", className)}>
       <div className="flex items-center justify-between px-3 pt-3 pb-1.5">
-        <span className="text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
+        <span className="text-muted-foreground font-semibold uppercase tracking-wider text-xs">
           {t.codeMode.explorer}
         </span>
         <button
@@ -421,7 +421,7 @@ export function FileTree({
             {gitStatus && (
               <span
                 className={cn(
-                  "ml-auto shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold",
+                  "ml-auto shrink-0 rounded px-1 py-0.5 text-xs font-semibold",
                   gitStatus === "M" &&
                     "bg-amber-500/10 text-amber-600 dark:text-amber-400",
                   gitStatus === "A" &&

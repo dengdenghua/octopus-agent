@@ -653,7 +653,7 @@ while (true) {
         </button>
         <div className="flex-1 truncate">
           <div className="truncate text-sm font-semibold">{api.name}</div>
-          <div className="text-muted-foreground truncate text-[10px]">
+          <div className="text-muted-foreground truncate text-xs">
             {api.agent_name}
           </div>
         </div>
@@ -680,11 +680,11 @@ while (true) {
 
       {/* Endpoint URL */}
       <div className="border-b px-3 py-2">
-        <div className="text-muted-foreground mb-1 text-[10px] font-medium uppercase">
+        <div className="text-muted-foreground mb-1 text-xs font-medium uppercase">
           {t.apiPublish.endpoint}
         </div>
         <div className="bg-muted/50 flex items-center gap-1.5 rounded px-2 py-1.5">
-          <code className="flex-1 truncate text-[11px]">{endpointUrl}/run</code>
+          <code className="flex-1 truncate text-xs">{endpointUrl}/run</code>
           <CopyButton text={`${endpointUrl}/run`} />
         </div>
       </div>
@@ -696,7 +696,7 @@ while (true) {
             key={key}
             type="button"
             className={cn(
-              "flex flex-1 items-center justify-center gap-1 py-2 text-[10px] font-medium transition-colors",
+              "flex flex-1 items-center justify-center gap-1 py-2 text-xs font-medium transition-colors",
               tab === key
                 ? "border-primary text-primary border-b-2"
                 : "text-muted-foreground hover:text-foreground",
@@ -761,11 +761,11 @@ while (true) {
             {/* Show created key (once) */}
             {createdKey && showRawKey && (
               <div className="rounded border border-yellow-500/30 bg-yellow-500/5 p-2">
-                <div className="mb-1 text-[10px] font-medium text-yellow-600">
+                <div className="mb-1 text-xs font-medium text-yellow-600">
                   {t.apiPublish.copyKeyWarning}
                 </div>
                 <div className="flex items-center gap-1">
-                  <code className="flex-1 break-all text-[11px]">
+                  <code className="flex-1 break-all text-xs">
                     {createdKey.raw_key}
                   </code>
                   <CopyButton text={createdKey.raw_key} />
@@ -797,7 +797,7 @@ while (true) {
                       <div className="truncate text-xs font-medium">
                         {k.name}
                       </div>
-                      <div className="text-muted-foreground text-[10px]">
+                      <div className="text-muted-foreground text-xs">
                         {k.key_prefix} | Created{" "}
                         {new Date(k.created_at).toLocaleDateString()}
                         {k.last_used_at &&
@@ -829,7 +829,7 @@ while (true) {
         {tab === "logs" && (
           <div className="p-3">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-muted-foreground text-[10px]">
+              <span className="text-muted-foreground text-xs">
                 {t.apiPublish.recentCalls(logs.length)}
               </span>
               <button
@@ -911,10 +911,10 @@ while (true) {
             </button>
             {testResponse && (
               <div className="space-y-1">
-                <div className="text-muted-foreground text-[10px] font-medium">
+                <div className="text-muted-foreground text-xs font-medium">
                   {t.apiPublish.response}
                 </div>
-                <pre className="bg-muted/50 max-h-48 overflow-auto rounded p-2 text-[11px]">
+                <pre className="bg-muted/50 max-h-48 overflow-auto rounded p-2 text-xs">
                   {testResponse}
                 </pre>
               </div>
@@ -941,12 +941,12 @@ function SnippetBlock({
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-muted-foreground text-[10px] font-medium">
+        <span className="text-muted-foreground text-xs font-medium">
           {title}
         </span>
         <CopyButton text={code} />
       </div>
-      <pre className="bg-muted/50 overflow-x-auto rounded p-2 text-[11px] leading-relaxed">
+      <pre className="bg-muted/50 overflow-x-auto rounded p-2 text-xs leading-relaxed">
         {code}
       </pre>
     </div>
@@ -972,36 +972,36 @@ function LogEntry({ log }: { log: CallLog }) {
       onClick={() => setExpanded(!expanded)}
     >
       <div className="flex items-center gap-2">
-        <span className={cn("text-[10px] font-medium", statusColor)}>
+        <span className={cn("text-xs font-medium", statusColor)}>
           {log.status}
         </span>
-        <span className="text-muted-foreground flex-1 truncate text-[10px]">
+        <span className="text-muted-foreground flex-1 truncate text-xs">
           {log.input_text.slice(0, 60)}
           {log.input_text.length > 60 ? "..." : ""}
         </span>
-        <span className="text-muted-foreground text-[10px]">
+        <span className="text-muted-foreground text-xs">
           {log.latency_ms.toFixed(0)}ms
         </span>
       </div>
-      <div className="text-muted-foreground mt-0.5 text-[9px]">
+      <div className="text-muted-foreground mt-0.5 text-xs">
         {new Date(log.timestamp).toLocaleString()}
         {log.tokens_used > 0 && ` | ${log.tokens_used} tokens`}
       </div>
       {expanded && (
         <div className="mt-2 space-y-1.5">
           <div>
-            <div className="text-muted-foreground text-[9px] font-medium">
+            <div className="text-muted-foreground text-xs font-medium">
               Input
             </div>
-            <pre className="bg-muted/50 mt-0.5 overflow-x-auto rounded p-1.5 text-[10px]">
+            <pre className="bg-muted/50 mt-0.5 overflow-x-auto rounded p-1.5 text-xs">
               {log.input_text}
             </pre>
           </div>
           <div>
-            <div className="text-muted-foreground text-[9px] font-medium">
+            <div className="text-muted-foreground text-xs font-medium">
               Output
             </div>
-            <pre className="bg-muted/50 mt-0.5 max-h-32 overflow-auto rounded p-1.5 text-[10px]">
+            <pre className="bg-muted/50 mt-0.5 max-h-32 overflow-auto rounded p-1.5 text-xs">
               {log.output_text || log.error_message || "(empty)"}
             </pre>
           </div>
@@ -1058,7 +1058,7 @@ function StatsView({ stats }: { stats: UsageStats }) {
       {/* Simple bar chart */}
       {stats.daily_counts.length > 0 && (
         <div>
-          <div className="text-muted-foreground mb-2 text-[10px] font-medium">
+          <div className="text-muted-foreground mb-2 text-xs font-medium">
             {t.apiPublish.dailyCalls}
           </div>
           <div className="flex items-end gap-px" style={{ height: 80 }}>
@@ -1073,7 +1073,7 @@ function StatsView({ stats }: { stats: UsageStats }) {
                   />
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  <div className="text-[10px]">
+                  <div className="text-xs">
                     <div>{d.date}</div>
                     <div>
                       {d.count} calls | {d.avg_latency_ms.toFixed(0)}ms avg
@@ -1100,7 +1100,7 @@ function StatCard({
 }) {
   return (
     <div className="rounded border p-2">
-      <div className="text-muted-foreground text-[9px] uppercase">{label}</div>
+      <div className="text-muted-foreground text-xs uppercase">{label}</div>
       <div className={cn("text-sm font-semibold", color)}>{value}</div>
     </div>
   );
@@ -1132,7 +1132,7 @@ function APIListItem({
       />
       <div className="flex-1 min-w-0">
         <div className="truncate text-xs font-medium">{api.name}</div>
-        <div className="text-muted-foreground truncate text-[10px]">
+        <div className="text-muted-foreground truncate text-xs">
           /{api.endpoint_path} | {api.agent_name}
           {api.key_count > 0 && ` | ${api.key_count} keys`}
         </div>

@@ -108,7 +108,7 @@ export function DiagnosticsPanel({
           <>
             <Section title={t.diagnosticsPanel.sections.preview}>
               {previewDiagnostics.length === 0 ? (
-                <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2Icon className="size-3 shrink-0" />
                   {t.diagnosticsPanel.noPreviewIssues}
                 </div>
@@ -184,7 +184,7 @@ export function DiagnosticsPanel({
             {info.write_scope && (
               <Section title={t.diagnosticsPanel.sections.writeScope}>
                 {info.write_scope.error ? (
-                  <div className="text-[10px] text-rose-500">
+                  <div className="text-xs text-rose-500">
                     {info.write_scope.error}
                   </div>
                 ) : (
@@ -223,7 +223,7 @@ export function DiagnosticsPanel({
                 value={info.python_executable}
               />
               {info.server_cwd !== info.workspace_path && (
-                <div className="flex items-center gap-1.5 mt-1 text-[10px] text-amber-600 dark:text-amber-400">
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-amber-600 dark:text-amber-400">
                   <AlertTriangleIcon className="size-3 shrink-0" />
                   {t.diagnosticsPanel.serverCwdDiffers}
                 </div>
@@ -245,7 +245,7 @@ function Section({
 }) {
   return (
     <div>
-      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
         {title}
       </div>
       <div className="space-y-0.5 ml-1">{children}</div>
@@ -258,7 +258,7 @@ function PreviewDiagnosticRow({ item }: { item: PreviewDiagnostic }) {
   return (
     <div
       className={cn(
-        "rounded border px-2 py-1.5 text-[10px]",
+        "rounded border px-2 py-1.5 text-xs",
         isError
           ? "border-rose-500/25 bg-rose-500/8"
           : "border-amber-500/25 bg-amber-500/8",
@@ -299,7 +299,7 @@ function PreviewDiagnosticRow({ item }: { item: PreviewDiagnostic }) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start gap-2 text-[10px]">
+    <div className="flex items-start gap-2 text-xs">
       <span className="text-muted-foreground shrink-0 w-20">{label}</span>
       <span className="font-mono text-foreground/80 break-all">{value}</span>
     </div>
@@ -309,7 +309,7 @@ function Row({ label, value }: { label: string; value: string }) {
 function StatusRow({ label, ok }: { label: string; ok: boolean }) {
   const { t } = useI18n();
   return (
-    <div className="flex items-center gap-2 text-[10px]">
+    <div className="flex items-center gap-2 text-xs">
       <span className="text-muted-foreground shrink-0 w-20">{label}</span>
       {ok ? (
         <CheckCircle2Icon className="size-3 text-emerald-500" />

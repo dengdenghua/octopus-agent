@@ -49,7 +49,7 @@ export function ArtifactPanel({
             {t.conversation.artifactsTitle}
           </h2>
           {artifactCount > 0 && (
-            <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+            <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
               {artifactCount}
             </span>
           )}

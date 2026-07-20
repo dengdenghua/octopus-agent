@@ -115,7 +115,7 @@ export default function SubscriptionSettingsPage() {
                   </span>
                   <Badge
                     variant={effectiveTier === "free" ? "secondary" : "default"}
-                    className="text-[10px]"
+                    className="text-xs"
                   >
                     {effectiveTier.toUpperCase()}
                   </Badge>
@@ -168,7 +168,7 @@ export default function SubscriptionSettingsPage() {
                 )}
               </span>
               {subscription?.auto_renew && (
-                <Badge variant="outline" className="text-[10px] ml-2">
+                <Badge variant="outline" className="text-xs ml-2">
                   {t.settings.subscription.autoRenewal}
                 </Badge>
               )}
@@ -305,7 +305,7 @@ function OfficialPricingSection() {
             <div className="flex items-center justify-center gap-2 text-sm">
               <UserIcon className="size-4 text-muted-foreground" />
               <span className="font-medium">{accountLabel}</span>
-              <Badge variant="secondary" className="text-[10px]">
+              <Badge variant="secondary" className="text-xs">
                 {t.auth.currentAccount}
               </Badge>
             </div>
@@ -413,7 +413,7 @@ function OfficialPricingSection() {
               )}
             >
               {isRecommended && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-violet-500 to-violet-600 px-2.5 py-0.5 text-[10px] font-medium text-white shadow-[var(--shadow-xs)]">
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-violet-500 to-violet-600 px-2.5 py-0.5 text-xs font-medium text-white shadow-[var(--shadow-xs)]">
                   <span aria-hidden="true">🔥</span> {t.payOrder.recommended}
                 </span>
               )}
@@ -429,7 +429,7 @@ function OfficialPricingSection() {
                 </span>
               </div>
               {originalYuan && (
-                <p className="text-muted-foreground text-[11px] text-center mt-0.5 line-through">
+                <p className="text-muted-foreground text-xs text-center mt-0.5 line-through">
                   ¥{originalYuan}
                 </p>
               )}

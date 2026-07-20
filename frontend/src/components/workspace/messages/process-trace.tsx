@@ -204,7 +204,7 @@ export function ProcessTrace({
           <button
             type="button"
             onClick={() => setRawDetailsOpen((value) => !value)}
-            className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/35 hover:text-foreground"
+            className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/35 hover:text-foreground"
             aria-expanded={rawDetailsOpen}
           >
             <ChevronDownIcon
@@ -361,7 +361,7 @@ function AgentHoverPreview({
               {agent.label}
             </span>
           </div>
-          <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
             <span>{statusLabel}</span>
             <span>·</span>
             <span>{t.message.processRecords(agent.eventCount)}</span>
@@ -427,7 +427,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
             <span className="text-sm font-medium text-foreground">
               {section.title}
             </span>
-            <span className="ml-auto text-[11px] text-muted-foreground">
+            <span className="ml-auto text-xs text-muted-foreground">
               {section.summary}
             </span>
           </div>
@@ -487,7 +487,7 @@ function TraceEventLine({ event }: { event: LiveToolEvent }) {
           ? `${event.name.replace(/[_-]+/g, " ")} ${target}`
           : event.name.replace(/[_-]+/g, " ");
   return (
-    <div className="flex items-start gap-2 text-[12px] text-muted-foreground">
+    <div className="flex items-start gap-2 text-xs text-muted-foreground">
       {event.status === "running" ? (
         <Loader2Icon className="mt-0.5 size-3.5 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
       ) : event.status === "waiting_approval" ? (
@@ -500,7 +500,7 @@ function TraceEventLine({ event }: { event: LiveToolEvent }) {
       <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-foreground">{label}</div>
-        <div className="truncate text-[11px] text-muted-foreground">
+        <div className="truncate text-xs text-muted-foreground">
           {event.name.replace(/[_-]+/g, " ")}
         </div>
       </div>

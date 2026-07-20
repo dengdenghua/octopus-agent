@@ -553,7 +553,7 @@ export function MessageOutputSummary({
           <div className="font-semibold text-foreground">
             {isFailure ? t.message.taskFailed : t.message.taskOutputs}
           </div>
-          <div className="truncate text-[11px] text-muted-foreground">
+          <div className="truncate text-xs text-muted-foreground">
             {isFailure && failure?.message ? (
               <span className="text-foreground/80">{failure.message}</span>
             ) : (
@@ -568,7 +568,7 @@ export function MessageOutputSummary({
           </div>
         </div>
         {summary.changes.length > 0 && (
-          <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-[11px] shadow-[var(--shadow-xs)]">
+          <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-xs shadow-[var(--shadow-xs)]">
             <span className="text-emerald-600 dark:text-emerald-400">
               +{totalAdded}
             </span>
@@ -581,7 +581,7 @@ export function MessageOutputSummary({
         <button
           type="button"
           onClick={openProcess}
-          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
         >
           <PlayCircleIcon className="size-3" />
           {t.message.viewProcess}
@@ -591,7 +591,7 @@ export function MessageOutputSummary({
             href={resultUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
             title={t.message.resultUrl}
           >
             <LinkIcon className="size-3" />
@@ -606,7 +606,7 @@ export function MessageOutputSummary({
               isFailure ? t.message.retryTaskHint : t.message.makeSimilarHint
             }
             className={cn(
-              "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors",
+              "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
               isFailure
                 ? "border-destructive/30 bg-destructive/[0.08] text-destructive hover:border-destructive/50 hover:bg-destructive/15"
                 : "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-700 transition-colors hover:border-emerald-500/50 hover:bg-emerald-500/15 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200",
@@ -660,7 +660,7 @@ export function MessageOutputSummary({
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <CheckCircle2Icon className="size-4 shrink-0 text-muted-foreground/60" />
             {t.message.verificationRan}
-            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 font-mono text-xs font-medium text-muted-foreground">
               {summary.verifications.filter((v) => v.passed).length}/
               {summary.verifications.length}
             </span>
@@ -686,7 +686,7 @@ export function MessageOutputSummary({
                       </span>
                       <span
                         className={cn(
-                          "rounded px-1 py-0.5 text-[9px] font-mono font-medium",
+                          "rounded px-1 py-0.5 text-xs font-mono font-medium",
                           passed
                             ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                             : "bg-red-500/10 text-red-700 dark:text-red-300",
@@ -698,7 +698,7 @@ export function MessageOutputSummary({
                       </span>
                     </div>
                     {entry.detail && (
-                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/60 p-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/60 p-1.5 font-mono text-xs leading-relaxed text-muted-foreground">
                         {entry.detail}
                       </pre>
                     )}
@@ -723,7 +723,7 @@ export function MessageOutputSummary({
                   <span className="block truncate text-sm font-semibold text-foreground">
                     {changeSummaryLabel}
                   </span>
-                  <span className="mt-0.5 block font-mono text-[10px] leading-none">
+                  <span className="mt-0.5 block font-mono text-xs leading-none">
                     <span className="text-emerald-600 dark:text-emerald-400">
                       +{totalAdded}
                     </span>
@@ -750,7 +750,7 @@ export function MessageOutputSummary({
                     onClick={() => void handleRevertAll()}
                     disabled={reverting || revertableChanges.length === 0}
                     className={cn(
-                      "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-transparent px-2 text-[11px] font-medium text-foreground/80 transition-colors",
+                      "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-transparent px-2 text-xs font-medium text-foreground/80 transition-colors",
                       "hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-55",
                     )}
                   >
@@ -761,7 +761,7 @@ export function MessageOutputSummary({
                     )}
                     {t.common.revert}
                   </button>
-                  <label className="relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-border-default bg-transparent px-2 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-muted/60">
+                  <label className="relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-border-default bg-transparent px-2 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/60">
                     <UserCheckIcon className="size-3 text-muted-foreground/70" />
                     {t.common.review}
                     <ChevronDownIcon className="size-3 text-muted-foreground/55" />
@@ -884,7 +884,7 @@ function ChangeRow({
         )}
         <span
           className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-[10px]",
+            "shrink-0 rounded px-1.5 py-0.5 text-xs",
             change.created
               ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
               : "bg-muted text-muted-foreground",
@@ -898,7 +898,7 @@ function ChangeRow({
         {change.diffTruncated && (
           <span
             title={t.message.diffTruncatedTooltip}
-            className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-400"
+            className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-700 dark:text-amber-400"
           >
             {t.message.diffTruncated}
           </span>
@@ -954,7 +954,7 @@ function HunkDecisionRow({
       data-hunk-decision={decision}
     >
       <div className="flex items-center justify-between gap-2 border-b border-border-subtle bg-muted/30 px-2 py-1">
-        <span className="font-mono text-[11px] text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           {header}
         </span>
         <div className="flex items-center gap-1.5">
@@ -963,7 +963,7 @@ function HunkDecisionRow({
               <button
                 type="button"
                 onClick={onAccept}
-                className="inline-flex h-6 items-center rounded-md border border-border-default px-2 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400"
+                className="inline-flex h-6 items-center rounded-md border border-border-default px-2 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400"
               >
                 {t.message.accept}
               </button>
@@ -971,7 +971,7 @@ function HunkDecisionRow({
                 type="button"
                 onClick={onReject}
                 disabled={rejecting}
-                className="inline-flex h-6 items-center gap-1 rounded-md border border-border-default px-2 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-55 dark:text-red-400"
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-border-default px-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-55 dark:text-red-400"
               >
                 {rejecting && (
                   <Loader2Icon className="size-3 animate-spin text-muted-foreground/70" />
@@ -982,7 +982,7 @@ function HunkDecisionRow({
           ) : (
             <span
               className={cn(
-                "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                "rounded px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide",
                 decision === "accepted"
                   ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
                   : "bg-red-500/15 text-red-700 dark:text-red-400",
@@ -995,7 +995,7 @@ function HunkDecisionRow({
           )}
         </div>
       </div>
-      <pre className="max-h-48 overflow-auto font-mono text-[11px] leading-snug">
+      <pre className="max-h-48 overflow-auto font-mono text-xs leading-snug">
         {hunk.body.split(/\r?\n/).map((line, idx) =>
           line ? (
             <div key={idx} className={cn("px-2", hunkLineTone(line))}>

@@ -126,12 +126,12 @@ function StatCard({
         <Icon className="size-3.5" />
       </div>
       <div className="min-w-0">
-        <div className="text-muted-foreground text-[10px]">{label}</div>
+        <div className="text-muted-foreground text-xs">{label}</div>
         <div className="text-foreground text-sm font-semibold leading-tight">
           {value}
         </div>
         {sub && (
-          <div className="text-muted-foreground/70 text-[10px]">{sub}</div>
+          <div className="text-muted-foreground/70 text-xs">{sub}</div>
         )}
       </div>
     </div>
@@ -159,7 +159,7 @@ function ToolCallList({
 
   if (aggregated.length === 0) {
     return (
-      <div className="text-muted-foreground/50 py-3 text-center text-[10px]">
+      <div className="text-muted-foreground/50 py-3 text-center text-xs">
         {noToolCallsLabel}
       </div>
     );
@@ -170,7 +170,7 @@ function ToolCallList({
       {aggregated.slice(0, 10).map((t) => (
         <div
           key={t.name}
-          className="flex items-center justify-between px-1 py-0.5 text-[11px]"
+          className="flex items-center justify-between px-1 py-0.5 text-xs"
         >
           <span className="text-foreground/80 truncate font-mono">
             {t.name}
@@ -282,7 +282,7 @@ export function MonitorPanel({
 
       {/* Tool Call Breakdown */}
       <div>
-        <div className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wider">
+        <div className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wider">
           {t.monitor.toolUsage}
         </div>
         <div className="rounded-lg border">
@@ -296,10 +296,10 @@ export function MonitorPanel({
       {/* Telemetry Status */}
       {telemetryConfig && (
         <div>
-          <div className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wider">
+          <div className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wider">
             {t.monitor.telemetry}
           </div>
-          <div className="space-y-0.5 rounded-lg border p-2 text-[11px]">
+          <div className="space-y-0.5 rounded-lg border p-2 text-xs">
             <div className="flex items-center gap-1.5">
               <div
                 className={cn(
@@ -336,7 +336,7 @@ export function MonitorPanel({
       {/* Token Breakdown Bar */}
       {stats.sessionTokens.total > 0 && (
         <div>
-          <div className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wider">
+          <div className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wider">
             {t.monitor.tokenDistribution}
           </div>
           <div className="flex h-2 overflow-hidden rounded-lg">
@@ -364,7 +364,7 @@ export function MonitorPanel({
               />
             )}
           </div>
-          <div className="text-muted-foreground/60 mt-0.5 flex gap-3 text-[9px]">
+          <div className="text-muted-foreground/60 mt-0.5 flex gap-3 text-xs">
             <span className="flex items-center gap-0.5">
               <span className="inline-block size-1.5 rounded-lg bg-blue-500" />{" "}
               {t.monitor.inputLabel}

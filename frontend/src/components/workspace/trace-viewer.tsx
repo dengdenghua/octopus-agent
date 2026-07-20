@@ -185,17 +185,17 @@ function TraceListItem({
         )}
       />
       <div className="min-w-0 flex-1">
-        <div className="text-foreground/90 truncate font-mono text-[11px]">
+        <div className="text-foreground/90 truncate font-mono text-xs">
           {trace.agent_name || trace.trace_id.slice(0, 12)}
         </div>
-        <div className="text-muted-foreground flex items-center gap-2 text-[10px]">
+        <div className="text-muted-foreground flex items-center gap-2 text-xs">
           <span>
             {trace.spans.length} {t.traces.spans}
           </span>
           <span>{formatDuration(totalMs)}</span>
         </div>
       </div>
-      <div className="text-muted-foreground/60 shrink-0 text-[9px]">
+      <div className="text-muted-foreground/60 shrink-0 text-xs">
         {formatTimestamp(trace.created_at)}
       </div>
       <ChevronRightIcon className="text-muted-foreground/40 size-3 shrink-0" />
@@ -231,7 +231,7 @@ function WaterfallRow({
       <CircleDotIcon
         className={cn("size-2.5 shrink-0", statusColor(node.span.status))}
       />
-      <span className="text-foreground/80 min-w-0 flex-1 truncate font-mono text-[11px]">
+      <span className="text-foreground/80 min-w-0 flex-1 truncate font-mono text-xs">
         {node.span.name}
       </span>
       <div className="flex w-20 shrink-0 items-center gap-1">
@@ -244,7 +244,7 @@ function WaterfallRow({
             style={{ width: `${barWidthPct}%` }}
           />
         </div>
-        <span className="text-muted-foreground w-9 text-right font-mono text-[9px]">
+        <span className="text-muted-foreground w-9 text-right font-mono text-xs">
           {formatDuration(node.span.duration_ms)}
         </span>
       </div>
@@ -263,7 +263,7 @@ function SpanDetail({
   return (
     <div className="border-t">
       <div className="flex items-center justify-between border-b px-3 py-1.5">
-        <span className="text-foreground/90 truncate font-mono text-[11px] font-semibold">
+        <span className="text-foreground/90 truncate font-mono text-xs font-semibold">
           {span.name}
         </span>
         <button
@@ -276,7 +276,7 @@ function SpanDetail({
 
       <div className="space-y-2 p-3">
         {/* Status / Duration */}
-        <div className="flex items-center gap-3 text-[11px]">
+        <div className="flex items-center gap-3 text-xs">
           <span className="flex items-center gap-1">
             <div className={cn("size-1.5 rounded-lg", statusBg(span.status))} />
             <span className="text-muted-foreground">{span.status}</span>
@@ -290,11 +290,11 @@ function SpanDetail({
         {/* Attributes */}
         {span.attributes && Object.keys(span.attributes).length > 0 && (
           <div>
-            <div className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wider">
+            <div className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wider">
               {t.traces.attributes}
             </div>
             <div className="rounded-lg border">
-              <div className="max-h-40 overflow-auto p-2 text-[10px]">
+              <div className="max-h-40 overflow-auto p-2 text-xs">
                 <pre className="text-foreground/70 whitespace-pre-wrap break-all font-mono">
                   {JSON.stringify(span.attributes, null, 2)}
                 </pre>
@@ -306,12 +306,12 @@ function SpanDetail({
         {/* Events */}
         {span.events && span.events.length > 0 && (
           <div>
-            <div className="text-muted-foreground mb-1 text-[10px] font-medium uppercase tracking-wider">
+            <div className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wider">
               {t.traces.events(span.events.length)}
             </div>
             <div className="space-y-1">
               {span.events.map((ev, i) => (
-                <div key={i} className="rounded-lg border p-2 text-[10px]">
+                <div key={i} className="rounded-lg border p-2 text-xs">
                   <div className="text-foreground/80 font-mono font-medium">
                     {ev.name}
                   </div>
@@ -464,7 +464,7 @@ export function TraceViewer({ className }: { className?: string }) {
             {selectedTrace ? t.traces.trace : t.traces.title}
           </span>
           {selectedTrace && (
-            <span className="text-muted-foreground font-mono text-[10px]">
+            <span className="text-muted-foreground font-mono text-xs">
               {selectedTrace.trace_id.slice(0, 8)}
             </span>
           )}
@@ -491,7 +491,7 @@ export function TraceViewer({ className }: { className?: string }) {
 
       {/* Error */}
       {error && (
-        <div className="mx-3 mb-2 flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-1 text-[10px] text-red-500">
+        <div className="mx-3 mb-2 flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-1 text-xs text-red-500">
           <AlertCircleIcon className="size-3 shrink-0" />
           <span className="truncate">{error}</span>
         </div>
@@ -502,7 +502,7 @@ export function TraceViewer({ className }: { className?: string }) {
         /* ---- Trace List ---- */
         <div className="flex-1 overflow-auto">
           {traces.length === 0 && !loading && (
-            <div className="text-muted-foreground/50 py-8 text-center text-[11px]">
+            <div className="text-muted-foreground/50 py-8 text-center text-xs">
               {t.traces.noTraces}
             </div>
           )}
@@ -518,7 +518,7 @@ export function TraceViewer({ className }: { className?: string }) {
         /* ---- Waterfall + Detail ---- */
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Trace summary bar */}
-          <div className="flex items-center gap-2 border-b px-3 py-1.5 text-[10px]">
+          <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs">
             <span className="text-muted-foreground">
               {selectedTrace.spans.length} {t.traces.spans}
             </span>

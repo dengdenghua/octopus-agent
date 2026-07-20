@@ -384,7 +384,7 @@ export function TimelineView({
                     x={x}
                     y={PADDING_TOP - 10}
                     textAnchor="middle"
-                    className="fill-muted-foreground text-[10px]"
+                    className="fill-muted-foreground text-xs"
                     style={{ fontSize: "10px" }}
                   >
                     {tick.label}
@@ -440,7 +440,7 @@ export function TimelineView({
                   x={8}
                   y={y + BAR_HEIGHT / 2 + 1}
                   dominantBaseline="middle"
-                  className="fill-foreground text-[11px]"
+                  className="fill-foreground text-xs"
                   style={{ fontSize: "11px" }}
                 >
                   <tspan className="fill-muted-foreground">

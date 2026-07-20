@@ -243,7 +243,7 @@ function GrowthStoryHero({
             </p>
           </div>
           <div className="shrink-0 rounded-lg border border-primary/20 bg-background/80 px-4 py-3 text-right shadow-[var(--shadow-xs)]">
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               {t.evolutionDashboard.overallImprovementLabel}
             </div>
             <div
@@ -255,7 +255,7 @@ function GrowthStoryHero({
             >
               {improvementPct}
             </div>
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               {t.evolutionDashboard.of100}
             </div>
           </div>
@@ -337,7 +337,7 @@ function EvolutionStage({
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              "flex size-6 items-center justify-center rounded-full text-[11px] font-semibold",
+              "flex size-6 items-center justify-center rounded-full text-xs font-semibold",
               stage.done
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground",
@@ -347,13 +347,13 @@ function EvolutionStage({
           </span>
           <Icon className={cn("size-3.5", stage.done && "text-primary")} />
         </div>
-        <span className="text-[11px] tabular-nums">
+        <span className="text-xs tabular-nums">
           {stage.value}
           {stage.unit}
         </span>
       </div>
       <h3 className="mt-3 text-sm font-semibold">{stage.title}</h3>
-      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
         {stage.description}
       </p>
     </li>
@@ -382,7 +382,7 @@ function StoryMetric({
             {title}
           </h3>
           <div className="mt-2 text-2xl font-bold tabular-nums">{value}</div>
-          <div className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {detail}
           </div>
         </div>
@@ -444,7 +444,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
             {delta >= 0 ? "+" : ""}
             {formatPercent(delta, 0)}
           </div>
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             {t.evolutionDashboard.recentChange}
           </div>
         </div>
@@ -502,7 +502,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
                   style={{ height: `${Math.max(ratePct, 6)}%` }}
                 />
               </div>
-              <div className="truncate text-[10px] text-muted-foreground">
+              <div className="truncate text-xs text-muted-foreground">
                 {point.week}
               </div>
             </div>
@@ -572,7 +572,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
                   style={{ width: `${Math.max(ratePct, 4)}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[10px] text-muted-foreground">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
                   {t.evolutionDashboard.skillCalls(
                     numberOrZero(skill.usage_count),
@@ -615,7 +615,7 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
             className="rounded-lg border border-border-default bg-muted/20 px-3 py-3"
           >
             <div className="flex items-center gap-2">
-              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                 {index + 1}
               </span>
               <h3 className="min-w-0 truncate text-sm font-semibold">

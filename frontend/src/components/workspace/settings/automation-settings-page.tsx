@@ -422,7 +422,7 @@ function CapabilityCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <div className="font-medium">{title}</div>
-            <span className="rounded-md border border-border-default bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+            <span className="rounded-md border border-border-default bg-background px-1.5 py-0.5 text-xs font-mono text-muted-foreground">
               {groupLabel} {groupName}
             </span>
           </div>
@@ -593,7 +593,7 @@ function ApprovalRulesSection() {
         </ul>
       )}
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {t.settings.automation.rules.firstMatchHint}
       </p>
 
@@ -695,7 +695,7 @@ function ApprovalRulesSection() {
           className="w-[min(380px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[380px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-[15px]">
+            <DialogTitle className="text-base">
               {t.settings.automation.rules.deleteConfirmTitle}
             </DialogTitle>
             <DialogDescription className="text-[12.5px] leading-5">
@@ -761,7 +761,7 @@ function RuleRow({
   const { t } = useI18n();
   return (
     <li className="flex items-start gap-2 rounded-md border border-border-default bg-background px-3 py-2 text-sm">
-      <span className="mt-0.5 w-6 text-right text-[11px] font-mono text-muted-foreground">
+      <span className="mt-0.5 w-6 text-right text-xs font-mono text-muted-foreground">
         {index + 1}
       </span>
       <Badge
@@ -775,13 +775,13 @@ function RuleRow({
       <div className="min-w-0 flex-1">
         <div className="font-mono text-xs break-all">{rule.tool}</div>
         {rule.args_contains ? (
-          <div className="mt-0.5 text-[11px] text-muted-foreground">
+          <div className="mt-0.5 text-xs text-muted-foreground">
             {t.settings.automation.rules.argsLabel}{" "}
             <span className="font-mono">{rule.args_contains}</span>
           </div>
         ) : null}
         {rule.reason ? (
-          <div className="mt-0.5 text-[11px] text-muted-foreground italic">
+          <div className="mt-0.5 text-xs text-muted-foreground italic">
             {rule.reason}
           </div>
         ) : null}

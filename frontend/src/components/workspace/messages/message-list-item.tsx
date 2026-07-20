@@ -232,7 +232,7 @@ function SegmentedReasoningPanel({
           },
         })
       }
-      className="group/thinking-row mb-1 flex w-full min-w-0 items-center gap-1.5 py-0.5 text-left text-[11px] leading-4 text-muted-foreground/55 transition-colors hover:text-muted-foreground"
+      className="group/thinking-row mb-1 flex w-full min-w-0 items-center gap-1.5 py-0.5 text-left text-xs leading-4 text-muted-foreground/55 transition-colors hover:text-muted-foreground"
       data-process-event-id={messageId}
       data-process-event-kind="thinking"
       data-testid="assistant-thinking-event"
@@ -746,7 +746,7 @@ function MessageContent_({
           remain available through the process workbench. Legacy persisted
           `run_status=streaming` messages retain the same honest receipt. */}
       {!isCurrentlyStreaming && showInterruptedReceipt && (
-        <div className="mt-2 text-[11px] leading-5 text-muted-foreground/70">
+        <div className="mt-2 text-xs leading-5 text-muted-foreground/70">
           {t.conversation.interruptedMessage}
         </div>
       )}
@@ -822,7 +822,7 @@ function MessageContent_({
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {strategyText && (
               <div
-                className="inline-flex items-center gap-1 rounded-full bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground/80"
+                className="inline-flex items-center gap-1 rounded-full bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground/80"
                 title={
                   octopus?.reflex_rule
                     ? `strategy=${strategy} · rule=${octopus.reflex_rule}`
@@ -834,7 +834,7 @@ function MessageContent_({
             )}
             {statsText && (
               <div
-                className="inline-flex items-center gap-1 rounded-full bg-muted/40 px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground/80"
+                className="inline-flex items-center gap-1 rounded-full bg-muted/40 px-2 py-0.5 text-xs tabular-nums text-muted-foreground/80"
                 title={[
                   octopus?.input_tokens != null
                     ? `input_tokens=${octopus.input_tokens}`
@@ -969,11 +969,11 @@ function RichFileCard({
         <div className="flex items-center justify-between gap-2">
           <Badge
             variant="secondary"
-            className="rounded px-1.5 py-0.5 text-[10px] font-normal"
+            className="rounded px-1.5 py-0.5 text-xs font-normal"
           >
             {getFileTypeLabel(file.filename, t.messageGrouping.fileFallback)}
           </Badge>
-          <span className="text-muted-foreground text-[10px]">
+          <span className="text-muted-foreground text-xs">
             {t.uploads.uploading}
           </span>
         </div>
@@ -1016,11 +1016,11 @@ function RichFileCard({
       <div className="flex items-center justify-between gap-2">
         <Badge
           variant="secondary"
-          className="rounded px-1.5 py-0.5 text-[10px] font-normal"
+          className="rounded px-1.5 py-0.5 text-xs font-normal"
         >
           {getFileTypeLabel(file.filename, t.messageGrouping.fileFallback)}
         </Badge>
-        <span className="text-muted-foreground text-[10px]">
+        <span className="text-muted-foreground text-xs">
           {formatBytes(file.size, {
             b: t.common.fileSizeB,
             kb: t.common.fileSizeKB,

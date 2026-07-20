@@ -124,7 +124,7 @@ export function VerifyPanel({
           {result && (
             <span
               className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                "rounded-full px-1.5 py-0.5 text-xs font-medium",
                 result.passed
                   ? "bg-emerald-500/10 text-emerald-600"
                   : "bg-rose-500/10 text-rose-600",
@@ -169,7 +169,7 @@ export function VerifyPanel({
             <div className="font-medium">
               {t.codeMode.autoVerifyAttempt(autoSummary.attempt)}
             </div>
-            <div className="mt-0.5 text-[11px] opacity-80">
+            <div className="mt-0.5 text-xs opacity-80">
               {autoSummary.autoFixQueued
                 ? t.codeMode.queuedAutoFix(
                     autoSummary.retryCount,
@@ -196,7 +196,7 @@ export function VerifyPanel({
                 : t.codeMode.changesAwaitingVerify}
             </div>
             {pendingFiles.length > 0 && (
-              <div className="mt-1 max-h-20 space-y-0.5 overflow-auto text-[10px] opacity-80">
+              <div className="mt-1 max-h-20 space-y-0.5 overflow-auto text-xs opacity-80">
                 {pendingFiles.slice(0, 8).map((file) => (
                   <div key={file} className="truncate font-mono" title={file}>
                     {file}
@@ -214,7 +214,7 @@ export function VerifyPanel({
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground/50">
             <ShieldCheckIcon className="size-8 mb-2 opacity-30" />
             <span className="text-xs">{t.codeMode.clickRunChecksToVerify}</span>
-            <span className="text-[10px] mt-1 opacity-60">{workDir}</span>
+            <span className="text-xs mt-1 opacity-60">{workDir}</span>
           </div>
         )}
 
@@ -227,7 +227,7 @@ export function VerifyPanel({
 
         {result && (
           <div className="space-y-1">
-            <div className="text-[10px] text-muted-foreground mb-2">
+            <div className="text-xs text-muted-foreground mb-2">
               {t.codeMode.projectLabel}: {result.kind}
             </div>
             {result.results.map((check) => (
@@ -252,7 +252,7 @@ export function VerifyPanel({
                   <span className="text-xs font-medium flex-1">
                     {check.name}
                   </span>
-                  <span className="text-[10px] text-muted-foreground font-mono">
+                  <span className="text-xs text-muted-foreground font-mono">
                     {check.duration_ms < 1000
                       ? `${check.duration_ms}ms`
                       : `${(check.duration_ms / 1000).toFixed(1)}s`}
@@ -261,7 +261,7 @@ export function VerifyPanel({
                 {expandedCheck === check.name && (
                   <div className="border-t border-border-subtle px-2.5 py-2">
                     <div className="flex items-center justify-between mb-1">
-                      <div className="text-[10px] text-muted-foreground font-mono">
+                      <div className="text-xs text-muted-foreground font-mono">
                         $ {check.command}
                       </div>
                       <div className="flex items-center gap-1">
@@ -277,7 +277,7 @@ export function VerifyPanel({
                               );
                               toast.success("Error sent to input");
                             }}
-                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10"
+                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                             title={t.codeMode.sendErrorToAI}
                           >
                             <MessageCircleIcon className="size-3" />
@@ -294,7 +294,7 @@ export function VerifyPanel({
                                 toast.error("Failed to copy output"),
                               );
                           }}
-                          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted"
+                          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted"
                           title={t.codeMode.copyOutput}
                         >
                           <ClipboardCopyIcon className="size-3" />
@@ -302,12 +302,12 @@ export function VerifyPanel({
                       </div>
                     </div>
                     {check.stdout && (
-                      <pre className="text-[10px] font-mono leading-snug whitespace-pre-wrap break-all max-h-[200px] overflow-auto text-muted-foreground/80">
+                      <pre className="text-xs font-mono leading-snug whitespace-pre-wrap break-all max-h-[200px] overflow-auto text-muted-foreground/80">
                         {check.stdout}
                       </pre>
                     )}
                     {check.stderr && (
-                      <pre className="text-[10px] font-mono leading-snug whitespace-pre-wrap break-all max-h-[200px] overflow-auto text-rose-600/80 dark:text-rose-400/80 mt-1">
+                      <pre className="text-xs font-mono leading-snug whitespace-pre-wrap break-all max-h-[200px] overflow-auto text-rose-600/80 dark:text-rose-400/80 mt-1">
                         {check.stderr}
                       </pre>
                     )}

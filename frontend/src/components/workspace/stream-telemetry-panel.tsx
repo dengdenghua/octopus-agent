@@ -89,7 +89,7 @@ export function StreamTelemetryPanel() {
               ],
             ].map(([label, value]) => (
               <div key={label} className="bg-background px-3 py-3">
-                <div className="text-muted-foreground text-[11px]">{label}</div>
+                <div className="text-muted-foreground text-xs">{label}</div>
                 <div className="mt-1 text-sm font-semibold tabular-nums">
                   {value}
                 </div>

@@ -342,7 +342,7 @@ export function InviteDialog({
                               {displayName}
                             </span>
                           </div>
-                          <div className="truncate text-[11px] text-muted-foreground">
+                          <div className="truncate text-xs text-muted-foreground">
                             {agent.description || agent.name}
                           </div>
                         </div>

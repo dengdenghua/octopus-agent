@@ -66,7 +66,7 @@ export function DeepResearchHistoryPanel({
           <HistoryIcon className="size-4 text-primary" />
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">Agent History</div>
-            <div className="truncate text-[11px] text-muted-foreground">
+            <div className="truncate text-xs text-muted-foreground">
               {sortedJobs.length} saved runs
             </div>
           </div>
@@ -124,7 +124,7 @@ export function DeepResearchHistoryPanel({
                     <div className="line-clamp-2 text-xs font-medium">
                       {job.topic}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <span>{job.status}</span>
                       {job.lead_agent_name && (
                         <span>{job.lead_agent_name}</span>
@@ -140,7 +140,7 @@ export function DeepResearchHistoryPanel({
                     <TelescopeIcon className="size-4 shrink-0 text-muted-foreground" />
                   )}
                 </div>
-                <div className="mt-2 grid grid-cols-3 gap-1.5 text-[10px] text-muted-foreground">
+                <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs text-muted-foreground">
                   <HistoryMetric
                     icon={<FileTextIcon className="size-3" />}
                     value={job.materials.length}

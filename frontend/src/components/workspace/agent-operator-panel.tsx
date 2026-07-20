@@ -995,7 +995,7 @@ export function AgentOperatorPanel() {
     <section className="workspace-panel px-5 py-4">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Operator loop
           </div>
           <h2 className="mt-1 text-base font-semibold">
@@ -1187,7 +1187,7 @@ export function AgentOperatorPanel() {
                     <div className="truncate text-sm font-medium">
                       {run.title || run.summary || run.task_id}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-mono">{shortId(run.task_id)}</span>
                       <span>{run.tool_calls_started ?? 0} tools</span>
                       {(run.tool_errors ?? 0) > 0 && (
@@ -1197,7 +1197,7 @@ export function AgentOperatorPanel() {
                       )}
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-[10px]">
+                  <Badge variant="outline" className="text-xs">
                     {run.status ?? "unknown"}
                   </Badge>
                 </button>
@@ -1214,7 +1214,7 @@ export function AgentOperatorPanel() {
                     "No task selected"}
                 </div>
                 {selectedTaskId && (
-                  <div className="font-mono text-[11px] text-muted-foreground">
+                  <div className="font-mono text-xs text-muted-foreground">
                     {selectedTaskId}
                   </div>
                 )}
@@ -1281,13 +1281,13 @@ function TimelinePreview({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="text-xs">
           score {formatScore(timeline.overview.score)}
         </Badge>
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="text-xs">
           approvals {timeline.overview.approval_count ?? 0}
         </Badge>
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="text-xs">
           lessons {timeline.overview.experience_record_count ?? 0}
         </Badge>
       </div>
@@ -1295,7 +1295,7 @@ function TimelinePreview({
         {nodes.map((node, index) => (
           <div
             key={`${node.lane}-${node.kind}-${node.ts ?? index}`}
-            className="grid grid-cols-[5.5rem_1fr] gap-2 rounded-md bg-background/55 px-2 py-1.5 text-[11px]"
+            className="grid grid-cols-[5.5rem_1fr] gap-2 rounded-md bg-background/55 px-2 py-1.5 text-xs"
           >
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Clock3Icon className="size-3" />
@@ -1353,23 +1353,23 @@ function TaskRecoveryQueueCard({
               )}
             />
             Task recovery queue
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {queue.total} tracked
             </Badge>
             <Badge
               variant={healthy ? "outline" : "destructive"}
-              className="text-[10px]"
+              className="text-xs"
             >
               {actionable.length} action
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {topItem
               ? `${taskRecoveryActionLabel(topItem.recommended_action)} · ${topItem.title || topItem.task_id}`
               : "No stalled, failed, or approval-blocked task runs."}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-3 gap-2 text-right font-mono text-xs">
           <GateStat label="shown" value={queue.count} />
           <GateStat label="takeover" value={countRecovery(queue, "takeover")} />
           <GateStat label="resume" value={countRecovery(queue, "resume")} />
@@ -1395,7 +1395,7 @@ function TaskRecoveryQueueCard({
                     <div className="truncate text-xs font-medium">
                       {item.title || item.task_id}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                       <span className="font-mono">{shortId(item.task_id)}</span>
                       <span>{item.status ?? "unknown"}</span>
                       {item.kind && <span>{item.kind}</span>}
@@ -1404,7 +1404,7 @@ function TaskRecoveryQueueCard({
                       )}
                     </div>
                   </div>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                  <Badge variant="outline" className="shrink-0 text-xs">
                     P{item.priority}
                   </Badge>
                 </div>
@@ -1415,23 +1415,23 @@ function TaskRecoveryQueueCard({
                         ? "outline"
                         : "secondary"
                     }
-                    className="text-[10px]"
+                    className="text-xs"
                   >
                     {taskRecoveryActionLabel(item.recommended_action)}
                   </Badge>
                   {item.has_checkpoint && (
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-xs">
                       checkpoint {shortId(checkpointId)}
                     </Badge>
                   )}
                   {item.thread_id && (
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-xs">
                       thread {shortId(item.thread_id)}
                     </Badge>
                   )}
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0 text-[10px] text-muted-foreground">
+                  <div className="min-w-0 text-xs text-muted-foreground">
                     <div>
                       {item.can_resume
                         ? "Resume-safe state is available"
@@ -1450,7 +1450,7 @@ function TaskRecoveryQueueCard({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 shrink-0 px-2 text-[11px]"
+                      className="h-7 shrink-0 px-2 text-xs"
                       disabled={busy}
                       onClick={() => onTakeover(item.task_id)}
                     >
@@ -1550,11 +1550,11 @@ function CompetitorScorecardCard({
               )}
             />
             Competitor scorecard
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {error ? "degraded" : report.verdict.replaceAll("_", " ")}
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {error
               ? error
               : topGap
@@ -1568,13 +1568,13 @@ function CompetitorScorecardCard({
                     ? `Certification passed ${certification.passed}/${certification.total}`
                     : "Octopus has no tracked effective scorecard gaps"}
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
+          <div className="mt-1 text-xs text-muted-foreground">
             Architecture is estimated; static certification and same-task
             behavioral evidence are tracked separately.
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <div className="grid grid-cols-3 gap-2 text-right font-mono text-[11px] xl:grid-cols-6">
+          <div className="grid grid-cols-3 gap-2 text-right font-mono text-xs xl:grid-cols-6">
             <GateStat label="Architecture" value={octopusScore} />
             <GateStat
               label="Static evidence"
@@ -1594,7 +1594,7 @@ function CompetitorScorecardCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-[11px]"
+            className="h-7 px-2 text-xs"
             disabled={queueBusy || focusGaps.length === 0}
             onClick={onQueueRealGaps}
           >
@@ -1608,7 +1608,7 @@ function CompetitorScorecardCard({
 
       <div className="mt-2 grid gap-2 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
-          <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+          <div className="mb-1 text-xs font-medium text-muted-foreground">
             Real comparison ranking
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -1617,7 +1617,7 @@ function CompetitorScorecardCard({
                 key={row.competitor}
                 variant="outline"
                 className={cn(
-                  "text-[10px]",
+                  "text-xs",
                   row.competitor === "octopus" &&
                     "border-primary/30 bg-primary/10 text-primary",
                 )}
@@ -1628,20 +1628,20 @@ function CompetitorScorecardCard({
           </div>
         </div>
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
-          <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+          <div className="mb-1 text-xs font-medium text-muted-foreground">
             Effective focus gaps
           </div>
           <div className="flex flex-wrap gap-1.5">
             {focusGaps.length === 0 ? (
               <>
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="text-xs">
                   clear
                 </Badge>
                 {certification && (
                   <Badge
                     variant="outline"
                     className={cn(
-                      "text-[10px]",
+                      "text-xs",
                       certification.ready
                         ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                         : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -1659,7 +1659,7 @@ function CompetitorScorecardCard({
                   aria-controls="scorecard-gap-drilldown"
                   aria-pressed={selectedGap?.id === dimension.id}
                   className={cn(
-                    "rounded-full border px-2 py-0.5 text-[10px] text-amber-700 transition-colors hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60 dark:text-amber-300",
+                    "rounded-full border px-2 py-0.5 text-xs text-amber-700 transition-colors hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60 dark:text-amber-300",
                     selectedGap?.id === dimension.id
                       ? "border-amber-500/60 bg-amber-500/20"
                       : "border-amber-500/30 bg-amber-500/10",
@@ -1674,7 +1674,7 @@ function CompetitorScorecardCard({
             )}
           </div>
           {externalGaps.length > 0 && (
-            <div className="mt-1 truncate text-[10px] text-muted-foreground">
+            <div className="mt-1 truncate text-xs text-muted-foreground">
               external leader gaps: {externalGaps.length}
             </div>
           )}
@@ -1699,7 +1699,7 @@ function CompetitorScorecardCard({
           <Badge
             key={dimension.id}
             variant="outline"
-            className="border-emerald-500/25 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-300"
+            className="border-emerald-500/25 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-300"
           >
             leads {dimension.title} {dimension.scores.octopus}
           </Badge>
@@ -1708,7 +1708,7 @@ function CompetitorScorecardCard({
           <Badge
             key={item}
             variant="outline"
-            className="max-w-full text-[10px]"
+            className="max-w-full text-xs"
           >
             <span className="truncate">{item}</span>
           </Badge>
@@ -1761,7 +1761,7 @@ function E2ESurpassCertificationCard({
             <Badge
               variant="outline"
               className={cn(
-                "text-[10px]",
+                "text-xs",
                 ready
                   ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                   : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -1769,13 +1769,13 @@ function E2ESurpassCertificationCard({
             >
               {error ? "degraded" : certification.verdict.replaceAll("_", " ")}
             </Badge>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               quality {summary.quality_ready}/{summary.quality_total}
             </Badge>
             <Badge
               variant="outline"
               className={cn(
-                "text-[10px]",
+                "text-xs",
                 behavioralReady
                   ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                   : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -1789,11 +1789,11 @@ function E2ESurpassCertificationCard({
                   : "missing"}
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {focusText}
           </div>
           {!error && (
-            <div className="mt-1 truncate text-[11px] text-muted-foreground">
+            <div className="mt-1 truncate text-xs text-muted-foreground">
               scorecard {summary.scorecard_octopus} vs best external{" "}
               {summary.scorecard_best_external} · automation{" "}
               {summary.automation_octopus} vs Codex {summary.automation_codex}
@@ -1808,7 +1808,7 @@ function E2ESurpassCertificationCard({
             </div>
           )}
         </div>
-        <div className="grid shrink-0 grid-cols-5 gap-2 text-right font-mono text-[11px]">
+        <div className="grid shrink-0 grid-cols-5 gap-2 text-right font-mono text-xs">
           <GateStat label="Scorecard" value={summary.scorecard_octopus} />
           <GateStat
             label="Evidence"
@@ -1830,10 +1830,10 @@ function E2ESurpassCertificationCard({
       <div className="mt-2 grid gap-2 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <div className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
+            <div className="min-w-0 truncate text-xs font-medium text-muted-foreground">
               Certification checks
             </div>
-            <Badge variant="outline" className="shrink-0 text-[10px]">
+            <Badge variant="outline" className="shrink-0 text-xs">
               {passedChecks}/{certification.checks.length}
             </Badge>
           </div>
@@ -1841,7 +1841,7 @@ function E2ESurpassCertificationCard({
             {failedChecks.length === 0 && certification.checks.length > 0 ? (
               <Badge
                 variant="outline"
-                className="border-emerald-500/25 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-300"
+                className="border-emerald-500/25 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-300"
               >
                 all checks passed
               </Badge>
@@ -1850,7 +1850,7 @@ function E2ESurpassCertificationCard({
                 <Badge
                   key={check.id}
                   variant="outline"
-                  className="border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-300"
+                  className="border-amber-500/30 bg-amber-500/10 text-xs text-amber-700 dark:text-amber-300"
                 >
                   {check.title} {check.score}/{check.target}
                 </Badge>
@@ -1859,20 +1859,20 @@ function E2ESurpassCertificationCard({
           </div>
         </div>
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
-          <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+          <div className="mb-1 text-xs font-medium text-muted-foreground">
             Gap counters
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               scorecard gaps {summary.scorecard_gap_dimensions}
             </Badge>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               automation gaps {summary.automation_gap_dimensions}
             </Badge>
             <Badge
               variant="outline"
               className={cn(
-                "text-[10px]",
+                "text-xs",
                 summary.all_dimensions_surpassed &&
                   "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
               )}
@@ -1926,7 +1926,7 @@ function ScorecardGapDrilldown({
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="text-xs font-semibold">{gap.title}</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">
+          <div className="mt-0.5 text-xs text-muted-foreground">
             {gap.why}
           </div>
         </div>
@@ -1934,26 +1934,26 @@ function ScorecardGapDrilldown({
           {queueItem ? (
             <Badge
               variant="outline"
-              className="border-blue-500/25 bg-blue-500/10 text-[10px] text-blue-700 dark:text-blue-300"
+              className="border-blue-500/25 bg-blue-500/10 text-xs text-blue-700 dark:text-blue-300"
             >
               queued {queueItem.priority}
             </Badge>
           ) : null}
-          <Badge variant="outline" className="text-[10px]">
+          <Badge variant="outline" className="text-xs">
             real {realScore}
           </Badge>
-          <Badge variant="outline" className="text-[10px]">
+          <Badge variant="outline" className="text-xs">
             evidence {evidenceScore}
           </Badge>
-          <Badge variant="outline" className="text-[10px]">
+          <Badge variant="outline" className="text-xs">
             effective gap{" "}
             {gap.octopus_gap_to_effective_target ?? gap.octopus_gap_to_target}
           </Badge>
-          <Badge variant="outline" className="text-[10px]">
+          <Badge variant="outline" className="text-xs">
             surpass gap {gap.octopus_gap_to_surpass ?? 0}
           </Badge>
           {gap.best_external_competitor && (
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               best {competitorLabel(gap.best_external_competitor)}{" "}
               {gap.best_external_score ?? 0}
             </Badge>
@@ -1963,16 +1963,16 @@ function ScorecardGapDrilldown({
 
       <div className="mt-2 flex flex-col gap-2 rounded-md border border-border-default bg-muted/15 px-2 py-1.5 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <div className="text-[11px] font-medium text-muted-foreground">
+          <div className="text-xs font-medium text-muted-foreground">
             Remediation queue
           </div>
-          <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+          <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
             {queueItem
               ? `${queueItem.id} · ${queueItem.status} · x${queueItem.occurrences}`
               : "not queued"}
           </div>
           {queueItem ? (
-            <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+            <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
               target {queueItem.target_bucket} · audit {auditSummary.total}
             </div>
           ) : null}
@@ -1982,7 +1982,7 @@ function ScorecardGapDrilldown({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-[11px]"
+            className="h-7 px-2 text-xs"
             disabled={queueBusy}
             onClick={onQueue}
           >
@@ -1996,7 +1996,7 @@ function ScorecardGapDrilldown({
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 px-2 text-[11px]"
+              className="h-7 px-2 text-xs"
               disabled={applyBusy || queueItem.status !== "promoted"}
               onClick={onApplyPromoted}
             >
@@ -2014,7 +2014,7 @@ function ScorecardGapDrilldown({
           {nextActions.slice(0, 2).map((action) => (
             <div
               key={action}
-              className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-800 dark:text-amber-200"
+              className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-200"
             >
               {action}
             </div>
@@ -2027,10 +2027,10 @@ function ScorecardGapDrilldown({
         drilldownLinks.length > 0 && (
           <div className="mt-2 rounded-md border border-border-default bg-muted/15 px-2 py-1.5">
             <div className="mb-1 flex items-center justify-between gap-2">
-              <div className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
+              <div className="min-w-0 truncate text-xs font-medium text-muted-foreground">
                 Evidence sources
               </div>
-              <Badge variant="outline" className="shrink-0 text-[10px]">
+              <Badge variant="outline" className="shrink-0 text-xs">
                 {drilldownLinks.length} links
               </Badge>
             </div>
@@ -2045,13 +2045,13 @@ function ScorecardGapDrilldown({
                       {link.label ?? link.id ?? "Evidence link"}
                     </div>
                     {link.method ? (
-                      <Badge variant="outline" className="shrink-0 text-[10px]">
+                      <Badge variant="outline" className="shrink-0 text-xs">
                         {link.method}
                       </Badge>
                     ) : null}
                   </div>
                   {link.href ? (
-                    <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+                    <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
                       {link.href}
                     </div>
                   ) : null}
@@ -2064,10 +2064,10 @@ function ScorecardGapDrilldown({
       {checklist.length > 0 && (
         <div className="mt-2">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <div className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
+            <div className="min-w-0 truncate text-xs font-medium text-muted-foreground">
               Evidence checklist
             </div>
-            <Badge variant="outline" className="shrink-0 text-[10px]">
+            <Badge variant="outline" className="shrink-0 text-xs">
               {gap.octopus_missing_evidence_count ?? 0} missing
             </Badge>
           </div>
@@ -2081,11 +2081,11 @@ function ScorecardGapDrilldown({
                   <div className="min-w-0 truncate text-xs font-medium">
                     {item.title ?? item.id ?? "evidence"}
                   </div>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                  <Badge variant="outline" className="shrink-0 text-xs">
                     {Math.round((item.score ?? 0) * 100)}%
                   </Badge>
                 </div>
-                <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+                <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                   <span>
                     impl {item.implementation.present}/
                     {item.implementation.total}
@@ -2104,7 +2104,7 @@ function ScorecardGapDrilldown({
                   )}
                 </div>
                 {item.next_actions[0] && (
-                  <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
                     {item.next_actions[0]}
                   </div>
                 )}
@@ -2143,7 +2143,7 @@ function AutomationRadarCard({
             <Badge
               variant="outline"
               className={cn(
-                "text-[10px]",
+                "text-xs",
                 radar.verdict === "leading" &&
                   "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
               )}
@@ -2153,7 +2153,7 @@ function AutomationRadarCard({
             <Badge
               variant="outline"
               className={cn(
-                "text-[10px]",
+                "text-xs",
                 readyDrafts
                   ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                   : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -2163,12 +2163,12 @@ function AutomationRadarCard({
               {radar.policy_rule_drafts.total}
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             Browser, desktop, visual replay, and signed automation policy
             coverage.
           </div>
         </div>
-        <div className="grid shrink-0 grid-cols-3 gap-2 text-right font-mono text-[11px]">
+        <div className="grid shrink-0 grid-cols-3 gap-2 text-right font-mono text-xs">
           <GateStat label="Octo auto" value={octopusScore} />
           <GateStat label="Codex" value={codexScore} />
           <GateStat
@@ -2186,17 +2186,17 @@ function AutomationRadarCard({
 
       <div className="mt-2 grid gap-2 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-md border border-border-default bg-muted/15 px-2 py-1.5">
-          <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+          <div className="mb-1 text-xs font-medium text-muted-foreground">
             Remaining automation edges
           </div>
           <div className="flex flex-wrap gap-1.5">
             {topGaps.length === 0 ? (
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-xs">
                 clear
               </Badge>
             ) : (
               topGaps.slice(0, 4).map((gap) => (
-                <Badge key={gap.id} variant="outline" className="text-[10px]">
+                <Badge key={gap.id} variant="outline" className="text-xs">
                   {gap.title} {gap.scores.octopus}
                 </Badge>
               ))
@@ -2205,20 +2205,20 @@ function AutomationRadarCard({
         </div>
         <div className="rounded-md border border-border-default bg-muted/15 px-2 py-1.5">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <div className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
+            <div className="min-w-0 truncate text-xs font-medium text-muted-foreground">
               Signed automation rule drafts
             </div>
-            <Badge variant="outline" className="shrink-0 text-[10px]">
+            <Badge variant="outline" className="shrink-0 text-xs">
               {drafts.verified}/{drafts.total}
             </Badge>
           </div>
           {topDraft ? (
             <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <div className="truncate font-mono text-[10px]">
+                <div className="truncate font-mono text-xs">
                   {topDraft.signed_payload.rule.tool}
                 </div>
-                <div className="truncate text-[10px] text-muted-foreground">
+                <div className="truncate text-xs text-muted-foreground">
                   {topDraft.signed_payload.rule.reason}
                 </div>
               </div>
@@ -2226,7 +2226,7 @@ function AutomationRadarCard({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 shrink-0 px-2 text-[11px]"
+                className="h-7 shrink-0 px-2 text-xs"
                 disabled={
                   busyId ===
                   `install-automation-policy-rule:${topDraft.draft_id}`
@@ -2245,7 +2245,7 @@ function AutomationRadarCard({
               </Button>
             </div>
           ) : (
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               No automation rule drafts available.
             </div>
           )}
@@ -2343,7 +2343,7 @@ function PromotionAuditSummaryCard({
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="text-sm font-medium">Promotion audit</div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {!integrityOk
               ? `Audit chain broken at #${integrity?.broken_at ?? "?"}`
               : topologyBlocks > 0
@@ -2352,12 +2352,12 @@ function PromotionAuditSummaryCard({
                   ? "Overrides were used after replay gate blocked apply"
                   : "No blocked gate overrides recorded"}
           </div>
-          <div className="mt-1 truncate text-[10px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             chain {integrityOk ? "ok" : "failed"} ·{" "}
             {integrity?.entries_checked ?? 0} checked
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="audit" value={summary.total} />
           <GateStat label="over" value={summary.override_count} />
           <GateStat label="gate" value={summary.gate_failed_count} />
@@ -2395,22 +2395,22 @@ function MemoryQualityCard({
           <div className="flex items-center gap-2 text-sm font-medium">
             <GitBranchIcon className="size-4 text-primary" />
             Memory quality
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {reliabilityPercent}% reliable
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {topAction ??
               (summary.total > 0
                 ? "Recall memories are fresh and contradiction-clean"
                 : "No committed experience memories yet")}
           </div>
-          <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+          <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
             active {summary.active_count} · bucket experience{" "}
             {summary.by_bucket.experience ?? 0}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="mem" value={summary.total} />
           <GateStat label="stale" value={summary.stale_count} />
           <GateStat label="contra" value={summary.contradicted_count} />
@@ -2459,24 +2459,24 @@ function AutoVerifierCard({
           <div className="flex items-center gap-2 text-sm font-medium">
             <ListChecksIcon className="size-4 text-primary" />
             Auto verifier
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {passPercent}% pass
             </Badge>
             <Badge
               variant={repairRoutes.ready ? "outline" : "destructive"}
-              className="text-[10px]"
+              className="text-xs"
             >
               routes {repairScorePercent}%
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {alerts[0]?.message ??
               (latest
                 ? latest.selected_command
                 : "No auto-verifier decisions recorded yet")}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="runs" value={report.total} />
           <GateStat label="pass" value={report.pass_count} />
           <GateStat label="fail" value={report.fail_count} />
@@ -2487,7 +2487,7 @@ function AutoVerifierCard({
         </div>
       </div>
       <div className="mt-2 flex flex-col gap-2 rounded-md border border-background/70 bg-background/60 px-2 py-1.5 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0 text-[11px] text-muted-foreground">
+        <div className="min-w-0 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">
             {repairCandidates.length}
           </span>{" "}
@@ -2502,7 +2502,7 @@ function AutoVerifierCard({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 shrink-0 px-2 text-[11px]"
+          className="h-7 shrink-0 px-2 text-xs"
           onClick={onQueueRepairRoutes}
           disabled={queueBusy || repairCandidates.length === 0}
         >
@@ -2516,7 +2516,7 @@ function AutoVerifierCard({
             <Badge
               key={`${alert.family}:${alert.severity}`}
               variant="outline"
-              className="border-destructive/30 bg-destructive/10 text-[10px] text-destructive"
+              className="border-destructive/30 bg-destructive/10 text-xs text-destructive"
             >
               {alert.family} drift {Math.round(alert.pass_rate * 100)}%
             </Badge>
@@ -2531,19 +2531,19 @@ function AutoVerifierCard({
               className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5"
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 truncate font-mono text-[11px]">
+                <div className="min-w-0 truncate font-mono text-xs">
                   #{candidate.rank} {candidate.command}
                 </div>
-                <Badge variant="outline" className="shrink-0 text-[10px]">
+                <Badge variant="outline" className="shrink-0 text-xs">
                   {candidate.family}
                 </Badge>
               </div>
-              <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span>{Math.round(candidate.pass_rate * 100)}% history</span>
                 <span>{candidate.history_count} samples</span>
                 <span>{Math.round(candidate.avg_duration_ms)}ms</span>
               </div>
-              <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
+              <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                 {candidate.reason}
               </div>
             </div>
@@ -2589,14 +2589,14 @@ function PluginHealthCard({
           <div className="flex items-center gap-2 text-sm font-medium">
             <ListChecksIcon className="size-4 text-primary" />
             Plugin health
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {summary.ok_count}/{summary.total} ok
             </Badge>
             {compatibility && (
               <Badge
                 variant="outline"
                 className={cn(
-                  "text-[10px]",
+                  "text-xs",
                   compatibility.verdict === "fail"
                     ? "border-destructive/30 bg-destructive/10 text-destructive"
                     : compatibility.verdict === "review"
@@ -2608,7 +2608,7 @@ function PluginHealthCard({
               </Badge>
             )}
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {summary.failed_count > 0
               ? "Some plugins failed local smoke checks"
               : summary.review_required_count > 0
@@ -2616,7 +2616,7 @@ function PluginHealthCard({
                 : "Installed Codex plugins passed local smoke checks"}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="total" value={summary.total} />
           <GateStat label="ok" value={summary.ok_count} />
           <GateStat label="fail" value={summary.failed_count} />
@@ -2631,18 +2631,18 @@ function PluginHealthCard({
         </div>
       </div>
       {compatibility?.next_actions?.[0] && (
-        <div className="mt-2 truncate text-[11px] text-muted-foreground">
+        <div className="mt-2 truncate text-xs text-muted-foreground">
           {compatibility.next_actions[0]}
         </div>
       )}
-      <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-background/70 bg-background/60 px-2 py-1.5 text-[11px]">
+      <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-background/70 bg-background/60 px-2 py-1.5 text-xs">
         <span className="font-medium">Lifecycle history</span>
         <span className="min-w-0 truncate text-muted-foreground">
           {latestLifecycle
             ? `${latestLifecycle.operation} ${latestLifecycle.plugin_id} · ${latestLifecycle.status}`
             : "No install, upgrade, or rollback transactions"}
         </span>
-        <Badge variant="outline" className="shrink-0 text-[10px]">
+        <Badge variant="outline" className="shrink-0 text-xs">
           {lifecycle.total} tx
         </Badge>
       </div>
@@ -2653,7 +2653,7 @@ function PluginHealthCard({
               key={`${item.plugin_id ?? item.plugin_name ?? index}`}
               variant="outline"
               className={cn(
-                "max-w-full text-[10px]",
+                "max-w-full text-xs",
                 summary.failed_count > 0
                   ? "border-destructive/30 bg-destructive/10 text-destructive"
                   : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -2744,19 +2744,19 @@ function PublisherTrustCard({
           <div className="flex items-center gap-2 text-sm font-medium">
             <ShieldAlertIcon className="size-4 text-primary" />
             Publisher trust
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {report.active_key_count} active
             </Badge>
             {report.rotation_due_count > 0 && (
               <Badge
                 variant="outline"
-                className="border-amber-500/30 text-[10px] text-amber-700 dark:text-amber-300"
+                className="border-amber-500/30 text-xs text-amber-700 dark:text-amber-300"
               >
                 {report.rotation_due_count} due
               </Badge>
             )}
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
+          <div className="mt-1 text-xs text-muted-foreground">
             Ed25519 publisher keys · atomic rotation · audited revocation
           </div>
         </div>
@@ -2771,7 +2771,7 @@ function PublisherTrustCard({
               key={`${publisher.publisher_id}:${key.key_id}`}
               className="flex items-center justify-between gap-2 rounded-md border border-border-default bg-background/40 px-2 py-1.5"
             >
-              <div className="min-w-0 text-[11px]">
+              <div className="min-w-0 text-xs">
                 <div className="truncate font-mono">
                   {publisher.publisher_id}/{key.key_id}
                 </div>
@@ -2781,7 +2781,7 @@ function PublisherTrustCard({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="text-xs">
                   {key.status}
                 </Badge>
                 {key.status === "active" && (
@@ -2812,7 +2812,7 @@ function PublisherTrustCard({
           )),
         )}
         {report.publishers.length === 0 && (
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             {report.next_actions[0] ?? "No publisher keys registered."}
           </div>
         )}
@@ -2939,18 +2939,18 @@ function ToolSafetyCard({
               )}
             />
             Tool safety
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {summary.total} denied
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {summary.total > 0
               ? `${topTool?.[0] ?? "tool"} has recent policy denials`
               : "No static tool denials recorded in current trace window"}
           </div>
         </div>
         <div className="flex shrink-0 items-start gap-3">
-          <div className="grid grid-cols-3 gap-2 text-right font-mono text-[11px]">
+          <div className="grid grid-cols-3 gap-2 text-right font-mono text-xs">
             <GateStat label="deny" value={summary.by_action.deny ?? 0} />
             <GateStat label="block" value={summary.by_action.block ?? 0} />
             <GateStat label="halt" value={summary.by_action.halt ?? 0} />
@@ -2959,7 +2959,7 @@ function ToolSafetyCard({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 shrink-0 px-2 text-[11px]"
+            className="h-8 shrink-0 px-2 text-xs"
             disabled={!canQueue || busy}
             onClick={onQueuePolicyReview}
           >
@@ -2979,11 +2979,11 @@ function ToolSafetyCard({
                 <div className="min-w-0 truncate text-xs font-medium">
                   {item.tool_name}
                 </div>
-                <Badge variant="outline" className="shrink-0 text-[10px]">
+                <Badge variant="outline" className="shrink-0 text-xs">
                   {item.risk_level || item.action}
                 </Badge>
               </div>
-              <div className="mt-1 truncate text-[11px] text-muted-foreground">
+              <div className="mt-1 truncate text-xs text-muted-foreground">
                 {item.reason || item.action}
               </div>
             </div>
@@ -3026,17 +3026,17 @@ function PolicyReviewRuleDraftCard({
               )}
             />
             Policy review rules
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {report.verified}/{report.total} signed
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {hasDrafts
               ? "Replay-backed policy reviews produced signed install drafts"
               : "No signed policy-review rule drafts yet"}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-2 gap-2 text-right font-mono text-xs">
           <GateStat label="drafts" value={report.total} />
           <GateStat label="signed" value={report.verified} />
         </div>
@@ -3057,11 +3057,11 @@ function PolicyReviewRuleDraftCard({
                   <div className="min-w-0 truncate text-xs font-medium">
                     {rule.effect ?? "deny"} {rule.tool ?? "tool"}
                   </div>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                  <Badge variant="outline" className="shrink-0 text-xs">
                     {shortId(signature || draft.draft_id)}
                   </Badge>
                 </div>
-                <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
+                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                   {rule.reason || "Replay-backed policy review rule"}
                 </div>
                 <div className="mt-2 flex justify-end">
@@ -3069,7 +3069,7 @@ function PolicyReviewRuleDraftCard({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-7 px-2 text-[11px]"
+                    className="h-7 px-2 text-xs"
                     disabled={installing}
                     onClick={() => onInstall(draft.draft_id)}
                   >
@@ -3120,17 +3120,17 @@ function SubagentRiskCard({
               )}
             />
             Subagent risk
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {report.role_count} roles
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {hasRisks
               ? "Route evidence has identified watch or retirement candidates"
               : "No watch or retirement candidates in current fitness evidence"}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-2 gap-2 text-right font-mono text-xs">
           <GateStat label="risks" value={report.top_risks.length} />
           <GateStat
             label="route"
@@ -3155,7 +3155,7 @@ function SubagentRiskCard({
                 <Badge
                   variant="outline"
                   className={cn(
-                    "shrink-0 text-[10px]",
+                    "shrink-0 text-xs",
                     item.verdict === "retire_candidate"
                       ? "border-destructive/30 bg-destructive/10 text-destructive"
                       : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -3164,7 +3164,7 @@ function SubagentRiskCard({
                   {item.verdict}
                 </Badge>
               </div>
-              <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span>score {item.score.toFixed(2)}</span>
                 <span>{item.sample_count} samples</span>
                 {(item.routing_evidence_count ?? 0) > 0 && (
@@ -3177,7 +3177,7 @@ function SubagentRiskCard({
                   </span>
                 ) : null}
               </div>
-              <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
+              <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                 {item.recommendation}
               </div>
               <div className="mt-2 flex justify-end gap-1.5">
@@ -3185,7 +3185,7 @@ function SubagentRiskCard({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 px-2 text-[11px]"
+                  className="h-7 px-2 text-xs"
                   disabled={busyId === `subagent-policy:${item.role}:watch`}
                   onClick={() => onWatch(item.role, item.evidence_item_ids)}
                 >
@@ -3195,7 +3195,7 @@ function SubagentRiskCard({
                   type="button"
                   variant="destructive"
                   size="sm"
-                  className="h-7 px-2 text-[11px]"
+                  className="h-7 px-2 text-xs"
                   disabled={busyId === `subagent-policy:${item.role}:retire`}
                   onClick={() => onRetire(item.role, item.evidence_item_ids)}
                 >
@@ -3242,11 +3242,11 @@ function TopologyPolicyCard({
           <div className="flex items-center gap-2 text-sm font-medium">
             <GitBranchIcon className="size-4 text-primary" />
             Topology policy
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {topologies.length} teams
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {blocked.length > 0
               ? "Operator-retired subagents are present in active topologies"
               : impacted.length > 0
@@ -3254,7 +3254,7 @@ function TopologyPolicyCard({
                 : "No active topology is affected by subagent policy"}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-3 gap-2 text-right font-mono text-xs">
           <GateStat label="blocked" value={blocked.length} />
           <GateStat label="watch" value={watchCount} />
           <GateStat label="teams" value={topologies.length} />
@@ -3274,7 +3274,7 @@ function TopologyPolicyCard({
                 <Badge
                   variant="outline"
                   className={cn(
-                    "shrink-0 text-[10px]",
+                    "shrink-0 text-xs",
                     topology.subagent_policy?.blocked
                       ? "border-destructive/30 bg-destructive/10 text-destructive"
                       : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -3283,7 +3283,7 @@ function TopologyPolicyCard({
                   {topology.subagent_policy?.status ?? "clear"}
                 </Badge>
               </div>
-              <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 {[
                   ...(topology.subagent_policy?.retired ?? []),
                   ...(topology.subagent_policy?.watch ?? []),
@@ -3339,11 +3339,11 @@ function TopologyPromotionCard({
           <div className="flex items-center gap-2 text-sm font-medium">
             <GitBranchIcon className="size-4 text-primary" />
             Team promotion
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {proposals.count} proposals
             </Badge>
           </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+          <div className="mt-1 truncate text-xs text-muted-foreground">
             {subagentProposals > 0
               ? "Strong subagents are ready for team topology promotion"
               : lift.count > 0
@@ -3351,7 +3351,7 @@ function TopologyPromotionCard({
                 : "No subagent-derived team promotions yet"}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-[11px]">
+        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="sub" value={subagentProposals} />
           <GateStat label="up" value={improved} />
           <GateStat label="wait" value={pending} />
@@ -3370,7 +3370,7 @@ function TopologyPromotionCard({
                   {String(proposal.detail.role ?? proposal.kind)} {"->"}{" "}
                   {String(proposal.detail.new_agent ?? "agent")}
                 </div>
-                <Badge variant="outline" className="shrink-0 text-[10px]">
+                <Badge variant="outline" className="shrink-0 text-xs">
                   {((proposal.rank_score ?? proposal.confidence) * 100).toFixed(
                     0,
                   )}
@@ -3378,12 +3378,12 @@ function TopologyPromotionCard({
                 </Badge>
               </div>
               {proposal.detail.historical_lift ? (
-                <div className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-300">
+                <div className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
                   lift +{proposal.detail.historical_lift.improved_count}/-
                   {proposal.detail.historical_lift.regressed_count}
                 </div>
               ) : null}
-              <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
+              <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                 {proposal.rationale}
               </div>
             </div>
@@ -3412,13 +3412,13 @@ function ReviewQueueRow({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={cn("text-[10px]", priorityClass(item.priority))}>
+            <Badge className={cn("text-xs", priorityClass(item.priority))}>
               {item.priority}
             </Badge>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               {item.target_bucket}
             </Badge>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               x{item.occurrences}
             </span>
           </div>
@@ -3426,7 +3426,7 @@ function ReviewQueueRow({
           <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
             {item.text}
           </p>
-          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span>{item.candidate_kind}</span>
             {(item.source_task_ids ?? []).slice(0, 2).map((taskId) => (
               <span key={taskId} className="font-mono">
@@ -3502,7 +3502,7 @@ function PanelTitle({
         <span className="text-primary">{icon}</span>
         {title}
       </div>
-      <span className="text-[11px] text-muted-foreground">{meta}</span>
+      <span className="text-xs text-muted-foreground">{meta}</span>
     </div>
   );
 }
@@ -3524,7 +3524,7 @@ function Metric({
   };
   return (
     <div className={cn("rounded-lg border px-3 py-2", tones[tone])}>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
       <div className="mt-1 font-mono text-xl font-semibold">{value}</div>

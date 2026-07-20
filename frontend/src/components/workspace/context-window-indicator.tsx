@@ -46,13 +46,13 @@ function BucketBar({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Icon className={cn("size-3", bucket.color)} />
-          <span className="text-[10px] text-muted-foreground/70">
+          <span className="text-xs text-muted-foreground/70">
             {bucket.name}
           </span>
         </div>
         <span
           className={cn(
-            "text-[10px] font-mono tabular-nums",
+            "text-xs font-mono tabular-nums",
             overflow
               ? "text-amber-600 dark:text-amber-400"
               : "text-muted-foreground/50",
@@ -119,12 +119,12 @@ export function ContextWindowIndicator({
   return (
     <div className={cn("space-y-2 px-3 py-2", className)}>
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-medium text-muted-foreground/70">
+        <span className="text-xs font-medium text-muted-foreground/70">
           {t.contextWindow?.title}
         </span>
         <span
           className={cn(
-            "text-[10px] font-mono tabular-nums",
+            "text-xs font-mono tabular-nums",
             isHigh
               ? "text-red-500"
               : isMedium

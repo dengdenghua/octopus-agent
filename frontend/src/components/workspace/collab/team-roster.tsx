@@ -52,7 +52,7 @@ export function TeamRoster({
       {/* AI members — workstation seats, always in attendance */}
       {agents.length > 0 && (
         <div className="mb-3">
-          <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             <BotIcon className="size-3" /> {t.collab.roster.workstationGroup}
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -83,7 +83,7 @@ export function TeamRoster({
                   dotLabel={t.collab.roster.standby}
                   badge={
                     isLeader ? (
-                      <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
                         {t.collab.common.leader}
                       </span>
                     ) : undefined
@@ -107,7 +107,7 @@ export function TeamRoster({
 
       {/* Human collaborators */}
       <div>
-        <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        <div className="mb-1.5 px-0.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
           {t.collab.roster.collaboratorsGroup}
         </div>
         {humans.length === 0 ? (
@@ -139,7 +139,7 @@ export function TeamRoster({
                   dotLabel={statusText}
                   badge={
                     participant.id === currentParticipantId ? (
-                      <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                      <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
                         You
                       </span>
                     ) : undefined

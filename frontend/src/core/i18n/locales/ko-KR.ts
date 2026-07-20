@@ -8629,4 +8629,85 @@ Strategy:
     remoteLoading: "원격 워크스페이스를 불러오는 중…",
     remoteLoadFailed: (error) => `원격 워크스페이스 불러오기 실패: ${error}`,
   },
+
+  // Deep Research Panel
+  deepResearchPanel: {
+    title: "Agent",
+    cancelAgentRunTitle: "에이전트 실행 취소",
+    cancelRunConfirmTitle: "에이전트 실행을 취소하시겠습니까?",
+    cancelRunConfirmDescription: (count) =>
+      `진행 중인 에이전트 작업 ${count}개를 취소합니다. 일부 진행 상황은 폐기됩니다.`,
+    cancelRunConfirmLabel: "실행 취소",
+    copyReportFailedToast: "보고서 복사에 실패했습니다",
+    metricRoles: "역할",
+    metricSources: "소스",
+    metricMaterials: "자료",
+    agentBudget: "에이전트 예산",
+    searchesCount: (n) => `${n}회 검색`,
+    batchProgress: (completed, total) => `${completed}/${total} 완료`,
+    batchFailedCancelled: (failed, cancelled) =>
+      `${failed}건 실패 · ${cancelled}건 취소`,
+    batchIdLabel: (id) => `배치 ${id}`,
+    liveAgentStream: "라이브 에이전트 스트림",
+    eventsCount: (n) => `${n}개 이벤트`,
+    prefetch: "사전 가져오기",
+    prefetchStats: (runs, evidence) => `${runs}회 실행 · ${evidence}건 증거`,
+    executionSteps: "실행 단계",
+    synthesisRoleLabel: "종합",
+    searchSources: "검색 소스",
+    evidence: "증거",
+    finalReport: "최종 보고서",
+    savedToLeadMemory: "리드 메모리에 저장됨",
+    copied: "복사됨",
+    copyMarkdown: "Markdown 복사",
+    downloadMarkdown: "Markdown 다운로드",
+    stageSummary: "단계 요약",
+    openUrl: "URL 열기",
+    hitsCount: (n) => `${n}건 일치`,
+    evidenceCount: (n) => `${n}건 증거`,
+    batchEventTitle: (status) => `배치 ${status}`,
+    subagentEventTitle: (name, status) => `${name} ${status}`,
+    subagentFallback: "서브에이전트",
+    statusComplete: "완료",
+    statusUpdated: "업데이트됨",
+    routeBlocked: "경로 차단됨",
+    routeWarning: "경로 경고",
+    routeAllowed: "경로 허용됨",
+  },
+
+  // Desktop Organizer Page
+  desktopOrganizerPage: {
+    title: "데스크톱 어시스턴트",
+    description:
+      "기본은 워크스페이스로 시작합니다. 시스템 데스크톱 파일을 처리해야 할 때 투명 데스크톱 어시스턴트를 활성화하세요.",
+    enabledOn: "활성화됨",
+    enabledOff: "비활성화됨",
+    tileNotTakeoverTitle: "시스템 데스크톱을 인계하지 않음",
+    tileNotTakeoverBody:
+      "투명 레이어는 열 때만 나타나며, 닫으면 마우스와 창 제어권이 Windows로 돌아갑니다.",
+    tileRightClickTitle: "우클릭으로 어시스턴트 호출",
+    tileRightClickBody:
+      "정리 레이어 내에서 우클릭하면 유형별로 분류된 데스크톱 파일 서랍이 열립니다.",
+    tileSafePreviewTitle: "안전한 미리보기 우선",
+    tileSafePreviewBody:
+      "현재는 보기 수집만 수행하며 파일을 자동으로 이동하지 않습니다. 이동 및 정리에는 별도의 확인과 실행 취소가 추가됩니다.",
+    webEnvNotice:
+      "현재 웹 환경이므로 우클릭 메뉴 설치/제거는 비활성화 상태로 유지됩니다. 데스크톱 버전으로 전환하면 두 항목이 실제로 적용됩니다.",
+    contextMenuTitle: "시스템 우클릭 메뉴",
+    contextMenuDescription:
+      'Windows 데스크톱 빈 공간을 우클릭하면 "Octopus 한 번에 데스크톱 정리"가 표시됩니다.',
+    installButton: "우클릭 명령 설치",
+    installingButton: "설치 중",
+    removeButton: "제거",
+    removingButton: "제거 중",
+    installSuccess: "시스템 우클릭 명령이 설치되었습니다.",
+    installUnsupported: "현재 환경은 설치를 지원하지 않습니다.",
+    removeSuccess: "시스템 우클릭 명령이 제거되었습니다.",
+    removeUnsupported: "현재 환경은 제거를 지원하지 않습니다.",
+    openAssistant: "데스크톱 어시스턴트 열기",
+    backToWorkspace: "워크스페이스로 돌아가기",
+    confirmRemoveTitle: "시스템 우클릭 메뉴를 제거하시겠습니까?",
+    confirmRemoveDescription:
+      "Windows 데스크톱 우클릭 메뉴에서 Octopus 한 번에 정리 명령을 제거합니다.",
+  },
 };

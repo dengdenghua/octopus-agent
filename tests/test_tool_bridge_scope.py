@@ -2327,6 +2327,25 @@ def test_structured_public_update_is_removed_before_native_dispatch():
     assert calls[0].input == {"path": "README.md"}
 
 
+def test_structured_evidence_update_is_joined_and_removed_before_dispatch():
+    calls, checkpoint = tool_bridge._native_calls_with_public_checkpoint(
+        [
+            ToolCall(
+                id="read",
+                name="read_file",
+                input={
+                    "path": "reducer.ts",
+                    "confirmed_fact": "items.py 采用统一的事件生命周期。",
+                    "next_action": "接着核对 reducer.ts 的归并方式",
+                },
+            )
+        ]
+    )
+
+    assert checkpoint == "items.py 采用统一的事件生命周期；接着核对 reducer.ts 的归并方式"
+    assert calls[0].input == {"path": "reducer.ts"}
+
+
 def test_likely_long_tool_gets_model_update_while_execution_is_open(
     tmp_path,
     monkeypatch,
@@ -2481,6 +2500,144 @@ def test_native_result_checkpoint_extracts_real_source_titles():
     assert "《Codex CLI features and interaction》" in checkpoint
     assert "《Claude Code interactive mode》" in checkpoint
     assert "真实工具结果" in checkpoint
+
+
+def test_native_result_checkpoint_keeps_ordered_local_reads_visible():
+    calls = [
+        ToolCall(
+            id="read-1",
+            name="read_file",
+            input={"path": "runtime/protocol/items.py"},
+        )
+    ]
+    blocks = [
+        {
+            "type": "tool_result",
+            "tool_use_id": "read-1",
+            "content": json.dumps(
+                {
+                    "path": "runtime/protocol/items.py",
+                    "size": 21204,
+                    "truncated": False,
+                }
+            ),
+        }
+    ]
+    goal = (
+        "依次读取第一批 runtime/protocol/items.py；"
+        "第二批 frontend/src/core/realtime/reducer.ts。"
+    )
+
+    checkpoint = tool_bridge._native_result_checkpoint(calls, blocks, goal=goal)
+
+    assert checkpoint == (
+        "已完整取得 items.py 的 21,204 字节内容；接下来核对 reducer.ts。"
+    )
+
+
+def test_ordered_read_handoffs_require_an_explicit_between_batch_request():
+    assert tool_bridge._ordered_read_handoffs_requested(
+        "依次读取第一批 a.py；第二批 b.ts。每一批结束后说出刚确认的事实。"
+    )
+    assert not tool_bridge._ordered_read_handoffs_requested(
+        "读取 a.py 和 b.ts，最后给我结论。"
+    )
+
+
+def test_ordered_reads_emit_initial_orientation_and_each_result_once(tmp_path):
+    (tmp_path / "a.py").write_text("A = 1\n", encoding="utf-8")
+    (tmp_path / "b.ts").write_text("export const b = 2\n", encoding="utf-8")
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="read_file",
+            description="Read one file.",
+            affinity=["file", "io"],
+            trusted_source="skill://public/read_file",
+            handler=_read_file,
+        ),
+        verify_tests=False,
+    )
+
+    class Router:
+        def __init__(self):
+            self.main_round = 0
+            self.evidence_round = 0
+
+        def call_stream(self, request):
+            is_evidence = any(
+                "[PUBLIC PROGRESS UPDATE]" in str(message.content)
+                for message in request.messages
+            )
+            if is_evidence:
+                self.evidence_round += 1
+                update = (
+                    "已确认 a.py 定义了 A；接下来核对 b.ts。"
+                    if self.evidence_round == 1
+                    else "已确认 b.ts 导出了 b；两批证据已经齐全。"
+                )
+                yield ModelStreamEvent(type="text_delta", delta=update)
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=update))
+                return
+            self.main_round += 1
+            if self.main_round == 1:
+                call = ToolCall(
+                    id="a",
+                    name="read_file",
+                    input={
+                        "path": "a.py",
+                        "public_update": "我先读取 a.py，确认第一条事实。",
+                    },
+                )
+                yield ModelStreamEvent(type="tool_use", tool_call=call)
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            if self.main_round == 2:
+                call = ToolCall(
+                    id="b",
+                    name="read_file",
+                    input={
+                        "path": "b.ts",
+                        "confirmed_fact": "已确认 a.py 定义了 A。",
+                        "next_action": "接下来核对 b.ts",
+                    },
+                )
+                yield ModelStreamEvent(type="tool_use", tool_call=call)
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(type="text_delta", delta="最终结论。")
+            yield ModelStreamEvent(type="done", final=ModelResponse(text="最终结论。"))
+
+    router = Router()
+    stack = SimpleNamespace(
+        executor=ToolExecutor(registry, TrustEngine()),
+        planner=SimpleNamespace(router=router, planner_model="mock"),
+    )
+    goal = "依次读取第一批 a.py；第二批 b.ts。每一批结束后说出刚确认的事实。"
+    intent = ParsedIntent(
+        raw=goal,
+        intent_type="task",
+        normalized_goal=goal,
+        user_context={
+            "conversation_id": "ordered-read-handoffs",
+            "mode": "code",
+            "workspace_path": str(tmp_path),
+            "realtime_public_narrative": True,
+            "realtime_public_orientation": True,
+        },
+    )
+
+    events = list(stream_agentic_fallback(stack, intent, _agent()))
+
+    commentary = [event[1] for event in events if event[0] == "commentary"]
+    assert commentary == [
+        "我先读取 a.py，确认第一条事实。",
+        "已确认 a.py 定义了 A；接下来核对 b.ts。",
+        "已确认 b.ts 导出了 b；两批证据已经齐全。",
+    ]
+    assert [event[0] for event in events].count("tool_start") == 2
+    assert events[-1] == ("done", "", "最终结论。")
 
 
 def test_no_local_access_contract_removes_local_and_delegation_tools():

@@ -436,7 +436,7 @@ export function CronSettingsPage() {
           className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-[15px]">
+            <DialogTitle className="text-base">
               {t.cronSettings.deleteConfirmTitle}
             </DialogTitle>
             <DialogDescription className="text-[12.5px] leading-5">

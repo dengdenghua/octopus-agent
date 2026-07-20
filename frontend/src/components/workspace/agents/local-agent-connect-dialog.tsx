@@ -302,7 +302,7 @@ export function LocalAgentConnectDialog({
           ) : (
             <>
               {doctorSummary ? (
-                <div className="rounded-lg border border-border-default bg-muted/20 p-2 text-[11px]">
+                <div className="rounded-lg border border-border-default bg-muted/20 p-2 text-xs">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-medium text-foreground">
                       本机 CLI Doctor
@@ -340,7 +340,7 @@ export function LocalAgentConnectDialog({
                           <span className="min-w-0 truncate">
                             {group.partner_ids.join("、")}
                           </span>
-                          <span className="shrink-0 rounded bg-muted px-1 font-mono text-[10px]">
+                          <span className="shrink-0 rounded bg-muted px-1 font-mono text-xs">
                             {group.count}
                           </span>
                         </span>
@@ -475,7 +475,7 @@ export function LocalAgentConnectDialog({
                           <Badge
                             variant="secondary"
                             className={cn(
-                              "h-5 rounded-md px-1.5 text-[10px] font-medium ring-1",
+                              "h-5 rounded-md px-1.5 text-xs font-medium ring-1",
                               badge.className,
                             )}
                           >
@@ -488,7 +488,7 @@ export function LocalAgentConnectDialog({
                         {partner.readiness_message ? (
                           <p
                             className={cn(
-                              "mt-1 text-[11px]",
+                              "mt-1 text-xs",
                               partner.ready
                                 ? "text-emerald-700 dark:text-emerald-300"
                                 : "text-amber-700 dark:text-amber-300",
@@ -499,7 +499,7 @@ export function LocalAgentConnectDialog({
                         ) : null}
                         {partner.fix_hint && !partner.ready ? (
                           <p
-                            className="mt-1 line-clamp-2 text-[11px] text-muted-foreground"
+                            className="mt-1 line-clamp-2 text-xs text-muted-foreground"
                             title={partner.fix_hint}
                           >
                             修复建议：{partner.fix_hint}
@@ -511,7 +511,7 @@ export function LocalAgentConnectDialog({
                       <details className="group mt-2 overflow-hidden rounded-md border border-border-default/70 bg-muted/15">
                         <summary
                           aria-label={`${partner.name} 接入与诊断详情`}
-                          className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/35"
+                          className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/35"
                         >
                           <span>接入与诊断详情</span>
                           <ChevronDownIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-180" />
@@ -519,14 +519,14 @@ export function LocalAgentConnectDialog({
                         <div className="space-y-1 border-t border-border-default/70 p-2">
                           {setupSteps.length > 0 ? (
                             <span className="block space-y-1">
-                              <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                              <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
                                 连接步骤
                               </span>
                               {setupSteps.map((step, index) => (
                                 <span
                                   key={`${partner.id}-setup-${step.label}`}
                                   className={cn(
-                                    "flex gap-2 rounded border px-2 py-1 text-[10px]",
+                                    "flex gap-2 rounded border px-2 py-1 text-xs",
                                     step.tone === "ready"
                                       ? "border-emerald-100 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-200"
                                       : step.tone === "blocked"
@@ -534,7 +534,7 @@ export function LocalAgentConnectDialog({
                                         : "border-border-default/60 bg-background/70 text-muted-foreground",
                                   )}
                                 >
-                                  <span className="grid size-4 shrink-0 place-items-center rounded-full bg-background/80 font-mono text-[9px]">
+                                  <span className="grid size-4 shrink-0 place-items-center rounded-full bg-background/80 font-mono text-xs">
                                     {index + 1}
                                   </span>
                                   <span className="min-w-0">
@@ -550,12 +550,12 @@ export function LocalAgentConnectDialog({
                             </span>
                           ) : null}
                           {partner.setup_hint ? (
-                            <span className="block text-[11px] text-muted-foreground">
+                            <span className="block text-xs text-muted-foreground">
                               {partner.setup_hint}
                             </span>
                           ) : null}
                           {partner.interaction_hint ? (
-                            <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                            <span className="block text-xs leading-relaxed text-muted-foreground">
                               {partner.interaction_hint}
                             </span>
                           ) : null}
@@ -565,7 +565,7 @@ export function LocalAgentConnectDialog({
                                 <span
                                   key={`${partner.id}-diagnostic-${item.label}`}
                                   className={cn(
-                                    "rounded border px-2 py-1 text-[10px]",
+                                    "rounded border px-2 py-1 text-xs",
                                     item.tone === "ready"
                                       ? "border-emerald-100 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-200"
                                       : item.tone === "blocked"
@@ -579,7 +579,7 @@ export function LocalAgentConnectDialog({
                                     {item.label}：{item.value}
                                   </span>
                                   {item.detail ? (
-                                    <span className="mt-0.5 block text-[10px] opacity-80">
+                                    <span className="mt-0.5 block text-xs opacity-80">
                                       {item.detail}
                                     </span>
                                   ) : null}
@@ -592,7 +592,7 @@ export function LocalAgentConnectDialog({
                               {commandHints.map((hint) => (
                                 <span
                                   key={`${partner.id}-${hint.command}`}
-                                  className="flex gap-2 rounded border border-border-default/60 bg-background/70 px-2 py-1 text-[10px]"
+                                  className="flex gap-2 rounded border border-border-default/60 bg-background/70 px-2 py-1 text-xs"
                                 >
                                   <code className="shrink-0 font-mono text-foreground">
                                     {hint.command}
@@ -608,7 +608,7 @@ export function LocalAgentConnectDialog({
                             </span>
                           ) : null}
                           {partner.native_launch_cwd ? (
-                            <span className="block truncate rounded border border-border-default/60 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground">
+                            <span className="block truncate rounded border border-border-default/60 bg-background/70 px-2 py-1 text-xs text-muted-foreground">
                               工作目录：
                               <code
                                 className="font-mono text-foreground"
@@ -625,7 +625,7 @@ export function LocalAgentConnectDialog({
                                   type="button"
                                   onClick={() => void handleProbe(partner)}
                                   disabled={Boolean(probingId)}
-                                  className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-xs text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {isProbing ? (
                                     <Loader2Icon
@@ -648,7 +648,7 @@ export function LocalAgentConnectDialog({
                                   key={`${partner.id}-${row.label}`}
                                   type="button"
                                   onClick={() => void copyCommand(row.command)}
-                                  className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                                  className="inline-flex max-w-full items-center gap-1 rounded border border-border-default/70 bg-background px-1.5 py-0.5 text-xs text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
                                   title={row.command}
                                 >
                                   <ClipboardIcon
@@ -666,7 +666,7 @@ export function LocalAgentConnectDialog({
                           {probeResult ? (
                             <span
                               className={cn(
-                                "mt-1 block rounded border px-2 py-1 text-[11px]",
+                                "mt-1 block rounded border px-2 py-1 text-xs",
                                 probeResult.ok
                                   ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-200"
                                   : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-200",
@@ -674,7 +674,7 @@ export function LocalAgentConnectDialog({
                             >
                               <span className="block font-medium">
                                 {!probeResult.ok && probeFailureKindLabel ? (
-                                  <span className="mr-1 inline-flex rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-medium">
+                                  <span className="mr-1 inline-flex rounded bg-background/80 px-1.5 py-0.5 text-xs font-medium">
                                     {probeFailureKindLabel}
                                   </span>
                                 ) : null}
@@ -692,7 +692,7 @@ export function LocalAgentConnectDialog({
                                 </span>
                               ) : null}
                               {!probeResult.ok && probeResult.raw_error ? (
-                                <code className="mt-0.5 block truncate font-mono text-[10px] opacity-80">
+                                <code className="mt-0.5 block truncate font-mono text-xs opacity-80">
                                   {probeResult.raw_error}
                                 </code>
                               ) : null}
@@ -700,7 +700,7 @@ export function LocalAgentConnectDialog({
                           ) : null}
                           {partner.executable ? (
                             <code
-                              className="block truncate rounded border border-border-default/60 bg-background/70 px-2 py-1 font-mono text-[10px] text-muted-foreground"
+                              className="block truncate rounded border border-border-default/60 bg-background/70 px-2 py-1 font-mono text-xs text-muted-foreground"
                               title={partner.executable}
                             >
                               {partner.executable}
@@ -727,7 +727,7 @@ export function LocalAgentConnectDialog({
                           )}
                         />
                         {aliasInvalid ? (
-                          <p className="mt-1 text-[10px] text-destructive">
+                          <p className="mt-1 text-xs text-destructive">
                             仅支持文字、数字、空格、点、短横线和下划线
                           </p>
                         ) : null}

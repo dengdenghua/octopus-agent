@@ -128,14 +128,14 @@ export default function ArchitecturePage() {
           >
             <div className="px-4 py-3 border-b border-border-subtle">
               <h1 className="text-sm font-bold">{t.architecture.title}</h1>
-              <p className="mt-0.5 text-[10px] text-muted-foreground leading-snug">
+              <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
                 {t.architecture.subtitle}
               </p>
             </div>
             <nav className="p-2 space-y-3">
               {DOC_GROUPS.map((grp) => (
                 <div key={grp.titleKey}>
-                  <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  <div className="px-2 py-1 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
                     {t.architecture.groups[grp.titleKey]}
                   </div>
                   <ul className="mt-0.5 space-y-0.5">
@@ -147,7 +147,7 @@ export default function ArchitecturePage() {
                             type="button"
                             onClick={() => setActiveId(id)}
                             className={cn(
-                              "w-full text-left rounded px-2 py-1.5 text-[12px]",
+                              "w-full text-left rounded px-2 py-1.5 text-xs",
                               "hover:bg-muted/60 transition-colors truncate",
                               id === activeId
                                 ? "bg-primary/10 text-foreground font-medium"

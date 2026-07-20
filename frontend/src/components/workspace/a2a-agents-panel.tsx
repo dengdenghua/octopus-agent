@@ -296,7 +296,7 @@ function RegisterForm({
 
   return (
     <form onSubmit={handleSubmit} className="border-b px-4 py-3">
-      <label className="text-muted-foreground mb-1.5 block text-[11px] font-medium">
+      <label className="text-muted-foreground mb-1.5 block text-xs font-medium">
         {t.a2a.remoteAgentUrl}
       </label>
       <div className="flex gap-2">
@@ -322,7 +322,7 @@ function RegisterForm({
           {t.a2a.connect}
         </button>
       </div>
-      {error && <p className="mt-1.5 text-[11px] text-red-500">{error}</p>}
+      {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
     </form>
   );
 }
@@ -388,7 +388,7 @@ function AgentCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="truncate text-sm font-medium">{agent.name}</span>
-              <span className="text-muted-foreground text-[10px]">
+              <span className="text-muted-foreground text-xs">
                 v{agent.version}
               </span>
             </div>
@@ -400,13 +400,13 @@ function AgentCard({
                 {agent.skills.slice(0, 3).map((skill) => (
                   <span
                     key={skill.id}
-                    className="bg-muted rounded px-1.5 py-0.5 text-[10px]"
+                    className="bg-muted rounded px-1.5 py-0.5 text-xs"
                   >
                     {skill.name}
                   </span>
                 ))}
                 {agent.skills.length > 3 && (
-                  <span className="text-muted-foreground text-[10px]">
+                  <span className="text-muted-foreground text-xs">
                     +{agent.skills.length - 3}
                   </span>
                 )}
@@ -419,7 +419,7 @@ function AgentCard({
       </TooltipTrigger>
       <TooltipContent side="left" className="max-w-64">
         <p className="text-xs">{agent.base_url}</p>
-        <p className="text-muted-foreground mt-1 text-[10px]">
+        <p className="text-muted-foreground mt-1 text-xs">
           {t.a2a.status}: {agent.status} | {t.a2a.skills}: {agent.skills.length}
         </p>
       </TooltipContent>
@@ -527,7 +527,7 @@ function AgentDetailView({
         </div>
         <div className="min-w-0 flex-1">
           <span className="text-sm font-semibold">{agent.name}</span>
-          <span className="text-muted-foreground ml-1.5 text-[10px]">
+          <span className="text-muted-foreground ml-1.5 text-xs">
             v{agent.version}
           </span>
         </div>
@@ -536,14 +536,14 @@ function AgentDetailView({
       {/* Info section */}
       <div className="space-y-3 border-b px-4 py-3">
         <div>
-          <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+          <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
             {t.a2a.endpoint}
           </span>
           <p className="mt-0.5 truncate text-xs">{agent.base_url}</p>
         </div>
         {agent.description && (
           <div>
-            <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+            <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
               {t.a2a.description}
             </span>
             <p className="text-foreground/80 mt-0.5 text-xs leading-relaxed">
@@ -552,7 +552,7 @@ function AgentDetailView({
           </div>
         )}
         <div>
-          <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+          <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
             {t.a2a.capabilities}
           </span>
           <div className="mt-1 flex flex-wrap gap-1.5">
@@ -575,7 +575,7 @@ function AgentDetailView({
       {/* Skills */}
       {agent.skills.length > 0 && (
         <div className="border-b px-4 py-3">
-          <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+          <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
             {t.a2a.skills} ({agent.skills.length})
           </span>
           <div className="mt-2 space-y-2">
@@ -583,7 +583,7 @@ function AgentDetailView({
               <div key={skill.id} className="rounded-lg bg-muted/30 px-3 py-2">
                 <p className="text-xs font-medium">{skill.name}</p>
                 {skill.description && (
-                  <p className="text-muted-foreground mt-0.5 text-[11px]">
+                  <p className="text-muted-foreground mt-0.5 text-xs">
                     {skill.description}
                   </p>
                 )}
@@ -592,7 +592,7 @@ function AgentDetailView({
                     {skill.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="rounded bg-muted px-1 py-0.5 text-[10px]"
+                        className="rounded bg-muted px-1 py-0.5 text-xs"
                       >
                         {tag}
                       </span>
@@ -660,7 +660,7 @@ function AgentDetailView({
 
       {/* Send task */}
       <div className="px-4 py-3">
-        <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wide">
+        <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
           {t.a2a.sendTask}
         </span>
         <form onSubmit={handleSendTask} className="mt-2 flex gap-2">
@@ -700,7 +700,7 @@ function AgentDetailView({
             <div className="flex items-center gap-2">
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-medium",
+                  "inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-medium",
                   taskResult.status.state === "completed"
                     ? "bg-green-500/10 text-green-600"
                     : taskResult.status.state === "failed"
@@ -710,7 +710,7 @@ function AgentDetailView({
               >
                 {taskResult.status.state}
               </span>
-              <span className="text-muted-foreground text-[10px]">
+              <span className="text-muted-foreground text-xs">
                 Task {taskResult.id.slice(0, 8)}
               </span>
             </div>
@@ -731,7 +731,7 @@ function AgentDetailView({
             {/* Show artifacts */}
             {taskResult.artifacts.length > 0 && (
               <div className="mt-2">
-                <span className="text-muted-foreground text-[10px]">
+                <span className="text-muted-foreground text-xs">
                   {t.a2a.artifacts}: {taskResult.artifacts.length}
                 </span>
                 {taskResult.artifacts.map((artifact, i) => (
@@ -775,7 +775,7 @@ function CapabilityBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-medium",
+        "inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-medium",
         enabled
           ? "bg-green-500/10 text-green-600"
           : "bg-muted text-muted-foreground",

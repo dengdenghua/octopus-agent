@@ -198,7 +198,7 @@ function PlanStepItem({
         {/* Content */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground/50 text-[10px] font-mono">
+            <span className="text-muted-foreground/50 text-xs font-mono">
               {index + 1}
             </span>
             <span
@@ -226,14 +226,14 @@ function PlanStepItem({
 
       {/* Detail */}
       {expanded && (step.detail || step.toolCalls) && (
-        <div className="mt-1.5 pl-6 text-[10px] text-muted-foreground">
+        <div className="mt-1.5 pl-6 text-xs text-muted-foreground">
           {step.detail && <div>{step.detail}</div>}
           {step.toolCalls && step.toolCalls.length > 0 && (
             <div className="mt-0.5 flex flex-wrap gap-1">
               {step.toolCalls.map((tc, i) => (
                 <span
                   key={i}
-                  className="rounded bg-muted/70 px-1 py-0.5 font-mono text-[9px]"
+                  className="rounded bg-muted/70 px-1 py-0.5 font-mono text-xs"
                 >
                   {tc}
                 </span>
@@ -278,7 +278,7 @@ export function PlanButton({
       <ClipboardListIcon className="size-3.5" />
       <span>{t.planPanel.title}</span>
       {stepCount > 0 && (
-        <span className="rounded-lg bg-muted/80 px-1.5 py-0.5 text-[10px] tabular-nums">
+        <span className="rounded-lg bg-muted/80 px-1.5 py-0.5 text-xs tabular-nums">
           {completedCount}/{stepCount}
         </span>
       )}
@@ -349,7 +349,7 @@ export function PlanPanel({
             <ClipboardListIcon className="text-primary size-3.5" />
           </div>
           <span className="text-sm font-semibold">{t.planPanel.title}</span>
-          <span className="text-muted-foreground text-[10px]">
+          <span className="text-muted-foreground text-xs">
             {t.planPanel.steps(completedCount, steps.length)}
           </span>
         </div>
@@ -381,7 +381,7 @@ export function PlanPanel({
             <p className="text-muted-foreground/50 text-xs">
               No plan detected yet.
             </p>
-            <p className="text-muted-foreground/40 text-[10px]">
+            <p className="text-muted-foreground/40 text-xs">
               The plan will appear when the agent starts working.
             </p>
           </div>

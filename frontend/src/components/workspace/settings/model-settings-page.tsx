@@ -298,6 +298,8 @@ interface ModelConfig {
   default_header_names?: string[];
   has_default_headers?: boolean;
   max_tokens?: number | null;
+  context_window?: number | null;
+  enable_1m_context?: boolean;
 }
 
 function customModelReferences(model: ModelConfig): string[] {
@@ -871,7 +873,7 @@ function ModelSettingsOverview({
 
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         <div className="rounded-lg border border-border bg-background/65 p-3">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {copy.currentDefault}
           </div>
           <div className="mt-1 truncate font-mono text-sm text-foreground">
@@ -879,7 +881,7 @@ function ModelSettingsOverview({
           </div>
         </div>
         <div className="rounded-lg border border-border bg-background/65 p-3">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {copy.configuredModels}
           </div>
           <div className="mt-1 text-sm font-semibold text-foreground">
@@ -887,7 +889,7 @@ function ModelSettingsOverview({
           </div>
         </div>
         <div className="rounded-lg border border-border bg-background/65 p-3">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {copy.gateway}
           </div>
           <div
@@ -1519,7 +1521,7 @@ export default function ModelSettingsPage() {
                             {displayName}
                           </div>
                           <span
-                            className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground"
+                            className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground"
                             title={t.settings.model.modelList.hint}
                           >
                             {t.settings.model.modelCount(list.length)}
@@ -1531,13 +1533,13 @@ export default function ModelSettingsPage() {
                           </div>
                         )}
                         {list.length > 0 && (
-                          <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-foreground/80">
+                          <ul className="mt-1.5 space-y-0.5 font-mono text-xs text-foreground/80">
                             {list.map((id, idx) => (
                               <li
                                 key={`${modelId}:${idx}:${id}`}
                                 className="flex min-w-0 items-center gap-2"
                               >
-                                <span className="shrink-0 rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 font-sans text-[9px] font-medium text-muted-foreground">
+                                <span className="shrink-0 rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 font-sans text-xs font-medium text-muted-foreground">
                                   {idx === 0 && idx === list.length - 1
                                     ? t.settings.model.modelList
                                         .pickerDefaultAndPerformance
@@ -1721,7 +1723,7 @@ export default function ModelSettingsPage() {
           className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-[15px]">
+            <DialogTitle className="text-base">
               {t.settings.model.deleteModelTitle}
             </DialogTitle>
             <DialogDescription className="text-[12.5px] leading-5">
@@ -1734,7 +1736,7 @@ export default function ModelSettingsPage() {
                 : ""}
             </DialogDescription>
             {deletingCurrentDefault && (
-              <div className="mt-2 flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-[12px] leading-5 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
+              <div className="mt-2 flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs leading-5 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
                 <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
                 <span>{pageCopy.deletingDefault(deleteReplacement)}</span>
               </div>
@@ -2000,7 +2002,7 @@ function BuiltInCompatProfilesCard({
                           {upstream?.profile_display_name || item.id}
                         </span>
                         {score && (
-                          <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          <span className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
                             {copy.compatScore(
                               score.min === score.max
                                 ? `${score.min}`
@@ -2009,15 +2011,15 @@ function BuiltInCompatProfilesCard({
                           </span>
                         )}
                       </div>
-                      <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                      <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
                         {upstream?.model || item.id}
                       </div>
                     </div>
-                    <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
                       {copy.compatFallbacks(countCompatRetries(item))}
                     </span>
                   </div>
-                  <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                  <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                     {hints.length > 0 && (
                       <div title={hints.join(", ")}>
                         {copy.compatNormalize(
@@ -2067,7 +2069,7 @@ function CompatDiagnosticSummary({
 
   if (status === "loading" && !diagnostic) {
     return (
-      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
         <Loader2Icon className="size-3 animate-spin" />
         {t.settings.model.compatDiagnostics.loading}
       </div>
@@ -2076,7 +2078,7 @@ function CompatDiagnosticSummary({
 
   if (!diagnostic) {
     return status === "error" ? (
-      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
         <AlertTriangleIcon className="size-3.5 text-amber-500" />
         {t.settings.model.compatDiagnostics.unavailable}
       </div>
@@ -2085,7 +2087,7 @@ function CompatDiagnosticSummary({
 
   if (!diagnostic.applicable) {
     return (
-      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
         <InfoIcon className="size-3.5" />
         <span>
           {diagnostic.reason ||
@@ -2125,7 +2127,7 @@ function CompatDiagnosticSummary({
     retryReasons.length > 0;
 
   return (
-    <div className="mt-3 min-w-0 max-w-full space-y-2 overflow-hidden border-l border-border pl-3 text-[11px] text-muted-foreground">
+    <div className="mt-3 min-w-0 max-w-full space-y-2 overflow-hidden border-l border-border pl-3 text-xs text-muted-foreground">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 font-medium text-foreground/80">
           <CheckCircle2Icon className="size-3.5 text-emerald-500" />
@@ -2321,7 +2323,7 @@ function OfficialModelsSection() {
                   {upstream.display_name || upstream.id}
                 </span>
                 {upstream.recommended && (
-                  <span className="rounded border border-emerald-500/40 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="rounded border border-emerald-500/40 px-1.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                     {t.modelPicker.recommended}
                   </span>
                 )}
@@ -2332,7 +2334,7 @@ function OfficialModelsSection() {
               <span className="rounded-lg bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
                 {upstream.multiplier ?? "1.0x"}
               </span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {t.settings.model.gatewayHosted}
               </span>
             </div>
@@ -2377,6 +2379,7 @@ function EditModelForm({
   const [baseUrl, setBaseUrl] = useState("");
   const [thinking, setThinking] = useState(false);
   const [vision, setVision] = useState(false);
+  const [millionContext, setMillionContext] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [headersText, setHeadersText] = useState("");
   const [showHeaders, setShowHeaders] = useState(false);
@@ -2429,6 +2432,10 @@ function EditModelForm({
         setBaseUrl((d.base_url as string) || "");
         setThinking(!!d.supports_thinking);
         setVision(!!d.supports_vision);
+        setMillionContext(
+          d.enable_1m_context === true ||
+            Number(d.context_window || 0) >= 1_000_000,
+        );
         setHeadersText("");
         setShowHeaders(false);
         setApiKeyPlaceholder(
@@ -2500,6 +2507,8 @@ function EditModelForm({
     if (baseUrl) body.base_url = baseUrl;
     body.supports_thinking = thinking;
     body.supports_vision = vision;
+    body.context_window = 256_000;
+    body.enable_1m_context = millionContext;
     // Always send the full models list — backend normalises and
     // persists verbatim, replacing any prior binding.
     body.models = cleanedModels;
@@ -2605,7 +2614,7 @@ function EditModelForm({
               </label>
               <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm">
                 <span className="font-mono">{detectedProvider}</span>
-                <span className="ml-2 text-[10px] text-muted-foreground/70">
+                <span className="ml-2 text-xs text-muted-foreground/70">
                   {t.settings.model.providerAutoHint}
                 </span>
               </div>
@@ -2667,7 +2676,7 @@ function EditModelForm({
               <label className="text-xs text-muted-foreground">
                 {t.settings.model.modelList.label}
               </label>
-              <span className="text-[10px] text-muted-foreground/70">
+              <span className="text-xs text-muted-foreground/70">
                 {t.settings.model.modelList.hint}
               </span>
             </div>
@@ -2678,7 +2687,7 @@ function EditModelForm({
                   className="flex items-center gap-1.5"
                 >
                   <span
-                    className="w-4 shrink-0 text-right text-[11px] text-muted-foreground/60 tabular-nums"
+                    className="w-4 shrink-0 text-right text-xs text-muted-foreground/60 tabular-nums"
                     title={
                       idx === 0
                         ? t.settings.model.modelList.label
@@ -2754,7 +2763,7 @@ function EditModelForm({
                   rows={3}
                   className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t.settings.model.extraHeadersHint}
                 </p>
               </div>
@@ -2769,6 +2778,15 @@ function EditModelForm({
             <div className="flex items-center gap-2 pt-5">
               <Switch checked={vision} onCheckedChange={setVision} />{" "}
               <span className="text-xs">{t.settings.model.visionLabel}</span>
+            </div>
+            <div className="flex items-center gap-2 pt-5">
+              <Switch
+                checked={millionContext}
+                onCheckedChange={setMillionContext}
+              />{" "}
+              <span className="text-xs">
+                {t.settings.model.millionContextLabel}
+              </span>
             </div>
           </div>
 
@@ -2874,6 +2892,7 @@ function AddModelForm({
   const [baseUrl, setBaseUrl] = useState("https://api.openai.com/v1");
   const [thinking, setThinking] = useState(false);
   const [vision, setVision] = useState(false);
+  const [millionContext, setMillionContext] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -2896,6 +2915,9 @@ function AddModelForm({
 
   const handleModelChange = (idx: number, value: string) => {
     setModels((prev) => prev.map((m, i) => (i === idx ? value : m)));
+    if (/glm-5\.2|deepseek-v4-(flash|pro)/i.test(value)) {
+      setMillionContext(true);
+    }
   };
   const handleModelAdd = () => {
     setModels((prev) => [...prev, ""]);
@@ -2999,6 +3021,8 @@ function AddModelForm({
             models: cleanedModels,
             supports_thinking: thinking,
             supports_vision: vision,
+            context_window: 256_000,
+            enable_1m_context: millionContext,
             default_headers: parseHeadersText(headersText),
           }),
         },
@@ -3056,7 +3080,7 @@ function AddModelForm({
           <span className="text-destructive">*</span>{" "}
           {t.settings.model.modelList.label}
         </label>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
+        <p className="mt-0.5 text-xs text-muted-foreground">
           {t.settings.model.modelList.hint}
         </p>
         <ul className="mt-2 space-y-1.5">
@@ -3121,7 +3145,7 @@ function AddModelForm({
                   key={m}
                   type="button"
                   onClick={() => handleModelChange(0, m)}
-                  className="rounded-md border border-border-default bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  className="rounded-md border border-border-default bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                   title={t.settings.model.fillModelId ?? "Fill this model ID"}
                 >
                   {m}
@@ -3172,7 +3196,7 @@ function AddModelForm({
                   href={preset.consoleUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[11px] text-primary hover:underline font-normal"
+                  className="text-xs text-primary hover:underline font-normal"
                 >
                   {t.settings.model.getApiKey}
                 </a>
@@ -3279,14 +3303,14 @@ function AddModelForm({
               rows={3}
               className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t.settings.model.extraHeadersHint}
             </p>
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="flex items-center gap-2">
           <Switch
             aria-label={t.settings.model.thinkingLabel}
@@ -3302,6 +3326,16 @@ function AddModelForm({
             onCheckedChange={setVision}
           />{" "}
           <span className="text-sm">{t.settings.model.visionLabel}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            aria-label={t.settings.model.millionContextLabel}
+            checked={millionContext}
+            onCheckedChange={setMillionContext}
+          />{" "}
+          <span className="text-sm">
+            {t.settings.model.millionContextLabel}
+          </span>
         </div>
       </div>
 
@@ -3505,17 +3539,17 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
               <Loader2Icon className="size-3.5 animate-spin text-blue-500" />
             )}
             {scanStatus === "done" && services.length > 0 && (
-              <span className="inline-flex items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-400">
+              <span className="inline-flex items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-400">
                 {t.settings.model.localModels.modelsCount(services.length)}
               </span>
             )}
             {scanStatus === "done" && services.length === 0 && (
-              <span className="inline-flex items-center rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground">
+              <span className="inline-flex items-center rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground">
                 {t.settings.model.localModels.empty}
               </span>
             )}
             {scanStatus === "error" && (
-              <span className="inline-flex items-center rounded-md border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+              <span className="inline-flex items-center rounded-md border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-xs font-medium text-destructive">
                 {t.settings.model.localModels.serviceStatus.error}
               </span>
             )}
@@ -3562,17 +3596,17 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
                           {svc.base_url}
                         </code>
                         {svc.status === "ok" && (
-                          <span className="inline-flex shrink-0 items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-400">
+                          <span className="inline-flex shrink-0 items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-400">
                             {t.settings.model.localModels.serviceStatus.ok}
                           </span>
                         )}
                         {svc.status === "empty" && (
-                          <span className="inline-flex shrink-0 items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
+                          <span className="inline-flex shrink-0 items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
                             {t.settings.model.localModels.serviceStatus.empty}
                           </span>
                         )}
                         {svc.status === "error" && (
-                          <span className="inline-flex shrink-0 items-center rounded-md border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+                          <span className="inline-flex shrink-0 items-center rounded-md border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-xs font-medium text-destructive">
                             {t.settings.model.localModels.serviceStatus.error}
                           </span>
                         )}
