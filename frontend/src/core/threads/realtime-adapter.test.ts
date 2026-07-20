@@ -350,6 +350,54 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(ai.additional_kwargs?.message_kind).toBe("answer");
   });
 
+  it("moves a failed agent response out of chat and into structured detail", () => {
+    const failedAnswer: AgentMessageItem = {
+      ...agentMsg(
+        "任务未能完成：内部守卫要求缺少执行证据。\n\n完整诊断详情。",
+        "failed-answer",
+      ),
+      status: "failed",
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([makeTurn([userMsg("analyze"), failedAnswer], "failed")]),
+    );
+
+    expect(state.messages).toHaveLength(2);
+    const ai = state.messages[1] as AIMessage;
+    expect(ai.content).toBe("");
+    expect(ai.additional_kwargs?.response_state).toBe("failed");
+    expect(ai.additional_kwargs?.error).toMatchObject({
+      message: "任务未能完成：内部守卫要求缺少执行证据。\n\n完整诊断详情。",
+      info: { code: "agent_response_failed" },
+    });
+    expect(
+      conversationLastError(
+        makeConv([makeTurn([userMsg("analyze"), failedAnswer], "failed")]),
+      )?.message,
+    ).toContain("内部守卫要求缺少执行证据");
+  });
+
+  it("adds a structured receipt to failed verification-only turns", () => {
+    const failedVerification: VerificationItem = {
+      ...verification("verification required"),
+      status: "failed",
+      kind: "manual",
+      summary:
+        "Code changes were produced but no verification step was recorded before final answer.",
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([makeTurn([userMsg("edit"), failedVerification], "failed")]),
+    );
+    const receipt = state.messages.find(
+      (message) => message.additional_kwargs?.response_state === "failed",
+    ) as AIMessage | undefined;
+
+    expect(receipt?.content).toBe("");
+    expect(receipt?.additional_kwargs?.error).toMatchObject({
+      info: { code: "verification_required" },
+    });
+  });
+
   it("merges multiple reasoning items into one block separated by blank lines", () => {
     const state = conversationToAgentThreadState(
       makeConv([

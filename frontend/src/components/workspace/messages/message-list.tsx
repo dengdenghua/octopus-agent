@@ -61,6 +61,7 @@ import { extractClarificationQuestionnaire } from "../clarification-questionnair
 import { hasVisibleMessageGroupContent, MessageGroup } from "./message-group";
 import { MessageListItem } from "./message-list-item";
 import {
+  type FailurePresentation,
   hasMessageOutputSummary,
   MessageOutputSummary,
 } from "./message-output-summary";
@@ -451,6 +452,71 @@ function assistantGroupContainsFailureMessage(
   });
 }
 
+type StructuredFailure = {
+  code?: string;
+  detail: string;
+  eventId?: string;
+};
+
+function asFailureRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+export function structuredFailureFromMessages(
+  messages: Message[],
+): StructuredFailure | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.type !== "ai") continue;
+    const error = asFailureRecord(message.additional_kwargs?.error);
+    if (!error) continue;
+    const info = asFailureRecord(error.info);
+    const detail =
+      typeof error.message === "string" && error.message.trim()
+        ? error.message.trim()
+        : "turn failed";
+    return {
+      detail,
+      eventId: message.id,
+      ...(typeof info?.code === "string" && info.code.trim()
+        ? { code: info.code.trim() }
+        : {}),
+    };
+  }
+  return null;
+}
+
+function latestTurnMessages(messages: Message[]): Message[] {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.type === "human") return messages.slice(index);
+  }
+  return messages;
+}
+
+function failureKind(
+  detail: string,
+  code?: string,
+): FailurePresentation["kind"] {
+  const signal = `${code ?? ""}\n${detail}`;
+  if (
+    /network|fetch|abort|timeout|ECONNREFUSED|websocket|transport|connection/i.test(
+      signal,
+    )
+  ) {
+    return "network";
+  }
+  if (
+    /verification_required|verification_failed|verification required|no verification step|Code changes were produced/i.test(
+      signal,
+    )
+  ) {
+    return "verification";
+  }
+  return "error";
+}
+
 /**
  * Memoized wrapper around a single message group. Only the group that
  * contains the currently-streaming message (or the latest group while
@@ -481,10 +547,7 @@ const MemoizedGroup = memo(
     enableClarificationActions: boolean;
     deferGroupOutputs: boolean;
     groupAuditNotice: string | null;
-    groupFailure?: {
-      message: string;
-      kind?: "error" | "network" | "verification";
-    } | null;
+    groupFailure?: FailurePresentation | null;
     showAssistantAvatar: boolean;
     renderGroupContent: (
       group: CoreMessageGroup,
@@ -493,10 +556,7 @@ const MemoizedGroup = memo(
       keepOpen?: boolean,
       deferOutputs?: boolean,
       auditNotice?: string | null,
-      failure?: {
-        message: string;
-        kind?: "error" | "network" | "verification";
-      } | null,
+      failure?: FailurePresentation | null,
       showAssistantAvatar?: boolean,
     ) => ReactNode;
   }) {
@@ -734,38 +794,46 @@ export function MessageList({
     typeof rawThreadError === "string"
       ? rawThreadError
       : (rawThreadError?.message ?? "");
-  // "websocket closed (1006 ...)" is the realtime hook's send-failure text —
-  // a connectivity problem, so it must get the amber network styling.
-  const isNetworkError =
-    /network|fetch|abort|timeout|ECONNREFUSED|websocket/i.test(
-      threadErrorMessage,
+  const latestStructuredFailure = useMemo(
+    () => structuredFailureFromMessages(latestTurnMessages(messages)),
+    [messages],
+  );
+  const presentFailure = useCallback(
+    (failure: StructuredFailure): FailurePresentation => {
+      const kind = failureKind(failure.detail, failure.code);
+      const message =
+        kind === "network"
+          ? t.streaming.networkLost
+          : kind === "verification"
+            ? t.streaming.verificationRequired
+            : t.streaming.turnFailed;
+      return { ...failure, kind, message };
+    },
+    [
+      t.streaming.networkLost,
+      t.streaming.turnFailed,
+      t.streaming.verificationRequired,
+    ],
+  );
+  const failureReceipt = useMemo<FailurePresentation | null>(() => {
+    if (!thread.error || thread.isLoading) return null;
+    return presentFailure(
+      latestStructuredFailure ?? {
+        detail: threadErrorMessage.trim() || "turn failed",
+      },
     );
-  const isVerificationRequiredError =
-    /verification required|no verification step|Code changes were produced/i.test(
-      threadErrorMessage,
-    );
-  const errorBannerText =
-    thread.error && !thread.isLoading
-      ? isNetworkError
-        ? t.streaming.networkLost
-        : isVerificationRequiredError
-          ? t.streaming.verificationRequired
-          : /^turn failed$/i.test(threadErrorMessage)
-            ? t.streaming.turnFailed
-            : threadErrorMessage || t.streaming.connectionLost
-      : null;
+  }, [
+    latestStructuredFailure,
+    presentFailure,
+    thread.error,
+    thread.isLoading,
+    threadErrorMessage,
+  ]);
+  const isNetworkError = failureReceipt?.kind === "network";
+  const isVerificationRequiredError = failureReceipt?.kind === "verification";
+  const errorBannerText = failureReceipt?.message ?? null;
   const verificationAuditNotice =
     isVerificationRequiredError && errorBannerText ? errorBannerText : null;
-
-  const failureReceipt = useMemo(() => {
-    if (!errorBannerText) return null;
-    const kind: "error" | "network" | "verification" = isNetworkError
-      ? "network"
-      : isVerificationRequiredError
-        ? "verification"
-        : "error";
-    return { message: errorBannerText, kind };
-  }, [errorBannerText, isNetworkError, isVerificationRequiredError]);
 
   // Aggregation layer (fold continuous tool-call runs into collapsible
   // bubbles) is currently disabled because it was eating streaming AI messages
@@ -795,12 +863,12 @@ export function MessageList({
     );
   }, [failureReceipt, groupedMessages, thread.isLoading]);
   const failureAlreadyVisibleInAssistantText = useMemo(() => {
-    if (!errorBannerText || thread.isLoading) return false;
+    if (!failureReceipt?.detail || thread.isLoading) return false;
     const latestGroup = groupedMessages[groupedMessages.length - 1];
     return latestGroup?.type === "assistant"
-      ? assistantGroupContainsFailureMessage(latestGroup, errorBannerText)
+      ? assistantGroupContainsFailureMessage(latestGroup, failureReceipt.detail)
       : false;
-  }, [errorBannerText, groupedMessages, thread.isLoading]);
+  }, [failureReceipt, groupedMessages, thread.isLoading]);
   // Mirror the receipt mount rule: the audit actions attach to the last
   // plain assistant group of the latest turn, and receipt content is judged
   // on the whole turn slice — file changes usually live in the processing
@@ -1261,10 +1329,7 @@ export function MessageList({
     keepOpen = false,
     deferOutputs = false,
     auditNotice: string | null = null,
-    failure: {
-      message: string;
-      kind?: "error" | "network" | "verification";
-    } | null = null,
+    failure: FailurePresentation | null = null,
     showAssistantAvatar = true,
   ) => {
     if (group.type === "human" || group.type === "assistant") {
@@ -1515,6 +1580,14 @@ export function MessageList({
                   group.type === "assistant"
                     ? turnMessagesForGroup(groupedMessages, group)
                     : group.messages;
+                const structuredGroupFailure =
+                  group.type === "assistant" &&
+                  isLastAssistantGroupOfTurn(groupedMessages, group)
+                    ? structuredFailureFromMessages(groupTurnMessages)
+                    : null;
+                const historicalGroupFailure = structuredGroupFailure
+                  ? presentFailure(structuredGroupFailure)
+                  : null;
                 const shouldShowFailureReceipt =
                   Boolean(failureReceipt) &&
                   isLatestGroup &&
@@ -1523,9 +1596,10 @@ export function MessageList({
                   (!hasVisibleAssistantText(group) ||
                     hasMessageOutputSummary(groupTurnMessages));
                 const groupFailure =
-                  failureReceipt && shouldShowFailureReceipt
+                  historicalGroupFailure ??
+                  (failureReceipt && shouldShowFailureReceipt
                     ? failureReceipt
-                    : null;
+                    : null);
 
                 const turnGroupPosition = turn.groupIndexes.indexOf(index);
                 const assistantIdentity = assistantFrameIdentity(group);
@@ -1617,7 +1691,25 @@ export function MessageList({
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => emitOpenAgentWorkbench({ tab: "agent" })}
+                      onClick={() => {
+                        if (!failureReceipt) {
+                          emitOpenAgentWorkbench({ tab: "agent" });
+                          return;
+                        }
+                        emitOpenAgentWorkbench({
+                          tab: "agent",
+                          eventId: failureReceipt.eventId,
+                          eventKind: "execution",
+                          view: "trace",
+                          processEvent: {
+                            kind: "execution",
+                            summary: failureReceipt.message,
+                            detail: failureReceipt.detail,
+                            status: "error",
+                            count: 1,
+                          },
+                        });
+                      }}
                       className="inline-flex h-7 items-center gap-1 rounded-md border border-border-default bg-background/60 px-2.5 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-background/90"
                     >
                       <PlayCircleIcon className="size-3" />

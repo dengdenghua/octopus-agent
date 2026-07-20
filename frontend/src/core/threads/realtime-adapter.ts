@@ -402,6 +402,7 @@ function turnToMessages(turn: Turn): Message[] {
       case "agentMessage": {
         const am = item as AgentMessageItem;
         const isInterruptedMessage = am.id === interruptedMessageId;
+        const isFailedMessage = am.status === "failed";
         const messageKind = am.messageKind ?? "answer";
         // The backend's ReAct loop streams the LLM's raw trajectory:
         // "Thought: ...\nAction: tool(...)\nFinal Answer: ..." into
@@ -465,13 +466,25 @@ function turnToMessages(turn: Turn): Message[] {
             kwargs.interrupted_draft = split.finalAnswer;
           }
         }
+        if (isFailedMessage) {
+          const failureDetail = split.finalAnswer?.trim() || "turn failed";
+          kwargs.response_state = "failed";
+          kwargs.error = {
+            message: failureDetail,
+            will_retry: false,
+            info: { code: "agent_response_failed" },
+          };
+        }
         if (messageKind === "commentary" && !isInterruptedMessage) {
           kwargs.public_progress = true;
         }
         const ai: AIMessage = {
           type: "ai",
           id: am.id,
-          content: isInterruptedMessage ? "" : (split.finalAnswer ?? ""),
+          content:
+            isInterruptedMessage || isFailedMessage
+              ? ""
+              : (split.finalAnswer ?? ""),
           additional_kwargs: kwargs,
           ...(pending.toolCalls.length > 0
             ? { tool_calls: pending.toolCalls }
@@ -571,8 +584,59 @@ function turnToMessages(turn: Turn): Message[] {
   }
 
   flushPendingAsTrailingAi();
+  appendFailedTurnReceipt(out, turn);
   attachGroundingToNarrativeAnchor(out, turn.grounding);
   return out;
+}
+
+function appendFailedTurnReceipt(out: Message[], turn: Turn): void {
+  if (turn.status !== "failed") return;
+  if (
+    out.some(
+      (message) =>
+        message.type === "ai" &&
+        typeof message.additional_kwargs?.error === "object" &&
+        message.additional_kwargs.error !== null,
+    )
+  ) {
+    return;
+  }
+
+  const verificationMessage = failedVerificationMessage(turn);
+  const turnError =
+    turn.error && typeof turn.error === "object"
+      ? (turn.error as Record<string, unknown>)
+      : null;
+  const turnErrorMessage =
+    typeof turnError?.message === "string" ? turnError.message.trim() : "";
+  const turnErrorCode =
+    typeof turnError?.code === "string" ? turnError.code.trim() : "";
+  const message = verificationMessage || turnErrorMessage || "turn failed";
+  const verificationRequired = turn.items.some(
+    (item) =>
+      item.type === "verification" &&
+      item.status === "failed" &&
+      /verification required/i.test((item as VerificationItem).command),
+  );
+  const code = verificationMessage
+    ? verificationRequired
+      ? "verification_required"
+      : "verification_failed"
+    : turnErrorCode || "turn_failed";
+
+  out.push({
+    id: `${turn.id}:failure-receipt`,
+    type: "ai",
+    content: "",
+    additional_kwargs: {
+      response_state: "failed",
+      error: {
+        message,
+        will_retry: false,
+        info: { code },
+      },
+    },
+  });
 }
 
 function toolCallTimelineCoordinates(
@@ -907,6 +971,16 @@ export function conversationLastError(conv: Conversation): Error | undefined {
     const item = last.items[i];
     if (item !== undefined && item.type === "error") {
       return new Error((item as ErrorItem).message);
+    }
+  }
+  for (let i = last.items.length - 1; i >= 0; i--) {
+    const item = last.items[i];
+    if (
+      item?.type === "agentMessage" &&
+      item.status === "failed" &&
+      (item as AgentMessageItem).text.trim()
+    ) {
+      return new Error((item as AgentMessageItem).text.trim());
     }
   }
   const verificationMessage = failedVerificationMessage(last);

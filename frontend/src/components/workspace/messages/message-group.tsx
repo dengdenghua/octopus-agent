@@ -227,6 +227,13 @@ function dedupeTimelineChunks(chunks: string[]): string[] {
   return result;
 }
 
+function timelineNarrativeFingerprint(value: string): string {
+  return stripTraceLabelPrefixes(value)
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 export function MessageGroup({
   className,
   enableClarificationActions = false,
@@ -2249,7 +2256,7 @@ function convertToSteps(
   isLoading = false,
 ): CoTStep[] {
   const steps: CoTStep[] = [];
-  const seenPublicCommentary = new Set<string>();
+  const seenPublicNarrative = new Set<string>();
   const seenToolCallIds = new Set<string>();
   let iteration = 1;
   let lastStepType: "reasoning" | "toolCall" | null = null;
@@ -2260,6 +2267,9 @@ function convertToSteps(
     idSuffix = "reasoning",
   ) => {
     if (!reasoning.trim()) return;
+    const fingerprint = timelineNarrativeFingerprint(reasoning);
+    if (!fingerprint || seenPublicNarrative.has(fingerprint)) return;
+    seenPublicNarrative.add(fingerprint);
     if (lastStepType === "toolCall") {
       iteration++;
     }
@@ -2351,23 +2361,24 @@ function convertToSteps(
           steps.push(toToolCallStep(message, toolCall));
           lastStepType = "toolCall";
         }
+        const commentary = extractContentFromMessage(message).trim();
+        const commentaryFingerprint = timelineNarrativeFingerprint(commentary);
         for (let index = 0; index < reasoningChunks.length; index += 1) {
           const reasoningChunk = reasoningChunks[index];
-          if (reasoningChunk) {
+          if (
+            reasoningChunk &&
+            timelineNarrativeFingerprint(reasoningChunk) !==
+              commentaryFingerprint
+          ) {
             pushReasoningStep(message, reasoningChunk, `reasoning-${index}`);
           }
         }
-        const commentary = extractContentFromMessage(message).trim();
-        const commentaryFingerprint = commentary
-          .replace(/\s+/g, " ")
-          .trim()
-          .toLowerCase();
         if (
           commentary &&
           !isInternalProgressText(commentary) &&
-          !seenPublicCommentary.has(commentaryFingerprint)
+          !seenPublicNarrative.has(commentaryFingerprint)
         ) {
-          seenPublicCommentary.add(commentaryFingerprint);
+          seenPublicNarrative.add(commentaryFingerprint);
           steps.push({
             id: `${message.id}-commentary`,
             messageId: message.id,

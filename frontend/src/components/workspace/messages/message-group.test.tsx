@@ -188,6 +188,38 @@ describe("MessageGroup reasoning grouping", () => {
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
+  it("renders identical public summary and checkpoint text only once", () => {
+    const checkpoint = "正在读取事件适配器与消息组件，核对时间线顺序。";
+    const messages: AIMessage[] = [
+      {
+        id: "progress-with-summary",
+        type: "ai",
+        content: checkpoint,
+        additional_kwargs: {
+          public_progress: true,
+          public_reasoning_summary: checkpoint,
+        },
+        tool_calls: [
+          {
+            id: "read-adapter",
+            name: "read_file",
+            args: { path: "realtime-adapter.ts" },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} isLoading />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getAllByText(checkpoint)).toHaveLength(1);
+    expect(screen.getAllByTestId("public-progress-event")).toHaveLength(1);
+    expect(
+      screen.queryByTestId("process-timeline-event-thinking"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders public checkpoints inline between thinking and execution", () => {
     const messages: AIMessage[] = [
       {

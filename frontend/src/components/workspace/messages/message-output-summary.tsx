@@ -75,6 +75,14 @@ type OutputSummary = {
   verifications: VerificationEntry[];
 };
 
+export type FailurePresentation = {
+  message: string;
+  detail: string;
+  kind: "error" | "network" | "verification";
+  code?: string;
+  eventId?: string;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
@@ -365,14 +373,17 @@ export function MessageOutputSummary({
    *  Falls back to `messages` when absent. */
   turnMessages?: Message[];
   threadId?: string;
-  failure?: { message: string; kind?: "error" | "network" | "verification" } | null;
+  failure?: FailurePresentation | null;
   className?: string;
 }) {
   const { t } = useI18n();
   const { select, setOpen } = useArtifacts();
   const scanMessages = turnMessages ?? messages;
   const summary = useMemo(() => summarizeOutputs(scanMessages), [scanMessages]);
-  const resultUrl = useMemo(() => extractResultUrl(scanMessages), [scanMessages]);
+  const resultUrl = useMemo(
+    () => extractResultUrl(scanMessages),
+    [scanMessages],
+  );
   const originalPrompt = useMemo(
     () => extractOriginalPrompt(scanMessages),
     [scanMessages],
@@ -459,6 +470,26 @@ export function MessageOutputSummary({
   );
   const showAuditActions = Boolean(auditNotice);
 
+  const openProcess = () => {
+    if (!failure) {
+      emitOpenAgentWorkbench({ tab: "agent" });
+      return;
+    }
+    emitOpenAgentWorkbench({
+      tab: "agent",
+      eventId: failure.eventId,
+      eventKind: "execution",
+      view: "trace",
+      processEvent: {
+        kind: "execution",
+        summary: failure.message,
+        detail: failure.detail,
+        status: "error",
+        count: 1,
+      },
+    });
+  };
+
   const handleRevertAll = async () => {
     if (revertableChanges.length === 0 || reverting) return;
     setReverting(true);
@@ -524,12 +555,7 @@ export function MessageOutputSummary({
           </div>
           <div className="truncate text-[11px] text-muted-foreground">
             {isFailure && failure?.message ? (
-              <>
-                <span className="text-muted-foreground/80">
-                  {t.message.taskFailedReason}:
-                </span>{" "}
-                <span className="text-foreground/80">{failure.message}</span>
-              </>
+              <span className="text-foreground/80">{failure.message}</span>
             ) : (
               <>
                 {t.message.taskCompleted}
@@ -554,7 +580,7 @@ export function MessageOutputSummary({
         )}
         <button
           type="button"
-          onClick={() => emitOpenAgentWorkbench({ tab: "agent" })}
+          onClick={openProcess}
           className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
         >
           <PlayCircleIcon className="size-3" />
@@ -576,7 +602,9 @@ export function MessageOutputSummary({
           <button
             type="button"
             onClick={handleMakeSimilar}
-            title={isFailure ? t.message.retryTaskHint : t.message.makeSimilarHint}
+            title={
+              isFailure ? t.message.retryTaskHint : t.message.makeSimilarHint
+            }
             className={cn(
               "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors",
               isFailure
@@ -628,10 +656,7 @@ export function MessageOutputSummary({
       )}
 
       {summary.verifications.length > 0 && (
-        <section
-          aria-label={t.message.verificationRan}
-          className="space-y-2"
-        >
+        <section aria-label={t.message.verificationRan} className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <CheckCircle2Icon className="size-4 shrink-0 text-muted-foreground/60" />
             {t.message.verificationRan}

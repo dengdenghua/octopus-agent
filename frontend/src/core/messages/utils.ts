@@ -26,6 +26,57 @@ export type MessageGroup =
   | AssistantClarificationGroup
   | AssistantSubagentGroup;
 
+function normalizedNarrativeText(value: unknown): string {
+  return typeof value === "string"
+    ? value.replace(/\s+/g, " ").trim().toLowerCase()
+    : "";
+}
+
+function publicNarrativeCandidates(message: Message): string[] {
+  if (message.type !== "ai") return [];
+  const additional = message.additional_kwargs;
+  const octopus =
+    additional?.octopus && typeof additional.octopus === "object"
+      ? (additional.octopus as Record<string, unknown>)
+      : null;
+  return [
+    extractContentFromMessage(message),
+    additional?.public_reasoning_summary,
+    octopus?.public_reasoning_summary,
+  ]
+    .map(normalizedNarrativeText)
+    .filter(Boolean);
+}
+
+/**
+ * Some legacy streams emit the same public checkpoint twice: first as a plain
+ * assistant message, then again on the following structured process item.
+ * Classify the first copy structurally instead of guessing from words such as
+ * "reading" or "investigating". The process renderer can then keep one copy
+ * on the chronological lane without creating a second answer/avatar block.
+ */
+function isDuplicatedProcessPrelude(
+  message: Message,
+  index: number,
+  messages: Message[],
+): boolean {
+  const narrative = normalizedNarrativeText(extractContentFromMessage(message));
+  if (!narrative) return false;
+
+  for (let nextIndex = index + 1; nextIndex < messages.length; nextIndex += 1) {
+    const next = messages[nextIndex]!;
+    if (next.type === "human") break;
+    if (next.type !== "ai") continue;
+    const isProcessMessage =
+      next.additional_kwargs?.public_progress === true ||
+      hasToolCalls(next) ||
+      hasReasoning(next);
+    if (!isProcessMessage) continue;
+    if (publicNarrativeCandidates(next).includes(narrative)) return true;
+  }
+  return false;
+}
+
 export function groupMessages<T>(
   messages: Message[],
   mapper: (group: MessageGroup) => T,
@@ -156,6 +207,28 @@ export function groupMessages<T>(
         // assistant group so MessageListItem can render that status without
         // inventing user-visible answer text.
         groups.push({ id: message.id, type: "assistant", messages: [message] });
+      } else if (
+        message.additional_kwargs?.response_state === "failed" ||
+        message.additional_kwargs?.error
+      ) {
+        // Failed turns carry their detailed diagnostic as structured metadata.
+        // Keep a terminal assistant group so MessageList can render one compact
+        // receipt without replaying the raw guard/stack text in the transcript.
+        groups.push({ id: message.id, type: "assistant", messages: [message] });
+      } else if (
+        hasContent(message) &&
+        isDuplicatedProcessPrelude(message, index, messages)
+      ) {
+        const lastGroup = groups[groups.length - 1];
+        if (lastGroup?.type !== "assistant:processing") {
+          groups.push({
+            id: message.id,
+            type: "assistant:processing",
+            messages: [message],
+          });
+        } else {
+          lastGroup.messages.push(message);
+        }
       } else if (hasContent(message)) {
         // Plain AI response (with or without reasoning). Render as a
         // normal assistant message — MessageListItem will draw a

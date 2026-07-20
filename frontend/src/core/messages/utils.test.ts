@@ -47,6 +47,35 @@ describe("groupMessages", () => {
     expect(result[1]?.type).toBe("assistant");
   });
 
+  it("folds a duplicated legacy checkpoint into the following process group", () => {
+    const checkpoint = "正在核对两个实现文件，随后给出结论。";
+    const result = groupMessages(
+      [
+        { id: "1", type: "human", content: "检查实现" },
+        { id: "2", type: "ai", content: checkpoint },
+        {
+          id: "3",
+          type: "ai",
+          content: "",
+          additional_kwargs: { public_reasoning_summary: checkpoint },
+          tool_calls: [
+            { id: "read-1", name: "read_file", args: { path: "a.ts" } },
+          ],
+        },
+      ] as Message[],
+      (group) => group,
+    );
+
+    expect(result.map((group) => group.type)).toEqual([
+      "human",
+      "assistant:processing",
+    ]);
+    expect(result[1]?.messages.map((message) => message.id)).toEqual([
+      "2",
+      "3",
+    ]);
+  });
+
   it("groups AI messages with tool calls as processing", () => {
     const result = groupMessages(
       [

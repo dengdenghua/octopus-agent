@@ -13,6 +13,7 @@ import {
   extractResultUrl,
   MessageOutputSummary,
 } from "./message-output-summary";
+import { AGENT_WORKBENCH_OPEN_EVENT } from "../agent-workbench-events";
 
 const selectArtifact = vi.fn();
 const setArtifactsOpen = vi.fn();
@@ -317,9 +318,7 @@ describe("MessageOutputSummary", () => {
     expect(screen.getByText("验证")).toBeInTheDocument();
     expect(screen.getByText("测试通过")).toBeInTheDocument();
     expect(screen.getByText("通过")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /做同款/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /做同款/ })).toBeInTheDocument();
   });
 
   it("strips internal <uploaded_files> markup from the make-similar prompt", () => {
@@ -376,9 +375,7 @@ describe("MessageList receipt wiring", () => {
     renderMessageList(thread);
 
     expect(screen.getByText("测试通过")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /做同款/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /做同款/ })).toBeInTheDocument();
   });
 });
 
@@ -402,7 +399,9 @@ describe("MessageList failure visibility", () => {
 
     renderMessageList(thread);
 
-    expect(screen.getByText(/模型执行结束但没有返回任何可见输出/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/模型执行结束但没有返回任何可见输出/),
+    ).toBeInTheDocument();
     expect(screen.queryByText("任务未完成")).not.toBeInTheDocument();
     expect(screen.queryByText("失败原因")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -428,7 +427,58 @@ describe("MessageList failure visibility", () => {
     renderMessageList(thread, "en-US");
 
     const banner = screen.getByRole("alert");
-    expect(banner).toHaveTextContent("beak step 3 failed");
+    expect(banner).toHaveTextContent(
+      "This turn stopped before finishing. Continue the chat or retry.",
+    );
+    expect(banner).not.toHaveTextContent("beak step 3 failed");
+  });
+
+  it("renders historical structured failures as compact receipts with full detail in the workbench", () => {
+    const rawDetail = [
+      "任务未能完成：内部守卫缺少执行证据。",
+      "Code mode cannot finish this implementation task yet: no successful file write/edit execution is recorded.",
+    ].join("\n\n");
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "分析代码" },
+      {
+        id: "failed-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          response_state: "failed",
+          error: {
+            message: rawDetail,
+            info: { code: "agent_response_failed" },
+          },
+        },
+      },
+      { id: "user-2", type: "human", content: "继续" },
+      { id: "assistant-2", type: "ai", content: "后续任务已经完成。" },
+    ];
+    const opened: CustomEvent[] = [];
+    const onOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, onOpen);
+
+    renderMessageList(mockThread({ messages }));
+
+    expect(screen.getByText("任务未完成")).toBeInTheDocument();
+    expect(
+      screen.getByText("本轮任务未完成。可继续发送消息或重试。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/implementation task yet/),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看过程" }));
+    expect(opened.at(-1)?.detail).toMatchObject({
+      eventId: "failed-1",
+      eventKind: "execution",
+      view: "trace",
+      processEvent: {
+        status: "error",
+        detail: rawDetail,
+      },
+    });
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, onOpen);
   });
 
   it("mounts audit actions on the final assistant group when changes live in the processing group", () => {
@@ -512,7 +562,10 @@ describe("MessageList failure visibility", () => {
     renderMessageList(thread, "en-US");
 
     const banner = screen.getByRole("alert");
-    expect(banner).toHaveTextContent("boom exploded");
+    expect(banner).toHaveTextContent(
+      "This turn stopped before finishing. Continue the chat or retry.",
+    );
+    expect(banner).not.toHaveTextContent("boom exploded");
     expect(banner).not.toHaveTextContent(/This reply was interrupted/i);
   });
 });
