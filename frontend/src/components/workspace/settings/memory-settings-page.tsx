@@ -749,7 +749,7 @@ export default function MemorySettingsPage() {
               <div
                 role="status"
                 aria-live="polite"
-                className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+                className="flex items-center gap-2 text-xs text-muted-foreground"
               >
                 <Loader2Icon className="size-3.5 animate-spin" />
                 {t.settings.memory.configLoading}
@@ -757,7 +757,7 @@ export default function MemorySettingsPage() {
             ) : memoryConfigError ? (
               <div
                 role="alert"
-                className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-3 py-2 text-xs sm:flex-row sm:items-center"
+                className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-4 py-3 text-xs sm:flex-row sm:items-center"
               >
                 <span className="text-destructive">
                   {t.settings.memory.configLoadFailed}
@@ -780,74 +780,70 @@ export default function MemorySettingsPage() {
                 </Button>
               </div>
             ) : null}
-            <div className="rounded-lg border p-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">
-                      {t.settings.memory.enableMemory}
-                    </div>
-                    <div className="text-muted-foreground mt-1 text-xs">
-                      {t.settings.memory.enableMemoryDesc}
-                    </div>
+            <div className="rounded-lg border bg-card divide-y">
+              <div className="flex items-center justify-between gap-4 px-5 py-4">
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-sm font-medium">
+                    {t.settings.memory.enableMemory}
                   </div>
-                  <Switch
-                    aria-label={t.settings.memory.enableMemory}
-                    checked={memoryConfigEnabled}
-                    disabled={
-                      memoryConfigUnavailable || updateMemoryConfig.isPending
-                    }
-                    onCheckedChange={(enabled) =>
-                      void handleMemoryConfigChange({ enabled })
-                    }
-                  />
-                </div>
-
-                <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">
-                      {t.settings.memory.autoCapture}
-                    </div>
-                    <div className="text-muted-foreground mt-1 text-xs">
-                      {t.settings.memory.autoCaptureDesc}
-                    </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t.settings.memory.enableMemoryDesc}
                   </div>
-                  <Switch
-                    aria-label={t.settings.memory.autoCapture}
-                    checked={memoryConfigEnabled && autoCaptureEnabled}
-                    disabled={
-                      !memoryConfigEnabled ||
-                      updateMemoryConfig.isPending ||
-                      memoryConfigUnavailable
-                    }
-                    onCheckedChange={(auto_capture_enabled) =>
-                      void handleMemoryConfigChange({ auto_capture_enabled })
-                    }
-                  />
                 </div>
-
-                <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">
-                      {t.settings.memory.injectOnReply}
-                    </div>
-                    <div className="text-muted-foreground mt-1 text-xs">
-                      {t.settings.memory.injectOnReplyDesc}
-                    </div>
+                <Switch
+                  aria-label={t.settings.memory.enableMemory}
+                  checked={memoryConfigEnabled}
+                  disabled={
+                    memoryConfigUnavailable || updateMemoryConfig.isPending
+                  }
+                  onCheckedChange={(enabled) =>
+                    void handleMemoryConfigChange({ enabled })
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 px-5 py-4">
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-sm font-medium">
+                    {t.settings.memory.autoCapture}
                   </div>
-                  <Switch
-                    aria-label={t.settings.memory.injectOnReply}
-                    checked={memoryConfigEnabled && injectionEnabled}
-                    disabled={
-                      !memoryConfigEnabled ||
-                      updateMemoryConfig.isPending ||
-                      memoryConfigUnavailable
-                    }
-                    onCheckedChange={(injection_enabled) =>
-                      void handleMemoryConfigChange({ injection_enabled })
-                    }
-                  />
+                  <div className="text-xs text-muted-foreground">
+                    {t.settings.memory.autoCaptureDesc}
+                  </div>
                 </div>
+                <Switch
+                  aria-label={t.settings.memory.autoCapture}
+                  checked={memoryConfigEnabled && autoCaptureEnabled}
+                  disabled={
+                    !memoryConfigEnabled ||
+                    updateMemoryConfig.isPending ||
+                    memoryConfigUnavailable
+                  }
+                  onCheckedChange={(auto_capture_enabled) =>
+                    void handleMemoryConfigChange({ auto_capture_enabled })
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 px-5 py-4">
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-sm font-medium">
+                    {t.settings.memory.injectOnReply}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t.settings.memory.injectOnReplyDesc}
+                  </div>
+                </div>
+                <Switch
+                  aria-label={t.settings.memory.injectOnReply}
+                  checked={memoryConfigEnabled && injectionEnabled}
+                  disabled={
+                    !memoryConfigEnabled ||
+                    updateMemoryConfig.isPending ||
+                    memoryConfigUnavailable
+                  }
+                  onCheckedChange={(injection_enabled) =>
+                    void handleMemoryConfigChange({ injection_enabled })
+                  }
+                />
               </div>
             </div>
 
@@ -857,7 +853,7 @@ export default function MemorySettingsPage() {
               </div>
             ) : null}
 
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="relative sm:max-w-xs w-full">
                   <SearchIcon className="text-muted-foreground absolute left-2.5 top-2.5 size-4" />
@@ -889,7 +885,7 @@ export default function MemorySettingsPage() {
                 </ToggleGroup>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -899,26 +895,30 @@ export default function MemorySettingsPage() {
                 />
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={importMemoryMutation.isPending}
                 >
-                  <UploadIcon className="mr-2 h-4 w-4" />
+                  <UploadIcon className="mr-1.5 size-3.5" />
                   {importButton}
                 </Button>
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={() => void handleExportMemory()}
                   disabled={isExporting}
                 >
-                  <DownloadIcon className="mr-2 h-4 w-4" />
+                  <DownloadIcon className="mr-1.5 size-3.5" />
                   {isExporting ? t.common.loading : exportButton}
                 </Button>
-                <Button variant="outline" onClick={openCreateFactDialog}>
-                  <PlusIcon className="mr-2 h-4 w-4" />
+                <Button variant="outline" size="sm" onClick={openCreateFactDialog}>
+                  <PlusIcon className="mr-1.5 size-3.5" />
                   {addFactLabel}
                 </Button>
                 <Button
-                  variant="destructive"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
                   onClick={() => setClearDialogOpen(true)}
                   disabled={
                     clearMemory.isPending ||
@@ -959,19 +959,17 @@ export default function MemorySettingsPage() {
             ) : null}
 
             {shouldRenderFactsBlock ? (
-              <div className="rounded-lg border p-4">
-                <div className="mb-4">
-                  <h3 className="text-base font-medium">
-                    {t.settings.memory.markdown.facts}
-                  </h3>
-                </div>
+              <div className="rounded-lg border bg-card p-5">
+                <h3 className="text-sm font-medium mb-4">
+                  {t.settings.memory.markdown.facts}
+                </h3>
 
                 {filteredFacts.length === 0 ? (
-                  <div className="text-muted-foreground text-sm">
+                  <div className="text-sm text-muted-foreground">
                     {normalizedQuery ? noMatches : noFacts}
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="divide-y">
                     {filteredFacts.map((fact) => {
                       const { key } = confidenceToLevelKey(fact.confidence);
                       const confidenceText =
@@ -980,34 +978,34 @@ export default function MemorySettingsPage() {
                       return (
                         <div
                           key={fact.id}
-                          className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between"
+                          className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between"
                         >
-                          <div className="min-w-0 space-y-2">
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                          <div className="min-w-0 space-y-1.5">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                               <span>
-                                <span className="text-muted-foreground">
-                                  {t.settings.memory.markdown.table.category}:
-                                </span>{" "}
-                                {upperFirst(fact.category)}
+                                {t.settings.memory.markdown.table.category}:{" "}
+                                <span className="text-foreground">
+                                  {upperFirst(fact.category)}
+                                </span>
                               </span>
                               <span>
-                                <span className="text-muted-foreground">
-                                  {t.settings.memory.markdown.table.confidence}:
-                                </span>{" "}
-                                {confidenceText}
+                                {t.settings.memory.markdown.table.confidence}:{" "}
+                                <span className="text-foreground">
+                                  {confidenceText}
+                                </span>
                               </span>
                               <span>
-                                <span className="text-muted-foreground">
-                                  {t.settings.memory.markdown.table.createdAt}:
-                                </span>{" "}
-                                {formatTimeAgo(fact.createdAt)}
+                                {t.settings.memory.markdown.table.createdAt}:{" "}
+                                <span className="text-foreground">
+                                  {formatTimeAgo(fact.createdAt)}
+                                </span>
                               </span>
                               <span>
-                                <span className="text-muted-foreground">
-                                  {t.settings.memory.markdown.table.source}:
-                                </span>{" "}
+                                {t.settings.memory.markdown.table.source}:{" "}
                                 {fact.source === "manual" ? (
-                                  t.settings.memory.manualFactSource
+                                  <span className="text-foreground">
+                                    {t.settings.memory.manualFactSource}
+                                  </span>
                                 ) : isThreadSource(fact.source) ? (
                                   <Link
                                     to={pathOfThread(fact.source)}
@@ -1016,14 +1014,16 @@ export default function MemorySettingsPage() {
                                     {t.settings.memory.markdown.table.view}
                                   </Link>
                                 ) : (
-                                  fact.source
+                                  <span className="text-foreground">
+                                    {fact.source}
+                                  </span>
                                 )}
                               </span>
                               <span>
-                                <span className="text-muted-foreground">
-                                  {t.settings.memory.scopeLabel}
-                                </span>{" "}
-                                {factScopeLabel(fact, t)}
+                                {t.settings.memory.scopeLabel}:{" "}
+                                <span className="text-foreground">
+                                  {factScopeLabel(fact, t)}
+                                </span>
                               </span>
                             </div>
                             <p className="text-sm break-words">
@@ -1041,7 +1041,7 @@ export default function MemorySettingsPage() {
                               title={t.common.edit}
                               aria-label={`${t.common.edit}: ${truncateFactPreview(fact.content, 60)}`}
                             >
-                              <PenLineIcon className="h-4 w-4" />
+                              <PenLineIcon className="size-3.5" />
                             </Button>
 
                             <Button
@@ -1053,7 +1053,7 @@ export default function MemorySettingsPage() {
                               title={t.common.delete}
                               aria-label={`${t.common.delete}: ${truncateFactPreview(fact.content, 60)}`}
                             >
-                              <Trash2Icon className="h-4 w-4" />
+                              <Trash2Icon className="size-3.5" />
                             </Button>
                           </div>
                         </div>

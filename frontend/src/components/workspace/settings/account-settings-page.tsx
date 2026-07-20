@@ -16,7 +16,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -151,11 +150,11 @@ export default function AccountSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {(profileError || privacyError) && (
         <div
           role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300/70 bg-amber-50/95 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/90 dark:text-amber-200"
         >
           <span>{t.accountSettings.dataUnavailable}</span>
           <Button
@@ -175,73 +174,63 @@ export default function AccountSettingsPage() {
       <OfficialCreditsCard />
 
       {/* Profile */}
-      <section>
-        <div className="mb-3">
+      <section className="space-y-3">
+        <div>
           <h3 className="text-sm font-medium">
             {t.settings.account.profile.title}
           </h3>
-          <p className="text-muted-foreground text-xs mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {t.settings.account.profile.description}
           </p>
         </div>
-        <div className="rounded-lg border bg-card">
-          <div className="p-5">
-            <div className="flex items-start gap-4">
-              <div className="relative group flex-shrink-0">
-                <Avatar className="size-14 border border-border-default bg-background ring-2 ring-transparent transition group-hover:ring-primary/20 cursor-pointer">
-                  <AvatarImage src={profile?.avatar_url} />
-                  <AvatarFallback className="bg-muted/50 text-base font-medium text-foreground">
-                    {accountName[0] || (
-                      <UserIcon className="size-5 text-muted-foreground" />
-                    )}
-                  </AvatarFallback>
-                </Avatar>
-                <button
-                  type="button"
-                  onClick={handleAvatarClick}
-                  disabled={uploadAvatar.isPending}
-                  aria-busy={uploadAvatar.isPending}
-                  aria-label={t.accountSettings.clickToChangeAvatar}
-                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100 focus-visible:bg-black/40 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                >
-                  <CameraIcon className="size-4" />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-                  {t.accountSettings.clickToChangeAvatar}
-                </p>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-medium">{accountName}</p>
-                  {accountUsername && (
-                    <span className="text-muted-foreground text-sm">
-                      @{accountUsername}
-                    </span>
+        <div className="rounded-lg border bg-card p-5 space-y-5">
+          <div className="flex items-center gap-4">
+            <div className="relative group flex-shrink-0">
+              <Avatar className="size-12 border border-border-default bg-background">
+                <AvatarImage src={profile?.avatar_url} />
+                <AvatarFallback className="bg-muted/50 text-sm font-medium text-foreground">
+                  {accountName[0] || (
+                    <UserIcon className="size-4 text-muted-foreground" />
                   )}
-                </div>
-                {accountEmail && (
-                  <p className="text-muted-foreground text-sm flex items-center gap-1.5 mt-0.5">
-                    <MailIcon className="size-3.5" />
-                    {accountEmail}
-                  </p>
+                </AvatarFallback>
+              </Avatar>
+              <button
+                type="button"
+                onClick={handleAvatarClick}
+                disabled={uploadAvatar.isPending}
+                aria-busy={uploadAvatar.isPending}
+                aria-label={t.accountSettings.clickToChangeAvatar}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100 focus-visible:bg-black/40 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              >
+                <CameraIcon className="size-3.5" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium">{accountName}</p>
+                {accountUsername && (
+                  <span className="text-xs text-muted-foreground">
+                    @{accountUsername}
+                  </span>
                 )}
-                <p className="text-[11px] text-muted-foreground mt-2">
-                  {t.accountSettings.systemManaged}
-                </p>
               </div>
+              {accountEmail && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                  <MailIcon className="size-3" />
+                  {accountEmail}
+                </p>
+              )}
             </div>
           </div>
 
-          <Separator />
-
-          <div className="p-5 space-y-4">
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="displayName" className="text-xs">
                 {t.settings.account.profile.displayName}
@@ -270,15 +259,13 @@ export default function AccountSettingsPage() {
                 disabled={updateProfile.isPending}
                 className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[64px] w-full rounded-lg border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
               />
-              <p className="text-muted-foreground text-[11px] text-right">
+              <p className="text-xs text-muted-foreground text-right">
                 {bio.length}/500
               </p>
             </div>
           </div>
 
-          <Separator />
-
-          <div className="flex items-center justify-end px-5 py-3">
+          <div className="flex items-center justify-end">
             <Button
               size="sm"
               onClick={handleSaveProfile}
@@ -295,12 +282,12 @@ export default function AccountSettingsPage() {
       </section>
 
       {/* Linked Accounts */}
-      <section>
-        <div className="mb-3">
+      <section className="space-y-3">
+        <div>
           <h3 className="text-sm font-medium">
             {t.settings.account.linkedAccounts.title}
           </h3>
-          <p className="text-muted-foreground text-xs mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {t.settings.account.linkedAccounts.description}
           </p>
         </div>
@@ -346,7 +333,7 @@ export default function AccountSettingsPage() {
                     <p className="text-sm font-medium capitalize">
                       {account.provider}
                     </p>
-                    <p className="text-muted-foreground text-xs">
+                    <p className="text-xs text-muted-foreground">
                       {account.email}
                     </p>
                   </div>
@@ -383,19 +370,19 @@ export default function AccountSettingsPage() {
               </li>
             )}
           </ul>
-          <p className="border-t px-4 py-3 text-xs text-muted-foreground">
+          <p className="border-t px-5 py-3 text-xs text-muted-foreground">
             {t.accountSettings.thirdPartyLinkUnavailable}
           </p>
         </div>
       </section>
 
       {/* Privacy */}
-      <section>
-        <div className="mb-3">
+      <section className="space-y-3">
+        <div>
           <h3 className="text-sm font-medium">
             {t.settings.account.privacy.title}
           </h3>
-          <p className="text-muted-foreground text-xs mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {t.settings.account.privacy.description}
           </p>
         </div>
@@ -405,7 +392,7 @@ export default function AccountSettingsPage() {
               <Label className="text-sm">
                 {t.settings.account.privacy.shareUsageData}
               </Label>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-xs text-muted-foreground">
                 {t.settings.account.privacy.shareUsageDataDescription}
               </p>
             </div>
@@ -423,7 +410,7 @@ export default function AccountSettingsPage() {
               <Label className="text-sm">
                 {t.settings.account.privacy.allowAnalytics}
               </Label>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-xs text-muted-foreground">
                 {t.settings.account.privacy.allowAnalyticsDescription}
               </p>
             </div>
@@ -513,8 +500,8 @@ function OfficialCreditsCard() {
   };
 
   return (
-    <section>
-      <div className="mb-3">
+    <section className="space-y-3">
+      <div>
         <h3 className="text-sm font-medium flex items-center gap-2">
           <CoinsIcon className="size-4" />
           {t.accountSettings.creditsBalance}
@@ -524,9 +511,9 @@ function OfficialCreditsCard() {
         {tokenInvalid && (
           <div
             role="alert"
-            className="flex items-start gap-2 border-b border-amber-200/60 bg-amber-50 px-5 py-3 text-xs text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200"
+            className="flex items-start gap-2 border-b border-amber-300/60 bg-amber-50/95 px-5 py-3 text-xs text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/90 dark:text-amber-200"
           >
-            <AlertTriangleIcon className="size-4 shrink-0 mt-0.5" />
+            <AlertTriangleIcon className="size-3.5 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-medium">
                 {t.accountSettings.sessionExpired(
@@ -540,20 +527,20 @@ function OfficialCreditsCard() {
             </div>
           </div>
         )}
-        <div className="p-5">
+        <div className="p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-baseline gap-2">
                 <span
                   className={
-                    "text-2xl font-semibold tabular-nums tracking-tight" +
+                    "text-xl font-semibold tabular-nums tracking-tight" +
                     (tokenInvalid ? " text-muted-foreground" : "")
                   }
                 >
                   {formatCredits(remaining, t)}
                 </span>
                 {typeof remaining === "number" && remaining > 0 && (
-                  <span className="text-sm text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {tokenInvalid
                       ? t.accountSettings.cachedSuffix
                       : t.accountSettings.available}
@@ -582,7 +569,7 @@ function OfficialCreditsCard() {
           </div>
 
           {summary?.by_type && Object.keys(summary.by_type).length > 0 && (
-            <div className="mt-4 space-y-3">
+            <div className="space-y-2.5">
               {Object.entries(summary.by_type)
                 .filter(([, v]) => v.granted > 0)
                 .map(([type, v]) => {
@@ -602,7 +589,7 @@ function OfficialCreditsCard() {
                           </span>
                         </span>
                       </div>
-                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
                         <div
                           role="progressbar"
                           aria-label={type}
@@ -622,7 +609,7 @@ function OfficialCreditsCard() {
                   );
                 })}
               {expired > 0 && (
-                <div className="flex items-center justify-between pt-2 border-t text-xs">
+                <div className="flex items-center justify-between pt-1.5 border-t text-xs">
                   <span className="text-muted-foreground">
                     {t.accountSettings.expiredOrFrozen}
                   </span>
@@ -634,12 +621,9 @@ function OfficialCreditsCard() {
             </div>
           )}
         </div>
-        <Separator />
-        <div className="px-5 py-3">
-          <p className="text-xs text-muted-foreground">
-            {t.accountSettings.creditsDescription}
-          </p>
-        </div>
+        <p className="border-t px-5 py-3 text-xs text-muted-foreground">
+          {t.accountSettings.creditsDescription}
+        </p>
       </div>
     </section>
   );
