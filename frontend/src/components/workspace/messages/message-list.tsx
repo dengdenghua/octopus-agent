@@ -1742,7 +1742,7 @@ export function MessageList({
       </ConversationScrollButton>
 
       {showTimeoutWarning && !thread.error && (
-        <div className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-amber-300/70 bg-amber-50/95 px-4 py-2 text-xs text-amber-900 shadow-[var(--shadow-xs)] backdrop-blur-sm dark:border-amber-700/50 dark:bg-amber-950/90 dark:text-amber-200">
+        <div className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-amber-300/70 bg-amber-50/95 px-4 py-2 text-xs text-amber-900 shadow-[var(--shadow-xs)] dark:border-amber-700/50 dark:bg-amber-950/90 dark:text-amber-200">
           <AlertTriangleIcon className="size-4 shrink-0 text-amber-600" />
           <span>
             {t.message.timeoutWarning(Math.floor(loadingAgeMs / 1000))}

@@ -267,7 +267,7 @@ function SubtaskHoverPreview({
       className="pointer-events-auto absolute left-8 top-full z-40 hidden w-[min(42rem,calc(100vw-5rem))] pt-2 group-focus-within/subtask-row:block group-hover/subtask-row:block"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="rounded-xl border border-border-default bg-background/95 p-4 text-left shadow-2xl shadow-black/15 backdrop-blur-xl">
+      <div className="rounded-lg border border-border-default bg-background p-4 text-left shadow-sm">
         <div className="flex items-start gap-3">
           <span className="flex size-14 shrink-0 items-center justify-center rounded-full border border-border-default bg-muted/35 text-2xl">
             {task.avatarEmoji ?? "🤖"}

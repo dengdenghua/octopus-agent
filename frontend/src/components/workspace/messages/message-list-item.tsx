@@ -295,17 +295,6 @@ export const MessageListItem = memo(function MessageListItem({
           throw new Error(`feedback http ${res.status}`);
         }
 
-        if (sentiment === "liked") {
-          import("canvas-confetti").then(({ default: confetti }) => {
-            confetti({
-              particleCount: 100,
-              spread: 70,
-              origin: { y: 0.6 },
-              colors: ["#10b981", "#3b82f6", "#f59e0b", "#eab308"],
-            });
-          });
-        }
-
         toast.success(
           sentiment === "liked"
             ? t.conversation.feedbackThanks
@@ -343,7 +332,7 @@ export const MessageListItem = memo(function MessageListItem({
           className={cn(
             "flex items-center gap-1.5 text-muted-foreground",
             isHuman
-              ? "pointer-events-none absolute top-full right-0 z-20 mt-0.5 w-auto justify-end rounded-lg bg-background/90 px-1 py-0.5 opacity-0 shadow-[var(--shadow-xs)] backdrop-blur-sm transition-opacity group-hover/conversation-message:pointer-events-auto group-hover/conversation-message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
+              ? "pointer-events-none absolute top-full right-0 z-20 mt-0.5 w-auto justify-end rounded-lg bg-background/90 px-1 py-0.5 opacity-0 shadow-[var(--shadow-xs)] transition-opacity group-hover/conversation-message:pointer-events-auto group-hover/conversation-message:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
               : "mt-2 w-full",
           )}
         >
@@ -378,7 +367,7 @@ export const MessageListItem = memo(function MessageListItem({
               ""
             }
             size="icon-sm"
-            className="size-6 rounded-lg border-0 bg-transparent p-0 text-muted-foreground/70 shadow-none transition-all duration-200 hover:bg-muted/60 hover:text-foreground focus-visible:ring-0 active:scale-95"
+            className="size-6 rounded-lg border-0 bg-transparent p-0 text-muted-foreground/70 shadow-none transition-colors duration-200 hover:bg-muted/60 hover:text-foreground focus-visible:ring-0"
           />
           {message.type === "ai" ? (
             <button
@@ -1002,12 +991,12 @@ function RichFileCard({
         href={fileUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="group border-border-subtle relative block overflow-hidden rounded-lg border"
+        className="border-border-subtle relative block overflow-hidden rounded-lg border"
       >
         <img
           src={fileUrl}
           alt={file.filename}
-          className="h-32 w-auto max-w-60 object-cover transition-transform group-hover:scale-105"
+          className="h-32 w-auto max-w-60 object-cover"
         />
       </a>
     );

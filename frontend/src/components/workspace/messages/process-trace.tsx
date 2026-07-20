@@ -340,7 +340,7 @@ function AgentHoverPreview({
   const body = agent.prompt || agent.task || t.message.noTaskDescription;
   return (
     <div
-      className="pointer-events-none absolute left-8 top-[calc(100%+0.5rem)] z-40 hidden w-[min(42rem,calc(100vw-5rem))] rounded-xl border border-border-default bg-background/95 p-4 text-left shadow-2xl shadow-black/15 backdrop-blur-xl group-hover/agent-row:block"
+      className="pointer-events-none absolute left-8 top-[calc(100%+0.5rem)] z-40 hidden w-[min(42rem,calc(100vw-5rem))] rounded-lg border border-border-default bg-background p-4 text-left shadow-sm group-hover/agent-row:block"
       role="tooltip"
     >
       <div className="flex items-start gap-3">
