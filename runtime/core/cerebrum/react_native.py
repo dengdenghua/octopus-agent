@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 from runtime.core.cerebrum.react_types import ReActStep
@@ -48,6 +49,24 @@ STRICT_EXPLICIT_READ_TOOL_NAMES = frozenset(
         "read_file_range",
     }
 )
+_PUBLIC_UPDATE_FROM_THINKING_RE = re.compile(
+    r"(?:^|\n)\s*(?:Update|Progress)\s*:\s*(.+?)"
+    r"(?=\n\s*(?:Action|Observation|Thought|Final)\s*:|\n\n|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _explicit_public_update_from_thinking(value: str) -> str:
+    """Recover only the model's explicitly labelled public checkpoint.
+
+    Some OpenAI-compatible reasoning providers place all pre-tool prose in
+    ``reasoning_content`` even when the prompt gives ``Update:`` a dedicated
+    public contract. Never surface the surrounding chain of thought; only the
+    delimited Update/Progress field is eligible for the conversation lane.
+    """
+
+    match = _PUBLIC_UPDATE_FROM_THINKING_RE.search(value or "")
+    return match.group(1).strip() if match else ""
 
 
 def native_tool_use_flag_enabled() -> bool:
@@ -139,7 +158,11 @@ def build_loop_tool_specs(
         return []
 
 
-def require_public_update_on_tool_specs(specs: list[Any]) -> list[Any]:
+def require_public_update_on_tool_specs(
+    specs: list[Any],
+    *,
+    evidence_round: bool = False,
+) -> list[Any]:
     """Require one model-authored public sentence on every native tool round.
 
     Some function-calling providers emit a tool call without any ordinary text,
@@ -152,23 +175,45 @@ def require_public_update_on_tool_specs(specs: list[Any]) -> list[Any]:
     for spec in specs:
         schema = dict(getattr(spec, "input_schema", None) or {})
         properties = dict(schema.get("properties") or {})
-        properties["public_update"] = {
-            "type": "string",
-            "maxLength": 420,
-            "description": (
-                "One short user-facing sentence in the user's language. On the first "
-                "tool round, name the concrete scope being inspected or changed. On "
-                "later rounds, the sentence MUST contain at least one concrete fact from "
-                "the preceding result, followed by what this next action will establish. "
-                "A sentence that only says the next files are being read is invalid. "
-                "Do not include hidden "
-                "reasoning, stage labels, tool or protocol names, generic status filler, "
-                "repeated wording, or an unsupported completion claim."
-            ),
-        }
         required = list(schema.get("required") or [])
-        if "public_update" not in required:
-            required.append("public_update")
+        if evidence_round:
+            properties["confirmed_fact"] = {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 280,
+                "description": (
+                    "One concrete user-facing fact established by the immediately "
+                    "preceding tool results. It must name the actual finding, not merely "
+                    "say that files were read or work continues. Use the user's language; "
+                    "do not expose hidden reasoning or use a heading/stage label."
+                ),
+            }
+            properties["next_action"] = {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 220,
+                "description": (
+                    "What this tool call will now establish, in one natural user-facing "
+                    "clause. Do not mention internal protocol names or claim completion."
+                ),
+            }
+            for field in ("confirmed_fact", "next_action"):
+                if field not in required:
+                    required.append(field)
+        else:
+            properties["public_update"] = {
+                "type": "string",
+                "maxLength": 420,
+                "description": (
+                    "One short user-facing sentence in the user's language naming the "
+                    "concrete scope being inspected or changed and what that will "
+                    "establish. Do not include hidden reasoning, stage labels, tool or "
+                    "protocol names, generic status filler, repeated wording, or an "
+                    "unsupported completion claim."
+                ),
+            }
+            if "public_update" not in required:
+                required.append("public_update")
         schema["type"] = "object"
         schema["properties"] = properties
         schema["required"] = required
@@ -198,6 +243,8 @@ def step_from_tool_calls(
     """
     actions: list[str] = []
     structured_public_update = ""
+    structured_confirmed_fact = ""
+    structured_next_action = ""
     for call in tool_calls:
         name = str(getattr(call, "name", "") or "").strip()
         if not name:
@@ -205,8 +252,14 @@ def step_from_tool_calls(
         raw_input = getattr(call, "input", None)
         args = dict(raw_input) if isinstance(raw_input, dict) else {}
         candidate_update = args.pop("public_update", "")
+        candidate_fact = args.pop("confirmed_fact", "")
+        candidate_next_action = args.pop("next_action", "")
         if not structured_public_update and isinstance(candidate_update, str):
             structured_public_update = candidate_update.strip()
+        if not structured_confirmed_fact and isinstance(candidate_fact, str):
+            structured_confirmed_fact = candidate_fact.strip()
+        if not structured_next_action and isinstance(candidate_next_action, str):
+            structured_next_action = candidate_next_action.strip()
         try:
             arg_json = json.dumps(args, ensure_ascii=False)
         except (TypeError, ValueError):
@@ -214,10 +267,21 @@ def step_from_tool_calls(
         actions.append(f"{name}({arg_json})")
 
     thought = (thinking or "").strip()
+    tagged_public_update = _explicit_public_update_from_thinking(thought)
+    structured_evidence_update = ""
+    if structured_confirmed_fact and structured_next_action:
+        fact = structured_confirmed_fact.rstrip("。.!！?？；; ")
+        next_action = structured_next_action.lstrip("；;，, ")
+        structured_evidence_update = f"{fact}；{next_action}"
     return ReActStep(
         iteration=iteration,
         thought=thought,
-        public_update=(text or "").strip() or structured_public_update,
+        public_update=(
+            structured_evidence_update
+            or (text or "").strip()
+            or structured_public_update
+            or tagged_public_update
+        ),
         action="; ".join(actions),
         observation="",
         raw_llm_output=text or "",

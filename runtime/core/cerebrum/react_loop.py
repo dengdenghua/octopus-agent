@@ -1992,6 +1992,14 @@ def stream_react_loop(
         )
         else _native_tool_specs
     )
+    _native_evidence_update_tool_specs = (
+        require_public_update_on_tool_specs(
+            _native_tool_specs,
+            evidence_round=True,
+        )
+        if _native_public_update_tool_specs is not _native_tool_specs
+        else _native_tool_specs
+    )
 
     # Expose the live approval provider through the session so the
     # ``exit_plan_mode`` skill can issue an interactive approval
@@ -3428,6 +3436,14 @@ def stream_react_loop(
         try:
             _iteration_recovery_mode = _force_convergence_next
             _force_convergence_next = False
+            _request_has_tool_evidence = bool(
+                executed_beak_steps
+                or any(
+                    prior_step.action_results
+                    or (prior_step.action and prior_step.observation)
+                    for prior_step in steps
+                )
+            )
             req = ModelRequest(
                 model=effective_model,
                 messages=list(messages),
@@ -3450,7 +3466,11 @@ def stream_react_loop(
                     )
                 ),
                 tools=(
-                    _native_public_update_tool_specs
+                    (
+                        _native_evidence_update_tool_specs
+                        if _request_has_tool_evidence
+                        else _native_public_update_tool_specs
+                    )
                     if _native_mode and _evidence_convergence_active is None
                     else []
                 ),
@@ -3484,10 +3504,7 @@ def stream_react_loop(
             _native_orientation_disabled = False
             _iteration_soft_timed_out = False
             _base_iteration_timeout = _model_iteration_timeout_s()
-            _has_tool_evidence = bool(
-                executed_beak_steps
-                or any(prior_step.action_results for prior_step in steps)
-            )
+            _has_tool_evidence = _request_has_tool_evidence
             if _iteration_recovery_mode and _evidence_convergence_active is not None:
                 _iteration_timeout = _model_evidence_synthesis_timeout_s(
                     _base_iteration_timeout

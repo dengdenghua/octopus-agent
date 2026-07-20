@@ -1511,9 +1511,13 @@ export function MessageList({
     if (stableId) return `id:${stableId}`;
     const stableName = identityKey(identity.name);
     if (stableName) return `name:${stableName}`;
-    return [identityKey(identity.avatar), identityKey(identity.icon)]
+    const presentationIdentity = [
+      identityKey(identity.avatar),
+      identityKey(identity.icon),
+    ]
       .filter((value): value is string => Boolean(value))
       .join("|");
+    return presentationIdentity || null;
   };
 
   if (thread.isThreadLoading && messages.length === 0) {
@@ -1606,17 +1610,23 @@ export function MessageList({
 
                 const turnGroupPosition = turn.groupIndexes.indexOf(index);
                 const assistantIdentity = assistantFrameIdentity(group);
-                const previousAssistantIdentity = [...turn.groupIndexes]
+                const previousAssistantGroups = [...turn.groupIndexes]
                   .slice(0, turnGroupPosition)
                   .reverse()
-                  .map((groupIndex) =>
-                    assistantFrameIdentity(groupedMessages[groupIndex]!),
-                  )
+                  .map((groupIndex) => groupedMessages[groupIndex]!)
+                  .filter(
+                    (candidate) =>
+                      candidate.type === "assistant" ||
+                      candidate.type === "assistant:processing",
+                  );
+                const previousAssistantIdentity = previousAssistantGroups
+                  .map((candidate) => assistantFrameIdentity(candidate))
                   .find((identity): identity is string => identity !== null);
                 const showAssistantAvatar =
-                  assistantIdentity === null ||
-                  previousAssistantIdentity === undefined ||
-                  previousAssistantIdentity !== assistantIdentity;
+                  previousAssistantGroups.length === 0 ||
+                  (assistantIdentity !== null &&
+                    previousAssistantIdentity !== undefined &&
+                    previousAssistantIdentity !== assistantIdentity);
 
                 return (
                   <Fragment key={groupKey}>

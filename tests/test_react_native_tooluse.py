@@ -179,10 +179,31 @@ def test_native_tool_schema_requires_model_authored_public_update() -> None:
     assert augmented.input_schema["required"] == ["path", "public_update"]
     assert augmented.input_schema["properties"]["public_update"]["type"] == "string"
     assert augmented.input_schema["properties"]["public_update"]["maxLength"] == 420
-    assert "later rounds" in augmented.input_schema["properties"]["public_update"]["description"]
-    assert "concrete fact" in augmented.input_schema["properties"]["public_update"]["description"]
-    assert "only says the next files" in augmented.input_schema["properties"]["public_update"]["description"]
     assert "public_update" not in original.input_schema["properties"]
+
+
+def test_native_evidence_round_requires_fact_and_next_action_separately() -> None:
+    original = ToolSpec(
+        name="read_file",
+        input_schema={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    )
+
+    augmented = require_public_update_on_tool_specs(
+        [original],
+        evidence_round=True,
+    )[0]
+
+    assert augmented.input_schema["required"] == [
+        "path",
+        "confirmed_fact",
+        "next_action",
+    ]
+    assert "actual finding" in augmented.input_schema["properties"]["confirmed_fact"]["description"]
+    assert "public_update" not in augmented.input_schema["properties"]
 
 
 def test_structured_public_update_is_displayed_but_not_sent_to_tool() -> None:
@@ -202,6 +223,48 @@ def test_structured_public_update_is_displayed_but_not_sent_to_tool() -> None:
 
     assert step.public_update == "我先核对 x.py 的实际定义，再给出结论。"
     assert step.action == 'read_file({"path": "x.py"})'
+
+
+def test_structured_evidence_update_precedes_generic_text_and_is_not_dispatched() -> None:
+    step = step_from_tool_calls(
+        [
+            ToolCall(
+                id="a",
+                name="read_file",
+                input={
+                    "path": "frontend.ts",
+                    "confirmed_fact": "后端 Item 采用 started 到 completed 的统一生命周期。",
+                    "next_action": "接着核对前端是否按 itemId 归并",
+                },
+            )
+        ],
+        text="正在读取下一批文件。",
+        iteration=2,
+    )
+
+    assert step.public_update == (
+        "后端 Item 采用 started 到 completed 的统一生命周期；"
+        "接着核对前端是否按 itemId 归并"
+    )
+    assert step.action == 'read_file({"path": "frontend.ts"})'
+
+
+def test_explicit_update_in_reasoning_channel_is_recovered_without_leaking_thought() -> None:
+    step = step_from_tool_calls(
+        [ToolCall(id="a", name="read_file", input={"path": "frontend.ts"})],
+        text="",
+        thinking=(
+            "这里是不能公开的内部分析。\n\n"
+            "Update: 第二批确认适配层按 Item 身份保持引用稳定；接着核对滚动容器。\n\n"
+            'Action:\nread_file({"path":"frontend.ts"})'
+        ),
+        iteration=3,
+    )
+
+    assert step.public_update == (
+        "第二批确认适配层按 Item 身份保持引用稳定；接着核对滚动容器。"
+    )
+    assert "内部分析" not in step.public_update
 
 
 def test_step_from_tool_calls_parallel() -> None:
@@ -393,7 +456,8 @@ def test_every_native_tool_round_requires_a_fresh_public_update() -> None:
                         name="read_file",
                         input={
                             "path": "frontend.ts",
-                            "public_update": "后端字段已经确认；我再核对前端映射，确定两端是否逐项对应。",
+                            "confirmed_fact": "后端字段已经确认。",
+                            "next_action": "我再核对前端映射，确定两端是否逐项对应。",
                         },
                     )
                 ],
@@ -443,10 +507,12 @@ def test_every_native_tool_round_requires_a_fresh_public_update() -> None:
 
     tool_requests = [request for request in router.requests if request.tools]
     assert len(tool_requests) >= 2
-    assert all(
-        "public_update" in request.tools[0].input_schema.get("required", [])
-        for request in tool_requests[:2]
-    )
+    assert "public_update" in tool_requests[0].tools[0].input_schema["required"]
+    assert tool_requests[1].tools[0].input_schema["required"] == [
+        "path",
+        "confirmed_fact",
+        "next_action",
+    ]
     assert result is not None
     assert [step.public_update for step in result.steps[:2]] == [
         "我先核对后端事件定义，确认时间线的源字段。",

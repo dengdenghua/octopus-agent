@@ -243,6 +243,32 @@ describe("MessageList process trace lifecycle", () => {
     expect(screen.getByText("两个文件的字段定义一致。")).toBeInTheDocument();
   });
 
+  test("keeps one avatar when final answer identity metadata arrives incomplete", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "检查两个文件"),
+        {
+          id: "assistant-progress",
+          type: "ai",
+          content: "我先核对两个文件。",
+          additional_kwargs: {
+            public_progress: true,
+            agent_id: "general",
+            agent_display_name: "Eve",
+            agent_avatar_url: "/api/agents/general/avatar",
+          },
+        } as AIMessage,
+        message("assistant-final", "ai", "两个文件的字段定义一致。"),
+      ],
+    });
+
+    const { container } = renderMessageList({ thread });
+
+    expect(container.querySelectorAll(".size-8.rounded-md")).toHaveLength(1);
+    expect(screen.getByText("我先核对两个文件。")).toBeInTheDocument();
+    expect(screen.getByText("两个文件的字段定义一致。")).toBeInTheDocument();
+  });
+
   test("keeps one evidence cluster inside each conversational interval", () => {
     const agentMetadata = {
       agent_id: "general",
