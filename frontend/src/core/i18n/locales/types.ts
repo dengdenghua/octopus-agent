@@ -4093,6 +4093,7 @@ export interface Translations {
     signalCommits: (count: number) => string;
     signalReadme: string;
     signalSummaryEmpty: string;
+    closeFolderAria: (name: string) => string;
   };
 
   // Code page tabs
@@ -4103,6 +4104,11 @@ export interface Translations {
     teach: string;
     browser: string;
     diff: string;
+  };
+
+  // Editor Tabs
+  editorTabs: {
+    closeTabAria: (label: string) => string;
   };
 
   // Skills Market
@@ -5385,8 +5391,15 @@ export interface Translations {
     localFileAgentHint: string;
   };
 
+  // Mobile
+  mobile: {
+    micDisabledAria: string;
+  };
+
   fileTree: {
     emptyDirectory: string;
+    openFolderAria: (name: string) => string;
+    openFileAria: (name: string) => string;
   };
 
   // TAOR Indicator

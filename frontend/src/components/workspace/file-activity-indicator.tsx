@@ -68,7 +68,7 @@ export function FileActivityIndicator({ className }: Props) {
           </span>
         </button>
       </HoverCardTrigger>
-      <HoverCardContent align="start" className="w-[480px] p-2 text-xs">
+      <HoverCardContent align="start" className="w-80 sm:w-[480px] p-2 text-xs">
         <div className="font-medium mb-1.5 flex items-center justify-between">
           <span>{t.activityIndicators.fileActivityTitle(events.length)}</span>
           <span className="text-xs text-muted-foreground">

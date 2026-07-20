@@ -442,8 +442,8 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
             </section>
 
             <InfoBlock title={t.runtimeSelfCheckPanel.capabilitySurfaces}>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-sm">
+              <div className="overflow-x-auto max-w-full">
+                <table className="w-full min-w-[480px] text-sm md:min-w-0">
                   <thead className="text-muted-foreground border-b text-left text-xs">
                     <tr>
                       <th className="py-2 pr-3 font-medium">

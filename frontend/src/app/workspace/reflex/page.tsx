@@ -208,7 +208,7 @@ export default function ReflexMonitorPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           {/* Hero / actions */}
           <section className="workspace-panel px-4 py-4 sm:px-6 sm:py-5">
-            <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-center">
+            <div className="flex flex-col items-start gap-4 md:flex-row md:items-center">
               <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-emerald-500/20">
                 <ZapIcon className="size-5" />
               </div>

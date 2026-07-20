@@ -1702,7 +1702,7 @@ function SourcesView({
       </div>
 
       {!manifest && (
-        <div className="flex shrink-0 flex-col gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="font-medium">下一步：重新连接本地知识库服务</div>
             <div className="mt-0.5 truncate text-amber-900/80">

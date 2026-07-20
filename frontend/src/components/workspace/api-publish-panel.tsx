@@ -993,7 +993,7 @@ function LogEntry({ log }: { log: CallLog }) {
             <div className="text-muted-foreground text-xs font-medium">
               Input
             </div>
-            <pre className="bg-muted/50 mt-0.5 overflow-x-auto rounded p-1.5 text-xs">
+            <pre className="bg-muted/50 mt-0.5 max-w-full overflow-x-auto rounded p-1.5 text-xs">
               {log.input_text}
             </pre>
           </div>

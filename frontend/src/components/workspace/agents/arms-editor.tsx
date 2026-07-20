@@ -931,7 +931,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                 setDirty(true);
               }}
               placeholder={t.armsEditor.extraAffinityPlaceholder}
-              className="mt-1 w-full rounded-sm border border-border bg-card/70 px-3 py-2 text-sm shadow-[var(--shadow-xs)] focus:outline-none focus:ring-1 focus:ring-ring"
+              className="mt-1 w-full rounded-sm border border-border bg-card/70 px-3 py-2 text-sm shadow-[var(--shadow-xs)] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
 

@@ -4397,6 +4397,7 @@ export const zhCN: Translations = {
       resetZoom: "重置缩放",
       devicePreview: "设备预览",
     },
+    closeFolderAria: (name: string) => `关闭文件夹：${name}`,
   },
 
   // Gene Lock Badge
@@ -4643,6 +4644,11 @@ export const zhCN: Translations = {
     teach: "教学",
     browser: "浏览器",
     diff: "差异",
+  },
+
+  // Editor Tabs
+  editorTabs: {
+    closeTabAria: (label: string) => `关闭标签页：${label}`,
   },
 
   // Skills Market
@@ -6004,8 +6010,15 @@ export const zhCN: Translations = {
       "召唤本地数据库：只检索本机授权资料，确认后再带入任务上下文",
   },
 
+  // Mobile
+  mobile: {
+    micDisabledAria: "语音输入（暂未启用）",
+  },
+
   fileTree: {
     emptyDirectory: "空目录",
+    openFolderAria: (name: string) => `打开文件夹：${name}`,
+    openFileAria: (name: string) => `打开文件：${name}`,
   },
 
   // TAOR Indicator

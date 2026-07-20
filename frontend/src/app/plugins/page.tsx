@@ -236,7 +236,7 @@ function PluginListItem({
   );
 
   return (
-    <Card className="group flex flex-row items-center gap-3 border border-border bg-card p-3 shadow-none transition-colors hover:bg-accent/30">
+    <Card className="group flex flex-col gap-3 border border-border bg-card p-3 shadow-none transition-colors hover:bg-accent/30 sm:flex-row sm:items-center">
       <div
         className={cn(
           "flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background",

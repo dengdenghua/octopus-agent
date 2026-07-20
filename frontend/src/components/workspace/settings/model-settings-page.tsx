@@ -847,7 +847,7 @@ function ModelSettingsOverview({
 
   return (
     <section className="rounded-lg border border-border bg-card/60 p-4 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h2 className="text-base font-semibold">{copy.overviewTitle}</h2>
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
@@ -1742,7 +1742,7 @@ export default function ModelSettingsPage() {
               </div>
             )}
           </DialogHeader>
-          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+          <DialogFooter className="mt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               disabled={deletingModel}

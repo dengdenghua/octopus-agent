@@ -141,6 +141,7 @@ export function KnowledgeGraphPanel() {
       {/* Implementation note. */}
       <div className="flex items-center gap-2">
         <button
+          type="button"
           onClick={() => setViewMode("graph")}
           className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "graph" ? "bg-violet-500/15 text-violet-400" : "text-muted-foreground hover:bg-muted"}`}
         >
@@ -148,6 +149,7 @@ export function KnowledgeGraphPanel() {
           {t.knowledgePanel.graphView}
         </button>
         <button
+          type="button"
           onClick={() => setViewMode("list")}
           className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-violet-500/15 text-violet-400" : "text-muted-foreground hover:bg-muted"}`}
         >

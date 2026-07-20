@@ -646,7 +646,7 @@ function BackendBrowserTab({
           {wt.openDirectory}
         </button>
         {extensionGuideOpen && (
-          <div className="absolute right-0 top-full mt-2 w-[360px] rounded-2xl border bg-background/98 p-4 text-left shadow-xl backdrop-blur">
+          <div className="absolute right-0 top-full mt-2 w-[360px] max-w-[calc(100vw-1rem)] rounded-2xl border bg-background/98 p-4 text-left shadow-xl backdrop-blur">
             <div className="flex items-start gap-3">
               <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
                 <PlugIcon className="size-5" />
@@ -987,6 +987,7 @@ function BrowserDesktopHome({
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onSearchKey}
             placeholder={wt.searchPlaceholder}
+            aria-label={wt.searchPlaceholder}
             className="min-w-0 flex-1 bg-transparent text-lg font-medium text-foreground outline-none placeholder:text-muted-foreground/70"
           />
         </div>
@@ -1339,7 +1340,7 @@ function DesktopControlPanel({
               : wt.panelTitleDesktopSettings;
 
   return (
-    <div className="absolute bottom-7 left-24 top-24 z-20 w-[360px] overflow-hidden rounded-[28px] border border-white/38 bg-white/70 text-foreground shadow-xl shadow-black/15 backdrop-blur-2xl">
+    <div className="absolute bottom-7 left-24 top-24 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[28px] border border-white/38 bg-white/70 text-foreground shadow-xl shadow-black/15 backdrop-blur-2xl">
       <div className="flex items-center justify-between border-b border-white/32 px-5 py-4">
         <div>
           <div className="text-base font-semibold">{title}</div>

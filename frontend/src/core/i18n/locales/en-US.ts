@@ -4668,6 +4668,7 @@ Strategy:
       resetZoom: "Reset Zoom",
       devicePreview: "Device Preview",
     },
+    closeFolderAria: (name: string) => `Close folder: ${name}`,
   },
 
   // Gene Lock Badge
@@ -4934,6 +4935,11 @@ Strategy:
     teach: "Teach",
     browser: "Browser",
     diff: "Diff",
+  },
+
+  // Editor Tabs
+  editorTabs: {
+    closeTabAria: (label: string) => `Close tab: ${label}`,
   },
 
   // Skills Market
@@ -6345,8 +6351,15 @@ Strategy:
       "Summon the local file agent: search authorized local files before adding confirmed context",
   },
 
+  // Mobile
+  mobile: {
+    micDisabledAria: "Voice input (not yet enabled)",
+  },
+
   fileTree: {
     emptyDirectory: "Empty directory",
+    openFolderAria: (name: string) => `Open folder: ${name}`,
+    openFileAria: (name: string) => `Open file: ${name}`,
   },
 
   // TAOR Indicator

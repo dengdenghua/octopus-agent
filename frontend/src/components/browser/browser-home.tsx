@@ -694,7 +694,7 @@ function ContextMenu({
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
       <div
         className="fixed z-50 bg-white/95 backdrop-blur-xl border border-white/30 rounded-2xl py-2 min-w-[160px] shadow-2xl"
         style={{ left: state.x, top: state.y }}
@@ -1974,7 +1974,7 @@ export function BrowserHome({
           <div className={cn("flex flex-col gap-9", compactDesktop && "gap-7")}>
             <section
               className={cn(
-                "w-[360px] self-end rounded-[26px] p-4 text-foreground",
+                "w-[360px] max-w-[calc(100vw-1rem)] self-end rounded-[26px] p-4 text-foreground",
                 liquidGlassClass("card"),
                 compactDesktop && "w-full self-stretch",
                 mobileDesktop && "rounded-[22px] p-3",
@@ -2236,7 +2236,11 @@ export function BrowserHome({
                             <span className="text-sm font-medium text-foreground">
                               {folder.name}
                             </span>
-                            <button onClick={() => toggleFolder(folder.id)}>
+                            <button
+                              type="button"
+                              aria-label={t.browser.closeFolderAria(folder.name)}
+                              onClick={() => toggleFolder(folder.id)}
+                            >
                               <X className="w-4 h-4 text-muted-foreground/70 hover:text-muted-foreground" />
                             </button>
                           </div>
@@ -2566,7 +2570,7 @@ function DesktopControlPanel({
   return (
     <div
       className={cn(
-        "absolute bottom-7 left-24 top-24 z-20 w-[360px] overflow-hidden rounded-[30px] text-foreground",
+        "absolute bottom-7 left-24 top-24 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[30px] text-foreground",
         liquidGlassClass("sheet"),
       )}
     >

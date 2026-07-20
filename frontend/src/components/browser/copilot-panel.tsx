@@ -879,6 +879,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
               value={researchGoal}
               onChange={(e) => setResearchGoal(e.target.value)}
               placeholder={t.browser.copilot.researchGoalPlaceholder}
+              aria-label={t.browser.copilot.researchGoalPlaceholder}
               className={cn(
                 "min-w-0 flex-1 rounded px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-500/40",
                 liquidGlassClass("input", true),
@@ -1090,14 +1091,17 @@ export function CopilotPanel({ webviewHandle }: Props) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
             placeholder={t.browser.copilot.inputPlaceholder}
+            aria-label={t.browser.copilot.inputPlaceholder}
             rows={1}
             className="max-h-32 min-h-[24px] flex-1 resize-none bg-transparent text-sm outline-none"
           />
           <button
+            type="button"
             onClick={() => send(input)}
             disabled={!input.trim() || thread.isLoading}
             className="grid size-7 place-items-center rounded bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
             title={t.codeMode.send}
+            aria-label={t.codeMode.send}
           >
             <SendIcon className="size-3.5" />
           </button>

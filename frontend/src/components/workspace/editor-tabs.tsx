@@ -1,6 +1,7 @@
 import { XIcon, FileIcon } from "lucide-react";
 import { useCallback, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/core/i18n/hooks";
 
 export interface EditorTab {
   path: string;
@@ -50,6 +51,7 @@ export function EditorTabs({
   onClose,
   className,
 }: EditorTabsProps) {
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
 
@@ -131,9 +133,9 @@ export function EditorTabs({
               {tab.isDirty && (
                 <span className="size-1.5 rounded-full bg-primary shrink-0" />
               )}
-              <span
-                role="button"
-                tabIndex={-1}
+              <button
+                type="button"
+                aria-label={t.editorTabs.closeTabAria(tab.label)}
                 onClick={(e) => handleClose(e, tab.path)}
                 className={cn(
                   "ml-0.5 rounded p-0.5 shrink-0 transition-colors",
@@ -143,7 +145,7 @@ export function EditorTabs({
                 )}
               >
                 <XIcon className="size-2.5" />
-              </span>
+              </button>
             </button>
           );
         })}

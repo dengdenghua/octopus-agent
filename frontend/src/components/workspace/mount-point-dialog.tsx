@@ -607,7 +607,7 @@ export function MountPointDialog({
           )}
         </div>
 
-        <DialogFooter className="flex-row items-center justify-between gap-2">
+        <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Button
             type="button"
             variant="outline"

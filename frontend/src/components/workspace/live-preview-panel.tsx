@@ -377,6 +377,7 @@ ${jsContent || "// No JavaScript"}
             </button>
           )}
           <button
+            type="button"
             onClick={() => setShowCode(!showCode)}
             className={cn(
               "p-1.5 rounded-md transition-all",
@@ -385,6 +386,7 @@ ${jsContent || "// No JavaScript"}
                 : "text-muted-foreground hover:text-foreground hover:bg-muted",
             )}
             title={showCode ? t.livePreview.hideCode : t.livePreview.showCode}
+            aria-label={showCode ? t.livePreview.hideCode : t.livePreview.showCode}
           >
             {showCode ? (
               <EyeIcon className="size-3.5" />
@@ -393,16 +395,24 @@ ${jsContent || "// No JavaScript"}
             )}
           </button>
           <button
+            type="button"
             onClick={handleRefresh}
             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
             title={t.livePreview.refresh}
+            aria-label={t.livePreview.refresh}
           >
             <RotateCcwIcon className="size-3.5" />
           </button>
           <button
+            type="button"
             onClick={handleOpenDevTools}
             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
             title={
+              isElectronEnv
+                ? t.codeMode.previewDevTools
+                : t.codeMode.previewDevToolsUnavailable
+            }
+            aria-label={
               isElectronEnv
                 ? t.codeMode.previewDevTools
                 : t.codeMode.previewDevToolsUnavailable
@@ -412,9 +422,11 @@ ${jsContent || "// No JavaScript"}
           </button>
           {onOpenExternal && (
             <button
+              type="button"
               onClick={onOpenExternal}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
               title={t.livePreview.openExternal}
+              aria-label={t.livePreview.openExternal}
             >
               <ExternalLinkIcon className="size-3.5" />
             </button>

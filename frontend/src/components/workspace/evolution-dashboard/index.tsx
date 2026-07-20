@@ -270,7 +270,7 @@ function GrowthStoryHero({
         <GeneLockControlCard compact className="mt-3" />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-4">
         <StoryMetric
           icon={BookOpenIcon}
           title={t.evolutionDashboard.autoExtractedSkills}

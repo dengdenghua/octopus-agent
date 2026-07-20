@@ -64,6 +64,7 @@ export function TerminalInput({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder={finalPlaceholder}
+          aria-label={finalPlaceholder}
           rows={1}
           className={cn(
             "text-foreground flex-1 resize-none bg-transparent outline-none text-sm leading-snug py-1",
@@ -84,17 +85,21 @@ export function TerminalInput({
         />
         {isLoading ? (
           <button
+            type="button"
             onClick={onStop}
             title={t.codeMode.stop}
+            aria-label={t.codeMode.stop}
             className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-destructive/90 text-destructive-foreground transition-colors hover:bg-destructive"
           >
             <SquareIcon className="size-3" fill="currentColor" />
           </button>
         ) : (
           <button
+            type="button"
             onClick={onSubmit}
             disabled={disabled || !value.trim()}
             title={t.codeMode.send}
+            aria-label={t.codeMode.send}
             className={cn(
               "flex size-7 shrink-0 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",
               "bg-foreground text-background hover:bg-foreground/90 active:scale-95",

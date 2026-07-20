@@ -69,7 +69,7 @@ export function ConfirmDialog({
             </DialogDescription>
           ) : null}
         </DialogHeader>
-        <DialogFooter className="mt-1 flex-row justify-end gap-2">
+        <DialogFooter className="mt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
             disabled={pending}

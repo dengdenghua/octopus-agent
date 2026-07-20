@@ -245,7 +245,7 @@ export default function AppearanceSettingsPage() {
         >
           <SelectTrigger
             aria-label={t.settings.appearance.languageTitle}
-            className="w-[220px]"
+            className="w-full sm:w-[220px]"
           >
             <SelectValue />
           </SelectTrigger>
@@ -275,7 +275,7 @@ export default function AppearanceSettingsPage() {
         >
           <SelectTrigger
             aria-label={t.settings.appearance.chatFontSizeTitle}
-            className="w-[220px] max-w-full"
+            className="w-full sm:w-[220px] max-w-full"
           >
             <SelectValue />
           </SelectTrigger>

@@ -4657,6 +4657,7 @@ Strategy:
       resetZoom: "Reset Zoom",
       devicePreview: "Device Preview",
     },
+    closeFolderAria: (name: string) => `폴더 닫기: ${name}`,
   },
 
   // Gene Lock Badge
@@ -4921,6 +4922,11 @@ Strategy:
     teach: "Teach",
     browser: "Browser",
     diff: "Diff",
+  },
+
+  // Editor Tabs
+  editorTabs: {
+    closeTabAria: (label: string) => `탭 닫기: ${label}`,
   },
 
   // Skills Market
@@ -6328,8 +6334,15 @@ Strategy:
       "Summon the local file agent: search authorized local files before adding confirmed context",
   },
 
+  // Mobile
+  mobile: {
+    micDisabledAria: "음성 입력 (아직 활성화되지 않음)",
+  },
+
   fileTree: {
     emptyDirectory: "Empty directory",
+    openFolderAria: (name: string) => `폴더 열기: ${name}`,
+    openFileAria: (name: string) => `파일 열기: ${name}`,
   },
 
   // TAOR Indicator

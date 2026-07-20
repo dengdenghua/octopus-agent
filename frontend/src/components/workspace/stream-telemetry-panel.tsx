@@ -97,8 +97,8 @@ export function StreamTelemetryPanel() {
             ))}
           </div>
 
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left text-xs">
+          <div className="mt-5 overflow-x-auto max-w-full">
+            <table className="w-full min-w-[480px] text-left text-xs md:min-w-0">
               <thead className="text-muted-foreground border-b">
                 <tr>
                   <th className="px-2 py-2 font-medium">

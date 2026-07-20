@@ -98,7 +98,7 @@ export function RegistryRolesPanel() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div
           data-testid="registry-roles-category-scroll"
           className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 pr-1 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
@@ -143,6 +143,7 @@ export function RegistryRolesPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索角色"
+            aria-label="搜索角色"
             className="h-8 w-44 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
           />
           <Button

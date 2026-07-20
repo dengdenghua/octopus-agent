@@ -4673,6 +4673,7 @@ Strategy:
       resetZoom: "Reset Zoom",
       devicePreview: "Device Preview",
     },
+    closeFolderAria: (name: string) => `フォルダを閉じる: ${name}`,
   },
 
   // Gene Lock Badge
@@ -4939,6 +4940,11 @@ Strategy:
     teach: "Teach",
     browser: "Browser",
     diff: "Diff",
+  },
+
+  // Editor Tabs
+  editorTabs: {
+    closeTabAria: (label: string) => `タブを閉じる: ${label}`,
   },
 
   // Skills Market
@@ -6345,8 +6351,15 @@ Strategy:
       "Summon the local file agent: search authorized local files before adding confirmed context",
   },
 
+  // Mobile
+  mobile: {
+    micDisabledAria: "音声入力（現在使用できません）",
+  },
+
   fileTree: {
     emptyDirectory: "Empty directory",
+    openFolderAria: (name: string) => `フォルダを開く: ${name}`,
+    openFileAria: (name: string) => `ファイルを開く: ${name}`,
   },
 
   // TAOR Indicator

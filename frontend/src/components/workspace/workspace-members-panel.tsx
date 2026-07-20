@@ -397,7 +397,7 @@ export function WorkspaceMembersPanel({
               </Select>
             </div>
           </div>
-          <DialogFooter className="flex-row justify-end gap-2">
+          <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="ghost"

@@ -419,7 +419,7 @@ export function AgentsTab({
       {loadError && (
         <div
           role="alert"
-          className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-3 text-sm sm:flex-row sm:items-center"
+          className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-3 text-sm md:flex-row md:items-center"
         >
           <span className="flex items-center gap-2 text-destructive">
             <AlertCircleIcon className="size-4 shrink-0" aria-hidden="true" />
@@ -436,7 +436,7 @@ export function AgentsTab({
           </Button>
         </div>
       )}
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0 flex-1">
           <div
             data-testid="agents-category-scroll"
@@ -729,7 +729,7 @@ function PluginListItem({
       : t.plugins.statusDisabledTooltip;
 
   return (
-    <Card className="group flex flex-row items-center gap-3 border border-border bg-card p-3 shadow-none transition-colors hover:bg-accent/30">
+    <Card className="group flex flex-col gap-3 border border-border bg-card p-3 shadow-none transition-colors hover:bg-accent/30 sm:flex-row sm:items-center">
       <div
         className={cn(
           "flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background",
@@ -900,7 +900,7 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
         </TabsContent>
 
         <TabsContent value="local" className="mt-0 flex flex-col gap-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <Select
                 value={pluginAuthorFilter}
@@ -1185,7 +1185,7 @@ export function AgentWorldUnified() {
               {t.agentWorldUnified.pageDescription}
             </p>
           </div>
-          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
             <div className="relative w-full md:max-w-[360px]">
               <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
               <Input

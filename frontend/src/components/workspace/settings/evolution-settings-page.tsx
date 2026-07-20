@@ -271,7 +271,7 @@ export default function EvolutionSettingsPage() {
           {e.recipeScoreTitle}
         </div>
         {recipes && recipes.scores.length > 0 ? (
-          <div className="mt-2 overflow-x-auto">
+          <div className="mt-2 overflow-x-auto max-w-full">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border-default text-left text-muted-foreground">

@@ -276,7 +276,7 @@ function HunkBlock({
         onAcceptHunk={(_filePath, hunkId) => onAccept(hunkId)}
         onRejectHunk={() => onReject(hunk)}
       />
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto max-w-full">
         <table className="w-full border-collapse text-xs font-mono leading-snug">
           <tbody>
             {hunk.lines.map((line, index) => (

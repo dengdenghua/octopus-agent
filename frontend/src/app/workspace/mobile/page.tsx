@@ -87,6 +87,7 @@ import {
 import { useScreenStream } from "@/core/tentacle/use-screen-stream";
 import { usePcScreenStream } from "@/core/tentacle/use-pc-screen-stream";
 import { useAuth } from "@/providers/AuthProvider";
+import { useI18n } from "@/core/i18n/hooks";
 
 // ── Types ──────────────────────────────────────────────
 
@@ -1135,6 +1136,7 @@ function ChatTab({
   onOpenDevicePreview: () => void;
   onSendMessage: (text: string) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const phoneCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1241,7 +1243,12 @@ function ChatTab({
               disabled={submitting}
               className="flex-1 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
-            <button className="shrink-0 text-muted-foreground/70 hover:text-muted-foreground">
+            <button
+              type="button"
+              disabled
+              aria-label={t.mobile.micDisabledAria}
+              className="shrink-0 text-muted-foreground/70 hover:text-muted-foreground"
+            >
               <MicIcon className="size-5" />
             </button>
           </div>

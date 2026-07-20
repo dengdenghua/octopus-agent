@@ -890,7 +890,7 @@ export function IntelligencePanel() {
                       />
                     </div>
                   </div>
-                  <div className="grid gap-1.5 sm:grid-cols-3">
+                  <div className="grid gap-1.5 md:grid-cols-3">
                     <div className="space-y-1">
                       <Label
                         htmlFor={draftTimeId}
@@ -1059,7 +1059,7 @@ export function IntelligencePanel() {
 
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
         <section className="flex min-w-0 flex-col gap-2.5">
-          <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-col items-stretch justify-between gap-3 md:flex-row md:items-center">
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <RadarIcon className="size-4 text-primary" />
@@ -1150,7 +1150,7 @@ export function IntelligencePanel() {
                         : "border-border-default bg-card/60 hover:border-border hover:bg-card",
                     )}
                   >
-                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start">
+                    <div className="flex flex-col gap-2.5 md:flex-row md:items-start">
                       <button
                         type="button"
                         className="flex min-w-0 flex-1 items-start gap-2.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
@@ -1532,7 +1532,7 @@ export function IntelligencePanel() {
                 : ""}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+          <DialogFooter className="mt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"

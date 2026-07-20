@@ -290,7 +290,7 @@ function ConfigPreview({
           {expanded === i && (
             <div className="border-t">
               <textarea
-                className="bg-muted/50 w-full resize-none p-2 font-mono text-xs leading-relaxed focus:outline-none"
+                className="bg-muted/50 w-full resize-none p-2 font-mono text-xs leading-relaxed focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 rows={Math.min(cfg.content.split("\n").length, 20)}
                 value={cfg.content}
                 onChange={(e) => onEdit?.(i, e.target.value)}

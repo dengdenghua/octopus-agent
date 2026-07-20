@@ -74,7 +74,7 @@ export function RegistrySkillsPanel() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <span className="text-sm font-medium">技能商城 · 从 registry 按需安装</span>
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="text-xs text-muted-foreground">
@@ -84,6 +84,7 @@ export function RegistrySkillsPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索技能"
+            aria-label="搜索技能"
             className="h-8 w-44 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
           />
           <Button

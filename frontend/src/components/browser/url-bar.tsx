@@ -577,7 +577,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
               {siteInfoOpen && (
                 <div
                   ref={siteInfoPanelRef}
-                  className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-2 w-[320px] rounded-xl p-3 text-popover-foreground"
+                  className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-2 w-[320px] max-w-[calc(100vw-1rem)] rounded-xl p-3 text-popover-foreground"
                 >
                   <div className="flex items-start gap-2.5">
                     <div className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
@@ -1024,7 +1024,7 @@ function DownloadDropdown({
   return (
     <div
       ref={ref}
-      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[360px] overflow-hidden rounded-xl text-popover-foreground"
+      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl text-popover-foreground"
     >
       <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -1165,7 +1165,7 @@ function HistoryDropdown({
   return (
     <div
       ref={ref}
-      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[420px] rounded-lg"
+      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[420px] max-w-[calc(100vw-1rem)] rounded-lg"
     >
       <div className="flex items-center justify-between border-b">
         <div className="flex">

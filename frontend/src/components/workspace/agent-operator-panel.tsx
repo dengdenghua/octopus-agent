@@ -1341,7 +1341,7 @@ function TaskRecoveryQueueCard({
           : "border-amber-500/30 bg-amber-500/10",
       )}
     >
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
             <GitBranchIcon
@@ -1369,7 +1369,7 @@ function TaskRecoveryQueueCard({
               : "No stalled, failed, or approval-blocked task runs."}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-right font-mono text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs">
           <GateStat label="shown" value={queue.count} />
           <GateStat label="takeover" value={countRecovery(queue, "takeover")} />
           <GateStat label="resume" value={countRecovery(queue, "resume")} />
@@ -1538,7 +1538,7 @@ function CompetitorScorecardCard({
             : "border-amber-500/30 bg-amber-500/10",
       )}
     >
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <BarChart3Icon
@@ -1574,7 +1574,7 @@ function CompetitorScorecardCard({
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <div className="grid grid-cols-3 gap-2 text-right font-mono text-xs xl:grid-cols-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs xl:grid-cols-6">
             <GateStat label="Architecture" value={octopusScore} />
             <GateStat
               label="Static evidence"
@@ -1749,7 +1749,7 @@ function E2ESurpassCertificationCard({
           : "border-amber-500/30 bg-amber-500/10",
       )}
     >
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             {ready ? (
@@ -1808,7 +1808,7 @@ function E2ESurpassCertificationCard({
             </div>
           )}
         </div>
-        <div className="grid shrink-0 grid-cols-5 gap-2 text-right font-mono text-xs">
+        <div className="grid shrink-0 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-right font-mono text-xs">
           <GateStat label="Scorecard" value={summary.scorecard_octopus} />
           <GateStat
             label="Evidence"
@@ -2135,7 +2135,7 @@ function AutomationRadarCard({
   const topGaps = radar.octopus_gaps ?? [];
   return (
     <div className="mt-3 rounded-lg border border-border-default bg-background/60 px-3 py-2">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <ShieldAlertIcon className="size-4 text-blue-700 dark:text-blue-300" />
@@ -2168,7 +2168,7 @@ function AutomationRadarCard({
             coverage.
           </div>
         </div>
-        <div className="grid shrink-0 grid-cols-3 gap-2 text-right font-mono text-xs">
+        <div className="grid shrink-0 grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs">
           <GateStat label="Octo auto" value={octopusScore} />
           <GateStat label="Codex" value={codexScore} />
           <GateStat
@@ -2288,7 +2288,7 @@ function ReplayGateOverrideDialog({
           <div className="mt-1 text-xs text-muted-foreground">
             {gate?.reason || "No reason provided"}
           </div>
-          <div className="mt-3 grid grid-cols-4 gap-2 text-center font-mono text-xs">
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center font-mono text-xs">
             <GateStat label="cases" value={gate?.summary.total ?? 0} />
             <GateStat label="pass" value={gate?.summary.passed ?? 0} />
             <GateStat label="fail" value={gate?.summary.failed ?? 0} />
@@ -2357,7 +2357,7 @@ function PromotionAuditSummaryCard({
             {integrity?.entries_checked ?? 0} checked
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="audit" value={summary.total} />
           <GateStat label="over" value={summary.override_count} />
           <GateStat label="gate" value={summary.gate_failed_count} />
@@ -2410,7 +2410,7 @@ function MemoryQualityCard({
             {summary.by_bucket.experience ?? 0}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="mem" value={summary.total} />
           <GateStat label="stale" value={summary.stale_count} />
           <GateStat label="contra" value={summary.contradicted_count} />
@@ -2476,7 +2476,7 @@ function AutoVerifierCard({
                 : "No auto-verifier decisions recorded yet")}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="runs" value={report.total} />
           <GateStat label="pass" value={report.pass_count} />
           <GateStat label="fail" value={report.fail_count} />
@@ -2616,7 +2616,7 @@ function PluginHealthCard({
                 : "Installed Codex plugins passed local smoke checks"}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="total" value={summary.total} />
           <GateStat label="ok" value={summary.ok_count} />
           <GateStat label="fail" value={summary.failed_count} />
@@ -2950,7 +2950,7 @@ function ToolSafetyCard({
           </div>
         </div>
         <div className="flex shrink-0 items-start gap-3">
-          <div className="grid grid-cols-3 gap-2 text-right font-mono text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs">
             <GateStat label="deny" value={summary.by_action.deny ?? 0} />
             <GateStat label="block" value={summary.by_action.block ?? 0} />
             <GateStat label="halt" value={summary.by_action.halt ?? 0} />
@@ -3254,7 +3254,7 @@ function TopologyPolicyCard({
                 : "No active topology is affected by subagent policy"}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-right font-mono text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs">
           <GateStat label="blocked" value={blocked.length} />
           <GateStat label="watch" value={watchCount} />
           <GateStat label="teams" value={topologies.length} />
@@ -3351,7 +3351,7 @@ function TopologyPromotionCard({
                 : "No subagent-derived team promotions yet"}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 text-right font-mono text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
           <GateStat label="sub" value={subagentProposals} />
           <GateStat label="up" value={improved} />
           <GateStat label="wait" value={pending} />

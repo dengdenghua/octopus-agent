@@ -745,6 +745,7 @@ export default function DesktopShellPage() {
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={onKeyDown}
                 placeholder={t.desktop.searchPlaceholder}
+                aria-label={t.desktop.searchPlaceholder}
                 className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground/70"
               />
               <button
@@ -868,6 +869,7 @@ export default function DesktopShellPage() {
                     value={desktopSearch}
                     onChange={(event) => setDesktopSearch(event.target.value)}
                     placeholder={t.desktop.drawer.searchPlaceholder}
+                    aria-label={t.desktop.drawer.searchPlaceholder}
                     className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
                   />
                   {desktopSearch && (

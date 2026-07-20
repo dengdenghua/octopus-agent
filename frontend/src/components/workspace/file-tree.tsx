@@ -378,6 +378,7 @@ export function FileTree({
             style={{ paddingLeft: `${entry.depth * 14 + 8}px` }}
             role="button"
             tabIndex={0}
+            aria-label={isDir ? t.fileTree.openFolderAria(entry.name) : t.fileTree.openFileAria(entry.name)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();

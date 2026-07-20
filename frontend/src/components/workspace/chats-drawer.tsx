@@ -404,7 +404,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
             autoFocus
             className="h-8 text-sm"
           />
-          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+          <DialogFooter className="mt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"

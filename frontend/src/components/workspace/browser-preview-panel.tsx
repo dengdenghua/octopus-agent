@@ -1341,6 +1341,7 @@ export function BrowserPreviewPanel({
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder={t.browser.urlPlaceholder}
+              aria-label={t.browser.urlPlaceholder}
               className="h-full w-full bg-transparent pl-7 pr-2 text-xs outline-none"
             />
           </div>
@@ -1383,6 +1384,7 @@ export function BrowserPreviewPanel({
           disabled={viewportChanging}
           className="hidden h-7 max-w-[112px] shrink-0 rounded-md border border-border-default bg-background/70 px-1.5 text-xs font-medium text-muted-foreground outline-none hover:text-foreground md:block"
           title={bp.selectDevicePreset}
+          aria-label={bp.selectDevicePreset}
         >
           {(Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]).map(
             (preset) => {

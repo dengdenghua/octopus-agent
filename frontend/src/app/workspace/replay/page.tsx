@@ -429,7 +429,7 @@ function ReplayCasesTable({
     );
   }
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto max-w-full">
       <table className="w-full text-left text-xs">
         <thead className="border-b border-border-default text-muted-foreground">
           <tr>
@@ -521,7 +521,7 @@ function ReplayEvaluationsTable({
     );
   }
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto max-w-full">
       <table className="w-full text-left text-xs">
         <thead className="border-b border-border-default text-muted-foreground">
           <tr>

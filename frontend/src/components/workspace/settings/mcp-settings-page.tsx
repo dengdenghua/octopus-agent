@@ -554,7 +554,7 @@ export function McpSettingsPage() {
               {serverToRemove ? copy.removeDescription(serverToRemove) : ""}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+          <DialogFooter className="mt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               size="sm"

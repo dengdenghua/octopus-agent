@@ -303,7 +303,7 @@ export function TimelineView({
       {/* Timeline container */}
       <div
         ref={containerRef}
-        className="relative overflow-x-auto overflow-y-auto rounded-lg border bg-card"
+        className="relative overflow-x-auto max-w-full overflow-y-auto rounded-lg border bg-card"
         style={{ maxHeight: "480px" }}
         onScroll={(e) => setScrollLeft((e.target as HTMLDivElement).scrollLeft)}
       >

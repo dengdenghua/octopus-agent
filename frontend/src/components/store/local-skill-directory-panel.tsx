@@ -311,7 +311,7 @@ export function LocalSkillDirectoryPanel({
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
       {showInternalSearch && !showSkillPacks && (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-center">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-center">
           <div className="relative w-full lg:max-w-[560px]">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input

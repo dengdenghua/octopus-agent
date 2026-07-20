@@ -281,7 +281,7 @@ function ListView({ tasks }: { tasks: UnifiedTask[] }) {
   ];
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div className="overflow-x-auto max-w-full rounded-lg border">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b bg-muted/30">

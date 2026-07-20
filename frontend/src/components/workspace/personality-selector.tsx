@@ -117,6 +117,7 @@ export function PersonalitySelector({
         {templates.map((tpl) => (
           <button
             key={tpl.name}
+            type="button"
             onClick={() => void applyTemplate(tpl.name)}
             disabled={applying !== null}
             className={cn(
