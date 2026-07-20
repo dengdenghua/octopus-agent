@@ -26,6 +26,23 @@ class EvidenceConvergence:
     covered: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ExplicitReadScopeConstraint:
+    actions: tuple[str, ...]
+    missing: tuple[str, ...]
+    skipped: tuple[str, ...]
+
+    def observation_note(self) -> str:
+        skipped = ", ".join(self.skipped)
+        missing = ", ".join(self.missing)
+        return (
+            "[explicit-read-scope] The runtime skipped duplicate or unrequested "
+            f"file inspections: {skipped}. Continue only with the explicitly requested "
+            f"files that still lack successful evidence: {missing}. Do not guess "
+            "alternate paths or expand into related files, tests, or type files."
+        )
+
+
 _BOUNDED_ANSWER_RE = re.compile(
     r"(?:"
     r"(?:只|仅)(?:用|需|要)?\s*(?:一|1)\s*(?:句|句话|行)"
@@ -131,6 +148,87 @@ def _successful_fetched_urls(steps: list[ReActStep]) -> tuple[str, ...]:
             if isinstance(value, str) and value.strip():
                 urls.append(value.strip().rstrip(".,;，。；"))
     return tuple(dict.fromkeys(urls))
+
+
+def constrain_explicit_read_scope(
+    *,
+    goal: str,
+    steps: list[ReActStep],
+    actions: list[str],
+    read_only: bool,
+) -> ExplicitReadScopeConstraint | None:
+    """Filter duplicate and out-of-scope reads after explicit coverage begins.
+
+    The first evidence round remains unconstrained so an agent can orient in an
+    unfamiliar workspace. Once at least one user-named file has successful read
+    evidence, however, the remaining explicit paths are authoritative. This
+    prevents weak providers from re-reading covered files or expanding into
+    guessed neighbours while the requested set is still incomplete.
+    """
+
+    if not read_only or not actions:
+        return None
+    requested = _explicit_source_paths(goal)
+    if not requested:
+        return None
+
+    observed = _successful_read_paths(steps)
+    covered = [
+        path
+        for path in requested
+        if any(_path_evidence_matches(path, candidate) for candidate in observed)
+    ]
+    if not covered:
+        return None
+    missing = tuple(path for path in requested if path not in covered)
+    if not missing:
+        return None
+
+    path_inspection_tools = {
+        "bb_read",
+        "grep_text",
+        "read_file",
+        "read_file_range",
+        "read_files",
+        "read_text_file",
+    }
+    kept: list[str] = []
+    skipped: list[str] = []
+    for action in actions:
+        parsed = _parse_action(action)
+        if parsed is None:
+            kept.append(action)
+            continue
+        name, args = parsed
+        if name.lower() not in path_inspection_tools:
+            kept.append(action)
+            continue
+        targets = [
+            str(args[key]).strip()
+            for key in ("path", "file_path", "filepath", "file")
+            if isinstance(args.get(key), str) and str(args[key]).strip()
+        ]
+        values = args.get("paths") or args.get("files")
+        if isinstance(values, list):
+            targets.extend(str(value).strip() for value in values if isinstance(value, str))
+        if not targets:
+            kept.append(action)
+            continue
+        if all(
+            any(_path_evidence_matches(requested_path, target) for requested_path in missing)
+            for target in targets
+        ):
+            kept.append(action)
+            continue
+        skipped.extend(targets)
+
+    if not skipped:
+        return None
+    return ExplicitReadScopeConstraint(
+        actions=tuple(kept),
+        missing=missing,
+        skipped=tuple(dict.fromkeys(skipped)),
+    )
 
 
 def read_only_evidence_convergence(
@@ -317,8 +415,10 @@ def evidence_answer_conflicts_with_goal(*, goal: str, answer: str) -> bool:
 
 __all__ = [
     "EvidenceConvergence",
+    "ExplicitReadScopeConstraint",
     "build_direct_answer_directive",
     "build_evidence_digest",
+    "constrain_explicit_read_scope",
     "evidence_answer_conflicts_with_goal",
     "read_only_evidence_convergence",
 ]

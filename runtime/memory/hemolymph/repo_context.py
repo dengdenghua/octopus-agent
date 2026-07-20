@@ -482,7 +482,11 @@ def _codebase_context_disabled() -> bool:
     )
 
 
-def build_codebase_context(goal: str) -> tuple[str, list[dict[str, str]]]:
+def build_codebase_context(
+    goal: str,
+    *,
+    strict_explicit_scope: bool = False,
+) -> tuple[str, list[dict[str, str]]]:
     """Combined codebase grounding for a goal: relevant wiki pages (summaries)
     + the actual source chunks. Returns ``(prompt_section, sources)`` where
     ``sources`` lists exactly the docs/chunks folded into ``prompt_section``
@@ -500,14 +504,19 @@ def build_codebase_context(goal: str) -> tuple[str, list[dict[str, str]]]:
         return "", []
     parts: list[str] = []
     sources: list[dict[str, str]] = []
-    with contextlib.suppress(Exception):
-        wiki = retrieve_repo_context(goal, _sink=sources)
-        if wiki:
-            parts.append(wiki)
+    if not strict_explicit_scope:
+        with contextlib.suppress(Exception):
+            wiki = retrieve_repo_context(goal, _sink=sources)
+            if wiki:
+                parts.append(wiki)
     with contextlib.suppress(Exception):
         from runtime.memory.hemolymph.code_index import retrieve_code_context
 
-        code = retrieve_code_context(goal, _sink=sources)
+        code = retrieve_code_context(
+            goal,
+            _sink=sources,
+            strict_explicit_paths=strict_explicit_scope,
+        )
         if code:
             parts.append(code)
     return "\n\n".join(parts), sources

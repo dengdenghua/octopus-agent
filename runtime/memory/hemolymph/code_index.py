@@ -343,6 +343,43 @@ def _salient_identifiers(text: str, *, max_n: int = 12) -> list[str]:
     return [tok for tok, _n in counts.most_common(max_n)]
 
 
+def _render_code_chunks(
+    chunks: list[dict[str, Any]],
+    *,
+    budget_tokens: int,
+    sink: list[dict[str, str]] | None,
+    strict_explicit: bool = False,
+) -> str:
+    per_chunk_chars = max(300, (budget_tokens * 4) // max(1, len(chunks)))
+    parts = [
+        (
+            "EXPLICITLY REQUESTED SOURCE (bounded to the user's named files; "
+            "do not infer or retrieve neighbouring files):"
+            if strict_explicit
+            else "RELEVANT SOURCE (auto-retrieved by relevance to the goal; some entries are "
+            "dependencies the top hits reference — read the files for full context "
+            "before editing):"
+        )
+    ]
+    for item in chunks:
+        body = item["body"]
+        if len(body) > per_chunk_chars:
+            body = body[:per_chunk_chars].rstrip() + "\n…(truncated)"
+        path = str(item["path"])
+        loc = f"{path}:{item['line']}" if item["line"] is not None else path
+        tag = "  (dependency)" if item.get("hop") else ""
+        if sink is not None:
+            sink.append(
+                {
+                    "kind": "source",
+                    "title": path.rsplit("/", 1)[-1],
+                    "path": loc,
+                }
+            )
+        parts.append(f"\n### {loc}{tag}\n{body}")
+    return "\n".join(parts)
+
+
 def retrieve_code_context(
     query: str,
     *,
@@ -351,6 +388,7 @@ def retrieve_code_context(
     max_chunks: int = 3,
     ttl: float = _INDEX_TTL_S,
     _sink: list[dict[str, str]] | None = None,
+    strict_explicit_paths: bool = False,
 ) -> str | None:
     """Return the source chunks most relevant to ``query`` as a prompt section,
     or ``None`` when there is no source or no chunk overlaps the query.
@@ -393,6 +431,16 @@ def retrieve_code_context(
             ),
         )
         exact_chunks.append({"path": rel, "line": line, "body": body})
+
+    if strict_explicit_paths and explicit_paths:
+        if not exact_chunks:
+            return None
+        return _render_code_chunks(
+            exact_chunks,
+            budget_tokens=budget_tokens,
+            sink=_sink,
+            strict_explicit=True,
+        )
 
     idx = _get_index(base, ttl=ttl)
     if not idx["pages"] and not exact_chunks:
@@ -449,9 +497,7 @@ def retrieve_code_context(
         if path in chosen_paths:
             continue
         chosen_paths.add(path)
-        chosen.append(
-            {"path": path, "line": item.get("line"), "body": str(item.get("body") or "")}
-        )
+        chosen.append({"path": path, "line": item.get("line"), "body": str(item.get("body") or "")})
         if len(chosen) >= max_chunks:
             break
 
@@ -489,27 +535,8 @@ def retrieve_code_context(
                 if len(seen) >= max_chunks:
                     break
 
-    all_chunks = chosen + hop_chunks
-    per_chunk_chars = max(300, (budget_tokens * 4) // max(1, len(all_chunks)))
-    parts: list[str] = [
-        "RELEVANT SOURCE (auto-retrieved by relevance to the goal; some entries are "
-        "dependencies the top hits reference — read the files for full context "
-        "before editing):",
-    ]
-    for item in all_chunks:
-        body = item["body"]
-        if len(body) > per_chunk_chars:
-            body = body[:per_chunk_chars].rstrip() + "\n…(truncated)"
-        path = str(item["path"])
-        loc = f"{path}:{item['line']}" if item["line"] is not None else path
-        tag = "  (dependency)" if item.get("hop") else ""
-        if _sink is not None:
-            _sink.append(
-                {
-                    "kind": "source",
-                    "title": path.rsplit("/", 1)[-1],
-                    "path": loc,
-                }
-            )
-        parts.append(f"\n### {loc}{tag}\n{body}")
-    return "\n".join(parts)
+    return _render_code_chunks(
+        chosen + hop_chunks,
+        budget_tokens=budget_tokens,
+        sink=_sink,
+    )

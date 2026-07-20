@@ -1474,6 +1474,83 @@ def test_read_only_evidence_convergence_suppresses_scope_expansion(tmp_path) -> 
     assert any("already complete" in step.observation for step in result.steps)
 
 
+def test_partial_explicit_read_scope_skips_duplicate_and_related_reads(tmp_path) -> None:
+    for name in ("a.py", "b.ts", "c.tsx"):
+        (tmp_path / name).write_text(f"source for {name}\n", encoding="utf-8")
+    (tmp_path / "related.test.ts").write_text("should stay unread\n", encoding="utf-8")
+    router = _CapturingRouter(
+        [
+            (
+                "Thought: read the first requested pair\n"
+                'Action: read_file({"path":"a.py"})\n'
+                'Action: read_file({"path":"b.ts"})'
+            ),
+            (
+                "Thought: accidentally repeat and broaden while finishing\n"
+                'Action: grep_text({"pattern":"source", "path":"a.py"})\n'
+                'Action: read_file({"path":"c.tsx"})\n'
+                'Action: read_file({"path":"related.test.ts"})'
+            ),
+            "Final Answer: 三个指定文件已经完成对比。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("只读比较 a.py、b.ts 与 c.tsx，不要读取其他文件，也不要修改文件。")
+    intent.user_context.update({"mode": "code", "workspace_path": str(tmp_path)})
+
+    events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=4)
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == "三个指定文件已经完成对比。"
+    started = [
+        event.get("input_preview", {}).get("path")
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "read_file"
+    ]
+    assert started == ["a.py", "b.ts", "c.tsx"]
+    assert not any(
+        event.get("type") == "tool_start" and event.get("tool_name") == "grep_text"
+        for event in events
+    )
+    assert router.requests[2].tools == []
+    assert any(
+        "[explicit-read-scope]" in step.observation
+        and "related.test.ts" in step.observation
+        for step in result.steps
+    )
+
+
+def test_explicit_point_count_rewrites_underfilled_grounded_answer(tmp_path) -> None:
+    (tmp_path / "a.py").write_text("VALUE = 1\n", encoding="utf-8")
+    router = _CapturingRouter(
+        [
+            'Thought: inspect evidence\nAction: read_file({"path":"a.py"})',
+            "Final Answer: 结论清晰，模块职责没有重叠。",
+            (
+                "Final Answer: 1. 协议职责清晰。\n"
+                "2. 状态更新可预测。\n"
+                "3. 流式健康可观测。"
+            ),
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("只读分析 a.py，最后给出三点结论，不要修改文件。")
+    intent.user_context.update({"mode": "code", "workspace_path": str(tmp_path)})
+
+    _events, result = _drain(
+        stream_react_loop(stack, intent, agent=None, max_iterations=4)
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer.startswith("1. 协议职责清晰")
+    assert router.calls == 3
+    assert any(
+        "answer-item-count guard" in step.observation for step in result.steps
+    )
+
+
 def test_bounded_multi_file_turn_narrates_coverage_before_final_answer(tmp_path) -> None:
     (tmp_path / "backend.py").write_text("phase_id = 'phaseId'\n", encoding="utf-8")
     (tmp_path / "frontend.ts").write_text(

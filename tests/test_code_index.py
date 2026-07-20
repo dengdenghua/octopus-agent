@@ -134,8 +134,7 @@ def test_explicit_cross_stack_paths_are_always_grounded(tmp_path: Path, monkeypa
     sink: list[dict[str, str]] = []
 
     out = retrieve_code_context(
-        "只读比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts，"
-        "用一句话回答。",
+        "只读比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts，用一句话回答。",
         root=tmp_path,
         max_chunks=2,
         _sink=sink,
@@ -148,6 +147,38 @@ def test_explicit_cross_stack_paths_are_always_grounded(tmp_path: Path, monkeypa
     }
     assert "phase_id" in out
     assert "phaseId" in out
+
+
+def test_strict_explicit_grounding_excludes_ranked_and_dependency_files(
+    tmp_path: Path,
+) -> None:
+    requested = {
+        f"src/file-{index}.ts": f"export const requested_{index} = SharedType;\n"
+        for index in range(4)
+    }
+    _make_src(
+        tmp_path,
+        {
+            **requested,
+            "src/shared.ts": "export type SharedType = string;\n",
+            "src/file-0.test.ts": "test('requested', () => requested_0);\n",
+        },
+    )
+    sink: list[dict[str, str]] = []
+    goal = "只读比较 " + "、".join(requested) + "，不要读取其他文件。"
+
+    out = retrieve_code_context(
+        goal,
+        root=tmp_path,
+        strict_explicit_paths=True,
+        _sink=sink,
+    )
+
+    assert out is not None
+    assert "EXPLICITLY REQUESTED SOURCE" in out
+    assert {entry["path"].split(":", 1)[0] for entry in sink} == set(requested)
+    assert "shared.ts" not in out
+    assert "file-0.test.ts" not in out
 
 
 # ── semantic fusion (reuses the persisted KB index, gated to the workspace) ──

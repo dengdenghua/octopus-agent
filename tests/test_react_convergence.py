@@ -1,6 +1,7 @@
 from runtime.core.cerebrum.react_convergence import (
     build_direct_answer_directive,
     build_evidence_digest,
+    constrain_explicit_read_scope,
     evidence_answer_conflicts_with_goal,
     read_only_evidence_convergence,
 )
@@ -39,6 +40,42 @@ def test_does_not_converge_while_an_explicit_file_is_missing() -> None:
     )
 
     assert decision is None
+
+
+def test_incomplete_explicit_scope_filters_duplicate_and_unrequested_reads() -> None:
+    goal = "只读比较 src/a.py、src/b.ts 与 src/c.tsx，不要修改文件。"
+    constraint = constrain_explicit_read_scope(
+        goal=goal,
+        read_only=True,
+        steps=[_step('read_file({"path":"src/a.py"})')],
+        actions=[
+            'read_file({"path":"src/a.py"})',
+            'grep_text({"pattern":"Thing", "path":"src/a.py"})',
+            'read_file({"path":"src/b.ts"})',
+            'read_file({"path":"src/related.test.ts"})',
+            'echo({"text":"keep non-read actions untouched"})',
+        ],
+    )
+
+    assert constraint is not None
+    assert constraint.actions == (
+        'read_file({"path":"src/b.ts"})',
+        'echo({"text":"keep non-read actions untouched"})',
+    )
+    assert constraint.missing == ("src/b.ts", "src/c.tsx")
+    assert constraint.skipped == ("src/a.py", "src/related.test.ts")
+    assert "src/b.ts, src/c.tsx" in constraint.observation_note()
+
+
+def test_explicit_scope_waits_for_first_successful_requested_read() -> None:
+    constraint = constrain_explicit_read_scope(
+        goal="只读比较 src/a.py 与 src/b.ts。",
+        read_only=True,
+        steps=[],
+        actions=['read_file({"path":"README.md"})'],
+    )
+
+    assert constraint is None
 
 
 def test_failed_read_is_not_evidence() -> None:

@@ -45,6 +45,7 @@ from runtime.core.cerebrum.react_convergence import (
     EvidenceConvergence,
     build_direct_answer_directive,
     build_evidence_digest,
+    constrain_explicit_read_scope,
     evidence_answer_conflicts_with_goal,
     read_only_evidence_convergence,
 )
@@ -71,6 +72,7 @@ from runtime.core.cerebrum.react_guards import (
     _code_mode_completion_guard,
     _completion_phrase_without_todo_guard,
     _concurrency_semantic_followup_guard,
+    _explicit_source_paths,
     _failed_verification_followup_guard,
     _goal_requests_code_mutation,
     _incomplete_final_answer_guard,
@@ -2063,6 +2065,12 @@ def stream_react_loop(
 
             _cb, _grounding_sources = build_codebase_context(
                 str(getattr(intent, "normalized_goal", "") or ""),
+                strict_explicit_scope=bool(
+                    _read_only_turn
+                    and _explicit_source_paths(
+                        str(getattr(intent, "normalized_goal", "") or "")
+                    )
+                ),
             )
             if _cb:
                 volatile_parts.append(_cb)
@@ -4231,6 +4239,7 @@ def stream_react_loop(
             tools_active and step.action and step.action.lower() not in {"none", "n/a", ""}
         )
         _duplicate_action_count = 0
+        _explicit_read_scope_note = ""
         if tool_action_requested and len(step.actions) > 1:
             step.actions, _duplicate_action_count = _deduplicate_actions(step.actions)
             step.action = "; ".join(step.actions)
@@ -4247,6 +4256,21 @@ def stream_react_loop(
             )
             step.actions = _candidate_actions
             step.action = "; ".join(_candidate_actions)
+            _scope_constraint = constrain_explicit_read_scope(
+                goal=intent.normalized_goal,
+                steps=steps,
+                actions=_candidate_actions,
+                read_only=_read_only_turn,
+            )
+            if _scope_constraint is not None:
+                step.actions = list(_scope_constraint.actions)
+                step.action = "; ".join(step.actions)
+                _explicit_read_scope_note = _scope_constraint.observation_note()
+                tool_action_requested = bool(step.actions)
+                if not tool_action_requested:
+                    observation = _explicit_read_scope_note
+                    step.observation = observation
+                    maybe_final = None
         _current_action_fingerprint = ""
         _repeated_failure_skipped = False
         if tool_action_requested and len(step.actions or [step.action]) == 1:
@@ -4802,6 +4826,12 @@ def stream_react_loop(
                 f"{_duplicate_action_count} duplicate call(s) with identical tool arguments "
                 "in one model round. The runtime executed each unique call once."
             )
+        if (
+            _explicit_read_scope_note
+            and step.observation
+            and _explicit_read_scope_note not in step.observation
+        ):
+            step.observation += "\n\n" + _explicit_read_scope_note
         if tool_action_requested and _current_action_fingerprint:
             if tool_ok:
                 _last_failed_action_fingerprint = ""

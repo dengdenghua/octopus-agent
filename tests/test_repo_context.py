@@ -444,6 +444,38 @@ def test_build_codebase_context_returns_text_and_sources(monkeypatch) -> None:
     assert collect_codebase_sources("fix the planner") == sources
 
 
+def test_strict_explicit_codebase_context_skips_wiki_and_forwards_scope(monkeypatch) -> None:
+    import runtime.memory.hemolymph.code_index as ci
+    import runtime.memory.hemolymph.repo_context as rc
+
+    wiki_calls = {"count": 0}
+    code_flags: list[bool] = []
+
+    def _fake_wiki(_goal: str, **_kwargs: Any) -> str:
+        wiki_calls["count"] += 1
+        return "WIKI-PART"
+
+    def _fake_code(_goal: str, **kwargs: Any) -> str:
+        code_flags.append(bool(kwargs.get("strict_explicit_paths")))
+        sink = kwargs.get("_sink")
+        if sink is not None:
+            sink.append({"kind": "source", "title": "a.py", "path": "a.py:1"})
+        return "STRICT-CODE-PART"
+
+    monkeypatch.setattr(rc, "retrieve_repo_context", _fake_wiki)
+    monkeypatch.setattr(ci, "retrieve_code_context", _fake_code)
+
+    text, sources = build_codebase_context(
+        "只读读取 a.py，不要读取其他文件。",
+        strict_explicit_scope=True,
+    )
+
+    assert text == "STRICT-CODE-PART"
+    assert sources == [{"kind": "source", "title": "a.py", "path": "a.py:1"}]
+    assert wiki_calls["count"] == 0
+    assert code_flags == [True]
+
+
 def test_collect_codebase_sources_empty_when_off(monkeypatch) -> None:
     monkeypatch.setenv("OCTOPUS_CODEBASE_CONTEXT", "0")
     assert collect_codebase_sources("anything") == []

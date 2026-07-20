@@ -558,6 +558,7 @@ def _successful_read_paths(steps: list[ReActStep]) -> set[str]:
     paths: set[str] = set()
     read_tools = {
         "read_file",
+        "read_file_range",
         "read_files",
         "read_text_file",
         "bb_read",
@@ -3533,6 +3534,79 @@ def _invoke_incomplete_final(ctx: GuardContext) -> str | None:
     return _incomplete_final_answer_guard(ctx.final_answer)
 
 
+_CHINESE_COUNT_WORDS = {
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+}
+
+
+def _requested_answer_item_count(goal: str) -> int | None:
+    text = str(goal or "")
+    chinese = re.search(
+        r"(?:最后|最终|请|用|给出|总结|归纳|回答)?[^。；;\n]{0,16}"
+        r"([二两三四五六七八九十])\s*(?:点|条|项)"
+        r"(?:结论|建议|要点|发现|回答|说明)?",
+        text,
+    )
+    if chinese:
+        return _CHINESE_COUNT_WORDS.get(chinese.group(1))
+    arabic_cn = re.search(
+        r"(?:最后|最终|请|用|给出|总结|归纳|回答)?[^。；;\n]{0,16}"
+        r"([2-9]|10)\s*(?:点|条|项)"
+        r"(?:结论|建议|要点|发现|回答|说明)?",
+        text,
+    )
+    if arabic_cn:
+        return int(arabic_cn.group(1))
+    english = re.search(
+        r"\b(?:give|provide|return|summari[sz]e(?:\s+in)?|with|in)?\s*"
+        r"([2-9]|10)\s+(?:points?|findings?|conclusions?|recommendations?|items?)\b",
+        text,
+        re.IGNORECASE,
+    )
+    return int(english.group(1)) if english else None
+
+
+def _answer_item_count(answer: str) -> int:
+    text = str(answer or "")
+    numbered = re.findall(r"(?m)^\s*(?:\d+|[一二三四五六七八九十])[.)、．]\s+", text)
+    bullets = re.findall(r"(?m)^\s*[-*+]\s+\S", text)
+    ordinals = re.findall(
+        r"(?:^|\n)\s*(?:第[一二三四五六七八九十\d]+[点条项]|"
+        r"(?:第一|第二|第三|第四|第五|第六|第七|第八|第九|第十)[：:,，、])",
+        text,
+    )
+    return max(len(numbered), len(bullets), len(ordinals))
+
+
+def _answer_item_count_guard(goal: str, final_answer: str) -> str | None:
+    requested = _requested_answer_item_count(goal)
+    if requested is None:
+        return None
+    delivered = _answer_item_count(final_answer)
+    if delivered >= requested:
+        return None
+    return (
+        "The final answer does not satisfy the user's explicit output shape: "
+        f"they requested {requested} distinct points, but only {delivered} "
+        "recognizable list item(s) were delivered. Rewrite the answer as a "
+        f"numbered list with exactly {requested} substantive items grounded in "
+        "the available evidence; do not call more tools merely to fix formatting."
+    )
+
+
+def _invoke_answer_item_count(ctx: GuardContext) -> str | None:
+    return _answer_item_count_guard(ctx.goal, ctx.final_answer)
+
+
 def _invoke_false_no_tool(ctx: GuardContext) -> str | None:
     if not ctx.is_code_mode:
         return None
@@ -3693,6 +3767,7 @@ GUARD_REGISTRY: list[GuardSpec] = [
     _spec_security("unsafe-deser guard", "security", _unsafe_deser_guard),
     # ── Tool-availability / inspection-evidence ──
     GuardSpec("final-answer completeness guard", "protocol", _invoke_incomplete_final),
+    GuardSpec("answer-item-count guard", "protocol", _invoke_answer_item_count),
     GuardSpec("inspection-evidence guard", "protocol", _invoke_missing_inspection),
     GuardSpec(
         "inspection-answer-fragment guard",
