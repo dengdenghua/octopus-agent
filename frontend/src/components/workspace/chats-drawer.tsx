@@ -4,6 +4,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   MessageSquareIcon,
   MessageSquarePlusIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
   SearchIcon,
   SettingsIcon,
   Trash2Icon,
@@ -16,13 +18,34 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { emitAgentChanged, eventBus } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
-import { useDeleteThread, useThreads } from "@/core/threads/hooks";
+import {
+  useDeleteThread,
+  useRenameThread,
+  useThreads,
+} from "@/core/threads/hooks";
 import type { AgentThread } from "@/core/threads/types";
 import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
 import { uuid } from "@/core/utils/uuid";
+import { activeWorkspaceThreadIdFromPathname } from "@/core/threads/sidebar";
+import { isIMEComposing } from "@/lib/ime";
 import { isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 
@@ -107,7 +130,24 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
   const deleteThread = useDeleteThread();
+  const { mutate: renameThread } = useRenameThread();
   const [query, setQuery] = useState("");
+  const { confirm, confirmDialog } = useConfirmDialog();
+  const [threadToRename, setThreadToRename] = useState<AgentThread | null>(
+    null,
+  );
+  const [renameValue, setRenameValue] = useState("");
+
+  const handleRenameSubmit = useCallback(() => {
+    if (threadToRename && renameValue.trim()) {
+      renameThread({
+        threadId: threadToRename.thread_id,
+        title: renameValue.trim(),
+      });
+      setThreadToRename(null);
+      setRenameValue("");
+    }
+  }, [renameThread, threadToRename, renameValue]);
 
   // The drawer is the global history surface, so it should not follow
   // the footer agent filter.
@@ -130,9 +170,10 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
 
   const startNewChat = useCallback(() => {
     onOpenChange(false);
-    const activeThread = threads.find((thread) =>
-      pathname.includes(thread.thread_id),
-    );
+    const activeId = activeWorkspaceThreadIdFromPathname(pathname);
+    const activeThread = activeId
+      ? threads.find((thread) => thread.thread_id === activeId)
+      : undefined;
     const routeWorkspacePath =
       new URLSearchParams(search).get("workspace_path") ?? "";
     const threadPath = threadWorkspacePath(activeThread);
@@ -160,20 +201,23 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
   }, [onOpenChange]);
 
   const handleDelete = useCallback(
-    (thread: AgentThread) => {
-      if (!window.confirm(t.sidebar.confirmDeleteThread(deriveTitle(thread)))) {
-        return;
-      }
+    async (thread: AgentThread) => {
+      const ok = await confirm({
+        title: t.sidebar.deleteThreadTooltip,
+        description: t.sidebar.confirmDeleteThread(deriveTitle(thread)),
+      });
+      if (!ok) return;
       deleteThread.mutate({ threadId: thread.thread_id });
       if (pathname === threadHref(thread)) {
         navigate(`/workspace/realtime/${uuid()}`, { replace: true });
       }
     },
-    [deleteThread, navigate, pathname, t],
+    [confirm, deleteThread, navigate, pathname, t],
   );
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="left"
         className={cn(
@@ -235,7 +279,9 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
             <ul className="flex flex-col gap-px">
               {filteredThreads.map((thread) => {
                 const href = threadHref(thread);
-                const active = pathname.includes(thread.thread_id);
+                const active =
+                  activeWorkspaceThreadIdFromPathname(pathname) ===
+                  thread.thread_id;
                 return (
                   <li key={thread.thread_id} className="group/thread relative">
                     <Link
@@ -270,24 +316,45 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                         {formatCompactRelativeTimestamp(thread.updated_at)}
                       </span>
                     </Link>
-                    <button
-                      type="button"
-                      title={t.sidebar.deleteThreadTooltip}
-                      disabled={deleteThread.isPending}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleDelete(thread);
-                      }}
-                      className={cn(
-                        "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-md",
-                        "text-muted-foreground/60 opacity-0 transition-opacity",
-                        "hover:bg-destructive/10 hover:text-destructive",
-                        "group-hover/thread:opacity-100",
-                      )}
-                    >
-                      <Trash2Icon className="size-3" />
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          title={t.common.more}
+                          aria-label={t.common.more}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          className={cn(
+                            "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-md",
+                            "text-muted-foreground/60 opacity-0 transition-opacity",
+                            "hover:bg-muted/60 hover:text-foreground",
+                            "group-hover/thread:opacity-100 data-[state=open]:opacity-100",
+                          )}
+                        >
+                          <MoreHorizontalIcon className="size-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" side="right">
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setThreadToRename(thread);
+                            setRenameValue(deriveTitle(thread));
+                          }}
+                        >
+                          <PencilIcon className="text-muted-foreground" />
+                          <span>{t.common.rename}</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={deleteThread.isPending}
+                          onSelect={() => void handleDelete(thread)}
+                        >
+                          <Trash2Icon className="text-muted-foreground" />
+                          <span>{t.sidebar.deleteThreadTooltip}</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </li>
                 );
               })}
@@ -306,6 +373,61 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
           </button>
         </div>
       </SheetContent>
-    </Sheet>
+      </Sheet>
+      <Dialog
+        open={threadToRename !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setThreadToRename(null);
+            setRenameValue("");
+          }
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[360px]"
+        >
+          <DialogHeader className="gap-1 text-left">
+            <DialogTitle className="text-[15px]">
+              {t.common.rename}
+            </DialogTitle>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !isIMEComposing(e)) {
+                e.preventDefault();
+                handleRenameSubmit();
+              }
+            }}
+            autoFocus
+            className="h-8 text-[13px]"
+          />
+          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setThreadToRename(null);
+                setRenameValue("");
+              }}
+            >
+              {t.common.cancel}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!renameValue.trim()}
+              onClick={handleRenameSubmit}
+            >
+              {t.common.save}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {confirmDialog}
+    </>
   );
 }

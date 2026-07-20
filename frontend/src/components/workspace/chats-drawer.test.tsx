@@ -9,6 +9,7 @@ import { ChatsDrawer } from "./chats-drawer";
 vi.mock("@/core/threads/hooks", () => ({
   useThreads: () => ({ data: [] }),
   useDeleteThread: () => ({ isPending: false, mutate: vi.fn() }),
+  useRenameThread: () => ({ isPending: false, mutate: vi.fn() }),
 }));
 
 describe("ChatsDrawer", () => {

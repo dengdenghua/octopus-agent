@@ -15,8 +15,10 @@ import {
   HardDriveIcon,
   ListTodoIcon,
   MessageSquarePlusIcon,
+  MoreHorizontalIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
+  PencilIcon,
   PlusIcon,
   Trash2Icon,
   type LucideIcon,
@@ -44,11 +46,20 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { isIMEComposing } from "@/lib/ime";
 
 import {
   Sidebar,
@@ -71,7 +82,30 @@ import { getAPIClient } from "@/core/api";
 import { getBackendBaseURL } from "@/core/config";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
-import { useDeleteThread, useThreads } from "@/core/threads/hooks";
+import {
+  useDeleteThread,
+  useRenameThread,
+  useThreads,
+} from "@/core/threads/hooks";
+import {
+  buildConversationThreadSummaries,
+  buildProjectThreadSummaries,
+  buildThreadRunStatusByHref,
+  cleanDisplayText,
+  isGeneratedTeamProjectName,
+  isProjectThreadMode,
+  mergeThreadRunStatus,
+  normalizeThreadRunStatus,
+  projectNameForThread,
+  summarizeThreadForSidebar,
+  syncThreadAgentSelection,
+  threadHref,
+  activeTeamTaskRoomId,
+  activeWorkspaceThreadIdFromPathname,
+  withThreadSidebarMode,
+  type ThreadRunStatus,
+  type ThreadSummary,
+} from "@/core/threads/sidebar";
 import type { AgentThread } from "@/core/threads/types";
 import {
   agentRunStatusLightClass,
@@ -154,18 +188,6 @@ const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
   },
 ];
 
-type ThreadSummary = {
-  id: string;
-  title: string;
-  updatedAt: string;
-  mode: string;
-  href: string;
-  workspacePath?: string;
-  /** Agent ids associated with this thread · drives the WeChat-style
-   *  avatar (single big avatar OR 2×2 / 3×3 grid for team threads). */
-  agents: string[];
-};
-
 type SidebarFileExplorerTarget = {
   project: string;
   title: string;
@@ -173,379 +195,6 @@ type SidebarFileExplorerTarget = {
   workDir: string | null;
   href?: string;
 };
-
-type ThreadRunStatus = Extract<
-  AgentRunState,
-  "running" | "waiting" | "pending" | "error"
->;
-
-function syncThreadAgentSelection(agents: string[]) {
-  if (agents.length !== 1) return;
-  const agent = agents[0]?.trim();
-  if (!agent) return;
-  emitAgentChanged(agent, "thread");
-}
-
-/** Pull a list of agent ids out of thread metadata · accepts the
- *  several places the backend stashes them (single agent on solo
- *  threads, agent_roster on team threads, fallback to bare ``agent``
- *  field). */
-function isProjectThreadMode(mode: string): boolean {
-  return mode === "code" || mode === "team";
-}
-
-function isConversationThreadMode(mode: string): boolean {
-  return (
-    mode === "chat" ||
-    mode === "chats" ||
-    mode === "react" ||
-    mode === "deep" ||
-    // Legacy persisted swarm threads stay visible in the conversation list,
-    // but the composer no longer exposes swarm as a selectable mode.
-    mode === "swarm" ||
-    mode === "agent"
-  );
-}
-
-function isGeneratedTeamProjectName(project: string): boolean {
-  const value = project.trim();
-  return (
-    value === "Team" ||
-    value.startsWith("Team · ") ||
-    value === "团队" ||
-    value.startsWith("团队 · ")
-  );
-}
-
-function isBareGeneratedTeamLabel(value: string): boolean {
-  const text = value.trim();
-  return text === "Team" || text === "团队";
-}
-
-function threadMetadataMode(thread: {
-  metadata?: Record<string, unknown>;
-  values?: Record<string, unknown>;
-}): string {
-  const mode = thread.metadata?.["mode"] ?? thread.values?.["mode"];
-  return typeof mode === "string" ? mode : "";
-}
-
-function isGeneratedTeamThreadTitle(
-  thread: {
-    metadata?: Record<string, unknown>;
-    values?: Record<string, unknown>;
-  },
-  title: string,
-): boolean {
-  if (!isGeneratedTeamProjectName(title)) return false;
-  return (
-    isBareGeneratedTeamLabel(title) ||
-    threadMetadataMode(thread) === "team" ||
-    isGeneratedTeamProjectName(cleanDisplayText(thread.metadata?.["project"]))
-  );
-}
-
-function withThreadSidebarMode(
-  thread: AgentThread,
-  mode: "code" | "team",
-): AgentThread {
-  if (thread.metadata?.["mode"] === mode) return thread;
-  return {
-    ...thread,
-    metadata: {
-      ...(thread.metadata ?? {}),
-      mode,
-    },
-  };
-}
-
-function buildThreadRunStatusByHref({
-  activeTeamTasks,
-  backgroundTasks,
-  liveThreadRunStatusByHref,
-  threadHrefById,
-}: {
-  activeTeamTasks: TeamTask[];
-  backgroundTasks?: TasksListResponse;
-  liveThreadRunStatusByHref?: Map<string, ThreadRunStatus>;
-  threadHrefById: Map<string, string>;
-}): Map<string, ThreadRunStatus> {
-  const byHref = new Map<string, ThreadRunStatus>();
-  const activeStatuses = new Set(["running", "failed", "pending"]);
-  for (const task of activeTeamTasks) {
-    if (!activeStatuses.has(task.status)) continue;
-    const status = teamTaskRunStatus(task.status);
-    if (!status) continue;
-    const href = `/workspace/realtime/${encodeURIComponent(task.room_id)}`;
-    byHref.set(href, mergeThreadRunStatus(byHref.get(href), status));
-  }
-
-  for (const task of backgroundTasks?.active ?? []) {
-    mergeTaskStatusForThread(byHref, threadHrefById, task.thread_id, "running");
-  }
-  for (const task of backgroundTasks?.pending ?? []) {
-    mergeTaskStatusForThread(byHref, threadHrefById, task.thread_id, "waiting");
-  }
-  for (const task of backgroundTasks?.paused ?? []) {
-    mergeTaskStatusForThread(byHref, threadHrefById, task.thread_id, "waiting");
-  }
-
-  for (const [href, status] of liveThreadRunStatusByHref ?? []) {
-    byHref.set(href, mergeThreadRunStatus(byHref.get(href), status));
-  }
-
-  return byHref;
-}
-
-function teamTaskRunStatus(status: TeamTask["status"]): ThreadRunStatus | null {
-  if (status === "running") return "running";
-  if (status === "pending") return "pending";
-  if (status === "failed") return "error";
-  return null;
-}
-
-function normalizeThreadRunStatus(
-  status: "running" | "waiting" | "pending" | "error" | "done" | null,
-): ThreadRunStatus | null {
-  if (
-    status === "running" ||
-    status === "waiting" ||
-    status === "pending" ||
-    status === "error"
-  ) {
-    return status;
-  }
-  return null;
-}
-
-function mergeTaskStatusForThread(
-  byHref: Map<string, ThreadRunStatus>,
-  threadHrefById: Map<string, string>,
-  threadId: string,
-  status: ThreadRunStatus,
-) {
-  const href = threadHrefById.get(threadId);
-  if (!href) return;
-  byHref.set(href, mergeThreadRunStatus(byHref.get(href), status));
-}
-
-function mergeThreadRunStatus(
-  current: ThreadRunStatus | undefined,
-  next: ThreadRunStatus,
-): ThreadRunStatus {
-  const priority: Record<ThreadRunStatus, number> = {
-    error: 4,
-    waiting: 3,
-    running: 2,
-    pending: 1,
-  };
-  if (!current) return next;
-  return priority[next] > priority[current] ? next : current;
-}
-
-function projectNameForThread(
-  thread: Pick<ThreadSummary, "mode">,
-  meta: Record<string, unknown>,
-  personalSpaceLabel = "Personal space",
-): string {
-  const explicitProject = cleanDisplayText(meta["project"]);
-  const workspacePath =
-    typeof meta["workspace_path"] === "string"
-      ? meta["workspace_path"].trim()
-      : "";
-  const workspaceProject = workspacePath ? basename(workspacePath) : "";
-
-  if (thread.mode === "team") {
-    if (workspaceProject) return workspaceProject;
-    if (isGeneratedTeamProjectName(explicitProject)) return personalSpaceLabel;
-    return explicitProject;
-  }
-  if (explicitProject) return explicitProject;
-  if (workspaceProject) return workspaceProject;
-  return "";
-}
-
-function summarizeThreadForSidebar(thread: AgentThread): ThreadSummary {
-  return {
-    id: thread.thread_id,
-    title: deriveThreadTitle(thread),
-    updatedAt: thread.updated_at,
-    mode:
-      typeof thread.metadata?.["mode"] === "string"
-        ? (thread.metadata["mode"] as string)
-        : "chat",
-    href: threadHref(thread),
-    workspacePath:
-      typeof thread.metadata?.["workspace_path"] === "string"
-        ? (thread.metadata["workspace_path"] as string)
-        : undefined,
-    agents: deriveThreadAgents(thread),
-  };
-}
-
-function buildConversationThreadSummaries(
-  threads: AgentThread[],
-): ThreadSummary[] {
-  return threads
-    .map(summarizeThreadForSidebar)
-    .filter((thread) => isConversationThreadMode(thread.mode));
-}
-
-function buildProjectThreadSummaries(threads: AgentThread[]): ThreadSummary[] {
-  return threads
-    .map(summarizeThreadForSidebar)
-    .filter((thread) => isProjectThreadMode(thread.mode));
-}
-
-function firstString(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-}
-
-function deriveThreadAgents(thread: {
-  metadata?: Record<string, unknown>;
-  values?: Record<string, unknown>;
-}): string[] {
-  const meta = thread.metadata ?? {};
-  const values = thread.values ?? {};
-  // 1. team threads · ``agent_roster`` is an array of {agent_id, ...}
-  const roster = meta["agent_roster"] ?? values["agent_roster"];
-  if (Array.isArray(roster)) {
-    const ids = roster
-      .map((r) =>
-        r &&
-        typeof r === "object" &&
-        typeof (r as { agent_id?: unknown }).agent_id === "string"
-          ? (r as { agent_id: string }).agent_id
-          : null,
-      )
-      .filter((x): x is string => !!x);
-    if (ids.length > 0) return ids;
-  }
-  // 2. team_members (legacy field name · same shape)
-  const members = meta["team_members"] ?? values["team_members"];
-  if (Array.isArray(members)) {
-    const ids = members
-      .map((r) =>
-        typeof r === "string"
-          ? r
-          : r &&
-              typeof r === "object" &&
-              typeof (r as { agent_id?: unknown }).agent_id === "string"
-            ? (r as { agent_id: string }).agent_id
-            : null,
-      )
-      .filter((x): x is string => !!x);
-    if (ids.length > 0) return ids;
-  }
-  // 3. solo agent · the ``agent`` field is set on every chat/code
-  //    thread by the compat router (cf. metadata.agent='coder')
-  const single = firstString(
-    meta["agent"],
-    meta["agent_name"],
-    meta["agent_id"],
-    meta["lead_agent_name"],
-    meta["current_agent"],
-    values["current_speaker"],
-    values["agent_name"],
-  );
-  if (single) return [single];
-  return [];
-}
-
-function cleanDisplayText(value: unknown): string {
-  if (typeof value !== "string") return "";
-  const s = value
-    .trim()
-    .replace(/[\x00-\x1F\x7F-\x9F]/g, "")
-    .replace(/\s+/g, " ");
-  const questionMarks = (s.match(/\?/g) ?? []).length;
-  const replacementChars = (s.match(/\uFFFD/g) ?? []).length;
-  if (
-    /^\?{3,}$/.test(s) ||
-    (questionMarks >= 5 && questionMarks / s.length > 0.25) ||
-    (replacementChars >= 3 && replacementChars / s.length > 0.2)
-  ) {
-    return "";
-  }
-  return s;
-}
-
-function threadTitleFromContent(content: unknown): string {
-  if (typeof content === "string") return cleanDisplayText(content);
-  if (!Array.isArray(content)) return "";
-  return cleanDisplayText(
-    content
-      .map((part) => {
-        if (typeof part === "string") return part;
-        if (
-          part &&
-          typeof part === "object" &&
-          (part as Record<string, unknown>).type === "text" &&
-          typeof (part as Record<string, unknown>).text === "string"
-        ) {
-          return (part as { text: string }).text;
-        }
-        return "";
-      })
-      .filter(Boolean)
-      .join(" "),
-  );
-}
-
-function truncateThreadTitle(title: string): string {
-  return title.length > 60 ? `${title.slice(0, 58)}...` : title;
-}
-
-/** Best-effort thread title from `values`: first user message content,
- *  truncated. Falls back to metadata.title or a short thread-id. */
-function deriveThreadTitle(thread: {
-  thread_id: string;
-  metadata?: Record<string, unknown>;
-  values?: Record<string, unknown>;
-}): string {
-  const metaTitle = cleanDisplayText(thread.metadata?.["title"]);
-  if (metaTitle && !isGeneratedTeamThreadTitle(thread, metaTitle)) {
-    return truncateThreadTitle(metaTitle);
-  }
-
-  const messages = thread.values?.["messages"];
-  if (Array.isArray(messages)) {
-    for (const m of messages) {
-      if (
-        m &&
-        typeof m === "object" &&
-        (m as Record<string, unknown>).type === "human"
-      ) {
-        const content = (m as Record<string, unknown>).content;
-        const title = threadTitleFromContent(content);
-        if (title) return truncateThreadTitle(title);
-      }
-    }
-  }
-  const valuesTitle = cleanDisplayText(thread.values?.["title"]);
-  if (
-    valuesTitle &&
-    valuesTitle !== "New chat" &&
-    valuesTitle !== "New task" &&
-    !isGeneratedTeamThreadTitle(thread, valuesTitle)
-  ) {
-    return truncateThreadTitle(valuesTitle);
-  }
-  if (threadMetadataMode(thread) === "team") {
-    return `task/${thread.thread_id.slice(0, 6)}`;
-  }
-  return `thread/${thread.thread_id.slice(0, 6)}`;
-}
-
-function threadHref(thread: {
-  thread_id: string;
-  metadata?: Record<string, unknown>;
-}) {
-  return `/workspace/realtime/${encodeURIComponent(thread.thread_id)}`;
-}
 
 const PROJECTS_KEY = "octopus.projects";
 const RECENT_WORKDIRS_KEY = "octopus:recentWorkdirs";
@@ -619,39 +268,6 @@ function readProjectGroupingEnabled(): boolean {
     swallow(e);
     return true;
   }
-}
-
-function activeWorkspaceThreadIdFromPathname(pathname: string): string | null {
-  const match = /^\/workspace\/(?:realtime|team)\/([^/?#]+)/.exec(pathname);
-  const value = match?.[1];
-  if (!value || value === "new") return null;
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function activeTeamTaskRoomId(
-  pathname: string,
-  thread: AgentThread | null,
-): string | null {
-  const routeId = activeWorkspaceThreadIdFromPathname(pathname);
-  if (!routeId) return null;
-  if (/^\/workspace\/team\//.test(pathname)) return routeId;
-
-  const metadata: Record<string, unknown> = thread?.metadata ?? {};
-  const values: Record<string, unknown> = thread?.values ?? {};
-  if (firstString(metadata["mode"], values["mode"]) !== "team") {
-    return null;
-  }
-  return firstString(
-    metadata["team_room_id"],
-    metadata["room_id"],
-    values["team_room_id"],
-    values["room_id"],
-    thread?.thread_id,
-  );
 }
 
 export function syncedSidebarPathname(
@@ -2082,63 +1698,6 @@ function ProjectGroupIcon({ project }: { project: string }) {
   return <FolderIcon className="size-[18px] shrink-0 opacity-70" />;
 }
 
-function ConfirmDeleteThreadDialog({
-  title,
-  open,
-  pending,
-  onOpenChange,
-  onConfirm,
-}: {
-  title: string;
-  open: boolean;
-  pending: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[360px]"
-      >
-        <DialogHeader className="gap-1 text-left">
-          <DialogTitle className="text-[15px]">
-            {t.sidebar.deleteThreadTooltip}
-          </DialogTitle>
-          <DialogDescription className="text-[12.5px] leading-5">
-            {t.sidebar.confirmDeleteThread(title)}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="mt-1 flex-row justify-end gap-2">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => onOpenChange(false)}
-            className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
-          >
-            {t.common.cancel}
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={onConfirm}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
-          >
-            {pending ? (
-              <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
-            ) : (
-              <Trash2Icon className="size-3.5" />
-            )}
-            {t.common.delete}
-          </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function ProjectGroup({
   project,
   threads,
@@ -2160,16 +1719,39 @@ function ProjectGroup({
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(true);
-  const [threadToDelete, setThreadToDelete] = useState<ThreadSummary | null>(
+  const deleteThread = useDeleteThread();
+  const { mutate: renameThread } = useRenameThread();
+  const navigate = useNavigate();
+  const { confirm, confirmDialog } = useConfirmDialog();
+  const [threadToRename, setThreadToRename] = useState<ThreadSummary | null>(
     null,
   );
-  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
-  const deleteThread = useDeleteThread();
-  const navigate = useNavigate();
-  const confirmDeleteProject = () => {
-    if (!projectToDelete) return;
-    void onDeleteProject(projectToDelete);
-    setProjectToDelete(null);
+  const [renameValue, setRenameValue] = useState("");
+  const handleRenameSubmit = useCallback(() => {
+    if (threadToRename && renameValue.trim()) {
+      renameThread({ threadId: threadToRename.id, title: renameValue.trim() });
+      setThreadToRename(null);
+      setRenameValue("");
+    }
+  }, [renameThread, threadToRename, renameValue]);
+  const handleDeleteThread = async (thread: ThreadSummary) => {
+    const ok = await confirm({
+      title: t.sidebar.deleteThreadTooltip,
+      description: t.sidebar.confirmDeleteThread(thread.title),
+    });
+    if (!ok) return;
+    deleteThread.mutate({ threadId: thread.id });
+    if (pathname === thread.href) {
+      void navigate(PRIMARY_WORKSPACE_ROUTE);
+    }
+  };
+  const handleDeleteProject = async (project: string) => {
+    const ok = await confirm({
+      title: t.sidebar.confirmDeleteProjectTitle,
+      description: t.sidebar.confirmDeleteProject(project),
+    });
+    if (!ok) return;
+    void onDeleteProject(project);
   };
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -2202,7 +1784,7 @@ function ProjectGroup({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setProjectToDelete(project);
+                void handleDeleteProject(project);
               }}
               className={cn(
                 "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity group-hover/project:opacity-100 hover:bg-destructive/10 hover:text-destructive",
@@ -2222,7 +1804,7 @@ function ProjectGroup({
               the full project lane like TRAE's code sidebar. */}
           <ul className="mt-0.5 space-y-px">
             {threads.slice(0, 12).map((thread) => {
-              const active = pathname.includes(thread.id);
+              const active = activeWorkspaceThreadIdFromPathname(pathname) === thread.id;
               const runStatus = runStatusByHref.get(thread.href);
               return (
                 <li key={thread.id} className="group/thread relative">
@@ -2288,88 +1870,100 @@ function ProjectGroup({
                   >
                     <ListTodoIcon className="size-3.5" />
                   </button>
-                  <button
-                    type="button"
-                    title={t.sidebar.deleteThreadTooltip}
-                    aria-label={t.sidebar.deleteThreadTooltip}
-                    disabled={deleteThread.isPending}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setThreadToDelete(thread);
-                    }}
-                    className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover/thread:opacity-100 focus-visible:opacity-100"
-                  >
-                    <Trash2Icon className="size-3" />
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        title={t.common.more}
+                        aria-label={t.common.more}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity hover:bg-muted/40 hover:text-foreground group-hover/thread:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                      >
+                        <MoreHorizontalIcon className="size-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" side="right">
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setThreadToRename(thread);
+                          setRenameValue(thread.title);
+                        }}
+                      >
+                        <PencilIcon className="text-muted-foreground" />
+                        <span>{t.common.rename}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={deleteThread.isPending}
+                        onSelect={() => void handleDeleteThread(thread)}
+                      >
+                        <Trash2Icon className="text-muted-foreground" />
+                        <span>{t.sidebar.deleteThreadTooltip}</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </li>
               );
             })}
           </ul>
         </CollapsibleContent>
       </SidebarGroup>
-      <ConfirmDeleteThreadDialog
-        title={threadToDelete?.title ?? ""}
-        open={threadToDelete !== null}
-        pending={deleteThread.isPending}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setThreadToDelete(null);
-        }}
-        onConfirm={() => {
-          if (!threadToDelete) return;
-          const target = threadToDelete;
-          setThreadToDelete(null);
-          deleteThread.mutate({ threadId: target.id });
-          if (pathname === target.href) {
-            void navigate(PRIMARY_WORKSPACE_ROUTE);
-          }
-        }}
-      />
       <Dialog
-        open={projectToDelete !== null}
+        open={threadToRename !== null}
         onOpenChange={(nextOpen) => {
-          if (!nextOpen) setProjectToDelete(null);
+          if (!nextOpen) {
+            setThreadToRename(null);
+            setRenameValue("");
+          }
         }}
       >
         <DialogContent
           showCloseButton={false}
-          className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[360px]"
+          className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
             <DialogTitle className="text-[15px]">
-              {t.sidebar.confirmDeleteProjectTitle}
+              {t.common.rename}
             </DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-5">
-              {projectToDelete
-                ? t.sidebar.confirmDeleteProject(projectToDelete)
-                : ""}
-            </DialogDescription>
           </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !isIMEComposing(e)) {
+                e.preventDefault();
+                handleRenameSubmit();
+              }
+            }}
+            autoFocus
+            className="h-8 text-[13px]"
+          />
           <DialogFooter className="mt-1 flex-row justify-end gap-2">
-            <button
+            <Button
               type="button"
-              disabled={deleting}
-              onClick={() => setProjectToDelete(null)}
-              className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setThreadToRename(null);
+                setRenameValue("");
+              }}
             >
               {t.common.cancel}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              disabled={deleting}
-              onClick={confirmDeleteProject}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
+              size="sm"
+              disabled={!renameValue.trim()}
+              onClick={handleRenameSubmit}
             >
-              {deleting ? (
-                <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
-              ) : (
-                <Trash2Icon className="size-3.5" />
-              )}
-              {t.common.delete}
-            </button>
+              {t.common.save}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </Collapsible>
   );
 }
@@ -2693,12 +2287,36 @@ function ChatsSection({
     }
   }, [open]);
   const deleteThread = useDeleteThread();
+  const { mutate: renameThread } = useRenameThread();
   const navigate = useNavigate();
+  const { confirm, confirmDialog } = useConfirmDialog();
   // Emit a task-new event each click. Reusing a fixed /new link can be a
   // no-op when the pathname is already selected, so the workspace shell owns
   // fresh thread creation.
-  const [threadToDelete, setThreadToDelete] = useState<ThreadSummary | null>(
+  const [threadToRename, setThreadToRename] = useState<ThreadSummary | null>(
     null,
+  );
+  const [renameValue, setRenameValue] = useState("");
+  const handleRenameSubmit = useCallback(() => {
+    if (threadToRename && renameValue.trim()) {
+      renameThread({ threadId: threadToRename.id, title: renameValue.trim() });
+      setThreadToRename(null);
+      setRenameValue("");
+    }
+  }, [renameThread, threadToRename, renameValue]);
+  const handleDeleteThread = useCallback(
+    async (thread: ThreadSummary) => {
+      const ok = await confirm({
+        title: tr.sidebar.deleteThreadTooltip,
+        description: tr.sidebar.confirmDeleteThread(thread.title),
+      });
+      if (!ok) return;
+      deleteThread.mutate({ threadId: thread.id });
+      if (pathname === thread.href) {
+        void navigate(PRIMARY_WORKSPACE_ROUTE);
+      }
+    },
+    [confirm, deleteThread, navigate, pathname, tr],
   );
   const startNewChat = useCallback(() => {
     eventBus.emit("task:new", {
@@ -2710,7 +2328,10 @@ function ChatsSection({
   const actionLabel = newActionLabel ?? tr.sidebar.actionNewTask;
   const visibleLimit = 20;
   const displayedThreads = useMemo(() => {
-    const current = threads.find((thread) => pathname.includes(thread.id));
+    const activeId = activeWorkspaceThreadIdFromPathname(pathname);
+    const current = activeId
+      ? threads.find((thread) => thread.id === activeId)
+      : undefined;
     const recent = threads.slice(0, visibleLimit);
     if (!current || recent.some((thread) => thread.id === current.id)) {
       return recent;
@@ -2739,7 +2360,8 @@ function ChatsSection({
           ) : (
             <ul className="mt-0.5 space-y-px">
               {displayedThreads.map((t) => {
-                const active = pathname.includes(t.id);
+                const active =
+                  activeWorkspaceThreadIdFromPathname(pathname) === t.id;
                 const runStatus = runStatusByHref?.get(t.href);
                 return (
                   <li key={t.id} className="group/thread relative">
@@ -2773,43 +2395,100 @@ function ChatsSection({
                         {formatCompactRelativeTimestamp(t.updatedAt)}
                       </span>
                     </Link>
-                    <button
-                      type="button"
-                      title={tr.sidebar.deleteThreadTooltip}
-                      aria-label={tr.sidebar.deleteThreadTooltip}
-                      disabled={deleteThread.isPending}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setThreadToDelete(t);
-                      }}
-                      className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity group-hover/thread:opacity-100 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100"
-                    >
-                      <Trash2Icon className="size-3" />
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          title={tr.common.more}
+                          aria-label={tr.common.more}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity group-hover/thread:opacity-100 hover:bg-muted/40 hover:text-foreground focus-visible:opacity-100 data-[state=open]:opacity-100"
+                        >
+                          <MoreHorizontalIcon className="size-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" side="right">
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setThreadToRename(t);
+                            setRenameValue(t.title);
+                          }}
+                        >
+                          <PencilIcon className="text-muted-foreground" />
+                          <span>{tr.common.rename}</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={deleteThread.isPending}
+                          onSelect={() => void handleDeleteThread(t)}
+                        >
+                          <Trash2Icon className="text-muted-foreground" />
+                          <span>{tr.sidebar.deleteThreadTooltip}</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </li>
                 );
               })}
             </ul>
           ))}
       </SidebarGroup>
-      <ConfirmDeleteThreadDialog
-        title={threadToDelete?.title ?? ""}
-        open={threadToDelete !== null}
-        pending={deleteThread.isPending}
+      <Dialog
+        open={threadToRename !== null}
         onOpenChange={(nextOpen) => {
-          if (!nextOpen) setThreadToDelete(null);
-        }}
-        onConfirm={() => {
-          if (!threadToDelete) return;
-          const target = threadToDelete;
-          setThreadToDelete(null);
-          deleteThread.mutate({ threadId: target.id });
-          if (pathname === target.href) {
-            void navigate(PRIMARY_WORKSPACE_ROUTE);
+          if (!nextOpen) {
+            setThreadToRename(null);
+            setRenameValue("");
           }
         }}
-      />
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[360px]"
+        >
+          <DialogHeader className="gap-1 text-left">
+            <DialogTitle className="text-[15px]">
+              {tr.common.rename}
+            </DialogTitle>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !isIMEComposing(e)) {
+                e.preventDefault();
+                handleRenameSubmit();
+              }
+            }}
+            autoFocus
+            className="h-8 text-[13px]"
+          />
+          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setThreadToRename(null);
+                setRenameValue("");
+              }}
+            >
+              {tr.common.cancel}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!renameValue.trim()}
+              onClick={handleRenameSubmit}
+            >
+              {tr.common.save}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {confirmDialog}
     </div>
   );
 }
