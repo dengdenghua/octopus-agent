@@ -268,7 +268,7 @@ describe("MessageGroup reasoning grouping", () => {
     });
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
     const groundingTrigger = screen.getByRole("button", {
-      name: "预读了 0 篇项目文档 · 1 处代码",
+      name: "参考 realtime_event_bridge.py",
     });
     expect(checkpoints[0]).toContainElement(groundingTrigger);
     expect(screen.queryByText("定向")).not.toBeInTheDocument();

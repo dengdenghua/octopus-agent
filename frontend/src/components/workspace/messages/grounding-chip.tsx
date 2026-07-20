@@ -24,15 +24,14 @@ export function GroundingChip({ message }: { message: Message }) {
     return g as GroundingSource[];
   }, [message.additional_kwargs?.grounding]);
   if (!sources) return null;
-  const docCount = sources.filter((source) => source.kind === "doc").length;
-  const sourceCount = sources.length - docCount;
-  const label = t.message.grounding.summary(docCount, sourceCount);
+  const firstSource = sources[0];
+  const firstSourceLabel = firstSource?.title || firstSource?.path || "";
+  const label = t.message.grounding.summary(firstSourceLabel, sources.length);
   return (
     <div
       className="mb-1"
       data-grounding-evidence="true"
-      data-grounding-doc-count={docCount}
-      data-grounding-source-count={sourceCount}
+      data-grounding-source-count={sources.length}
     >
       <button
         type="button"
@@ -56,11 +55,6 @@ export function GroundingChip({ message }: { message: Message }) {
               key={`${source.path}-${index}`}
               className="flex min-w-0 items-center gap-2"
             >
-              <span className="shrink-0 text-[9px] uppercase tracking-wide text-muted-foreground/50">
-                {source.kind === "doc"
-                  ? t.message.grounding.doc
-                  : t.message.grounding.source}
-              </span>
               <span className="truncate font-medium text-foreground/90">
                 {source.title}
               </span>

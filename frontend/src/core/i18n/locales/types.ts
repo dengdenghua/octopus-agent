@@ -254,9 +254,7 @@ export interface Translations {
     branchPosition: (current: number, total: number) => string;
     grounding: {
       /** Describe auto-prefetched context separately from explicit tool work. */
-      summary: (docs: number, sources: number) => string;
-      doc: string;
-      source: string;
+      summary: (first: string, total: number) => string;
     };
     thinkingForSeconds: (seconds: number) => string;
     planningNSteps: (n: number) => string;
@@ -518,16 +516,6 @@ export interface Translations {
     updateFile: string;
     runAction: string;
     teammateTimeout: string;
-    clarifyTaskDirection: string;
-    synthesizeFindings: string;
-    planNextStep: string;
-    progressOrient: string;
-    progressInvestigate: string;
-    progressImplement: string;
-    progressVerify: string;
-    progressPivot: string;
-    progressSynthesize: string;
-    progressRecover: string;
   };
 
   // Trace generator (swarm simulation label bag)

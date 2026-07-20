@@ -316,10 +316,8 @@ export const enUS: Translations = {
     nextBranch: "Next response version",
     branchPosition: (current, total) => `${current} of ${total}`,
     grounding: {
-      summary: (docs: number, sources: number) =>
-        `Prefetched ${docs} project doc${docs === 1 ? "" : "s"} · ${sources} code location${sources === 1 ? "" : "s"}`,
-      doc: "doc",
-      source: "code",
+      summary: (first: string, total: number) =>
+        total > 1 ? `Used ${first} and ${total - 1} more` : `Used ${first}`,
     },
     thinkingForSeconds: (seconds: number) => `${seconds}s thinking`,
     planningNSteps: (n: number) => `${n} planning step${n === 1 ? "" : "s"}`,
@@ -600,16 +598,6 @@ export const enUS: Translations = {
     updateFile: "Update file",
     runAction: "Run action",
     teammateTimeout: "Teammate did not return in time; Octopus took over",
-    clarifyTaskDirection: "Clarify task direction",
-    synthesizeFindings: "Synthesize findings",
-    planNextStep: "Plan next step",
-    progressOrient: "Orient",
-    progressInvestigate: "Investigate",
-    progressImplement: "Implement",
-    progressVerify: "Verify",
-    progressPivot: "Pivot",
-    progressSynthesize: "Synthesize",
-    progressRecover: "Recover",
   },
 
   // Trace generator labels

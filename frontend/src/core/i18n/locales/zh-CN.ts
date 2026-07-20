@@ -305,10 +305,8 @@ export const zhCN: Translations = {
     nextBranch: "下一个回复版本",
     branchPosition: (current, total) => `第 ${current} / ${total} 个版本`,
     grounding: {
-      summary: (docs: number, sources: number) =>
-        `预读了 ${docs} 篇项目文档 · ${sources} 处代码`,
-      doc: "文档",
-      source: "代码",
+      summary: (first: string, total: number) =>
+        total > 1 ? `参考 ${first} 等 ${total} 条上下文` : `参考 ${first}`,
     },
     thinkingForSeconds: (seconds: number) => `思考 ${seconds} 秒`,
     planningNSteps: (n: number) => `规划 ${n} 步`,
@@ -577,16 +575,6 @@ export const zhCN: Translations = {
     updateFile: "更新文件",
     runAction: "执行动作",
     teammateTimeout: "团队成员暂未返回，Octopus 接管",
-    clarifyTaskDirection: "确认任务方向",
-    synthesizeFindings: "整理调研结果",
-    planNextStep: "规划下一步",
-    progressOrient: "定向",
-    progressInvestigate: "调查",
-    progressImplement: "实施",
-    progressVerify: "验证",
-    progressPivot: "转向",
-    progressSynthesize: "收束",
-    progressRecover: "恢复",
   },
 
   // Trace generator labels

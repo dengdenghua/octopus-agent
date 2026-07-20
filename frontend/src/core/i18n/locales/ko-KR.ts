@@ -313,10 +313,8 @@ export const koKR: Translations = {
     nextBranch: "다음 답변 버전",
     branchPosition: (current, total) => `${current} / ${total}번째`,
     grounding: {
-      summary: (docs: number, sources: number) =>
-        `사전 참조: 프로젝트 문서 ${docs}건 · 코드 ${sources}곳`,
-      doc: "문서",
-      source: "코드",
+      summary: (first: string, total: number) =>
+        total > 1 ? `${first} 외 ${total - 1}개 참고` : `${first} 참고`,
     },
     thinkingForSeconds: (seconds: number) => `${seconds}초 동안 생각 중`,
     planningNSteps: (n: number) => `${n}단계 계획`,
@@ -595,16 +593,6 @@ export const koKR: Translations = {
     updateFile: "파일 업데이트",
     runAction: "동작 실행",
     teammateTimeout: "팀원이 제시간에 응답하지 않아 Octopus 가 인계받았습니다",
-    clarifyTaskDirection: "작업 방향 확인",
-    synthesizeFindings: "조사 결과 정리",
-    planNextStep: "다음 단계 계획",
-    progressOrient: "방향 설정",
-    progressInvestigate: "조사",
-    progressImplement: "구현",
-    progressVerify: "검증",
-    progressPivot: "전환",
-    progressSynthesize: "정리",
-    progressRecover: "복구",
   },
 
   // Trace generator labels

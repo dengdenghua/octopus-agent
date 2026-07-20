@@ -313,10 +313,8 @@ export const jaJP: Translations = {
     nextBranch: "次の回答バージョン",
     branchPosition: (current, total) => `${current} / ${total} 件目`,
     grounding: {
-      summary: (docs: number, sources: number) =>
-        `事前参照: プロジェクト文書 ${docs} 件 · コード ${sources} 箇所`,
-      doc: "ドキュメント",
-      source: "コード",
+      summary: (first: string, total: number) =>
+        total > 1 ? `${first} ほか ${total - 1} 件を参照` : `${first} を参照`,
     },
     thinkingForSeconds: (seconds: number) => `${seconds} 秒 思考中`,
     planningNSteps: (n: number) => `${n} ステップを計画`,
@@ -597,16 +595,6 @@ export const jaJP: Translations = {
     runAction: "アクションを実行",
     teammateTimeout:
       "チームメンバーが時間内に返答しなかったため、Octopus が引き継ぎました",
-    clarifyTaskDirection: "タスクの方向性を確認",
-    synthesizeFindings: "調査結果を整理",
-    planNextStep: "次のステップを計画",
-    progressOrient: "方向付け",
-    progressInvestigate: "調査",
-    progressImplement: "実装",
-    progressVerify: "検証",
-    progressPivot: "転換",
-    progressSynthesize: "集約",
-    progressRecover: "復旧",
   },
 
   // Trace generator labels

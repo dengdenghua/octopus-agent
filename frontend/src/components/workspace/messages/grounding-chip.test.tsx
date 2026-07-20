@@ -23,7 +23,7 @@ describe("GroundingChip", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows a plain-language count, collapsed, then expands the exact sources", async () => {
+  it("names real context, collapsed, then expands the exact sources", async () => {
     const grounding = [
       {
         kind: "doc",
@@ -40,7 +40,7 @@ describe("GroundingChip", () => {
 
     // Collapsed: one quiet plain-language line, no source paths leaking in.
     const trigger = screen.getByRole("button", {
-      name: /Prefetched 1 project doc · 1 code location/,
+      name: "Used Hemolymph (Context) and 1 more",
     });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("runtime/react_loop.py:501")).toBeNull();
@@ -52,9 +52,8 @@ describe("GroundingChip", () => {
     expect(screen.getByText("23-memory/hemolymph.md")).toBeInTheDocument();
     expect(screen.getByText("react_loop.py")).toBeInTheDocument();
     expect(screen.getByText("runtime/react_loop.py:501")).toBeInTheDocument();
-    // doc vs source labelled in plain language (en-US)
-    expect(screen.getByText("doc")).toBeInTheDocument();
-    expect(screen.getByText("code")).toBeInTheDocument();
+    expect(screen.queryByText("doc")).not.toBeInTheDocument();
+    expect(screen.queryByText("code")).not.toBeInTheDocument();
   });
 
   it("ignores a non-array grounding value", () => {
