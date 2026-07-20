@@ -748,7 +748,18 @@ def _quiet_evidence_targets(steps: list[ReActStep]) -> set[str]:
 def _quiet_evidence_checkpoint_due(steps: list[ReActStep]) -> bool:
     """Whether accumulated quiet reads merit one model-authored public beat."""
 
-    return len(steps) >= 2 and len(_quiet_evidence_targets(steps)) >= 2
+    return len(_quiet_evidence_targets(steps)) >= 2
+
+
+def _should_accumulate_quiet_evidence(
+    step: ReActStep,
+    *,
+    succeeded: bool,
+    observation: str,
+) -> bool:
+    """Keep successful read evidence even when it arrived in one parallel batch."""
+
+    return succeeded and bool(observation) and bool(_quiet_evidence_targets([step]))
 
 
 def _explicit_read_only_goal(value: str | None) -> bool:
@@ -4887,12 +4898,10 @@ def stream_react_loop(
                 succeeded=tool_ok,
             )
         )
-        if (
-            tool_action_requested
-            and tool_ok
-            and observation
-            and not _meaningful_result_checkpoint
-            and _quiet_evidence_targets([step])
+        if tool_action_requested and _should_accumulate_quiet_evidence(
+            step,
+            succeeded=tool_ok,
+            observation=observation,
         ):
             _quiet_evidence_steps.append(step)
             # Keep prompts bounded when a provider repeatedly inspects new
