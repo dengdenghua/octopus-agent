@@ -326,7 +326,7 @@ export function ClarificationQuestionnaire({
         <span className="w-7 shrink-0 text-base font-semibold text-foreground">
           {step + 1}.
         </span>
-        <h4 className="text-[17px] font-semibold leading-7 tracking-normal text-foreground sm:text-lg">
+        <h4 className="text-base font-semibold leading-7 tracking-normal text-foreground sm:text-lg">
           {current.title}
         </h4>
       </div>

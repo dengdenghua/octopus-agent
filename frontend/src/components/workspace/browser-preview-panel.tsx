@@ -1623,7 +1623,7 @@ export function BrowserPreviewPanel({
                   }}
                 >
                   <span className="absolute size-9 rounded-full border border-primary/40 bg-primary/10 animate-ping" />
-                  <span className="grid size-5 place-items-center rounded-full border border-primary/55 bg-background/90 text-[8px] font-bold text-primary shadow-[var(--shadow-xs)]">
+                  <span className="grid size-5 place-items-center rounded-full border border-primary/55 bg-background/90 text-[10px] font-bold text-primary shadow-[var(--shadow-xs)]">
                     {clickMarker.mode === "double" ? "2x" : "1x"}
                   </span>
                 </div>

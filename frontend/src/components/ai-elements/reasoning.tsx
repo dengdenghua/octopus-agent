@@ -18,7 +18,6 @@ import {
   useState,
 } from "react";
 
-import { Shimmer } from "./shimmer";
 
 const LazyStreamdown = lazy(() => import("./streamdown-host"));
 
@@ -125,7 +124,7 @@ export const ReasoningTrigger = memo(
       getThinkingMessage ??
       ((streaming: boolean, elapsed?: number) => {
         if (streaming || elapsed === 0) {
-          return <Shimmer duration={1}>{t.streaming.thinking}</Shimmer>;
+          return <span className="animate-pulse">{t.streaming.thinking}</span>;
         }
         if (elapsed === undefined) {
           return <span>{t.streaming.thoughtProcess}</span>;

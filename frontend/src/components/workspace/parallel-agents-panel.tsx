@@ -443,7 +443,7 @@ function AgentCard({
           >
             <BotIcon className="text-muted-foreground size-5" />
           </div>
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-lg bg-foreground text-[8px] font-bold text-background">
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-lg bg-foreground text-[10px] font-bold text-background">
             {String(index).padStart(2, "0")}
           </span>
         </div>

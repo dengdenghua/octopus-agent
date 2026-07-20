@@ -43,6 +43,15 @@ import {
   readLastComposerTarget,
 } from "@/core/composer-image-inbox";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -144,6 +153,8 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   const [siteDataStatus, setSiteDataStatus] = useState<string | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [zoomByTab, setZoomByTab] = useState<Record<string, number>>({});
+  const [findDialogOpen, setFindDialogOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
   const historyBtnRef = useRef<HTMLButtonElement>(null);
   const downloadsBtnRef = useRef<HTMLButtonElement>(null);
   const actionsBtnRef = useRef<HTMLButtonElement>(null);
@@ -410,13 +421,21 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
 
   const findInPage = useCallback(() => {
     if (!webviewHandle || !canUsePageActions) return;
-    const query = window.prompt(ub.findPrompt);
-    if (!query) return;
+    setFindQuery("");
     setActionsOpen(false);
+    setFindDialogOpen(true);
+  }, [canUsePageActions, webviewHandle]);
+
+  const executeFind = useCallback(() => {
+    if (!webviewHandle || !findQuery.trim()) {
+      setFindDialogOpen(false);
+      return;
+    }
     void webviewHandle.executeJS(`
-      (() => window.find(${JSON.stringify(query)}, false, false, true, false, true, false))();
+      (() => window.find(${JSON.stringify(findQuery.trim())}, false, false, true, false, true, false))();
     `);
-  }, [canUsePageActions, ub.findPrompt, webviewHandle]);
+    setFindDialogOpen(false);
+  }, [findQuery, webviewHandle]);
 
   useEffect(() => {
     if (!window.octopus?.on) return;
@@ -787,6 +806,33 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         )}
       </div>
       {confirmDialog}
+      <Dialog open={findDialogOpen} onOpenChange={setFindDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{ub.findPrompt}</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={findQuery}
+            onChange={(e) => setFindQuery(e.target.value)}
+            placeholder={ub.findPrompt}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                executeFind();
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFindDialogOpen(false)}>
+              {t.common.cancel}
+            </Button>
+            <Button onClick={executeFind}>
+              {t.common.confirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </LiquidGlass>
   );
 }

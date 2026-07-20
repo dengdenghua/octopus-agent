@@ -52,7 +52,7 @@ export function AgentWelcome({
         </span>
       </div>
       <div className="space-y-2">
-        <h2 className="text-[22px] font-bold tracking-tight text-foreground">
+        <h2 className="text-xl font-bold tracking-tight text-foreground">
           {displayName}
         </h2>
         {description ? (

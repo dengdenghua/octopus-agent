@@ -112,7 +112,7 @@ export function FileLeaseIndicator({
           <LockIcon className="size-2.5 text-amber-500 dark:text-amber-400" />
           {!compact && (
             <Avatar className="size-3.5 rounded-full">
-              <AvatarFallback className="rounded-full bg-muted text-[7px] font-semibold text-muted-foreground">
+              <AvatarFallback className="rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
                 {avatarLetter(lease.holder_id)}
               </AvatarFallback>
             </Avatar>
