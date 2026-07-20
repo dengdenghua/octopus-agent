@@ -68,62 +68,6 @@ import { GroundingChip } from "./grounding-chip";
 import { MarkdownContent } from "./markdown-content";
 import { stripTraceLabelPrefixes } from "./trace-labels";
 
-const INTERNAL_PROGRESS_PATTERNS = [
-  /我会先调用必要工具/,
-  /边拿结果边整理答案/,
-  /开始直接生成回复/,
-  /开始规划/,
-  /规划完成/,
-  /还在执行中/,
-  /正在执行工具/,
-  /工具完成/,
-  /frame the ask/i,
-  /gather context/i,
-  /reason across options/i,
-  /avoid exposing hidden chain-of-thought/i,
-  /use the plan below only as private execution guidance/i,
-];
-
-function isInternalProgressText(text?: string | null): boolean {
-  if (!text?.trim()) return false;
-  return INTERNAL_PROGRESS_PATTERNS.some((pattern) => pattern.test(text));
-}
-
-function isActionCallbackText(text?: string | null): boolean {
-  const value = text
-    ?.replace(/^\s*>\s?/gm, "")
-    .replace(/<\/?(?:tool|tool_call|function)[^>]*>/gi, "")
-    .trim();
-  if (!value) return false;
-  const normalized = stripTraceLabelPrefixes(value);
-  const chineseActionPrefixes = [
-    "\u4f7f\u7528",
-    "\u6267\u884c",
-    "\u641c\u7d22",
-    "\u8bfb\u53d6",
-    "\u5199\u5165",
-    "\u8c03\u7528",
-    "\u6253\u5f00",
-    "\u66f4\u65b0",
-  ];
-  const actionIntent =
-    /^(?:now\s+)?(?:let me|i(?:'ll| will| need to| should| can)|we(?:'ll| will| need to| should))\s+(?:search|look up|query|check|read|open|fetch|browse|run|write|compile|synthesize|summarize|try|use)\b/i;
-  const observationIntent =
-    /^(?:the\s+)?(?:search\s+results?|results?|observation)\b.*\b(?:empty|found|show|shows|coming back|returned|suggest|indicate)\b/i;
-  const toolProtocol =
-    /<tool_call\b|<\/?function=|"\s*command\s*"\s*:\s*"|(?:^|\b)(?:web_search|image_search|web_fetch|fetch_url|read_file|write_file|apply_patch|shell_command|exec_shell|list_cwd)\b/i;
-  return (
-    /^Action:\s*/.test(value) ||
-    /^Observation:\s*/i.test(value) ||
-    toolProtocol.test(text ?? "") ||
-    actionIntent.test(normalized) ||
-    observationIntent.test(normalized) ||
-    /^(search|read|write|call|open|update|run|use)\b/i.test(value) ||
-    /^[A-Za-z_][A-Za-z0-9_-]*\s*\(/.test(normalized) ||
-    chineseActionPrefixes.some((prefix) => normalized.startsWith(prefix))
-  );
-}
-
 const HIDDEN_TIMELINE_TOOL_NAMES = new Set([
   "task",
   "todo_write",
@@ -200,17 +144,7 @@ function normalizePublicTimelineChunk(chunk: string): string | null {
       .replace(/\s+/g, " ")
       .trim(),
   );
-  if (!stripped) return null;
-  if (FIRST_PHASE_RE.test(stripped)) {
-    return compactReasoningSummary(stripped, 120);
-  }
-  if (
-    /^\s*Observation\s*:/i.test(chunk) ||
-    /\(real tool execution/i.test(chunk)
-  ) {
-    return null;
-  }
-  return stripped;
+  return stripped || null;
 }
 
 function dedupeTimelineChunks(chunks: string[]): string[] {
@@ -265,10 +199,7 @@ export function MessageGroup({
   const [openActionGroups, setOpenActionGroups] = useState<
     Record<string, boolean>
   >({});
-  const steps = useMemo(
-    () => convertToSteps(messages, t, isLoading),
-    [messages, t, isLoading],
-  );
+  const steps = useMemo(() => convertToSteps(messages), [messages]);
   const showInterruptedReceipt =
     !isLoading &&
     messages.some(
@@ -308,7 +239,7 @@ export function MessageGroup({
   const leadInSteps = useMemo(
     () =>
       isLiveTimeline
-        ? leadInStepsBeforeFirstPhase(replaySteps, currentStep)
+        ? leadInStepsBeforeStructuredPhase(replaySteps, currentStep)
         : [],
     [currentStep, isLiveTimeline, replaySteps],
   );
@@ -711,12 +642,8 @@ export function MessageGroup({
         compactExecutionCoverage.get(item.id) ?? ([item] as TimelineItem[]);
       const groupedTargetSummary =
         summarizeCompactExecutionTargets(coveredItems);
-      const summary =
-        item.type === "reasoningGroup"
-          ? summarizeReasoningGroup(item, t)
-          : item.type === "actionCallbackGroup"
-            ? summarizeActionGroup(item, t)
-            : (groupedTargetSummary ?? summarizeCurrentStep(item.step, t));
+      const concreteTargetSummary =
+        item.type === "toolCall" ? compactToolTarget(item.step) : null;
       const count = coveredItems.reduce(
         (total, coveredItem) =>
           total +
@@ -725,6 +652,14 @@ export function MessageGroup({
             : coveredItem.steps.length),
         0,
       );
+      const summary =
+        item.type === "reasoningGroup"
+          ? summarizeReasoningGroup(item, t)
+          : item.type === "actionCallbackGroup"
+            ? summarizeActionGroup(item, t)
+            : (groupedTargetSummary ??
+              concreteTargetSummary ??
+              summarizeCurrentStep(item.step, t));
       const workbenchEventId =
         item.type === "toolCall" ? item.step.id : step.messageId;
       const effectReceipt =
@@ -1964,9 +1899,9 @@ type TimelineItem =
 
 export function hasVisibleMessageGroupContent(
   messages: Message[],
-  t?: ReturnType<typeof useI18n>["t"],
+  _t?: ReturnType<typeof useI18n>["t"],
 ): boolean {
-  return convertToSteps(messages, t).length > 0;
+  return convertToSteps(messages).length > 0;
 }
 
 function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
@@ -2035,6 +1970,9 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
 }
 
 function selectCompactTimelineItems(items: TimelineItem[]): TimelineItem[] {
+  const commentary = items.filter((item) => item.type === "commentary");
+  const firstCommentary = commentary[0];
+  const latestCommentary = commentary[commentary.length - 1];
   const latestThinking = [...items]
     .reverse()
     .find((item) => item.type === "reasoningGroup");
@@ -2044,11 +1982,15 @@ function selectCompactTimelineItems(items: TimelineItem[]): TimelineItem[] {
       (item) => item.type === "toolCall" || item.type === "actionCallbackGroup",
     );
   const selected = new Set<TimelineItem>();
+  // A long run can emit many retry/checkpoint updates. The conversation lane
+  // keeps the opening intent and the latest finding; the complete event chain
+  // remains available in the workbench. This preserves a human conversational
+  // rhythm without turning transient retries into a permanent wall of text.
+  if (firstCommentary) selected.add(firstCommentary);
+  if (latestCommentary) selected.add(latestCommentary);
   if (latestThinking) selected.add(latestThinking);
   if (latestExecution) selected.add(latestExecution);
-  return items.filter(
-    (item) => item.type === "commentary" || selected.has(item),
-  );
+  return items.filter((item) => selected.has(item));
 }
 
 function executionCoverageByVisibleItem(
@@ -2146,22 +2088,17 @@ function timelineItemFromStep(step: CoTStep, suffix: string): TimelineItem {
   };
 }
 
-function leadInStepsBeforeFirstPhase(
+function leadInStepsBeforeStructuredPhase(
   replaySteps: CoTStep[],
   currentStep: CoTStep | null,
 ): CoTStep[] {
   if (replaySteps.length === 0) return [];
-  const firstPhaseIndex = replaySteps.findIndex(isFirstPhaseStep);
+  const firstPhaseIndex = replaySteps.findIndex((step) =>
+    Boolean(step.phaseId),
+  );
   if (firstPhaseIndex > 0) return replaySteps.slice(0, firstPhaseIndex);
   if (firstPhaseIndex === 0) return [];
-  return currentStep && isFirstPhaseStep(currentStep) ? replaySteps : [];
-}
-
-const FIRST_PHASE_RE =
-  /(?:^|\n|\b)(?:phase\s*1\s*[:：.)-]|phase\s+one\b|第\s*(?:一|1)\s*阶段|阶段\s*(?:一|1)\b)/i;
-
-function isFirstPhaseStep(step: CoTStep): boolean {
-  return FIRST_PHASE_RE.test(stepText(step));
+  return currentStep?.phaseId ? replaySteps : [];
 }
 
 function stepText(step: CoTStep): string {
@@ -2303,11 +2240,7 @@ function extractPublicReasoningSummary(message: Message): string | null {
   return typeof nested === "string" && nested.trim() ? nested.trim() : null;
 }
 
-function convertToSteps(
-  messages: Message[],
-  t?: ReturnType<typeof useI18n>["t"],
-  isLoading = false,
-): CoTStep[] {
+function convertToSteps(messages: Message[]): CoTStep[] {
   const steps: CoTStep[] = [];
   const seenPublicNarrative = new Set<string>();
   const seenToolCallIds = new Set<string>();
@@ -2331,6 +2264,22 @@ function convertToSteps(
       messageId: message.id,
       type: "reasoning",
       reasoning,
+      phaseId:
+        typeof message.additional_kwargs?.phase_id === "string"
+          ? message.additional_kwargs.phase_id
+          : undefined,
+      parentItemId:
+        typeof message.additional_kwargs?.parent_item_id === "string"
+          ? message.additional_kwargs.parent_item_id
+          : undefined,
+      progressSequence:
+        typeof message.additional_kwargs?.progress_sequence === "number"
+          ? message.additional_kwargs.progress_sequence
+          : undefined,
+      timelineSequence:
+        typeof message.additional_kwargs?.timeline_sequence === "number"
+          ? message.additional_kwargs.timeline_sequence
+          : undefined,
       iteration,
     });
     lastStepType = "reasoning";
@@ -2385,19 +2334,11 @@ function convertToSteps(
       const publicReasoning = extractPublicReasoningSummary(message);
       const isPublicProgress =
         message.additional_kwargs?.public_progress === true;
-      const rawPublicPreamble =
-        tc &&
-        tc.length > 0 &&
-        !isPublicProgress &&
-        !publicReasoning &&
-        !isLikelyFinalAnswerContent(message) &&
-        !isLoading
-          ? extractContentFromMessage(message)
-          : null;
-      const publicPreamble = isInternalProgressText(rawPublicPreamble)
-        ? null
-        : rawPublicPreamble;
-      const reasoningText = publicReasoning ?? publicPreamble;
+      // The public lane is protocol-driven. Ordinary assistant content may be
+      // an answer preamble, a provider callback, or a final answer; guessing
+      // its role from wording creates duplicate narration. Only explicitly
+      // public summaries/checkpoints become process events.
+      const reasoningText = publicReasoning;
       const reasoningChunks = dedupeTimelineChunks(
         reasoningText
           ? splitReasoningIntoTimelineChunks(reasoningText)
@@ -2426,11 +2367,7 @@ function convertToSteps(
             pushReasoningStep(message, reasoningChunk, `reasoning-${index}`);
           }
         }
-        if (
-          commentary &&
-          !isInternalProgressText(commentary) &&
-          !seenPublicNarrative.has(commentaryFingerprint)
-        ) {
+        if (commentary && !seenPublicNarrative.has(commentaryFingerprint)) {
           seenPublicNarrative.add(commentaryFingerprint);
           steps.push({
             id: `${message.id}-commentary`,
@@ -2472,18 +2409,7 @@ function convertToSteps(
       for (let index = 0; index < maxStepCount; index += 1) {
         const reasoningChunk = reasoningChunks[index];
         if (reasoningChunk) {
-          if (isActionCallbackText(reasoningChunk)) {
-            steps.push({
-              id: `${message.id}-action-${index}`,
-              messageId: message.id,
-              type: "actionCallback",
-              actionText: reasoningChunk,
-              iteration,
-            });
-            lastStepType = "toolCall";
-          } else {
-            pushReasoningStep(message, reasoningChunk, `reasoning-${index}`);
-          }
+          pushReasoningStep(message, reasoningChunk, `reasoning-${index}`);
         }
         const tool_call = visibleToolCalls[index];
         if (!tool_call) continue;
@@ -2500,9 +2426,6 @@ function splitReasoningIntoTimelineChunks(reasoning: string): string[] {
   const trimmed = reasoning.trim();
   if (!trimmed) return [];
 
-  const traceChunks = splitLabeledTraceChunks(trimmed);
-  if (traceChunks.length > 0) return traceChunks;
-
   const paragraphChunks = trimmed
     .split(/\n{2,}/)
     .map((chunk) => chunk.trim())
@@ -2513,145 +2436,6 @@ function splitReasoningIntoTimelineChunks(reasoning: string): string[] {
     .split(
       /(?<=[.!?。！？])\s+(?=(?:Now|Let me|The |This |I |We |继续|现在|接下来|然后)\b)/,
     )
-    .map((chunk) => chunk.trim())
-    .filter(Boolean);
-}
-
-const TRACE_LABEL_RE =
-  /(^|\n)\s*(?:<\/?(?:thought|thinking)>\s*)*(Thought|Action|Observation|Final Answer|\u601d\u8003|\u60f3\u6cd5|\u884c\u52a8|\u6267\u884c|\u89c2\u5bdf|\u6700\u7ec8\u7b54\u6848)\s*[:\uff1a]?/gi;
-
-type TraceLabelKind = "thought" | "action" | "observation" | "final";
-
-function splitLabeledTraceChunks(reasoning: string): string[] {
-  const matches = Array.from(reasoning.matchAll(TRACE_LABEL_RE));
-  if (matches.length === 0) return [];
-
-  const chunks: string[] = [];
-  const firstIndex = matches[0]?.index ?? 0;
-  chunks.push(...splitPlainReasoningChunks(reasoning.slice(0, firstIndex)));
-
-  for (let index = 0; index < matches.length; index += 1) {
-    const match = matches[index]!;
-    const label = normalizeTraceLabel(match[2] ?? "");
-    const start = (match.index ?? 0) + match[0].length;
-    const end = matches[index + 1]?.index ?? reasoning.length;
-    const body = reasoning
-      .slice(start, end)
-      .replace(/<\/?(?:thought|thinking)>/gi, "")
-      .trim();
-    if (!body) continue;
-
-    if (label === "final") {
-      continue;
-    }
-    if (label === "action") {
-      chunks.push(...splitActionTraceBlock(body));
-      continue;
-    }
-    if (label === "observation") {
-      const summary = compactObservationTraceBlock(body);
-      if (summary) chunks.push(`Observation: ${summary}`);
-      continue;
-    }
-
-    chunks.push(
-      ...splitPlainReasoningChunks(body).map((chunk) => `Thought: ${chunk}`),
-    );
-  }
-
-  return chunks.filter(Boolean);
-}
-
-function normalizeTraceLabel(label: string): TraceLabelKind {
-  const lower = label.toLowerCase();
-  if (
-    lower.includes("action") ||
-    label === "\u884c\u52a8" ||
-    label === "\u6267\u884c"
-  ) {
-    return "action";
-  }
-  if (lower.includes("observation") || label === "\u89c2\u5bdf") {
-    return "observation";
-  }
-  if (lower.includes("final") || label === "\u6700\u7ec8\u7b54\u6848") {
-    return "final";
-  }
-  return "thought";
-}
-
-function splitActionTraceBlock(body: string): string[] {
-  const lines = body
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !/^```/.test(line));
-  const chunks: string[] = [];
-  for (const line of lines.length > 0 ? lines : [body]) {
-    const clean = line.replace(/^[-*+]\s+/, "").trim();
-    if (!clean) continue;
-    const calls = splitInlineToolCalls(clean);
-    if (calls.length > 0) {
-      chunks.push(...calls.map((call) => `Action: ${call}`));
-      continue;
-    }
-    if (isActionTraceLine(clean)) {
-      chunks.push(`Action: ${compactReasoningSummary(clean, 220)}`);
-      continue;
-    }
-    chunks.push(`Thought: ${clean}`);
-  }
-  return chunks;
-}
-
-function isActionTraceLine(line: string): boolean {
-  return (
-    /^(search|read|write|call|open|update|run|use|fetch)\b/i.test(line) ||
-    /^(?:\u4f7f\u7528|\u6267\u884c|\u641c\u7d22|\u8bfb\u53d6|\u5199\u5165|\u8c03\u7528|\u6253\u5f00|\u66f4\u65b0)/.test(
-      line,
-    )
-  );
-}
-
-function splitInlineToolCalls(line: string): string[] {
-  if (!/^[A-Za-z_][A-Za-z0-9_-]*\s*\(/.test(line)) return [];
-  return line
-    .split(/\)\s+(?=[A-Za-z_][A-Za-z0-9_-]*\s*\()/)
-    .map((part, index, parts) =>
-      index < parts.length - 1 && !part.endsWith(")") ? `${part})` : part,
-    )
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function compactObservationTraceBlock(body: string): string {
-  const clean = body.replace(/\s+/g, " ").trim();
-  if (!clean) return "";
-  const lines = body
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const batchLine = lines.find((line) => /^\[\d+\/\d+\s+[^\]]+\]/.test(line));
-  const executionLine = lines.find((line) =>
-    /\(real tool execution (?:succeeded|failed)\)/i.test(line),
-  );
-  const targetMatch =
-    clean.match(/"query"\s*:\s*"([^"]+)"/) ??
-    clean.match(/"url"\s*:\s*"([^"]+)"/) ??
-    clean.match(/"path"\s*:\s*"([^"]+)"/);
-  const parts = [
-    batchLine ?? lines[0] ?? "",
-    executionLine ?? "",
-    targetMatch?.[1] ? `target: ${targetMatch[1]}` : "",
-  ].filter(Boolean);
-  return compactReasoningSummary(parts.join(" "), 220);
-}
-
-function splitPlainReasoningChunks(reasoning: string): string[] {
-  const trimmed = reasoning.trim();
-  if (!trimmed) return [];
-  return trimmed
-    .split(/\n{2,}/)
     .map((chunk) => chunk.trim())
     .filter(Boolean);
 }

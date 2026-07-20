@@ -322,6 +322,35 @@ describe("MessageGroup reasoning grouping", () => {
     ).not.toHaveTextContent(/^执行(?:\s|·)/);
   });
 
+  it("keeps opening intent and latest finding while folding retry chatter", () => {
+    const updates = [
+      "先确认时间线的数据来源。",
+      "第一次读取失败，正在切换路径。",
+      "第二次读取仍失败，继续尝试。",
+      "已经找到真实仓库位置。",
+    ];
+    const messages: AIMessage[] = updates.map((content, index) => ({
+      id: `progress-${index + 1}`,
+      type: "ai",
+      content,
+      additional_kwargs: {
+        public_progress: true,
+        progress_sequence: index + 1,
+        timeline_sequence: index + 1,
+      },
+    }));
+
+    renderWithProviders(<MessageGroup messages={messages} isLoading />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getAllByTestId("public-progress-event")).toHaveLength(2);
+    expect(screen.getByText(updates[0]!)).toBeInTheDocument();
+    expect(screen.getByText(updates[3]!)).toBeInTheDocument();
+    expect(screen.queryByText(updates[1]!)).not.toBeInTheDocument();
+    expect(screen.queryByText(updates[2]!)).not.toBeInTheDocument();
+  });
+
   it("deduplicates replayed checkpoints and tool ids in the main transcript", () => {
     const repeatedProgress = "正在读取消息组件，确认时间线的真实渲染顺序。";
     const messages: AIMessage[] = ["progress-a", "progress-b"].map((id) => ({
@@ -557,7 +586,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("keeps completed code-mode traces behind the workbench disclosure", () => {
+  it("keeps completed code-mode traces concrete without action categories", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-1",
@@ -592,9 +621,8 @@ describe("MessageGroup reasoning grouping", () => {
     expect(
       screen.queryByText("Inspect the user request before editing."),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("frontend route structure"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText("frontend route structure")).toBeInTheDocument();
+    expect(screen.queryByText(/Search sources/)).not.toBeInTheDocument();
   });
 
   it("keeps a live code-mode trace compact when the same turn becomes historical", () => {
@@ -789,7 +817,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the lead-in before Phase 1 visible during live streaming", () => {
+  it("uses structured order instead of phase wording for the live frame", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-lead-in",
@@ -801,11 +829,12 @@ describe("MessageGroup reasoning grouping", () => {
         },
       },
       {
-        id: "ai-phase-1",
+        id: "ai-current",
         type: "ai",
         content: "",
         additional_kwargs: {
-          public_reasoning_summary: "Phase 1: 先拆分候选细分赛道。",
+          public_reasoning_summary: "先拆分候选细分赛道。",
+          phase_id: "turn-1:progress:1",
         },
       },
     ];
@@ -820,9 +849,7 @@ describe("MessageGroup reasoning grouping", () => {
     expect(
       screen.queryByText("这个问题需要先确认赛道边界，否则机会点会太泛。"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Phase 1: 先拆分候选细分赛道。"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("先拆分候选细分赛道。")).toBeInTheDocument();
     expect(screen.queryByTitle(/过程回放/)).not.toBeInTheDocument();
   });
 
@@ -993,6 +1020,38 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Action:/)).not.toBeInTheDocument();
     expect(screen.queryByText("执行中")).not.toBeInTheDocument();
+  });
+
+  it("does not infer a second narration lane from ordinary tool-bearing content", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-read",
+        type: "ai",
+        content: "我先读取消息组件，再把证据串起来。",
+        tool_calls: [
+          {
+            id: "read-message-group",
+            name: "read_file",
+            args: { path: "frontend/src/messages/message-group.tsx" },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} />, {
+      locale: "zh-CN",
+    });
+
+    expect(
+      screen.queryByText("我先读取消息组件，再把证据串起来。"),
+    ).not.toBeInTheDocument();
+    const execution = screen.getByTestId("process-timeline-event-execution");
+    expect(execution).toHaveTextContent("message-group.tsx");
+    expect(execution).not.toHaveTextContent("查看文件");
+    expect(execution).not.toHaveTextContent("执行动作");
+    expect(
+      screen.queryByTestId("process-timeline-event-thinking"),
+    ).not.toBeInTheDocument();
   });
 
   it("collapses consecutive tool targets into one quiet evidence row", () => {
