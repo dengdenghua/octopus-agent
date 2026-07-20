@@ -373,10 +373,17 @@ export function FileTree({
             }}
             className={cn(
               "flex items-center gap-1 px-2 py-[3px] hover:bg-accent/50 active:bg-accent/60 cursor-pointer rounded-lg mx-1 transition-colors group",
-              isHot &&
-                "bg-primary/10 ring-1 ring-primary/40 shadow-[0_0_12px_rgba(var(--primary-rgb,99,102,241),0.35)] animate-pulse",
+              isHot && "bg-primary/10 ring-1 ring-primary/40",
             )}
             style={{ paddingLeft: `${entry.depth * 14 + 8}px` }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                isDir ? toggleDir(entry.path) : onFileClick?.(entry.path);
+              }
+            }}
             onClick={() =>
               isDir ? toggleDir(entry.path) : onFileClick?.(entry.path)
             }
@@ -414,7 +421,7 @@ export function FileTree({
             {gitStatus && (
               <span
                 className={cn(
-                  "ml-auto shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold",
+                  "ml-auto shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold",
                   gitStatus === "M" &&
                     "bg-amber-500/10 text-amber-600 dark:text-amber-400",
                   gitStatus === "A" &&

@@ -55,7 +55,6 @@ import { useArtifactContent, useArtifactDiff } from "@/core/artifacts/hooks";
 import { artifactDisplayPath, urlOfArtifact } from "@/core/artifacts/utils";
 import { copyTextToClipboard } from "@/core/clipboard";
 import { useI18n } from "@/core/i18n/hooks";
-import { installSkill } from "@/core/skills/api";
 import { useStreamdownPlugins } from "@/core/streamdown";
 import { checkCodeFile, getFileName } from "@/core/utils/files";
 import { env } from "@/env";
@@ -67,6 +66,7 @@ import { Tooltip } from "../tooltip";
 
 import { useArtifacts } from "./context";
 import { INSPECT_INJECTED_SCRIPT } from "./inspect-injected-script";
+import { useInstallSkill } from "./use-install-skill";
 import { InspectOverlay } from "./inspect-overlay";
 
 type ViewMode = "code" | "preview" | "diff";
@@ -130,7 +130,8 @@ export function ArtifactFileDetail({
   const displayContent = content ?? "";
 
   const [viewMode, setViewMode] = useState<ViewMode>("code");
-  const [isInstalling, setIsInstalling] = useState(false);
+  const { installingFile, install } = useInstallSkill(threadId);
+  const isInstalling = installingFile === filepath;
   const { isMock } = useThread();
   useEffect(() => {
     if (isWriteFile && isDiffAvailable) {
@@ -142,27 +143,9 @@ export function ArtifactFileDetail({
     }
   }, [isSupportPreview, isWriteFile, isDiffAvailable]);
 
-  const handleInstallSkill = useCallback(async () => {
-    if (isInstalling) return;
-
-    setIsInstalling(true);
-    try {
-      const result = await installSkill({
-        thread_id: threadId,
-        path: filepath,
-      });
-      if (result.success) {
-        toast.success(result.message);
-      } else {
-        toast.error(result.message ?? t.toolCalls.toastSkillInstallFailed);
-      }
-    } catch (error) {
-      console.error("Failed to install skill:", error);
-      toast.error(t.toolCalls.toastSkillInstallFailed);
-    } finally {
-      setIsInstalling(false);
-    }
-  }, [threadId, filepath, isInstalling, t]);
+  const handleInstallSkill = useCallback(() => {
+    void install(filepath);
+  }, [install, filepath]);
 
   const effectiveContent = isWriteFile ? newContent : displayContent;
 
@@ -341,6 +324,7 @@ export function ArtifactFileDetail({
         {!isCodeFile && (
           <iframe
             className="size-full"
+            title={t.common.preview}
             src={urlOfArtifact({
               filepath: filepathFromProps,
               threadId,

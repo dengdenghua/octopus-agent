@@ -1,11 +1,9 @@
 import { DownloadIcon, LoaderIcon, PackageIcon } from "lucide-react";
-import { useCallback, useState } from "react";
-import { toast } from "sonner";
+import { useCallback } from "react";
 
 import { Button } from "@/components/ui/button";
 import { artifactDisplayPath, urlOfArtifact } from "@/core/artifacts/utils";
 import { useI18n } from "@/core/i18n/hooks";
-import { installSkill } from "@/core/skills/api";
 import {
   getFileExtensionDisplayName,
   getFileIcon,
@@ -14,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { useArtifacts } from "./context";
+import { useInstallSkill } from "./use-install-skill";
 
 export function ArtifactFileList({
   className,
@@ -26,7 +25,7 @@ export function ArtifactFileList({
 }) {
   const { t } = useI18n();
   const { select: selectArtifact, setOpen } = useArtifacts();
-  const [installingFile, setInstallingFile] = useState<string | null>(null);
+  const { installingFile, install } = useInstallSkill(threadId);
 
   const handleClick = useCallback(
     (filepath: string) => {
@@ -37,31 +36,12 @@ export function ArtifactFileList({
   );
 
   const handleInstallSkill = useCallback(
-    async (e: React.MouseEvent, filepath: string) => {
+    (e: React.MouseEvent, filepath: string) => {
       e.stopPropagation();
       e.preventDefault();
-
-      if (installingFile) return;
-
-      setInstallingFile(filepath);
-      try {
-        const result = await installSkill({
-          thread_id: threadId,
-          path: filepath,
-        });
-        if (result.success) {
-          toast.success(result.message);
-        } else {
-          toast.error(result.message || t.toolCalls.toastSkillInstallFailed);
-        }
-      } catch (error) {
-        console.error("Failed to install skill:", error);
-        toast.error(t.toolCalls.toastSkillInstallFailed);
-      } finally {
-        setInstallingFile(null);
-      }
+      void install(filepath);
     },
-    [threadId, installingFile, t],
+    [install],
   );
 
   return (
@@ -109,7 +89,13 @@ export function ArtifactFileList({
                 {t.common.install}
               </Button>
             )}
-            <Button variant="ghost" size="icon-sm" className="size-7" asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              asChild
+              aria-label={t.common.download}
+            >
               <a
                 href={urlOfArtifact({
                   filepath: file,

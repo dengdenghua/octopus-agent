@@ -34,6 +34,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import {
   WorkspaceBody,
@@ -1465,7 +1466,7 @@ function AppListRow({ item }: { item: AppItem }) {
       <span>
         <Badge
           variant="outline"
-          className="rounded-md border-black/10 bg-white text-[11px]"
+          className="rounded-md border-black/10 bg-white text-[10px]"
         >
           {item.status}
         </Badge>
@@ -1921,7 +1922,7 @@ function SearchResultsView({
                   <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
                     {hit.snippet}
                   </div>
-                  <div className="mt-1 truncate text-[11px] text-muted-foreground/75">
+                  <div className="mt-1 truncate text-[10px] text-muted-foreground/75">
                     {hit.path}
                   </div>
                 </div>
@@ -1992,6 +1993,7 @@ function SourceRow({
   source: NASSource;
   onRemove: () => void;
 }) {
+  const { confirm, confirmDialog } = useConfirmDialog();
   const isReady = source.status === "ready";
   const displayPath = isAbsolutePath(source.path) ? source.path : source.path;
   return (
@@ -2015,7 +2017,7 @@ function SourceRow({
         <Badge
           variant="outline"
           className={cn(
-            "h-5 px-1.5 text-[11px]",
+            "h-5 px-1.5 text-[10px]",
             isReady
               ? "border-emerald-300/55 bg-emerald-50 text-emerald-800"
               : "border-amber-300/55 bg-amber-50 text-amber-800",
@@ -2023,10 +2025,25 @@ function SourceRow({
         >
           {isReady ? "已就绪" : "待索引"}
         </Badge>
-        <Button size="sm" variant="ghost" onClick={onRemove}>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={async () => {
+            if (
+              await confirm({
+                title: "移除授权目录",
+                description: `将移除「${source.display_name}」及其索引数据，此操作不可撤销。`,
+                confirmLabel: "移除",
+              })
+            ) {
+              onRemove();
+            }
+          }}
+        >
           移除
         </Button>
       </div>
+      {confirmDialog}
     </div>
   );
 }
