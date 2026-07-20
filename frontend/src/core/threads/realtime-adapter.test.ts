@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { AIMessage } from "@/core/api/types";
 import type {
   AgentMessageItem,
   ArtifactItem,
@@ -15,6 +16,8 @@ import type {
   UserMessageItem,
   VerificationItem,
 } from "@/core/realtime/items";
+import { emptyConversation } from "@/core/realtime/items";
+import { reduce } from "@/core/realtime/reducer";
 
 import {
   conversationIsLoading,
@@ -211,6 +214,58 @@ describe("conversationToAgentThreadState · userMessage", () => {
 });
 
 describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
+  it("keeps the terminal narrative stable across reversed turn lifecycle events", () => {
+    const completed = makeTurn(
+      [
+        userMsg("inspect"),
+        {
+          ...agentMsg("checking", "progress"),
+          messageKind: "commentary",
+          timelineSequence: 1,
+        },
+        cmd("read_file", "tool", {
+          timelineSequence: 2,
+          parentItemId: "progress",
+        }),
+        {
+          ...agentMsg("The inspection is complete.", "answer"),
+          timelineSequence: 3,
+          parentItemId: "tool",
+        },
+      ],
+      "completed",
+    );
+    const afterCompletion = reduce(emptyConversation("th-test"), {
+      method: "turn/completed",
+      params: { threadId: "th-test", turn: completed },
+    }).next;
+    const afterLateStart = reduce(afterCompletion, {
+      method: "turn/started",
+      params: {
+        threadId: "th-test",
+        turn: makeTurn([userMsg("inspect")], "inProgress"),
+      },
+    }).next;
+
+    const state = conversationToAgentThreadState(afterLateStart);
+
+    expect(afterLateStart.turns[0]?.status).toBe("completed");
+    expect(state.messages.map((message) => message.content)).toEqual([
+      "inspect",
+      "checking",
+      "The inspection is complete.",
+    ]);
+    expect((state.messages[1] as AIMessage).additional_kwargs).toMatchObject({
+      public_progress: true,
+      timeline_sequence: 1,
+    });
+    expect((state.messages[2] as AIMessage).tool_calls?.[0]).toMatchObject({
+      id: "tool",
+      timelineSequence: 2,
+      parentItemId: "progress",
+    });
+  });
+
   it("preserves public commentary as distinct non-terminal messages", () => {
     const firstCommentary: AgentMessageItem = {
       ...agentMsg("首轮扫描确认事件桥负责三类流。", "p1"),

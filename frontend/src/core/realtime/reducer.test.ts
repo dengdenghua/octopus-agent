@@ -407,6 +407,167 @@ describe("reducer", () => {
     if (item.type === "agentMessage") expect(item.text).toBe("final");
   });
 
+  it("keeps a completed turn authoritative when its start arrives late", () => {
+    const completedTurn = {
+      ...blankTurn("trn-1", "th"),
+      status: "completed" as const,
+      completedAt: T0_ISO,
+      items: [
+        {
+          id: "user",
+          type: "userMessage" as const,
+          status: "completed" as const,
+          createdAt: T0_ISO,
+          text: "inspect",
+        },
+        {
+          id: "answer",
+          type: "agentMessage" as const,
+          status: "completed" as const,
+          createdAt: T0_ISO,
+          text: "done",
+          timelineSequence: 3,
+          parentItemId: "tool",
+        },
+        {
+          id: "commentary",
+          type: "agentMessage" as const,
+          status: "completed" as const,
+          createdAt: T0_ISO,
+          text: "checking",
+          messageKind: "commentary" as const,
+          timelineSequence: 1,
+        },
+        {
+          id: "tool",
+          type: "commandExecution" as const,
+          status: "completed" as const,
+          createdAt: T0_ISO,
+          command: "read_file",
+          cwd: null,
+          aggregatedOutput: "ok",
+          exitCode: 0,
+          processId: null,
+          networkAccess: false,
+          timelineSequence: 2,
+          parentItemId: "commentary",
+        },
+      ],
+    };
+    const staleStart = {
+      ...blankTurn("trn-1", "th"),
+      items: [completedTurn.items[0]!],
+    };
+
+    const state = apply(
+      emptyConversation("th"),
+      {
+        method: "turn/completed",
+        params: { threadId: "th", turn: completedTurn },
+      },
+      {
+        method: "turn/started",
+        params: { threadId: "th", turn: staleStart },
+      },
+    );
+
+    expect(state.turns).toHaveLength(1);
+    expect(state.turns[0]?.status).toBe("completed");
+    expect(state.turns[0]?.items.map((item) => item.id)).toEqual([
+      "user",
+      "commentary",
+      "tool",
+      "answer",
+    ]);
+  });
+
+  it("does not let a duplicate turn start erase streamed item content", () => {
+    const turn = blankTurn("trn-1", "th");
+    const state = apply(
+      emptyConversation("th"),
+      { method: "turn/started", params: { threadId: "th", turn } },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: turn.id,
+          item: {
+            id: "answer",
+            type: "agentMessage",
+            status: "inProgress",
+            createdAt: T0_ISO,
+            text: "",
+          },
+        },
+      },
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "th",
+          turnId: turn.id,
+          itemId: "answer",
+          delta: "streamed text",
+        },
+      },
+      {
+        method: "turn/started",
+        params: {
+          threadId: "th",
+          turn: {
+            ...turn,
+            items: [
+              {
+                id: "answer",
+                type: "agentMessage",
+                status: "inProgress",
+                createdAt: T0_ISO,
+                text: "",
+                timelineSequence: 2,
+                parentItemId: "commentary",
+              },
+              {
+                id: "commentary",
+                type: "agentMessage",
+                status: "completed",
+                createdAt: T0_ISO,
+                text: "working",
+                messageKind: "commentary",
+                timelineSequence: 1,
+              },
+            ],
+          },
+        },
+      },
+    );
+
+    expect(state.turns[0]?.items.map((item) => item.id)).toEqual([
+      "commentary",
+      "answer",
+    ]);
+    const answer = state.turns[0]?.items.find((item) => item.id === "answer");
+    expect(answer?.timelineSequence).toBe(2);
+    if (answer?.type === "agentMessage") {
+      expect(answer.text).toBe("streamed text");
+    }
+  });
+
+  it("treats an identical duplicate turn start as a true no-op", () => {
+    const turn = blankTurn("trn-1", "th");
+    const state = apply(emptyConversation("th"), {
+      method: "turn/started",
+      params: { threadId: "th", turn },
+    });
+
+    const result = reduce(state, {
+      method: "turn/started",
+      params: { threadId: "th", turn: { ...turn, items: [] } },
+    });
+
+    expect(result.next).toBe(state);
+    expect(result.changedTurnIds).toEqual([]);
+    expect(result.changedItemIds).toEqual([]);
+  });
+
   it("orders late lifecycle snapshots by server timeline sequence", () => {
     const turn = blankTurn("trn-1", "th");
     const state = apply(

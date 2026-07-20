@@ -240,20 +240,38 @@ export function reduce(
         items: orderTimelineItems(evt.params.turn.items),
       };
       const idx = state.turns.findIndex((t) => t.id === incoming.id);
-      const turns =
-        idx === -1
-          ? [...state.turns, incoming]
-          : state.turns.map((t) =>
-              t.id === incoming.id ? { ...t, ...incoming } : t,
-            );
+      if (idx !== -1) {
+        const existing = state.turns[idx]!;
+        const merged = mergeStartedTurn(existing, incoming);
+        if (merged === existing) return unchanged(state);
+        return {
+          next: {
+            ...state,
+            turns: replaceAt(state.turns, idx, merged),
+          },
+          changedTurnIds: [incoming.id],
+          changedItemIds: [],
+        };
+      }
       return {
-        next: { ...state, turns },
+        next: { ...state, turns: [...state.turns, incoming] },
         changedTurnIds: [incoming.id],
         changedItemIds: [],
       };
     }
     case "turn/completed": {
       const incoming = evt.params.turn;
+      const existingIndex = state.turns.findIndex(
+        (turn) => turn.id === incoming.id,
+      );
+      if (existingIndex === -1) {
+        const completed = normalizeTerminalTurn(incoming);
+        return {
+          next: { ...state, turns: [...state.turns, completed] },
+          changedTurnIds: [incoming.id],
+          changedItemIds: completed.items.map((item) => item.id),
+        };
+      }
       const changedItemIds: string[] = [];
       const turns = state.turns.map((t) => {
         if (t.id !== incoming.id) return t;
@@ -513,6 +531,54 @@ function mergeCompletedTurn(existing: Turn, incoming: Turn): Turn {
     ...existing,
     ...incoming,
     items,
+  };
+}
+
+/**
+ * A duplicate/replayed turn start is never more authoritative than state we
+ * already reduced from item deltas or a terminal turn snapshot. Preserve the
+ * live copy, enrich missing timeline coordinates, and append genuinely new
+ * items without allowing a stale start to erase text or reopen the turn.
+ */
+function mergeStartedTurn(existing: Turn, incoming: Turn): Turn {
+  if (existing.status !== "inProgress") return existing;
+
+  const incomingById = new Map(incoming.items.map((item) => [item.id, item]));
+  const existingIds = new Set(existing.items.map((item) => item.id));
+  const existingItems = existing.items.map((item) => {
+    const replayed = incomingById.get(item.id);
+    if (!replayed) return item;
+    const timelineSequence =
+      item.timelineSequence ?? replayed.timelineSequence ?? null;
+    const parentItemId = item.parentItemId ?? replayed.parentItemId ?? null;
+    const phaseId = item.phaseId ?? replayed.phaseId ?? null;
+    if (
+      timelineSequence === item.timelineSequence &&
+      parentItemId === item.parentItemId &&
+      phaseId === item.phaseId
+    ) {
+      return item;
+    }
+    return { ...item, timelineSequence, parentItemId, phaseId } as Item;
+  });
+  const appended = incoming.items.filter((item) => !existingIds.has(item.id));
+  if (
+    appended.length === 0 &&
+    existingItems.every((item, index) => item === existing.items[index])
+  ) {
+    return existing;
+  }
+  return {
+    ...incoming,
+    ...existing,
+    items: orderTimelineItems([...existingItems, ...appended]),
+  };
+}
+
+function normalizeTerminalTurn(turn: Turn): Turn {
+  return {
+    ...turn,
+    items: closeItemsForTurn(orderTimelineItems(turn.items), turn.status),
   };
 }
 
