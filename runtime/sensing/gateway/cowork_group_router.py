@@ -24,6 +24,7 @@ from runtime.memory.cowork.group import (
     responders,
 )
 from runtime.memory.cowork.group_store import GroupStore
+from runtime.memory.threads.event_log import validate_thread_id
 
 
 class GrantBody(BaseModel):
@@ -126,6 +127,12 @@ def create_cowork_group_router(
 ) -> APIRouter:
     """Create the ``/api/cowork/*`` thread-group router."""
     group_store = store or GroupStore()
+
+    def _require_thread_path(thread_id: str) -> None:
+        try:
+            validate_thread_id(thread_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     def _collaboration_store():
         if collaboration_store is not None:
@@ -341,7 +348,7 @@ def create_cowork_group_router(
     def _auth_dep(request: Request) -> None:
         _actor(request)  # enforces 401 when require_auth and no/invalid token
 
-    router = APIRouter(tags=["cowork"])
+    router = APIRouter(tags=["cowork"], dependencies=[Depends(_require_thread_path)])
 
     @router.get("/api/cowork/{thread_id}")
     def get_group(thread_id: str, until_seq: int | None = None) -> dict[str, Any]:

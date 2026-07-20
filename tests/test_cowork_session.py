@@ -156,6 +156,13 @@ def _client(tmp_path) -> TestClient:
     return TestClient(app)
 
 
+def test_thread_id_validation_is_an_api_error_not_a_server_error(tmp_path) -> None:
+    response = _client(tmp_path).get("/api/collab/-2494-9AMFYgjfm9Ym0uN")
+
+    assert response.status_code == 400
+    assert "threadId must be" in response.json()["detail"]
+
+
 def test_collab_endpoints(tmp_path) -> None:
     rms = RoomMessageStore(base_dir=tmp_path / "rooms")
     app = FastAPI()
