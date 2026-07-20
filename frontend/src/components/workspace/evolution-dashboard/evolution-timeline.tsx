@@ -22,7 +22,7 @@ const STATUS_DOT_COLOR: Record<string, string> = {
   applied: "bg-emerald-500",
   pending: "bg-amber-500",
   rolled_back: "bg-red-500",
-  rejected: "bg-zinc-400 dark:bg-zinc-500",
+  rejected: "bg-muted-foreground",
 };
 
 const CANARY_PHASE_STYLE: Record<string, string> = {
@@ -40,7 +40,7 @@ const CANARY_PHASE_STYLE: Record<string, string> = {
 function canaryPhaseStyle(phase: string): string {
   return (
     CANARY_PHASE_STYLE[phase] ??
-    "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border-zinc-500/30"
+    "bg-muted text-muted-foreground border-border"
   );
 }
 
@@ -79,7 +79,7 @@ function FitnessDiffCard({ before, after }: { before: number; after: number }) {
           <span className="text-muted-foreground w-9 shrink-0">Before</span>
           <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
             <div
-              className="h-full rounded-full bg-zinc-400 dark:bg-zinc-500"
+              className="h-full rounded-full bg-muted-foreground"
               style={{ width: `${Math.max((safeBefore / maxVal) * 100, 2)}%` }}
             />
           </div>
@@ -119,7 +119,7 @@ function TimelineNode({
   isRollingBack?: boolean;
 }) {
   const dotColor =
-    STATUS_DOT_COLOR[record.status] ?? "bg-zinc-400 dark:bg-zinc-500";
+    STATUS_DOT_COLOR[record.status] ?? "bg-muted-foreground";
   const isCanaryKind =
     record.kind.toLowerCase().includes("canary") ||
     record.kind.toLowerCase().includes("skill");

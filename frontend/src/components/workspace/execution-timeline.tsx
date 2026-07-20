@@ -223,7 +223,7 @@ export function ExecutionTimeline() {
           return (
             <div
               key={tid}
-              className="rounded-xl border border-border-default bg-background/60 overflow-hidden"
+              className="rounded-lg border border-border-default bg-background/60 overflow-hidden"
             >
               <button
                 className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/30"

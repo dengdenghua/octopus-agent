@@ -165,7 +165,7 @@ export function RecRecorderOverlay({
     <div
       role="dialog"
       aria-label={t.recorder.title}
-      className="fixed bottom-5 right-5 z-[120] w-[260px] rounded-2xl border border-border-default bg-background/95 p-4 shadow-2xl ring-1 ring-border-subtle backdrop-blur"
+      className="fixed bottom-5 right-5 z-[120] w-[260px] rounded-lg border border-border-default bg-background/95 p-4 shadow-2xl ring-1 ring-border-subtle backdrop-blur"
     >
       <div className="mb-2 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
@@ -235,7 +235,7 @@ export function RecRecorderOverlay({
 
       {phase === "recording" && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2.5 rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2">
+          <div className="flex items-center gap-2.5 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2">
             <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
             <span className="font-mono text-sm font-semibold text-foreground">
               {formatElapsed(elapsed)}
@@ -286,7 +286,7 @@ function DoneSummary({ result }: { result: StopRecordingResponse | null }) {
 
   if (status === "promoted" && forged.length) {
     return (
-      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
         <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
           <SparklesIcon className="size-3.5" />
           已学会技能
@@ -300,20 +300,20 @@ function DoneSummary({ result }: { result: StopRecordingResponse | null }) {
   }
   if (status === "quarantined") {
     return (
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] text-amber-700 dark:text-amber-300">
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] text-amber-700 dark:text-amber-300">
         已生成技能候选,含敏感操作,已隔离待人工审批。
       </div>
     );
   }
   if (status === "no_successful_trajectory") {
     return (
-      <div className="rounded-xl border border-border bg-muted/40 p-3 text-[11px] text-muted-foreground">
+      <div className="rounded-lg border border-border bg-muted/40 p-3 text-[11px] text-muted-foreground">
         本轮暂无可提炼的成功操作轨迹,换个更明确的任务再录一次。
       </div>
     );
   }
   return (
-    <div className="rounded-xl border border-border bg-muted/40 p-3 text-[11px] text-muted-foreground">
+    <div className="rounded-lg border border-border bg-muted/40 p-3 text-[11px] text-muted-foreground">
       录制完成{result?.name ? `：${result.name}` : ""}。
     </div>
   );

@@ -58,7 +58,7 @@ export default function NotificationSettingsPage() {
         description={t.settings.notification.description}
       >
         <div className="space-y-3" role="status" aria-live="polite">
-          <Skeleton className="h-16 w-full rounded-xl" />
+          <Skeleton className="h-16 w-full rounded-lg" />
           <Skeleton className="h-9 w-44 rounded-lg" />
         </div>
       </SettingsSection>
@@ -72,7 +72,7 @@ export default function NotificationSettingsPage() {
         description={t.settings.notification.description}
       >
         <p
-          className="text-muted-foreground rounded-xl border bg-muted/30 p-4 text-sm"
+          className="text-muted-foreground rounded-lg border bg-muted/30 p-4 text-sm"
           role="status"
         >
           {t.settings.notification.notSupported}
@@ -87,7 +87,7 @@ export default function NotificationSettingsPage() {
       description={t.settings.notification.description}
     >
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-4 rounded-xl border bg-card p-4">
+        <div className="flex items-center justify-between gap-4 rounded-lg border bg-card p-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
               {permission === "granted" ? (

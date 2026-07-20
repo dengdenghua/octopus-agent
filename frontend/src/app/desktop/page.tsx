@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks";
 import { useI18n } from "@/core/i18n/hooks";
@@ -119,6 +120,7 @@ function getDesktopItemCategory(
 export default function DesktopShellPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [query, setQuery] = useState("");
   const [nativeDesktopItems, setNativeDesktopItems] = useState<
     NativeDesktopItem[]
@@ -531,9 +533,10 @@ export default function DesktopShellPage() {
       }
     } else if (action === "delete") {
       if (!window.octopus?.desktop?.trashItem) return;
-      const confirmed = window.confirm(
-        t.desktop.contextMenu.confirmTrash(item.name),
-      );
+      const confirmed = await confirm({
+        title: t.common.delete,
+        description: t.desktop.contextMenu.confirmTrash(item.name),
+      });
       if (!confirmed) return;
       setDeletingItemId(item.id);
       try {
@@ -1248,6 +1251,7 @@ export default function DesktopShellPage() {
           </div>
         )}
       </section>
+      {confirmDialog}
     </main>
   );
 }

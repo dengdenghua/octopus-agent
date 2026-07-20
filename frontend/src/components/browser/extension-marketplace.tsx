@@ -21,6 +21,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -212,6 +213,7 @@ export function ExtensionMarketplace({
   >([]);
   const [extensionError, setExtensionError] = useState<string | null>(null);
   const [extensionBusy, setExtensionBusy] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
   const isElectron =
     typeof window !== "undefined" && window.octopus?.isElectron === true;
 
@@ -257,7 +259,11 @@ export function ExtensionMarketplace({
 
   const removeBrowserExtension = async (id: string) => {
     if (!window.octopus?.extensions) return;
-    if (!window.confirm(em.confirmRemove)) return;
+    const ok = await confirm({
+      title: t.common.delete,
+      description: em.confirmRemove,
+    });
+    if (!ok) return;
     setExtensionBusy(true);
     try {
       const result = await window.octopus.extensions.remove(id);
@@ -634,6 +640,7 @@ export function ExtensionMarketplace({
           </main>
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }

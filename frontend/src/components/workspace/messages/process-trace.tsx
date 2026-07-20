@@ -238,7 +238,7 @@ function AgentClusterCard({
 }) {
   const { t } = useI18n();
   return (
-    <div className="rounded-xl border border-border-default bg-background/85 px-3 py-2.5 shadow-[var(--shadow-xs)]">
+    <div className="rounded-lg border border-border-default bg-background/85 px-3 py-2.5 shadow-[var(--shadow-xs)]">
       <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
         <NetworkIcon className="size-4 shrink-0 text-sky-500" />
         <span className="font-medium text-foreground">
@@ -406,7 +406,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         : "done";
 
   return (
-    <div className="rounded-xl border border-border-default bg-background/85 px-3 py-2 shadow-[var(--shadow-xs)]">
+    <div className="rounded-lg border border-border-default bg-background/85 px-3 py-2 shadow-[var(--shadow-xs)]">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

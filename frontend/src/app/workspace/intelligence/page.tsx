@@ -43,7 +43,7 @@ export default function IntelligencePage() {
             </TabsList>
           </Tabs>
 
-          <div className="workspace-panel ui-density-panel rounded-[1.75rem]">
+          <div className="workspace-panel ui-density-panel">
             {activeTab === "subscriptions" ? (
               <IntelligencePanel />
             ) : (

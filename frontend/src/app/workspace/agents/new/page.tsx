@@ -628,7 +628,7 @@ export default function NewAgentPage() {
     return (
       <div className="relative flex size-full items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_50%_18%,hsl(var(--primary)/0.08),transparent_34%),linear-gradient(to_bottom,hsl(var(--background)),hsl(var(--muted)/0.28))] p-6 text-white">
         <div className="pointer-events-none absolute inset-x-[20%] top-[8%] h-24 rounded-[50%] bg-primary/10 blur-3xl" />
-        <div className="relative h-[min(700px,80vh)] w-[min(1080px,86vw)] overflow-hidden rounded-xl border border-white/10 bg-[#202020]/96 shadow-[0_28px_90px_rgba(15,23,42,0.28)] ring-1 ring-black/20 backdrop-blur-xl">
+        <div className="relative h-[min(700px,80vh)] w-[min(1080px,86vw)] overflow-hidden rounded-lg border border-white/10 bg-[#202020]/96 shadow-[0_28px_90px_rgba(15,23,42,0.28)] ring-1 ring-black/20 backdrop-blur-xl">
           <div className="pointer-events-none absolute inset-0 opacity-[0.09] [background-image:radial-gradient(circle_at_76%_28%,rgba(244,232,111,0.1),transparent_30%),linear-gradient(to_right,rgba(255,255,255,0.032)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.024)_1px,transparent_1px)] [background-size:100%_100%,40px_40px,40px_40px]" />
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[#f4e86f]/24 to-transparent" />
           <div className="pointer-events-none absolute inset-x-14 bottom-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />

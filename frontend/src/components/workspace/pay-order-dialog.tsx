@@ -128,14 +128,14 @@ export function PayOrderDialog({
 
         <div className="grid gap-5 px-6 pb-6 md:grid-cols-2">
           {/* Left column — QR + description */}
-          <div className="rounded-2xl bg-muted/40 px-6 py-8 flex flex-col items-center">
+          <div className="rounded-lg bg-muted/40 px-6 py-8 flex flex-col items-center">
             <h2 className="text-2xl font-semibold text-center">
               {t.payOrder.title}
             </h2>
             <p className="mt-2 text-sm text-muted-foreground text-center">
               {t.payOrder.subtitle}
             </p>
-            <div className="mt-6 flex size-[260px] items-center justify-center rounded-xl bg-white p-4 shadow-[var(--shadow-xs)]">
+            <div className="mt-6 flex size-[260px] items-center justify-center rounded-lg bg-white p-4 shadow-[var(--shadow-xs)]">
               {paymentLink ? (
                 <QRCodeSVG
                   value={paymentLink}

@@ -10,6 +10,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -491,6 +492,7 @@ export function ChannelCredentialDialog({
   const [showSecret, setShowSecret] = useState<Record<string, boolean>>({});
   const [masked, setMasked] = useState<Record<string, string> | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { confirm: confirmAction, confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     if (!open) return;
@@ -559,7 +561,12 @@ export function ChannelCredentialDialog({
   }
 
   async function handleDelete() {
-    if (!confirm(t.channelCredential.confirmDisconnect(displayName))) return;
+    const ok = await confirmAction({
+      title: t.channelCredential.disconnect,
+      description: t.channelCredential.confirmDisconnect(displayName),
+      confirmLabel: t.channelCredential.disconnect,
+    });
+    if (!ok) return;
     try {
       const r = await fetch(
         `${getBackendBaseURL()}/api/channels/credentials/${platform}`,
@@ -756,6 +763,7 @@ export function ChannelCredentialDialog({
           </div>
         </div>
       </DialogContent>
+      {confirmDialog}
     </Dialog>
   );
 }

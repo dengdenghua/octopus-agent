@@ -95,7 +95,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   git: "text-orange-500",
   docs: "text-green-500",
   web: "text-cyan-500",
-  terminal: "text-zinc-400",
+  terminal: "text-muted-foreground",
   agent: "text-indigo-500",
   plugin: "text-fuchsia-500",
   skill: "text-yellow-500",

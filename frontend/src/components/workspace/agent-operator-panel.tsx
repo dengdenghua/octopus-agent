@@ -992,7 +992,7 @@ export function AgentOperatorPanel() {
   };
 
   return (
-    <section className="workspace-panel rounded-[1.5rem] px-5 py-4">
+    <section className="workspace-panel px-5 py-4">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">

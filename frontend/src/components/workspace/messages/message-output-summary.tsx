@@ -532,7 +532,7 @@ export function MessageOutputSummary({
     <div className={cn("mt-4 flex w-full flex-col gap-2", className)}>
       <div
         className={cn(
-          "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-xs",
+          "flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs",
           isFailure
             ? isNetworkFailure
               ? "border-amber-500/25 bg-amber-500/[0.06]"

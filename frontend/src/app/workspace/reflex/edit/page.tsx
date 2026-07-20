@@ -236,7 +236,7 @@ export default function ReflexEditorPage() {
       <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-          <section className="workspace-panel rounded-[1.75rem] px-6 py-4">
+          <section className="workspace-panel px-6 py-4">
             <div className="flex items-center gap-3">
               <Button asChild variant="ghost" size="sm">
                 <Link to="/workspace/reflex">
@@ -317,7 +317,7 @@ export default function ReflexEditorPage() {
           </section>
 
           {test && (
-            <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
+            <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <FileWarningIcon className="size-4" />
@@ -368,7 +368,7 @@ export default function ReflexEditorPage() {
           )}
 
           {initialLoadFailed ? (
-            <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
+            <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
               <CardContent className="flex flex-col items-center gap-3 px-4 py-12 text-center">
                 <FileWarningIcon className="size-8 text-rose-400" />
                 <div className="flex flex-wrap justify-center gap-2">
@@ -379,7 +379,7 @@ export default function ReflexEditorPage() {
               </CardContent>
             </Card>
           ) : mode === "yaml" ? (
-            <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
+            <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
               <CardContent className="p-2">
                 <Suspense
                   fallback={

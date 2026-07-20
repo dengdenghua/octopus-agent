@@ -30,6 +30,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { ErrorState, LoadingState } from "@/components/ui/state";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -114,10 +122,10 @@ export default function ObservabilityPage({
       <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-          <section className="workspace-panel rounded-[1.75rem] px-6 py-5">
+          <section className="workspace-panel px-6 py-5">
             <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
               <div className="flex items-center gap-4">
-                <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-violet-500/20">
+                <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-violet-500/20">
                   <ActivityIcon className="size-5" />
                 </div>
                 <div className="flex-1">
@@ -182,7 +190,7 @@ export default function ObservabilityPage({
 
             <TabsContent value="overview" className="mt-4">
               <div className="space-y-4">
-                <section className="workspace-panel rounded-[1.5rem] px-5 py-4">
+                <section className="workspace-panel px-5 py-4">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
                       <h2 className="text-base font-semibold">先从总览开始</h2>
@@ -412,19 +420,21 @@ function SwarmPanel() {
       </CardHeader>
       <CardContent className="space-y-3">
         {grouped.length === 0 && (
-          <EmptyState
-            icon={<NetworkIcon className="size-6" />}
-            title={t.observabilityPage.noConcurrentTasks}
-            hint={
-              <>
+          <Empty className="border-0 bg-transparent shadow-none">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <NetworkIcon />
+              </EmptyMedia>
+              <EmptyTitle>{t.observabilityPage.noConcurrentTasks}</EmptyTitle>
+              <EmptyDescription>
                 {t.observabilityPage.noConcurrentTasksHint}
                 <br />
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-[11px]">
                   {t.observabilityPage.nestedSseNote}
                 </span>
-              </>
-            }
-          />
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
         {grouped.map(([taskId, sub]) => (
           <div
@@ -579,11 +589,17 @@ function BlackboardPanel() {
         </CardHeader>
         <CardContent>
           {!selected && (
-            <EmptyState
-              icon={<DatabaseIcon className="size-6" />}
-              title={t.observabilityPage.selectTurnHint}
-              hint={t.observabilityPage.selectTurnHintDesc}
-            />
+            <Empty className="border-0 bg-transparent shadow-none">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <DatabaseIcon />
+                </EmptyMedia>
+                <EmptyTitle>{t.observabilityPage.selectTurnHint}</EmptyTitle>
+                <EmptyDescription>
+                  {t.observabilityPage.selectTurnHintDesc}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
           {selected &&
             snap.data &&
@@ -718,11 +734,17 @@ function JournalPanel() {
       </CardHeader>
       <CardContent>
         {events.length === 0 && (
-          <EmptyState
-            icon={<ActivityIcon className="size-6" />}
-            title={t.observabilityPage.noEvents}
-            hint={t.observabilityPage.noEventsHint}
-          />
+          <Empty className="border-0 bg-transparent shadow-none">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <ActivityIcon />
+              </EmptyMedia>
+              <EmptyTitle>{t.observabilityPage.noEvents}</EmptyTitle>
+              <EmptyDescription>
+                {t.observabilityPage.noEventsHint}
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
         <div className="max-h-[60vh] overflow-auto font-mono text-[11px]">
           {events
@@ -955,15 +977,15 @@ export function ToolEffectsPanel() {
           </div>
 
           {error ? (
-            <div className="rounded-xl bg-destructive/8 px-3 py-3 text-xs text-destructive">
+            <div className="rounded-lg bg-destructive/8 px-3 py-3 text-xs text-destructive">
               回执状态读取失败：{error}
             </div>
           ) : data.receipts.length === 0 ? (
-            <div className="rounded-xl bg-muted/30 px-3 py-5 text-center text-xs text-muted-foreground">
+            <div className="rounded-lg bg-muted/30 px-3 py-5 text-center text-xs text-muted-foreground">
               暂无外部动作回执；工具执行后会自动出现在这里。
             </div>
           ) : (
-            <div className="divide-y divide-border-default/70 rounded-xl border border-border-default/70">
+            <div className="divide-y divide-border-default/70 rounded-lg border border-border-default/70">
               {visibleReceipts.map((receipt) => (
                 <div
                   key={receipt.effect_key}
@@ -1027,7 +1049,7 @@ export function ToolEffectsPanel() {
               fencing token，页面过期时不会误操作新回执。
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+          <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
             {selected?.sucker_id} · token {selected?.fencing_token}
           </div>
           <Textarea
@@ -1112,18 +1134,13 @@ function RegenerationPanel() {
   );
 
   if (loading && !data) {
-    return (
-      <EmptyState
-        icon={<RefreshCwIcon className="size-6 animate-spin" />}
-        title={t.observabilityPage.loading}
-      />
-    );
+    return <LoadingState title={t.observabilityPage.loading} />;
   }
   if (error) {
     return (
-      <EmptyState
-        icon={<BrainCircuitIcon className="size-6" />}
-        title={`${t.observabilityPage.errorPrefix} ${error}`}
+      <ErrorState
+        title={t.observabilityPage.errorPrefix}
+        detail={error}
       />
     );
   }
@@ -1291,11 +1308,17 @@ function HemolymphPanel() {
         </CardHeader>
         <CardContent>
           {!latest && (
-            <EmptyState
-              icon={<GaugeIcon className="size-6" />}
-              title={t.observabilityPage.noComposeRecords}
-              hint={t.observabilityPage.noComposeRecordsHint}
-            />
+            <Empty className="border-0 bg-transparent shadow-none">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <GaugeIcon />
+                </EmptyMedia>
+                <EmptyTitle>{t.observabilityPage.noComposeRecords}</EmptyTitle>
+                <EmptyDescription>
+                  {t.observabilityPage.noComposeRecordsHint}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
           {latest && (
             <div className="space-y-3">
@@ -1470,11 +1493,17 @@ function CostPanel() {
         </CardHeader>
         <CardContent>
           {data.tasks.length === 0 && (
-            <EmptyState
-              icon={<CoinsIcon className="size-6" />}
-              title={t.observabilityPage.noBudgetCommits}
-              hint={t.observabilityPage.noBudgetCommitsHint}
-            />
+            <Empty className="border-0 bg-transparent shadow-none">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <CoinsIcon />
+                </EmptyMedia>
+                <EmptyTitle>{t.observabilityPage.noBudgetCommits}</EmptyTitle>
+                <EmptyDescription>
+                  {t.observabilityPage.noBudgetCommitsHint}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
           {data.tasks.length > 0 && (
             <div className="max-h-[60vh] overflow-auto">
@@ -1531,24 +1560,6 @@ function CostPanel() {
 // ═══════════════════════════════════════════════════════════
 // Shared UI helpers
 // ═══════════════════════════════════════════════════════════
-
-function EmptyState({
-  icon,
-  title,
-  hint,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  hint?: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
-      <div className="text-muted-foreground">{icon}</div>
-      <div className="text-sm font-medium">{title}</div>
-      {hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}
-    </div>
-  );
-}
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
@@ -1659,7 +1670,7 @@ function PanelGroup({
   children: React.ReactNode;
 }) {
   return (
-    <section className="workspace-panel rounded-[1.5rem] px-5 py-4">
+    <section className="workspace-panel px-5 py-4">
       <div className="mb-4 space-y-1.5">
         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           {eyebrow}
@@ -1682,7 +1693,7 @@ function ObservabilitySignalCard({
   description: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border-default bg-background/70 px-4 py-3">
+    <div className="rounded-lg border border-border-default bg-background/70 px-4 py-3">
       <div className="flex items-center gap-2 text-sm font-medium">
         <span className="text-primary">{icon}</span>
         {title}

@@ -1176,7 +1176,7 @@ export function AgentWorldUnified() {
         </div>
       ) : null}
       {!hudOnly && (
-        <div className="flex flex-col gap-3 rounded-xl border border-border-default bg-card/70 px-3 py-2.5 shadow-[var(--shadow-xs)] md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-border-default bg-card/70 px-3 py-2.5 shadow-[var(--shadow-xs)] md:flex-row md:items-center md:justify-between">
           <div className="hidden min-w-0 md:block">
             <h1 className="truncate text-sm font-semibold text-foreground">
               {t.agentWorldUnified.pageTitle}
@@ -1234,7 +1234,7 @@ export function AgentWorldUnified() {
 
       {/* Main Content */}
       {!hudOnly && (
-        <div className="relative flex-1 overflow-y-auto rounded-xl border border-border-default bg-card/70 px-3 py-3 shadow-[var(--shadow-xs)] md:px-4 md:py-4">
+        <div className="relative flex-1 overflow-y-auto rounded-lg border border-border-default bg-card/70 px-3 py-3 shadow-[var(--shadow-xs)] md:px-4 md:py-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList variant="line" className="mb-3">
               {SHOW_LOCAL_AGENT_LIBRARY && (

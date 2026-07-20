@@ -79,7 +79,7 @@ export default function SubscriptionSettingsPage() {
       {subscriptionError && !subscription && (
         <div
           role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
         >
           <span>{t.subscriptionSettings.subscriptionUnavailable}</span>
           <Button
@@ -94,7 +94,7 @@ export default function SubscriptionSettingsPage() {
       )}
       {/* Current Plan Card */}
       {!subscriptionError && (
-        <div className="rounded-xl border bg-card p-5">
+        <div className="rounded-lg border bg-card p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <div
@@ -295,7 +295,7 @@ function OfficialPricingSection() {
   if (!linked && !link.isLoading) {
     return (
       <div
-        className="rounded-xl border border-dashed bg-muted/30 p-6 text-center space-y-4"
+        className="rounded-lg border border-dashed bg-muted/30 p-6 text-center space-y-4"
         data-subscription-pricing
         role={link.isError ? "alert" : "status"}
       >
@@ -344,7 +344,7 @@ function OfficialPricingSection() {
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-56 w-full rounded-xl" />
+            <Skeleton key={i} className="h-56 w-full rounded-lg" />
           ))}
         </div>
       </div>
@@ -354,7 +354,7 @@ function OfficialPricingSection() {
   if (goodsQuery.isError || goodsQuery.data?.length === 0) {
     return (
       <div
-        className="rounded-xl border border-dashed bg-muted/30 p-8 text-center space-y-3"
+        className="rounded-lg border border-dashed bg-muted/30 p-8 text-center space-y-3"
         data-subscription-pricing
         role={goodsQuery.isError ? "alert" : "status"}
       >
@@ -406,7 +406,7 @@ function OfficialPricingSection() {
             <li
               key={g.id}
               className={cn(
-                "relative flex flex-col rounded-xl border p-5 transition-all",
+                "relative flex flex-col rounded-lg border p-5 transition-all",
                 isRecommended
                   ? "border-violet-300/60 bg-gradient-to-b from-violet-50/50 to-white shadow-[var(--shadow-sm)] dark:from-violet-950/20 dark:to-transparent dark:border-violet-700/40"
                   : "bg-card border-border-default hover:border-border hover:shadow-[var(--shadow-xs)]",

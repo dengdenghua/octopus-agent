@@ -25,6 +25,12 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -951,10 +957,10 @@ export default function ComputerAutomationPage() {
       <WorkspaceHeader />
       <WorkspaceBody>
         <div className="mx-auto flex size-full max-w-7xl flex-col gap-4 py-2">
-          <section className="workspace-panel flex flex-col gap-4 rounded-[1.75rem] p-5">
+          <section className="workspace-panel flex flex-col gap-4 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-[var(--shadow-xs)]">
+                <div className="flex size-11 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-[var(--shadow-xs)]">
                   <MonitorCheckIcon className="size-5" />
                 </div>
                 <div>
@@ -1039,7 +1045,7 @@ export default function ComputerAutomationPage() {
             {status && <RuntimeReadinessPanel status={status} />}
 
             {computerUnavailable && status && (
-              <div className="rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
+              <div className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
                 <div className="flex items-start gap-2">
                   <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" />
                   <div>
@@ -1071,7 +1077,7 @@ export default function ComputerAutomationPage() {
           </section>
 
           <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[1.35fr_0.95fr]">
-            <section className="workspace-panel flex min-h-0 flex-col overflow-hidden rounded-[1.75rem] p-4">
+            <section className="workspace-panel flex min-h-0 flex-col overflow-hidden p-4">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-sm font-semibold">屏幕观察</h2>
@@ -1095,7 +1101,7 @@ export default function ComputerAutomationPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex overflow-hidden rounded-xl border border-border bg-background p-0.5">
+                  <div className="inline-flex overflow-hidden rounded-lg border border-border bg-background p-0.5">
                     <button
                       type="button"
                       onClick={() => setObservationMode("snapshot")}
@@ -1151,7 +1157,7 @@ export default function ComputerAutomationPage() {
                     ? liveCanvasFrameRef
                     : screenshotFrameRef
                 }
-                className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-border bg-muted/30"
+                className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30"
               >
                 {observationMode === "live" ? (
                   <>
@@ -1209,7 +1215,7 @@ export default function ComputerAutomationPage() {
                       <span>{liveScreenDetail}</span>
                     </div>
                     {pcScreenError ? (
-                      <div className="pointer-events-none absolute inset-x-6 top-6 rounded-xl border border-destructive/30 bg-background/95 px-3 py-2 text-xs leading-5 text-destructive shadow-[var(--shadow-xs)]">
+                      <div className="pointer-events-none absolute inset-x-6 top-6 rounded-lg border border-destructive/30 bg-background/95 px-3 py-2 text-xs leading-5 text-destructive shadow-[var(--shadow-xs)]">
                         {pcScreenError}
                       </div>
                     ) : null}
@@ -1278,7 +1284,7 @@ export default function ComputerAutomationPage() {
             </section>
 
             <aside className="flex min-h-0 flex-col gap-4">
-              <section className="workspace-panel rounded-[1.75rem] p-4">
+              <section className="workspace-panel p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <ListChecksIcon className="size-4 text-primary" />
                   <h2 className="text-sm font-semibold">任务计划</h2>
@@ -1313,7 +1319,7 @@ export default function ComputerAutomationPage() {
                         <div
                           key={item.id}
                           className={cn(
-                            "rounded-2xl border border-border bg-background/70 p-3 transition-colors",
+                            "rounded-lg border border-border bg-background/70 p-3 transition-colors",
                             highlightedAction === item.action &&
                               "border-emerald-300 bg-emerald-50/60 dark:border-emerald-900/70 dark:bg-emerald-950/20",
                           )}
@@ -1337,7 +1343,7 @@ export default function ComputerAutomationPage() {
                               加入确认
                             </Button>
                           </div>
-                          <pre className="mt-2 max-h-24 overflow-auto rounded-xl bg-black/5 p-2 text-xs dark:bg-white/10">
+                          <pre className="mt-2 max-h-24 overflow-auto rounded-lg bg-black/5 p-2 text-xs dark:bg-white/10">
                             {JSON.stringify(item.action, null, 2)}
                           </pre>
                           <MatchedControlSummary action={item.action} />
@@ -1370,7 +1376,7 @@ export default function ComputerAutomationPage() {
                 </div>
               </section>
 
-              <section className="workspace-panel rounded-[1.75rem] p-4">
+              <section className="workspace-panel p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <ScanSearchIcon className="size-4 text-primary" />
                   <h2 className="text-sm font-semibold">视觉输出</h2>
@@ -1413,7 +1419,7 @@ export default function ComputerAutomationPage() {
                     </Button>
                   </div>
                   {visionModels.length > 0 ? (
-                    <div className="flex items-center justify-between rounded-xl border border-border bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-background/70 px-3 py-2 text-xs text-muted-foreground">
                       <span>
                         当前：
                         {selectedVisionModel?.display_name ||
@@ -1423,7 +1429,7 @@ export default function ComputerAutomationPage() {
                       <span>{visionModels.length} 个视觉模型</span>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
                       <span>
                         {modelsError
                           ? "模型列表读取失败，可手动输入模型 ID。"
@@ -1458,7 +1464,7 @@ export default function ComputerAutomationPage() {
                 </div>
               </section>
 
-              <section className="workspace-panel rounded-[1.75rem] p-4">
+              <section className="workspace-panel p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <KeyboardIcon className="size-4 text-primary" />
                   <h2 className="text-sm font-semibold">动作预演</h2>
@@ -1529,7 +1535,7 @@ export default function ComputerAutomationPage() {
                 </div>
               </section>
 
-              <section className="workspace-panel rounded-[1.75rem] p-4">
+              <section className="workspace-panel p-4">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <h2 className="text-sm font-semibold">确认队列</h2>
                   {preview && previewSecondsLeft !== null ? (
@@ -1540,7 +1546,7 @@ export default function ComputerAutomationPage() {
                   <div className="flex flex-col gap-3">
                     <div
                       className={cn(
-                        "rounded-2xl border p-3 text-sm",
+                        "rounded-lg border p-3 text-sm",
                         preview.risk.level === "high"
                           ? "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"
                           : "border-border bg-background",
@@ -1550,12 +1556,12 @@ export default function ComputerAutomationPage() {
                         风险：{preview.risk.level}
                       </div>
                       <p className="mt-1 leading-6">{preview.risk.reason}</p>
-                      <pre className="mt-2 overflow-auto rounded-xl bg-black/5 p-2 text-xs dark:bg-white/10">
+                      <pre className="mt-2 overflow-auto rounded-lg bg-black/5 p-2 text-xs dark:bg-white/10">
                         {JSON.stringify(preview.action, null, 2)}
                       </pre>
                       <MatchedControlSummary action={preview.action} />
                       {leaseBlocked ? (
-                        <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
+                        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
                           {leaseState.detail}
                         </div>
                       ) : null}
@@ -1577,16 +1583,25 @@ export default function ComputerAutomationPage() {
                 )}
               </section>
 
-              <section className="workspace-panel min-h-0 flex-1 rounded-[1.75rem] p-4">
+              <section className="workspace-panel min-h-0 flex-1 p-4">
                 <h2 className="mb-3 text-sm font-semibold">操作记录</h2>
                 <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
                   {logs.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">还没有记录</p>
+                    <Empty className="gap-3 border-0 bg-transparent p-4 shadow-none">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <ListChecksIcon />
+                        </EmptyMedia>
+                        <EmptyTitle className="text-sm">
+                          还没有记录
+                        </EmptyTitle>
+                      </EmptyHeader>
+                    </Empty>
                   ) : (
                     logs.map((item) => (
                       <div
                         key={item.id}
-                        className="rounded-xl border border-border bg-background/70 p-3"
+                        className="rounded-lg border border-border bg-background/70 p-3"
                       >
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <CheckCircle2Icon
@@ -1619,7 +1634,7 @@ export default function ComputerAutomationPage() {
 
 function StatusTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-background/70 p-3">
+    <div className="rounded-lg border border-border bg-background/70 p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 truncate text-sm font-semibold">{value}</div>
     </div>
@@ -1645,7 +1660,7 @@ function RuntimeReadinessPanel({ status }: { status: ComputerStatus }) {
   }[state.tone];
 
   return (
-    <div className={cn("rounded-2xl border px-4 py-3", toneClass)}>
+    <div className={cn("rounded-lg border px-4 py-3", toneClass)}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-semibold">
@@ -1659,7 +1674,7 @@ function RuntimeReadinessPanel({ status }: { status: ComputerStatus }) {
           <p className="mt-1 text-xs leading-5 opacity-85">{state.detail}</p>
         </div>
         {evidence?.case_id || evidence?.fingerprint ? (
-          <div className="shrink-0 rounded-xl border border-current/20 px-3 py-2 text-xs leading-5">
+          <div className="shrink-0 rounded-lg border border-current/20 px-3 py-2 text-xs leading-5">
             <div className="font-medium">回放证据</div>
             <div className="mt-0.5 font-mono opacity-80">
               {evidence.case_id || evidence.fingerprint}
@@ -1673,7 +1688,7 @@ function RuntimeReadinessPanel({ status }: { status: ComputerStatus }) {
           {visibleItems.map((item) => (
             <div
               key={item.id}
-              className="rounded-xl border border-current/15 bg-background/45 px-3 py-2 text-xs leading-5 text-foreground"
+              className="rounded-lg border border-current/15 bg-background/45 px-3 py-2 text-xs leading-5 text-foreground"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold">{item.title}</span>
@@ -2211,7 +2226,7 @@ function MatchedControlSummary({
       : null;
 
   return (
-    <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 text-xs leading-5 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100">
+    <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/70 p-2.5 text-xs leading-5 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100">
       <div className="flex items-start gap-2">
         <ScanSearchIcon className="mt-0.5 size-3.5 shrink-0" />
         <div className="min-w-0 flex-1">
@@ -2280,7 +2295,7 @@ function DeviceStatePanel({ state }: { state: DeviceState }) {
     loading: "border-border bg-background text-foreground",
   }[state.tone];
   return (
-    <div className={cn("rounded-2xl border p-4", toneClass)}>
+    <div className={cn("rounded-lg border p-4", toneClass)}>
       <div className="flex items-center gap-2 text-sm font-semibold">
         <ActivityIcon className="size-4" />
         这台电脑 · {state.label}
@@ -2327,7 +2342,7 @@ function PermissionGuardPanel({
     },
   ];
   return (
-    <div className="rounded-2xl border border-border bg-background/70 p-4">
+    <div className="rounded-lg border border-border bg-background/70 p-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <ShieldCheckIcon className="size-4 text-emerald-600" />
@@ -2368,7 +2383,7 @@ function CurrentActionPanel({ action }: { action: ActiveAction }) {
     ok: "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100",
   }[action.tone];
   return (
-    <div className={cn("rounded-2xl border p-4", toneClass)}>
+    <div className={cn("rounded-lg border p-4", toneClass)}>
       <div className="flex items-center gap-2 text-sm font-semibold">
         <MousePointerClickIcon className="size-4" />
         当前动作 · {action.label}
@@ -2405,7 +2420,7 @@ function ControlSessionPanel({
   const latest = evidence.slice(0, 3);
 
   return (
-    <div className={cn("rounded-2xl border p-4", toneClass)}>
+    <div className={cn("rounded-lg border p-4", toneClass)}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <ShieldCheckIcon className="size-4" />

@@ -1484,7 +1484,7 @@ export function AgentCreationCard({
             aria-hidden="true"
             className="absolute -top-3 left-1/2 z-20 h-5 w-16 -translate-x-1/2 rounded-full border-4 border-foreground bg-background"
           />
-          <div className="relative min-h-[28rem] rounded-xl border border-border-default bg-background px-5 py-5 shadow-xl shadow-black/10">
+          <div className="relative min-h-[28rem] rounded-lg border border-border-default bg-background px-5 py-5 shadow-xl shadow-black/10">
             {showBrief ? (
               <div className="flex h-full min-h-[25rem] flex-col">
                 <div className="flex items-center gap-3">

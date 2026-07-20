@@ -17,7 +17,7 @@ export default function McpPage() {
       <WorkspaceBody>
         <div className="ui-density-stack mx-auto flex w-full max-w-(--container-width-md) flex-col py-2">
           <CapabilityQualityStrip surface="integrations" />
-          <section className="workspace-panel ui-density-panel flex flex-col gap-4 rounded-[1.75rem]">
+          <section className="workspace-panel ui-density-panel flex flex-col gap-4">
             <div className="space-y-1">
               <div className="text-muted-foreground text-xs font-medium uppercase tracking-[0.18em]">
                 {t.mcpCenter.integrations}
@@ -57,7 +57,7 @@ export default function McpPage() {
               </div>
             </div>
           </section>
-          <div className="workspace-panel ui-density-panel rounded-[1.75rem]">
+          <div className="workspace-panel ui-density-panel">
             <McpSettingsPage />
           </div>
         </div>

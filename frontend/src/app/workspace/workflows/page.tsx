@@ -52,10 +52,10 @@ export default function WorkflowsPage() {
       <WorkspaceHeader />
       <WorkspaceBody className="items-stretch">
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-4 py-10">
-          <section className="overflow-hidden rounded-xl border border-border-default bg-card shadow-[var(--shadow-xs)]">
+          <section className="overflow-hidden rounded-lg border border-border-default bg-card shadow-[var(--shadow-xs)]">
             <div className="grid gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
               <div className="border-b border-border-default bg-muted/20 p-6 lg:border-b-0 lg:border-r">
-                <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <div className="flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <WorkflowIcon className="size-5" />
                 </div>
                 <div className="mt-5 inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">

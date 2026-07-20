@@ -418,7 +418,7 @@ export function McpSettingsPage() {
               );
             })}
             {servers.length === 0 && (
-              <div className="flex flex-col items-center rounded-xl border border-dashed bg-muted/15 px-4 py-7 text-center">
+              <div className="flex flex-col items-center rounded-lg border border-dashed bg-muted/15 px-4 py-7 text-center">
                 <span className="mb-2 grid size-9 place-items-center rounded-full bg-muted text-muted-foreground">
                   <ServerIcon aria-hidden="true" className="size-4" />
                 </span>

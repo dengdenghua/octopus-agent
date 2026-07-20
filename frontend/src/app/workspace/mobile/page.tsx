@@ -59,6 +59,12 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -667,7 +673,7 @@ function Drawer({
             {/* 新建对话 */}
             <button
               onClick={onNewConversation}
-              className="flex w-full items-center gap-3 rounded-xl bg-muted/50 px-3 py-3 text-left transition-colors hover:bg-muted dark:bg-muted dark:hover:bg-muted"
+              className="flex w-full items-center gap-3 rounded-lg bg-muted/50 px-3 py-3 text-left transition-colors hover:bg-muted dark:bg-muted dark:hover:bg-muted"
             >
               <div className="flex size-7 shrink-0 items-center justify-center bg-foreground text-white dark:bg-white dark:text-foreground">
                 <MessageSquarePlusIcon className="size-3.5" />
@@ -798,7 +804,7 @@ function DeviceSwitcher({
           }
         }}
       />
-      <div className="absolute left-3 right-3 top-[72px] z-50 overflow-hidden rounded-xl border border-border bg-white shadow-xl dark:border-border dark:bg-card">
+      <div className="absolute left-3 right-3 top-[72px] z-50 overflow-hidden rounded-lg border border-border bg-white shadow-xl dark:border-border dark:bg-card">
         <div className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
           切换设备
         </div>
@@ -1018,7 +1024,7 @@ function PreviewCard({
       onClick={disabled ? undefined : onEnter}
       disabled={disabled}
       className={cn(
-        "group flex w-full items-center gap-2.5 overflow-hidden rounded-xl border p-2.5 text-left transition-colors",
+        "group flex w-full items-center gap-2.5 overflow-hidden rounded-lg border p-2.5 text-left transition-colors",
         disabled
           ? "border-dashed border-border bg-muted/50 opacity-60 dark:border-border dark:bg-background"
           : "border-border bg-white hover:border-blue-500 hover:bg-blue-50/50 dark:border-border dark:bg-muted dark:hover:bg-blue-500/10",
@@ -1400,9 +1406,14 @@ function SkillsTab({
               <LoaderIcon className="size-6 animate-spin text-muted-foreground/70" />
             </div>
           ) : skills.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground/70">
-              暂无可用技能
-            </div>
+            <Empty className="border-0 bg-transparent py-12 shadow-none">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <SparklesIcon />
+                </EmptyMedia>
+                <EmptyTitle className="text-sm">暂无可用技能</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
           ) : (
             skills.map((skill) => {
               const Icon = pickSkillIcon(skill.name);
@@ -1411,7 +1422,7 @@ function SkillsTab({
                   key={skill.name}
                   className="flex items-center gap-3 rounded-2xl border border-border bg-white p-3.5 dark:border-border dark:bg-card"
                 >
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted dark:bg-muted">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted dark:bg-muted">
                     <Icon className="size-5 text-muted-foreground dark:text-muted-foreground" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1489,7 +1500,7 @@ function MeTab({
 
           <div className="rounded-2xl border border-border bg-white p-4 dark:border-border dark:bg-card">
             <div className="flex items-center gap-3">
-              <div className="size-16 overflow-hidden rounded-xl bg-muted dark:bg-muted">
+              <div className="size-16 overflow-hidden rounded-lg bg-muted dark:bg-muted">
                 <img
                   src="/images/octopus.svg"
                   alt="logo"
@@ -1516,7 +1527,7 @@ function MeTab({
                 rightText={`已连接 ${totalDevices} 台设备`}
                 onClick={onOpenDevicePreview}
               />
-              <div className="flex items-center gap-3 rounded-xl bg-muted/50 px-3 py-2.5 text-xs dark:bg-muted">
+              <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2.5 text-xs dark:bg-muted">
                 <span className="size-1.5 rounded-full bg-green-500" />
                 <span className="text-muted-foreground">当前:</span>
                 <span className="font-medium">{activeDevice.name}</span>

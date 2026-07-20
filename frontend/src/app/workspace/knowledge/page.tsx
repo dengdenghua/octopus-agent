@@ -3,9 +3,17 @@ import {
   BrainIcon,
   DatabaseIcon,
   FileTextIcon,
+  type LucideIcon,
   NetworkIcon,
 } from "lucide-react";
 
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CapabilityQualityStrip } from "@/components/workspace/capability-quality-strip";
 import { KnowledgeGraphPanel } from "@/components/workspace/knowledge-graph-panel";
@@ -16,30 +24,23 @@ import {
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 
-function MemoryTab() {
+function ComingSoonTab({
+  icon: Icon,
+  title,
+}: {
+  icon: LucideIcon;
+  title: string;
+}) {
   return (
-    <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
-      <BrainIcon className="size-8 text-muted-foreground/40" />
-      <p className="text-sm text-muted-foreground">记忆管理 · 即将上线</p>
-    </div>
-  );
-}
-
-function WikiTab() {
-  return (
-    <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
-      <FileTextIcon className="size-8 text-muted-foreground/40" />
-      <p className="text-sm text-muted-foreground">Wiki 文档 · 即将上线</p>
-    </div>
-  );
-}
-
-function FilesTab() {
-  return (
-    <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
-      <DatabaseIcon className="size-8 text-muted-foreground/40" />
-      <p className="text-sm text-muted-foreground">文件管理 · 即将上线</p>
-    </div>
+    <Empty className="min-h-64">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <Icon />
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>即将上线</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
   );
 }
 
@@ -73,11 +74,17 @@ export default function KnowledgePage() {
             </TabsList>
           </Tabs>
 
-          <div className="workspace-panel ui-density-panel rounded-[1.75rem]">
+          <div className="workspace-panel ui-density-panel">
             {activeTab === "graph" && <KnowledgeGraphPanel />}
-            {activeTab === "memory" && <MemoryTab />}
-            {activeTab === "wiki" && <WikiTab />}
-            {activeTab === "files" && <FilesTab />}
+            {activeTab === "memory" && (
+              <ComingSoonTab icon={BrainIcon} title="记忆管理" />
+            )}
+            {activeTab === "wiki" && (
+              <ComingSoonTab icon={FileTextIcon} title="Wiki 文档" />
+            )}
+            {activeTab === "files" && (
+              <ComingSoonTab icon={DatabaseIcon} title="文件管理" />
+            )}
           </div>
         </div>
       </WorkspaceBody>

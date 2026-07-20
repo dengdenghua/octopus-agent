@@ -155,7 +155,7 @@ export default function AccountSettingsPage() {
       {(profileError || privacyError) && (
         <div
           role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
         >
           <span>{t.accountSettings.dataUnavailable}</span>
           <Button
@@ -184,7 +184,7 @@ export default function AccountSettingsPage() {
             {t.settings.account.profile.description}
           </p>
         </div>
-        <div className="rounded-xl border bg-card">
+        <div className="rounded-lg border bg-card">
           <div className="p-5">
             <div className="flex items-start gap-4">
               <div className="relative group flex-shrink-0">
@@ -304,7 +304,7 @@ export default function AccountSettingsPage() {
             {t.settings.account.linkedAccounts.description}
           </p>
         </div>
-        <div className="rounded-xl border bg-card">
+        <div className="rounded-lg border bg-card">
           <ul className="divide-y">
             {profile?.linked_accounts?.map((account) => (
               <li
@@ -399,7 +399,7 @@ export default function AccountSettingsPage() {
             {t.settings.account.privacy.description}
           </p>
         </div>
-        <div className="rounded-xl border bg-card divide-y">
+        <div className="rounded-lg border bg-card divide-y">
           <div className="flex items-center justify-between px-5 py-4">
             <div className="space-y-0.5 pr-4">
               <Label className="text-sm">
@@ -520,7 +520,7 @@ function OfficialCreditsCard() {
           {t.accountSettings.creditsBalance}
         </h3>
       </div>
-      <div className="rounded-xl border bg-card">
+      <div className="rounded-lg border bg-card">
         {tokenInvalid && (
           <div
             role="alert"

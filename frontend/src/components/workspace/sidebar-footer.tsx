@@ -318,7 +318,7 @@ export function AgentFooter() {
           side="top"
           align="start"
           sideOffset={6}
-          className="max-h-[calc(100vh-1rem)] w-72 overflow-y-auto overscroll-contain rounded-xl border-border-default p-1.5 shadow-xl shadow-black/10"
+          className="max-h-[calc(100vh-1rem)] w-72 overflow-y-auto overscroll-contain rounded-lg border-border-default p-1.5 shadow-xl shadow-black/10"
         >
           <DropdownMenuLabel className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             {t.sidebar.switchAgentMenuTitle}

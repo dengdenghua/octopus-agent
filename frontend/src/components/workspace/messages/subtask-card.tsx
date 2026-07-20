@@ -13,9 +13,7 @@ import {
   ChainOfThoughtContent,
   ChainOfThoughtStep,
 } from "@/components/ai-elements/chain-of-thought";
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
-import { ShineBorder } from "@/components/ui/shine-border";
 import { DotProgress } from "@/components/workspace/swarm/dot-progress";
 import { emitAgentWorkbenchFocus } from "@/components/workspace/agent-workbench-events";
 import { useI18n } from "@/core/i18n/hooks";
@@ -133,15 +131,6 @@ export function SubtaskCard({
       className={cn("relative w-full gap-2 rounded-lg border py-0", className)}
       open={!collapsed}
     >
-      <div className={cn("ambilight z-[-1]", isActive ? "enabled" : "")}></div>
-      {isActive && (
-        <>
-          <ShineBorder
-            borderWidth={1.5}
-            shineColor={["#A07CFE", "#FE8FB5", "#FFBE7B"]}
-          />
-        </>
-      )}
       <div className="bg-background/95 flex w-full flex-col rounded-lg">
         <div className="flex w-full items-center justify-between p-0.5">
           <Button
@@ -165,15 +154,7 @@ export function SubtaskCard({
                 )}
                 <ChainOfThoughtStep
                   className="font-normal"
-                  label={
-                    isActive ? (
-                      <Shimmer duration={3} spread={3}>
-                        {task.name ?? task.description}
-                      </Shimmer>
-                    ) : (
-                      (task.name ?? task.description)
-                    )
-                  }
+                  label={task.name ?? task.description}
                   icon={<ClipboardListIcon />}
                 ></ChainOfThoughtStep>
               </div>

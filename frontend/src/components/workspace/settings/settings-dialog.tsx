@@ -765,7 +765,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                       return (
                         <div
                           key={item.title}
-                          className="rounded-xl border border-border bg-muted/20 p-4"
+                          className="rounded-lg border border-border bg-muted/20 p-4"
                         >
                           <Icon
                             aria-hidden="true"

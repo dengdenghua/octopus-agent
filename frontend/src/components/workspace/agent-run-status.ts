@@ -155,7 +155,7 @@ export function agentRunPanelClass(status: AgentRunStatusInput): string {
 export function agentRunRobotButtonClass(status: AgentRunStatusInput): string {
   const state = agentRunStateFromStatus(status);
   if (state === "running") {
-    return "border-emerald-500/40 bg-emerald-500/10 animate-[breathing_2s_ease-in-out_infinite]";
+    return "border-emerald-500/40 bg-emerald-500/10 animate-pulse";
   }
   if (state === "waiting") return "border-amber-500/40 bg-amber-500/10";
   if (state === "pending") return "border-amber-500/40 bg-amber-500/10";
@@ -168,8 +168,9 @@ export function agentRunAvatarAnimationClass(
   status: AgentRunStatusInput,
 ): string | null {
   const state = agentRunStateFromStatus(status);
-  if (state === "running") return "animate-[breathing_2s_ease-in-out_infinite]";
-  if (state === "waiting" || state === "pending") return "animate-pulse";
+  if (state === "running" || state === "waiting" || state === "pending") {
+    return "animate-pulse";
+  }
   return null;
 }
 

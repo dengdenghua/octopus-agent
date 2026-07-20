@@ -298,7 +298,7 @@ export function ApplicationRegistryPanel() {
                 className="group min-w-0 rounded-lg border border-border-default bg-background/70 px-3 py-2.5 transition-colors hover:border-primary/30 hover:bg-muted/15"
               >
                 <div className="flex items-start gap-2">
-                  <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border-default bg-muted/40">
+                  <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default bg-muted/40">
                     {iconUrl ? (
                       <img
                         alt=""

@@ -324,7 +324,7 @@ export function PersonalModeSelector({
         ? createPortal(
             <div
               ref={menuRef}
-              className="fixed z-[100] overflow-hidden rounded-xl border bg-background shadow-xl ring-1 ring-border/30"
+              className="fixed z-[100] overflow-hidden rounded-lg border bg-background shadow-xl ring-1 ring-border/30"
               style={{
                 left: `${panelRect.left}px`,
                 width: `${panelRect.width}px`,

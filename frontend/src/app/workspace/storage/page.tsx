@@ -885,7 +885,7 @@ function TopicCenterView({
 
       <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(420px,1fr)_320px] overflow-hidden">
         <aside className="min-h-0 overflow-y-auto border-r border-black/5 bg-[#f7f7f7] p-3">
-          <div className="mb-3 rounded-xl bg-white p-3 shadow-[var(--shadow-xs)] ring-1 ring-black/5">
+          <div className="mb-3 rounded-lg bg-white p-3 shadow-[var(--shadow-xs)] ring-1 ring-black/5">
             <div className="text-sm font-semibold">索引持续构建中</div>
             <div className="mt-1 text-xs leading-5 text-muted-foreground">
               新增文件会自动进入主题、来源和全文搜索。
@@ -1134,7 +1134,7 @@ function TopicNavRow({
     <button
       type="button"
       className={cn(
-        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
         active ? "bg-white shadow-[var(--shadow-xs)] ring-1 ring-black/5" : "hover:bg-white/70",
       )}
     >
@@ -1160,10 +1160,10 @@ function TopicNavRow({
 function FileCard({ item }: { item: FileItem }) {
   const Icon = item.icon;
   return (
-    <div className="group flex min-h-20 items-center gap-3 rounded-xl border border-black/5 bg-white p-3 text-left shadow-[var(--shadow-xs)] transition-colors hover:border-black/10 hover:bg-[#fbfbfb]">
+    <div className="group flex min-h-20 items-center gap-3 rounded-lg border border-black/5 bg-white p-3 text-left shadow-[var(--shadow-xs)] transition-colors hover:border-black/10 hover:bg-[#fbfbfb]">
       <div
         className={cn(
-          "flex size-11 shrink-0 items-center justify-center rounded-xl",
+          "flex size-11 shrink-0 items-center justify-center rounded-lg",
           toneClass(item.tone),
         )}
       >
@@ -1218,11 +1218,11 @@ function FileManagerRow({ item }: { item: FileItem }) {
 function ImageAssetTile({ item }: { item: FileItem }) {
   const Icon = item.icon;
   return (
-    <div className="group min-w-0 overflow-hidden rounded-xl border border-black/5 bg-white text-left shadow-[var(--shadow-xs)] transition-colors hover:border-black/10 hover:bg-[#fcfcfc]">
+    <div className="group min-w-0 overflow-hidden rounded-lg border border-black/5 bg-white text-left shadow-[var(--shadow-xs)] transition-colors hover:border-black/10 hover:bg-[#fcfcfc]">
       <span className="flex aspect-[4/3] w-full items-center justify-center bg-[#f7f7f7]">
         <span
           className={cn(
-            "flex size-16 items-center justify-center rounded-2xl",
+            "flex size-16 items-center justify-center rounded-lg",
             toneClass(item.tone),
           )}
         >
@@ -1291,15 +1291,15 @@ function PreviewPanel({
   const Icon = item.icon;
   return (
     <div className="flex min-h-full flex-col">
-      <div className="rounded-2xl bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-black/5">
+      <div className="rounded-lg bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-black/5">
         <div className="text-sm font-semibold">{title}</div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {subtitle}
         </p>
-        <div className="mt-4 rounded-xl bg-[#f7f7f7] p-4">
+        <div className="mt-4 rounded-lg bg-[#f7f7f7] p-4">
           <div
             className={cn(
-              "mx-auto flex size-20 items-center justify-center rounded-2xl",
+              "mx-auto flex size-20 items-center justify-center rounded-lg",
               toneClass(item.tone),
             )}
           >
@@ -1314,7 +1314,7 @@ function PreviewPanel({
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-black/5">
+      <div className="mt-3 rounded-lg bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-black/5">
         <div className="text-sm font-semibold">来源定位</div>
         <div className="mt-3 space-y-2 text-xs text-muted-foreground">
           <div className="flex justify-between gap-3">
@@ -1332,9 +1332,9 @@ function PreviewPanel({
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-black/5">
+      <div className="mt-3 rounded-lg bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-black/5">
         <div className="text-sm font-semibold">可带入任务的片段</div>
-        <p className="mt-2 rounded-xl bg-[#f7f7f7] p-3 text-xs leading-5 text-muted-foreground">
+        <p className="mt-2 rounded-lg bg-[#f7f7f7] p-3 text-xs leading-5 text-muted-foreground">
           本地命中摘要会先停留在预览区。点击引用后，仅当前片段、文件名和来源定位进入任务上下文。
         </p>
       </div>
@@ -1342,14 +1342,14 @@ function PreviewPanel({
       <div className="mt-3 grid gap-2">
         <Button
           variant="secondary"
-          className="justify-start rounded-xl bg-white shadow-[var(--shadow-xs)]"
+          className="justify-start rounded-lg bg-white shadow-[var(--shadow-xs)]"
         >
           <FileSearchIcon className="size-4" />
           在对话中引用
         </Button>
         <Button
           variant="secondary"
-          className="justify-start rounded-xl bg-white shadow-[var(--shadow-xs)]"
+          className="justify-start rounded-lg bg-white shadow-[var(--shadow-xs)]"
         >
           <FolderOpenIcon className="size-4" />
           打开所在位置
@@ -1762,7 +1762,7 @@ function SourcesView({
         </div>
         {sources.length === 0 ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center px-8 text-center">
-            <div className="grid size-14 place-items-center rounded-xl bg-black text-white shadow-[var(--shadow-xs)]">
+            <div className="grid size-14 place-items-center rounded-lg bg-black text-white shadow-[var(--shadow-xs)]">
               <FolderPlusIcon className="size-7" />
             </div>
             <div className="mt-4 text-base font-semibold">
@@ -1907,7 +1907,7 @@ function SearchResultsView({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] p-5">
         {hasHits ? (
-          <div className="overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-xs)] ring-1 ring-black/5">
+          <div className="overflow-hidden rounded-lg bg-white shadow-[var(--shadow-xs)] ring-1 ring-black/5">
             {hits.map((hit) => (
               <div
                 key={hit.chunk_id}
@@ -1936,8 +1936,8 @@ function SearchResultsView({
             ))}
           </div>
         ) : (
-          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-2xl bg-white px-6 text-center shadow-[var(--shadow-xs)] ring-1 ring-black/5">
-            <div className="grid size-14 place-items-center rounded-2xl bg-amber-50 text-amber-700">
+          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-lg bg-white px-6 text-center shadow-[var(--shadow-xs)] ring-1 ring-black/5">
+            <div className="grid size-14 place-items-center rounded-lg bg-amber-50 text-amber-700">
               <FileSearchIcon className="size-6" />
             </div>
             <div className="mt-4 text-base font-semibold">
@@ -1953,7 +1953,7 @@ function SearchResultsView({
               <Button
                 size="sm"
                 variant="secondary"
-                className="rounded-xl bg-black/[0.04]"
+                className="rounded-lg bg-black/[0.04]"
                 onClick={() => {
                   window.location.hash =
                     "/workspace/storage?surface=company&library=sources";
@@ -1964,7 +1964,7 @@ function SearchResultsView({
               <Button
                 size="sm"
                 variant="secondary"
-                className="rounded-xl bg-black/[0.04]"
+                className="rounded-lg bg-black/[0.04]"
               >
                 切换隐私模式
               </Button>
@@ -2038,7 +2038,7 @@ function toneClass(tone: string) {
     violet: "bg-violet-50 text-violet-700",
     amber: "bg-amber-50 text-amber-700",
     rose: "bg-rose-50 text-rose-700",
-    zinc: "bg-zinc-100 text-zinc-700",
+    zinc: "bg-muted text-muted-foreground",
   };
   return classes[tone] ?? tone;
 }

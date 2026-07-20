@@ -1252,7 +1252,7 @@ export function BrowserPreviewPanel({
         )}
       >
         <div className="absolute inset-x-8 top-6 h-px bg-gradient-to-r from-transparent via-border/70 to-transparent" />
-        <div className="grid size-14 place-items-center rounded-2xl border border-border-default bg-background/82 shadow-[var(--shadow-xs)] backdrop-blur">
+        <div className="grid size-14 place-items-center rounded-lg border border-border-default bg-background/82 shadow-[var(--shadow-xs)] backdrop-blur">
           {loading ? (
             <Loader2Icon className="size-8 animate-spin text-primary" />
           ) : (
@@ -1632,7 +1632,7 @@ export function BrowserPreviewPanel({
           <div className="flex h-full flex-col items-center justify-center p-5">
             {/* 本地服务快速入口 */}
             {detectedServices.length > 0 ? (
-              <div className="w-full max-w-sm space-y-3 rounded-2xl border border-border-default bg-background/82 p-3 shadow-[var(--shadow-xs)] backdrop-blur">
+              <div className="w-full max-w-sm space-y-3 rounded-lg border border-border-default bg-background/82 p-3 shadow-[var(--shadow-xs)] backdrop-blur">
                 <div className="flex items-center gap-2">
                   <div className="grid size-7 place-items-center rounded-lg bg-primary/10 text-primary">
                     <ServerIcon className="size-3.5" />
@@ -1701,8 +1701,8 @@ export function BrowserPreviewPanel({
                 </div>
               </div>
             ) : (
-              <div className="max-w-sm rounded-2xl border border-border-default bg-background/82 p-5 text-center shadow-[var(--shadow-xs)] backdrop-blur">
-                <div className="mx-auto grid size-10 place-items-center rounded-xl bg-muted/60">
+              <div className="max-w-sm rounded-lg border border-border-default bg-background/82 p-5 text-center shadow-[var(--shadow-xs)] backdrop-blur">
+                <div className="mx-auto grid size-10 place-items-center rounded-lg bg-muted/60">
                   <ImageIcon className="size-5 text-muted-foreground/45" />
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-muted-foreground">

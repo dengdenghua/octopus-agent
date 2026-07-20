@@ -174,7 +174,7 @@ export default function ArchitecturePage() {
                 <LoadingState
                   title={t.architecture.loading}
                   variant="skeleton"
-                  className="rounded-xl"
+                  className="rounded-lg"
                 />
               )}
               {error && (

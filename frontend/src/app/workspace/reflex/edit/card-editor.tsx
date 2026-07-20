@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
@@ -226,9 +227,15 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
     });
   };
 
-  const deleteCard = (idx: number) => {
+  const { confirm, confirmDialog } = useConfirmDialog();
+
+  const deleteCard = async (idx: number) => {
     if (!cards) return;
-    if (!window.confirm(t.reflexEditor.cardConfirmDelete)) return;
+    const ok = await confirm({
+      title: t.common.delete,
+      description: t.reflexEditor.cardConfirmDelete,
+    });
+    if (!ok) return;
     setCards(cards.filter((_, i) => i !== idx));
   };
 
@@ -339,7 +346,7 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
       </div>
 
       {cards.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border-default px-4 py-12 text-center text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border-default px-4 py-12 text-center text-sm text-muted-foreground">
           {t.reflexEditor.cardEmpty}
         </div>
       ) : (
@@ -350,11 +357,12 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
               card={c}
               workflows={workflows}
               onChange={(p) => updateCard(i, p)}
-              onDelete={() => deleteCard(i)}
+              onDelete={() => void deleteCard(i)}
             />
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
@@ -423,7 +431,7 @@ function RuleCard({
   return (
     <Card
       className={cn(
-        "rounded-2xl border-white/40 shadow-none dark:border-white/10",
+        "rounded-lg border-white/40 shadow-none dark:border-white/10",
         readOnly && "opacity-70",
       )}
     >

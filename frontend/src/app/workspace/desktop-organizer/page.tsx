@@ -63,10 +63,10 @@ export default function DesktopOrganizerPage() {
       <WorkspaceHeader />
       <WorkspaceBody>
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 py-2">
-          <section className="workspace-panel flex flex-col gap-5 rounded-[1.75rem] p-4 md:p-6">
+          <section className="workspace-panel flex flex-col gap-5 p-4 md:p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-[var(--shadow-xs)]">
+                <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-[var(--shadow-xs)]">
                   <FolderKanbanIcon className="size-5" />
                 </div>
                 <div>
@@ -79,7 +79,7 @@ export default function DesktopOrganizerPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 rounded-xl border border-border bg-background/70 px-4 py-3">
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-background/70 px-4 py-3">
                 <span className="text-sm font-medium">
                   {enabled ? "已开启" : "未开启"}
                 </span>
@@ -106,12 +106,12 @@ export default function DesktopOrganizerPage() {
             </div>
 
             {!isElectron && (
-              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.08] px-4 py-3 text-sm text-muted-foreground">
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.08] px-4 py-3 text-sm text-muted-foreground">
                 当前打开的是网页环境，所以右键菜单安装/移除会保持禁用。切到桌面版后，这两项才会真正生效。
               </div>
             )}
 
-            <div className="rounded-2xl border border-border bg-background/70 p-4">
+            <div className="rounded-lg border border-border bg-background/70 p-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-sm font-semibold">系统右键菜单</h2>
@@ -174,7 +174,7 @@ function InfoTile({
   body: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-background/70 p-4">
+    <div className="rounded-lg border border-border bg-background/70 p-4">
       <Icon className="mb-3 size-5 text-primary" />
       <h2 className="text-sm font-semibold">{title}</h2>
       <p className="mt-1 text-sm leading-6 text-muted-foreground">{body}</p>

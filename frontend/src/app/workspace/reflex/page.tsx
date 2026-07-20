@@ -207,9 +207,9 @@ export default function ReflexMonitorPage() {
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           {/* Hero / actions */}
-          <section className="workspace-panel rounded-[1.75rem] px-4 py-4 sm:px-6 sm:py-5">
+          <section className="workspace-panel px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-center">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-emerald-500/20">
+              <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-emerald-500/20">
                 <ZapIcon className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
@@ -310,7 +310,7 @@ export default function ReflexMonitorPage() {
           </div>
 
           {/* Sparkline */}
-          <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
+          <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">
                 {t.reflexPage.sparklineTitle}
@@ -331,7 +331,7 @@ export default function ReflexMonitorPage() {
 
           {/* Tiers (fuzzy_cache + slm) */}
           {tiers.length > 0 && (
-            <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
+            <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">
                   {t.reflexPage.responseTiersTitle}
@@ -348,7 +348,7 @@ export default function ReflexMonitorPage() {
           )}
 
           {/* Rules table */}
-          <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
+          <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">
                 {t.reflexPage.rulesTableTitle}
@@ -439,7 +439,7 @@ function StatCard({
   tone?: "good" | "warn";
 }) {
   return (
-    <div className="rounded-xl border border-border-default bg-background/60 px-3 py-3">
+    <div className="rounded-lg border border-border-default bg-background/60 px-3 py-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {icon}
         {label}
@@ -509,7 +509,7 @@ function Sparkline({ buckets }: { buckets: TimeseriesBucket[] }) {
 function TierCard({ tier }: { tier: TierInfo }) {
   const { t } = useI18n();
   return (
-    <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
+    <div className="rounded-lg border border-border-default bg-background/60 px-4 py-3">
       <div className="flex items-center justify-between">
         <div className="font-medium">{tier.name}</div>
         <Badge

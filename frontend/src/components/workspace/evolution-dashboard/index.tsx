@@ -225,7 +225,7 @@ function GrowthStoryHero({
 
   return (
     <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-      <div className="rounded-xl border border-border-default bg-gradient-to-br from-primary/10 via-background to-background p-5">
+      <div className="rounded-lg border border-border-default bg-gradient-to-br from-primary/10 via-background to-background p-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -374,7 +374,7 @@ function StoryMetric({
   sparkline?: number[];
 }) {
   return (
-    <div className="rounded-xl border border-border-default bg-card px-4 py-3">
+    <div className="rounded-lg border border-border-default bg-card px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -403,7 +403,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
   const { t } = useI18n();
   if (data.length === 0) {
     return (
-      <section className="rounded-xl border border-border-default bg-card p-4">
+      <section className="rounded-lg border border-border-default bg-card p-4">
         <SectionTitle
           icon={TrendingUpIcon}
           title={t.evolutionDashboard.capabilityTrend}
@@ -426,7 +426,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
     ) / compact.length;
 
   return (
-    <section className="rounded-xl border border-border-default bg-card p-4">
+    <section className="rounded-lg border border-border-default bg-card p-4">
       <div className="flex items-start justify-between gap-4">
         <SectionTitle
           icon={TrendingUpIcon}
@@ -517,7 +517,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
   const { t } = useI18n();
   if (data.length === 0) {
     return (
-      <section className="rounded-xl border border-border-default bg-card p-4">
+      <section className="rounded-lg border border-border-default bg-card p-4">
         <SectionTitle
           icon={BrainCircuitIcon}
           title={t.evolutionDashboard.strongerSkills}
@@ -528,7 +528,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
   }
 
   return (
-    <section className="rounded-xl border border-border-default bg-card p-4">
+    <section className="rounded-lg border border-border-default bg-card p-4">
       <SectionTitle
         icon={BrainCircuitIcon}
         title={t.evolutionDashboard.strongerSkills}
@@ -592,7 +592,7 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
   const { t } = useI18n();
   if (data.length === 0) {
     return (
-      <section className="rounded-xl border border-border-default bg-card p-4">
+      <section className="rounded-lg border border-border-default bg-card p-4">
         <SectionTitle
           icon={LightbulbIcon}
           title={t.evolutionDashboard.howToImproveNext}
@@ -603,7 +603,7 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
   }
 
   return (
-    <section className="rounded-xl border border-border-default bg-card p-4">
+    <section className="rounded-lg border border-border-default bg-card p-4">
       <SectionTitle
         icon={LightbulbIcon}
         title={t.evolutionDashboard.howToImproveNext}

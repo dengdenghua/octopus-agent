@@ -151,7 +151,7 @@ export function DailyClaimDialog({
               onClick={() => doClaim(true)}
               disabled={busy || !canClaim || info.isLoading}
               className={cn(
-                "h-12 w-full rounded-xl bg-black text-base font-semibold text-white shadow",
+                "h-12 w-full rounded-lg bg-black text-base font-semibold text-white shadow",
                 "hover:bg-black/90 disabled:opacity-60",
               )}
             >
@@ -167,7 +167,7 @@ export function DailyClaimDialog({
             variant="outline"
             onClick={() => doClaim(false)}
             disabled={busy || !canClaim || info.isLoading}
-            className="h-12 w-full rounded-xl border text-base font-medium disabled:opacity-60"
+            className="h-12 w-full rounded-lg border text-base font-medium disabled:opacity-60"
           >
             {pendingDraw === false
               ? t.dailyClaim.claiming

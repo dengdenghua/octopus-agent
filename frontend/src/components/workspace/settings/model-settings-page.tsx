@@ -844,7 +844,7 @@ function ModelSettingsOverview({
         : copy.gatewayDisconnected;
 
   return (
-    <section className="rounded-2xl border border-border bg-card/60 p-4 shadow-sm">
+    <section className="rounded-lg border border-border bg-card/60 p-4 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <h2 className="text-base font-semibold">{copy.overviewTitle}</h2>
@@ -870,7 +870,7 @@ function ModelSettingsOverview({
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <div className="rounded-xl border border-border bg-background/65 p-3">
+        <div className="rounded-lg border border-border bg-background/65 p-3">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {copy.currentDefault}
           </div>
@@ -878,7 +878,7 @@ function ModelSettingsOverview({
             {defaultModelName || copy.noDefault}
           </div>
         </div>
-        <div className="rounded-xl border border-border bg-background/65 p-3">
+        <div className="rounded-lg border border-border bg-background/65 p-3">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {copy.configuredModels}
           </div>
@@ -886,7 +886,7 @@ function ModelSettingsOverview({
             {copy.configuredSummary(customModelCount, modelCount)}
           </div>
         </div>
-        <div className="rounded-xl border border-border bg-background/65 p-3">
+        <div className="rounded-lg border border-border bg-background/65 p-3">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {copy.gateway}
           </div>
@@ -1645,7 +1645,7 @@ export default function ModelSettingsPage() {
       {/* Official models */}
       {!isGuest && <OfficialModelsSection />}
 
-      <details className="group rounded-2xl border border-border bg-card/40 p-4">
+      <details className="group rounded-lg border border-border bg-card/40 p-4">
         <summary
           aria-label={pageCopy.advancedTitle}
           className="cursor-pointer list-none"
@@ -1784,7 +1784,7 @@ function AdvancedDisclosure({
   children: React.ReactNode;
 }) {
   return (
-    <details className="group/advanced-item rounded-xl border border-border bg-background/55 px-4 py-3">
+    <details className="group/advanced-item rounded-lg border border-border bg-background/55 px-4 py-3">
       <summary
         aria-label={title}
         className="cursor-pointer list-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"

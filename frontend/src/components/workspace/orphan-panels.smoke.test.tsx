@@ -47,6 +47,13 @@ vi.mock("@/core/i18n/hooks", () => {
       itemsCount: (count: number) => `${count} 条`,
       reportGenerated: (count: number) => `${count} 条情报已生成`,
       reportsGenerated: (count: number) => `${count} 份报告已生成`,
+      selectSubscription: (name: string) => `查看订阅报告：${name}`,
+      runSubscription: (name: string) => `立即运行订阅：${name}`,
+      enableSubscription: (name: string) => `启用订阅：${name}`,
+      disableSubscription: (name: string) => `停用订阅：${name}`,
+      deleteSubscriptionNamed: (name: string) => `删除订阅：${name}`,
+      deleteConfirmDescription: (name: string) =>
+        `确定删除自动订阅「${name}」吗？已有报告不会被删除，此操作不可撤销。`,
     },
     intelligencePanel: {
       examplePrompts: [

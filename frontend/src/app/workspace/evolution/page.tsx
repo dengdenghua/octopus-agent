@@ -23,10 +23,10 @@ export default function EvolutionPage() {
       <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-          <section className="workspace-panel rounded-[1.75rem] px-6 py-5">
+          <section className="workspace-panel px-6 py-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex min-w-0 items-start gap-4 sm:items-center">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-[var(--shadow-xs)]">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary shadow-[var(--shadow-xs)]">
                   <DnaIcon className="size-5" />
                 </div>
                 <div className="min-w-0">
@@ -68,14 +68,14 @@ export default function EvolutionPage() {
             </div>
           </section>
 
-          <div className="workspace-panel rounded-[1.75rem] px-5 py-5">
+          <div className="workspace-panel px-5 py-5">
             <EvolutionDashboard />
           </div>
 
           {showAdvanced && (
             <section
               id="evolution-runtime-monitor"
-              className="workspace-panel scroll-mt-4 rounded-[1.75rem] px-5 py-5"
+              className="workspace-panel scroll-mt-4 px-5 py-5"
             >
               <div className="mb-4 flex flex-col gap-1">
                 <h2 className="text-base font-semibold">

@@ -1687,15 +1687,27 @@ function RealtimePageContent({
   // flag removed. Tool/permission scoping lives in the skills &
   // permissions system, not a global gate.
   const codeModeUnlocked = true;
-  // Local CLI partner (Codex / Claude Code): driven by spawning its own CLI, so
+  // Local CLI partner: driven by spawning its own CLI, so
   // its model comes from the CLI's config, not the Octopus model picker.
   const partnerCaps = activeAgent?.capabilities as
     | { local_partner?: boolean; local_partner_id?: string }
     | undefined;
+  const localPartnerIdByAgentId: Record<string, string> = {
+    local_claude_code: "claude-code",
+    local_codex_cli: "codex-cli",
+    local_trae_cli: "trae-cli",
+    local_qoder_cli: "qoder-cli",
+    local_kimi_cli: "kimi-cli",
+    local_codebuddy_cli: "codebuddy-cli",
+  };
   const isLocalPartner =
     activeAgentId.startsWith("local_") || Boolean(partnerCaps?.local_partner);
   const partnerId = isLocalPartner
-    ? String(partnerCaps?.local_partner_id ?? "")
+    ? String(
+        partnerCaps?.local_partner_id ??
+          localPartnerIdByAgentId[activeAgentId] ??
+          "",
+      )
     : "";
   const [partnerModel, setPartnerModel] = useState("");
   // Reset the override when switching to a different agent.
@@ -1932,8 +1944,8 @@ function RealtimePageContent({
         : undefined,
       project_signals: projectSignals,
       agent_name: effectiveAgentId,
-      // Local CLI partner model override → passed to the CLI via -m. Empty/absent
-      // ⇒ the CLI keeps its own configured default. Kept separate from
+      // Local CLI partner model override. CLIs with a stable model flag receive
+      // it; others keep their own default. Kept separate from
       // model_name (octopus's namespace) on purpose.
       partner_model: partnerId ? partnerModel : undefined,
       interaction_mode:
@@ -3195,7 +3207,7 @@ function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
             onClick={() => onPick(item.prompt)}
             title={item.prompt}
             className={cn(
-              "group inline-flex items-center gap-2 rounded-xl border border-transparent bg-transparent px-3.5 py-2 text-[13px] font-medium text-muted-foreground/80",
+              "group inline-flex items-center gap-2 rounded-lg border border-transparent bg-transparent px-3.5 py-2 text-[13px] font-medium text-muted-foreground/80",
               "transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-default hover:bg-card hover:text-foreground hover:shadow-[var(--shadow-sm)]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0 active:duration-75",
             )}

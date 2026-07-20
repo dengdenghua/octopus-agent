@@ -93,7 +93,7 @@ export function CodeWelcome({
               type="button"
               onClick={() => onSubmit?.(action.prompt)}
               className={cn(
-                "flex flex-col items-center gap-2 rounded-xl border border-border-default bg-card/50 px-3 py-4",
+                "flex flex-col items-center gap-2 rounded-lg border border-border-default bg-card/50 px-3 py-4",
                 "text-center transition-all duration-150",
                 "hover:border-border hover:bg-muted/50 hover:shadow-[var(--shadow-xs)]",
                 "active:scale-[0.98]",

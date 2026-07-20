@@ -314,11 +314,11 @@ export default function ChannelsPage() {
       <WorkspaceBody className="px-4 pb-4">
         <div className="ui-density-stack mx-auto flex w-full max-w-6xl flex-col">
           {/* Implementation note. */}
-          <section className="workspace-panel ui-density-panel rounded-[1.75rem]">
+          <section className="workspace-panel ui-density-panel">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/10">
                     <MessageCircleIcon className="size-5" />
                   </div>
                   <div>
@@ -339,7 +339,7 @@ export default function ChannelsPage() {
               </div>
 
               <div className="grid min-w-[220px] grid-cols-2 gap-2 tabular-nums">
-                <div className="rounded-xl border border-border-default bg-background/62 px-3 py-2">
+                <div className="rounded-lg border border-border-default bg-background/62 px-3 py-2">
                   <div className="text-[11px] text-muted-foreground">
                     {t.channels.channelCount(rows.length)}
                   </div>
@@ -347,7 +347,7 @@ export default function ChannelsPage() {
                     {rows.length}
                   </div>
                 </div>
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2">
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2">
                   <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
                     <span
                       className={cn(
@@ -371,7 +371,7 @@ export default function ChannelsPage() {
             <LoadingState
               title={t.channels.loading}
               variant="skeleton"
-              className="workspace-panel rounded-[1.75rem] p-5"
+              className="workspace-panel p-5"
             />
           )}
 
@@ -381,12 +381,12 @@ export default function ChannelsPage() {
               detail={error}
               actionLabel={t.channels.retry}
               onAction={() => void loadAll()}
-              className="workspace-panel rounded-[1.75rem]"
+              className="workspace-panel"
             />
           )}
 
           {!loading && !error && rows.length === 0 && (
-            <Empty className="workspace-panel min-h-[260px] rounded-[1.75rem]">
+            <Empty className="workspace-panel min-h-[260px]">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <MessageCircleIcon />
@@ -401,17 +401,17 @@ export default function ChannelsPage() {
 
           {!loading && !error && rows.length > 0 && (
             <>
-              <section className="workspace-panel flex flex-col gap-3 rounded-[1.25rem] p-3 md:flex-row md:items-center md:justify-between">
+              <section className="workspace-panel flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
                 <div className="relative min-w-0 flex-1">
                   <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder={t.channels.searchPlaceholder}
-                    className="h-10 rounded-xl pl-9"
+                    className="h-10 rounded-lg pl-9"
                   />
                 </div>
-                <div className="grid shrink-0 grid-cols-3 gap-1 rounded-xl border border-border-default bg-muted/25 p-1">
+                <div className="grid shrink-0 grid-cols-3 gap-1 rounded-lg border border-border-default bg-muted/25 p-1">
                   {[
                     { value: "all", label: t.channels.filterAll },
                     { value: "connected", label: t.channels.filterConnected },
@@ -435,7 +435,7 @@ export default function ChannelsPage() {
               </section>
 
               {channelSections.length === 0 ? (
-                <Empty className="workspace-panel min-h-[240px] rounded-[1.75rem]">
+                <Empty className="workspace-panel min-h-[240px]">
                   <EmptyHeader>
                     <EmptyMedia variant="icon">
                       <SearchIcon />
@@ -629,7 +629,7 @@ function ChannelCard({
   return (
     <div
       className={cn(
-        "workspace-panel ui-density-panel group relative overflow-hidden rounded-2xl border bg-background/60",
+        "workspace-panel ui-density-panel group relative overflow-hidden rounded-lg border bg-background/60",
         "transition-colors hover:border-border-strong",
         row.connected ? "border-emerald-500/20" : "border-border-default",
       )}
@@ -645,7 +645,7 @@ function ChannelCard({
         <div className="flex items-start gap-3">
           <div
             className={cn(
-              "flex size-11 items-center justify-center rounded-xl text-lg shadow-[var(--shadow-xs)] ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
+              "flex size-11 items-center justify-center rounded-lg text-lg shadow-[var(--shadow-xs)] ring-1 ring-black/[0.04] dark:ring-white/[0.06]",
               colorCls,
             )}
           >
@@ -710,7 +710,7 @@ function ChannelCard({
             type="button"
             onClick={onRequestAssign}
             className={cn(
-              "group flex w-full items-center justify-between rounded-xl",
+              "group flex w-full items-center justify-between rounded-lg",
               "border border-primary/20 bg-primary/[0.04] px-3 py-2.5 text-left",
               "hover:border-primary/40 hover:bg-primary/[0.08] transition-colors",
             )}
@@ -746,7 +746,7 @@ function ChannelCard({
             type="button"
             onClick={onRequestAssign}
             className={cn(
-              "group flex w-full items-center justify-between rounded-xl",
+              "group flex w-full items-center justify-between rounded-lg",
               "border border-dashed border-border-default bg-muted/18 px-3 py-2.5 text-left",
               "hover:border-border hover:bg-muted/40 transition-colors",
             )}

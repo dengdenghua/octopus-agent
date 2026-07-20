@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { BackgroundTask } from "@/core/background/types";
@@ -128,7 +128,6 @@ describe("BackgroundTasksPanel", () => {
 
   it("supports keyboard-focusable task selection and confirms destructive actions", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const runningTask = task({ task_id: "running-task", name: "运行报告" });
     const completedTask = task({
       task_id: "completed-task",
@@ -157,12 +156,22 @@ describe("BackgroundTasksPanel", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "取消" }));
-    expect(confirmSpy).toHaveBeenCalledWith("确定要取消后台任务“运行报告”吗？");
+    const cancelDialog = await screen.findByRole("dialog", { name: "取消" });
+    expect(cancelDialog).toHaveTextContent("确定要取消后台任务“运行报告”吗？");
+    // Dialog 内「取消」(放弃操作) 与「取消」(确认取消任务) 同名，确认按钮排在最后。
+    const cancelButtons = within(cancelDialog).getAllByRole("button", {
+      name: "取消",
+    });
+    await user.click(cancelButtons.at(-1)!);
     expect(actions.cancel).toHaveBeenCalledWith("running-task");
 
     await user.click(screen.getByRole("button", { name: "删除" }));
-    expect(confirmSpy).toHaveBeenCalledWith(
+    const deleteDialog = await screen.findByRole("dialog", { name: "删除" });
+    expect(deleteDialog).toHaveTextContent(
       "确定要永久删除后台任务“季度报告”吗？",
+    );
+    await user.click(
+      within(deleteDialog).getByRole("button", { name: "删除" }),
     );
     expect(actions.remove).toHaveBeenCalledWith("completed-task");
 
@@ -170,7 +179,5 @@ describe("BackgroundTasksPanel", () => {
     expect(screen.getByText("任务状态：已完成")).toBeInTheDocument();
     expect(screen.getByText("对话:")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
-
-    confirmSpy.mockRestore();
   });
 });

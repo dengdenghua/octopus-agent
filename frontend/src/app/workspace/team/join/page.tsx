@@ -89,7 +89,7 @@ export default function TeamJoinPage() {
   return (
     <WorkspaceContainer>
       <WorkspaceBody className="flex items-center justify-center px-6 py-10">
-        <div className="workspace-panel w-full max-w-md rounded-[1.5rem] p-6 shadow-[var(--shadow-xs)]">
+        <div className="workspace-panel w-full max-w-md p-6 shadow-[var(--shadow-xs)]">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <UsersIcon className="size-5" />

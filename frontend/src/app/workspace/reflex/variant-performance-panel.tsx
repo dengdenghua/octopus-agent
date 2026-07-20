@@ -190,7 +190,7 @@ export function VariantPerformancePanel() {
   if (recipes.length === 0 && !autoTick?.enabled) return null;
 
   return (
-    <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
+    <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <BarChart3Icon className="size-4" />
@@ -324,7 +324,7 @@ function RecipeRow({
   }, [summary.recipe_id, loadStats, onChange]);
 
   return (
-    <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
+    <div className="rounded-lg border border-border-default bg-background/60 px-4 py-3">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
         <span className="font-mono text-xs text-muted-foreground">recipe:</span>
         <span className="font-mono">{summary.recipe_id}</span>
@@ -497,7 +497,7 @@ function AutoTickBar({
   return (
     <div
       className={cn(
-        "rounded-xl border px-4 py-3",
+        "rounded-lg border px-4 py-3",
         status.enabled
           ? "border-emerald-500/30 bg-emerald-500/5"
           : "border-border-default bg-background/60",

@@ -182,7 +182,7 @@ export function TodoPanel({
   return (
     <div
       className={cn(
-        "workspace-panel-subtle overflow-hidden rounded-2xl border border-border-default shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl",
+        "workspace-panel-subtle overflow-hidden rounded-lg border border-border-default shadow-[var(--shadow-md)] shadow-black/5 backdrop-blur-xl",
         className,
       )}
     >

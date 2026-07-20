@@ -184,11 +184,7 @@
     }
   }
 
-  /* Gradient shimmer text for streaming/thinking states.
-     Usage: <span class="codex-shimmer-text">Thinking…</span>
-     Also exposed as the animate-codex-shimmer utility for custom elements. */
-  --animate-codex-shimmer: codex-shimmer 2.2s cubic-bezier(0.4, 0, 0.2, 1)
-    infinite;
+  /* Shared diagonal shimmer sweep (used by the loading skeleton). */
   @keyframes codex-shimmer {
     0% {
       background-position: 140% 0;
@@ -724,35 +720,6 @@
     min-height: var(--density-card-min-height);
   }
 
-  /* Codex shimmer text: a gradient sweep across foreground text.
-     Use instead of a plain "thinking…" string while streaming. */
-  .codex-shimmer-text {
-    color: color-mix(in oklch, var(--foreground) 45%, transparent);
-    background: linear-gradient(
-      112deg,
-      transparent 22%,
-      color-mix(in oklch, var(--foreground) 8%, transparent) 38%,
-      color-mix(in oklch, var(--foreground) 85%, transparent) 49%,
-      color-mix(in oklch, var(--foreground) 12%, transparent) 56%,
-      transparent 74%
-    );
-    background-position: 140% 0;
-    background-repeat: no-repeat;
-    background-size: 220% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: var(--animate-codex-shimmer);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .codex-shimmer-text {
-      animation: none;
-      color: var(--muted-foreground);
-      -webkit-text-fill-color: currentColor;
-    }
-  }
-
   /* Kimi-style semantic stream tail. The cursor is attached to the final
      rendered text block, so it stays beside the newest character instead of
      dropping onto a new line after Streamdown's block-level root. */
@@ -1279,60 +1246,6 @@
     @media (width >= 80rem) {
       max-width: 80rem;
     }
-  }
-
-  .ambilight {
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 1s ease-in-out;
-  }
-  .ambilight:before,
-  .ambilight:after {
-    content: "";
-    pointer-events: none;
-    position: absolute;
-    left: 0;
-    top: 0;
-    background: linear-gradient(
-      45deg,
-      #fb0094,
-      #0000ff,
-      #00ff00,
-      #ffff00,
-      #ff0000,
-      #fb0094,
-      #0000ff,
-      #00ff00,
-      #ffff00,
-      #ff0000
-    );
-    background-size: 400%;
-    width: 100%;
-    height: 100%;
-    border-radius: 8px;
-    z-index: -1;
-    animation: ambilight 40s ease-in-out infinite;
-  }
-  .ambilight.enabled {
-    opacity: 1;
-  }
-  .dark .ambilight:before,
-  .dark .ambilight:after {
-    opacity: 0.85;
-  }
-  @keyframes ambilight {
-    0% {
-      background-position: 0 0;
-    }
-    50% {
-      background-position: 400% 0;
-    }
-    100% {
-      background-position: 0 0;
-    }
-  }
-  .ambilight:after {
-    filter: blur(60px);
   }
 
   .golden-text {

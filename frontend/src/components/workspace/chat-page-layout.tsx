@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 // Resized drawer width is persisted so it survives reloads / remounts.
 const SIDEBAR_WIDTH_KEY = "octopus:chatSidebarWidth";
@@ -400,11 +401,11 @@ export function ChatPageLayout({
                   messageListClassName,
                 )}
               >
-                {messageList}
+                <ErrorBoundary>{messageList}</ErrorBoundary>
               </div>
             </div>
             <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center bg-gradient-to-t from-background via-background/92 to-transparent px-3 pb-3 pt-8">
-              {inputArea}
+              <ErrorBoundary>{inputArea}</ErrorBoundary>
             </div>
           </section>
         </div>
@@ -451,7 +452,7 @@ export function ChatPageLayout({
                 aria-label={t.sidebar.ariaResizeSidebar}
               />
             )}
-            {sidebar}
+            <ErrorBoundary>{sidebar}</ErrorBoundary>
           </aside>
         )}
         {secondaryPanel && !isNarrowViewport && (
@@ -475,7 +476,7 @@ export function ChatPageLayout({
               className="absolute top-0 left-0 bottom-0 z-30 w-1 cursor-col-resize transition-colors hover:bg-primary/30 active:bg-primary/50 focus-visible:bg-primary/50 focus-visible:outline-none"
               aria-label={t.sidebar.ariaResizeWorkbench}
             />
-            {secondaryPanel}
+            <ErrorBoundary>{secondaryPanel}</ErrorBoundary>
           </aside>
         )}
         {secondaryPanel && isNarrowViewport && (
@@ -495,7 +496,7 @@ export function ChatPageLayout({
               style={{ height: "min(72vh, 640px)" }}
               className="fixed right-0 bottom-0 left-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-border-default bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)] backdrop-blur-[10px]"
             >
-              {secondaryPanel}
+              <ErrorBoundary>{secondaryPanel}</ErrorBoundary>
             </aside>
           </>
         )}

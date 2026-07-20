@@ -107,7 +107,7 @@ export function UnifiedStore({
 
         <div className="ui-density-page relative min-h-0 flex-1 overflow-y-auto">
           <TabsContent value="plugins" className="m-0">
-            <div className="workspace-panel ui-density-panel min-h-[520px] rounded-2xl border border-border-default shadow-[var(--shadow-xs)] shadow-black/[0.02]">
+            <div className="workspace-panel ui-density-panel min-h-[520px] rounded-lg border border-border-default shadow-[var(--shadow-xs)] shadow-black/[0.02]">
               <ApplicationRegistryPanel />
             </div>
           </TabsContent>
@@ -120,7 +120,7 @@ export function UnifiedStore({
             </div>
           </TabsContent>
           <TabsContent value="registry" className="m-0">
-            <div className="workspace-panel ui-density-panel min-h-[520px] rounded-2xl border border-border-default shadow-[var(--shadow-xs)] shadow-black/[0.02]">
+            <div className="workspace-panel ui-density-panel min-h-[520px] rounded-lg border border-border-default shadow-[var(--shadow-xs)] shadow-black/[0.02]">
               <RegistrySkillsPanel />
             </div>
           </TabsContent>

@@ -1088,7 +1088,7 @@ export function ChatInputBox({
         data-testid="chat-composer"
         className={cn(
           "group relative",
-          "rounded-xl border border-border-default/80 bg-background/80 shadow-[var(--shadow-xs)] backdrop-blur-sm",
+          "rounded-lg border border-border-default/80 bg-background/80 shadow-[var(--shadow-xs)] backdrop-blur-sm",
           "transition-all duration-200 ease-out",
           "hover:border-border-default hover:shadow-[var(--shadow-sm)]",
           "focus-within:border-primary/25 focus-within:shadow-[0_0_0_3px_rgba(138,127,255,0.08),var(--shadow-sm)]",

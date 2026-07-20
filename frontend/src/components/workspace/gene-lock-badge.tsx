@@ -23,6 +23,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 type LockStatus = {
@@ -46,6 +47,7 @@ export function GeneLockBadge() {
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const reload = useCallback(async () => {
     try {
@@ -103,7 +105,11 @@ export function GeneLockBadge() {
   );
 
   const triggerPanic = useCallback(async () => {
-    if (!window.confirm(g.panicConfirm)) return;
+    const ok = await confirm({
+      title: g.panicButton,
+      description: g.panicConfirm,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await fetch(`${getBackendBaseURL()}/api/gene-locks/panic`, {
@@ -115,7 +121,7 @@ export function GeneLockBadge() {
     } finally {
       setBusy(false);
     }
-  }, [g.panicConfirm, reload]);
+  }, [confirm, g.panicButton, g.panicConfirm, reload]);
 
   const clearPanic = useCallback(async () => {
     setBusy(true);
@@ -246,7 +252,7 @@ export function GeneLockBadge() {
                 size="sm"
                 variant="destructive"
                 className="h-7 text-xs"
-                onClick={triggerPanic}
+                onClick={() => void triggerPanic()}
                 disabled={busy}
               >
                 <SirenIcon className="mr-1 size-3" />
@@ -290,6 +296,7 @@ export function GeneLockBadge() {
           </div>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
@@ -306,6 +313,7 @@ export function GeneLockControlCard({
   const [status, setStatus] = useState<LockStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const reload = useCallback(async () => {
     try {
@@ -379,8 +387,14 @@ export function GeneLockControlCard({
   );
 
   const setPanic = useCallback(
-    (enabled: boolean) => {
-      if (enabled && !window.confirm(g.panicConfirm)) return;
+    async (enabled: boolean) => {
+      if (enabled) {
+        const ok = await confirm({
+          title: g.panicButton,
+          description: g.panicConfirm,
+        });
+        if (!ok) return;
+      }
       void run(enabled ? "panic:on" : "panic:off", () =>
         fetch(
           `${getBackendBaseURL()}/api/gene-locks/panic${enabled ? "" : "/clear"}`,
@@ -396,7 +410,7 @@ export function GeneLockControlCard({
         ),
       );
     },
-    [g.panicConfirm, run],
+    [confirm, g.panicButton, g.panicConfirm, run],
   );
 
   if (!status) return null;
@@ -407,13 +421,14 @@ export function GeneLockControlCard({
 
   if (compact) {
     return (
-      <div
-        aria-busy={busy !== null}
-        className={cn(
-          "rounded-lg border border-border-default bg-background/75 px-3 py-2 shadow-[var(--shadow-xs)]",
-          className,
-        )}
-      >
+      <>
+        <div
+          aria-busy={busy !== null}
+          className={cn(
+            "rounded-lg border border-border-default bg-background/75 px-3 py-2 shadow-[var(--shadow-xs)]",
+            className,
+          )}
+        >
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <DnaIcon className="size-3.5 shrink-0 text-primary" />
@@ -493,7 +508,7 @@ export function GeneLockControlCard({
             variant={panic ? "secondary" : "outline"}
             className="h-7 px-2 text-[11px]"
             disabled={busy !== null}
-            onClick={() => setPanic(!panic)}
+            onClick={() => void setPanic(!panic)}
             aria-pressed={panic}
           >
             {panic ? (
@@ -526,15 +541,18 @@ export function GeneLockControlCard({
             <span className="text-destructive">{g.evolutionPaused}</span>
           ) : null}
         </div>
-      </div>
+        </div>
+        {confirmDialog}
+      </>
     );
   }
 
   return (
-    <section
-      className="workspace-panel rounded-[1.25rem] border border-border-default px-4 py-4"
-      aria-busy={busy !== null}
-    >
+    <>
+      <section
+        className="workspace-panel border border-border-default px-4 py-4"
+        aria-busy={busy !== null}
+      >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -641,7 +659,7 @@ export function GeneLockControlCard({
             variant={panic ? "secondary" : "destructive"}
             className="mt-2 h-8 w-full text-xs"
             disabled={busy !== null}
-            onClick={() => setPanic(!panic)}
+            onClick={() => void setPanic(!panic)}
             aria-pressed={panic}
           >
             {panic ? (
@@ -661,6 +679,8 @@ export function GeneLockControlCard({
           </p>
         </div>
       </div>
-    </section>
+      </section>
+      {confirmDialog}
+    </>
   );
 }

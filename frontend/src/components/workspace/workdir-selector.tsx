@@ -596,7 +596,7 @@ export function WorkDirSelector({
         "flex max-h-full flex-col overflow-hidden border border-border-default bg-popover/95 backdrop-blur",
         isMutedVariant
           ? "rounded-lg shadow-[var(--shadow-md)]"
-          : "rounded-xl shadow-2xl",
+          : "rounded-lg shadow-2xl",
       )}
     >
       {/* Primary entry point for adding a workspace. Only meaningful with a

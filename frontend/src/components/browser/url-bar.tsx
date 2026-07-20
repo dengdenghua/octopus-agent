@@ -42,6 +42,7 @@ import {
   queueComposerImageEntry,
   readLastComposerTarget,
 } from "@/core/composer-image-inbox";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -149,6 +150,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   const addressBarRef = useRef<HTMLDivElement>(null);
   const siteInfoBtnRef = useRef<HTMLButtonElement>(null);
   const siteInfoPanelRef = useRef<HTMLDivElement>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const deviceLabelMap = useMemo<Record<DevicePreset, string>>(
     () => ({
@@ -325,7 +327,11 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
     if (!webviewHandle || !window.octopus?.browser) return;
     const wcId = webviewHandle.getWebContentsId();
     if (wcId == null) return;
-    const confirmed = window.confirm(ub.confirmClearSiteData);
+    const confirmed = await confirm({
+      title: ub.clearData,
+      description: ub.confirmClearSiteData,
+      confirmLabel: ub.clearData,
+    });
     if (!confirmed) return;
     setSiteDataStatus(ub.clearingSiteData);
     try {
@@ -343,7 +349,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         error instanceof Error ? error.message : ub.clearFailed,
       );
     }
-  }, [ub, webviewHandle]);
+  }, [confirm, ub, webviewHandle]);
 
   const siteOrigin = useMemo(() => {
     if (!activeTab?.url) return null;
@@ -780,6 +786,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
           />
         )}
       </div>
+      {confirmDialog}
     </LiquidGlass>
   );
 }

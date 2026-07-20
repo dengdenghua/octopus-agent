@@ -24,6 +24,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -238,13 +239,7 @@ function TaskListItem({
               variant="ghost"
               size="icon"
               className="size-7 text-destructive hover:text-destructive"
-              onClick={() => {
-                if (
-                  window.confirm(t.backgroundTasks.cancelConfirm(taskLabel))
-                ) {
-                  onCancel();
-                }
-              }}
+              onClick={onCancel}
               aria-label={t.backgroundTasks.cancel}
               title={t.backgroundTasks.cancel}
             >
@@ -256,13 +251,7 @@ function TaskListItem({
               variant="ghost"
               size="icon"
               className="size-7 text-destructive hover:text-destructive"
-              onClick={() => {
-                if (
-                  window.confirm(t.backgroundTasks.deleteConfirm(taskLabel))
-                ) {
-                  onDelete();
-                }
-              }}
+              onClick={onDelete}
               aria-label={t.backgroundTasks.delete}
               title={t.backgroundTasks.delete}
             >
@@ -295,7 +284,6 @@ function TaskDetailView({
   const { t } = useI18n();
   const { messages, done, doneStatus } = useBackgroundTaskOutput(task.task_id);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const taskLabel = task.name || task.prompt || t.backgroundTasks.unnamedTask;
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -347,13 +335,7 @@ function TaskDetailView({
               variant="outline"
               size="sm"
               className="text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={() => {
-                if (
-                  window.confirm(t.backgroundTasks.cancelConfirm(taskLabel))
-                ) {
-                  onCancel();
-                }
-              }}
+              onClick={onCancel}
             >
               <SquareIcon className="size-3.5 mr-1" />
               {t.backgroundTasks.cancel}
@@ -550,6 +532,7 @@ function BackgroundTasksPanelContent() {
   } = useBackgroundTasks();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const selectedTask = tasks.find((t) => t.task_id === selectedTaskId) ?? null;
 
@@ -566,16 +549,49 @@ function BackgroundTasksPanelContent() {
     [submit],
   );
 
+  const confirmCancel = useCallback(
+    async (task: BackgroundTask) => {
+      const taskLabel =
+        task.name || task.prompt.slice(0, 50) || t.backgroundTasks.unnamedTask;
+      const ok = await confirm({
+        title: t.backgroundTasks.cancel,
+        description: t.backgroundTasks.cancelConfirm(taskLabel),
+        confirmLabel: t.backgroundTasks.cancel,
+      });
+      if (ok) cancel(task.task_id);
+    },
+    [confirm, cancel, t],
+  );
+
+  const confirmDelete = useCallback(
+    async (task: BackgroundTask) => {
+      const taskLabel =
+        task.name || task.prompt.slice(0, 50) || t.backgroundTasks.unnamedTask;
+      const ok = await confirm({
+        title: t.backgroundTasks.delete,
+        description: t.backgroundTasks.deleteConfirm(taskLabel),
+      });
+      if (ok) {
+        if (selectedTaskId === task.task_id) setSelectedTaskId(null);
+        remove(task.task_id);
+      }
+    },
+    [confirm, remove, selectedTaskId, t],
+  );
+
   // Show task detail
   if (selectedTask) {
     return (
-      <TaskDetailView
-        task={selectedTask}
-        onBack={() => setSelectedTaskId(null)}
-        onPause={() => pause(selectedTask.task_id)}
-        onResume={() => resume(selectedTask.task_id)}
-        onCancel={() => cancel(selectedTask.task_id)}
-      />
+      <>
+        <TaskDetailView
+          task={selectedTask}
+          onBack={() => setSelectedTaskId(null)}
+          onPause={() => pause(selectedTask.task_id)}
+          onResume={() => resume(selectedTask.task_id)}
+          onCancel={() => void confirmCancel(selectedTask)}
+        />
+        {confirmDialog}
+      </>
     );
   }
 
@@ -607,7 +623,6 @@ function BackgroundTasksPanelContent() {
   // Task list
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">{t.backgroundTasks.title}</h3>
@@ -693,13 +708,14 @@ function BackgroundTasksPanelContent() {
                 onSelect={() => setSelectedTaskId(task.task_id)}
                 onPause={() => pause(task.task_id)}
                 onResume={() => resume(task.task_id)}
-                onCancel={() => cancel(task.task_id)}
-                onDelete={() => remove(task.task_id)}
+                onCancel={() => void confirmCancel(task)}
+                onDelete={() => void confirmDelete(task)}
               />
             ))}
           </div>
         </ScrollArea>
       )}
+      {confirmDialog}
     </div>
   );
 }

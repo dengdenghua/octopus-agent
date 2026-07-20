@@ -117,7 +117,7 @@ function BrowserPageBody() {
           className={
             isPhone
               ? "flex flex-col overflow-hidden rounded-[1.75rem] border-[6px] border-foreground/80 bg-background shadow-2xl"
-              : "flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border-default bg-card shadow-[var(--shadow-xs)]"
+              : "flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-border-default bg-card shadow-[var(--shadow-xs)]"
           }
           style={
             isPhone

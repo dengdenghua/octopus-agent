@@ -440,7 +440,7 @@ function AppearanceStepSlider<TValue extends AppearanceStepValue>({
   );
 
   return (
-    <div className="rounded-xl border bg-muted/20 px-4 py-3">
+    <div className="rounded-lg border bg-muted/20 px-4 py-3">
       {showHeader ? (
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
@@ -742,7 +742,7 @@ function ThemePreviewCard({
               <div className="h-3 w-1/2 rounded-md bg-current/10" />
               <div
                 className={cn(
-                  "h-[88px] rounded-xl border bg-current/5",
+                  "h-[88px] rounded-lg border bg-current/5",
                   previewIsApple
                     ? "border-white/70 bg-white/42 shadow-[0_8px_22px_rgba(15,23,42,0.08)] backdrop-blur-xl"
                     : previewIsDark
@@ -757,7 +757,7 @@ function ThemePreviewCard({
                   className={cn(
                     "h-8 w-8 rounded-lg",
                     previewIsApple
-                      ? "rounded-xl bg-blue-500/10"
+                      ? "rounded-lg bg-blue-500/10"
                       : "bg-current/10",
                   )}
                 />
@@ -770,7 +770,7 @@ function ThemePreviewCard({
                 className={cn(
                   "flex flex-col gap-1 rounded-lg border border-dashed p-2",
                   previewIsApple
-                    ? "rounded-xl border-blue-200/50 bg-white/34"
+                    ? "rounded-lg border-blue-200/50 bg-white/34"
                     : previewIsDark
                       ? "border-white/10"
                       : "border-border",

@@ -110,7 +110,7 @@ export function KnowledgeGraphPanel() {
   if (entities.length === 0 && relationships.length === 0 && !searchQuery) {
     return (
       <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-4 py-10 text-center">
-        <div className="rounded-xl bg-gradient-to-br from-violet-500/10 to-purple-500/5 p-3 text-violet-600 dark:text-violet-400">
+        <div className="rounded-lg bg-gradient-to-br from-violet-500/10 to-purple-500/5 p-3 text-violet-600 dark:text-violet-400">
           <BrainIcon className="h-5 w-5" />
         </div>
         <div className="space-y-1">

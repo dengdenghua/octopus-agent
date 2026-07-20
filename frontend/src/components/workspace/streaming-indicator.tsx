@@ -48,7 +48,7 @@ export const StreamingIndicator = memo(function StreamingIndicator({
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              "codex-shimmer-text font-medium",
+              "font-medium text-foreground",
               isSm ? "text-xs" : "text-sm",
             )}
           >

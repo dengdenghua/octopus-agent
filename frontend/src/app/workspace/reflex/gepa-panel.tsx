@@ -564,7 +564,7 @@ export function GepaPanel() {
   }, [applied, t]);
 
   return (
-    <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
+    <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <Sparkles className="size-4" />
@@ -576,7 +576,7 @@ export function GepaPanel() {
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         {/* Currently applied */}
-        <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
+        <div className="rounded-lg border border-border-default bg-background/60 px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="font-medium">
               {t.recipeForge.addendumAppliedTitle}
@@ -619,7 +619,7 @@ export function GepaPanel() {
         </div>
 
         {/* Run controls */}
-        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border-default bg-background/60 px-4 py-3">
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border-default bg-background/60 px-4 py-3">
           <NumberKnob
             label={t.recipeForge.knobIterations}
             value={nIter}
@@ -680,7 +680,7 @@ export function GepaPanel() {
             and skipped runs still tell the operator WHY they were
             skipped via the history list). */}
         {run && run.ok && (
-          <div className="space-y-3 rounded-xl border border-border-default bg-background/60 px-4 py-3">
+          <div className="space-y-3 rounded-lg border border-border-default bg-background/60 px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-medium">
                 <TrendingUpIcon className="size-4 text-emerald-400" />
@@ -733,7 +733,7 @@ export function GepaPanel() {
 
         {/* Active addendums · global + per-recipe map */}
         {addendums.length > 0 && (
-          <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
+          <div className="rounded-lg border border-border-default bg-background/60 px-4 py-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="font-medium">
                 {t.recipeForge.addendumsByScope(addendums.length)}
@@ -778,7 +778,7 @@ export function GepaPanel() {
         )}
 
         {/* Canary states · active / full / rolled back */}
-        <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
+        <div className="rounded-lg border border-border-default bg-background/60 px-4 py-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2 font-medium">
               <ShieldCheckIcon className="size-4" />
@@ -817,7 +817,7 @@ export function GepaPanel() {
 
         {/* Past runs · cross-session history of all Forge runs */}
         {history.length > 0 && (
-          <div className="rounded-xl border border-border-default bg-background/60 px-4 py-3">
+          <div className="rounded-lg border border-border-default bg-background/60 px-4 py-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-2 font-medium">
                 <HistoryIcon className="size-4" />

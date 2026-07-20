@@ -133,7 +133,7 @@ export function CapabilityQualityStrip({
   return (
     <section
       className={cn(
-        "workspace-panel-subtle flex flex-col gap-3 rounded-xl border border-border-default bg-background/75 px-4 py-3 md:flex-row md:items-center md:justify-between",
+        "workspace-panel-subtle flex flex-col gap-3 rounded-lg border border-border-default bg-background/75 px-4 py-3 md:flex-row md:items-center md:justify-between",
         className,
       )}
     >
