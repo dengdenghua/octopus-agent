@@ -1981,11 +1981,6 @@ function selectCompactTimelineItems(items: TimelineItem[]): TimelineItem[] {
   const latestThinking = [...items]
     .reverse()
     .find((item) => item.type === "reasoningGroup");
-  const latestExecution = [...items]
-    .reverse()
-    .find(
-      (item) => item.type === "toolCall" || item.type === "actionCallbackGroup",
-    );
   const selected = new Set<TimelineItem>();
   // A long run can emit many retry/checkpoint updates. The conversation lane
   // keeps the opening intent and the latest finding; the complete event chain
@@ -1994,7 +1989,31 @@ function selectCompactTimelineItems(items: TimelineItem[]): TimelineItem[] {
   if (firstCommentary) selected.add(firstCommentary);
   if (latestCommentary) selected.add(latestCommentary);
   if (latestThinking) selected.add(latestThinking);
-  if (latestExecution) selected.add(latestExecution);
+  // Preserve one quiet execution anchor in every visible conversational
+  // interval. A long run then reads naturally as “said → did → said → did”
+  // without expanding every tool call into a transcript row.
+  const visibleCommentaryIndexes = [firstCommentary, latestCommentary]
+    .filter((item): item is CommentaryTimelineItem => Boolean(item))
+    .map((item) => items.indexOf(item))
+    .filter(
+      (index, position, indexes) =>
+        index >= 0 && indexes.indexOf(index) === position,
+    )
+    .sort((a, b) => a - b);
+  const boundaries = [-1, ...visibleCommentaryIndexes, items.length];
+  for (
+    let boundaryIndex = 0;
+    boundaryIndex < boundaries.length - 1;
+    boundaryIndex += 1
+  ) {
+    const start = boundaries[boundaryIndex]! + 1;
+    const end = boundaries[boundaryIndex + 1]!;
+    const executionAnchor = items
+      .slice(start, end)
+      .reverse()
+      .find(isExecutionTimelineItem);
+    if (executionAnchor) selected.add(executionAnchor);
+  }
   return items.filter((item) => selected.has(item));
 }
 
@@ -2002,16 +2021,38 @@ function executionCoverageByVisibleItem(
   allItems: TimelineItem[],
   visibleItems: TimelineItem[],
 ): Map<string, TimelineItem[]> {
-  const visibleExecution = [...visibleItems]
-    .reverse()
-    .find(
-      (item) => item.type === "toolCall" || item.type === "actionCallbackGroup",
-    );
-  if (!visibleExecution) return new Map();
-  const executionItems = allItems.filter(
-    (item) => item.type === "toolCall" || item.type === "actionCallbackGroup",
+  const positionByItem = new Map(
+    allItems.map((item, index) => [item, index] as const),
   );
-  return new Map([[visibleExecution.id, executionItems]]);
+  const visibleExecution = visibleItems
+    .filter(isExecutionTimelineItem)
+    .sort(
+      (a, b) =>
+        (positionByItem.get(a) ?? Number.MAX_SAFE_INTEGER) -
+        (positionByItem.get(b) ?? Number.MAX_SAFE_INTEGER),
+    );
+  if (visibleExecution.length === 0) return new Map();
+
+  const coverage = new Map<string, TimelineItem[]>(
+    visibleExecution.map((item) => [item.id, []]),
+  );
+  for (const item of allItems.filter(isExecutionTimelineItem)) {
+    const itemIndex = positionByItem.get(item) ?? Number.MAX_SAFE_INTEGER;
+    const anchor =
+      visibleExecution.find(
+        (candidate) =>
+          (positionByItem.get(candidate) ?? Number.MAX_SAFE_INTEGER) >=
+          itemIndex,
+      ) ?? visibleExecution[visibleExecution.length - 1]!;
+    coverage.get(anchor.id)!.push(item);
+  }
+  return coverage;
+}
+
+function isExecutionTimelineItem(
+  item: TimelineItem,
+): item is ToolCallTimelineItem | ActionCallbackGroupItem {
+  return item.type === "toolCall" || item.type === "actionCallbackGroup";
 }
 
 function compactToolTarget(step: CoTToolCallStep): string | null {

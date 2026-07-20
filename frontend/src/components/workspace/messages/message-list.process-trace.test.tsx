@@ -243,6 +243,120 @@ describe("MessageList process trace lifecycle", () => {
     expect(screen.getByText("两个文件的字段定义一致。")).toBeInTheDocument();
   });
 
+  test("keeps one evidence cluster inside each conversational interval", () => {
+    const agentMetadata = {
+      agent_id: "general",
+      agent_display_name: "Eve",
+    };
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "检查结构化时间线"),
+        {
+          id: "progress-opening",
+          type: "ai",
+          content: "我先核对前端如何归并三条事件通道。",
+          additional_kwargs: {
+            public_progress: true,
+            timeline_sequence: 1,
+            ...agentMetadata,
+          },
+        } as AIMessage,
+        {
+          id: "tools-frontend",
+          type: "ai",
+          content: "",
+          additional_kwargs: agentMetadata,
+          tool_calls: [
+            {
+              id: "read-adapter",
+              name: "read_file",
+              args: { path: "frontend/src/core/threads/realtime-adapter.ts" },
+              timelineSequence: 2,
+            },
+            {
+              id: "read-group",
+              name: "read_file",
+              args: {
+                path: "frontend/src/components/workspace/messages/message-group.tsx",
+              },
+              timelineSequence: 3,
+            },
+          ],
+        } as AIMessage,
+        {
+          id: "progress-finding",
+          type: "ai",
+          content: "前端边界已经确认，现在转向服务端事件桥。",
+          additional_kwargs: {
+            public_progress: true,
+            timeline_sequence: 4,
+            ...agentMetadata,
+          },
+        } as AIMessage,
+        {
+          id: "tools-runtime",
+          type: "ai",
+          content: "",
+          additional_kwargs: agentMetadata,
+          tool_calls: [
+            {
+              id: "read-bridge",
+              name: "read_file",
+              args: {
+                path: "runtime/sensing/gateway/realtime_event_bridge.py",
+              },
+              timelineSequence: 5,
+            },
+          ],
+        } as AIMessage,
+        {
+          id: "assistant-final",
+          type: "ai",
+          content: "三条通道最终按结构化坐标合并。",
+          additional_kwargs: agentMetadata,
+        } as AIMessage,
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      locale: "zh-CN",
+      currentAgent: {
+        name: "general",
+        display_name: "Eve",
+        avatar_url: "/api/agents/general/avatar",
+      },
+    });
+
+    const commentary = screen.getAllByTestId("public-progress-event");
+    const execution = screen.getAllByTestId("process-timeline-event-execution");
+    const answer = screen.getByText("三条通道最终按结构化坐标合并。");
+
+    expect(commentary).toHaveLength(2);
+    expect(execution).toHaveLength(2);
+    expect(execution[0]).toHaveTextContent(
+      "realtime-adapter.ts · message-group.tsx",
+    );
+    expect(execution[1]).toHaveTextContent("realtime_event_bridge.py");
+    expect(
+      commentary[0]!.compareDocumentPosition(execution[0]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      execution[0]!.compareDocumentPosition(commentary[1]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      commentary[1]!.compareDocumentPosition(execution[1]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      execution[1]!.compareDocumentPosition(answer) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+  });
+
   test("does not repeat an avatar when visual metadata arrives mid-turn", () => {
     const thread = mockThread({
       messages: [
