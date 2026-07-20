@@ -82,6 +82,45 @@ doc-code alignment, and dependency pruning.
 - `docs/architecture.md` + `docs/biomimetic/` removed (superseded by
   `docs/architecture/` + `docs/vision/`).
 
+### Frontend style review
+
+10-commit sweep (`f5ba93762` → `3bf7687df`) covering sidebar nav,
+message area, file/artifact viewer, agent team flow, browser &
+computer automation, channels & external connections, secondary
+workbench, i18n consistency, and a11y/responsive pass. No behavior
+changes — visual + a11y polish only.
+
+- **Confirm dialogs**: all `window.confirm` calls replaced with the
+  shared `useConfirmDialog` hook (sidebar, chats drawer, agent cards,
+  team tasks, browser/desktop, channels, MCP, API publish, secondary
+  workbench).
+- **Decorative cleanup**: removed `Shimmer`, `ShineBorder`,
+  `ambilight`, `codex-shimmer-text`, `canvas-confetti` dependency,
+  `breathing` keyframes; downgraded to `animate-pulse` or flat
+  backgrounds.
+- **Design tokens**: hardcoded `text-slate-` / `bg-slate-` /
+  `text-gray-` replaced with semantic tokens (`--foreground`,
+  `--muted-foreground`, etc.); rounded corners unified to 5/7/10px;
+  shadows reduced to 1px 4px; removed backdrop-blur and scale
+  animations.
+- **Empty states**: 4 pages (knowledge, observability, computer,
+  mobile) migrated to shadcn `Empty` with icons.
+- **Font sizes**: non-standard `text-[9/10/11px]` normalized;
+  `text-[7/8/17/22px]` left for later mapping decision.
+- **i18n**: 5 new aria-label keys (`editorTabs.closeTabAria`,
+  `mobile.micDisabledAria`, `fileTree.openFolderAria`,
+  `fileTree.openFileAria`, `browser.closeFolderAria`) synced to
+  `types.ts` + 4 locale files (zh-CN / en-US / ja-JP / ko-KR).
+- **A11y**: keyboard-reachable close-tab button, `aria-label` on
+  icon buttons / inputs / file-tree, `type="button"` on native
+  buttons, `focus-visible:` replacing bare `focus:outline-none`.
+- **Responsive**: 11 DialogFooter restored to
+  `flex-col-reverse sm:flex-row`; 12 grid-cols gained `sm:`/`lg:`
+  breakpoints; 6 CardHeaders stack on mobile; 8 popover widths
+  gained `max-w-[calc(100vw-1rem)]`; sidebar rail + mode switcher
+  breakpoints aligned; `evolution-dashboard` `xl:grid-cols-1` bug
+  fixed to `xl:grid-cols-4`.
+
 ---
 
 ## [Unreleased] — 2026-05 · multi-author audit sweep

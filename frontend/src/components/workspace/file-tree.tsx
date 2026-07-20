@@ -382,7 +382,11 @@ export function FileTree({
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                isDir ? toggleDir(entry.path) : onFileClick?.(entry.path);
+                if (isDir) {
+                  toggleDir(entry.path);
+                } else {
+                  onFileClick?.(entry.path);
+                }
               }
             }}
             onClick={() =>
