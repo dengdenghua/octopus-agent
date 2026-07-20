@@ -4555,6 +4555,12 @@ Strategy:
       addIconBtn: "Add Icon",
       addWidgetBtn: "Add Widget",
       appNameDoubao: "Doubao",
+      deleteConfirmTitle: "デスクトップ項目を削除",
+      deleteConfirmDescription:
+        "この項目はデスクトップから削除されます。この操作は取り消せません。",
+      resetLayoutConfirmTitle: "デスクトップレイアウトをリセット",
+      resetLayoutConfirmDescription:
+        "デフォルトのアプリ順序と壁紙が復元され、カスタマイズ内容は失われます。",
     },
     empty: {
       noMatch: "No matching records",

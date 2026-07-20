@@ -4283,6 +4283,11 @@ export const zhCN: Translations = {
       addIconBtn: "添加图标",
       addWidgetBtn: "添加小组件",
       appNameDoubao: "豆包",
+      deleteConfirmTitle: "删除桌面项",
+      deleteConfirmDescription: "将从桌面移除该项，此操作不可撤销。",
+      resetLayoutConfirmTitle: "重置桌面布局",
+      resetLayoutConfirmDescription:
+        "将恢复默认应用顺序和壁纸，自定义内容将丢失。",
     },
     empty: {
       noMatch: "没有匹配的记录",

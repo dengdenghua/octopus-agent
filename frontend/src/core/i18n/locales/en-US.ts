@@ -4550,6 +4550,12 @@ Strategy:
       addIconBtn: "Add Icon",
       addWidgetBtn: "Add Widget",
       appNameDoubao: "Doubao",
+      deleteConfirmTitle: "Delete desktop item",
+      deleteConfirmDescription:
+        "This item will be removed from the desktop. This action cannot be undone.",
+      resetLayoutConfirmTitle: "Reset desktop layout",
+      resetLayoutConfirmDescription:
+        "Default app order and wallpaper will be restored. Customizations will be lost.",
     },
     empty: {
       noMatch: "No matching records",

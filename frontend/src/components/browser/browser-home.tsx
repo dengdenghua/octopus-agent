@@ -43,6 +43,7 @@ import {
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { liquidGlassClass } from "./liquid-glass";
 import { useBrowserStore, type BrowserTab } from "./browser-store";
@@ -398,7 +399,7 @@ function DesktopAppLogo({
   return (
     <span
       className={cn(
-        "grid place-items-center overflow-hidden rounded-[18px] border border-white/65 bg-white/72 text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.78),0_10px_26px_rgba(15,23,42,0.14)] ring-1 ring-black/5 backdrop-blur-xl transition",
+        "grid place-items-center overflow-hidden rounded-[18px] text-foreground transition",
         className,
         failed && "bg-gradient-to-br text-white",
         failed && app.color,
@@ -1207,7 +1208,18 @@ export function BrowserHome({
     setDockAppUrls((prev) => prev.filter((item) => item !== url));
   }, []);
 
-  const resetDesktopLayout = () => {
+  const { confirm, confirmDialog } = useConfirmDialog();
+
+  const resetDesktopLayout = async () => {
+    if (
+      !(await confirm({
+        title: wt.resetLayoutConfirmTitle,
+        description: wt.resetLayoutConfirmDescription,
+        confirmLabel: wt.resetLayout,
+        destructive: false,
+      }))
+    )
+      return;
     setAppOrder(AI_DESKTOP_APPS.map((app) => app.url));
     setDockAppUrls(DEFAULT_DOCK_APP_URLS);
     setDesktopBackdrop(DEFAULT_DESKTOP_BACKDROP);
@@ -1554,13 +1566,18 @@ export function BrowserHome({
     >
       <div
         className={cn(
-          "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-[24px] border border-white/55 bg-emerald-50/24 py-4 shadow-[0_18px_54px_rgba(15,23,42,0.14),inset_0_1px_1px_rgba(255,255,255,0.82)] backdrop-blur-2xl",
+          "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-[24px] py-4",
           liquidGlassClass("dock"),
           compactDesktop && "left-3 top-4 h-[calc(100%-2rem)]",
           mobileDesktop && "left-2 w-11",
         )}
       >
-        <div className="grid size-8 place-items-center rounded-2xl border border-white/70 bg-white/46 text-foreground shadow-[var(--shadow-xs)] backdrop-blur-xl">
+        <div
+          className={cn(
+            "grid size-8 place-items-center rounded-2xl text-foreground",
+            liquidGlassClass("thin"),
+          )}
+        >
           <BotIcon className="size-5" />
         </div>
         <div className="mt-8 flex flex-col gap-4">
@@ -1579,9 +1596,9 @@ export function BrowserHome({
                   setActivePanel(item.id);
                 }}
                 className={cn(
-                  "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-[var(--shadow-xs)]",
-                  selected &&
-                    "border-white/80 bg-white/68 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.13),inset_0_1px_1px_rgba(255,255,255,0.86)]",
+                  "grid size-9 place-items-center rounded-2xl text-muted-foreground/90 transition hover:text-foreground",
+                  liquidGlassClass("thin", true),
+                  selected && "text-foreground",
                 )}
                 title={sideNavLabelMap[item.id]}
               >
@@ -1595,9 +1612,9 @@ export function BrowserHome({
             type="button"
             onClick={() => setActivePanel("add")}
             className={cn(
-              "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-[var(--shadow-xs)]",
-              activePanel === "add" &&
-                "border-white/80 bg-white/68 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.13),inset_0_1px_1px_rgba(255,255,255,0.86)]",
+              "grid size-9 place-items-center rounded-2xl text-muted-foreground/90 transition hover:text-foreground",
+              liquidGlassClass("thin", true),
+              activePanel === "add" && "text-foreground",
             )}
             title={wt.addTitle}
           >
@@ -1607,9 +1624,9 @@ export function BrowserHome({
             type="button"
             onClick={() => setActivePanel("settings")}
             className={cn(
-              "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-[var(--shadow-xs)]",
-              activePanel === "settings" &&
-                "border-white/80 bg-white/68 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.13),inset_0_1px_1px_rgba(255,255,255,0.86)]",
+              "grid size-9 place-items-center rounded-2xl text-muted-foreground/90 transition hover:text-foreground",
+              liquidGlassClass("thin", true),
+              activePanel === "settings" && "text-foreground",
             )}
             title={wt.settingsTitle}
           >
@@ -1813,7 +1830,7 @@ export function BrowserHome({
               >
                 <div
                   className={cn(
-                    "grid w-24 place-items-center border-r border-white/38 bg-white/40 px-4 py-3 text-center",
+                    "grid w-24 place-items-center border-r border-white/20 px-4 py-3 text-center",
                     mobileDesktop && "w-20 px-3 py-2",
                   )}
                 >
@@ -1831,7 +1848,7 @@ export function BrowserHome({
                 </div>
                 <div
                   className={cn(
-                    "flex min-w-40 flex-col justify-center bg-white/16 px-5 text-left",
+                    "flex min-w-40 flex-col justify-center px-5 text-left",
                     mobileDesktop && "min-w-32 px-4",
                   )}
                 >
@@ -1867,7 +1884,7 @@ export function BrowserHome({
                         current === group.id ? null : group.id,
                       )
                     }
-                    className="group flex min-w-0 flex-col items-center gap-2 rounded-2xl p-1 text-center transition hover:bg-white/24 focus:outline-none focus:ring-2 focus:ring-white/55"
+                    className="group flex min-w-0 flex-col items-center gap-2 rounded-2xl p-1 text-center transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40"
                     title={`${group.title} · ${group.subtitle}`}
                   >
                     <span
@@ -1975,7 +1992,10 @@ export function BrowserHome({
                   </div>
                 </div>
                 <div
-                  className="grid size-8 place-items-center rounded-full border border-white/45 bg-white/30 text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.65)]"
+                  className={cn(
+                    "grid size-8 place-items-center rounded-full text-muted-foreground",
+                    liquidGlassClass("thin"),
+                  )}
                   title={bt.historyOnly}
                 >
                   <Clock3Icon className="size-4" />
@@ -2034,7 +2054,7 @@ export function BrowserHome({
                       <div className="text-sm text-muted-foreground">
                         {widget.type === "notes" && (
                           <div className="space-y-2">
-                            <div className="rounded-xl border border-white/45 bg-white/32 p-2 backdrop-blur-xl">
+                            <div className="rounded-xl border border-white/25 p-2">
                               <p className="text-xs text-muted-foreground">
                                 {bt.todoPlaceholder}
                               </p>
@@ -2049,10 +2069,10 @@ export function BrowserHome({
                         )}
                         {widget.type === "system" && (
                           <div className="space-y-2">
-                            <div className="h-2 rounded-full bg-white/32">
+                            <div className="h-2 rounded-full bg-white/16">
                               <div className="h-full bg-blue-500 rounded-full w-[23%]" />
                             </div>
-                            <div className="h-2 rounded-full bg-white/32">
+                            <div className="h-2 rounded-full bg-white/16">
                               <div className="h-full bg-violet-500 rounded-full w-[45%]" />
                             </div>
                           </div>
@@ -2341,6 +2361,8 @@ export function BrowserHome({
             : undefined
         }
       />
+
+      {confirmDialog}
 
       {editWidgetState.visible && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">

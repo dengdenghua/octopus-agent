@@ -4539,6 +4539,12 @@ Strategy:
       addIconBtn: "Add Icon",
       addWidgetBtn: "Add Widget",
       appNameDoubao: "Doubao",
+      deleteConfirmTitle: "데스크톱 항목 삭제",
+      deleteConfirmDescription:
+        "이 항목이 데스크톱에서 제거됩니다. 이 작업은 되돌릴 수 없습니다.",
+      resetLayoutConfirmTitle: "데스크톱 레이아웃 초기화",
+      resetLayoutConfirmDescription:
+        "기본 앱 순서와 배경화면이 복원되며, 사용자 지정 내용은 손실됩니다.",
     },
     empty: {
       noMatch: "No matching records",

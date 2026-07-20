@@ -150,6 +150,7 @@ export function BrowserPanel() {
             <iframe
               key={key}
               src={url}
+              title={t.browser.startBrowsingHint}
               className="h-full w-full border-0"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             />

@@ -80,6 +80,15 @@ export function TabBar() {
             onDragEnd={handleDragEnd}
             onClick={() => activateTab(tab.id)}
             onAuxClick={(e) => handleAuxClick(e, tab.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                activateTab(tab.id);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={tabLabel}
             className={cn(
               "group relative flex h-7 min-w-[84px] max-w-[152px] cursor-pointer items-center gap-1 rounded-[12px] px-1.5 text-[11px] transition-[background-color,border-color,box-shadow,color,transform]",
               isHomeTab && "min-w-[68px] max-w-[96px]",

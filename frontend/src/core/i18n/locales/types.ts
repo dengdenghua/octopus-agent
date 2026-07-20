@@ -3758,6 +3758,10 @@ export interface Translations {
       addIconBtn: string;
       addWidgetBtn: string;
       appNameDoubao: string;
+      deleteConfirmTitle: string;
+      deleteConfirmDescription: string;
+      resetLayoutConfirmTitle: string;
+      resetLayoutConfirmDescription: string;
     };
     empty: {
       noMatch: string;

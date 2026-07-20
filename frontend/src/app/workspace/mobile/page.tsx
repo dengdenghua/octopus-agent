@@ -651,6 +651,12 @@ function Drawer({
       <div
         className="absolute inset-0 z-40 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
+        role="button"
+        tabIndex={-1}
+        aria-label="关闭"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+        }}
       />
       {/* Drawer panel */}
       <div className="absolute left-0 top-0 z-50 flex h-full w-[78%] max-w-[360px] flex-col overflow-hidden bg-white shadow-2xl dark:bg-card animate-in slide-in-from-left duration-200">
@@ -943,6 +949,12 @@ function DevicePreviewModal({
       <div
         className="absolute inset-0 z-40 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
+        role="button"
+        tabIndex={-1}
+        aria-label="关闭"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+        }}
       />
       <div className="absolute bottom-0 left-0 right-0 z-50 max-h-[60%] overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-card animate-in slide-in-from-bottom duration-200">
         <div className="flex justify-center pt-2 pb-1">
