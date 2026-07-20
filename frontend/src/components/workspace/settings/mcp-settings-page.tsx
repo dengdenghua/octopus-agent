@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -48,6 +49,7 @@ type LoadState = "loading" | "ready" | "error";
 
 export function McpSettingsPage() {
   const { t, locale } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const copy = getSettingsUxCopy(locale).mcp;
   const [servers, setServers] = useState<McpServer[]>([]);
   const [serversLoadState, setServersLoadState] =
@@ -134,6 +136,14 @@ export function McpSettingsPage() {
 
   const revoke = async (name: string) => {
     if (pendingServer || trustLoadState !== "ready") return;
+    if (
+      !(await confirm({
+        title: t.mcpSettings.revokeConfirmTitle,
+        description: t.mcpSettings.revokeConfirmDescription(name),
+        confirmLabel: t.mcpSettings.revokeButton,
+      }))
+    )
+      return;
     setPendingServer(name);
     try {
       await revokeMCPTrust(name);
@@ -295,6 +305,7 @@ export function McpSettingsPage() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <SettingsSection title={copy.title} description={copy.description}>
         {serversLoadState === "loading" ? (
           <McpStateNotice state="loading" copy={copy} />
@@ -533,7 +544,7 @@ export function McpSettingsPage() {
       >
         <DialogContent
           showCloseButton={false}
-          className="w-[min(380px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[380px]"
+          className="w-[min(380px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[380px]"
         >
           <DialogHeader className="gap-1 text-left">
             <DialogTitle className="text-[15px]">

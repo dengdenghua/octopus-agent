@@ -1976,6 +1976,9 @@ export const zhCN: Translations = {
       "该渠道收到的消息将由所选智能体处理。之后可以随时更换或解绑。",
     noAgentsAvailable: "还没有可用的智能体，请先到「智能体」页创建一个。",
     unassignCurrent: "解绑当前智能体",
+    unassignConfirmTitle: "解绑智能体",
+    unassignConfirmDescription:
+      "解绑后该渠道收到的消息将不再由智能体处理，可随时重新绑定。",
     howToSetup: "如何接入?",
     clickToChangeAgent: "点击更换智能体",
     handlingMessages: "正在处理此渠道消息",
@@ -4728,6 +4731,12 @@ export const zhCN: Translations = {
     sendRequest: "发送请求",
     response: "响应",
     revoke: "撤销",
+    revokeKeyConfirmTitle: "撤销 API 密钥",
+    revokeKeyConfirmDescription:
+      "撤销后使用此密钥的请求将立即失败，此操作不可撤销。",
+    deleteApiConfirmTitle: "取消发布 API",
+    deleteApiConfirmDescription:
+      "将删除该 API 发布及关联的密钥与调用日志，此操作不可撤销。",
     disable: "禁用",
     enable: "启用",
     refreshTooltip: "刷新",
@@ -5261,6 +5270,9 @@ export const zhCN: Translations = {
     untrustedTag: "未信任",
     trustButton: "信任",
     revokeButton: "撤销",
+    revokeConfirmTitle: "撤销 MCP 信任",
+    revokeConfirmDescription: (name: string) =>
+      `将撤销「${name}」的 MCP 信任，相关工具调用将失败。此操作可重新信任。`,
     unapprovedHint:
       "未审批 · 启用后此服务的工具不会注册到 skill catalog · 点击「信任」后生效",
     noServers: "暂无 MCP 服务。请在 extensions_config.json 中添加。",

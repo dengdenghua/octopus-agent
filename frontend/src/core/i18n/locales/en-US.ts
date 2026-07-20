@@ -2052,6 +2052,9 @@ export const enUS: Translations = {
     noAgentsAvailable:
       "No agents available yet — create one on the Agents page first.",
     unassignCurrent: "Unbind current agent",
+    unassignConfirmTitle: "Unbind agent",
+    unassignConfirmDescription:
+      "Messages from this channel will no longer be handled by the agent. You can rebind anytime.",
     howToSetup: "How to connect?",
     clickToChangeAgent: "Click to change agent",
     handlingMessages: "Handling messages for this channel",
@@ -5017,6 +5020,12 @@ Strategy:
     sendRequest: "Send Request",
     response: "Response",
     revoke: "Revoke",
+    revokeKeyConfirmTitle: "Revoke API key",
+    revokeKeyConfirmDescription:
+      "Requests using this key will fail immediately. This action cannot be undone.",
+    deleteApiConfirmTitle: "Unpublish API",
+    deleteApiConfirmDescription:
+      "This API publication and its associated keys and call logs will be deleted. This action cannot be undone.",
     disable: "Disable",
     enable: "Enable",
     refreshTooltip: "Refresh",
@@ -5564,6 +5573,9 @@ Strategy:
     untrustedTag: "untrusted",
     trustButton: "Trust",
     revokeButton: "Revoke",
+    revokeConfirmTitle: "Revoke MCP trust",
+    revokeConfirmDescription: (name: string) =>
+      `Trust for "${name}" will be revoked. Related tool calls will fail. Trust can be re-granted.`,
     unapprovedHint:
       "Unapproved · tools from this server won't register with the skill catalog until you click Trust.",
     noServers:

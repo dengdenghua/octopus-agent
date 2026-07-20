@@ -31,6 +31,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { swallow } from "@/core/utils/log";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { copyTextToClipboard } from "@/core/clipboard";
@@ -463,6 +464,7 @@ function APIDetailView({
   onRefresh: () => void;
 }) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   type Tab = "keys" | "snippets" | "logs" | "stats" | "test";
   const [tab, setTab] = useState<Tab>("snippets");
   const [keys, setKeys] = useState<APIKey[]>([]);
@@ -534,6 +536,14 @@ function APIDetailView({
   };
 
   const handleRevokeKey = async (keyId: string) => {
+    if (
+      !(await confirm({
+        title: t.apiPublish.revokeKeyConfirmTitle,
+        description: t.apiPublish.revokeKeyConfirmDescription,
+        confirmLabel: t.apiPublish.revoke,
+      }))
+    )
+      return;
     try {
       await apiClient.revokeKey(api.api_id, keyId);
       fetchKeys();
@@ -631,6 +641,7 @@ while (true) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {confirmDialog}
       {/* Header */}
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <button
@@ -1146,6 +1157,7 @@ function APIListItem({
 
 export function APIPublishPanel({ className }: { className?: string }) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [apis, setApis] = useState<PublishedAPI[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1187,6 +1199,14 @@ export function APIPublishPanel({ className }: { className?: string }) {
   );
 
   const handleDelete = async (apiId: string) => {
+    if (
+      !(await confirm({
+        title: t.apiPublish.deleteApiConfirmTitle,
+        description: t.apiPublish.deleteApiConfirmDescription,
+        confirmLabel: t.common.delete,
+      }))
+    )
+      return;
     try {
       await apiClient.unpublish(apiId);
       setApis((prev) => prev.filter((a) => a.api_id !== apiId));
@@ -1211,6 +1231,7 @@ export function APIPublishPanel({ className }: { className?: string }) {
 
   return (
     <div className={cn("flex h-full flex-col", className)}>
+      {confirmDialog}
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold">

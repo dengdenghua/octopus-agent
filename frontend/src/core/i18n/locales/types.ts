@@ -1798,6 +1798,8 @@ export interface Translations {
     assignDialogDesc: string;
     noAgentsAvailable: string;
     unassignCurrent: string;
+    unassignConfirmTitle: string;
+    unassignConfirmDescription: string;
     howToSetup: string;
     clickToChangeAgent: string;
     handlingMessages: string;
@@ -4188,6 +4190,10 @@ export interface Translations {
     sendRequest: string;
     response: string;
     revoke: string;
+    revokeKeyConfirmTitle: string;
+    revokeKeyConfirmDescription: string;
+    deleteApiConfirmTitle: string;
+    deleteApiConfirmDescription: string;
     disable: string;
     enable: string;
     refreshTooltip: string;
@@ -4699,6 +4705,8 @@ export interface Translations {
     untrustedTag: string;
     trustButton: string;
     revokeButton: string;
+    revokeConfirmTitle: string;
+    revokeConfirmDescription: (name: string) => string;
     unapprovedHint: string;
     noServers: string;
     toastLoadConfigFailed: string;

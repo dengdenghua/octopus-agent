@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Empty,
   EmptyDescription,
@@ -161,6 +162,7 @@ const CATEGORY_ORDER = ["im", "china", "email_sms", "smart_home", "dev_tools"];
 
 export default function ChannelsPage() {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [rows, setRows] = useState<ChannelRow[]>([]);
   const [agents, setAgents] = useState<AgentLite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -232,6 +234,14 @@ export default function ChannelsPage() {
   }
 
   async function unassignAgent(channelId: string) {
+    if (
+      !(await confirm({
+        title: t.channels.unassignConfirmTitle,
+        description: t.channels.unassignConfirmDescription,
+        confirmLabel: t.channels.unassignCurrent,
+      }))
+    )
+      return;
     try {
       const r = await fetch(`/api/channels/${channelId}/assistant`, {
         method: "DELETE",
@@ -313,6 +323,7 @@ export default function ChannelsPage() {
       <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="ui-density-stack mx-auto flex w-full max-w-6xl flex-col">
+          {confirmDialog}
           {/* Implementation note. */}
           <section className="workspace-panel ui-density-panel">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
