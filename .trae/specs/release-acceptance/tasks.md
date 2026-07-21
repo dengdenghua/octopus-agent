@@ -52,9 +52,9 @@
 
 ## 阶段 5：提交 commit
 
-- [ ] Task 10: 提交 commit
-  - [ ] SubTask 10.1: 暂存 `CHANGELOG.md` + `.trae/specs/release-acceptance/` + i18n 修复文件
-  - [ ] SubTask 10.2: commit message: `chore(release): re-validate frontend style review pass`
+- [x] Task 10: 提交 commit
+  - [x] SubTask 10.1: 暂存 `CHANGELOG.md` + `.trae/specs/release-acceptance/` + i18n 修复文件
+  - [x] SubTask 10.2: commit `41f2fc63d` — `chore(release): re-validate frontend style review pass`（8 files +379/-316）
 
 # Task Dependencies
 

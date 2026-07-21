@@ -28,5 +28,5 @@
 
 ## 阶段 5：提交
 
-- [ ] commit: `chore(release): re-validate frontend style review pass`
-- [ ] 提交文件：`CHANGELOG.md` + `.trae/specs/release-acceptance/` + i18n 修复文件（types.ts + 4 locales）
+- [x] commit `41f2fc63d`: `chore(release): re-validate frontend style review pass`
+- [x] 提交文件：`CHANGELOG.md` + `.trae/specs/release-acceptance/` + i18n 修复文件（types.ts + 4 locales），8 files +379/-316
