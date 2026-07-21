@@ -211,20 +211,20 @@ export const jaJP: Translations = {
 
   // Message display
   message: {
-    thinking: "思考中",
-    thinkingProcess: "思考プロセス",
+    thinking: "整理中",
+    thinkingProcess: "プロセスメモ",
     replyThinking: "返信の要約",
     replyThinkingDescription: "最終回答に向けた簡潔な処理概要",
-    executionProcess: "実行ログ",
+    executionProcess: "アクション記録",
     executionProcessDescription:
-      "モデル接続、ツール呼び出し、観察結果の構造化されたタイムライン",
-    visibleReasoning: "可視化された推論",
-    executionSteps: "実行ステップ",
-    toolCalls: "ツール呼び出し",
+      "このターンで公開できる操作、参照、結果の手がかり",
+    visibleReasoning: "公開進捗",
+    executionSteps: "アクションステップ",
+    toolCalls: "操作記録",
     todoAndContext: "ToDo とコンテキスト",
     expandable: "展開可能",
     agentCluster: "Agent クラスタ",
-    processDetails: "プロセス詳細",
+    processDetails: "詳細を開く",
     statusViewing: "表示中",
     statusCompleted: "完了",
     statusError: "エラー",
@@ -232,7 +232,6 @@ export const jaJP: Translations = {
     assistant: "アシスタント",
     turnLabel: (n: number) => `${n} ターン目`,
     turnNumberLabel: (n: number, label: string) => `${n} ターン目：${label}`,
-    phaseTask: "フェーズタスク",
     turnLocator: "ターン位置",
     jumpToFirstTurn: "最初のターンへ",
     jumpToLastTurn: "最後のターンへ",
@@ -249,8 +248,8 @@ export const jaJP: Translations = {
     processRecords: (n: number) => `プロセス記録 ${n} 件`,
     showMoreAgents: (n: number) => `他 ${n} 件のエージェントを表示`,
     collapseAgents: "エージェントを折りたたむ",
-    latestTool: "最新のツール",
-    execution: "実行",
+    latestTool: "最新のアクション",
+    execution: "アクション",
     verification: "検証",
     process: "プロセス",
     actionCount: (n: number) => `${n} 件のアクション`,
@@ -321,14 +320,14 @@ export const jaJP: Translations = {
     fileOperationsCount: (n: number) => `ファイル操作 ${n} 回`,
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `ファイル操作 ${n} 回 (+${added} / -${removed})`,
-    toolCallsCount: (n: number) => `ツール呼び出し ${n} 回`,
+    toolCallsCount: (n: number) => `操作記録 ${n} 件`,
     loadOlderTurns: "古いターンを読み込む",
     loadingOlderTurns: "古いターンを読み込み中…",
   },
 
   // Execution Checklist
   executionChecklist: {
-    title: "Execution Steps",
+    title: "Progress Checklist",
     clarifyGoal: "Clarify task goal",
     clarifyGoalDetail:
       "Converge user request into an executable output target.",
@@ -338,17 +337,18 @@ export const jaJP: Translations = {
       `Adjust keywords based on round ${round} results`,
     adjustKeywordsDetail:
       "After reading results, narrow scope and continue to supplement missing market, competitor, or demand evidence.",
-    webSearch: (count: number) => `Web search ${count} times`,
+    webSearch: (count: number) => `Search sources ${count} times`,
     readContext: "Read context",
     writeFile: "Write/modify file",
-    runCommand: "Run command",
-    callTool: (count: number) => `Call tool ${count} times`,
+    runCommand: "Run checks",
+    callTool: (count: number) =>
+      `Coordinate ${count} action${count === 1 ? "" : "s"}`,
     toolCallDetail:
-      "Tool calls are the evidence collection and execution layer, not the complete thinking process.",
+      "These are visible progress signals; detailed operations stay in the workbench.",
     analyzeAndAlign: "Analyze and align data",
     analyzeAndAlignDetail:
       "Summarize, deduplicate, and calibrate search results from each round, rather than directly pasting search results.",
-    generateResponse: "Generate response",
+    generateResponse: "Draft response",
     generateResponseDetail:
       "Organize analysis conclusions into final content readable by users.",
     marketSize: "Calibrate market size and growth metrics",
@@ -568,8 +568,8 @@ export const jaJP: Translations = {
       `${file} を編集 (+${added} 行)`,
     editFileRemoved: (file: string, removed: number) =>
       `${file} を編集 (-${removed} 行)`,
-    executeCommand: "コマンド実行",
-    executeCommandWith: (cmd: string) => `${cmd} を実行`,
+    executeCommand: "チェックを実行",
+    executeCommandWith: (cmd: string) => `チェックを実行: ${cmd}`,
     planStep: "計画ステップ",
     think: "思考",
     hideProcessReplay: "プロセス再生を非表示",
@@ -586,15 +586,20 @@ export const jaJP: Translations = {
     liveProcessDone: "完了",
     liveProcessPending: "待機中",
     liveProcessHistory: (n: number) => `${n} ステップ再生`,
-    reasoningFallback: "思考を整理",
+    reasoningFallback: "公開進捗を整理",
     callTeammate: "チームメンバーを呼び出し",
     searchSources: "情報を検索",
     readWebpage: "Web ページを読み込み",
     readFile: "ファイルを確認",
     updateFile: "ファイルを更新",
-    runAction: "アクションを実行",
+    runAction: "操作を実行",
     teammateTimeout:
       "チームメンバーが時間内に返答しなかったため、Octopus が引き継ぎました",
+    factSummaryPath: (value: string) => `確認済み: ${value}`,
+    factSummaryCount: (value: string) => `確認済み: 全 ${value} 件`,
+    factSummaryStatus: (value: string) => `確認済み: ステータス ${value}`,
+    factSummaryTitle: (value: string) => `確認済み: ${value}`,
+    factSummaryText: (value: string) => `確認済み: ${value}`,
   },
 
   // Trace generator labels
@@ -1092,7 +1097,7 @@ export const jaJP: Translations = {
     terminalActions: (count: number) =>
       `${count} terminal action${count !== 1 ? "s" : ""}`,
     executionActions: (count: number) =>
-      `${count} execution action${count !== 1 ? "s" : ""}`,
+      `${count} execution operation${count !== 1 ? "s" : ""}`,
     listSeparator: ", ",
     statusProcessing: "Processing",
     statusCompleted: "Completed",
@@ -1185,6 +1190,8 @@ export const jaJP: Translations = {
     statusError: "エラー",
     statusDone: "完了",
     progress: "進捗",
+    roundTitle: (iteration) => `ラウンド ${iteration}`,
+    roundActionCount: (count) => `${count} 件のアクション`,
     artifacts: "成果物",
     generatedArtifacts: "生成された成果物",
     changedFiles: "変更ファイル",
@@ -1254,9 +1261,12 @@ export const jaJP: Translations = {
     phaseStatusError: "Error",
     phaseStatusDone: "Completed",
     phaseStatusPending: "Pending",
-    robot: "Robot",
-    noRunningRobotProcess: "No robot process is currently running.",
-    startingRobotProcess: "Controller started — waiting for its first action…",
+    robot: "Collaboration scene",
+    noRunningRobotProcess: "No active collaboration process yet.",
+    startingRobotProcess:
+      "Joined the collaboration scene — waiting for the first visible action…",
+    locateTranscriptEvent: "Locate in conversation",
+    collapseWorkbench: "Collapse workbench",
     tabList: "Tab list",
     summaryLabel: "Summary",
     agentStatusRunning: "Running",
@@ -1269,6 +1279,7 @@ export const jaJP: Translations = {
     mainController: "Main",
     subComputer: "Sub computer",
     currentConversation: "Current conversation",
+    timelinePosition: (sequence) => `Timeline item ${sequence}`,
     workbenchSlots: "Slots",
     viewMainAgentSlot: "View main computer",
     mainAgentProcessTitle: "Main computer: current conversation main process",
@@ -1468,7 +1479,8 @@ export const jaJP: Translations = {
     removing: "Removing...",
     pingAria: (name) => `Ping ${name}`,
     removeAria: (name) => `Remove ${name}`,
-    removeConfirmTitle: (name) => `リモートバックエンド「${name}」を削除しますか？`,
+    removeConfirmTitle: (name) =>
+      `リモートバックエンド「${name}」を削除しますか？`,
     removeConfirmDescription:
       "このバックエンドはリストから削除されます。必要に応じて後で再追加できます。",
   },
@@ -2917,10 +2929,10 @@ export const jaJP: Translations = {
   toolCalls: {
     moreSteps: (count: number) => `${count} more step${count === 1 ? "" : "s"}`,
     lessSteps: "Less steps",
-    executeCommand: "Execute command",
+    executeCommand: "チェックを実行",
     presentFiles: "Present files",
     needYourHelp: "Need your help",
-    useTool: (toolName: string) => `Use "${toolName}" tool`,
+    useTool: () => "Run action",
     searchFor: (query: string) => `Search for "${query}"`,
     searchForRelatedInfo: "Search for related information",
     searchForRelatedImages: "Search for related images",
@@ -5236,12 +5248,12 @@ Strategy:
     tokens: "Tokens",
     estCost: "Est. Cost",
     turns: "turns",
-    toolCalls: "Tool Calls",
+    toolCalls: "Action Records",
     cacheReads: "Cache Reads",
     tokensCached: "tokens cached",
     unique: "unique",
-    toolUsage: "Tool Usage",
-    noToolCalls: "No tool calls yet",
+    toolUsage: "Action Usage",
+    noToolCalls: "No action records yet",
     telemetry: "Telemetry",
     otelEnabled: "OTel Enabled",
     otelDisabled: "OTel Disabled",
@@ -5783,28 +5795,28 @@ Strategy:
   // Live Run Feedback
   liveRunFeedback: {
     title: "Live Feedback",
-    phaseUnderstand: "Understand",
-    phaseExecute: "Execute",
-    phaseVerify: "Verify",
-    generatingActionDraft: "Generating action draft",
-    generatingReasoning: "Generating reasoning",
+    phaseUnderstand: "Reading context",
+    phaseExecute: "Working",
+    phaseVerify: "Checking",
+    generatingActionDraft: "Shaping the next step",
+    generatingReasoning: "Organizing judgment",
     iteration: (n: number) => `Iteration ${n}`,
     contentPreview: "Content Preview",
-    updatingTodos: "Updating todos",
-    writingFile: "Writing",
-    writeComplete: "Write complete",
-    readingFile: "Reading",
-    readingContext: "Reading context",
-    runningCommand: "Running command",
-    calling: "Calling",
+    updatingTodos: "Updating plan",
+    writingFile: "Updating",
+    writeComplete: "Updated",
+    readingFile: "Checking",
+    readingContext: "context",
+    runningCommand: "Running local check",
+    calling: "Working",
   },
 
   // Public Thinking Status
   publicThinkingStatus: {
-    waitingForModel: "モデルの最初の応答を待っています",
-    modelWorking: "モデルが処理中です",
-    slowResponse: "処理に通常より時間がかかっています",
-    reconnecting: "接続が切れました。再接続しています",
+    waitingForModel: "内容を確認しています",
+    modelWorking: "流れを整理しています",
+    slowResponse: "続けています。少し時間がかかっています",
+    reconnecting: "接続が切れました。戻っています",
   },
 
   // Evolution Dashboard
@@ -6103,31 +6115,31 @@ Strategy:
     pullParallelResults:
       "Pulling parallel results back to the main thread for synthesis and cross-validation.",
     thoughtDetailLabel: (iteration) =>
-      `Thought detail${iteration ? ` · Round ${iteration}` : ""}`,
+      `整理メモ${iteration ? ` · Round ${iteration}` : ""}`,
     modelPublicReasoningFragment:
-      "The model publicly returned this round's reasoning/planning fragment.",
-    modelPublicReasoningStream: "Model Public Reasoning Stream",
+      "このラウンドの表示可能な整理メモを受け取りました。",
+    modelPublicReasoningStream: "公開整理メモ",
     modelOutputtingReasoning:
-      "The model is outputting the reasoning content publicly returned by the provider.",
+      "表示可能な整理メモを受信しています。",
     invokeSkillProcess: "Invoking skill/skill retrieval process.",
     understandTask: "Understanding Task",
     readingUserRequirements:
       "Reading user requirements, conversation context, and current work mode.",
     connectRuntime: "Connecting Runtime",
     establishingCallbackChannel:
-      "Establishing real-time callback channel for model and tool events.",
-    renderingModelOutput: "Rendering model output",
+      "リアルタイムの回送チャネルを確立しています。",
+    renderingModelOutput: "回答を表示しています",
     incrementalTextReceived:
       "Incremental text received; answer content will continue to be appended to the message area in segments.",
     thinking: "Thinking...",
-    modelOrganizingNextStep: "The model is organizing the next step.",
+    modelOrganizingNextStep: "次の一手を整理しています。",
     modelOrganizingNextStepWithWait: (seconds) =>
-      `The model is organizing the next step; waited ${seconds}s.`,
-    modelOutputIncomplete: "Model output incomplete",
+      `次の一手を整理しています。${seconds}s 待機しました。`,
+    modelOutputIncomplete: "今回の出力は完了しませんでした",
     providerRejected:
       "The provider rejected the request, the account is unavailable, or no renderable content was returned.",
-    modelOutputReceived: "Model output received",
-    modelStartedReturning: "The model has started returning content.",
+    modelOutputReceived: "回答内容を受信しました",
+    modelStartedReturning: "内容の返送が始まりました。",
     readFileToUnderstand:
       "Reading file content to understand the current implementation.",
     viewDirectoryStructure:
@@ -6166,8 +6178,8 @@ Strategy:
       "Results for this round read; next step is to adjust scope, supplement gaps, and enter comprehensive analysis.",
     detailTitles: {
       input: "Input",
-      thought: "Thought",
-      publicReasoning: "Public reasoning",
+      thought: "Note",
+      publicReasoning: "Public progress",
       result: "Result",
       observation: "Observation",
       preview: "Live content preview",
@@ -8669,7 +8681,8 @@ Strategy:
     remoteTab: "リモートマウント",
     remoteEmpty: "登録されたリモートワークスペースがありません。",
     remoteLoading: "リモートワークスペースを読み込み中…",
-    remoteLoadFailed: (error) => `リモートワークスペースの読み込みに失敗しました: ${error}`,
+    remoteLoadFailed: (error) =>
+      `リモートワークスペースの読み込みに失敗しました: ${error}`,
   },
 
   // Deep Research Panel
@@ -8693,7 +8706,8 @@ Strategy:
     liveAgentStream: "ライブエージェントストリーム",
     eventsCount: (n) => `${n} イベント`,
     prefetch: "プリフェッチ",
-    prefetchStats: (runs, evidence) => `${runs} 回実行 · ${evidence} 件のエビデンス`,
+    prefetchStats: (runs, evidence) =>
+      `${runs} 回実行 · ${evidence} 件のエビデンス`,
     executionSteps: "実行ステップ",
     synthesisRoleLabel: "統合",
     searchSources: "検索ソース",
@@ -8737,7 +8751,7 @@ Strategy:
       "現在はウェブ環境のため、右クリックメニューのインストール/削除は無効のままです。デスクトップ版に切り替えると、これら2項目が有効になります。",
     contextMenuTitle: "システム右クリックメニュー",
     contextMenuDescription:
-      'Windows デスクトップの空き領域を右クリックすると「Octopus 一括整理デスクトップ」が表示されます。',
+      "Windows デスクトップの空き領域を右クリックすると「Octopus 一括整理デスクトップ」が表示されます。",
     installButton: "右クリックコマンドをインストール",
     installingButton: "インストール中",
     removeButton: "削除",

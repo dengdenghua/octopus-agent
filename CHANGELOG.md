@@ -121,6 +121,17 @@ changes — visual + a11y polish only.
   breakpoints aligned; `evolution-dashboard` `xl:grid-cols-1` bug
   fixed to `xl:grid-cols-4`.
 
+Follow-up 2-commit sweep (`a4b1e4aca` → `1d842e79c`) to catch
+leftovers from the initial pass:
+
+- **Leftover fixes**: removed last `window.prompt` in
+  `url-bar.tsx` (replaced with shadcn Dialog); removed `Shimmer`
+  from `reasoning.tsx` (downgraded to `animate-pulse`); deleted
+  `shimmer.tsx` (no longer imported).
+- **Font size normalization**: remaining non-standard sizes mapped
+  — `text-[22px]` → `text-xl`, `text-[17px]` → `text-base`,
+  `text-[7/8px]` × 4 → `text-[10px]`.
+
 ---
 
 ## [Unreleased] — 2026-05 · multi-author audit sweep

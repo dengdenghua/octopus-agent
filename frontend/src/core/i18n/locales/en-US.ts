@@ -212,21 +212,21 @@ export const enUS: Translations = {
 
   // Message display
   message: {
-    thinking: "Thinking",
-    thinkingProcess: "Thinking process",
+    thinking: "Organizing",
+    thinkingProcess: "Process notes",
     replyThinking: "Reply summary",
     replyThinkingDescription:
       "Concise processing summary for the final response",
-    executionProcess: "Execution log",
+    executionProcess: "Action trail",
     executionProcessDescription:
-      "Structured timeline of model connection, tool calls, and observations",
-    visibleReasoning: "Visible reasoning",
-    executionSteps: "Execution steps",
-    toolCalls: "Tool calls",
+      "Visible actions, references, and result clues for this turn",
+    visibleReasoning: "Public progress",
+    executionSteps: "Action steps",
+    toolCalls: "Action records",
     todoAndContext: "Todo & Context",
     expandable: "Expandable",
     agentCluster: "Agent Cluster",
-    processDetails: "Process details",
+    processDetails: "Open details",
     statusViewing: "Viewing",
     statusCompleted: "Completed",
     statusError: "Error",
@@ -234,7 +234,6 @@ export const enUS: Translations = {
     assistant: "Assistant",
     turnLabel: (n: number) => `Turn ${n}`,
     turnNumberLabel: (n: number, label: string) => `Turn ${n}: ${label}`,
-    phaseTask: "phase task",
     turnLocator: "Turn locator",
     jumpToFirstTurn: "Jump to first turn",
     jumpToLastTurn: "Jump to last turn",
@@ -251,8 +250,8 @@ export const enUS: Translations = {
     processRecords: (n: number) => `${n} process records`,
     showMoreAgents: (n: number) => `Show ${n} more agents`,
     collapseAgents: "Collapse agents",
-    latestTool: "Latest tool",
-    execution: "Execution",
+    latestTool: "Latest action",
+    execution: "Action",
     verification: "Verification",
     process: "Process",
     actionCount: (n: number) => `${n} action${n === 1 ? "" : "s"}`,
@@ -325,14 +324,14 @@ export const enUS: Translations = {
       `${n} file operation${n === 1 ? "" : "s"}`,
     fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
       `${n} file operation${n === 1 ? "" : "s"} (+${added} / -${removed})`,
-    toolCallsCount: (n: number) => `${n} tool call${n === 1 ? "" : "s"}`,
+    toolCallsCount: (n: number) => `${n} action record${n === 1 ? "" : "s"}`,
     loadOlderTurns: "Load older turns",
     loadingOlderTurns: "Loading older turns…",
   },
 
   // Execution Checklist
   executionChecklist: {
-    title: "Execution Steps",
+    title: "Progress Checklist",
     clarifyGoal: "Clarify task goal",
     clarifyGoalDetail:
       "Converge user request into an executable output target.",
@@ -342,17 +341,18 @@ export const enUS: Translations = {
       `Adjust keywords based on round ${round} results`,
     adjustKeywordsDetail:
       "After reading results, narrow scope and continue to supplement missing market, competitor, or demand evidence.",
-    webSearch: (count: number) => `Web search ${count} times`,
+    webSearch: (count: number) => `Search sources ${count} times`,
     readContext: "Read context",
     writeFile: "Write/modify file",
-    runCommand: "Run command",
-    callTool: (count: number) => `Call tool ${count} times`,
+    runCommand: "Run checks",
+    callTool: (count: number) =>
+      `Coordinate ${count} action${count === 1 ? "" : "s"}`,
     toolCallDetail:
-      "Tool calls are the evidence collection and execution layer, not the complete thinking process.",
+      "These are visible progress signals; detailed operations stay in the workbench.",
     analyzeAndAlign: "Analyze and align data",
     analyzeAndAlignDetail:
       "Summarize, deduplicate, and calibrate search results from each round, rather than directly pasting search results.",
-    generateResponse: "Generate response",
+    generateResponse: "Draft response",
     generateResponseDetail:
       "Organize analysis conclusions into final content readable by users.",
     marketSize: "Calibrate market size and growth metrics",
@@ -572,8 +572,8 @@ export const enUS: Translations = {
       `Edit ${file} +${added} lines`,
     editFileRemoved: (file: string, removed: number) =>
       `Edit ${file} -${removed} lines`,
-    executeCommand: "Run command",
-    executeCommandWith: (cmd: string) => `Run ${cmd}`,
+    executeCommand: "Run checks",
+    executeCommandWith: (cmd: string) => `Run checks: ${cmd}`,
     planStep: "Plan step",
     think: "Thinking",
     hideProcessReplay: "Hide process replay",
@@ -590,14 +590,19 @@ export const enUS: Translations = {
     liveProcessDone: "Done",
     liveProcessPending: "Pending",
     liveProcessHistory: (n: number) => `${n} replay step${n === 1 ? "" : "s"}`,
-    reasoningFallback: "Synthesize reasoning",
+    reasoningFallback: "Summarize public progress",
     callTeammate: "Call teammate",
     searchSources: "Search sources",
     readWebpage: "Read webpage",
     readFile: "Read file",
     updateFile: "Update file",
-    runAction: "Run action",
+    runAction: "Run operation",
     teammateTimeout: "Teammate did not return in time; Octopus took over",
+    factSummaryPath: (value: string) => `Confirmed: ${value}`,
+    factSummaryCount: (value: string) => `Confirmed: ${value} total`,
+    factSummaryStatus: (value: string) => `Confirmed: status ${value}`,
+    factSummaryTitle: (value: string) => `Confirmed: ${value}`,
+    factSummaryText: (value: string) => `Confirmed: ${value}`,
   },
 
   // Trace generator labels
@@ -1094,7 +1099,7 @@ export const enUS: Translations = {
     terminalActions: (count: number) =>
       `${count} terminal action${count !== 1 ? "s" : ""}`,
     executionActions: (count: number) =>
-      `${count} execution action${count !== 1 ? "s" : ""}`,
+      `${count} execution operation${count !== 1 ? "s" : ""}`,
     listSeparator: ", ",
     statusProcessing: "Processing",
     statusCompleted: "Completed",
@@ -1187,6 +1192,8 @@ export const enUS: Translations = {
     statusError: "Error",
     statusDone: "Done",
     progress: "Progress",
+    roundTitle: (iteration) => `Round ${iteration}`,
+    roundActionCount: (count) => `${count} actions`,
     artifacts: "Artifacts",
     generatedArtifacts: "Generated artifacts",
     changedFiles: "Changed files",
@@ -1256,10 +1263,12 @@ export const enUS: Translations = {
     phaseStatusError: "Error",
     phaseStatusDone: "Completed",
     phaseStatusPending: "Pending",
-    robot: "Controller status",
-    noRunningRobotProcess:
-      "No active controller execution is running right now.",
-    startingRobotProcess: "Controller started — waiting for its first action…",
+    robot: "Collaboration scene",
+    noRunningRobotProcess: "No active collaboration process yet.",
+    startingRobotProcess:
+      "Joined the collaboration scene — waiting for the first visible action…",
+    locateTranscriptEvent: "Locate in conversation",
+    collapseWorkbench: "Collapse workbench",
     tabList: "Tab list",
     summaryLabel: "Summary",
     agentStatusRunning: "Running",
@@ -1272,6 +1281,7 @@ export const enUS: Translations = {
     mainController: "Main",
     subComputer: "Sub computer",
     currentConversation: "Current conversation",
+    timelinePosition: (sequence) => `Timeline item ${sequence}`,
     workbenchSlots: "Slots",
     viewMainAgentSlot: "View main computer",
     mainAgentProcessTitle: "Main computer: current conversation main process",
@@ -2918,10 +2928,10 @@ export const enUS: Translations = {
   toolCalls: {
     moreSteps: (count: number) => `${count} more step${count === 1 ? "" : "s"}`,
     lessSteps: "Less steps",
-    executeCommand: "Execute command",
+    executeCommand: "Run checks",
     presentFiles: "Present files",
     needYourHelp: "Need your help",
-    useTool: (toolName: string) => `Use "${toolName}" tool`,
+    useTool: () => "Run action",
     searchFor: (query: string) => `Search for "${query}"`,
     searchForRelatedInfo: "Search for related information",
     searchForRelatedImages: "Search for related images",
@@ -5231,12 +5241,12 @@ Strategy:
     tokens: "Tokens",
     estCost: "Est. Cost",
     turns: "turns",
-    toolCalls: "Tool Calls",
+    toolCalls: "Action Records",
     cacheReads: "Cache Reads",
     tokensCached: "tokens cached",
     unique: "unique",
-    toolUsage: "Tool Usage",
-    noToolCalls: "No tool calls yet",
+    toolUsage: "Action Usage",
+    noToolCalls: "No action records yet",
     telemetry: "Telemetry",
     otelEnabled: "OTel Enabled",
     otelDisabled: "OTel Disabled",
@@ -5779,28 +5789,28 @@ Strategy:
   // Live Run Feedback
   liveRunFeedback: {
     title: "Live Feedback",
-    phaseUnderstand: "Understand",
-    phaseExecute: "Execute",
-    phaseVerify: "Verify",
-    generatingActionDraft: "Generating action draft",
-    generatingReasoning: "Generating reasoning",
+    phaseUnderstand: "Reading context",
+    phaseExecute: "Working",
+    phaseVerify: "Checking",
+    generatingActionDraft: "Shaping the next step",
+    generatingReasoning: "Organizing judgment",
     iteration: (n: number) => `Iteration ${n}`,
     contentPreview: "Content Preview",
-    updatingTodos: "Updating todos",
-    writingFile: "Writing",
-    writeComplete: "Write complete",
-    readingFile: "Reading",
-    readingContext: "Reading context",
-    runningCommand: "Running command",
-    calling: "Calling",
+    updatingTodos: "Updating plan",
+    writingFile: "Updating",
+    writeComplete: "Updated",
+    readingFile: "Checking",
+    readingContext: "context",
+    runningCommand: "Running local check",
+    calling: "Working",
   },
 
   // Public Thinking Status
   publicThinkingStatus: {
-    waitingForModel: "Waiting for the model's first response",
-    modelWorking: "Model is working",
-    slowResponse: "Still working — slower than usual",
-    reconnecting: "Connection lost — reconnecting",
+    waitingForModel: "Reading this through",
+    modelWorking: "Organizing the thread",
+    slowResponse: "Still on it — slower than usual",
+    reconnecting: "Connection dropped — reconnecting",
   },
 
   // Evolution Dashboard
@@ -6103,31 +6113,31 @@ Strategy:
     pullParallelResults:
       "Pulling parallel results back to the main thread for synthesis and cross-validation.",
     thoughtDetailLabel: (iteration) =>
-      `Thought detail${iteration ? ` · Round ${iteration}` : ""}`,
+      `Process note${iteration ? ` · Round ${iteration}` : ""}`,
     modelPublicReasoningFragment:
-      "The model publicly returned this round's reasoning/planning fragment.",
-    modelPublicReasoningStream: "Model Public Reasoning Stream",
+      "A display-safe planning fragment arrived for this round.",
+    modelPublicReasoningStream: "Public planning notes",
     modelOutputtingReasoning:
-      "The model is outputting the reasoning content publicly returned by the provider.",
+      "Receiving display-safe planning notes for this round.",
     invokeSkillProcess: "Invoking skill/skill retrieval process.",
     understandTask: "Understanding Task",
     readingUserRequirements:
       "Reading user requirements, conversation context, and current work mode.",
     connectRuntime: "Connecting Runtime",
     establishingCallbackChannel:
-      "Establishing real-time callback channel for model and tool events.",
-    renderingModelOutput: "Rendering model output",
+      "Establishing the real-time callback channel.",
+    renderingModelOutput: "Rendering the answer",
     incrementalTextReceived:
       "Incremental text received; answer content will continue to be appended to the message area in segments.",
     thinking: "Thinking...",
-    modelOrganizingNextStep: "The model is organizing the next step.",
+    modelOrganizingNextStep: "Organizing the next step.",
     modelOrganizingNextStepWithWait: (seconds) =>
-      `The model is organizing the next step; waited ${seconds}s.`,
-    modelOutputIncomplete: "Model output incomplete",
+      `Organizing the next step; waited ${seconds}s.`,
+    modelOutputIncomplete: "This response did not finish",
     providerRejected:
       "The provider rejected the request, the account is unavailable, or no renderable content was returned.",
-    modelOutputReceived: "Model output received",
-    modelStartedReturning: "The model has started returning content.",
+    modelOutputReceived: "Answer content received",
+    modelStartedReturning: "Content has started returning.",
     readFileToUnderstand:
       "Reading file content to understand the current implementation.",
     viewDirectoryStructure:
@@ -6166,8 +6176,8 @@ Strategy:
       "Results for this round read; next step is to adjust scope, supplement gaps, and enter comprehensive analysis.",
     detailTitles: {
       input: "Input",
-      thought: "Thought",
-      publicReasoning: "Public reasoning",
+      thought: "Note",
+      publicReasoning: "Public progress",
       result: "Result",
       observation: "Observation",
       preview: "Live content preview",

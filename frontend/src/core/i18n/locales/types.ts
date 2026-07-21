@@ -177,7 +177,6 @@ export interface Translations {
     assistant: string;
     turnLabel: (n: number) => string;
     turnNumberLabel: (n: number, label: string) => string;
-    phaseTask: string;
     turnLocator: string;
     jumpToFirstTurn: string;
     jumpToLastTurn: string;
@@ -516,6 +515,11 @@ export interface Translations {
     updateFile: string;
     runAction: string;
     teammateTimeout: string;
+    factSummaryPath: (value: string) => string;
+    factSummaryCount: (value: string) => string;
+    factSummaryStatus: (value: string) => string;
+    factSummaryTitle: (value: string) => string;
+    factSummaryText: (value: string) => string;
   };
 
   // Trace generator (swarm simulation label bag)
@@ -987,6 +991,8 @@ export interface Translations {
     statusError: string;
     statusDone: string;
     progress: string;
+    roundTitle: (iteration: number) => string;
+    roundActionCount: (count: number) => string;
     artifacts: string;
     generatedArtifacts: string;
     changedFiles: string;
@@ -1054,6 +1060,8 @@ export interface Translations {
     robot: string;
     noRunningRobotProcess: string;
     startingRobotProcess: string;
+    locateTranscriptEvent: string;
+    collapseWorkbench: string;
     tabList: string;
     summaryLabel: string;
     agentStatusRunning: string;
@@ -1066,6 +1074,7 @@ export interface Translations {
     mainController: string;
     subComputer: string;
     currentConversation: string;
+    timelinePosition: (sequence: number) => string;
     workbenchSlots: string;
     viewMainAgentSlot: string;
     mainAgentProcessTitle: string;
@@ -3867,6 +3876,7 @@ export interface Translations {
       resetZoom: string;
       devicePreview: string;
     };
+    closeFolderAria: (name: string) => string;
   };
 
   // Gene Lock Badge
@@ -4093,7 +4103,6 @@ export interface Translations {
     signalCommits: (count: number) => string;
     signalReadme: string;
     signalSummaryEmpty: string;
-    closeFolderAria: (name: string) => string;
   };
 
   // Code page tabs
