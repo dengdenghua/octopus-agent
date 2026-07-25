@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+
 class SubagentDispatchRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

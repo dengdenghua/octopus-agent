@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover
     Response = None  # type: ignore[assignment, misc]
 
 from runtime.sensing._fastapi_guard import require_fastapi
+
 from .config import LocalAuthConfig, verify_password
 
 logger = logging.getLogger(__name__)

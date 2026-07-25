@@ -47,9 +47,9 @@ except ImportError:  # pragma: no cover
     FileResponse = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.platform.process.paths import app_paths
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+from runtime.sensing._fastapi_guard import require_fastapi
 
 MAX_UPLOAD_FILES = 20
 MAX_UPLOAD_FILE_BYTES = 50 * 1024 * 1024

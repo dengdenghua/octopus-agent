@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+
 def create_memory_router(
     *,
     identity_store: Any = None,

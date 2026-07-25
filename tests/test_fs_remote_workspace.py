@@ -36,7 +36,6 @@ from runtime.sensing.server.mount_backend import (
 from runtime.workspace import WorkspaceStore
 from runtime.workspace import crypto as crypto_mod
 
-
 # ═══════════════════════════════════════════════════════════
 # In-memory mock MountBackend
 # ═══════════════════════════════════════════════════════════

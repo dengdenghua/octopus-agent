@@ -14,6 +14,7 @@ except ImportError:
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+
 def _node_status_from_events(
     task_id: str,
     node_id: str,

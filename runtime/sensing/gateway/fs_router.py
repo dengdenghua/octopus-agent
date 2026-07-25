@@ -704,7 +704,7 @@ def create_fs_router(
             )
         # Auto-acquire (or renew-in-place for the same holder) so the
         # write is exclusive for the lease TTL window.
-        try:
+        with suppress(Exception):  # noqa: BLE001 — lease acquisition must not block the write
             lease_store.acquire(
                 workspace_id=workspace_id,
                 file_path=file_path,
@@ -712,8 +712,6 @@ def create_fs_router(
                 ttl_seconds=1800,
                 kind="exclusive",
             )
-        except Exception:  # noqa: BLE001 — lease acquisition must not block the write
-            pass
 
     def _broadcast_file_written(
         workspace_id: str,
@@ -771,7 +769,7 @@ def create_fs_router(
     # the local ``TREE_IGNORED_DIRS`` filter for ``.git`` / ``node_modules``
     # / ``.octopus`` / ``logs`` so a remote workspace gets the same noise
     # suppression as a local one.
-    _REMOTE_IGNORED_DIRS = {
+    _REMOTE_IGNORED_DIRS = {  # noqa: N806 — intentional constant
         ".git", "node_modules", ".octopus", "logs",
     }
 

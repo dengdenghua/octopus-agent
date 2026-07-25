@@ -46,13 +46,13 @@ except ImportError:  # pragma: no cover
     APIRouter = None  # type: ignore[assignment]
     Request = None  # type: ignore[assignment]
 
-from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.platform.models import (
     ArmId,
     Budget,
     BudgetLimits,
     ParsedIntent,
 )
+from runtime.sensing._fastapi_guard import require_fastapi
 
 # Re-export formatting helpers from openai_formatting.py so call
 # sites inside this file stay unchanged. The public API of that

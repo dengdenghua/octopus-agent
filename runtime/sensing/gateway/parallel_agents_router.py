@@ -16,9 +16,9 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment,misc]
     StreamingResponse = None  # type: ignore[assignment,misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.execution.parallel_agents.models import DispatchRequest, SplitRequest
 from runtime.execution.parallel_agents.orchestrator import ParallelAgentOrchestrator
+from runtime.sensing._fastapi_guard import require_fastapi
 
 
 def create_parallel_agents_router(

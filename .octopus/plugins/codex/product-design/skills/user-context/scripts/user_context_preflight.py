@@ -9,7 +9,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +51,7 @@ def resolve_state_dir(codex_home: Path | None, state_dir: Path | None) -> Path:
 
 def file_mtime(path: Path) -> str | None:
     try:
-        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).isoformat()
     except OSError:
         return None
 

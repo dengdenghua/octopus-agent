@@ -86,6 +86,7 @@ class TestServeBasics:
         calls: list[str] = []
 
         import uvicorn
+
         from runtime.sensing.gateway import storage_supervisor
 
         monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)

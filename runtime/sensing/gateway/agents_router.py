@@ -125,7 +125,8 @@ except ImportError:  # pragma: no cover
     FileResponse = None  # type: ignore[assignment, misc]
     Response = None  # type: ignore[assignment, misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
+from runtime.sensing._fastapi_guard import require_fastapi  # noqa: E402, I001 — after FASTAPI_AVAILABLE flag
+
 
 def _avatar_url_for(agent_id: str) -> str | None:
     """Return a URL the UI can <img> load, or None if no avatar on disk.

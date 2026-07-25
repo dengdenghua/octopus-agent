@@ -145,7 +145,7 @@ def test_get_by_holder(tmp_path: Path) -> None:
     store.acquire("ws1", "c.py", "bob", ttl_seconds=60)
     alice_leases = store.get_by_holder("alice")
     assert len(alice_leases) == 2
-    assert {l.file_path for l in alice_leases} == {"a.py", "b.py"}
+    assert {lease.file_path for lease in alice_leases} == {"a.py", "b.py"}
     bob_leases = store.get_by_holder("bob")
     assert len(bob_leases) == 1
     assert bob_leases[0].file_path == "c.py"
@@ -211,5 +211,5 @@ def test_shared_lease(tmp_path: Path) -> None:
     # Both coexist on the same file.
     active = store.list_active("ws1")
     assert len(active) == 2
-    holders = {l.holder_id for l in active}
+    holders = {lease.holder_id for lease in active}
     assert holders == {"alice", "bob"}

@@ -83,7 +83,11 @@ def create_local_brain_router(
         if not _is_loopback_request(request):
             raise HTTPException(403, "storage credentials are local-only")
 
-        from runtime.execution.suckers.storage_skills import _base_url, _storage_token, storage_alive
+        from runtime.execution.suckers.storage_skills import (
+            _base_url,
+            _storage_token,
+            storage_alive,
+        )
         from runtime.sensing.gateway.storage_supervisor import maybe_start_storage
 
         status = maybe_start_storage()

@@ -26,8 +26,8 @@ except ImportError:  # pragma: no cover
     FileResponse = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+from runtime.sensing._fastapi_guard import require_fastapi
 
 if FASTAPI_AVAILABLE:
 

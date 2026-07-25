@@ -82,7 +82,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment,misc]
     Request = None  # type: ignore[assignment,misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
+from runtime.sensing._fastapi_guard import require_fastapi  # noqa: E402, I001 — after FASTAPI_AVAILABLE flag
 
 # ── Wire models ─────────────────────────────────────────────────────
 

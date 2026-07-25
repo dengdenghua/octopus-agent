@@ -20,8 +20,9 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
 from pydantic import BaseModel, ConfigDict, Field
+
+from runtime.sensing._fastapi_guard import require_fastapi
 
 
 class RankRequest(BaseModel):

@@ -107,10 +107,10 @@ def _lazy_module_map() -> dict[str, str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "_LAZY_MODULES":
+                if isinstance(target, ast.Name) and target.id == "_LAZY_MODULES":  # noqa: SIM102 — distinct checks
                     if isinstance(node.value, ast.Dict):
                         out: dict[str, str] = {}
-                        for key, val in zip(node.value.keys, node.value.values):
+                        for key, val in zip(node.value.keys, node.value.values, strict=False):
                             if (
                                 isinstance(key, ast.Constant)
                                 and isinstance(key.value, str)

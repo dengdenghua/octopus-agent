@@ -55,6 +55,7 @@ What this module deliberately does NOT do
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -63,9 +64,10 @@ import socket
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from runtime.protocol.envelope import (
     JsonRpcError,
@@ -268,10 +270,8 @@ class LeaderProcess:
         """Release the socket and PID file."""
         self._stop.set()
         if self._server_sock is not None:
-            try:
+            with contextlib.suppress(OSError):
                 self._server_sock.close()
-            except OSError:
-                pass
             self._server_sock = None
         try:
             if self.socket_path.exists():
@@ -290,16 +290,14 @@ class LeaderProcess:
     def _serve_loop(self) -> None:
         # Handle SIGTERM/SIGINT gracefully.
         for sig in (signal.SIGTERM, signal.SIGINT):
-            try:
+            # In background threads signal.signal can fail; ignore.
+            with contextlib.suppress(ValueError, OSError):
                 signal.signal(sig, lambda _signum, _frame: self._stop.set())
-            except (ValueError, OSError):
-                # In background threads signal.signal can fail; ignore.
-                pass
 
         while not self._stop.is_set():
             try:
                 client, _ = self._server_sock.accept()  # type: ignore[union-attr]
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 break
@@ -327,10 +325,8 @@ class LeaderProcess:
                 self._handle_message(client, raw)
         finally:
             self.state.detach_client(client)
-            try:
+            with contextlib.suppress(OSError):
                 client.close()
-            except OSError:
-                pass
 
     def _handle_message(self, client: socket.socket, raw: str) -> None:
         try:
@@ -368,10 +364,8 @@ class LeaderProcess:
             self._send_error(client, message.id, JsonRpcErrorCode.INTERNAL_ERROR, str(exc))
             return
         response = JsonRpcResponse(jsonrpc="2.0", id=message.id, result=result)
-        try:
+        with contextlib.suppress(OSError):
             _write_frame(client, encode_message(response))
-        except OSError:
-            pass
 
     def _send_error(
         self,
@@ -387,10 +381,8 @@ class LeaderProcess:
             id=response_id,
             error=JsonRpcError(code=int(code), message=message),
         )
-        try:
+        with contextlib.suppress(OSError):
             _write_frame(client, encode_message(response))
-        except OSError:
-            pass
 
     # ── Built-in handlers ────────────────────────────────────
 
@@ -437,10 +429,8 @@ class LeaderProcess:
                     f"leader already running as pid {old_pid} (pid file: {self.pid_path})"
                 )
             # Stale PID file — reclaim.
-            try:
+            with contextlib.suppress(OSError):
                 self.pid_path.unlink()
-            except OSError:
-                pass
         self.pid_path.parent.mkdir(parents=True, exist_ok=True)
         self.pid_path.write_text(str(os.getpid()))
 
@@ -484,7 +474,7 @@ class LeaderClient:
         socket_path: Path | str = DEFAULT_SOCKET_PATH,
         *,
         timeout: float = 5.0,
-    ) -> "LeaderClient":
+    ) -> LeaderClient:
         path = Path(socket_path)
         if not path.exists():
             raise LeaderNotRunning(f"leader socket not found: {path}")
@@ -497,17 +487,15 @@ class LeaderClient:
             raise LeaderNotRunning(f"failed to connect to {path}: {exc}") from exc
         return cls(sock)
 
-    def __enter__(self) -> "LeaderClient":
+    def __enter__(self) -> LeaderClient:
         return self
 
     def __exit__(self, *_exc_info: object) -> None:
         self.close()
 
     def close(self) -> None:
-        try:
+        with contextlib.suppress(OSError):
             self._sock.close()
-        except OSError:
-            pass
 
     def call(self, method: str, params: dict[str, Any]) -> Any:
         """Send a JSON-RPC request and wait for the response.
@@ -638,10 +626,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         if not _pid_alive(pid):
             print(f"pid {pid} not alive; cleaning pid file")
-            try:
+            with contextlib.suppress(OSError):
                 pid_path.unlink()
-            except OSError:
-                pass
             return 0
         try:
             os.kill(pid, signal.SIGTERM)

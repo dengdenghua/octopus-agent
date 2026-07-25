@@ -38,8 +38,8 @@ from runtime.tentacle.mobile.apks.tool_bridge import (
     tool_execute,
 )
 from runtime.tentacle.mobile.apks.version import OCTOPUS_MOBILE_VERSION, is_compatible
-from runtime.tentacle.mobile.mcp_server import TentacleMcpServer
 from runtime.tentacle.mobile.capabilities import android_capabilities
+from runtime.tentacle.mobile.mcp_server import TentacleMcpServer
 
 # ── 1. 包导入测试 ─────────────────────────────────────────
 

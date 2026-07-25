@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover
     BaseModel = object  # type: ignore[assignment, misc]
 
 from runtime.sensing._fastapi_guard import require_fastapi
+
 from .client import OctClientError, mask_email, post_public
 from .config import OctConfig
 from .links import OctLink, OctLinkStore

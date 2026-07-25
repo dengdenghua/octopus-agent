@@ -41,7 +41,6 @@ from runtime.workspace import WorkspaceStore
 from runtime.workspace import crypto as crypto_mod
 from runtime.workspace.cowork_bridge import grant_for_workspace_role
 
-
 # ═══════════════════════════════════════════════════════════
 # Fixtures
 # ═══════════════════════════════════════════════════════════

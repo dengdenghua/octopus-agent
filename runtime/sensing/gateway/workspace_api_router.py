@@ -20,6 +20,7 @@ endpoints; the thread router continues to own ``GET /api/workspaces/{thread_id}/
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -39,7 +40,6 @@ from runtime.workspace import (
     VALID_MOUNT_TYPES,
     WorkspaceStore,
 )
-
 
 # ═══════════════════════════════════════════════════════════
 # Request bodies
@@ -197,12 +197,10 @@ def create_workspace_api_router(
             raise _bad_request(exc) from exc
         # Pre-warm the backend cache so the first health/list_dir call
         # doesn't pay the connection cost.
-        try:
+        with contextlib.suppress(Exception):  # noqa: BLE001 — pre-warm is best-effort
             backend_registry.get_or_create(
                 ws.id, ws.mount_type, ws.mount_target, ws.mount_options
             )
-        except Exception:  # noqa: BLE001 — pre-warm is best-effort
-            pass
         return {"workspace": ws.to_dict()}
 
     @router.get("/api/workspaces", dependencies=[Depends(_auth_dep)])
@@ -211,10 +209,7 @@ def create_workspace_api_router(
     ) -> dict[str, Any]:
         """List workspaces accessible to ``user_id``."""
         _require_flag()
-        if user_id:
-            workspaces = store.list_workspaces_for_user(user_id)
-        else:
-            workspaces = store.list_workspaces()
+        workspaces = store.list_workspaces_for_user(user_id) if user_id else store.list_workspaces()
         return {"workspaces": [ws.to_dict() for ws in workspaces]}
 
     @router.get(
@@ -365,7 +360,7 @@ def create_workspace_api_router(
         _require_flag()
         _workspace_or_404(workspace_id)
         active = leases.list_active(workspace_id=workspace_id)
-        return {"leases": [_lease_dict(l) for l in active]}
+        return {"leases": [_lease_dict(lease) for lease in active]}
 
     # ─── Health ────────────────────────────────────────────────────────────
 

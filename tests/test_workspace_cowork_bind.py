@@ -29,7 +29,6 @@ from runtime.workspace.cowork_bridge import (
     sync_workspace_members_to_group,
 )
 
-
 # ─── Fixtures ──────────────────────────────────────────────────────────────
 
 

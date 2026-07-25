@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+
 def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Split OKF/YAML frontmatter (JSON-literal values · see gen_wiki) from the
     markdown body so the UI renders clean markdown, not a raw ``---`` block.

@@ -3,12 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from runtime.core.hearts.gill_pump import GillCache, GillHeartPump, retrieval_gill_enabled
-from runtime.platform.models import ContextSegment
-from runtime.platform.process import event_bridge
 from runtime.core.nerves.bus import AgentAdded, TypedEventBus
 from runtime.execution.suckers import SkillRegistry
 from runtime.memory.hemolymph import ContextComposer
-from runtime.platform.models import ParsedIntent
+from runtime.platform.models import ContextSegment, ParsedIntent
+from runtime.platform.process import event_bridge
 
 
 class _SignalBus:

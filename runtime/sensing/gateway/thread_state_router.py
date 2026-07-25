@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+
 def create_thread_state_router(
     *,
     store: Any,

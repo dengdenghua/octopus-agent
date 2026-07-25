@@ -33,6 +33,7 @@ except ImportError:
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+
 def create_meta_skill_router(
     *,
     identity_store: Any = None,

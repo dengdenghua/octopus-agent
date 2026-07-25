@@ -41,7 +41,6 @@ from runtime.workspace.cowork_bridge import (
     link_workspace_to_group,
 )
 
-
 # ═══════════════════════════════════════════════════════════
 # Mock backend
 # ═══════════════════════════════════════════════════════════

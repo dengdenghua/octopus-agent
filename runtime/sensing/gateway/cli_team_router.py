@@ -31,6 +31,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+
 class CliTeamRunRequest(BaseModel):
     goal: str = ""
     repo_root: str | None = None

@@ -29,6 +29,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment,misc]
 
 from runtime.sensing._fastapi_guard import require_fastapi
+
 from .evolution_ops import (
     _as_dt,
     _bounded_score,

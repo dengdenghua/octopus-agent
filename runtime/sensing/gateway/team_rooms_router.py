@@ -51,7 +51,8 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment,misc]
     WebSocket = None  # type: ignore[assignment,misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
+from runtime.sensing._fastapi_guard import require_fastapi  # noqa: E402, I001 — after FASTAPI_AVAILABLE flag
+
 
 class TeamMemberWire(BaseModel):
     model_config = ConfigDict(extra="allow")

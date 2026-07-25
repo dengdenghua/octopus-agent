@@ -17,7 +17,6 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment,misc]
     Request = None  # type: ignore[assignment,misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.platform.process.paths import app_paths, project_root
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
 from runtime.research.deep_research import (
@@ -28,6 +27,7 @@ from runtime.research.deep_research import (
     ResearchRouteDecision,
 )
 from runtime.research.prefetch import ResearchPrefetcher
+from runtime.sensing._fastapi_guard import require_fastapi
 
 
 def create_deep_research_router(

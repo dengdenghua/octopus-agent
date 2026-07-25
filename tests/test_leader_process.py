@@ -153,27 +153,24 @@ def test_client_set_task_status_validates_status(
     running_leader: LeaderProcess,
     leader_socket: Path,
 ) -> None:
-    with LeaderClient.connect(leader_socket) as client:
-        with pytest.raises(LeaderError, match="invalid status"):
-            client.call("set_task_status", {"task_id": "t", "status": "bogus"})
+    with LeaderClient.connect(leader_socket) as client, pytest.raises(LeaderError, match="invalid status"):
+        client.call("set_task_status", {"task_id": "t", "status": "bogus"})
 
 
 def test_client_set_task_status_requires_task_id(
     running_leader: LeaderProcess,
     leader_socket: Path,
 ) -> None:
-    with LeaderClient.connect(leader_socket) as client:
-        with pytest.raises(LeaderError, match="task_id required"):
-            client.call("set_task_status", {"status": "running"})
+    with LeaderClient.connect(leader_socket) as client, pytest.raises(LeaderError, match="task_id required"):
+        client.call("set_task_status", {"status": "running"})
 
 
 def test_client_method_not_found(
     running_leader: LeaderProcess,
     leader_socket: Path,
 ) -> None:
-    with LeaderClient.connect(leader_socket) as client:
-        with pytest.raises(LeaderError, match="unknown method"):
-            client.call("nonexistent_method", {})
+    with LeaderClient.connect(leader_socket) as client, pytest.raises(LeaderError, match="unknown method"):
+        client.call("nonexistent_method", {})
 
 
 # ── Client connection failures ──────────────────────────────

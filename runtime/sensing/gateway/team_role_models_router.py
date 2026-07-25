@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+
 class RoleModelsBody(BaseModel):
     overrides: dict[str, str] = {}
 

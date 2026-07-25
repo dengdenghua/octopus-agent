@@ -16,6 +16,7 @@ except ImportError:
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+
 def create_skill_market_router(
     *,
     skill_market: Any = None,

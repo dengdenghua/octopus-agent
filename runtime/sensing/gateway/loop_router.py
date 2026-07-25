@@ -13,7 +13,6 @@ except ImportError:  # pragma: no cover
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.execution.loops.models import (
     CancelLoopRunRequest,
     CreateLoopRunRequest,
@@ -35,6 +34,7 @@ from runtime.execution.loops.replay import (
 )
 from runtime.execution.loops.store import LoopRunStore
 from runtime.platform.process.task_supervisor import TaskSupervisor, task_lease_health
+from runtime.sensing._fastapi_guard import require_fastapi
 
 
 def create_loop_router(

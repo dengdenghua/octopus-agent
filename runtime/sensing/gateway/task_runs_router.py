@@ -15,7 +15,6 @@ except ImportError:  # pragma: no cover
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
-from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.platform.process.paths import app_paths
 from runtime.platform.process.task_supervisor import (
     LostTaskLease,
@@ -25,6 +24,7 @@ from runtime.platform.process.task_supervisor import (
     build_task_runs_overview,
     task_lease_health,
 )
+from runtime.sensing._fastapi_guard import require_fastapi
 
 
 class TaskApprovalDecisionRequest(BaseModel):
