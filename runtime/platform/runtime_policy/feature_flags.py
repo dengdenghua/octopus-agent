@@ -381,7 +381,7 @@ _BUILTIN: list[FlagSpec] = [
     ),
     FlagSpec(
         name="ui.ambient_suggestions_interval_sec",
-        default=21600,
+        default=6 * 60 * 60,
         description=(
             "Tick interval (seconds) for the ambient-suggestions "
             "background scheduler. Defaults to 6 hours."
@@ -403,6 +403,15 @@ _BUILTIN: list[FlagSpec] = [
         description=(
             "Expose SSH/WebSocket transport so a local desktop can "
             "connect to a remote octopus-agent runtime."
+        ),
+        experimental=True,
+    ),
+    FlagSpec(
+        name="ui.remote_workspace",
+        default=False,
+        description=(
+            "Expose the Workspace HTTP API (mount + membership + "
+            "file lease endpoints under /api/workspaces)."
         ),
         experimental=True,
     ),

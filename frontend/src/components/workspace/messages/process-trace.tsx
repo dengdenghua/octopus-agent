@@ -94,8 +94,11 @@ export function ProcessTrace({
     live || shouldOpenProcessTraceByDefault(visibleEvents, hasAnswer, mode),
   );
   const [rawDetailsOpen, setRawDetailsOpen] = useState(false);
-  const shouldOpen =
-    live || shouldOpenProcessTraceByDefault(visibleEvents, hasAnswer, mode);
+  const shouldOpen = shouldOpenProcessTraceByDefault(
+    visibleEvents,
+    hasAnswer,
+    mode,
+  );
   const doneCount = useMemo(
     () => visibleEvents.filter((e) => e.status === "done").length,
     [visibleEvents],
@@ -105,7 +108,7 @@ export function ProcessTrace({
     ? progressForPhases(phaseState.phases, phaseState.currentPhase)
     : null;
   const showAgents = parallelAgents.length > 0;
-  const showProcessBody = live || open;
+  const showProcessBody = open;
   const hasSectionCards = sections.length > 0;
 
   useEffect(() => {
@@ -119,7 +122,7 @@ export function ProcessTrace({
   return (
     <div
       className={cn(
-        "border-l px-3 py-1.5",
+        "px-1 py-1.5",
         live
           ? "mb-3 border-primary/35"
           : "mb-2 border-border-default text-muted-foreground",
@@ -238,7 +241,7 @@ function AgentClusterCard({
 }) {
   const { t } = useI18n();
   return (
-    <div className="rounded-lg border border-border-default bg-background/85 px-3 py-2.5 shadow-[var(--shadow-xs)]">
+    <div className="px-1 py-1.5">
       <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
         <NetworkIcon className="size-4 shrink-0 text-sky-500" />
         <span className="font-medium text-foreground">
@@ -275,11 +278,11 @@ function AgentClusterRow({
       <button
         type="button"
         onClick={() => emitAgentWorkbenchFocus({ agentId: agent.id })}
-        className="flex w-full items-center gap-2 rounded-lg bg-muted/35 px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted/60"
+        className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/45"
       >
         <span
           className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-md border bg-background",
+            "flex size-6 shrink-0 items-center justify-center bg-transparent",
             agentRunPanelClass(agent.status),
           )}
         >
@@ -406,7 +409,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         : "done";
 
   return (
-    <div className="rounded-lg border border-border-default bg-background/85 px-3 py-2 shadow-[var(--shadow-xs)]">
+    <div className="px-1 py-1.5">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -449,7 +452,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         />
       </button>
       {open && (
-        <div className="mt-3 space-y-1.5 border-l border-border-subtle pl-3">
+        <div className="mt-2 space-y-1.5 pl-1">
           {section.events.map((event) => (
             <TraceEventLine key={event.id} event={event} />
           ))}
@@ -460,32 +463,24 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
 }
 
 function TraceEventLine({ event }: { event: LiveToolEvent }) {
+  const { t } = useI18n();
   const Icon =
     event.name === "read_file"
       ? FileTextIcon
       : event.name === "shell_command" || event.name === "exec_shell"
         ? TerminalIcon
         : event.name === "web_search"
-          ? GlobeIcon
+      ? GlobeIcon
           : MonitorIcon;
-  const target = firstString(event.input, [
-    "path",
-    "file_path",
-    "filepath",
-    "filename",
-    "command",
-    "query",
-    "url",
-    "target",
-  ]);
-  const label =
-    typeof event.thought === "string" && event.thought.trim()
-      ? event.thought.trim()
-      : typeof event.observation === "string" && event.observation.trim()
-        ? event.observation.trim()
-        : target
-          ? `${event.name.replace(/[_-]+/g, " ")} ${target}`
-          : event.name.replace(/[_-]+/g, " ");
+  const { label, detail } = publicTraceEventLabel(event, {
+    callTeammate: t.messageGrouping.callTeammate,
+    executeCommand: t.messageGrouping.executeCommand,
+    readFile: t.messageGrouping.readFile,
+    readWebpage: t.messageGrouping.readWebpage,
+    runAction: t.messageGrouping.runAction,
+    searchSources: t.messageGrouping.searchSources,
+    updateFile: t.messageGrouping.updateFile,
+  });
   return (
     <div className="flex items-start gap-2 text-xs text-muted-foreground">
       {event.status === "running" ? (
@@ -500,12 +495,105 @@ function TraceEventLine({ event }: { event: LiveToolEvent }) {
       <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-foreground">{label}</div>
-        <div className="truncate text-xs text-muted-foreground">
-          {event.name.replace(/[_-]+/g, " ")}
-        </div>
+        {detail && (
+          <div className="truncate text-xs text-muted-foreground">{detail}</div>
+        )}
       </div>
     </div>
   );
+}
+
+type TraceEventLabelBag = {
+  callTeammate: string;
+  executeCommand: string;
+  readFile: string;
+  readWebpage: string;
+  runAction: string;
+  searchSources: string;
+  updateFile: string;
+};
+
+const DEFAULT_TRACE_LABELS: TraceEventLabelBag = {
+  callTeammate: "Call teammate",
+  executeCommand: "Run command",
+  readFile: "Read file",
+  readWebpage: "Read webpage",
+  runAction: "Run operation",
+  searchSources: "Search sources",
+  updateFile: "Update file",
+};
+
+const TRACE_UNSAFE_TEXT_RE =
+  /(?:sk-[\w-]+|bearer\s+[a-z0-9._-]+|api[_-]?key|token|secret|credential|password|passwd|id_rsa|id_ed25519|\.pem\b|\.key\b|<[/]?(?:tool|tool_call|function|thinking|thought|TextBlock|ReasoningBlock|ToolCallBlock|ToolResultBlock)\b|```|\b(?:Action|Observation|Thought|Final Answer)\s*:|\b(?:read_file|exec_shell|shell_command|run_command|todo_write|apply_patch)\b)/i;
+
+function compactPublicTraceText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text || text.length > 220 || TRACE_UNSAFE_TEXT_RE.test(text)) return "";
+  return text;
+}
+
+function safeTraceTarget(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (!text || TRACE_UNSAFE_TEXT_RE.test(text)) return "";
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      return new URL(text).hostname;
+    } catch {
+      return "";
+    }
+  }
+  if (/[\\/]/.test(text)) {
+    const parts = text.split(/[\\/]/).filter(Boolean);
+    return parts.at(-1) ?? "";
+  }
+  return text.length > 80 ? `${text.slice(0, 79).trimEnd()}…` : text;
+}
+
+function firstSafeTarget(input: Record<string, unknown> | undefined): string {
+  if (!input) return "";
+  for (const key of [
+    "path",
+    "file_path",
+    "filepath",
+    "filename",
+    "url",
+    "query",
+    "target",
+  ]) {
+    const target = safeTraceTarget(input[key]);
+    if (target) return target;
+  }
+  return "";
+}
+
+export function publicTraceEventLabel(
+  event: LiveToolEvent,
+  labels: TraceEventLabelBag = DEFAULT_TRACE_LABELS,
+): { label: string; detail: string } {
+  const narrative =
+    compactPublicTraceText(event.thought) ||
+    compactPublicTraceText(event.observation);
+  if (narrative) return { label: narrative, detail: "" };
+
+  const name = event.name.toLowerCase();
+  const target = firstSafeTarget(event.input);
+  const label =
+    name.includes("search") || name.includes("grep") || name.includes("glob")
+      ? labels.searchSources
+      : name.includes("web") || name.includes("fetch") || name.includes("browser")
+        ? labels.readWebpage
+        : name.includes("read") || name === "ls" || name === "list_cwd"
+          ? labels.readFile
+          : name.includes("write") || name.includes("edit") || name.includes("patch")
+            ? labels.updateFile
+            : name.includes("shell") || name.includes("exec") || name.includes("command")
+              ? labels.executeCommand
+              : name.includes("agent") || name.includes("delegate")
+                ? labels.callTeammate
+                : labels.runAction;
+  return { label, detail: target };
 }
 
 function mergeSectionEvents(

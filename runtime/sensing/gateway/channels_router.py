@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 class LocalChannelManager:
     """Small channel manager for dashboard-only sessions.
@@ -78,8 +79,7 @@ def create_channels_router(
     jwt_audience: str | None = None,
     state_path: str | Path | None = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     if manager is None:
         manager = LocalChannelManager()

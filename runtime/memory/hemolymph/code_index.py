@@ -24,7 +24,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from runtime.memory.hemolymph.repo_context import _bm25, _tokenize
+from runtime.memory.hemolymph.repo_context import (
+    _bm25,
+    _tokenize,
+    is_private_agent_context_path,
+)
 from runtime.memory.hemolymph.semantic_code_index import search_persisted
 
 # The chunker is language-agnostic (Python merely gets AST-aware boundaries),
@@ -83,8 +87,13 @@ def _iter_source_files(root: Path) -> list[Path]:
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.startswith(".")]
         for name in filenames:
-            if Path(name).suffix in _CODE_EXTS:
-                files.append(Path(dirpath) / name)
+            path = Path(dirpath) / name
+            try:
+                rel = path.relative_to(root).as_posix()
+            except ValueError:
+                rel = path.as_posix()
+            if Path(name).suffix in _CODE_EXTS and not is_private_agent_context_path(rel):
+                files.append(path)
                 if len(files) >= _MAX_FILES:
                     return files
     return files
@@ -414,7 +423,12 @@ def retrieve_code_context(
             in_root = candidate.is_relative_to(base.resolve())
         except (OSError, RuntimeError):
             in_root = False
-        if not in_root or not candidate.is_file() or candidate.suffix not in _CODE_EXTS:
+        if (
+            not in_root
+            or not candidate.is_file()
+            or candidate.suffix not in _CODE_EXTS
+            or is_private_agent_context_path(requested)
+        ):
             continue
         chunks = _chunk_file(candidate, requested)
         if not chunks:
@@ -465,6 +479,15 @@ def retrieve_code_context(
     # explicit root, where the global index would be incoherent.
     use_semantic = root is None or Path(root).resolve() == Path.cwd().resolve()
     semantic = search_persisted(query, top_k=max(6, max_chunks * 2)) if use_semantic else None
+    if semantic:
+        # The persisted semantic index may predate this policy.  Filter its
+        # rows too, otherwise an old index can reintroduce agent-private chunks
+        # even though the fresh BM25 index correctly excludes them.
+        semantic = [
+            row
+            for row in semantic
+            if not is_private_agent_context_path(str(row.get("path") or ""))
+        ]
     if semantic:
         first_chunk: dict[str, dict[str, Any]] = {}
         for chunk in bm25_chunks:

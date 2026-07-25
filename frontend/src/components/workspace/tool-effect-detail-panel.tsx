@@ -14,6 +14,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { authorizeToolEffectRetry } from "@/core/observability/api";
 import { useToolEffects } from "@/core/observability/tool-effects-context";
 
+const INTERNAL_EFFECT_ACTOR_RE =
+  /^(?:read_file|read_file_range|exec_shell|shell_command|run_command|todo_write|apply_patch|write_file|edit_file|str_replace|web_search|fetch_url)$/i;
+
+function publicEffectActor(value: unknown): string {
+  const actor = typeof value === "string" ? value.trim() : "";
+  return actor && !INTERNAL_EFFECT_ACTOR_RE.test(actor) ? actor : "外部动作";
+}
+
 export function ToolEffectDetailPanel({
   effectKey,
   onBack,
@@ -100,7 +108,7 @@ export function ToolEffectDetailPanel({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">
-                    {receipt.sucker_id || "未知工具"}
+                    {publicEffectActor(receipt.sucker_id)}
                   </span>
                   <EffectStateBadge state={receipt.state} />
                 </div>

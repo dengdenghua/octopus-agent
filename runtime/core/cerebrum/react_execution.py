@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -151,9 +152,36 @@ def _execute_action_via_beak(
 
         session_cm: Any = nullcontext()
         active_session = current_session()
-        if (active_session is None or active_session.agent is None) and agent is not None:
-            user_context = intent.user_context if intent is not None else {}
-            metadata = dict(user_context.get("metadata") or {})
+        user_context = intent.user_context if intent is not None else {}
+        needs_context_session = bool(
+            active_session is not None
+            or agent is not None
+            or user_context.get("workspace_path")
+            or user_context.get("personal_workspace_path")
+            or user_context.get("browser_operation_mode") is True
+            or user_context.get("browser_regression_enabled") is True
+        )
+        if intent is not None and needs_context_session:
+            active_metadata = getattr(active_session, "metadata", None)
+            user_metadata = user_context.get("metadata")
+            if isinstance(active_metadata, dict):
+                metadata = active_metadata
+                if isinstance(user_metadata, dict):
+                    for key, value in user_metadata.items():
+                        metadata.setdefault(key, value)
+            elif isinstance(user_metadata, dict):
+                metadata = user_metadata
+            else:
+                metadata = {}
+                user_context["metadata"] = metadata
+            surface_overrides = {
+                "browser_operation_mode",
+                "browser_surface",
+                "runtime_surfaces",
+                "chrome_operation_mode",
+                "browser_regression_enabled",
+                "browser_regression_preview_url",
+            }
             for key in (
                 "workspace_path",
                 "workspace_scope",
@@ -171,6 +199,12 @@ def _execute_action_via_beak(
                 "workflow_preset",
                 "skill_pack_profile",
                 "verification_policy",
+                "browser_operation_mode",
+                "browser_surface",
+                "runtime_surfaces",
+                "chrome_operation_mode",
+                "browser_regression_enabled",
+                "browser_regression_preview_url",
                 "default_skill_packs",
                 "default_plugins",
                 "mode_contract",
@@ -181,25 +215,41 @@ def _execute_action_via_beak(
                 "team_id",
                 "agent_name",
             ):
-                if key in user_context and key not in metadata:
+                if key in user_context and (key not in metadata or key in surface_overrides):
                     metadata[key] = user_context[key]
+            session_agent = agent or getattr(active_session, "agent", None)
             session_cm = session_scope(
                 Session(
-                    actor=getattr(intent, "actor", None) if intent is not None else None,
-                    agent=agent,
+                    actor=(
+                        getattr(intent, "actor", None) or getattr(active_session, "actor", None)
+                    ),
+                    agent=session_agent,
                     thread_id=(
                         getattr(intent, "thread_id", None)
                         or getattr(intent, "conversation_id", None)
                         or user_context.get("thread_id")
                         or user_context.get("conversation_id")
-                        if intent is not None
-                        else None
+                        or getattr(active_session, "thread_id", None)
                     ),
+                    conversation_id=(
+                        getattr(intent, "conversation_id", None)
+                        or user_context.get("conversation_id")
+                        or getattr(active_session, "conversation_id", None)
+                    ),
+                    turn_id=getattr(active_session, "turn_id", None) or str(react_task_id),
+                    started_at=getattr(active_session, "started_at", None) or time.time(),
                     metadata=metadata,
                 )
             )
 
         with session_cm:
+            trusted_browser_loopback = bool(
+                skill_name.startswith("browser_")
+                and (
+                    user_context.get("browser_operation_mode") is True
+                    or user_context.get("browser_regression_enabled") is True
+                )
+            )
             step = executor.execute_step(
                 step_id=react_step_counter,
                 node_id=f"react_n{react_step_counter}",
@@ -210,6 +260,7 @@ def _execute_action_via_beak(
                 arm_id=ArmId("react_arm"),
                 budget=budget,
                 actor=None,
+                trusted_browser_loopback=trusted_browser_loopback,
             )
     except (ConnectionError, TimeoutError, OSError, TypeError, ValueError) as exc:
         _logger.warning("react_loop tool exec failed (%s): %s", skill_name, exc)
@@ -242,8 +293,10 @@ def _execute_action_via_beak(
         err = normalized_result.error_type or (
             "structured_error" if normalized_result.is_error and status == "success" else status
         )
+        detail = normalized_result.rendered.strip()
+        detail_line = f"\n{detail}" if detail else ""
         return (
-            f"(工具失败) status={status} error={err}\n"
+            f"(工具失败) status={status} error={err}{detail_line}\n"
             "请在下一轮 Thought 中分析失败原因，然后换一种方式重试 · "
             "例如：换不同参数、换另一个工具、或直接用已有信息给出 Final Answer。"
         ), step
@@ -378,19 +431,27 @@ def _build_progress_summary(
 ) -> str:
     if not steps:
         return ""
-    phase_labels = {"understand": "理解", "execute": "执行", "verify": "验证"}
+    phase_labels = {"understand": "补齐上下文", "execute": "处理线索", "verify": "确认结果"}
     phase_label = phase_labels.get(current_phase, current_phase)
     files_read = [
         p for p, f in working_set.items() if f.get("relevance") in ("related", "referenced")
     ]
     files_modified = [p for p, f in working_set.items() if f.get("relevance") == "editing"]
-    parts = [f"阶段: {phase_label}"]
+    parts = [phase_label]
     if files_read:
-        parts.append(f"已读文件: {', '.join(files_read[:6])}")
+        parts.append(f"已查看 {', '.join(_public_progress_target(p) for p in files_read[:6])}")
     if files_modified:
-        parts.append(f"已改文件: {', '.join(files_modified[:6])}")
-    parts.append(f"已完成 {len(steps)} 轮推理")
-    return " | ".join(parts)
+        parts.append(f"已更新 {', '.join(_public_progress_target(p) for p in files_modified[:6])}")
+    parts.append(f"第 {len(steps)} 轮")
+    return " · ".join(part for part in parts if part)
+
+
+def _public_progress_target(value: str) -> str:
+    clean = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not clean:
+        return ""
+    parts = [part for part in re.split(r"[\\/]+", clean) if part]
+    return parts[-1] if parts else clean
 
 
 def _build_research_progress_summary(steps: list[ReActStep]) -> str:
@@ -401,10 +462,7 @@ def _build_research_progress_summary(steps: list[ReActStep]) -> str:
     action = (latest.action or "").lower()
     searches = [step for step in steps if "web_search" in (step.action or "").lower()]
     if "web_search" in action:
-        return (
-            f"已完成第 {len(searches)} 轮资料检索；正在根据搜索结果校准口径，"
-            "继续补查市场规模、竞争格局、技术路线或用户需求里的缺口。"
-        )
+        return f"已完成第 {len(searches)} 轮资料检索；正在收拢可用证据，继续补齐还不确定的缺口。"
     if "fetch_url" in action:
         return "已打开具体来源核对细节；接下来会把来源信息并入结论。"
     if "none" in action or "final" in action:

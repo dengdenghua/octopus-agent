@@ -166,9 +166,9 @@ export function FileLeaseIndicator({
 
 /** Convenience wrapper that gates rendering on whether a lease exists. */
 export function FileLeaseBadge({
-  workspaceId,
+  workspaceId: _workspaceId,
   lease,
-  filePath,
+  filePath: _filePath,
   className,
 }: Omit<FileLeaseIndicatorProps, "compact">) {
   const { t } = useI18n();

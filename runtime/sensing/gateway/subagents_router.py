@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment,misc]
     StreamingResponse = None  # type: ignore[assignment,misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 class SubagentDispatchRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -94,8 +95,7 @@ def create_subagents_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["subagents"])
 

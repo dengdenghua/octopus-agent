@@ -1,7 +1,7 @@
 """CLI-team router · ``/api/cli-team/*``.
 
 Backs the work-mode "run a team of my external coding CLIs" panel:
-  * ``GET  /api/cli-team/status`` — which drivable CLIs (Claude/Codex) are
+  * ``GET  /api/cli-team/status`` — which drivable CLIs (Claude/Codex/Trae/Qoder) are
     installed here, and is the workspace a git repo (worktree isolation needs it).
   * ``POST /api/cli-team/run``    — run them all on a goal, each in its own
     isolated worktree + shared blackboard, and return every agent's diff for a
@@ -29,6 +29,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 class CliTeamRunRequest(BaseModel):
     goal: str = ""
@@ -44,8 +45,7 @@ def create_cli_team_router(
     jwt_audience: str | None = None,
 ) -> Any:
     """Build + return the router. ``app.include_router(create_cli_team_router())``."""
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     def _auth_dep(request: Request) -> None:
         # The CLI-team panel can spawn external coding CLIs across
@@ -88,7 +88,10 @@ def create_cli_team_router(
         if not members:
             return {
                 "ok": False,
-                "error": "no installed coding-agent CLI detected (install Claude Code or Codex)",
+                "error": (
+                    "no installed coding-agent CLI detected "
+                    "(install Claude Code, Codex, Trae CLI, or Qoder CLI)"
+                ),
                 "members": [],
             }
         root = body.repo_root or os.getcwd()

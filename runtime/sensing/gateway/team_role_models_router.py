@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 class RoleModelsBody(BaseModel):
     overrides: dict[str, str] = {}
@@ -36,8 +37,7 @@ def create_team_role_models_router(
     jwt_audience: str | None = None,
 ) -> Any:
     """Build + return the router."""
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     def _auth_dep(request: Request) -> None:
         # Role-model overrides steer team execution cost/tier choices.

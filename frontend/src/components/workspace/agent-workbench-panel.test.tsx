@@ -110,9 +110,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.queryByRole("tab", { name: /浏览器/ }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByText("当前没有活跃中的主控执行过程。"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("当前还没有活跃的协作过程。")).toBeInTheDocument();
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
 
@@ -138,8 +136,20 @@ describe("<AgentWorkbenchPanel />", () => {
 
   test("empty shell says the controller is idle when no turn is running", () => {
     renderWorkbench(<AgentWorkbenchPanel activeTab="agent" events={[]} />);
+    expect(screen.getByText("当前还没有活跃的协作过程。")).toBeInTheDocument();
+  });
+
+  test("empty shell marks a settled answer as completed", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[]}
+        hasAnswer
+        runSettled
+      />,
+    );
     expect(
-      screen.getByText("当前没有活跃中的主控执行过程。"),
+      screen.getByRole("button", { name: "主电脑 · 已完成" }),
     ).toBeInTheDocument();
   });
 
@@ -152,10 +162,40 @@ describe("<AgentWorkbenchPanel />", () => {
       <AgentWorkbenchPanel activeTab="agent" events={[]} isLoading />,
     );
     expect(
-      screen.getByText("主控已启动,正在等待第一个动作…"),
+      screen.getByText("已进入协作现场，正在等待第一个可见动作…"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("当前没有活跃中的主控执行过程。"),
+      screen.queryByText("当前还没有活跃的协作过程。"),
+    ).not.toBeInTheDocument();
+  });
+
+  test("keeps the current turn outline visible when it has no tool events", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[]}
+        hasAnswer
+        progressOutline={[
+          {
+            iteration: 1,
+            intentText: "核对本轮上下文",
+            executionCount: 0,
+            facts: ["本轮已返回一条具体结论"],
+          },
+        ]}
+        runSettled
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "主电脑 · 已完成" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /进展/ })).toBeInTheDocument();
+    expect(screen.getByText("核对本轮上下文")).toBeInTheDocument();
+    expect(screen.getByText("本轮已返回一条具体结论")).toBeInTheDocument();
+    expect(screen.getAllByText("1 条确认")).toHaveLength(2);
+    expect(
+      screen.queryByText("当前还没有活跃的协作过程。"),
     ).not.toBeInTheDocument();
   });
 
@@ -205,14 +245,10 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("协作")).not.toBeInTheDocument();
 
     fireEvent.click(codexSeat);
-
-    expect(screen.getAllByText("Codex CLI").length).toBeGreaterThan(0);
     expect(screen.getByText("暂无独立进程活动")).toBeInTheDocument();
     expect(
-      screen.queryByText("子电脑已就位，等待独立进程开始输出。"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("等待任务接管")).not.toBeInTheDocument();
-    expect(screen.queryByText("独立进程尚未开始")).not.toBeInTheDocument();
+      screen.getByText("当该成员启动独立进程后，过程记录会显示在这里。"),
+    ).toBeInTheDocument();
 
     const mainComputerButton = screen.getByRole("button", {
       name: "主电脑 · 等待中",
@@ -220,13 +256,6 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(mainComputerButton).toHaveClass("border-amber-500/40");
 
     fireEvent.click(mainComputerButton);
-
-    expect(screen.queryByText("暂无独立进程活动")).not.toBeInTheDocument();
-    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
-
-    fireEvent.click(codexSeat);
-
-    fireEvent.click(screen.getByRole("button", { name: "切回主电脑" }));
 
     expect(screen.queryByText("暂无独立进程活动")).not.toBeInTheDocument();
     expect(
@@ -430,19 +459,11 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expect(screen.getByRole("tablist", { name: /看板/ })).toBeInTheDocument();
     expandSummarySection(/进展/);
-    expect(
-      screen.getAllByText("Phase 2: 执行与收集证据").length,
-    ).toBeGreaterThan(0);
-    // 电脑视图现在仅显示子智能体，主agent的操作记录在概要页中
-    fireEvent.click(screen.getByText("电脑视图"));
-    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
+    expect(screen.getAllByText("处理线索").length).toBeGreaterThan(0);
+    expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 执行任务中...")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("活动轨迹"));
-    expect(screen.getByText("阅读")).toBeInTheDocument();
-    expect(screen.getByText("app.tsx")).toBeInTheDocument();
-    expect(screen.getByText("运行终端")).toBeInTheDocument();
-    expect(screen.getByText("npm run typecheck")).toBeInTheDocument();
+    expect(screen.queryByText("活动轨迹")).not.toBeInTheDocument();
   });
 
   test("groups screen frames by phase while keeping phase titles visible", () => {
@@ -531,12 +552,10 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/进展/);
 
-    expect(screen.getByText(/Phase 1: Read context/)).toBeInTheDocument();
-    expect(screen.getByText(/Phase 2: Run tests/)).toBeInTheDocument();
+    expect(screen.getByText(/Read context/)).toBeInTheDocument();
+    expect(screen.getByText(/Run tests/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("电脑视图"));
-
-    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
+    expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
   });
 
   test("shows verification-required audit as waiting instead of many failed reads", () => {
@@ -573,15 +592,88 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/进展/);
 
-    expect(
-      screen.getByText(/Phase 1: 理解任务与准备上下文/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Phase 2: 整理结果与交付/)).toBeInTheDocument();
+    expect(screen.getByText(/补齐上下文/)).toBeInTheDocument();
+    expect(screen.getByText(/收拢答案/)).toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 待确认")).toBeInTheDocument();
     expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("电脑视图"));
-    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
+    expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
+  });
+
+  test("renders the progress outline grouped by iteration with only the latest round expanded", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "read-1",
+            name: "read_file",
+            input: { path: "src/app.tsx" },
+            output: "const value = 1;",
+          }),
+        ]}
+        progressOutline={[
+          {
+            iteration: 1,
+            intentText: "先查看项目结构",
+            executionCount: 2,
+            facts: ["已确认入口文件位置"],
+          },
+          {
+            iteration: 2,
+            intentText: "修复构建错误",
+            executionCount: 1,
+            facts: ["已确认配置存在"],
+          },
+          {
+            iteration: 3,
+            intentText: "运行测试验证",
+            executionCount: 3,
+            facts: ["测试全部通过"],
+          },
+        ]}
+      />,
+    );
+
+    expandSummarySection(/进展/);
+
+    // 每轮显示意图摘要一行 + 执行计数
+    expect(screen.getByText("先查看项目结构")).toBeInTheDocument();
+    expect(screen.getByText("修复构建错误")).toBeInTheDocument();
+    expect(screen.getByText("运行测试验证")).toBeInTheDocument();
+    expect(screen.getByText("2 次操作 · 1 条确认")).toBeInTheDocument();
+    expect(screen.getByText("3 次操作 · 1 条确认")).toBeInTheDocument();
+
+    // 默认仅展开最近一轮：第三轮事实可见，前两轮事实不在文档中
+    expect(screen.getByText("测试全部通过")).toBeInTheDocument();
+    expect(screen.queryByText("已确认入口文件位置")).not.toBeInTheDocument();
+    expect(screen.queryByText("已确认配置存在")).not.toBeInTheDocument();
+
+    // 点击第一轮标题 → 展开其事实列表；最近一轮保持展开
+    fireEvent.click(screen.getByText("先查看项目结构"));
+    expect(screen.getByText("已确认入口文件位置")).toBeInTheDocument();
+    expect(screen.getByText("测试全部通过")).toBeInTheDocument();
+  });
+
+  test("falls back to the phase list when the progress outline is empty", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "read-1",
+            name: "read_file",
+            input: { path: "src/app.tsx" },
+            output: "const value = 1;",
+          }),
+        ]}
+        progressOutline={[]}
+      />,
+    );
+
+    expandSummarySection(/进展/);
+
+    expect(
+      screen.getByText(/补齐上下文|收拢答案|Read context/),
+    ).toBeInTheDocument();
   });
 
   test("shows recovered tool failures as warnings instead of failing the phase", () => {
@@ -619,14 +711,11 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/进展/);
 
-    expect(
-      screen.getByText(/Phase 1: 理解任务与准备上下文/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/补齐上下文/)).toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 已完成")).toBeInTheDocument();
     expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("电脑视图"));
-    expect(screen.getByText("暂无子智能体")).toBeInTheDocument();
+    expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
   });
 
   test("shows only observed context categories in the summary", () => {
@@ -727,10 +816,10 @@ describe("<AgentWorkbenchPanel />", () => {
       }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", {
+      screen.queryByRole("button", {
         name: "\u5176\u4ed6 1 \u6761\u6765\u6e90",
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(screen.getByText("context.ts")).toBeInTheDocument();
     expect(screen.getByText("market_report.md")).toBeInTheDocument();
     expect(screen.getByText("analyze.py")).toBeInTheDocument();
@@ -743,6 +832,9 @@ describe("<AgentWorkbenchPanel />", () => {
       }),
     );
     expect(screen.getByText("AI Market Size Report")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /AI Market Size Report/ }),
+    ).toHaveAttribute("href", "https://example.com/ai-market-size");
     expect(
       screen.queryByText("https://example.com/ai-market-size"),
     ).not.toBeInTheDocument();
@@ -1055,7 +1147,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getByText("writer.md")).toBeInTheDocument();
   });
 
-  test("focuses the exact workbench block selected from the transcript", async () => {
+  test("keeps main-agent transcript selections out of a duplicate workbench trace", async () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         focusedEventId="write-2"
@@ -1079,18 +1171,55 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "活动轨迹" })).toHaveClass(
+      expect(screen.getByRole("button", { name: "概要" })).toHaveClass(
         "border-foreground/70",
       );
     });
-    const selectedRow = screen.getByText("src/selected.ts").closest("button");
-    expect(selectedRow).toHaveClass("border-l-primary");
-    expect(screen.getByText("src/old.ts").closest("button")).not.toHaveClass(
-      "border-l-primary",
-    );
+    expect(screen.queryByText("活动轨迹")).not.toBeInTheDocument();
   });
 
-  test("expands the exact public thinking event selected from the transcript", async () => {
+  test("opens the matching evidence surface for a selected transcript action", async () => {
+    const onSelectTab = vi.fn();
+    const { rerender } = renderWorkbench(
+      <AgentWorkbenchPanel
+        focusedEventId="write-2"
+        focusedEventKind="execution"
+        focusedEventView="trace"
+        focusedEventNonce={1}
+        onSelectTab={onSelectTab}
+        events={[
+          event({
+            id: "write-2",
+            name: "write_file",
+            input: { path: "src/selected.ts" },
+          }),
+        ]}
+      />,
+    );
+
+    await waitFor(() => expect(onSelectTab).toHaveBeenCalledWith("diff"));
+
+    rerender(
+      <AgentWorkbenchPanel
+        focusedEventId="shell-3"
+        focusedEventKind="execution"
+        focusedEventView="trace"
+        focusedEventNonce={2}
+        onSelectTab={onSelectTab}
+        events={[
+          event({
+            id: "shell-3",
+            name: "shell_command",
+            input: { command: "pnpm test" },
+          }),
+        ]}
+      />,
+    );
+
+    await waitFor(() => expect(onSelectTab).toHaveBeenCalledWith("terminal"));
+  });
+
+  test("keeps selected public thinking in the transcript instead of repeating it in the summary", async () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         focusedEventId="thinking-7"
@@ -1111,21 +1240,51 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.getByTestId("focused-process-event")).toHaveAttribute(
-      "data-process-event-kind",
-      "thinking",
-    );
-    expect(screen.getByText("思考过程")).toBeInTheDocument();
     expect(
-      screen.getByText(
+      screen.queryByTestId("focused-process-event"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("当前对话")).not.toBeInTheDocument();
+    expect(screen.queryByText("已确认时间线顺序")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
         "已确认公开进展位于工具结果之后，最终回答之前；下一步检查刷新后的顺序是否保持。",
       ),
-    ).toBeInTheDocument();
-    expect(screen.getByText("phase-verify")).toBeInTheDocument();
-    expect(screen.getByText("#7")).toBeInTheDocument();
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("phase-verify")).not.toBeInTheDocument();
+    expect(screen.queryByText(/时间线第 7 条/)).not.toBeInTheDocument();
+    expect(screen.queryByText("#7")).not.toBeInTheDocument();
     expect(
       screen.queryByText("暂无运行中的机器人进程"),
     ).not.toBeInTheDocument();
+  });
+
+  test("does not duplicate selected execution events in the summary", async () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        focusedEventId="write-9"
+        focusedEventKind="execution"
+        focusedEventView="summary"
+        focusedEventNonce={1}
+        focusedProcessEvent={{
+          kind: "execution",
+          summary: "已更新消息排版",
+          detail: "修改了主对话里的进展行，右侧会展示对应证据。",
+          status: "done",
+          count: 1,
+        }}
+        events={[]}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("focused-process-event"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("当前对话")).not.toBeInTheDocument();
+    expect(screen.queryByText("已更新消息排版")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("修改了主对话里的进展行，右侧会展示对应证据。"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("执行日志")).not.toBeInTheDocument();
   });
 
   test("keeps a manually selected replay frame while the snapshot updates", async () => {
@@ -1671,6 +1830,15 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    expect(screen.getByRole("button", { name: /^产物/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /^上下文/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
     const generatedLabel = "生成产物";
     const generatedList = listAfterSummaryLabel(generatedLabel);
     fireEvent.click(
@@ -1801,9 +1969,45 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/进展/);
 
-    expect(screen.getAllByText(/Phase 2:/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/收拢答案/).length).toBeGreaterThan(0);
+    expect(screen.getByTitle("主电脑 · 已完成")).toBeInTheDocument();
     // Summary page shows phases with StatusGlyph icons instead of text
   });
+
+  test("keeps completed progress visible and context secondary", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        hasAnswer
+        runSettled
+        events={[
+          event({
+            id: "research-1",
+            name: "web_search",
+            status: "done",
+            input: { query: "agent ux research" },
+            output: {
+              results: [
+                {
+                  title: "Agent UX Research",
+                  url: "https://example.com/agent-ux",
+                },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    const progress = screen.getByRole("button", { name: /进展/ });
+    const context = screen.getByRole("button", { name: /上下文/ });
+
+    expect(progress).toHaveAttribute("aria-expanded", "true");
+    expect(progress).not.toHaveTextContent("来源");
+    expect(context).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/估算 token/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Agent UX Research")).not.toBeInTheDocument();
+  });
+
   test("does not show waiting copy for a completed empty selected phase", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
@@ -1854,7 +2058,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expandSummarySection(/进展/);
-    expect(screen.getAllByText(/Phase 1/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/write plan\.md/).length).toBeGreaterThan(0);
 
     rerender(
       <AgentWorkbenchPanel
@@ -1876,7 +2080,7 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.getAllByText(/Phase 2/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/run research/).length).toBeGreaterThan(0);
   });
 });
 

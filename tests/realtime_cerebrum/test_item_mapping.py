@@ -192,9 +192,9 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert updates
     phases = updates[0].params["phases"]
     assert [phase["title"] for phase in phases] == [
-        "Phase 1: Inspect context",
-        "Phase 2: Patch realtime protocol",
-        "Phase 3: Verify behavior",
+        "Inspect context",
+        "Patch realtime protocol",
+        "Verify behavior",
     ]
     assert phases[1]["status"] == "running"
     assert phases[1]["activeItemId"] == "todo-1"
@@ -221,7 +221,7 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert turn["workbenchSnapshot"]["version"] == 2
     assert resume is not None and resume.result is not None
     resumed_turn = resume.result["turns"][0]
-    assert resumed_turn["phases"][1]["title"] == "Phase 2: Patch realtime protocol"
+    assert resumed_turn["phases"][1]["title"] == "Patch realtime protocol"
     assert resumed_turn["workspaceFocus"]["view"] == "trace"
     assert resumed_turn["workbenchSnapshot"]["version"] == 2
 

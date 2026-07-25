@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
     JSONResponse = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Split OKF/YAML frontmatter (JSON-literal values · see gen_wiki) from the
@@ -289,8 +290,7 @@ def create_wiki_router(
 
     ``model_router`` / ``model`` enable the ``/api/wiki/ask`` synthesis endpoint;
     omit them (the default) and that route degrades to ``grounded=False``."""
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["wiki"])
 

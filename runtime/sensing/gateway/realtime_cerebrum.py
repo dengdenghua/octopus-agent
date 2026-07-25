@@ -1816,7 +1816,7 @@ class CerebrumRuntime:
 
     def _is_local_partner(self, agent: Any) -> bool:
         """True when this agent should be driven by spawning its registered
-        coding-agent CLI directly (Claude Code / Codex) instead of the LLM
+        coding-agent CLI directly (Claude Code / Codex / Trae / Qoder) instead of the LLM
         loop — i.e. its profile carries drivable ``local_partner`` capabilities."""
         from runtime.sensing.gateway.realtime_local_partner import agent_is_local_partner
 

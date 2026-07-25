@@ -122,10 +122,10 @@ class _FakeTrack:
     adapter-private helpers such as ``_call``.
     """
 
-    def __init__(self, *, fail_navigate: bool = False):
+    def __init__(self, *, fail_navigate: bool = False, track=None):
         from runtime.execution.suckers.browser_backend import Track
 
-        self.track = Track.ELECTRON
+        self.track = track or Track.ELECTRON
         self.calls = []
         self.fail_navigate = fail_navigate
 
@@ -133,14 +133,14 @@ class _FakeTrack:
         return True
 
     def _record(self, action, payload, *, ok=True, error=""):
-        from runtime.execution.suckers.browser_backend import BrowserResult, Track
+        from runtime.execution.suckers.browser_backend import BrowserResult
 
         self.calls.append((action, dict(payload)))
         response = {"ok": ok, "action": action}
         if error:
             response["error"] = error
         response.update(payload)
-        return BrowserResult.from_track(Track.ELECTRON, response)
+        return BrowserResult.from_track(self.track, response)
 
     def navigate(self, url):
         return self._record(
@@ -242,6 +242,55 @@ def test_unavailable_higher_track_is_skipped(monkeypatch):
 
     monkeypatch.setattr(bs, "_higher_track_backends", lambda: [_Down()])
     assert bs._dispatch_higher_track("click", {"selector": "#x"}) is None
+
+
+def test_explicit_track_preference_selects_requested_available_backend(monkeypatch):
+    from runtime.execution.suckers import browser_skills as bs
+    from runtime.execution.suckers.browser_backend import Track
+    from runtime.platform.process.session import Session, session_scope
+
+    extension = _FakeTrack(track=Track.EXTENSION)
+    electron = _FakeTrack(track=Track.ELECTRON)
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [extension, electron])
+
+    with session_scope(
+        Session(metadata={"browser_track_preference": "electron"}),
+    ):
+        out = bs._dispatch_higher_track("state", {"max_items": 10})
+
+    assert out is not None
+    assert out["track"] == "electron"
+    assert out["browser_track_preference_satisfied"] is True
+    assert electron.calls == [("state", {"max_items": 10})]
+    assert extension.calls == []
+
+
+def test_chrome_playwright_fallback_emits_auditable_track_receipt() -> None:
+    from runtime.execution.suckers import browser_skills as bs
+    from runtime.execution.suckers.browser_backend import Track
+    from runtime.platform.process.session import Session, session_scope
+
+    with session_scope(
+        Session(
+            metadata={
+                "browser_track_preference": "extension",
+                "browser_session_policy": "thread_native_external_chrome",
+            },
+        ),
+    ):
+        out = bs._annotate_browser_track_result(
+            {"url": "https://example.test"},
+            served_track=Track.PLAYWRIGHT,
+        )
+
+    assert out["track"] == "playwright"
+    assert out["browser_track_preference"] == "extension"
+    assert out["browser_track_preference_satisfied"] is False
+    assert out["browser_track_fallback"] == {
+        "requested": "extension",
+        "served": "playwright",
+        "reason": "extension_unavailable",
+    }
 
 
 def test_browser_state_uses_current_higher_track_without_url(monkeypatch):

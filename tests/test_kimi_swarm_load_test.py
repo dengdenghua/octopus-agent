@@ -415,8 +415,8 @@ def test_kimi_swarm_quota_probe_success_allows_resume(tmp_path: Path) -> None:
     result = run_kimi_swarm_quota_probe(
         config=KimiSwarmQuotaProbeConfig(
             session_id="quota-probe-ok",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             confirm_real_provider=True,
             max_tokens=7,
         ),
@@ -429,8 +429,8 @@ def test_kimi_swarm_quota_probe_success_allows_resume(tmp_path: Path) -> None:
     assert result["can_resume_provider_load_test"] is True
     assert result["provider_quota_limited"] is False
     assert result["failure_category"] == ""
-    assert calls[0].model == "kimi-for-coding"
-    assert calls[0].system_provider == "kimi_coding"
+    assert calls[0].model == "kimi-k3"
+    assert calls[0].system_provider == "volcengine_ark"
     assert calls[0].max_tokens == 7
 
     replay = store.replay("quota-probe-ok", limit=20)
@@ -520,8 +520,8 @@ def test_kimi_swarm_next_stage_blocks_after_provider_quota_limit(
     summary = run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="load-real-quota-block",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=1,
@@ -549,8 +549,8 @@ def test_kimi_swarm_next_stage_blocks_after_provider_quota_limit(
     assert recommendation["can_run_recommended_payload"] is False
     assert recommendation["latest_blocking_failure"]["category"] == ("provider_quota_limit")
     assert recommendation["quota_probe_payload"] == {
-        "provider_id": "kimi_coding",
-        "model": "kimi-for-coding",
+        "provider_id": "volcengine_ark",
+        "model": "kimi-k3",
         "confirm_real_provider": True,
         "max_tokens": 16,
     }
@@ -568,8 +568,8 @@ def test_kimi_swarm_resume_plan_uses_failed_full_reference_steps_only(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="resume-ramp-proof",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=3,
             step_count=12,
             max_concurrency=1,
@@ -596,8 +596,8 @@ def test_kimi_swarm_resume_plan_uses_failed_full_reference_steps_only(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="resume-full-quota",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=3,
             step_count=12,
             max_concurrency=1,
@@ -613,16 +613,16 @@ def test_kimi_swarm_resume_plan_uses_failed_full_reference_steps_only(
     )
 
     plan = build_kimi_swarm_resume_plan(
-        provider_id="kimi_coding",
-        model="kimi-for-coding",
+        provider_id="volcengine_ark",
+        model="kimi-k3",
         agent_count=3,
         step_count=12,
         max_concurrency=1,
         store=store,
     )
     recommendation = recommend_kimi_swarm_next_stage(
-        provider_id="kimi_coding",
-        model="kimi-for-coding",
+        provider_id="volcengine_ark",
+        model="kimi-k3",
         agent_count=3,
         step_count=12,
         max_concurrency=1,
@@ -645,7 +645,7 @@ def test_kimi_swarm_resume_plan_uses_failed_full_reference_steps_only(
     assert recommendation["recommended_preflight"]["mode"] == "real_provider_resume"
     assert recommendation["recommended_preflight"]["selected_stage"]["step_count"] == 5
     assert recommendation["can_run_recommended_payload"] is False
-    assert recommendation["quota_probe_payload"]["model"] == "kimi-for-coding"
+    assert recommendation["quota_probe_payload"]["model"] == "kimi-k3"
     assert "resume 5 remaining" in recommendation["next_action"]
 
     resumed_indices: list[int] = []
@@ -704,8 +704,8 @@ def test_kimi_swarm_resume_plan_accumulates_partial_resume_successes(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="partial-resume-source",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=3,
             step_count=12,
             max_concurrency=1,
@@ -721,8 +721,8 @@ def test_kimi_swarm_resume_plan_accumulates_partial_resume_successes(
     )
 
     plan = build_kimi_swarm_resume_plan(
-        provider_id="kimi_coding",
-        model="kimi-for-coding",
+        provider_id="volcengine_ark",
+        model="kimi-k3",
         agent_count=3,
         step_count=12,
         max_concurrency=1,
@@ -762,8 +762,8 @@ def test_kimi_swarm_resume_plan_accumulates_partial_resume_successes(
     )
 
     updated = build_kimi_swarm_resume_plan(
-        provider_id="kimi_coding",
-        model="kimi-for-coding",
+        provider_id="volcengine_ark",
+        model="kimi-k3",
         agent_count=3,
         step_count=12,
         max_concurrency=1,
@@ -790,8 +790,8 @@ def test_kimi_swarm_composite_proof_accepts_full_reference_resume(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="composite-ramp-proof",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=16,
@@ -818,8 +818,8 @@ def test_kimi_swarm_composite_proof_accepts_full_reference_resume(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="composite-full-quota",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=16,
@@ -839,8 +839,8 @@ def test_kimi_swarm_composite_proof_accepts_full_reference_resume(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="composite-full-resume",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=16,
@@ -899,8 +899,8 @@ def test_kimi_swarm_composite_proof_accumulates_partial_resume_sessions(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="partial-composite-source",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=1,
@@ -1263,7 +1263,7 @@ def test_kimi_swarm_certification_keeps_dry_run_as_remaining_proof(
     assert report["remaining_proof"][0]["status"] == "dry_run_only"
 
 
-def test_kimi_swarm_next_stage_defaults_to_kimi_coding_reference(
+def test_kimi_swarm_next_stage_defaults_to_kimi_k3_reference(
     tmp_path: Path,
 ) -> None:
     recommendation = recommend_kimi_swarm_next_stage(
@@ -1275,8 +1275,8 @@ def test_kimi_swarm_next_stage_defaults_to_kimi_coding_reference(
     assert recommendation["ready"] is False
     assert recommendation["proof_ready"] is False
     assert recommendation["next_stage"] == "provider_canary"
-    assert recommendation["provider_id"] == "kimi_coding"
-    assert recommendation["model"] == "kimi-for-coding"
+    assert recommendation["provider_id"] == "volcengine_ark"
+    assert recommendation["model"] == "kimi-k3"
     assert recommendation["provider_configured"] is False
     assert recommendation["provider_configuration_state"] == "missing"
     assert recommendation["can_run_recommended_payload"] is False
@@ -1287,7 +1287,7 @@ def test_kimi_swarm_next_stage_defaults_to_kimi_coding_reference(
     assert recommendation["recommended_preflight"]["blocking_failures"][0]["id"] == (
         "provider_configured"
     )
-    assert "Configure the Kimi Coding custom model" in recommendation["next_action"]
+    assert "Configure the Kimi K3 custom model" in recommendation["next_action"]
 
 
 def test_kimi_swarm_next_stage_advances_only_with_replay_backed_stage_proofs(
@@ -1305,8 +1305,8 @@ def test_kimi_swarm_next_stage_advances_only_with_replay_backed_stage_proofs(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="stage-canary-summary-only-next",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=32,
@@ -1327,8 +1327,8 @@ def test_kimi_swarm_next_stage_advances_only_with_replay_backed_stage_proofs(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="stage-canary-next",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=32,
@@ -1350,8 +1350,8 @@ def test_kimi_swarm_next_stage_advances_only_with_replay_backed_stage_proofs(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="stage-ramp-next",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=32,
@@ -1372,8 +1372,8 @@ def test_kimi_swarm_next_stage_advances_only_with_replay_backed_stage_proofs(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="stage-full-next",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=32,

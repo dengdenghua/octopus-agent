@@ -179,11 +179,11 @@ def test_kimi_swarm_certification_endpoint(monkeypatch, tmp_path) -> None:
     assert "provider_load_test_proof" in data
     assert data["provider_load_test_next_stage"]["schema"] == ("octopus.kimi_swarm_next_stage.v1")
     assert data["provider_load_test_next_stage"]["next_stage"] == "provider_canary"
-    assert data["provider_load_test_next_stage"]["provider_id"] == "kimi_coding"
-    assert data["provider_load_test_next_stage"]["model"] == "kimi-for-coding"
+    assert data["provider_load_test_next_stage"]["provider_id"] == "volcengine_ark"
+    assert data["provider_load_test_next_stage"]["model"] == "kimi-k3"
 
 
-def test_kimi_swarm_next_stage_endpoint_reports_default_kimi_coding_path(
+def test_kimi_swarm_next_stage_endpoint_reports_default_kimi_k3_path(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -205,8 +205,8 @@ def test_kimi_swarm_next_stage_endpoint_reports_default_kimi_coding_path(
     assert data["ready"] is False
     assert data["proof_ready"] is False
     assert data["next_stage"] == "provider_canary"
-    assert data["provider_id"] == "kimi_coding"
-    assert data["model"] == "kimi-for-coding"
+    assert data["provider_id"] == "volcengine_ark"
+    assert data["model"] == "kimi-k3"
     assert data["provider_configured"] is False
     assert data["can_run_recommended_payload"] is False
     assert data["recommended_payload"]["stage_id"] == "provider_canary"

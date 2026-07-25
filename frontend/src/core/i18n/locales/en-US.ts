@@ -227,6 +227,7 @@ export const enUS: Translations = {
     expandable: "Expandable",
     agentCluster: "Agent Cluster",
     processDetails: "Open details",
+    completedSteps: (n: number) => `Completed ${n} step${n === 1 ? "" : "s"}`,
     statusViewing: "Viewing",
     statusCompleted: "Completed",
     statusError: "Error",
@@ -572,7 +573,7 @@ export const enUS: Translations = {
       `Edit ${file} +${added} lines`,
     editFileRemoved: (file: string, removed: number) =>
       `Edit ${file} -${removed} lines`,
-    executeCommand: "Run checks",
+    executeCommand: "Run command",
     executeCommandWith: (cmd: string) => `Run checks: ${cmd}`,
     planStep: "Plan step",
     think: "Thinking",
@@ -599,10 +600,60 @@ export const enUS: Translations = {
     runAction: "Run operation",
     teammateTimeout: "Teammate did not return in time; Octopus took over",
     factSummaryPath: (value: string) => `Confirmed: ${value}`,
-    factSummaryCount: (value: string) => `Confirmed: ${value} total`,
-    factSummaryStatus: (value: string) => `Confirmed: status ${value}`,
+    factSummaryCount: (value: string) => `Confirmed: ${value} items`,
+    factSummaryStatus: (value: string) => `Confirmed: ${value}`,
     factSummaryTitle: (value: string) => `Confirmed: ${value}`,
     factSummaryText: (value: string) => `Confirmed: ${value}`,
+    factSummaryDuration: (value: string) => `Took ${value}`,
+    factSummaryLines: (value: string) => `${value} lines`,
+    factSummaryMatches: (value: string) => `${value} matches`,
+    factSummarySucceeded: "Execution succeeded",
+    factSummaryFailed: "Execution failed",
+    factSummaryExitCode: (value: string) => `Exit code ${value}`,
+    effectNeedsReview: "Needs review",
+    capabilityDisabled: (toolName: string) =>
+      `${toolName} is disabled in settings`,
+    enableCapability: "Enable",
+    enablingCapability: "Enabling…",
+    actionLabels: {
+      createFile: "Create",
+      editFile: "Edit",
+      searchFiles: "Search files",
+      viewDirectory: "View folder",
+      readFile: "Read",
+      runCommand: "Run",
+      searchWeb: "Search the web",
+      browseWeb: "Browse page",
+      browserClick: "Click",
+      browserType: "Type",
+      browserScreenshot: "Take screenshot",
+      browserNavigate: "Navigate to",
+      browserAction: "Use browser",
+      updatePlan: "Update plan",
+      delegateTask: "Delegate task",
+      deleteFile: "Delete",
+      moveFile: "Move/rename",
+      startPreview: "Start preview",
+      networkRequest: "Network request",
+      aggregateFileWrite: (count: number) =>
+        `Edited ${count} file${count === 1 ? "" : "s"}`,
+      aggregateFileRead: (count: number) =>
+        `Viewed ${count} file${count === 1 ? "" : "s"}`,
+      aggregateCommand: (count: number) =>
+        `Ran ${count} command${count === 1 ? "" : "s"}`,
+      aggregateWebSearch: (count: number) =>
+        `Searched ${count} time${count === 1 ? "" : "s"}`,
+      aggregateBrowser: (count: number) =>
+        `${count} browser action${count === 1 ? "" : "s"}`,
+      aggregateTeammate: (count: number) =>
+        `Delegated ${count} task${count === 1 ? "" : "s"}`,
+      aggregateTodo: (count: number) =>
+        `Updated plan ${count} time${count === 1 ? "" : "s"}`,
+      aggregateOther: (count: number) =>
+        `Ran ${count} action${count === 1 ? "" : "s"}`,
+    },
+    thinkingDuration: (value: string) => `Thought for ${value}`,
+    thinking: "Thinking",
   },
 
   // Trace generator labels
@@ -1107,6 +1158,8 @@ export const enUS: Translations = {
     executingTask: "Executing task...",
     waitingToContinue: "Waiting to Continue",
     currentProgress: "Current Progress",
+    stepProgress: (current: number, total: number) =>
+      `Step ${current} / ${total}`,
     minimizeProgress: "Minimize Progress",
     restoreProgress: "Restore Progress",
     closeWorkspace: "Close Workspace",
@@ -1193,7 +1246,12 @@ export const enUS: Translations = {
     statusDone: "Done",
     progress: "Progress",
     roundTitle: (iteration) => `Round ${iteration}`,
-    roundActionCount: (count) => `${count} actions`,
+    roundActivitySummary: (actionCount, factCount) =>
+      actionCount > 0 && factCount > 0
+        ? `${actionCount} actions · ${factCount} findings`
+        : actionCount > 0
+          ? `${actionCount} actions`
+          : `${factCount} findings`,
     artifacts: "Artifacts",
     generatedArtifacts: "Generated artifacts",
     changedFiles: "Changed files",
@@ -1667,6 +1725,8 @@ export const enUS: Translations = {
     groupTasks: "Collaborative tasks",
     recentThreadsSummary: (recent, hidden) =>
       `Recent ${recent} · ${hidden} more in history`,
+    showMoreProjectThreads: (count) => `Show ${count} more tasks`,
+    showFewerProjectThreads: "Show fewer tasks",
     // Header/footer tooltips
     newChatTooltip: "New chat",
     searchTooltip: "Search (⌘K)",
@@ -1675,7 +1735,9 @@ export const enUS: Translations = {
     deleteProjectTooltip: "Delete project",
     deleteThreadTooltip: "Delete chat",
     actionSort: "Sort",
-    actionNewProject: "Add workspace/project",
+    actionNewProject: "Choose project folder",
+    projectPickerFailed:
+      "The system folder picker could not be opened. Check that the local service is running.",
     actionNewTask: "New task",
     actionNewChat: "New chat",
     actionNew: "New",
@@ -2928,7 +2990,7 @@ export const enUS: Translations = {
   toolCalls: {
     moreSteps: (count: number) => `${count} more step${count === 1 ? "" : "s"}`,
     lessSteps: "Less steps",
-    executeCommand: "Run checks",
+    executeCommand: "Run command",
     presentFiles: "Present files",
     needYourHelp: "Need your help",
     useTool: () => "Run action",
@@ -6077,6 +6139,7 @@ Strategy:
     gitDiff: "Git Diff",
     streamRecovery: "Stream recovery",
     running: "running...",
+    genericAction: "Other action",
   },
 
   liveToolTimeline: {
@@ -6124,8 +6187,7 @@ Strategy:
     readingUserRequirements:
       "Reading user requirements, conversation context, and current work mode.",
     connectRuntime: "Connecting Runtime",
-    establishingCallbackChannel:
-      "Establishing the real-time callback channel.",
+    establishingCallbackChannel: "Establishing the real-time callback channel.",
     renderingModelOutput: "Rendering the answer",
     incrementalTextReceived:
       "Incremental text received; answer content will continue to be appended to the message area in segments.",
@@ -8593,7 +8655,7 @@ Strategy:
     empty: "No workspaces registered.",
     loading: "Loading workspaces...",
     loadFailed: (error) => `Failed to load workspaces: ${error}`,
-    addWorkspace: "Add workspace",
+    addWorkspace: "Connect folder or remote directory",
     switchWorkspaceAria: (name) => `Switch to ${name}`,
     activeWorkspace: "Active",
     typeLocal: "Local",
@@ -8605,7 +8667,7 @@ Strategy:
     mountTarget: "Mount target",
 
     mountDialog: {
-      title: "Add workspace",
+      title: "Connect folder or remote directory",
       nameLabel: "Name",
       namePlaceholder: "Workspace name",
       protocolLabel: "Protocol",

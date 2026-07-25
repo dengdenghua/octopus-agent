@@ -520,7 +520,7 @@ async def _start_turn(
 
             if runtime._is_local_partner(agent):
                 # LocalPartner agent: the user picked a registered external
-                # coding-agent CLI (Claude Code / Codex). Drive that CLI
+                # coding-agent CLI (Claude Code / Codex / Trae / Qoder). Drive that CLI
                 # directly with their own login instead of the LLM loop. The
                 # agent identity is the strongest signal, so this wins even
                 # over a stale topology_id.
@@ -566,6 +566,22 @@ async def _start_turn(
                 # Explicit topology / 集群: orchestrated team — _drive_swarm_mesh
                 # auto-picks the boids/SignalBus parallel mesh vs the sequential
                 # TeamRunner by the planned graph's shape.
+                # An explicit per-turn model must govern the whole team, not
+                # only the parent turn.  TeamRunner passes ``model_name`` to
+                # every ephemeral role; leaving it absent silently falls back
+                # to role defaults/cheap models that may use a different,
+                # unavailable provider.  Auto/default selections retain the
+                # topology's normal heterogeneous routing.
+                _team_model = str(getattr(validated, "model", None) or "").strip()
+                if _team_model and _team_model.lower() not in {"auto", "default"}:
+                    intent = intent.model_copy(
+                        update={
+                            "user_context": {
+                                **(intent.user_context or {}),
+                                "model_name": _team_model,
+                            }
+                        }
+                    )
                 turn_driver = "swarm_mesh"
                 await runtime._drive_swarm_mesh(
                     turn,

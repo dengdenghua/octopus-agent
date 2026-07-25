@@ -8,6 +8,10 @@ from runtime.platform.plugins.plugins import HookPoint, Plugin
 
 _LOG = logging.getLogger(__name__)
 
+# Adapter for the pre-EventBus plugin ABI. New plugins should implement
+# OctopusPlugin directly; this shim remains for externally installed plugins.
+COMPATIBILITY_STATUS = "legacy-plugin-abi"
+
 _HOOK_TO_EVENT: dict[str, str] = {
     HookPoint.ON_INIT: "plugin.on_init",
     HookPoint.ON_PLAN: "plugin.on_plan",

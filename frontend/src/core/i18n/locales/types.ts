@@ -170,6 +170,7 @@ export interface Translations {
     expandable: string;
     agentCluster: string;
     processDetails: string;
+    completedSteps: (n: number) => string;
     statusViewing: string;
     statusCompleted: string;
     statusError: string;
@@ -520,6 +521,47 @@ export interface Translations {
     factSummaryStatus: (value: string) => string;
     factSummaryTitle: (value: string) => string;
     factSummaryText: (value: string) => string;
+    factSummaryDuration: (value: string) => string;
+    factSummaryLines: (value: string) => string;
+    factSummaryMatches: (value: string) => string;
+    factSummarySucceeded: string;
+    factSummaryFailed: string;
+    factSummaryExitCode: (value: string) => string;
+    effectNeedsReview: string;
+    capabilityDisabled: (toolName: string) => string;
+    enableCapability: string;
+    enablingCapability: string;
+    actionLabels: {
+      createFile: string;
+      editFile: string;
+      searchFiles: string;
+      viewDirectory: string;
+      readFile: string;
+      runCommand: string;
+      searchWeb: string;
+      browseWeb: string;
+      browserClick: string;
+      browserType: string;
+      browserScreenshot: string;
+      browserNavigate: string;
+      browserAction: string;
+      updatePlan: string;
+      delegateTask: string;
+      deleteFile: string;
+      moveFile: string;
+      startPreview: string;
+      networkRequest: string;
+      aggregateFileWrite: (count: number) => string;
+      aggregateFileRead: (count: number) => string;
+      aggregateCommand: (count: number) => string;
+      aggregateWebSearch: (count: number) => string;
+      aggregateBrowser: (count: number) => string;
+      aggregateTeammate: (count: number) => string;
+      aggregateTodo: (count: number) => string;
+      aggregateOther: (count: number) => string;
+    };
+    thinkingDuration: (value: string) => string;
+    thinking: string;
   };
 
   // Trace generator (swarm simulation label bag)
@@ -916,6 +958,7 @@ export interface Translations {
     executingTask: string;
     waitingToContinue: string;
     currentProgress: string;
+    stepProgress: (current: number, total: number) => string;
     minimizeProgress: string;
     restoreProgress: string;
     closeWorkspace: string;
@@ -992,7 +1035,7 @@ export interface Translations {
     statusDone: string;
     progress: string;
     roundTitle: (iteration: number) => string;
-    roundActionCount: (count: number) => string;
+    roundActivitySummary: (actionCount: number, factCount: number) => string;
     artifacts: string;
     generatedArtifacts: string;
     changedFiles: string;
@@ -1450,6 +1493,8 @@ export interface Translations {
     soloTasks: string;
     groupTasks: string;
     recentThreadsSummary: (recent: number, hidden: number) => string;
+    showMoreProjectThreads: (count: number) => string;
+    showFewerProjectThreads: string;
     // Header/footer tooltips
     newChatTooltip: string;
     searchTooltip: string;
@@ -1459,6 +1504,7 @@ export interface Translations {
     deleteThreadTooltip: string;
     actionSort: string;
     actionNewProject: string;
+    projectPickerFailed: string;
     actionNewTask: string;
     actionNewChat: string;
     actionNew: string;
@@ -5168,6 +5214,7 @@ export interface Translations {
     gitDiff: string;
     streamRecovery: string;
     running: string;
+    genericAction: string;
   };
 
   // Live Tool Timeline detail labels

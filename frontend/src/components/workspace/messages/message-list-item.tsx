@@ -33,9 +33,10 @@ import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   extractContentFromMessage,
-  extractReasoningContentFromMessage,
   extractTextFromMessage,
   parseUploadedFiles,
+  stripInternalToolProtocol,
+  stripLeakedRendererMarkup,
   stripUploadedFilesTag,
   type FileInMessage,
 } from "@/core/messages/utils";
@@ -194,6 +195,32 @@ function buildPublicThinkingSummary(message: Message): string | null {
   // Raw reasoning_content can contain private chain-of-thought. Only render
   // summaries that the backend explicitly marks as public.
   return getPublicReasoningSummary(message);
+}
+
+function cleanClipboardText(value: string): string {
+  return stripLeakedRendererMarkup(stripInternalToolProtocol(value), {
+    trim: true,
+  });
+}
+
+export function messageClipboardText(message: Message): string {
+  const rawContent = extractContentFromMessage(message) ?? "";
+  if (message.type === "human") {
+    return stripUploadedFilesTag(rawContent).trim();
+  }
+
+  const displayContent = splitInlineThinkingDetails(
+    stripLegacySubagentBudgetPlaceholder(stripInternalTraceDetails(rawContent)),
+  ).content;
+  const visibleContent =
+    extractClarificationQuestionnaire(displayContent)?.visibleContent ??
+    displayContent;
+  const cleanedVisible = cleanClipboardText(visibleContent);
+  if (cleanedVisible) return cleanedVisible;
+
+  // Never fall back to raw reasoning_content/thinking blocks. If the backend
+  // explicitly supplies a public summary, copying mirrors the visible row.
+  return cleanClipboardText(buildPublicThinkingSummary(message) ?? "");
 }
 
 type MarkdownRenderProps = Pick<
@@ -361,11 +388,7 @@ export const MessageListItem = memo(function MessageListItem({
             </>
           )}
           <CopyButton
-            clipboardData={
-              extractContentFromMessage(message) ??
-              extractReasoningContentFromMessage(message) ??
-              ""
-            }
+            clipboardData={messageClipboardText(message)}
             size="icon-sm"
             className="size-6 rounded-lg border-0 bg-transparent p-0 text-muted-foreground/70 shadow-none transition-colors duration-200 hover:bg-muted/60 hover:text-foreground focus-visible:ring-0"
           />
@@ -515,8 +538,10 @@ function MessageContent_({
       };
     }
     return splitInlineThinkingDetails(
-      stripLegacySubagentBudgetPlaceholder(
-        stripInternalTraceDetails(rawContent ?? ""),
+      stripInternalToolProtocol(
+        stripLegacySubagentBudgetPlaceholder(
+          stripInternalTraceDetails(rawContent ?? ""),
+        ),
       ),
     );
   }, [rawContent, isHuman]);
@@ -750,112 +775,6 @@ function MessageContent_({
           {t.conversation.interruptedMessage}
         </div>
       )}
-      {/* Strategy badge · reveals which reply path produced this
-          bubble (reflex / ReAct / direct_llm / plan). Helps users
-          and devs spot when a long query accidentally hit the cache
-          or the planner path for a conversational turn. */}
-      {(() => {
-        const octopus = (
-          message.additional_kwargs as
-            | {
-                octopus?: {
-                  strategy?: string;
-                  success?: boolean;
-                  reflex_rule?: string;
-                  input_tokens?: number;
-                  output_tokens?: number;
-                  duration_ms?: number;
-                  rounds?: number;
-                };
-              }
-            | undefined
-        )?.octopus;
-        const strategy = octopus?.strategy;
-        if (!strategy && octopus?.duration_ms == null) return null;
-        const strategyFailed = octopus?.success === false;
-        const hiddenStrategies = new Set(["llm_unavailable"]);
-        const label: Record<string, string> = {
-          reflex: t.conversation.strategyReflex,
-          reflex_hit: t.conversation.strategyReflex,
-          react_loop: t.conversation.strategyReact,
-          chat_fallback_react: t.conversation.strategyReact,
-          react_direct_llm: t.conversation.strategyReact,
-          thinking_direct_llm: t.conversation.strategyReact,
-          direct_llm: t.conversation.strategyDirectLlm,
-          direct_llm_fallback: t.conversation.strategyDirectLlm,
-          flash_direct_llm: t.conversation.strategyDirectLlm,
-          team_direct_llm: t.conversation.strategyDirectLlm,
-          team_vote: t.conversation.strategyVote,
-        };
-        const strategyText = strategy
-          ? strategyFailed || hiddenStrategies.has(strategy)
-            ? null
-            : (label[strategy] ??
-              (strategy.startsWith("tier:")
-                ? t.conversation.strategyCache
-                : strategy))
-          : null;
-        // Compact stats string · only shown when backend forwarded
-        // tokens / duration via the agentic-loop stats event.
-        // Format: "1.2k in / 480 out · 8.3s · 3 rounds".
-        const statsBits: string[] = [];
-        const fmtTok = (n: number): string =>
-          n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
-        if (
-          typeof octopus?.input_tokens === "number" ||
-          typeof octopus?.output_tokens === "number"
-        ) {
-          const inT = octopus.input_tokens ?? 0;
-          const outT = octopus.output_tokens ?? 0;
-          statsBits.push(`${fmtTok(inT)} in / ${fmtTok(outT)} out`);
-        }
-        if (typeof octopus?.duration_ms === "number") {
-          const ms = octopus.duration_ms;
-          statsBits.push(ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
-        }
-        if (typeof octopus?.rounds === "number" && octopus.rounds > 1) {
-          statsBits.push(`${octopus.rounds} rounds`);
-        }
-        const statsText = statsBits.join(" · ");
-        if (!strategyText && !statsText) return null;
-        return (
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {strategyText && (
-              <div
-                className="inline-flex items-center gap-1 rounded-full bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground/80"
-                title={
-                  octopus?.reflex_rule
-                    ? `strategy=${strategy} · rule=${octopus.reflex_rule}`
-                    : `strategy=${strategy}`
-                }
-              >
-                {strategyText}
-              </div>
-            )}
-            {statsText && (
-              <div
-                className="inline-flex items-center gap-1 rounded-full bg-muted/40 px-2 py-0.5 text-xs tabular-nums text-muted-foreground/80"
-                title={[
-                  octopus?.input_tokens != null
-                    ? `input_tokens=${octopus.input_tokens}`
-                    : null,
-                  octopus?.output_tokens != null
-                    ? `output_tokens=${octopus.output_tokens}`
-                    : null,
-                  octopus?.duration_ms != null
-                    ? `duration_ms=${octopus.duration_ms}`
-                    : null,
-                  octopus?.rounds != null ? `rounds=${octopus.rounds}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              >
-                {statsText}
-              </div>
-            )}
-          </div>
-        );
-      })()}
     </AIElementMessageContent>
   );
 }

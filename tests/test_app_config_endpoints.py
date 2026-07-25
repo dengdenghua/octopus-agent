@@ -278,6 +278,8 @@ class TestCustomModelsUpsert:
             "api_key": "sk-test",
             "model": "claude-sonnet-4-6",
             "max_tokens": 12000,
+            "context_window": 256_000,
+            "enable_1m_context": True,
             "supports_thinking": True,
             "supports_vision": False,
             "supports_tool_use": True,
@@ -312,6 +314,8 @@ class TestCustomModelsUpsert:
         stored = json.loads(persisted.read_text(encoding="utf-8"))
         assert stored["claude-mirror"]["api_key"] == "sk-test"
         assert "max_tokens" not in stored["claude-mirror"]
+        assert stored["claude-mirror"]["context_window"] == 256_000
+        assert stored["claude-mirror"]["enable_1m_context"] is True
         assert stored["claude-mirror"]["supports_thinking"] is True
         assert stored["claude-mirror"]["supports_vision"] is False
         assert stored["claude-mirror"]["supports_tool_use"] is True
@@ -450,12 +454,15 @@ class TestCustomModelsUpsert:
                 "display_name": "K2.7 Code",
                 "supports_tool_use": True,
                 "omit_sampling_parameters": True,
+                "enable_1m_context": True,
             },
         )
         assert r.status_code == 200
         assert dispatcher.has("kimi-code")
         assert dispatcher.has("kimi-for-coding")
         assert dispatcher.has("kimi-for-coding-fast")
+        assert dispatcher.has("kimi-for-coding::1m")
+        assert dispatcher.has("kimi-for-coding-fast::1m")
 
         r = client.put(
             "/api/config/custom-models/kimi-code",
@@ -465,13 +472,17 @@ class TestCustomModelsUpsert:
         assert dispatcher.has("kimi-code")
         assert not dispatcher.has("kimi-for-coding")
         assert not dispatcher.has("kimi-for-coding-fast")
+        assert not dispatcher.has("kimi-for-coding::1m")
+        assert not dispatcher.has("kimi-for-coding-fast::1m")
         assert dispatcher.has("kimi-for-coding-v2")
+        assert dispatcher.has("kimi-for-coding-v2::1m")
 
         r = client.delete("/api/config/custom-models/kimi-code")
         assert r.status_code == 200
         assert r.json()["removed"] is True
         assert not dispatcher.has("kimi-code")
         assert not dispatcher.has("kimi-for-coding-v2")
+        assert not dispatcher.has("kimi-for-coding-v2::1m")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -772,6 +783,31 @@ class TestCustomModelsDelete:
 
 
 class TestLlmModelsMerge:
+    def test_one_million_context_is_explicit_and_auto_detected(
+        self,
+        client: TestClient,
+    ) -> None:
+        client.put(
+            "/api/config/custom-models/deepseek",
+            json={
+                "models": ["deepseek-v4-pro", "deepseek-v4-flash"],
+                "base_url": "https://example.test/v1",
+                "api_key": "sk-x",
+            },
+        )
+        rows = [
+            row
+            for row in client.get("/api/llm-models").json()["models"]
+            if row.get("entry_id") == "deepseek"
+        ]
+        assert len(rows) == 4
+        default_rows = [row for row in rows if row["context_profile"] == "default"]
+        one_million_rows = [row for row in rows if row["context_profile"] == "1m"]
+        assert {row["context_window"] for row in default_rows} == {256_000}
+        assert {row["context_window"] for row in one_million_rows} == {1_000_000}
+        assert all(row["id"].endswith("::1m") for row in one_million_rows)
+        assert {row["model"] for row in default_rows} == {row["model"] for row in one_million_rows}
+
     def test_custom_model_appears_in_merged_list(
         self,
         client: TestClient,

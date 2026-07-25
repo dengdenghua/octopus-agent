@@ -20,6 +20,7 @@ import subprocess
 from collections.abc import Callable
 from typing import Any
 
+from runtime.sensing.gateway.agents_local_partner import resolve_local_command
 from runtime.execution.agents.local_partner_bridge import (
     LocalPartnerResult,
     blackboard_brief,
@@ -73,6 +74,10 @@ _KNOWN_PARTNERS: dict[str, list[str]] = {
 }
 
 
+def _resolve_command(command: str) -> str | None:
+    return shutil.which(command) or resolve_local_command(command)
+
+
 def detect_installed_partners() -> list[dict[str, str]]:
     """Discover the drivable coding-agent CLIs actually on this machine (via
     ``shutil.which``) as team members — ``[]`` if none. Self-contained: no agent
@@ -80,7 +85,7 @@ def detect_installed_partners() -> list[dict[str, str]]:
     members: list[dict[str, str]] = []
     for partner_id, commands in _KNOWN_PARTNERS.items():
         for cmd in commands:
-            path = shutil.which(cmd)
+            path = _resolve_command(cmd)
             if path:
                 members.append(
                     {

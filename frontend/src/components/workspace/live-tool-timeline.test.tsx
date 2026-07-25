@@ -114,7 +114,11 @@ describe("LiveToolTimeline · nested sub-tool rendering", () => {
     const labels = rows
       .map((row) => row.querySelector(".font-medium")?.textContent ?? "")
       .map((s) => s.trim());
-    expect(labels).toEqual(["recall", "Write blackboard", "Read blackboard"]);
+    expect(labels).toEqual([
+      "Other action",
+      "Write blackboard",
+      "Read blackboard",
+    ]);
   });
 
   test("children show the sub-agent role badge", () => {
@@ -352,7 +356,7 @@ describe("LiveToolTimeline · nested sub-tool rendering", () => {
   });
 
   test("Chinese locale uses localized status badges and detail titles", () => {
-    wrap(
+    const { container } = wrap(
       [
         parentEvent({
           id: "status-running",
@@ -399,8 +403,69 @@ describe("LiveToolTimeline · nested sub-tool rendering", () => {
     expect(screen.getByText("\u7b49\u5f85\u5ba1\u6279")).toBeInTheDocument();
     expect(screen.getAllByText("\u8f93\u5165").length).toBeGreaterThan(0);
     expect(screen.getAllByText("\u7ed3\u679c").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^\u601d\u8003/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^\u89c2\u5bdf/).length).toBeGreaterThan(0);
+    expect(container).not.toHaveTextContent("模型");
+    expect(container).not.toHaveTextContent("思考细节");
+    expect(container).not.toHaveTextContent("Action:");
+    expect(container).not.toHaveTextContent("Observation:");
+  });
+
+  test("Chinese model-side timeline events read like product progress, not raw model logs", () => {
+    const { container } = wrap(
+      [
+        parentEvent({
+          id: "thought-1",
+          name: "agent_thought",
+          status: "running",
+          startedAt: 1000,
+        }),
+        parentEvent({
+          id: "planning-1",
+          name: "planning",
+          status: "running",
+          startedAt: 1100,
+        }),
+      ],
+      { showAll: true },
+      "zh-CN",
+    );
+
+    expect(
+      screen.getByText("这一轮公开返回了可展示的整理片段。"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/正在组织下一步/).length).toBeGreaterThan(0);
+    expect(container).not.toHaveTextContent("模型");
+    expect(container).not.toHaveTextContent("思考细节");
+    expect(container).not.toHaveTextContent("reasoning");
+  });
+
+  test("sanitizes unknown tool labels and expanded payload details", () => {
+    const { container } = wrap(
+      [
+        parentEvent({
+          id: "unknown-1",
+          name: "internal_private_runner",
+          status: "done",
+          startedAt: 1000,
+          finishedAt: 1100,
+          input: {
+            token: "super-secret-token",
+            nested: { authorization: "Bearer abc123" },
+            path: "src/app.tsx",
+          },
+          output: { result: "ok", api_key: "sk-live-123456" },
+        }),
+      ],
+      { showAll: true },
+      "zh-CN",
+    );
+
+    expect(screen.getByText("其他操作")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("internal_private_runner");
+    fireEvent.click(screen.getByRole("button", { name: "展开工具详情" }));
+    expect(container).toHaveTextContent("[redacted]");
+    expect(container).not.toHaveTextContent("super-secret-token");
+    expect(container).not.toHaveTextContent("abc123");
+    expect(container).not.toHaveTextContent("sk-live-123456");
   });
 
   test("consecutive research searches stay separate and show their own results", () => {

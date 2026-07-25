@@ -87,8 +87,11 @@ from runtime.core.cerebrum.react_parsing import (
     _payload_has_destructive_waiter_result_pop,
     _payload_has_inflight_identity_comparison,
     _payload_has_loader_barrier_deadlock,
+    _payload_has_single_pass_url_decode,
     _payload_has_stale_immutable_waiter_snapshot,
     _payload_has_terminal_pending_entry_leak,
+    _payload_has_wait_while_lock_held,
+    _payload_looks_like_path_boundary,
     _step_changed_public_signature,
     _step_command_text,
     _step_deleted_test_functions,
@@ -2450,6 +2453,52 @@ def _loader_barrier_deadlock_guard(
     )
 
 
+def _wait_while_lock_held_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Reject follower waits that retain the lock the leader must acquire."""
+    if not is_code_mode or not steps or _final_answer_requests_user_help(final_answer):
+        return None
+    affected: set[str] = set()
+    for step in steps:
+        if not _is_code_write_step(step):
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        tool_name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if not isinstance(path, str) or _is_test_path(path):
+            continue
+        new_text, old_text = _extract_step_payloads(step)
+        old_hit = _payload_has_wait_while_lock_held(old_text)
+        new_hit = _payload_has_wait_while_lock_held(new_text)
+        full_clean_rewrite = (
+            tool_name in {"write_text_file", "write_file", "create_file"}
+            and path in affected
+            and bool(new_text)
+            and not new_hit
+        )
+        if (old_hit or full_clean_rewrite) and not new_hit:
+            affected.discard(path)
+        elif new_hit:
+            affected.add(path)
+    if not affected:
+        return None
+    preview = ", ".join(sorted(affected)[:3])
+    return (
+        "Cannot finish yet: follower code in "
+        f"{preview} calls wait() while still holding the shared lock. The leader must acquire "
+        "that same lock to publish the result and signal the event, so the two sides deadlock. "
+        "Capture the pending object and an explicit leader flag under the lock, leave the locked "
+        "block, then make followers wait. The loader and every blocking wait must run outside the "
+        "shared map lock; reacquire it only for short state updates."
+    )
+
+
 def _concurrency_semantic_followup_guard(
     steps: list[ReActStep],
     *,
@@ -2457,6 +2506,7 @@ def _concurrency_semantic_followup_guard(
 ) -> str | None:
     """Surface deterministic concurrency defects immediately after a write."""
     for guard in (
+        _wait_while_lock_held_guard,
         _ambiguous_inflight_leader_election_guard,
         _destructive_waiter_result_guard,
         _stale_immutable_waiter_snapshot_guard,
@@ -2467,6 +2517,71 @@ def _concurrency_semantic_followup_guard(
         if message is not None:
             return message.replace("Cannot finish yet: ", "Before verification: ", 1)
     return None
+
+
+def _path_boundary_decode_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Reject path validation that decodes attacker input only once."""
+    if not is_code_mode or not steps or _final_answer_requests_user_help(final_answer):
+        return None
+    affected: set[str] = set()
+    for step in steps:
+        if not _is_code_write_step(step):
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        tool_name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if not isinstance(path, str) or _is_test_path(path):
+            continue
+        new_text, old_text = _extract_step_payloads(step)
+        new_hit = _payload_has_single_pass_url_decode(new_text)
+        old_hit = _payload_has_single_pass_url_decode(old_text)
+        introduces_boundary_defect = new_hit and _payload_looks_like_path_boundary(new_text)
+        full_clean_rewrite = (
+            tool_name in {"write_text_file", "write_file", "create_file"}
+            and path in affected
+            and bool(new_text)
+            and not new_hit
+        )
+        surgical_repair = path in affected and old_hit and not new_hit
+        if full_clean_rewrite or surgical_repair:
+            affected.discard(path)
+        elif introduces_boundary_defect or (path in affected and new_hit):
+            affected.add(path)
+    if not affected:
+        return None
+    preview = ", ".join(sorted(affected)[:3])
+    return (
+        "Cannot finish yet: path-boundary validation in "
+        f"{preview} URL-decodes attacker input only once. A payload such as "
+        "`%252e%252e%252fsecret` remains `%2e%2e%2fsecret` after that pass and can bypass "
+        "the canonical containment check. Decode repeatedly to a stable value with a bounded "
+        "round/size guard (or otherwise reject residual encoded separators/traversal), normalize "
+        "separators, then resolve and prove containment. Add a focused double-encoded traversal "
+        "regression that requires the public boundary exception."
+    )
+
+
+def _code_semantic_followup_guard(
+    steps: list[ReActStep],
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Surface deterministic source defects before another verifier cycle."""
+    path_message = _path_boundary_decode_guard(
+        steps,
+        "implementation complete",
+        is_code_mode=is_code_mode,
+    )
+    if path_message is not None:
+        return path_message.replace("Cannot finish yet: ", "Before verification: ", 1)
+    return _concurrency_semantic_followup_guard(steps, is_code_mode=is_code_mode)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -3765,6 +3880,7 @@ GUARD_REGISTRY: list[GuardSpec] = [
     _spec_security("dynamic-exec guard", "security", _dynamic_exec_guard),
     _spec_security("shell-injection guard", "security", _shell_injection_guard),
     _spec_security("unsafe-deser guard", "security", _unsafe_deser_guard),
+    _spec_code_mode("path-boundary decode guard", "security", _path_boundary_decode_guard),
     # ── Tool-availability / inspection-evidence ──
     GuardSpec("final-answer completeness guard", "protocol", _invoke_incomplete_final),
     GuardSpec("answer-item-count guard", "protocol", _invoke_answer_item_count),
@@ -3818,6 +3934,11 @@ GUARD_REGISTRY: list[GuardSpec] = [
     _spec_code_mode("sleep-in-prod guard", "code-smell", _sleep_in_production_guard),
     _spec_code_mode("async-without-await guard", "code-smell", _async_without_await_guard),
     _spec_code_mode("full-rewrite guard", "code-smell", _full_file_rewrite_guard),
+    _spec_code_mode(
+        "single-flight wait-under-lock guard",
+        "code-smell",
+        _wait_while_lock_held_guard,
+    ),
     _spec_code_mode(
         "single-flight leader-election guard",
         "code-smell",

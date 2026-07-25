@@ -396,6 +396,27 @@ def run_serve(
         tentacle_ws_port=cfg.tentacle.ws_port,
     )
 
+    # For a single-machine setup, let the regular ``octopus serve`` path own
+    # the optional File Agent service too.  This deliberately lives next to
+    # app construction (rather than only in the legacy ``ui`` command), since
+    # ``serve`` is the entrypoint used by the desktop app and local dev stack.
+    # The supervisor remains opt-in and best-effort: storage can still be
+    # deployed independently, and a missing sibling must never block Octopus.
+    try:
+        from runtime.sensing.gateway.storage_supervisor import (
+            maybe_start_storage,
+            start_storage_heartbeat,
+        )
+
+        storage_start = maybe_start_storage()
+        start_storage_heartbeat()
+        if storage_start in {"started", "already_running"}:
+            print(c.dim("  local knowledge storage: ready (managed with this session)"))
+        elif storage_start == "not_found":
+            print(c.dim("  local knowledge storage: unavailable (service command not found)"))
+    except Exception:  # noqa: BLE001 — optional storage must not block serve
+        logging.getLogger(__name__).debug("storage supervisor setup failed", exc_info=True)
+
     print(c.bold(_("cli.serve.url_fmt", host=host, port=port)))
     if uds:
         print(c.bold(f"  unix socket: {uds}  (ws+unix:///{uds})"))

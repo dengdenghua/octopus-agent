@@ -5,12 +5,15 @@
 out makes their contracts testable in isolation.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from runtime.core.cerebrum import react_loop
 from runtime.core.cerebrum.react_loop import (
     _explicit_no_tool_goal,
     _finish_reason_is_length_limited,
+    _has_unrecovered_beak_failure,
     _tool_call_succeeded,
 )
 
@@ -81,3 +84,28 @@ def test_beak_step_verdict_overrides_observation(monkeypatch):
     # A failed beak step overrides a clean-looking observation.
     monkeypatch.setattr(react_loop, "_beak_step_effective_success", lambda s: False)
     assert _tool_call_succeeded("looks fine", object()) is False
+
+
+def _beak_step(name: str, *, status: str = "success") -> SimpleNamespace:
+    return SimpleNamespace(
+        action=SimpleNamespace(name=name),
+        result=SimpleNamespace(status=status, output={}),
+    )
+
+
+def test_substantive_success_recovers_an_earlier_tool_failure():
+    steps = [
+        _beak_step("browser_navigate", status="failed"),
+        _beak_step("exec_shell"),
+    ]
+
+    assert not _has_unrecovered_beak_failure(steps)
+
+
+def test_bookkeeping_success_does_not_hide_an_unrecovered_tool_failure():
+    steps = [
+        _beak_step("browser_navigate", status="failed"),
+        _beak_step("todo_write"),
+    ]
+
+    assert _has_unrecovered_beak_failure(steps)

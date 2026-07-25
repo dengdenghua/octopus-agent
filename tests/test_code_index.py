@@ -55,6 +55,20 @@ def test_no_source_returns_none(tmp_path: Path) -> None:
     assert retrieve_code_context("anything", root=tmp_path) is None
 
 
+def test_agent_source_packs_are_never_auto_grounded(tmp_path: Path) -> None:
+    _make_src(
+        tmp_path,
+        {
+            "agents/vibe_selling/private.py": "def dream_dive_campaign(): return 'private'\n",
+            "runtime/growth.py": "def campaign_metrics(): return 'project'\n",
+        },
+    )
+    out = retrieve_code_context("campaign", root=tmp_path)
+    assert out is not None
+    assert "runtime/growth.py" in out
+    assert "agents/vibe_selling/private.py" not in out
+
+
 def test_no_overlap_returns_none(tmp_path: Path) -> None:
     _make_src(tmp_path, {"a.py": "def alpha(): return beta()\n"})
     assert retrieve_code_context("quantum chromodynamics lattice", root=tmp_path) is None

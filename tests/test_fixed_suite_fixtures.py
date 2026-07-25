@@ -59,6 +59,8 @@ def test_sensitive_cases_require_behavioral_trajectory_evidence() -> None:
     assert _trajectory_requirement("multiagent.parallel-evidence", parallel)
     for _ in range(3):
         parallel.append("tool_start", tool_name="subagent")
+    # The outcome grader, rather than an Octopus-specific bb_* tool name,
+    # validates the shared workspace handoff for cross-client comparisons.
     assert _trajectory_requirement("multiagent.parallel-evidence", parallel) is None
 
     denied = Trajectory(trial_id="denied", case_id="security.denied-destructive-action")
@@ -74,3 +76,27 @@ def test_sensitive_cases_require_behavioral_trajectory_evidence() -> None:
     assert _trajectory_requirement("memory.context-reset-resume", resume)
     resume.append("phase_start", phase_index=2)
     assert _trajectory_requirement("memory.context-reset-resume", resume) is None
+
+
+def test_browser_cases_require_real_ui_tool_trajectories() -> None:
+    crud = Trajectory(trial_id="crud", case_id="browser.dynamic-crud")
+    assert _trajectory_requirement("browser.dynamic-crud", crud)
+    crud.append("tool_start", tool_name="browser_navigate")
+    # Select controls can be changed through click semantics; two explicit
+    # type actions plus four clicks are still a real UI trajectory.
+    for _ in range(2):
+        crud.append("tool_start", tool_name="browser_type")
+    for _ in range(4):
+        crud.append("tool_start", tool_name="browser_click")
+    crud.append("tool_start", tool_name="browser_get")
+    assert _trajectory_requirement("browser.dynamic-crud", crud) is None
+
+    editor = Trajectory(trial_id="editor", case_id="browser.rich-editor-upload")
+    assert _trajectory_requirement("browser.rich-editor-upload", editor)
+    editor.append("tool_start", tool_name="browser_navigate")
+    editor.append("tool_start", tool_name="browser_type")
+    editor.append("tool_start", tool_name="live_browser_type")
+    editor.append("tool_start", tool_name="browser_upload")
+    editor.append("tool_start", tool_name="browser_click")
+    editor.append("tool_start", tool_name="browser_wait")
+    assert _trajectory_requirement("browser.rich-editor-upload", editor) is None

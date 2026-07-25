@@ -44,6 +44,7 @@ except ImportError:  # pragma: no cover
     PlainTextResponse = None  # type: ignore[assignment]
     JSONResponse = None  # type: ignore[assignment]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 _PROM_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
@@ -58,8 +59,7 @@ def create_metrics_router(*, registry: Any = None) -> Any:
         the global registry from ``runtime.platform.observability.metrics.get_registry()``
         is used so any code that emits via the global gets reflected here.
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     from runtime.platform.observability.metrics import get_registry as _global_registry
 

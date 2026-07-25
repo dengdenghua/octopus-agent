@@ -86,6 +86,42 @@ _CANDIDATE_EXCLUDE: tuple[str, ...] = (
 )
 
 
+def _lazy_module_map() -> dict[str, str]:
+    """Parse ``runtime/platform/__init__.py`` for ``_LAZY_MODULES``.
+
+    PEP 562 ``__getattr__`` lazy loading means ``from runtime.platform
+    import X`` actually loads ``_LAZY_MODULES[X]`` (e.g.
+    ``runtime.platform.runtime_policy.feature_flags``), not
+    ``runtime.platform.X``. The AST sees the latter and misses the real
+    module path, falsely flagging it as an orphan. This maps the short
+    name back to the real dotted path so dynamically-reached modules
+    aren't stranded.
+    """
+    init_path = REPO_ROOT / "runtime" / "platform" / "__init__.py"
+    if not init_path.is_file():
+        return {}
+    try:
+        tree = ast.parse(init_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "_LAZY_MODULES":
+                    if isinstance(node.value, ast.Dict):
+                        out: dict[str, str] = {}
+                        for key, val in zip(node.value.keys, node.value.values):
+                            if (
+                                isinstance(key, ast.Constant)
+                                and isinstance(key.value, str)
+                                and isinstance(val, ast.Constant)
+                                and isinstance(val.value, str)
+                            ):
+                                out[key.value] = val.value
+                        return out
+    return {}
+
+
 def _dotted(path: Path) -> str | None:
     """``<repo>/runtime/a/b.py`` -> ``runtime.a.b``; package -> dir dotted."""
     try:
@@ -193,6 +229,23 @@ def _scan() -> set[str]:
             if _excluded(p, _CONSUMER_EXCLUDE):
                 continue
             consumed |= _consumed_targets(p)
+
+    # PEP 562 lazy loading: ``from runtime.platform import X`` resolves
+    # through ``__getattr__`` to ``_LAZY_MODULES[X]``, a different dotted
+    # path than ``runtime.platform.X``. Map consumed short names back to
+    # their real module paths so dynamically-reached modules aren't
+    # falsely stranded. Only modules ACTUALLY imported (already in
+    # ``consumed`` as ``runtime.platform.X``) get their real path added —
+    # modules registered but never imported stay flagged as orphans.
+    lazy_map = _lazy_module_map()
+    if lazy_map:
+        lazy_resolved: set[str] = set()
+        for target in consumed:
+            if target.startswith("runtime.platform."):
+                short = target[len("runtime.platform."):]
+                if short in lazy_map:
+                    lazy_resolved.add(lazy_map[short])
+        consumed |= lazy_resolved
 
     exempt_entry = _script_entry_targets()
 

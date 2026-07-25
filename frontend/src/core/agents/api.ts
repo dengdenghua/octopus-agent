@@ -66,6 +66,7 @@ export interface LocalAgentPartner {
   name: string;
   default_alias: string;
   description: string;
+  icon?: string | null;
   avatar_url?: string | null;
   detected: boolean;
   registered: boolean;

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LocalAgentPartner } from "@/core/agents/api";
+import type * as AgentsApi from "@/core/agents/api";
 import { renderWithProviders } from "@/test/harness";
 
 const apiMocks = vi.hoisted(() => ({
@@ -13,10 +14,7 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/core/agents/api", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/core/agents/api")>(
-      "@/core/agents/api",
-    );
+  const actual = (await vi.importActual("@/core/agents/api")) as typeof AgentsApi;
   return {
     ...actual,
     getLocalAgentPartnersDoctor: apiMocks.doctor,

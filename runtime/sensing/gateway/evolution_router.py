@@ -92,8 +92,8 @@ if FASTAPI_AVAILABLE:
 
     class KimiSwarmQuotaProbeBody(BaseModel):
         session_id: str = "kimi-swarm-quota-probe"
-        provider_id: str = "kimi_coding"
-        model: str = "kimi-for-coding"
+        provider_id: str = "volcengine_ark"
+        model: str = "kimi-k3"
         confirm_real_provider: bool = False
         max_tokens: int = Field(default=16, ge=1, le=512)
 
@@ -157,7 +157,7 @@ def create_evolution_router() -> Any:
             return {
                 "ok": True,
                 **compute_kimi_swarm_certification(
-                    provider_configured=_kimi_swarm_provider_configured("kimi-for-coding"),
+                    provider_configured=_kimi_swarm_provider_configured("kimi-k3"),
                 ),
             }
         except Exception as exc:
@@ -284,8 +284,8 @@ def create_evolution_router() -> Any:
 
     @router.get("/kimi-swarm-certification/next-stage")
     def get_kimi_swarm_certification_next_stage(
-        provider_id: str = Query(default="kimi_coding"),
-        model: str = Query(default="kimi-for-coding"),
+        provider_id: str = Query(default="volcengine_ark"),
+        model: str = Query(default="kimi-k3"),
         agent_count: int = Query(default=300, ge=1, le=512),
         step_count: int = Query(default=4000, ge=1, le=20000),
         max_concurrency: int = Query(default=32, ge=1, le=256),
@@ -311,8 +311,8 @@ def create_evolution_router() -> Any:
 
     @router.get("/kimi-swarm-certification/resume-plan")
     def get_kimi_swarm_certification_resume_plan(
-        provider_id: str = Query(default="kimi_coding"),
-        model: str = Query(default="kimi-for-coding"),
+        provider_id: str = Query(default="volcengine_ark"),
+        model: str = Query(default="kimi-k3"),
         agent_count: int = Query(default=300, ge=1, le=512),
         step_count: int = Query(default=4000, ge=1, le=20000),
         max_concurrency: int = Query(default=32, ge=1, le=256),

@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 if FASTAPI_AVAILABLE:
 
@@ -47,8 +48,7 @@ def create_verify_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["verify"])
 

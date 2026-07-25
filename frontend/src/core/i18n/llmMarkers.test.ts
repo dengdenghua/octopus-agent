@@ -49,6 +49,7 @@ describe("hasLLMTraceMarkers", () => {
 
   it("detects English markers", () => {
     expect(hasLLMTraceMarkers("Thought: hmm")).toBe(true);
+    expect(hasLLMTraceMarkers("Update: checking files")).toBe(true);
     expect(hasLLMTraceMarkers("Final Answer: 42")).toBe(true);
   });
 
@@ -106,10 +107,11 @@ describe("segmentLLMTrace", () => {
 
   it("segments an English ReAct trace", () => {
     const trace =
-      "Thought: I should look it up.\nAction: lookup()\nObservation: ok\nFinal Answer: 42";
+      "Thought: I should look it up.\nUpdate: Checking the source now.\nAction: lookup()\nObservation: ok\nFinal Answer: 42";
     const segs = segmentLLMTrace(trace);
     const byKind = Object.fromEntries(segs.map((s) => [s.kind, s.text]));
     expect(byKind.thought).toContain("look it up");
+    expect(byKind.update).toContain("Checking the source");
     expect(byKind.action).toContain("lookup()");
     expect(byKind.observation).toContain("ok");
     expect(byKind.finalAnswer).toBe("42");

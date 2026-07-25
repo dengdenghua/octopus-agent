@@ -46,6 +46,7 @@ except ImportError:  # pragma: no cover
     APIRouter = None  # type: ignore[assignment]
     Request = None  # type: ignore[assignment]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.platform.models import (
     ArmId,
     Budget,
@@ -143,8 +144,7 @@ def create_openai_router(
     max_concurrent_completions_per_actor: int = 4,
     max_completions_per_minute_per_actor: int = 30,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter()
 

@@ -28,6 +28,7 @@ except ImportError:  # pragma: no cover
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.execution.agents.loader import default_agents_root
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
 from runtime.platform.io import atomic_write_json, atomic_write_text, read_json_with_backup
@@ -1002,8 +1003,7 @@ def create_agent_world_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     def _auth_dep(request: Request) -> None:
         # Agent market reads templates and can also install/uninstall local

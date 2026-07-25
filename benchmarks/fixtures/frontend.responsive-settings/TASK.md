@@ -5,6 +5,7 @@ Implement the supplied `index.html` to match `reference.json`.
 Acceptance requirements:
 
 - Read both `index.html` and `reference.json` before editing.
+- Use the isolated live preview URL in `EVAL_URL.txt` for browser regression checks.
 - At desktop width the settings grid has exactly two columns; at 390px it has
   exactly one column and no horizontal overflow.
 - Keep the content width at or below the reference maximum and preserve the

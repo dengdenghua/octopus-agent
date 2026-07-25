@@ -22,7 +22,6 @@ from .response_formatter import (
     _markdown_table_cell,
     _research_context_mode,
     _research_report_section_score,
-    _wrap_with_thinking_block,
 )
 from .stream_handler import (
     _commit_direct_llm_cost,
@@ -78,5 +77,4 @@ __all__ = [
     "_stream_direct_llm_fallback",
     "_trajectory_research_evidence",
     "_trajectory_tool_lines",
-    "_wrap_with_thinking_block",
 ]

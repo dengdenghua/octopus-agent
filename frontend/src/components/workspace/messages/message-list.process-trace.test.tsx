@@ -15,6 +15,7 @@ import {
   MessageList,
   streamingMessageProgressKey,
 } from "./message-list";
+import { messageClipboardText } from "./message-list-item";
 
 vi.mock("../artifacts", () => ({
   useArtifacts: () => ({
@@ -203,6 +204,155 @@ describe("MessageList process trace lifecycle", () => {
     );
   });
 
+  test("keeps model strategy and token metadata out of the main transcript", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "总结一下"),
+        {
+          id: "assistant-1",
+          type: "ai",
+          content: "已完成总结。",
+          additional_kwargs: {
+            octopus: {
+              strategy: "react_loop",
+              success: true,
+              input_tokens: 1200,
+              output_tokens: 480,
+              duration_ms: 8300,
+              rounds: 3,
+            },
+          },
+        } as Message,
+      ],
+    });
+
+    renderMessageList({ thread, mode: "chat", locale: "zh-CN" });
+
+    expect(screen.getByText("已完成总结。")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/ReAct|直答|反射|缓存|投票/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/1\.2k|480|8\.3s|rounds|tokens/i),
+    ).not.toBeInTheDocument();
+  });
+
+  test("copies only visible public assistant text, never raw reasoning", () => {
+    const assistant = {
+      id: "assistant-private",
+      type: "ai",
+      content:
+        "<details><summary>Thinking</summary>private chain</details><read_only> </read_only>\n<TextBlock>已确认事实。</TextBlock>",
+      additional_kwargs: {
+        reasoning_content: "PRIVATE_REASONING_DO_NOT_COPY",
+      },
+    } as unknown as Message;
+
+    expect(messageClipboardText(assistant)).toBe("已确认事实。");
+
+    const reasoningOnly = {
+      id: "assistant-reasoning-only",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        reasoning_content: "PRIVATE_REASONING_DO_NOT_COPY",
+      },
+    } as unknown as Message;
+    expect(messageClipboardText(reasoningOnly)).toBe("");
+
+    const publicSummaryOnly = {
+      id: "assistant-public-summary",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        reasoning_content: "PRIVATE_REASONING_DO_NOT_COPY",
+        public_reasoning_summary: "我先核对两个文件。",
+      },
+    } as unknown as Message;
+    expect(messageClipboardText(publicSummaryOnly)).toBe("我先核对两个文件。");
+  });
+
+  test("shows the assistant avatar before the first model event arrives", () => {
+    const thread = mockThread({
+      messages: [message("user-1", "human", "分析这两个文件")],
+      isLoading: true,
+      streamingMessage: null,
+    });
+
+    renderMessageList({
+      thread,
+      currentAgent: {
+        name: "general",
+        display_name: "Eve",
+        avatar_url: "/api/agents/general/avatar",
+      },
+    });
+
+    expect(
+      screen.getByTestId("conversation-activity-pulse"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+  });
+
+  test("shows the assistant avatar even before the optimistic user row mounts", () => {
+    const thread = mockThread({
+      messages: [],
+      isLoading: true,
+      streamingMessage: null,
+    });
+
+    renderMessageList({
+      thread,
+      currentAgent: {
+        name: "general",
+        display_name: "Eve",
+        avatar_url: "/api/agents/general/avatar",
+      },
+    });
+
+    expect(
+      screen.getByTestId("conversation-activity-pulse"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+  });
+
+  test("keeps waiting status attached to the existing assistant lane", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "继续核对"),
+        {
+          id: "assistant-progress",
+          type: "ai",
+          content: "我先核对相关上下文。",
+          additional_kwargs: {
+            public_progress: true,
+            agent_id: "general",
+            agent_display_name: "Eve",
+          },
+        } as AIMessage,
+      ],
+      isLoading: true,
+      streamingMessage: null,
+    });
+
+    renderMessageList({
+      thread,
+      locale: "zh-CN",
+      currentAgent: {
+        name: "general",
+        display_name: "Eve",
+        avatar_url: "/api/agents/general/avatar",
+      },
+    });
+
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+    const continuation = screen.getByTestId("assistant-continuation-activity");
+    expect(continuation).toHaveClass("ml-11");
+    expect(
+      screen.getByTestId("conversation-activity-pulse"),
+    ).toBeInTheDocument();
+  });
+
   test("shows one avatar across adjacent process and answer groups from the same agent", () => {
     const thread = mockThread({
       messages: [
@@ -383,6 +533,64 @@ describe("MessageList process trace lifecycle", () => {
     expect(screen.getAllByAltText("Eve")).toHaveLength(1);
   });
 
+  test("keeps intent and final fact anchors when compacting a long public timeline", () => {
+    const agentMetadata = {
+      agent_id: "general",
+      agent_display_name: "Eve",
+    };
+    const messages: Message[] = [message("user-1", "human", "跑一个长任务")];
+    for (let index = 0; index < 6; index += 1) {
+      messages.push({
+        id: `progress-${index}`,
+        type: "ai",
+        content:
+          index === 0
+            ? "我先判断任务边界。"
+            : index === 5
+              ? "已确认关键事实，可以收束。"
+              : `中间公开检查点 ${index}`,
+        additional_kwargs: {
+          public_progress: true,
+          timeline_sequence: index * 2 + 1,
+          ...agentMetadata,
+        },
+      } as AIMessage);
+      messages.push({
+        id: `tool-${index}`,
+        type: "ai",
+        content: "",
+        additional_kwargs: agentMetadata,
+        tool_calls: [
+          {
+            id: `read-${index}`,
+            name: "read_file",
+            args: { path: `frontend/src/file-${index}.ts` },
+            timelineSequence: index * 2 + 2,
+          },
+        ],
+      } as AIMessage);
+    }
+    messages.push({
+      id: "assistant-final",
+      type: "ai",
+      content: "最终回答。",
+      additional_kwargs: agentMetadata,
+    } as AIMessage);
+
+    const thread = mockThread({ messages });
+    renderMessageList({ thread, locale: "zh-CN" });
+
+    const commentary = screen.getAllByTestId("public-progress-event");
+    const execution = screen.getAllByTestId("process-timeline-event-execution");
+    expect(commentary).toHaveLength(4);
+    expect(execution.length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText("我先判断任务边界。")).toBeInTheDocument();
+    expect(screen.getByText("已确认关键事实，可以收束。")).toBeInTheDocument();
+    expect(screen.queryByText("中间公开检查点 2")).not.toBeInTheDocument();
+    expect(screen.queryByText("中间公开检查点 3")).not.toBeInTheDocument();
+    expect(screen.getByText("最终回答。")).toBeInTheDocument();
+  });
+
   test("does not repeat an avatar when visual metadata arrives mid-turn", () => {
     const thread = mockThread({
       messages: [
@@ -490,7 +698,7 @@ describe("MessageList process trace lifecycle", () => {
     expect(
       screen.getByText("NAS is network-attached storage."),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Process details/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Open details/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Thinking process/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Read notes\/nas\.md/)).not.toBeInTheDocument();
   });
@@ -536,7 +744,7 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
-    const savedStepToggles = screen.getAllByTitle("Process details");
+    const savedStepToggles = screen.getAllByTitle("Open details");
     expect(savedStepToggles).toHaveLength(2);
     expect(screen.getByText(/old market query/)).toBeInTheDocument();
     expect(
@@ -598,7 +806,7 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
-    expect(screen.getByTitle("Process details")).toBeInTheDocument();
+    expect(screen.getByTitle("Open details")).toBeInTheDocument();
     expect(
       screen.getAllByTestId("process-timeline-event-execution").length,
     ).toBeGreaterThan(0);
@@ -689,8 +897,8 @@ describe("MessageList process trace lifecycle", () => {
     });
 
     const pulse = screen.getByTestId("conversation-activity-pulse");
-    expect(pulse).toHaveTextContent("Model is working");
-    expect(pulse).toHaveTextContent("read file: src/app.ts");
+    expect(pulse).toHaveTextContent("Organizing");
+    expect(pulse).toHaveTextContent("Read file: app.ts");
 
     rerender(
       messageListTree({
@@ -713,7 +921,7 @@ describe("MessageList process trace lifecycle", () => {
     );
 
     expect(screen.getByTestId("conversation-activity-pulse")).toHaveTextContent(
-      "Model is working",
+      "Organizing",
     );
 
     rerender(
@@ -1128,6 +1336,36 @@ describe("MessageList stalled-run warning", () => {
     expect(
       screen.queryByText(/verification required/i),
     ).not.toBeInTheDocument();
+    expect(screen.queryByAltText("Octopus")).not.toBeInTheDocument();
+  });
+
+  test("does not leave an orphan assistant avatar for leaked control-only text", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "只读比较两个文件"),
+        {
+          id: "ai-control-only",
+          type: "ai",
+          content: "<read_only> </read_only>",
+          additional_kwargs: {
+            agent_id: "general",
+            agent_display_name: "Octopus",
+          },
+        } as AIMessage,
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      currentAgent: {
+        name: "general",
+        display_name: "Octopus",
+        avatar_url: "/api/agents/general/avatar",
+        icon: null,
+      },
+    });
+
+    expect(screen.queryByText(/read_only/i)).not.toBeInTheDocument();
     expect(screen.queryByAltText("Octopus")).not.toBeInTheDocument();
   });
 

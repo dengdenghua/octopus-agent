@@ -91,11 +91,11 @@
 **目标**：骨架立起来，fork 模块能跑
 **对应生物**：卵孵化出浮游幼体
 
-- [ ] 仓库初始化，Python 3.11+ / Pydantic 2.x / uv
-- [ ] 按 forklist.md P0 fork：`suckers/mcp/`、`mantle/`、`nerves/graph/`、`eyes/models/`、`beak/core/`、`suckers/loader/`
-- [ ] 批量改包名 → `runtime`
-- [ ] 跑通最小闭环：加载一个 SKILL.md → 进 Mantle → Beak 执行
-- [ ] CI：pytest + pre-commit
+- [x] 仓库初始化，Python 3.11+ / Pydantic 2.x / uv
+- [x] 按 forklist.md P0 fork：`suckers/mcp/`、`mantle/`、`nerves/graph/`、`eyes/models/`、`beak/core/`、`suckers/loader/`
+- [x] 批量改包名 → `runtime`
+- [x] 跑通最小闭环：加载一个 SKILL.md → 进 Mantle → Beak 执行
+- [x] CI：pytest + pre-commit
 
 **验收**：`pytest tests/smoke/` 绿灯。
 
@@ -106,12 +106,12 @@
 **目标**：1 条 Arm 能独立完成长任务
 **对应生物**：幼体长出第一条腕
 
-- [ ] `cerebrum/` MVP：把目标拆成 ArmTask 序列
-- [ ] `ganglia/` MVP：单 Ganglion 驱动 Arm 跑完整个 DAG（未实装）
-- [ ] `arms/code_arm.py`：第一条腕（代码腕），带 5–10 个 Suckers
-- [ ] `genome/checkpoint/` 接入，断点续跑
-- [ ] `hemolymph/` v1：context packet 打包器
-- [ ] `siphon/openai_gateway/` fork 上线，外部 SDK 能调
+- [x] `cerebrum/` MVP：把目标拆成 ArmTask 序列
+- [x] `ganglia/` MVP：GraphRuntime 驱动 Arm 跑完整个 DAG（注：独立 Ganglion 自治层 / 断联自治未实装，见 implementation-status.md）
+- [x] `arms/code_arm.py`：第一条腕（代码腕），带 5–10 个 Suckers
+- [x] `genome/checkpoint/` 接入，断点续跑
+- [x] `hemolymph/` v1：context packet 打包器
+- [x] `siphon/openai_gateway/` fork 上线，外部 SDK 能调
 
 **验收**：给定"读这个仓库 + 写个补丁 + 跑测试"这类多步任务，能断网续跑。
 
@@ -122,13 +122,13 @@
 **目标**：8 条 Arm 并行协作 + 腕间广播
 **对应生物**：长齐 8 条腕，开始抓多物体
 
-- [ ] 8 条专长腕：code / data / search / browse / file / comm / deploy / observe
-- [ ] `nerves/bus/` 分布式消息（NATS 或 Redis Streams）
-- [ ] **★ Chromatophores 拆分重构**：由单模块（pub/sub + effector）拆为 `signal_bus/` + `effector_pool/` 两个独立模块（设计债清理，MVP 阶段延迟到此）
-- [ ] `signal_bus/` pub/sub，5 类事件上线
-- [ ] `ink/` v1：`per_task_budget` + `circuit_breaker`
-- [ ] Cerebrum 的路由器按 Arm affinity 分发
-- [ ] 压测：8 腕并行跑 20 个任务不互相污染
+- [x] 8 条专长腕：code / data / search / browse / file / comm / deploy / observe
+- [ ] `nerves/bus/` 分布式消息（NATS 或 Redis Streams）—— 注：跨进程总线曾是休眠代码，已于路线收尾时删除；当前仅单进程 TypedEventBus（见 implementation-status.md）
+- [x] **★ Chromatophores 拆分重构**：由单模块（pub/sub + effector）拆为 `signal_bus/` + `effector_pool/` 两个独立模块（设计债清理，MVP 阶段延迟到此）
+- [x] `signal_bus/` pub/sub，5 类事件上线
+- [x] `ink/` v1：`per_task_budget` + `circuit_breaker`
+- [x] Cerebrum 的路由器按 Arm affinity 分发
+- [x] 压测：8 腕并行跑 20 个任务不互相污染
 
 **验收**：一个任务被 Cerebrum 切给 3 条 Arm 并发做，完成时间 ≤ 单腕串行的 50%。
 
@@ -139,12 +139,12 @@
 **目标**：Regeneration 反思流水线跑起来，系统开始自己变聪明
 **对应生物**：章鱼建立巢穴、学会打开罐子
 
-- [ ] `regeneration/trajectory/` 采集每条 Arm 的执行轨迹
-- [ ] `regeneration/evaluator/` 接 Anthropic Batch API 夜间打分
-- [ ] `regeneration/skill_forge/` 把高频成功路径结晶成新 Sucker
-- [ ] `regeneration/reflection/` 失败路径归纳成 Cerebrum 的规避规则
-- [ ] `genome/memory/` 长时记忆层，Teach-Repeat 入库
-- [ ] A/B 对比：开启 Regeneration 前后，同类任务成本曲线
+- [x] `regeneration/trajectory/` 采集每条 Arm 的执行轨迹
+- [x] `regeneration/evaluator/` 接 Anthropic Batch API 夜间打分
+- [x] `regeneration/skill_forge/` 把高频成功路径结晶成新 Sucker
+- [x] `regeneration/reflection/` 失败路径归纳成 Cerebrum 的规避规则
+- [x] `genome/memory/` 长时记忆层，Teach-Repeat 入库
+- [x] A/B 对比：开启 Regeneration 前后，同类任务成本曲线
 
 **验收**：连续运行 2 周后，新生成的 Sucker 数量 ≥ 10，且命中率 > 60%。
 
@@ -155,12 +155,12 @@
 **目标**：双循环隔离 + 策略自适应，达到"生产级"
 **对应生物**：3 颗心脏齐跳，能变色拟态
 
-- [ ] `hearts/` 双循环隔离：主循环 + 备循环，上下文泵驱动
-- [ ] `camouflage/` 策略 A/B：同任务并行跑多种 prompt/model 组合，按 ROI 收敛
-- [ ] `ink/skill_cost_profile`：每 Sucker 成本画像，异常涨价告警
-- [ ] `hearts/` 节律调度：预算紧缩时降频，空闲加速反思流水线
-- [ ] `mantle/k8s/` 上生产集群
-- [ ] 可观测性：OpenTelemetry + Langfuse
+- [ ] `hearts/` 双循环隔离：主循环 + 备循环，上下文泵驱动（注：当前实装为 FileLockCoordinator + RedisCoordinator + EtcdCoordinator 分布式锁 + 节律熔断聚合，完整双循环叙事未在默认路径运行，见 implementation-status.md）
+- [x] `camouflage/` 策略 A/B：同任务并行跑多种 prompt/model 组合，按 ROI 收敛
+- [x] `ink/skill_cost_profile`：每 Sucker 成本画像，异常涨价告警
+- [x] `hearts/` 节律调度：预算紧缩时降频，空闲加速反思流水线
+- [x] `mantle/k8s/` 上生产集群
+- [ ] 可观测性：OpenTelemetry + Langfuse（注：OTel 已接线，Langfuse 未接）
 
 **验收**：杀掉任一 Heart，系统 30s 内恢复；Camouflage 跑满 100 次实验后，系统平均成本较阶段 3 再降 ≥ 20%。
 

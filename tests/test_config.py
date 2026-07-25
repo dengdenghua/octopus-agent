@@ -295,6 +295,17 @@ class TestExampleYamlFile:
         assert cfg.planner.type in ("static", "llm")
         # Implementation note.
 
+    @pytest.mark.parametrize("filename", ["config.example.yaml", "config.local.yaml"])
+    def test_shipped_configs_keep_internal_react_callers_self_whitelisted(self, filename: str):
+        config_path = Path(__file__).parent.parent / filename
+        if not config_path.exists():
+            pytest.skip(f"{filename} not shipped")
+
+        cfg = load_from_yaml(config_path)
+
+        assert "react_loop" in cfg.immunity.self_whitelist
+        assert "react_arm" in cfg.immunity.self_whitelist
+
     def test_example_config_builds_with_mock(self, tmp_path: Path):
         """Implementation note."""
         example = Path(__file__).parent.parent / "config.example.yaml"

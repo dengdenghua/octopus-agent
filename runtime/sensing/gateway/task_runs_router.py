@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.platform.process.paths import app_paths
 from runtime.platform.process.task_supervisor import (
     LostTaskLease,
@@ -64,8 +65,7 @@ def create_task_runs_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["task-runs"])
 

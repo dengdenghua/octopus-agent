@@ -152,10 +152,38 @@ describe("<MarkdownContent /> streaming state", () => {
     ).toBeInTheDocument();
   });
 
+  it("hides inline leaked read-only control tags without dropping nearby prose", () => {
+    renderMarkdown(
+      "我先核对实现。<read_only> </read_only> 现在信息已经足够。",
+    );
+
+    expect(screen.queryByText(/read_only/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("我先核对实现。 现在信息已经足够。"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides leaked internal renderer component tags outside code fences", () => {
+    renderMarkdown(
+      "摘要应该在最终回答前展示为 `<TextBlock>`，不是阶段分析。",
+    );
+
+    expect(screen.queryByText(/TextBlock/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("摘要应该在最终回答前展示为，不是阶段分析。"),
+    ).toBeInTheDocument();
+  });
+
   it("keeps read-only tags when they are shown as a code example", () => {
     renderMarkdown("```xml\n<read_only>\n</read_only>\n```");
 
     expect(screen.getByText(/<read_only>/)).toBeInTheDocument();
+  });
+
+  it("keeps internal component tags when they are shown as a fenced code example", () => {
+    renderMarkdown("```tsx\n<TextBlock>hello</TextBlock>\n```");
+
+    expect(screen.getByText(/<TextBlock>/)).toBeInTheDocument();
   });
 
   it("keeps markdown controls and assistive technology in the streaming state", () => {

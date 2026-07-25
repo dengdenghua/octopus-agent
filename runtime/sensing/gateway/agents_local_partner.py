@@ -35,6 +35,7 @@ import shutil
 import subprocess
 import time
 from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -729,6 +730,83 @@ def partner_model(partner_id: str) -> dict[str, Any]:
 # ── Detection ──────────────────────────────────────────────────────
 
 
+def _path_entries(raw: str | None) -> list[str]:
+    entries: list[str] = []
+    seen: set[str] = set()
+    for part in (raw or "").split(os.pathsep):
+        item = os.path.expanduser(part.strip())
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        entries.append(item)
+    return entries
+
+
+def _common_local_bin_entries() -> list[str]:
+    home = Path.home()
+    return [
+        str(home / ".local" / "bin"),
+        str(home / ".local" / "node" / "bin"),
+        str(home / ".codebuddy" / "bin"),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/Applications/ChatGPT.app/Contents/Resources",
+    ]
+
+
+@lru_cache(maxsize=1)
+def _login_shell_path() -> str:
+    shell = os.environ.get("SHELL", "").strip()
+    if not shell or not Path(shell).is_absolute():
+        return ""
+    try:
+        proc = subprocess.run(
+            [shell, "-lc", 'printf "%s" "$PATH"'],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout.strip()
+
+
+def _candidate_path_entries() -> list[str]:
+    entries: list[str] = []
+    seen: set[str] = set()
+    for source in (
+        _path_entries(os.environ.get("PATH")),
+        _path_entries(_login_shell_path()),
+        _common_local_bin_entries(),
+    ):
+        for entry in source:
+            if entry in seen:
+                continue
+            seen.add(entry)
+            entries.append(entry)
+    return entries
+
+
+def resolve_local_command(command: str) -> str | None:
+    path = shutil.which(command)
+    if path:
+        return path
+    if os.path.sep in command or (os.path.altsep and os.path.altsep in command):
+        return None
+    for directory in _candidate_path_entries():
+        candidate = Path(directory) / command
+        try:
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate.resolve())
+        except OSError:
+            continue
+    return None
+
+
 def which_command(commands: list[str]) -> tuple[str | None, str | None]:
     """Probe a list of candidate commands; return (name, path) for the
     first match, or (None, None) if none found."""
@@ -741,7 +819,7 @@ def which_command(commands: list[str]) -> tuple[str | None, str | None]:
                     return str(candidate), str(candidate.resolve())
             except OSError:
                 pass
-        path = shutil.which(command)
+        path = resolve_local_command(command)
         if path:
             return command, path
     return None, None

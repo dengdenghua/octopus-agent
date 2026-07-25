@@ -10,6 +10,8 @@ from typing import Any
 _LOG = logging.getLogger(__name__)
 
 CURRENT_DATA_VERSION = 2
+# One-shot utility: invoked explicitly during upgrades, never at startup.
+COMPATIBILITY_STATUS = "legacy-one-shot"
 
 _MIGRATIONS: dict[int, dict[str, Any]] = {
     1: {

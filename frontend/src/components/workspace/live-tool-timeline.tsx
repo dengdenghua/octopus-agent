@@ -16,7 +16,7 @@ import {
   RefreshCwIcon,
   ListChecksIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
@@ -32,7 +32,10 @@ import { getProcessTraceEvents } from "./process-trace-events";
 import { SwarmRunOverview } from "./swarm-run-overview";
 import { isSkillToolName } from "./tool-action-kind";
 
-type TimelineT = Pick<Translations, "liveTools" | "liveToolTimeline">;
+type TimelineT = Pick<
+  Translations,
+  "liveTools" | "liveToolTimeline" | "messageGrouping" | "todoList"
+>;
 
 const TOOL_ICONS: Record<string, { icon: React.ElementType; color: string }> = {
   bash: { icon: TerminalIcon, color: "text-green-500" },
@@ -77,45 +80,78 @@ const TOOL_ICONS: Record<string, { icon: React.ElementType; color: string }> = {
 
 function getToolLabels(t: TimelineT): Record<string, string> {
   return {
-    bash: t.liveTools.terminal ?? "Terminal",
-    exec_shell: t.liveTools.terminal ?? "Terminal",
-    shell_command: t.liveTools.terminal ?? "Terminal",
-    write_file: t.liveTools.writeFile ?? "Write File",
-    write_text_file: t.liveTools.writeFile ?? "Write File",
-    create_file: t.liveTools.writeFile ?? "Create File",
-    edit_code: t.liveTools.editFile ?? "Edit File",
-    edit_text_file: t.liveTools.editFile ?? "Edit File",
-    str_replace: t.liveTools.editFile ?? "Edit File",
-    read_file: t.liveTools.readFile ?? "Read File",
-    read_text_file: t.liveTools.readFile ?? "Read File",
-    fetch_url: "Browse Page",
-    list_cwd: t.liveTools.searchFiles ?? "List Files",
-    glob: t.liveTools.searchFiles ?? "Search Files",
-    grep: t.liveTools.searchContent ?? "Search Content",
-    todo_write: "Todos",
-    call_agent: "Subagent",
-    call_agent_parallel: "Agent swarm",
-    bb_read: "Blackboard",
-    bb_write: "Blackboard",
-    bb_keys: "Blackboard",
-    "deep-research-swarm": "Research swarm",
-    "report-writing": "Report writing",
-    docx: "DOCX",
-    web_search: t.liveTools.webSearch ?? "Web Search",
-    apply_skill: "Apply skill",
-    list_learned_skills: "List skills",
-    learn_skill_from_text: "Learn skill",
-    planning: "Planning",
-    agent_thought: "Agent thought",
-    team_swarm: "Team swarm",
-    team_routing: "Team routing",
-    git_status: t.liveTools.gitStatus ?? "Git Status",
-    git_commit: t.liveTools.gitCommit ?? "Git Commit",
-    git_diff: t.liveTools.gitDiff ?? "Git Diff",
-    stream_recovery: t.liveTools.streamRecovery ?? "Stream recovery",
-    model_gateway: "Model gateway",
-    model_reasoning: "Model reasoning",
+    bash: t.liveTools.terminal,
+    exec_shell: t.liveTools.terminal,
+    shell_command: t.liveTools.terminal,
+    write_file: t.liveTools.writeFile,
+    write_text_file: t.liveTools.writeFile,
+    create_file: t.liveTools.writeFile,
+    edit_code: t.liveTools.editFile,
+    edit_text_file: t.liveTools.editFile,
+    str_replace: t.liveTools.editFile,
+    read_file: t.liveTools.readFile,
+    read_text_file: t.liveTools.readFile,
+    fetch_url: t.liveToolTimeline.browsingPage,
+    list_cwd: t.liveTools.searchFiles,
+    glob: t.liveTools.searchFiles,
+    grep: t.liveTools.searchContent,
+    todo_write: t.todoList.title,
+    call_agent: t.liveToolTimeline.callSubAgentShort,
+    call_agent_parallel: t.liveToolTimeline.subtaskAggregation,
+    bb_read: t.liveToolTimeline.readBlackboardShort,
+    bb_write: t.liveToolTimeline.writeBlackboardShort,
+    bb_keys: t.liveToolTimeline.readBlackboardDirectory,
+    "deep-research-swarm": t.messageGrouping.searchSources,
+    "report-writing": t.messageGrouping.runAction,
+    docx: t.messageGrouping.updateFile,
+    web_search: t.liveTools.webSearch,
+    apply_skill: t.liveToolTimeline.invokeSkillProcess,
+    list_learned_skills: t.messageGrouping.runAction,
+    learn_skill_from_text: t.liveToolTimeline.invokeSkillProcess,
+    planning: t.liveToolTimeline.understandTask,
+    agent_thought: t.liveToolTimeline.thinking,
+    team_swarm: t.liveToolTimeline.subtaskAggregation,
+    team_routing: t.liveToolTimeline.focusedDelegation,
+    git_status: t.liveTools.gitStatus,
+    git_commit: t.liveTools.gitCommit,
+    git_diff: t.liveTools.gitDiff,
+    stream_recovery: t.liveTools.streamRecovery,
+    model_gateway: t.liveToolTimeline.connectRuntime,
+    model_reasoning: t.liveToolTimeline.thinking,
   };
+}
+
+const SENSITIVE_DETAIL_KEY_RE =
+  /^(?:token|secret|api[_-]?key|password|passwd|authorization|cookie|set-cookie|private[_-]?key)$/i;
+const SENSITIVE_DETAIL_TEXT_RE =
+  /(?:bearer\s+|\bsk-[a-z0-9_-]+\b|\b(?:ghp|github_pat|xox[baprs])-)[^\s,;)}\]]+/gi;
+
+function sanitizePublicDetailText(value: string): string {
+  return value
+    .replace(SENSITIVE_DETAIL_TEXT_RE, "[redacted]")
+    .replace(
+      /((?:^|[\s,{[])['\"]?(?:token|secret|api[_-]?key|password|passwd|authorization|cookie|set-cookie|private[_-]?key)['\"]?\s*[:=]\s*)([^,;}\]\n]+)/gi,
+      "$1[redacted]",
+    );
+}
+
+function sanitizePublicDetailValue(value: unknown, depth = 0): unknown {
+  if (depth > 6) return "[redacted]";
+  if (typeof value === "string") return sanitizePublicDetailText(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizePublicDetailValue(item, depth + 1));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        SENSITIVE_DETAIL_KEY_RE.test(key)
+          ? "[redacted]"
+          : sanitizePublicDetailValue(item, depth + 1),
+      ]),
+    );
+  }
+  return value;
 }
 
 export interface LiveToolEvent {
@@ -249,9 +285,9 @@ export function LiveToolTimeline({
   return (
     <div className={cn("space-y-1 py-1.5", className)}>
       <SwarmRunOverview events={events} />
-      {visibleEvents.map((event, index) => (
+      {visibleEvents.map((event) => (
         <ParentWithChildren
-          key={`${event.id}:${index}`}
+          key={event.id}
           event={event}
           allEvents={events}
           toolLabels={toolLabels}
@@ -298,9 +334,9 @@ function ParentWithChildren({
         showAgent={showAgent}
       />
       <div className="ml-6 space-y-1 border-l border-primary/20 pl-2">
-        {children.map((child, index) => (
+        {children.map((child) => (
           <ToolEventRow
-            key={`${event.id}:${child.id}:${index}`}
+            key={`${event.id}:${child.id}`}
             event={child}
             toolLabels={toolLabels}
             t={t}
@@ -386,8 +422,11 @@ function formatOutputSummary(output: unknown): string | undefined {
 
 function formatDetailBlock(value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined;
+  const sanitized = sanitizePublicDetailValue(value);
   const text =
-    typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    typeof sanitized === "string"
+      ? sanitized
+      : JSON.stringify(sanitized, null, 2);
   const normalized = text.trim();
   if (!normalized) return undefined;
   return normalized.length > 4000
@@ -1100,7 +1139,7 @@ function ToolEventRow({
       icon: TerminalIcon,
       color: "text-muted-foreground",
     };
-  const label = toolLabels[event.name] ?? event.name;
+  const label = toolLabels[event.name] ?? t.liveTools.genericAction;
   const Icon = iconCfg.icon;
   const modelReasoningOutput = (() => {
     if (event.name !== "model_reasoning") return undefined;
@@ -1141,6 +1180,9 @@ function ToolEventRow({
   const [open, setOpen] = useState(
     event.status === "running" || event.status === "error",
   );
+  useEffect(() => {
+    if (event.status === "running" || event.status === "error") setOpen(true);
+  }, [event.id, event.status]);
   const inlineInputSummary =
     inputSummary &&
     !researchLog &&
@@ -1168,9 +1210,7 @@ function ToolEventRow({
       className={cn(
         "relative transition-all duration-200",
         nested ? "py-1 pl-2 text-xs" : "py-1.5 pl-2 text-xs",
-        event.status === "error"
-          ? "text-muted-foreground"
-          : "text-muted-foreground",
+        event.status === "error" ? "text-destructive" : "text-muted-foreground",
       )}
     >
       <div className="flex items-center gap-2">
@@ -1479,7 +1519,16 @@ function GroupedTimeline({
               onClick={() => emitAgentWorkbenchFocus({ agentId })}
               className="mb-1 flex w-full items-center gap-1.5 rounded-md px-3 py-1 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground"
             >
-              <span className="size-1.5 rounded-lg bg-primary animate-pulse" />
+              <span
+                className={cn(
+                  "size-1.5 rounded-lg",
+                  group.events.some((event) => event.status === "error")
+                    ? "bg-destructive"
+                    : group.events.some((event) => event.status === "running")
+                      ? "animate-pulse bg-primary"
+                      : "bg-emerald-500",
+                )}
+              />
               {group.name}
             </button>
           )}

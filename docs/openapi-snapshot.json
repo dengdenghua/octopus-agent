@@ -2749,12 +2749,12 @@
             "type": "integer"
           },
           "model": {
-            "default": "kimi-for-coding",
+            "default": "kimi-k3",
             "title": "Model",
             "type": "string"
           },
           "provider_id": {
-            "default": "kimi_coding",
+            "default": "volcengine_ark",
             "title": "Provider Id",
             "type": "string"
           },
@@ -21077,7 +21077,7 @@
             "name": "provider_id",
             "required": false,
             "schema": {
-              "default": "kimi_coding",
+              "default": "volcengine_ark",
               "title": "Provider Id",
               "type": "string"
             }
@@ -21087,7 +21087,7 @@
             "name": "model",
             "required": false,
             "schema": {
-              "default": "kimi-for-coding",
+              "default": "kimi-k3",
               "title": "Model",
               "type": "string"
             }
@@ -21241,7 +21241,7 @@
             "name": "provider_id",
             "required": false,
             "schema": {
-              "default": "kimi_coding",
+              "default": "volcengine_ark",
               "title": "Provider Id",
               "type": "string"
             }
@@ -21251,7 +21251,7 @@
             "name": "model",
             "required": false,
             "schema": {
-              "default": "kimi-for-coding",
+              "default": "kimi-k3",
               "title": "Model",
               "type": "string"
             }

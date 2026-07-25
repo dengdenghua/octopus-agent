@@ -28,6 +28,7 @@ except ImportError:  # pragma: no cover
     Query = None  # type: ignore[assignment,misc]
     Request = None  # type: ignore[assignment,misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from .evolution_ops import (
     _as_dt,
     _bounded_score,
@@ -134,8 +135,7 @@ def create_evolution_ops_router(
     level, these write paths require the caller to present a valid
     Bearer token resolved by ``identity_store``.
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["evolution-ops"])
     local_suppressed_skill_proposals: set[str] = set()

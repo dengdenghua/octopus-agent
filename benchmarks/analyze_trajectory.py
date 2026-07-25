@@ -57,6 +57,8 @@ def normalized_tool_name(step: dict[str, Any]) -> str | None:
     # distinct from an MCP tool. MCP/plugin calls carry their name on the
     # item (or, failing that, the item type).
     item_type = item.get("type")
+    if item_type == "commandExecution" and item.get("command"):
+        return str(item["command"])
     if item_type == "command_execution" or flat == "command_execution":
         return "command_execution"
     if item_type in _MCP_KINDS:

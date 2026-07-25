@@ -41,6 +41,20 @@ async function validate(v,n){await new Promise(r=>setTimeout(r,v.startsWith('slo
 e.addEventListener('input',()=>validate(e.value,++seq));f.addEventListener('submit',x=>{x.preventDefault();f.dataset.submittedEmail=e.value})</script>
 </body></html>""",
     )
+    _write(
+        workspace / "tests" / "test_race.js",
+        """const assert = require('assert');
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function validate(value) { await wait(value.startsWith('slow') ? 300 : 40); return value; }
+(async () => {
+  const slow = validate('slow@example.com');
+  await wait(10);
+  const fast = await validate('fast@example.com');
+  assert.equal(fast, 'fast@example.com');
+  await slow;
+})();
+""",
+    )
 
 
 def _parallel(workspace: Path) -> None:
@@ -220,3 +234,106 @@ def test_contract_fixture_verifier_is_satisfiable(case_id: str, tmp_path: Path) 
     result = json.loads(completed.stdout)
 
     assert result["passed"] is True, result
+
+
+def test_skill_roundtrip_verifier_accepts_semantic_chinese_procedure(tmp_path: Path) -> None:
+    case_id = "extensions.skill-roundtrip"
+    workspace = tmp_path / case_id
+    shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / case_id, workspace)
+    _write(
+        workspace / "skill" / "SKILL.md",
+        "读取整数列表，丢弃所有负数，对剩余值求平方，最后按升序排序。",
+    )
+    _write(workspace / "result.json", json.dumps({"values": [0, 9, 25]}))
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "benchmarks" / "verifiers" / "verify_contract_case.py"),
+            case_id,
+            str(workspace),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert json.loads(completed.stdout)["passed"] is True
+
+
+def test_skill_roundtrip_verifier_still_rejects_missing_discard_step(tmp_path: Path) -> None:
+    case_id = "extensions.skill-roundtrip"
+    workspace = tmp_path / case_id
+    shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / case_id, workspace)
+    _write(workspace / "skill" / "SKILL.md", "将负数与其他整数一起平方并按升序排序。")
+    _write(workspace / "result.json", json.dumps({"values": [0, 9, 25]}))
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "benchmarks" / "verifiers" / "verify_contract_case.py"),
+            case_id,
+            str(workspace),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    result = json.loads(completed.stdout)
+
+    assert result["passed"] is False
+    assert "discard" in result["reason"]
+
+
+def test_async_form_verifier_rejects_missing_persistent_race_test(tmp_path: Path) -> None:
+    case_id = "frontend.async-form-recovery"
+    workspace = tmp_path / case_id
+    shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / case_id, workspace)
+    _async_form(workspace)
+    (workspace / "tests" / "test_race.js").unlink()
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "benchmarks" / "verifiers" / "verify_contract_case.py"),
+            case_id,
+            str(workspace),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    result = json.loads(completed.stdout)
+
+    assert result["passed"] is False
+    assert "persistent race regression" in result["reason"]
+
+
+def test_async_form_verifier_rejects_test_auto_loaded_by_production_page(tmp_path: Path) -> None:
+    case_id = "frontend.async-form-recovery"
+    workspace = tmp_path / case_id
+    shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / case_id, workspace)
+    _async_form(workspace)
+    index = workspace / "index.html"
+    index.write_text(
+        index.read_text(encoding="utf-8").replace(
+            "</body>", '<script src="tests/test_race.js"></script></body>'
+        ),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "benchmarks" / "verifiers" / "verify_contract_case.py"),
+            case_id,
+            str(workspace),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    result = json.loads(completed.stdout)
+
+    assert result["passed"] is False
+    assert "separate from index.html" in result["reason"]

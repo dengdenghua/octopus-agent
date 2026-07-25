@@ -2,6 +2,10 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import {
+  BotIcon,
+  BrainIcon,
+  DatabaseIcon,
+  DnaIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
   MoreHorizontalIcon,
@@ -137,6 +141,32 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
     null,
   );
   const [renameValue, setRenameValue] = useState("");
+  const workspaceDestinations = [
+    {
+      label: t.sidebar.navHR,
+      to: "/workspace/agents?surface=chat",
+      icon: BotIcon,
+      active: pathname.startsWith("/workspace/agents"),
+    },
+    {
+      label: t.sidebar.navIntelligence,
+      to: "/workspace/intelligence?surface=chat",
+      icon: BrainIcon,
+      active: pathname.startsWith("/workspace/intelligence"),
+    },
+    {
+      label: t.sidebar.navEvolution,
+      to: "/workspace/evolution?surface=chat",
+      icon: DnaIcon,
+      active: pathname.startsWith("/workspace/evolution"),
+    },
+    {
+      label: t.sidebar.navDatabase,
+      to: "/workspace/storage?surface=company&library=docs",
+      icon: DatabaseIcon,
+      active: pathname.startsWith("/workspace/storage"),
+    },
+  ];
 
   const handleRenameSubmit = useCallback(() => {
     if (threadToRename && renameValue.trim()) {
@@ -218,161 +248,202 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="left"
-        className={cn(
-          "gap-0 p-0",
-          "data-[state=open]:duration-300 data-[state=closed]:duration-200",
-        )}
-        style={{ width: DRAWER_WIDTH, maxWidth: DRAWER_WIDTH }}
-      >
-        <SheetHeader className="border-b border-border-subtle px-4 py-3 pr-12">
-          <SheetTitle className="text-sm font-semibold">
-            {t.sidebar.sectionChats}
-          </SheetTitle>
-          <SheetDescription className="sr-only">
-            {t.sidebar.sectionChats}
-          </SheetDescription>
-        </SheetHeader>
+        <SheetContent
+          side="left"
+          className={cn(
+            "gap-0 p-0",
+            "data-[state=open]:duration-300 data-[state=closed]:duration-200",
+          )}
+          style={{ width: DRAWER_WIDTH, maxWidth: DRAWER_WIDTH }}
+        >
+          <SheetHeader className="border-b border-border-subtle px-4 py-3 pr-12">
+            <SheetTitle className="text-sm font-semibold">
+              {t.sidebar.sectionChats}
+            </SheetTitle>
+            <SheetDescription className="sr-only">
+              {t.sidebar.sectionChats}
+            </SheetDescription>
+          </SheetHeader>
 
-        <div className="flex flex-col gap-2 px-3 pt-3">
-          <button
-            type="button"
-            onClick={startNewChat}
-            className={cn(
-              "group flex h-9 w-full items-center justify-center gap-2",
-              "border border-primary/30 bg-primary/8 text-sm font-medium text-primary",
-              "transition-colors hover:bg-primary/14 active:scale-[0.99]",
-            )}
+          <nav
+            aria-label={t.sidebar.navigate}
+            className="border-b border-border-subtle px-3 py-3"
           >
-            <MessageSquarePlusIcon className="size-4" />
-            {t.sidebar.actionNewTask}
-          </button>
-
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t.sidebar.searchChats}
-              className="h-8 pl-8 text-[12.5px]"
-            />
-          </div>
-        </div>
-
-        <div className="mt-3 flex items-center justify-between px-4 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-          <span className="flex items-center gap-1.5">
-            <MessageSquareIcon className="size-3" />
-            {t.sidebar.recentChats}
-          </span>
-          <span className="text-xs text-muted-foreground/55">
-            {filteredThreads.length}
-          </span>
-        </div>
-
-        <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-          {filteredThreads.length === 0 ? (
-            <div className="mt-4 rounded-md border border-dashed border-border-default px-3 py-4 text-center text-xs text-muted-foreground/75">
-              {query.trim() ? t.sidebar.noMatchingChats : t.sidebar.noChatsYet}
+            <div className="mb-1.5 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+              {t.sidebar.navigate}
             </div>
-          ) : (
-            <ul className="flex flex-col gap-px">
-              {filteredThreads.map((thread) => {
-                const href = threadHref(thread);
-                const active =
-                  activeWorkspaceThreadIdFromPathname(pathname) ===
-                  thread.thread_id;
+            <div className="grid grid-cols-2 gap-1.5">
+              {workspaceDestinations.map((item) => {
+                const Icon = item.icon;
                 return (
-                  <li key={thread.thread_id} className="group/thread relative">
-                    <Link
-                      to={href}
-                      state={{
-                        threadOwnerAgentId:
-                          threadOwnerAgent(thread) || undefined,
-                        workspacePath: threadWorkspacePath(thread) || undefined,
-                      }}
-                      onMouseDown={() => {
-                        const owner = threadOwnerAgent(thread);
-                        if (owner) emitAgentChanged(owner, "thread");
-                      }}
-                      onClick={() => onOpenChange(false)}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] transition-colors",
-                        "hover:bg-muted/55",
-                        active &&
-                          "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)] font-medium",
-                      )}
-                    >
-                      <span className="min-w-0 flex-1 truncate leading-tight">
-                        {deriveTitle(thread)}
-                      </span>
-                      <span
-                        className={cn(
-                          "w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-xs text-muted-foreground/65",
-                          "transition-[width,opacity] group-hover/thread:w-0 group-hover/thread:opacity-0",
-                        )}
-                      >
-                        {formatCompactRelativeTimestamp(thread.updated_at)}
-                      </span>
-                    </Link>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          title={t.common.more}
-                          aria-label={t.common.more}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          className={cn(
-                            "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-md",
-                            "text-muted-foreground/60 opacity-0 transition-opacity",
-                            "hover:bg-muted/60 hover:text-foreground",
-                            "group-hover/thread:opacity-100 data-[state=open]:opacity-100",
-                          )}
-                        >
-                          <MoreHorizontalIcon className="size-3.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" side="right">
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setThreadToRename(thread);
-                            setRenameValue(deriveTitle(thread));
-                          }}
-                        >
-                          <PencilIcon className="text-muted-foreground" />
-                          <span>{t.common.rename}</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          disabled={deleteThread.isPending}
-                          onSelect={() => void handleDelete(thread)}
-                        >
-                          <Trash2Icon className="text-muted-foreground" />
-                          <span>{t.sidebar.deleteThreadTooltip}</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </li>
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => onOpenChange(false)}
+                    aria-current={item.active ? "page" : undefined}
+                    className={cn(
+                      "flex h-10 min-w-0 items-center gap-2 rounded-md px-2.5 text-[12.5px] font-medium outline-none transition-colors",
+                      "focus-visible:ring-2 focus-visible:ring-primary/55 focus-visible:ring-offset-1",
+                      item.active
+                        ? "bg-muted/70 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/55 hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="size-3.5 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
                 );
               })}
-            </ul>
-          )}
-        </div>
+            </div>
+          </nav>
 
-        <div className="border-t border-border-subtle p-2">
-          <button
-            type="button"
-            onClick={openSettings}
-            className="flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-          >
-            <SettingsIcon className="size-4" />
-            {t.common.settings}
-          </button>
-        </div>
-      </SheetContent>
+          <div className="flex flex-col gap-2 px-3 pt-3">
+            <button
+              type="button"
+              onClick={startNewChat}
+              className={cn(
+                "group flex h-10 w-full items-center justify-center gap-2 outline-none",
+                "border border-primary/30 bg-primary/8 text-sm font-medium text-primary",
+                "transition-colors hover:bg-primary/14 active:scale-[0.99]",
+                "focus-visible:ring-2 focus-visible:ring-primary/55 focus-visible:ring-offset-1",
+              )}
+            >
+              <MessageSquarePlusIcon className="size-4" />
+              {t.sidebar.actionNewTask}
+            </button>
+
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t.sidebar.searchChats}
+                className="h-10 pl-8 text-[12.5px]"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between px-4 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+            <span className="flex items-center gap-1.5">
+              <MessageSquareIcon className="size-3" />
+              {t.sidebar.recentChats}
+            </span>
+            <span className="text-xs text-muted-foreground/55">
+              {filteredThreads.length}
+            </span>
+          </div>
+
+          <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+            {filteredThreads.length === 0 ? (
+              <div className="mt-4 rounded-md border border-dashed border-border-default px-3 py-4 text-center text-xs text-muted-foreground/75">
+                {query.trim()
+                  ? t.sidebar.noMatchingChats
+                  : t.sidebar.noChatsYet}
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-px">
+                {filteredThreads.map((thread) => {
+                  const href = threadHref(thread);
+                  const active =
+                    activeWorkspaceThreadIdFromPathname(pathname) ===
+                    thread.thread_id;
+                  return (
+                    <li
+                      key={thread.thread_id}
+                      className="group/thread relative"
+                    >
+                      <Link
+                        to={href}
+                        state={{
+                          threadOwnerAgentId:
+                            threadOwnerAgent(thread) || undefined,
+                          workspacePath:
+                            threadWorkspacePath(thread) || undefined,
+                        }}
+                        onMouseDown={() => {
+                          const owner = threadOwnerAgent(thread);
+                          if (owner) emitAgentChanged(owner, "thread");
+                        }}
+                        onClick={() => onOpenChange(false)}
+                        aria-current={active ? "page" : undefined}
+                        className={cn(
+                          "flex min-h-10 items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] outline-none transition-colors",
+                          "hover:bg-muted/55",
+                          "focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset",
+                          active &&
+                            "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)] font-medium",
+                        )}
+                      >
+                        <span className="min-w-0 flex-1 truncate leading-tight">
+                          {deriveTitle(thread)}
+                        </span>
+                        <span
+                          className={cn(
+                            "w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-xs text-muted-foreground/65 [@media(hover:none)]:mr-6",
+                            "transition-[width,opacity] group-hover/thread:w-0 group-hover/thread:opacity-0",
+                          )}
+                        >
+                          {formatCompactRelativeTimestamp(thread.updated_at)}
+                        </span>
+                      </Link>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            title={t.common.more}
+                            aria-label={t.common.more}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            className={cn(
+                              "absolute right-1 top-1/2 -translate-y-1/2 flex size-7 items-center justify-center rounded-md outline-none",
+                              "text-muted-foreground/60 opacity-0 transition-opacity [@media(hover:none)]:opacity-100",
+                              "hover:bg-muted/60 hover:text-foreground",
+                              "focus-visible:bg-muted/60 focus-visible:text-foreground focus-visible:opacity-100",
+                              "group-hover/thread:opacity-100 data-[state=open]:opacity-100",
+                            )}
+                          >
+                            <MoreHorizontalIcon className="size-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" side="right">
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setThreadToRename(thread);
+                              setRenameValue(deriveTitle(thread));
+                            }}
+                          >
+                            <PencilIcon className="text-muted-foreground" />
+                            <span>{t.common.rename}</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={deleteThread.isPending}
+                            onSelect={() => void handleDelete(thread)}
+                          >
+                            <Trash2Icon className="text-muted-foreground" />
+                            <span>{t.sidebar.deleteThreadTooltip}</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div className="border-t border-border-subtle p-2">
+            <button
+              type="button"
+              onClick={openSettings}
+              className="flex h-10 w-full items-center gap-2 rounded-md px-2.5 text-[12.5px] font-medium text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset"
+            >
+              <SettingsIcon className="size-4" />
+              {t.common.settings}
+            </button>
+          </div>
+        </SheetContent>
       </Sheet>
       <Dialog
         open={threadToRename !== null}
@@ -388,9 +459,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
           className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-base">
-              {t.common.rename}
-            </DialogTitle>
+            <DialogTitle className="text-base">{t.common.rename}</DialogTitle>
           </DialogHeader>
           <Input
             value={renameValue}

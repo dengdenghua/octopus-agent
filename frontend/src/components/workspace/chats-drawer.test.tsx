@@ -33,4 +33,33 @@ describe("ChatsDrawer", () => {
     await waitFor(() => expect(openSettings).toHaveBeenCalledTimes(1));
     window.removeEventListener("octopus:open-settings", openSettings);
   });
+
+  it("keeps primary workspace destinations reachable on narrow screens", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+
+    renderWithProviders(<ChatsDrawer open onOpenChange={onOpenChange} />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getByRole("link", { name: "Hub" })).toHaveAttribute(
+      "href",
+      "/workspace/agents?surface=chat",
+    );
+    expect(screen.getByRole("link", { name: "自动化" })).toHaveAttribute(
+      "href",
+      "/workspace/intelligence?surface=chat",
+    );
+    expect(screen.getByRole("link", { name: "自进化" })).toHaveAttribute(
+      "href",
+      "/workspace/evolution?surface=chat",
+    );
+    expect(screen.getByRole("link", { name: "本地数据库" })).toHaveAttribute(
+      "href",
+      "/workspace/storage?surface=company&library=docs",
+    );
+
+    await user.click(screen.getByRole("link", { name: "本地数据库" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });

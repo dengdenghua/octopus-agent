@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -70,12 +71,18 @@ class CodexCliTrialRunner:
             if isinstance(event, dict):
                 events.extend(_codex_event_to_eval(event))
         if completed.returncode != 0:
+            kind = (
+                "infrastructure_error"
+                if _is_infrastructure_error(completed.stderr)
+                else "error"
+            )
             events.append(
                 {
-                    "kind": "error",
+                    "kind": kind,
                     "error": {
                         "returncode": completed.returncode,
                         "stderr": completed.stderr[-4000:],
+                        **({"type": "infrastructure"} if kind == "infrastructure_error" else {}),
                     },
                 }
             )
@@ -130,8 +137,46 @@ def _codex_event_to_eval(event: dict[str, Any]) -> list[dict[str, Any]]:
             text = str(item.get("text") or item.get("summary") or "")
             return [{"kind": "reasoning_delta", "delta": text}] if text else []
     if event_type in {"error", "turn.failed"}:
-        return [{"kind": "error", "error": event.get("error") or event}]
+        detail = event.get("error") or event
+        kind = "infrastructure_error" if _is_infrastructure_error(detail) else "error"
+        return [{"kind": kind, "error": detail}]
     return [{"kind": "protocol_event", "event_type": event_type, "event": event}]
+
+
+_INFRASTRUCTURE_ERROR_PATTERNS = (
+    r"\breconnecting\b",
+    r"stream disconnected",
+    r"tls (?:handshake|error|failure)",
+    r"connection (?:reset|refused|aborted|closed)",
+    r"failed to connect",
+    r"network (?:is unreachable|error|failure)",
+    r"temporary failure in name resolution",
+    r"\b(?:dns|econnreset|econnrefused)\b",
+    r"\b(?:402|429|502|503|504)\b",
+    r"rate.?limit",
+    r"(?:usage|spend|quota) limit",
+    r"insufficient_quota",
+    r"insufficient (?:balance|funds)",
+    r"payment required",
+    r"credit balance",
+    r"余额不足",
+    r"service unavailable",
+    r"gateway timeout",
+    r"provider (?:is )?(?:unavailable|overloaded)",
+    r"authentication (?:failed|required)",
+    r"invalid api key",
+)
+
+
+def _is_infrastructure_error(detail: Any) -> bool:
+    """Recognize provider/transport failures without scoring them as agent mistakes."""
+
+    if isinstance(detail, (dict, list)):
+        rendered = json.dumps(detail, ensure_ascii=False, sort_keys=True)
+    else:
+        rendered = str(detail)
+    lowered = rendered.lower()
+    return any(re.search(pattern, lowered) for pattern in _INFRASTRUCTURE_ERROR_PATTERNS)
 
 
 __all__ = ["CodexCliTrialRunner", "WorkspaceResolver", "codex_cli_version"]

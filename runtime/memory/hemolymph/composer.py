@@ -10,6 +10,7 @@ from collections import deque
 from typing import Any
 
 from runtime.adapters.instrumentation import trace_stage
+from runtime.core.hearts.gill_pump import GillCache
 from runtime.execution.suckers import SkillRegistry
 from runtime.memory.journal import Journal, TrajectoryEvent
 from runtime.platform.models import (
@@ -271,6 +272,8 @@ class ContextComposer:
         journal: Journal | None = None,
         quotas: QuotaAllocation = DEFAULT_QUOTAS,
         engine: ContextEngine | None = None,
+        gill_cache: GillCache | None = None,
+        gill_max_age_s: float = 2.0,
     ) -> None:
         self.registry = registry
         self.journal = journal
@@ -279,6 +282,8 @@ class ContextComposer:
         # TruncationContextEngine when none is supplied so existing
         # callers are unaffected.
         self.engine: ContextEngine = engine or TruncationContextEngine()
+        self.gill_cache = gill_cache
+        self.gill_max_age_s = max(0.1, float(gill_max_age_s))
 
     def compose(
         self,
@@ -341,20 +346,32 @@ class ContextComposer:
 
             # ─── memory bucket ───────────────────
             if self.journal is not None:
-                mem_blurbs = self._render_recent_trajectories(
+                memory_key = self.memory_cache_key(
                     n=history_cutoff_n,
                     arm_id=arm_id,
                     budget_for_bucket=alloc["memory"],
                 )
-                for blurb, refs in mem_blurbs:
-                    segments.append(
-                        ContextSegment(
-                            bucket="memory",
-                            content=blurb,
-                            tokens_estimated=estimate_tokens(blurb),
-                            source_refs=refs,
-                        )
+                cached_memory = (
+                    self.gill_cache.get_memory(
+                        memory_key,
+                        max_age_s=self.gill_max_age_s,
                     )
+                    if self.gill_cache is not None
+                    else []
+                )
+                if cached_memory:
+                    segments.extend(cached_memory)
+                    span.set_attribute("octopus.compose.gill_memory_hit", True)
+                else:
+                    memory_segments = self.prefetch_memory_segments(
+                        n=history_cutoff_n,
+                        arm_id=arm_id,
+                        budget_for_bucket=alloc["memory"],
+                    )
+                    segments.extend(memory_segments)
+                    if self.gill_cache is not None:
+                        self.gill_cache.set_memory(memory_segments, memory_key)
+                    span.set_attribute("octopus.compose.gill_memory_hit", False)
 
             final_segments = self.engine.compress(segments, budget_tokens)
 
@@ -384,6 +401,42 @@ class ContextComposer:
                 recipe_id=recipe_id,
                 task_type=task_type,
             )
+
+    @staticmethod
+    def memory_cache_key(
+        *, n: int, arm_id: ArmId | None, budget_for_bucket: int
+    ) -> str:
+        """Stable identity for a recent-trajectory retrieval window."""
+        return f"recent-trajectories:{arm_id or '*'}:{n}:{budget_for_bucket}"
+
+    def prefetch_memory_segments(
+        self,
+        *,
+        n: int = 5,
+        arm_id: ArmId | None = None,
+        budget_for_bucket: int,
+    ) -> list[ContextSegment]:
+        """Render memory in the same shape consumed by ``compose``.
+
+        A GillHeartPump can call this method ahead of the next turn and store
+        the result under ``memory_cache_key``. The normal synchronous path
+        uses it as a safe fallback on a miss or stale entry.
+        """
+        if self.journal is None:
+            return []
+        return [
+            ContextSegment(
+                bucket="memory",
+                content=blurb,
+                tokens_estimated=estimate_tokens(blurb),
+                source_refs=refs,
+            )
+            for blurb, refs in self._render_recent_trajectories(
+                n=n,
+                arm_id=arm_id,
+                budget_for_bucket=budget_for_bucket,
+            )
+        ]
 
     @staticmethod
     def _render_task(task_info: Any) -> str:

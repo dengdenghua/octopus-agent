@@ -9,7 +9,11 @@ import { singleHunkDiff } from "@/components/realtime/item-views/file-change-vie
 import { artifactDisplayPath } from "@/core/artifacts/utils";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
-import { stripUploadedFilesTag } from "@/core/messages/utils";
+import {
+  stripInternalToolProtocol,
+  stripLeakedRendererMarkup,
+  stripUploadedFilesTag,
+} from "@/core/messages/utils";
 import { swallow } from "@/core/utils/log";
 import {
   getFileExtensionDisplayName,
@@ -68,6 +72,25 @@ type VerificationEntry = {
   passed: boolean;
   detail?: string;
 };
+
+const VERIFICATION_DETAIL_SECRET_RE =
+  /\b(?:sk|pk|rk|ghp|gho|ghs|ghu|xox[baprs])[-_][A-Za-z0-9]{8,}\b|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}|\b(?:Bearer|Authorization:?)\s+[A-Za-z0-9._-]{10,}|(["']?(?:api[_-]?key|secret|password|passwd|token)["']?\s*[:=]\s*)["']?[^\s"',}]{4,}/gi;
+const VERIFICATION_RAW_TOOL_RE =
+  /\b(?:read_file|exec_shell|shell_command|run_command|todo_write|apply_patch|write_file|edit_file|str_replace)\b/gi;
+const VERIFICATION_PROTOCOL_PREFIX_RE =
+  /^\s*(?:Thought|Action|Observation|Final Answer|Tool|Tool Result)\s*:\s*/gim;
+
+function sanitizeVerificationText(value: string): string {
+  return stripLeakedRendererMarkup(stripInternalToolProtocol(value), {
+    trim: true,
+  })
+    .replace(VERIFICATION_DETAIL_SECRET_RE, (_match, prefix?: string) =>
+      prefix ? `${prefix}«redacted»` : "«redacted»",
+    )
+    .replace(VERIFICATION_RAW_TOOL_RE, "operation")
+    .replace(VERIFICATION_PROTOCOL_PREFIX_RE, "")
+    .trim();
+}
 
 type OutputSummary = {
   artifacts: OutputArtifact[];
@@ -205,12 +228,19 @@ const VERIFICATION_TOOL_NAMES = new Set([
   "format_code",
 ]);
 
+function isVerificationToolName(name: string): boolean {
+  return (
+    VERIFICATION_TOOL_NAMES.has(name) ||
+    /^(?:verify|verification|check|test|lint|build)[_-]/i.test(name)
+  );
+}
+
 function verificationFromToolMessage(
   toolMessage: ToolMessage,
   toolCallMap: Map<string, ToolCall>,
 ): VerificationEntry | null {
   const toolCall = toolCallMap.get(toolMessage.tool_call_id);
-  if (!toolCall || !VERIFICATION_TOOL_NAMES.has(toolCall.name)) return null;
+  if (!toolCall || !isVerificationToolName(toolCall.name)) return null;
 
   // Try to parse structured result from content
   const content =
@@ -240,12 +270,13 @@ function verificationFromToolMessage(
     result?.success === true ||
     result?.exit_code === 0;
 
-  const detail =
+  const rawDetail =
     typeof result?.error === "string"
       ? result.error
       : typeof result?.stdout === "string"
         ? result.stdout.slice(0, 200)
-        : undefined;
+        : "";
+  const detail = rawDetail ? sanitizeVerificationText(rawDetail) : undefined;
 
   return {
     id: toolMessage.tool_call_id,
@@ -424,7 +455,7 @@ export function MessageOutputSummary({
       case "build":
         return t.message.buildSucceeded;
       default:
-        return toolName;
+        return t.message.verificationRan;
     }
   };
 

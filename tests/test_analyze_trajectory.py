@@ -24,6 +24,18 @@ def test_codex_command_execution_wrapper() -> None:
     assert normalized_tool_name(step) == "command_execution"
 
 
+def test_octopus_command_execution_wrapper_exposes_skill_name() -> None:
+    step = {
+        "kind": "tool_start",
+        "payload": {
+            "tool_name": "command_execution",
+            "item": {"type": "commandExecution", "command": "browser_navigate"},
+        },
+    }
+
+    assert normalized_tool_name(step) == "browser_navigate"
+
+
 def test_codex_mcp_tool_call_uses_item_name() -> None:
     step = _start({"item": {"type": "mcp_tool_call", "tool_name": "browser.click"}})
     assert normalized_tool_name(step) == "browser.click"

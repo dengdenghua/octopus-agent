@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
+import { listLocalAgentPartners, type LocalAgentPartner } from "./api";
+import { localPartnerLogoUrl } from "./partner-brand";
 import type { Agent } from "./types";
 
 /** A coding-agent CLI detected on this machine (from `/api/cli-team/status`). */
@@ -16,6 +19,16 @@ interface CliTeamStatus {
   detected: DetectedPartner[];
   repo_root: string;
   is_git_repo: boolean;
+}
+
+export interface LocalCliPartnerAgent {
+  agent: Agent;
+  partnerId: string;
+  detected: boolean;
+  ready: boolean;
+  registered: boolean;
+  status: string;
+  fixHint?: string | null;
 }
 
 const PARTNER_LABEL: Record<string, string> = {
@@ -40,18 +53,6 @@ const PARTNER_ICON: Record<string, string> = {
   hermes: "🪽",
 };
 
-const PARTNER_LOGO_URL: Record<string, string> = {
-  "claude-code": "https://claude.ai/favicon.ico",
-  "codex-cli": "https://chatgpt.com/favicon.ico",
-  "trae-cli":
-    "https://lf-static.traecdn.us/obj/trae-ai-tx/trae_website/favicon.png",
-  "qoder-cli":
-    "https://img.alicdn.com/imgextra/i3/O1CN01KliT1u1jEq947NlKH_!!6000000004517-55-tps-180-180.svg",
-  "kimi-cli": "https://www.kimi.com/favicon.ico",
-  "codebuddy-cli":
-    "https://codebuddy-1328495429.cos.accelerate.myqcloud.com/web/ide/logo.svg",
-};
-
 const DRIVABLE_PARTNERS = new Set([
   "claude-code",
   "codex-cli",
@@ -72,13 +73,45 @@ function partnerToAgent(p: DetectedPartner): Agent {
     icon: PARTNER_ICON[p.partner_id] ?? "🖥️",
     // Prefer the partner's brand logo; the emoji icon stays as the fallback.
     avatar_url:
-      PARTNER_LOGO_URL[p.partner_id] ?? `/api/agents/${p.agent_id}/avatar`,
+      localPartnerLogoUrl(p.partner_id) ?? `/api/agents/${p.agent_id}/avatar`,
     model: null,
     tool_groups: null,
     capabilities: {
       local_partner: DRIVABLE_PARTNERS.has(p.partner_id),
       local_partner_id: p.partner_id,
       local_partner_command: p.command,
+    },
+  };
+}
+
+function localPartnerToAgent(
+  partner: LocalAgentPartner,
+  detected?: DetectedPartner,
+): Agent {
+  const partnerId = partner.id;
+  const label = partner.name || PARTNER_LABEL[partnerId] || partnerId;
+  const command =
+    detected?.command || partner.command || partner.executable || "";
+  return {
+    name: partner.agent_id,
+    display_name: label,
+    description:
+      partner.setup_hint ||
+      partner.description ||
+      `本机 ${label} · 用你的订阅，在隔离 worktree 里跑、共享团队黑板`,
+    icon:
+      partner.id === "claude-code"
+        ? "CC"
+        : (partner.icon ?? PARTNER_ICON[partnerId] ?? "CLI"),
+    avatar_url:
+      localPartnerLogoUrl(partnerId, partner.avatar_url) ??
+      `/api/agents/${partner.agent_id}/avatar`,
+    model: null,
+    tool_groups: null,
+    capabilities: {
+      local_partner: DRIVABLE_PARTNERS.has(partnerId),
+      local_partner_id: partnerId,
+      local_partner_command: command,
     },
   };
 }
@@ -118,6 +151,85 @@ export function useLocalCliAgents(): {
     isFetching,
     isError,
     refresh: refetch,
+  };
+}
+
+export function useLocalCliPartnerAgents(): {
+  partners: LocalCliPartnerAgent[];
+  isLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  refresh: () => Promise<unknown>;
+} {
+  const statusQuery = useQuery({
+    queryKey: ["cli-team-status"],
+    queryFn: async ({ signal }): Promise<CliTeamStatus> => {
+      const res = await fetch(`${getBackendBaseURL()}/api/cli-team/status`, {
+        cache: "no-store",
+        headers: authHeaders(),
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to detect local CLI partners: ${res.status}`);
+      }
+      return (await res.json()) as CliTeamStatus;
+    },
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+  const partnersQuery = useQuery({
+    queryKey: ["agents", "local-partners"],
+    queryFn: ({ signal }) => listLocalAgentPartners({ signal }),
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
+  const detectedByPartnerId = useMemo(
+    () =>
+      new Map(
+        (statusQuery.data?.detected ?? []).map((partner) => [
+          partner.partner_id,
+          partner,
+        ]),
+      ),
+    [statusQuery.data?.detected],
+  );
+  const partners = useMemo<LocalCliPartnerAgent[]>(() => {
+    const full = partnersQuery.data ?? [];
+    if (full.length > 0) {
+      return full.map((partner) => {
+        const detected = detectedByPartnerId.get(partner.id);
+        return {
+          agent: localPartnerToAgent(partner, detected),
+          partnerId: partner.id,
+          detected: Boolean(detected || partner.detected),
+          ready: Boolean(partner.ready ?? detected),
+          registered: Boolean(partner.registered),
+          status: partner.effective_status || partner.status || "missing",
+          fixHint: partner.fix_hint,
+        };
+      });
+    }
+    return (statusQuery.data?.detected ?? []).map((partner) => ({
+      agent: partnerToAgent(partner),
+      partnerId: partner.partner_id,
+      detected: true,
+      ready: true,
+      registered: false,
+      status: "detected",
+      fixHint: null,
+    }));
+  }, [detectedByPartnerId, partnersQuery.data, statusQuery.data?.detected]);
+
+  const refresh = async () => {
+    await Promise.all([statusQuery.refetch(), partnersQuery.refetch()]);
+  };
+  return {
+    partners,
+    isLoading: statusQuery.isLoading || partnersQuery.isLoading,
+    isFetching: statusQuery.isFetching || partnersQuery.isFetching,
+    isError: statusQuery.isError && partnersQuery.isError,
+    refresh,
   };
 }
 

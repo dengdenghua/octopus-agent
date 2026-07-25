@@ -13,16 +13,24 @@
 import type { ReplayData, ReplayStep } from "@/core/sharing/replay-html";
 
 import {
-  commandForBlock,
+  stripInternalToolProtocol,
+  stripLeakedRendererMarkup,
+} from "@/core/messages/utils";
+import {
   isRecord,
   stringFromKeys,
   textFromUnknown,
 } from "./agent-workbench-utils";
+import { normalizeAgentPhaseTitle } from "./agent-phases";
 import type { WorkBlock } from "./work-blocks";
 
 const MAX_BODY = 1200;
 /** Cap an inlined image's base64 length (~1.5 MB binary) so the HTML stays portable. */
 const MAX_IMAGE_B64 = 2_000_000;
+const INTERNAL_REPLAY_BLOCK_RE =
+  /`?<(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)\b[^<>`]*>[\s\S]*?<\/(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)>`?/g;
+const RAW_TOOL_NAME_RE =
+  /\b(?:read_file|exec_shell|shell_command|run_command|todo_write|apply_patch|write_file|edit_file|str_replace)\b/gi;
 
 /** Best-effort secret scrub applied to every embedded body. */
 export function redactSecrets(text: string): string {
@@ -51,11 +59,27 @@ function truncate(text: string, max = MAX_BODY): string {
   return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
 }
 
+export function sanitizeReplayText(
+  text: string,
+  options: { max?: number; normalizeTitle?: boolean } = {},
+): string {
+  const withoutInternalBlocks = text.replace(INTERNAL_REPLAY_BLOCK_RE, "");
+  const withoutProtocol = stripLeakedRendererMarkup(
+    stripInternalToolProtocol(withoutInternalBlocks),
+  );
+  const withoutSecrets = redactSecrets(withoutProtocol);
+  const normalized = options.normalizeTitle
+    ? normalizeAgentPhaseTitle(withoutSecrets)
+    : withoutSecrets.trim();
+  return truncate(
+    normalized.replace(RAW_TOOL_NAME_RE, "operation"),
+    options.max ?? MAX_BODY,
+  );
+}
+
 function bodyForBlock(block: WorkBlock): string {
   const parts: string[] = [];
   if (block.kind === "terminal") {
-    const cmd = commandForBlock(block);
-    if (cmd) parts.push(`$ ${cmd}`);
     const out = block.outputText || textFromUnknown(block.event.output);
     if (out) parts.push(out);
   } else {
@@ -65,7 +89,7 @@ function bodyForBlock(block: WorkBlock): string {
     if (block.outputText) parts.push(block.outputText);
   }
   const joined = parts.join("\n").trim();
-  return joined ? truncate(redactSecrets(joined)) : "";
+  return joined ? sanitizeReplayText(joined) : "";
 }
 
 /**
@@ -129,8 +153,13 @@ export function buildReplayFromBlocks(
       const image = imageForBlock(block);
       return {
         kind: block.kind,
-        title: block.title,
-        subtitle: block.subtitle || undefined,
+        title: sanitizeReplayText(block.title, {
+          max: 180,
+          normalizeTitle: true,
+        }),
+        subtitle: block.subtitle
+          ? sanitizeReplayText(block.subtitle, { max: 240 })
+          : undefined,
         body: body || undefined,
         status: block.status,
         image,

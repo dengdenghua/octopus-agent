@@ -64,6 +64,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 _SAFE_SKILL_INSTALL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
@@ -281,8 +282,7 @@ def create_meta_router(
         with the submitting user. Both being ``None`` means
         anonymous feedback still records (tagged ``actor=None``).
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["meta"])
     _feedback_path = Path(feedback_path)

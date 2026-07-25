@@ -1,5 +1,10 @@
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { toWorkBlocks, type WorkBlock } from "./work-blocks";
+import {
+  taskPlanItemActiveLabel,
+  taskPlanItemContent,
+  taskPlanItemId,
+} from "@/core/todos/task-plan";
 
 export type AgentPhaseStatus =
   | "pending"
@@ -85,26 +90,26 @@ function extractTodoPhases(
   const raw = todo?.input?.items ?? todo?.input?.todos;
   if (!Array.isArray(raw) || raw.length < 2) return null;
 
+  const occurrences = new Map<string, number>();
   const phases = raw
-    .map((item, index): AgentPhase | null => {
+    .map((item): AgentPhase | null => {
       if (!item || typeof item !== "object") return null;
       const record = item as Record<string, unknown>;
-      const title =
-        firstString(record, ["activeForm", "active_form"]) ||
-        firstString(record, ["content", "text", "title", "task"]);
-      if (!title) return null;
+      const content = taskPlanItemContent(record);
+      if (!content) return null;
+      const occurrence = occurrences.get(content) ?? 0;
+      occurrences.set(content, occurrence + 1);
       const status = normalizePhaseStatus(
         todoStatus(record.status),
         [],
         options,
       );
+      const activeLabel = taskPlanItemActiveLabel(record);
       const displayTitle =
-        (options.runSettled || options.hasAnswer) && status === "done"
-          ? title.replace(/^正在\s*/, "")
-          : title;
+        status === "running" && activeLabel ? activeLabel : content;
       return {
-        id: `todo-phase:${index}`,
-        title: phaseTitle(displayTitle, index),
+        id: `todo-phase:${taskPlanItemId(record, occurrence)}`,
+        title: phaseTitle(displayTitle),
         status,
         blockIds:
           status === "running" || status === "waiting_approval"
@@ -130,21 +135,21 @@ function buildGenericPhases(
   const buckets = [
     {
       id: "generic:prepare",
-      title: "理解任务与准备上下文",
+      title: "补齐上下文",
       blocks: blocks.filter((block) =>
         /read|recall|skill|agent/i.test(block.event.name),
       ),
     },
     {
       id: "generic:execute",
-      title: "执行与收集证据",
+      title: "处理线索",
       blocks: blocks.filter((block) =>
         /browser|search|web|fetch|terminal|shell|file/i.test(block.kind),
       ),
     },
     {
       id: "generic:deliver",
-      title: "整理结果与交付",
+      title: "收拢答案",
       blocks: blocks.filter((block) =>
         /todo|write|report|artifact|verification/i.test(
           `${block.event.name} ${block.kind} ${block.title}`,
@@ -154,9 +159,9 @@ function buildGenericPhases(
   ];
   return buckets
     .filter((bucket) => bucket.blocks.length > 0)
-    .map((bucket, index) => ({
+    .map((bucket) => ({
       id: bucket.id,
-      title: phaseTitle(bucket.title, index),
+      title: phaseTitle(bucket.title),
       status: statusFromBlockList(bucket.blocks, options),
       blockIds: bucket.blocks.map((block) => block.id),
     }));
@@ -247,9 +252,20 @@ function todoStatus(value: unknown): AgentPhaseStatus {
   return "pending";
 }
 
-function phaseTitle(title: string, index: number) {
+function phaseTitle(title: string) {
+  const displayTitle = normalizeAgentPhaseTitle(title);
+  return displayTitle || `进行中`;
+}
+
+export function normalizeAgentPhaseTitle(title: string) {
   const clean = title.replace(/\s+/g, " ").trim();
-  return /^phase\s+\d+/i.test(clean) ? clean : `Phase ${index + 1}: ${clean}`;
+  const withoutMachinePrefix = clean
+    .replace(
+      /^(?:phase|阶段|step|步骤)\s*[\d一二三四五六七八九十]+(?:\.\d+)?\s*[:：.)、-]?\s*/i,
+      "",
+    )
+    .trim();
+  return withoutMachinePrefix || clean;
 }
 
 function normalizePhaseOrdering(phases: AgentPhase[]): AgentPhase[] {
@@ -266,10 +282,3 @@ function normalizePhaseOrdering(phases: AgentPhase[]): AgentPhase[] {
   );
 }
 
-function firstString(input: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = input[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-}

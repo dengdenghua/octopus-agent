@@ -71,11 +71,12 @@ from runtime.core.cerebrum.react_execution import (
 )
 from runtime.core.cerebrum.react_guards import (
     _code_mode_completion_guard,
+    _code_semantic_followup_guard,
     _completion_phrase_without_todo_guard,
-    _concurrency_semantic_followup_guard,
     _explicit_source_paths,
     _failed_verification_followup_guard,
     _goal_requests_code_mutation,
+    _has_successful_code_write,
     _incomplete_final_answer_guard,
     _redundant_green_verification_guard,
     _unverified_write_followup_guard,
@@ -113,6 +114,7 @@ from runtime.core.cerebrum.react_parsing import (
     _has_successful_verification_observation,
     _is_code_write_step,
     _is_format_violation,
+    _latest_todo_items,
     _looks_like_special_tool_envelope,
     _looks_like_unfinished_work,
     _parse_action,
@@ -249,11 +251,7 @@ def _narrow_command_direct_answer(
     narrow; every broader task continues through normal model synthesis.
     """
 
-    if (
-        not succeeded
-        or resolved_name != "exec_shell"
-        or not _is_narrow_read_only_command(goal)
-    ):
+    if not succeeded or resolved_name != "exec_shell" or not _is_narrow_read_only_command(goal):
         return None
     actions = step.actions or ([step.action] if step.action else [])
     if len(actions) != 1 or beak_step is None:
@@ -635,11 +633,14 @@ def _stream_public_evidence_narrative(
     # A public checkpoint is latency-sensitive and tool-free. Prefer another
     # configured lightweight endpoint when available so a slow primary
     # reasoning model does not leave the conversation silent between batches.
-    narrator_model = next_custom_model_fallback(
-        model,
-        set(),
-        require_tool_use=False,
-    ) or model
+    narrator_model = (
+        next_custom_model_fallback(
+            model,
+            set(),
+            require_tool_use=False,
+        )
+        or model
+    )
     request = ModelRequest(
         model=narrator_model,
         messages=[
@@ -778,6 +779,76 @@ def _public_tool_target(args: dict[str, Any]) -> str:
     if isinstance(query, str) and query.strip():
         return query.strip()[:60]
     return ""
+
+
+def _todo_prewrite_guard(
+    actions: list[str],
+    steps: list[ReActStep],
+    *,
+    required: bool,
+    visible: bool,
+) -> str | None:
+    """Require a visible checklist before substantial multi-step tool work.
+
+    Long tasks start with a user-visible execution contract.  Grounding and
+    implementation happen after that contract exists, so research-heavy turns
+    cannot finish most of their work and only manufacture a checklist at the
+    final-answer boundary.
+    """
+
+    if not (required and visible) or _latest_todo_items(steps):
+        return None
+
+    parsed = [entry for action in actions if (entry := _parse_action(action))]
+    if not parsed or any(name.lower() == "todo_write" for name, _args in parsed):
+        return None
+
+    return (
+        "[todo-before-work] The runtime did not execute this tool work because "
+        "this multi-step task still has no visible checklist. Call todo_write "
+        "now with a complete, non-empty plan, then start the first plan item."
+    )
+
+
+def _todo_completion_before_write_guard(
+    actions: list[str],
+    steps: list[ReActStep],
+    *,
+    required: bool,
+) -> str | None:
+    """Reject an all-completed code checklist with no write evidence.
+
+    Discovery items may be completed while implementation remains pending.
+    The invalid shape is specifically an entirely-completed checklist before
+    any successful workspace mutation (and without a write in the same action
+    batch).  Letting that state execute makes the provider believe the task is
+    done while the Final Answer guard can only push it into a retry loop.
+    """
+
+    if not required or _has_successful_code_write(steps):
+        return None
+    parsed = [entry for action in actions if (entry := _parse_action(action))]
+    if any(_is_code_write_step(ReActStep(iteration=0, action=action)) for action in actions):
+        return None
+    for name, args in parsed:
+        if name != "todo_write":
+            continue
+        raw_items = args.get("items") or args.get("todos") or []
+        items = raw_items if isinstance(raw_items, list) else []
+        statuses = {
+            str(item.get("status") or "").strip().lower()
+            for item in items
+            if isinstance(item, dict)
+        }
+        if items and statuses and statuses <= {"completed", "complete", "done"}:
+            return (
+                "[todo-completion-before-write] The runtime did not accept this "
+                "all-completed checklist because no successful workspace write/edit "
+                "is recorded. Keep the implementation item in_progress, execute the "
+                "real write/edit tool, read the changed artifact back, verify it, and "
+                "only then mark the checklist completed."
+            )
+    return None
 
 
 def _result_checkpoint_is_meaningful(
@@ -1224,6 +1295,14 @@ def _deduplicate_actions(actions: list[str]) -> tuple[list[str], int]:
     return unique, duplicates
 
 
+def _action_batch_fingerprint(actions: list[str]) -> str:
+    """Stable ordered fingerprint for one or many requested tool calls."""
+    fingerprints = [_action_fingerprint(action) for action in actions]
+    if len(fingerprints) == 1:
+        return fingerprints[0]
+    return "batch:" + json.dumps(fingerprints, ensure_ascii=False, separators=(",", ":"))
+
+
 # Affinity tags that mark a tool as having side effects, so a failed call must
 # NOT be silently auto-retried (a partial write, or a shell command that ran
 # before its result failed to parse, would be doubled). Mirrors the executor's
@@ -1267,7 +1346,13 @@ def _ensure_browser_operation_skills(executor: Any) -> int:
 
 
 def _browser_operation_requested(user_context: Any) -> bool:
-    """Return whether the turn explicitly targets Browser or Chrome."""
+    """Return whether the turn requires dependency-gated local browser tools.
+
+    Code-mode UI regression needs those tools too, but remains distinct from
+    browser-only operation mode so it keeps coding iteration limits and final
+    guards.  This predicate is intentionally about tool registration, not the
+    work-surface semantics used later in the loop.
+    """
     if not isinstance(user_context, dict):
         return False
     metadata = user_context.get("metadata")
@@ -1286,6 +1371,8 @@ def _browser_operation_requested(user_context: Any) -> bool:
     return bool(
         user_context.get("browser_operation_mode")
         or metadata.get("browser_operation_mode")
+        or user_context.get("browser_regression_enabled")
+        or metadata.get("browser_regression_enabled")
         or user_context.get("chrome_operation_mode")
         or metadata.get("chrome_operation_mode")
         or surface in {"browser", "chrome"}
@@ -1298,9 +1385,17 @@ def _browser_task_iteration_limit(
     *,
     browser_operation_mode: bool,
 ) -> int:
-    """Give explicit Browser turns enough rounds for stateful UI flows."""
+    """Give explicit Browser turns enough rounds for stateful UI flows.
+
+    A 30-round floor still auto-pauses at round 27, which is too early for
+    ordinary form workflows that must navigate, fill native controls, upload,
+    submit, wait for a delayed frame, and inspect confirmation state.  Keep
+    explicit browser turns aligned with implementation turns at 60 rounds so
+    the checkpoint guard remains a last resort rather than interrupting the
+    final submit/verify pair.
+    """
     if browser_operation_mode:
-        return max(30, max_iterations)
+        return max(60, max_iterations)
     return max_iterations
 
 
@@ -1898,6 +1993,27 @@ def _native_tool_calls_missing_required_args(tool_calls: Any) -> list[str]:
     return missing
 
 
+def _safe_react_error_message(exc: BaseException, *, limit: int = 1200) -> str:
+    """Return a user-visible terminal model error without leaking secrets.
+
+    Provider errors carry important status evidence (for example ``http_402``)
+    that the realtime benchmark uses to separate infrastructure outages from
+    agent failures.  Keep that evidence, but pass the message through the
+    process redactor before it reaches a turn item.
+    """
+
+    message = str(exc).strip() or type(exc).__name__
+    try:
+        from runtime.platform.observability.redactor import redact_text
+
+        message = redact_text(message)
+    except Exception:  # pragma: no cover - diagnostics must never mask failure
+        # If the redactor itself is unavailable, preserve only the exception
+        # class.  Dropping detail is safer than exposing an embedded token.
+        message = type(exc).__name__
+    return message[:limit]
+
+
 def _code_task_iteration_limit(
     goal: str,
     max_iterations: int,
@@ -2062,9 +2178,7 @@ def stream_react_loop(
         len(_explicit_source_paths(_native_goal)) > 1
         and _explicit_observed_read_sequence(_native_goal)
     )
-    _native_observed_read_sequence = bool(
-        _strict_explicit_reads and _ordered_result_handoffs
-    )
+    _native_observed_read_sequence = bool(_strict_explicit_reads and _ordered_result_handoffs)
     _native_tool_specs = (
         build_loop_tool_specs(
             executor,
@@ -2169,9 +2283,7 @@ def stream_react_loop(
     )
     _uc = intent.user_context or {}
     _metadata = _uc.get("metadata") or {}
-    _realtime_public_orientation_requested = bool(
-        _uc.get("realtime_public_orientation")
-    )
+    _realtime_public_orientation_requested = bool(_uc.get("realtime_public_orientation"))
     if _realtime_public_orientation_requested:
         system_parts.append(
             "\n<public-orientation>\n"
@@ -2239,9 +2351,7 @@ def stream_react_loop(
                 str(getattr(intent, "normalized_goal", "") or ""),
                 strict_explicit_scope=bool(
                     _read_only_turn
-                    and _explicit_source_paths(
-                        str(getattr(intent, "normalized_goal", "") or "")
-                    )
+                    and _explicit_source_paths(str(getattr(intent, "normalized_goal", "") or ""))
                 ),
             )
             # An explicitly observable read sequence must obtain its source
@@ -2501,6 +2611,9 @@ def stream_react_loop(
                     "用户已在代码模式开启 UI 回归。完成代码修改和静态验证后，如果改动涉及前端、HTML、样式、交互或可视输出，"
                     "必须补充浏览器回归检查。\n"
                     + _preview_line
+                    + "这是代码模式的隔离预览，不依赖 Octopus Electron 桌面桥。对该 localhost/127.0.0.1 地址，"
+                    "直接使用 browser_navigate，再用 browser_state/browser_type/browser_click/browser_extract 检查；"
+                    "不要自建第二个 HTTP 服务；只使用本段列出的隔离浏览器工具完成验证。\n"
                     + "浏览器回归应模拟真人操作：使用可见鼠标移动、点击、输入和滚动路径，检查关键交互、布局、控制台错误和明显视觉回归。"
                     "发现问题时回到执行阶段修复，再重新验证。\n"
                     "如果没有可测试 UI、缺少登录/权限或预览无法启动，请在 Final Answer 里明确说明阻塞原因和已完成的静态验证。\n"
@@ -2942,9 +3055,7 @@ def stream_react_loop(
             agent=agent,
             user_context=_uc,
             goal=intent.normalized_goal,
-            include_names=(
-                STRICT_EXPLICIT_READ_TOOL_NAMES if _strict_explicit_reads else None
-            ),
+            include_names=(STRICT_EXPLICIT_READ_TOOL_NAMES if _strict_explicit_reads else None),
         )
         if catalog:
             _file_inspection_tools_visible = "  - read_file:" in catalog
@@ -3418,9 +3529,7 @@ def stream_react_loop(
             try:
                 _subrouter = router._resolve(next_model)
                 if _subrouter is not router:
-                    _resolved_model = (
-                        getattr(_subrouter, "default_model", None) or next_model
-                    )
+                    _resolved_model = getattr(_subrouter, "default_model", None) or next_model
             except (AttributeError, TypeError):
                 pass
         _wants_thinking = _supports_thinking(_resolved_model)
@@ -3541,8 +3650,7 @@ def stream_react_loop(
             _request_has_tool_evidence = bool(
                 executed_beak_steps
                 or any(
-                    prior_step.action_results
-                    or (prior_step.action and prior_step.observation)
+                    prior_step.action_results or (prior_step.action and prior_step.observation)
                     for prior_step in steps
                 )
             )
@@ -3556,9 +3664,7 @@ def stream_react_loop(
                 ),
                 temperature=temperature,
                 enable_thinking=_wants_thinking and not _iteration_recovery_mode,
-                reasoning_effort=(
-                    "low" if _iteration_recovery_mode else _reasoning_effort
-                ),
+                reasoning_effort=("low" if _iteration_recovery_mode else _reasoning_effort),
                 thinking_budget=(
                     1024
                     if _iteration_recovery_mode
@@ -3608,9 +3714,7 @@ def stream_react_loop(
             _base_iteration_timeout = _model_iteration_timeout_s()
             _has_tool_evidence = _request_has_tool_evidence
             if _iteration_recovery_mode and _evidence_convergence_active is not None:
-                _iteration_timeout = _model_evidence_synthesis_timeout_s(
-                    _base_iteration_timeout
-                )
+                _iteration_timeout = _model_evidence_synthesis_timeout_s(_base_iteration_timeout)
             elif _iteration_recovery_mode:
                 _iteration_timeout = _model_recovery_timeout_s(_base_iteration_timeout)
             elif _has_tool_evidence:
@@ -3675,12 +3779,13 @@ def stream_react_loop(
                         else:
                             _orientation = _safe_public_update(joined)[:420].rstrip()
                             if _orientation and not _native_orientation_emitted:
-                                _orientation_key = re.sub(
-                                    r"\s+", " ", _orientation
-                                ).strip().casefold()
-                                _orientation_ready = (
-                                    len(_orientation) >= _PUBLIC_EVIDENCE_STREAM_GATE_CHARS
-                                    or bool(re.search(r"[。.!！?？；;]\s*$", _orientation))
+                                _orientation_key = (
+                                    re.sub(r"\s+", " ", _orientation).strip().casefold()
+                                )
+                                _orientation_ready = len(
+                                    _orientation
+                                ) >= _PUBLIC_EVIDENCE_STREAM_GATE_CHARS or bool(
+                                    re.search(r"[。.!！?？；;]\s*$", _orientation)
                                 )
                                 if (
                                     _orientation_ready
@@ -3860,7 +3965,7 @@ def stream_react_loop(
                 "react_loop iter %d LLM 调用失败 (%s): %s",
                 i,
                 type(exc).__name__,
-                exc,
+                _safe_react_error_message(exc),
             )
             _error_text_was_exposed = bool(
                 locals().get("_final_stream_started", False)
@@ -3897,7 +4002,7 @@ def stream_react_loop(
                     _force_convergence_next = bool(steps)
                     continue
             if not steps:
-                _err_msg = str(exc)
+                _err_msg = _safe_react_error_message(exc)
                 _err_kind = (
                     "auth" if "current_actor" in _err_msg or "登录" in _err_msg else "router"
                 )
@@ -4110,8 +4215,8 @@ def stream_react_loop(
                     terminated_reason = "model_stall"
                     break
                 stall_message = (
-                    "模型连续两次在单轮推理时限内未能给出下一步操作或最终答案。"
-                    "前面已完成的工具结果仍保留在执行记录中，但这次无法可靠完成最终汇总。"
+                    "模型连续两次在单轮时限内未能给出下一步操作或最终答案。"
+                    "前面已完成的结果仍已保留，但这次无法可靠完成最终汇总。"
                     "你可以点击继续，系统会从已保存的进度重新收敛。"
                 )
                 yield {
@@ -4131,8 +4236,8 @@ def stream_react_loop(
                 "当前模型响应过慢，已保留现有结果并切换备用模型继续。"
                 if _fallback_model
                 else (
-                    "这一轮深度推理超过了单轮时限；已保留前面的有效结果，"
-                    "下一轮会关闭扩展思考，直接收敛为阶段结论、必要操作或最终答案。"
+                    "这一轮响应超过了单轮时限；已保留前面的有效结果，"
+                    "下一轮会减少额外操作，直接收拢阶段结论、必要操作或最终答案。"
                 )
             )
             yield {
@@ -4263,9 +4368,7 @@ def stream_react_loop(
             _recovered_read_actions = _recover_explicit_read_actions(
                 goal=intent.normalized_goal,
                 model_text=step.thought or text,
-                workspace_path=(
-                    _effective_wp if isinstance(_effective_wp, str) else None
-                ),
+                workspace_path=(_effective_wp if isinstance(_effective_wp, str) else None),
                 steps=steps,
                 executor=executor,
                 read_only=_read_only_turn,
@@ -4466,9 +4569,7 @@ def stream_react_loop(
             _candidate_actions = step.actions or [step.action]
             _candidate_actions = _bound_explicit_large_reads(
                 goal=intent.normalized_goal,
-                workspace_path=(
-                    _effective_wp if isinstance(_effective_wp, str) else None
-                ),
+                workspace_path=(_effective_wp if isinstance(_effective_wp, str) else None),
                 actions=_candidate_actions,
                 read_only=_read_only_turn,
             )
@@ -4492,18 +4593,16 @@ def stream_react_loop(
                     maybe_final = None
         _current_action_fingerprint = ""
         _repeated_failure_skipped = False
-        if tool_action_requested and len(step.actions or [step.action]) == 1:
-            _current_action_fingerprint = _action_fingerprint(
-                (step.actions or [step.action])[0]
-            )
+        if tool_action_requested:
+            _current_action_fingerprint = _action_batch_fingerprint(step.actions or [step.action])
             if (
                 _consecutive_same_failed_actions >= 2
                 and _current_action_fingerprint == _last_failed_action_fingerprint
             ):
                 observation = (
-                    "[repeated-failing-tool-skipped] The same tool call with identical "
-                    "arguments already failed twice, so the runtime did not execute it a "
-                    "third time. Treat the prior failure as definitive. Choose a different "
+                    "[repeated-failing-tool-skipped] The same tool call or ordered tool batch "
+                    "with identical arguments already failed twice, so the runtime did not "
+                    "execute it a third time. Treat the prior failure as definitive. Choose a different "
                     "action: for a missing file, create it with an allowed write tool; for "
                     "invalid arguments, correct them; otherwise use a different evidence source."
                 )
@@ -4525,6 +4624,44 @@ def stream_react_loop(
             tool_action_requested = False
             maybe_final = None
             _force_convergence_next = True
+        if tool_action_requested:
+            _todo_prewrite_message = _todo_prewrite_guard(
+                step.actions or [step.action],
+                steps,
+                # Keep bounded inspections and one-command probes lightweight.
+                # ReAct's plan-first gate applies to genuinely long or explicit
+                # goal-mode work; the native tool bridge enforces its own
+                # equivalent bootstrap from the shared protocol classifier.
+                required=(
+                    _todo_protocol_required
+                    and (
+                        _is_goal_mode
+                        or "\n" in intent.normalized_goal
+                        or len(intent.normalized_goal) >= 80
+                    )
+                ),
+                visible=_todo_protocol_visible,
+            )
+            if _todo_prewrite_message:
+                observation = _todo_prewrite_message
+                step.observation = observation
+                step.action = ""
+                step.actions = []
+                tool_action_requested = False
+                maybe_final = None
+        if _is_code_mode and tool_action_requested:
+            _premature_todo_completion = _todo_completion_before_write_guard(
+                step.actions or [step.action],
+                steps,
+                required=_goal_requests_code_mutation(intent.normalized_goal),
+            )
+            if _premature_todo_completion:
+                observation = _premature_todo_completion
+                step.observation = observation
+                step.action = ""
+                step.actions = []
+                tool_action_requested = False
+                maybe_final = None
         if _is_code_mode and tool_action_requested:
             # A deterministic source-level concurrency defect is stronger
             # evidence than another green/red probe.  Do not let providers
@@ -4532,7 +4669,7 @@ def stream_react_loop(
             # typecheck, or shell variants.  Reads and actual code writes stay
             # available; a write+verify batch is also allowed because the
             # ordered outcome tracker will evaluate the post-repair checks.
-            _semantic_repair = _concurrency_semantic_followup_guard(
+            _semantic_repair = _code_semantic_followup_guard(
                 steps,
                 is_code_mode=True,
             )
@@ -4542,8 +4679,7 @@ def stream_react_loop(
                     for _candidate in (step.actions or [step.action])
                 ]
                 _candidate_has_write = any(
-                    _is_code_write_step(_candidate_step)
-                    for _candidate_step in _candidate_steps
+                    _is_code_write_step(_candidate_step) for _candidate_step in _candidate_steps
                 )
                 _candidate_has_verifier = any(
                     _has_code_verification([_candidate_step])
@@ -4551,7 +4687,7 @@ def stream_react_loop(
                 )
                 if _candidate_has_verifier and not _candidate_has_write:
                     observation = (
-                        "[semantic-repair-tool-skipped] A deterministic concurrency defect "
+                        "[semantic-repair-tool-skipped] A deterministic source defect "
                         "is still present in the latest source edit, so the runtime did not "
                         "execute another verifier or shell probe. Repair the source first.\n"
                         + _semantic_repair
@@ -4601,9 +4737,7 @@ def stream_react_loop(
         step.public_update = _safe_public_update(step.public_update)
         _checkpoint_actions = step.actions or [step.action]
         _prior_result_handoff = bool(
-            _ordered_result_handoffs
-            and _result_handoff_ready
-            and tool_action_requested
+            _ordered_result_handoffs and _result_handoff_ready and tool_action_requested
         )
         if _prior_result_handoff:
             # The evidence narrator already gave the user the preceding fact
@@ -5082,18 +5216,14 @@ def stream_react_loop(
         if _is_code_mode and tool_action_requested:
             _ordered_outcomes = _per_action_outcomes(step, default_ok=tool_ok)
             _last_successful_write_idx = -1
-            for _outcome_idx, (_outcome_step, _outcome_ok) in enumerate(
-                _ordered_outcomes
-            ):
+            for _outcome_idx, (_outcome_step, _outcome_ok) in enumerate(_ordered_outcomes):
                 if _outcome_ok and _is_code_write_step(_outcome_step):
                     _last_successful_write_idx = _outcome_idx
 
             if _last_successful_write_idx >= 0:
                 _saw_successful_code_write = True
                 _clean_verification_rounds_after_write = 0
-                _verification_outcomes = _ordered_outcomes[
-                    _last_successful_write_idx + 1 :
-                ]
+                _verification_outcomes = _ordered_outcomes[_last_successful_write_idx + 1 :]
             else:
                 _verification_outcomes = _ordered_outcomes
 
@@ -5101,9 +5231,7 @@ def stream_react_loop(
                 for _outcome_step, _outcome_ok in _verification_outcomes:
                     if not _has_code_verification([_outcome_step]):
                         continue
-                    if _outcome_ok and _has_successful_verification_observation(
-                        [_outcome_step]
-                    ):
+                    if _outcome_ok and _has_successful_verification_observation([_outcome_step]):
                         # Separate verifier calls in one serial multi-action
                         # batch are independent evidence rounds. Counting the
                         # whole batch once caused green code agents to run the
@@ -5165,9 +5293,7 @@ def stream_react_loop(
             and observation
             and (
                 tool_ok
-                or str(observation).lstrip().startswith(
-                    "(real tool execution succeeded)"
-                )
+                or str(observation).lstrip().startswith("(real tool execution succeeded)")
                 or not re.search(
                     r"(?:tool execution failed|file not found|no such file|"
                     r"does not exist|permission denied|读取失败|未找到|不存在)",
@@ -5212,11 +5338,7 @@ def stream_react_loop(
             (_realtime_public_narrative or _ordered_result_handoffs)
             and maybe_final is None
             and not _model_result_update
-            and (
-                not _model_supplied_update
-                or _quiet_evidence_due
-                or _observed_result_checkpoint
-            )
+            and (not _model_supplied_update or _quiet_evidence_due or _observed_result_checkpoint)
             and (
                 _meaningful_result_checkpoint
                 or _observed_result_checkpoint
@@ -5345,14 +5467,12 @@ def stream_react_loop(
         )
         if _red_verify_nudge:
             _midflight_nudges.append(f"[red-verification-recovery]\n{_red_verify_nudge}")
-        _concurrency_nudge = _concurrency_semantic_followup_guard(
+        _concurrency_nudge = _code_semantic_followup_guard(
             _steps_with_current,
             is_code_mode=_is_code_mode,
         )
         if _concurrency_nudge:
-            _midflight_nudges.append(
-                f"[concurrency-semantic-repair]\n{_concurrency_nudge}"
-            )
+            _midflight_nudges.append(f"[code-semantic-repair]\n{_concurrency_nudge}")
         _green_verify_nudge = _redundant_green_verification_guard(
             _steps_with_current,
             is_code_mode=_is_code_mode,
@@ -5767,10 +5887,7 @@ def stream_react_loop(
             messages.append(
                 Message(
                     role="user",
-                    content=(
-                        f"Observation: {_obs_for_model}\n\n"
-                        f"{REACT_OBSERVATION_FOLLOWUP}"
-                    ),
+                    content=(f"Observation: {_obs_for_model}\n\n{REACT_OBSERVATION_FOLLOWUP}"),
                 )
             )
 
@@ -5931,7 +6048,11 @@ def stream_react_loop(
                         "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
                     )
         except (AttributeError, TypeError, ValueError) as exc:
-            _logger.warning("react_loop 强制收敛失败 (%s): %s", type(exc).__name__, exc)
+            _logger.warning(
+                "react_loop 强制收敛失败 (%s): %s",
+                type(exc).__name__,
+                _safe_react_error_message(exc),
+            )
             _persist_react_trajectory(
                 stack,
                 react_task_id=react_task_id,
@@ -5939,6 +6060,18 @@ def stream_react_loop(
                 success=False,
             )
             _pause.unregister_active(str(react_task_id))
+            # This is the final model attempt after the ordinary recovery
+            # retries have been exhausted.  Surface its real, redacted cause
+            # so the gateway and evaluation harness can distinguish provider
+            # infrastructure failures from missing agent output.
+            yield {
+                "type": "react_error",
+                "kind": type(exc).__name__,
+                "message": _safe_react_error_message(exc),
+                "iteration": (steps[-1].iteration + 1) if steps else 1,
+                "task_id": str(react_task_id) if react_task_id else None,
+                "terminal_stage": "forced_convergence",
+            }
             return None
 
     if final_answer and not final_answer_emitted:

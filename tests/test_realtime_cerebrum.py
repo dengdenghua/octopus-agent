@@ -432,8 +432,7 @@ def test_commentary_stream_chunks_extend_one_timeline_item(gateway: Any) -> None
         )
 
     messages = [
-        item for item in out["response"].result["turn"]["items"]
-        if item["type"] == "agentMessage"
+        item for item in out["response"].result["turn"]["items"] if item["type"] == "agentMessage"
     ]
     assert [message["text"] for message in messages] == [
         "四个目标文件均已读取，事件顺序已经确认。",
@@ -486,6 +485,257 @@ def test_duplicate_public_commentary_is_collapsed(gateway: Any) -> None:
         "关键文件已经确认，下一步核对事件顺序。",
         "最终答案",
     ]
+
+
+def test_silent_tool_round_does_not_manufacture_public_narrative(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "exec_shell",
+                "tool_call_id": "silent-tool",
+                "iteration": 1,
+                "input_preview": {
+                    "command": "cat ~/.ssh/id_rsa && pnpm test",
+                    "cwd": "/Users/dangbei/Public/octopus/octopus-agent",
+                    "token": "super-secret",
+                },
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "exec_shell",
+                "tool_call_id": "silent-tool",
+                "iteration": 1,
+                "status": "success",
+                "output_preview": "ok",
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-tool-public-narrative",
+                "input": [{"type": "text", "text": "check it"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    messages = [item for item in turn["items"] if item["type"] == "agentMessage"]
+    assert [item["messageKind"] for item in messages] == ["answer"]
+    public_text = "\n".join(item["text"] for item in messages)
+    assert public_text == "最终答案"
+    assert "exec_shell" not in public_text
+    assert "cat ~/.ssh/id_rsa" not in public_text
+    assert "/Users/dangbei/Public" not in public_text
+    assert "super-secret" not in public_text
+
+
+def test_tool_public_description_overrides_generic_runtime_narrative(
+    gateway: Any,
+) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "read_file",
+                "tool_call_id": "described-tool",
+                "iteration": 1,
+                "input_preview": {
+                    "path": "runtime/protocol/items.py",
+                    "public_description": "我先核对协议字段的真实定义。",
+                },
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "read_file",
+                "tool_call_id": "described-tool",
+                "iteration": 1,
+                "status": "success",
+                "public_result": "已确认三个字段都在协议层存在。",
+                "output_preview": "private raw output",
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-tool-public-description",
+                "input": [{"type": "text", "text": "check fields"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    messages = [
+        item for item in out["response"].result["turn"]["items"] if item["type"] == "agentMessage"
+    ]
+    public_text = "\n".join(item["text"] for item in messages)
+    assert "我先核对协议字段的真实定义。" in public_text
+    assert "已确认三个字段都在协议层存在。" in public_text
+    assert "我先核对相关上下文。" not in public_text
+    assert "关键上下文已经确认。" not in public_text
+    assert "read_file" not in public_text
+    assert "private raw output" not in public_text
+
+
+def test_final_answer_starts_after_public_commentary_completes(
+    gateway: Any,
+) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "commentary_delta",
+                "delta": "证据已经确认，开始收束。",
+                "progress_source": "model",
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-commentary-before-answer",
+                "input": [{"type": "text", "text": "summarize"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    notifications = out["notifications"]
+    commentary_item_id = None
+    answer_item_id = None
+    commentary_completed_index = -1
+    answer_started_index = -1
+    for index, notification in enumerate(notifications):
+        if notification.method != "item/started":
+            continue
+        item = notification.params["item"]
+        if item["type"] != "agentMessage":
+            continue
+        if item.get("messageKind") == "commentary":
+            commentary_item_id = item["id"]
+        else:
+            answer_item_id = item["id"]
+            answer_started_index = index
+            break
+
+    assert commentary_item_id is not None
+    assert answer_item_id is not None
+    for index, notification in enumerate(notifications):
+        if notification.method != "item/completed":
+            continue
+        item = notification.params["item"]
+        if item["id"] == commentary_item_id:
+            commentary_completed_index = index
+            break
+
+    assert commentary_completed_index != -1
+    assert commentary_completed_index < answer_started_index
+
+
+def test_tool_without_call_id_still_completes(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "read_file",
+                "iteration": 1,
+                "input_preview": {"public_description": "我先核对一个必要上下文。"},
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "read_file",
+                "iteration": 1,
+                "status": "success",
+                "public_result": "必要上下文已经确认。",
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-tool-without-call-id",
+                "input": [{"type": "text", "text": "check"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    tools = [item for item in turn["items"] if item["type"] == "commandExecution"]
+    messages = [item for item in turn["items"] if item["type"] == "agentMessage"]
+    assert len(tools) == 1
+    assert tools[0]["id"].startswith("itm_")
+    assert tools[0]["status"] == "completed"
+    assert [message["text"] for message in messages] == [
+        "我先核对一个必要上下文。",
+        "必要上下文已经确认。",
+        "最终答案",
+    ]
+
+
+def test_unsafe_tool_public_description_is_omitted_without_leaking(
+    gateway: Any,
+) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "read_file",
+                "tool_call_id": "unsafe-described-tool",
+                "iteration": 1,
+                "input_preview": {
+                    "public_description": "读取 /Users/dangbei/secret.txt token=super-secret",
+                },
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "read_file",
+                "tool_call_id": "unsafe-described-tool",
+                "iteration": 1,
+                "status": "success",
+                "public_result": "完成 token=super-secret",
+            },
+            {"type": "text_delta", "delta": "最终答案"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-tool-unsafe-public-description",
+                "input": [{"type": "text", "text": "check fields"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    messages = [
+        item for item in out["response"].result["turn"]["items"] if item["type"] == "agentMessage"
+    ]
+    public_text = "\n".join(item["text"] for item in messages)
+    assert public_text == "最终答案"
+    assert "/Users/dangbei/secret.txt" not in public_text
+    assert "super-secret" not in public_text
 
 
 def test_runtime_generated_commentary_is_not_shown_as_model_progress(gateway: Any) -> None:
@@ -690,9 +940,9 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert updates
     phases = updates[0].params["phases"]
     assert [phase["title"] for phase in phases] == [
-        "Phase 1: Inspect context",
-        "Phase 2: Patch realtime protocol",
-        "Phase 3: Verify behavior",
+        "Inspect context",
+        "Patch realtime protocol",
+        "Verify behavior",
     ]
     assert phases[1]["status"] == "running"
     assert phases[1]["activeItemId"] == "todo-1"
@@ -719,7 +969,7 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert turn["workbenchSnapshot"]["version"] == 2
     assert resume is not None and resume.result is not None
     resumed_turn = resume.result["turns"][0]
-    assert resumed_turn["phases"][1]["title"] == "Phase 2: Patch realtime protocol"
+    assert resumed_turn["phases"][1]["title"] == "Patch realtime protocol"
     assert resumed_turn["workspaceFocus"]["view"] == "trace"
     assert resumed_turn["workbenchSnapshot"]["version"] == 2
 
@@ -749,6 +999,7 @@ def test_team_subagent_lifecycle_maps_to_first_class_item(
 
         def run(self, topology: Any, text: str, context: dict[str, Any]) -> TeamRunResult:
             assert self._emit is not None
+            assert context["model_name"] == "kimi-k3"
             self._emit(
                 {
                     "type": "subagent_spawned",
@@ -799,6 +1050,7 @@ def test_team_subagent_lifecycle_maps_to_first_class_item(
                 "threadId": "th-team-subagent",
                 "input": [{"type": "text", "text": "run topology"}],
                 "approvalPolicy": "never",
+                "model": "kimi-k3",
                 "topologyId": "test_topology",
             },
         )

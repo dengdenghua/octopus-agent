@@ -94,8 +94,8 @@
   - [x] SubTask 20.2: 受影响单测单独跑全部通过（automation-settings 6/6、agent-operator-panel 16/16、chat-input-box 29/29；并发跑 187 文件时 4 个 timeout 是 pre-existing flaky）
   - [x] SubTask 20.3: grep 验证：`focus:outline-none` 残留 11 处，其中 8 处有 `focus-visible:` 替代、3 处有 `focus:ring-2`/`focus:border-blue-400` 替代（符合 WCAG 有可见焦点环）
 
-- [ ] Task 21: 提交 commit
-  - [ ] SubTask 21.1: commit message: `style(workspace): a11y + responsive pass for keyboard and mobile usability`
+- [x] Task 21: 提交 commit
+  - [x] SubTask 21.1: commit `3bf7687df` — `style(workspace): a11y + responsive pass for keyboard and mobile usability`（63 files +509/-82，仅 frontend/src/ + spec，排除 message-list 与 pre-existing benchmarks/runtime/tests 修改）
 
 # Task Dependencies
 

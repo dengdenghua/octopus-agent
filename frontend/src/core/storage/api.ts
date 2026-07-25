@@ -1,4 +1,5 @@
 import { getBackendBaseURL } from "@/core/config";
+import { authHeaders } from "@/core/auth/api";
 
 export type NASMode = "efficiency" | "privacy";
 
@@ -88,6 +89,21 @@ export interface NASServiceStartResponse {
   auth_token?: string | null;
 }
 
+export class NASRequestError extends Error {
+  constructor(
+    public readonly path: string,
+    public readonly status: number,
+    detail = "",
+  ) {
+    super(`NAS ${path} failed: ${status}${detail ? ` - ${detail}` : ""}`);
+    this.name = "NASRequestError";
+  }
+}
+
+export function isNASAuthenticationError(error: unknown): boolean {
+  return error instanceof NASRequestError && error.status === 401;
+}
+
 const DEFAULT_STORAGE_URL = "http://127.0.0.1:8767";
 const STORAGE_KEY = "octopus.storage.base-url";
 const LEGACY_STORAGE_KEY = "octopus.nas.base-url";
@@ -148,9 +164,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(
-      `NAS ${path} failed: ${response.status}${text ? ` - ${text}` : ""}`,
-    );
+    throw new NASRequestError(path, response.status, text);
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -159,7 +173,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export async function startNASService(): Promise<NASServiceStartResponse> {
   const response = await fetch(
     `${getBackendBaseURL()}/api/local-brain/storage/start`,
-    { method: "POST" },
+    {
+      method: "POST",
+      credentials: "include",
+      headers: authHeaders(),
+    },
   );
   if (!response.ok) {
     const text = await response.text().catch(() => "");

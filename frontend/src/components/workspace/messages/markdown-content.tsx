@@ -11,6 +11,7 @@ import {
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { FileReferenceChip } from "@/components/ui/file-reference-chip";
+import { stripLeakedRendererMarkup } from "@/core/messages/utils";
 import { useLocalSettings } from "@/core/settings";
 import { useStreamdownPlugins } from "@/core/streamdown";
 import { cn } from "@/lib/utils";
@@ -42,27 +43,13 @@ function isExternalUrl(href: string | undefined): boolean {
   return !!href && /^https?:\/\//.test(href);
 }
 
-const INTERNAL_CONTROL_TAG_LINE =
-  /^\s*(?:<read_only>\s*<\/read_only>|<\/?read_only>)\s*$/i;
-
 /**
  * Hide leaked runtime control tags without changing examples inside fenced
  * code blocks. Historical messages pass through this renderer too, so the
  * display repairs already-persisted replies as well as new streams.
  */
 export function stripLeakedControlMarkup(value: string): string {
-  let insideFence = false;
-  return value
-    .split(/\r?\n/)
-    .filter((line) => {
-      if (/^\s*```/.test(line)) {
-        insideFence = !insideFence;
-        return true;
-      }
-      return insideFence || !INTERNAL_CONTROL_TAG_LINE.test(line);
-    })
-    .join("\n")
-    .replace(/^\n+/, "");
+  return stripLeakedRendererMarkup(value, { trim: false });
 }
 
 export type MarkdownContentProps = {

@@ -47,6 +47,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 # ═══════════════════════════════════════════════════════════
 # Known-server presets · one-click install for well-known MCPs
@@ -133,8 +134,7 @@ def create_mcp_router(
         so a user's ``config.yaml`` declarations still appear in
         the UI immediately.
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     def _auth_dep(request: Request) -> None:
         # Router-level auth keeps MCP config/trust self-contained: if

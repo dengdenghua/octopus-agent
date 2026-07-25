@@ -82,6 +82,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment,misc]
     Request = None  # type: ignore[assignment,misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 # ── Wire models ─────────────────────────────────────────────────────
 
@@ -181,8 +182,7 @@ def create_team_tasks_router(
     When ``require_auth`` is false (single-user dev mode) the check is
     skipped — matching the existing _auth() bypass behavior.
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["team-tasks"])
     path = state_path or (app_paths().data_dir / "team_tasks.json")

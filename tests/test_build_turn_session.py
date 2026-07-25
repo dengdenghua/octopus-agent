@@ -69,6 +69,27 @@ class TestDefaults:
 
 
 class TestBodyContextWins:
+    def test_model_resolution_accepts_legacy_top_level_field(self):
+        store = _StubStore({"t1": {"metadata": {"model_name": "stored-model"}}})
+        sess = build_turn_session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t1",
+            body={"model": "request-model"},
+            store=store,
+        )
+        assert sess.metadata["model_name"] == "request-model"
+
+    def test_model_context_name_precedes_top_level_field(self):
+        sess = build_turn_session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t1",
+            body={"model": "request-model", "context": {"model": "context-model"}},
+            store=_StubStore(),
+        )
+        assert sess.metadata["model_name"] == "context-model"
+
     def test_body_mode_overrides_stored_mode(self):
         """A client saying ``mode=team`` in the request wins over
         any persisted ``mode`` â€” the design choice that makes the

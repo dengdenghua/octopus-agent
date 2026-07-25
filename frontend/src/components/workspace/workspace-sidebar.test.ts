@@ -169,6 +169,105 @@ describe("workspace sidebar project grouping", () => {
     ).toEqual(["/workspace/realtime/agent-1", "/workspace/realtime/deep-1"]);
   });
 
+  test("promotes only active threads into the ongoing strip", () => {
+    const threads = [
+      {
+        id: "running-old",
+        title: "running-old",
+        updatedAt: "2026-06-29T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/running-old",
+        agents: ["eve"],
+      },
+      {
+        id: "idle",
+        title: "idle",
+        updatedAt: "2026-06-30T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/idle",
+        agents: ["eve"],
+      },
+      {
+        id: "waiting-new",
+        title: "waiting-new",
+        updatedAt: "2026-07-01T00:00:00Z",
+        mode: "chat",
+        href: "/workspace/realtime/waiting-new",
+        agents: ["eve"],
+      },
+      {
+        id: "running-old-dupe",
+        title: "running-old duplicate",
+        updatedAt: "2026-07-02T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/running-old",
+        agents: ["eve"],
+      },
+    ];
+
+    const ongoing = __testing.buildOngoingThreadSummaries({
+      threads,
+      runStatusByHref: new Map([
+        ["/workspace/realtime/running-old", "running"],
+        ["/workspace/realtime/waiting-new", "waiting"],
+      ]),
+    });
+
+    expect(ongoing.map((thread) => [thread.id, thread.runStatus])).toEqual([
+      ["waiting-new", "waiting"],
+      ["running-old", "running"],
+    ]);
+  });
+
+  test("keeps the current task out of the background ongoing list", () => {
+    const threads = [
+      {
+        id: "current",
+        title: "current",
+        updatedAt: "2026-07-02T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/current",
+        agents: ["eve"],
+        runStatus: "running",
+      },
+      {
+        id: "background",
+        title: "background",
+        updatedAt: "2026-07-01T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/background",
+        agents: ["eve"],
+        runStatus: "waiting",
+      },
+    ] as never;
+
+    expect(
+      __testing
+        .excludeActiveThread(threads, "/workspace/realtime/current")
+        .map((thread) => thread.id),
+    ).toEqual(["background"]);
+  });
+
+  test("keeps project history compact until the user expands it", () => {
+    const threads = Array.from({ length: 9 }, (_, index) => ({
+      id: `thread-${index + 1}`,
+    }));
+
+    expect(
+      __testing.projectThreadsForPreview(threads, false).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual([
+      "thread-1",
+      "thread-2",
+      "thread-3",
+      "thread-4",
+      "thread-5",
+      "thread-6",
+    ]);
+    expect(__testing.projectThreadsForPreview(threads, true)).toHaveLength(9);
+  });
+
   test("groups team history by workspace folder before generated team label", () => {
     expect(
       __testing.projectNameForThread(

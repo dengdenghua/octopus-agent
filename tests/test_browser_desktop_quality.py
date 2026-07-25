@@ -159,6 +159,9 @@ def test_automation_radar_reports_browser_desktop_advantage() -> None:
     assert session_control["scores"]["codex"] == 98
     safety = next(row for row in report["dimensions"] if row["id"] == "automation_safety")
     assert safety["scores"]["octopus"] > safety["scores"]["codex"]
+    chrome = next(row for row in report["dimensions"] if row["id"] == "external_chrome_mode")
+    assert chrome["scores"]["octopus"] > chrome["scores"]["codex"]
+    assert chrome["evidence_ready"] is True
     assert {row["id"] for row in report["octopus_strengths"]} >= {
         "desktop_preview_execute",
         "visual_replay_validation",

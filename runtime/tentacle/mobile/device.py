@@ -26,49 +26,13 @@ from ..base import (
     now_ms,
 )
 from ..transport.ws_server import TentacleWebSocketServer
+from .capabilities import android_capabilities
 
 logger = logging.getLogger(__name__)
 
-# 30 个 Android 技能的标准清单（与 Octopus Mobile 现有 BaseTool 一一对应）
-ANDROID_CAPABILITIES: list[str] = [
-    # 基础操作
-    "android.tap",
-    "android.swipe",
-    "android.input_text",
-    "android.long_press",
-    "android.system_key",
-    # 屏幕感知
-    "android.get_screen_info",
-    "android.take_screenshot",
-    "android.find_node",
-    "android.find_text",
-    # 应用管理
-    "android.open_app",
-    "android.install_app",
-    "android.get_installed_apps",
-    "android.wait",
-    # 智能复合
-    "android.scroll_to_find",
-    "android.detect_dialog",
-    "android.find_and_tap",
-    "android.get_current_app",
-    # 任务控制
-    "android.finish",
-    "android.fail",
-    # 文件 / 剪贴板
-    "android.read_file",
-    "android.write_file",
-    "android.get_clipboard",
-    "android.set_clipboard",
-    # 浏览器（Phase 7，远期）
-    "android.browser.navigate",
-    "android.browser.get_dom",
-    "android.browser.click",
-    "android.browser.type",
-    "android.browser.screenshot",
-    "android.browser.evaluate",
-    "android.browser.install_extension",
-]
+# The SKILL.md manifests are the single source of truth. Keep this public
+# list-shaped export for callers that historically imported it from device.py.
+ANDROID_CAPABILITIES: list[str] = list(android_capabilities())
 
 
 class MobileDevice:

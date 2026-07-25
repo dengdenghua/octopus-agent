@@ -10,14 +10,19 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
+import {
+  stripInternalToolProtocol,
+  stripLeakedRendererMarkup,
+} from "@/core/messages/utils";
 import { cn } from "@/lib/utils";
 
 import type { LiveToolEvent } from "./live-tool-timeline";
+import { stripTraceLabelPrefixes } from "./messages/trace-labels";
 import {
   isFileMutationToolName,
   isReadToolName,
+  isSearchToolName,
   isShellToolName,
-  shellCommandFromInput,
 } from "./tool-name-groups";
 
 interface ReactStepDetail {
@@ -66,13 +71,13 @@ function textFromValue(value: unknown): string | undefined {
 }
 
 function compactInline(value: unknown, max = 180): string | undefined {
-  const text = textFromValue(value)?.replace(/\s+/g, " ");
+  const text = publicText(textFromValue(value))?.replace(/\s+/g, " ");
   if (!text) return undefined;
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
 function previewBlock(value: unknown): string | undefined {
-  const text = textFromValue(value);
+  const text = publicText(textFromValue(value));
   if (!text) return undefined;
   const lines = text.split(/\r?\n/);
   const preview = lines.slice(0, 10).join("\n");
@@ -91,11 +96,68 @@ function valueAt(record: Record<string, unknown> | undefined, keys: string[]) {
   return undefined;
 }
 
+function basenamePath(value: string): string {
+  const normalized = value.replace(/\\/g, "/").replace(/\/+$/, "");
+  return normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+}
+
+const INTERNAL_TOOL_NAME_RE =
+  /\b(?:read_file|write_text_file|shell_command|exec_command|grep_text|list_cwd|apply_patch|todo_write|web_search|fetch_url|browser_[a-z0-9_]+|mcp__[a-z0-9_]+)\b/i;
+
+const SECRET_OR_PROTOCOL_RE =
+  /(?:<[^>\n]+>|\b(?:token|api[_-]?key|secret|password|authorization)\s*[=:])/i;
+
+function publicText(value?: string): string | undefined {
+  const cleaned = stripLeakedRendererMarkup(
+    stripInternalToolProtocol(stripTraceLabelPrefixes(value ?? "")),
+    { trim: true },
+  ).trim();
+  if (!cleaned) return undefined;
+  if (SECRET_OR_PROTOCOL_RE.test(cleaned)) return undefined;
+  return cleaned;
+}
+
+function publicTarget(value: string | undefined): string | undefined {
+  const cleaned = publicText(value);
+  if (!cleaned) return undefined;
+  if (INTERNAL_TOOL_NAME_RE.test(cleaned)) return undefined;
+  if (/^[-\w./~]+(?:\.\w+)?$/.test(cleaned) && cleaned.includes("/")) {
+    return basenamePath(cleaned);
+  }
+  return cleaned;
+}
+
+function hostOf(value: string): string {
+  try {
+    const url = new URL(value);
+    return url.hostname || value;
+  } catch {
+    return value;
+  }
+}
+
 function eventPath(event: LiveToolEvent): string | undefined {
-  return compactInline(
+  const raw = compactInline(
     valueAt(event.input, ["path", "file_path", "target", "cwd"]),
     80,
   );
+  return publicTarget(raw ? basenamePath(raw) : undefined);
+}
+
+function eventPublicTarget(event: LiveToolEvent): string | undefined {
+  const input = event.input;
+  const explicitSummary = publicTarget(
+    compactInline(
+    valueAt(input, ["description", "summary", "label", "title"]),
+    80,
+    ),
+  );
+  if (explicitSummary) return explicitSummary;
+  const query = publicTarget(compactInline(valueAt(input, ["query", "pattern"]), 80));
+  if (query) return query;
+  const url = publicTarget(compactInline(valueAt(input, ["url"]), 80));
+  if (url) return hostOf(url);
+  return eventPath(event);
 }
 
 function contentPreviewFromEvent(event: LiveToolEvent): string | undefined {
@@ -149,15 +211,15 @@ function describeToolEvent(
   if (isReadToolName(event.name)) {
     return `${t.liveRunFeedback.readingFile}${path ? ` ${path}` : ` ${t.liveRunFeedback.readingContext}`}`;
   }
-  if (isShellToolName(event.name)) {
-    const command = compactInline(
-      shellCommandFromInput(event.input, event.name),
-      120,
-    );
-    return `${t.liveRunFeedback.runningCommand}${command ? `: ${command}` : ""}`;
+  if (isSearchToolName(event.name)) {
+    const target = eventPublicTarget(event);
+    return `${t.liveRunFeedback.readingContext}${target ? ` ${target}` : ""}`;
   }
-  const label = event.name.replace(/_/g, " ");
-  return `${t.liveRunFeedback.calling} ${label}${path ? ` (${path})` : ""}`;
+  if (isShellToolName(event.name)) {
+    const target = eventPublicTarget(event);
+    return `${t.liveRunFeedback.runningCommand}${target ? ` · ${target}` : ""}`;
+  }
+  return path ? `${t.liveRunFeedback.calling} · ${path}` : null;
 }
 
 function outputFeedback(event: LiveToolEvent | null): string | null {

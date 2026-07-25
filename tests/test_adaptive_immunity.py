@@ -228,6 +228,22 @@ class TestLearnAnomalyDetection:
             engine.learn(call, latency_ms=101.0, tokens=201.0)
         assert not any("behavioural anomaly" in r.message for r in caplog.records)
 
+    def test_self_whitelisted_calls_do_not_poison_shared_adaptive_state(self, caplog):
+        import logging
+
+        adaptive = AdaptiveImmunity(quarantine_threshold=0.7)
+        engine = TrustEngine(adaptive=adaptive)
+        call = ToolCall(sucker_id="run_tests", caller="react_loop", args={})
+
+        with caplog.at_level(logging.WARNING, logger="octopus.safety.trust"):
+            for _ in range(30):
+                engine.learn(call, latency_ms=100.0, tokens=200.0)
+            engine.learn(call, latency_ms=10000.0, tokens=200.0)
+
+        assert adaptive.sample_count("run_tests") == 0
+        assert adaptive.is_quarantined("run_tests") is False
+        assert not any("behavioural anomaly" in record.message for record in caplog.records)
+
 
 class TestBaselinePrediction:
     """predict() + TrustEngine.check fallback: when the runtime doesn't

@@ -19,6 +19,10 @@
  * data-URLs first; this module never fetches.
  */
 
+import {
+  stripInternalToolProtocol,
+  stripLeakedRendererMarkup,
+} from "@/core/messages/utils";
 import { escapeXml } from "./share-card";
 
 export interface ReplayStep {
@@ -58,21 +62,44 @@ function embedJson(value: unknown): string {
     .replace(/<!--/g, "<\\!--");
 }
 
+const INTERNAL_REPLAY_BLOCK_RE =
+  /`?<(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)\b[^<>`]*>[\s\S]*?<\/(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)>`?/g;
+const RAW_REPLAY_TOOL_NAME_RE =
+  /\b(?:read_file|exec_shell|shell_command|run_command|todo_write|apply_patch|write_file|edit_file|str_replace)\b/gi;
+const REPLAY_SECRET_RE =
+  /\b(?:sk|pk|rk|ghp|gho|ghs|ghu|xox[baprs])[-_][A-Za-z0-9]{8,}\b|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}|\b(?:Bearer|Authorization:?)\s+[A-Za-z0-9._-]{10,}|(["']?(?:api[_-]?key|secret|password|passwd|token)["']?\s*[:=]\s*)["']?[^\s"',}]{4,}/gi;
+
+function cleanText(value: unknown): string {
+  if (value == null) return "";
+  const withoutInternalBlocks = String(value).replace(
+    INTERNAL_REPLAY_BLOCK_RE,
+    "",
+  );
+  return stripLeakedRendererMarkup(
+    stripInternalToolProtocol(withoutInternalBlocks),
+  )
+    .replace(REPLAY_SECRET_RE, (_match, prefix?: string) =>
+      prefix ? `${prefix}«redacted»` : "«redacted»",
+    )
+    .replace(RAW_REPLAY_TOOL_NAME_RE, "operation")
+    .trim();
+}
+
 function cleanStep(step: ReplayStep): ReplayStep {
   return {
-    title: (step.title ?? "").toString(),
-    subtitle: step.subtitle ? step.subtitle.toString() : "",
-    body: step.body ? step.body.toString() : "",
-    kind: step.kind ? step.kind.toString() : "",
-    status: step.status ? step.status.toString() : "",
+    title: cleanText(step.title),
+    subtitle: cleanText(step.subtitle),
+    body: cleanText(step.body),
+    kind: cleanText(step.kind),
+    status: cleanText(step.status),
     image: typeof step.image === "string" && step.image ? step.image : "",
   };
 }
 
 export function buildReplayHtml(replay: ReplayData): string {
-  const title = (replay.title || "Octopus replay").trim();
-  const brand = (replay.brand || "Octopus Agent").trim();
-  const footer = (replay.footer || "").trim();
+  const title = cleanText(replay.title || "Octopus replay") || "Octopus replay";
+  const brand = cleanText(replay.brand || "Octopus Agent") || "Octopus Agent";
+  const footer = cleanText(replay.footer || "");
   const frameMs = Number.isFinite(replay.frameMs)
     ? Math.max(200, replay.frameMs as number)
     : 1400;

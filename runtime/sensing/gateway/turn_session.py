@@ -31,6 +31,12 @@ def build_turn_metadata(
     except (KeyError, AttributeError):
         stored_meta = {}
 
+    # Keep model selection in one place. This also preserves compatibility
+    # with older clients that send ``context.model`` or top-level ``model``.
+    from runtime.platform.process.turn_model import resolve_turn_model
+
+    resolved_model = resolve_turn_model(body, {"metadata": stored_meta})
+
     mode_val = config_meta.get("mode") or ctx.get("mode") or stored_meta.get("mode") or "chat"
     if isinstance(mode_val, str) and mode_val:
         metadata["mode"] = mode_val
@@ -82,7 +88,6 @@ def build_turn_metadata(
         "workspace_scope",
         "personal_workspace_path",
         "interaction_mode",
-        "model_name",
         "tool_surface",
         "browser_surface",
         "browser_session_policy",
@@ -106,6 +111,8 @@ def build_turn_metadata(
             metadata[key] = value.strip()
         elif isinstance(value, bool):
             metadata[key] = value
+    if resolved_model is not None:
+        metadata["model_name"] = resolved_model
     value = ctx.get("personal_workspace_enabled")
     if value is None and not explicit_conversation_mode:
         value = stored_meta.get("personal_workspace_enabled")

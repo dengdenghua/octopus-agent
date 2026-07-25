@@ -23,6 +23,7 @@ ApprovalAction = Literal["accept", "decline"]
 ApprovalResponder = Callable[[str, dict[str, Any]], dict[str, Any]]
 EventObserver = Callable[[dict[str, Any]], None]
 WorkspaceResolver = str | Path | Callable[[], str | Path]
+ContextOverridesResolver = dict[str, Any] | Callable[[Path], dict[str, Any]]
 
 
 class RealtimeEndpointError(RuntimeError):
@@ -119,7 +120,7 @@ class RealtimeTrialRunner:
     model: str | None = None
     topology_id: str | None = None
     workspace: WorkspaceResolver | None = None
-    context_overrides: dict[str, Any] | None = None
+    context_overrides: ContextOverridesResolver | None = None
     sandbox_policy: dict[str, Any] | None = None
     timeout_seconds: float = 900.0
     event_observer: EventObserver | None = None
@@ -148,7 +149,10 @@ class RealtimeTrialRunner:
                 "mode": "code",
                 "capability_mode": "code",
             }
-            context.update(self.context_overrides or {})
+            overrides = self.context_overrides
+            if callable(overrides):
+                overrides = overrides(workspace_root)
+            context.update(overrides or {})
             # A caller may select the appropriate work surface, but it cannot
             # weaken trial isolation or redirect the workspace.
             context["workspace_scope"] = "project"
@@ -326,9 +330,20 @@ def _runtime_error_event(error: Any) -> dict[str, Any]:
     ) else str(error)
     lowered = rendered.lower()
     provider_markers = (
+        "http_401",
+        "http_402",
+        "http_403",
         "http_429",
+        "incorrect api key",
+        "invalid api key",
+        "authentication failed",
+        "unauthorized",
         "insufficient balance",
+        "insufficient funds",
         "insufficient quota",
+        "payment required",
+        "credit balance",
+        "余额不足",
         "billing details",
         "account is suspended",
         "rate limit",

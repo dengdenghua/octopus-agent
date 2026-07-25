@@ -10,6 +10,7 @@ vi.mock("@/core/auth/api", () => ({
 import {
   dedupePersonaAgentsByDisplayName,
   useLocalCliAgents,
+  useLocalCliPartnerAgents,
 } from "./local-cli";
 import type { Agent } from "./types";
 
@@ -80,6 +81,89 @@ describe("useLocalCliAgents", () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.cliAgents).toEqual([]);
+  });
+
+  it("keeps supported but missing partners visible with their brand avatar", async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes("/api/cli-team/status")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              detected: [
+                {
+                  agent_id: "local_trae_cli",
+                  partner_id: "trae-cli",
+                  command: "/Users/me/.local/bin/trae-cli",
+                },
+              ],
+              repo_root: "/repo",
+              is_git_repo: true,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            partners: [
+              {
+                id: "trae-cli",
+                agent_id: "local_trae_cli",
+                name: "Trae CLI",
+                default_alias: "Trae CLI 伙伴",
+                description: "本机 Trae CLI",
+                avatar_url: "https://example.test/trae.png",
+                detected: true,
+                registered: false,
+                status: "detected",
+                effective_status: "ready",
+                ready: true,
+              },
+              {
+                id: "kimi-cli",
+                agent_id: "local_kimi_cli",
+                name: "Kimi CLI",
+                default_alias: "Kimi CLI 伙伴",
+                description: "本机 Kimi CLI",
+                avatar_url: "https://www.kimi.com/favicon.ico",
+                detected: false,
+                registered: false,
+                status: "missing",
+                effective_status: "missing",
+                ready: false,
+                fix_hint: "安装对应官方 CLI，并确认命令在 PATH 中。",
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    });
+
+    const { result } = renderHook(() => useLocalCliPartnerAgents(), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.partners.map((row) => row.agent.display_name)).toEqual(
+      ["Trae CLI", "Kimi CLI"],
+    );
+    expect(result.current.partners[0]).toMatchObject({
+      detected: true,
+      ready: true,
+    });
+    expect(
+      result.current.partners[0]?.agent.capabilities?.local_partner_command,
+    ).toBe("/Users/me/.local/bin/trae-cli");
+    expect(result.current.partners[1]).toMatchObject({
+      detected: false,
+      ready: false,
+      fixHint: "安装对应官方 CLI，并确认命令在 PATH 中。",
+    });
+    expect(result.current.partners[1]?.agent.avatar_url).toBe(
+      "https://www.kimi.com/favicon.ico",
+    );
   });
 });
 

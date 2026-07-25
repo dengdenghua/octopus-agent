@@ -53,10 +53,11 @@ describe("PublicThinkingStatus", () => {
     );
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("模型处理中");
+    expect(status).toHaveTextContent("正在整理线索");
     expect(status).toHaveTextContent("8s");
     expect(status).not.toHaveTextContent("理解");
     expect(status).not.toHaveTextContent("规划");
+    expect(status).not.toHaveTextContent("模型");
   });
 
   test("distinguishes an alive connection from a model that has not responded", () => {
@@ -70,9 +71,10 @@ describe("PublicThinkingStatus", () => {
     );
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("等待模型首个响应");
+    expect(status).toHaveTextContent("我在看这件事");
     expect(status).toHaveTextContent("18s");
     expect(status).not.toHaveTextContent("模型处理中");
+    expect(status).not.toHaveTextContent("模型");
   });
 
   test("shows the current action and its public target", () => {
@@ -86,9 +88,55 @@ describe("PublicThinkingStatus", () => {
     );
 
     const pulse = screen.getByTestId("conversation-activity-pulse");
-    expect(pulse).toHaveTextContent("模型处理中");
+    expect(pulse).toHaveTextContent("正在整理线索");
     expect(pulse).toHaveTextContent("12s");
-    expect(pulse).toHaveTextContent("web search: Kimi streaming interaction");
+    expect(pulse).toHaveTextContent("搜索资料: Kimi streaming interaction");
+    expect(pulse).not.toHaveTextContent("web_search");
+  });
+
+  test("keeps status details concise and does not leak shell commands", () => {
+    const { rerender } = renderWithProviders(
+      <PublicThinkingStatus
+        isLoading
+        liveToolEvents={[
+          toolEvent("running", {
+            id: "read-running",
+            name: "read_file",
+            input: {
+              path: "/Users/dangbei/Public/octopus/octopus-agent/src/app.ts",
+            },
+          }),
+        ]}
+        vitals={vitals({ elapsedMs: 12_000 })}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    const pulse = screen.getByTestId("conversation-activity-pulse");
+    expect(pulse).toHaveTextContent("查看文件: app.ts");
+    expect(pulse).not.toHaveTextContent("/Users/");
+    expect(pulse).not.toHaveTextContent("read_file");
+
+    rerender(
+      <PublicThinkingStatus
+        isLoading
+        liveToolEvents={[
+          toolEvent("running", {
+            id: "shell-running",
+            name: "exec_shell",
+            input: { command: "cat ~/.ssh/id_rsa && pnpm test" },
+          }),
+        ]}
+        vitals={vitals({ elapsedMs: 13_000 })}
+      />,
+    );
+
+    expect(screen.getByTestId("conversation-activity-pulse")).toHaveTextContent(
+      "执行操作",
+    );
+    expect(screen.getByTestId("conversation-activity-pulse")).not.toHaveTextContent(
+      "cat ~/.ssh/id_rsa",
+    );
   });
 
   test("gets out of the way while answer tokens are flowing", () => {
@@ -125,7 +173,7 @@ describe("PublicThinkingStatus", () => {
     );
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("仍在处理，响应较慢");
+    expect(status).toHaveTextContent("还在继续，稍慢一些");
     expect(status).toHaveTextContent("31s");
     expect(status).toHaveAttribute("data-phase", "slow");
   });

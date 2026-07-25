@@ -311,6 +311,16 @@ export interface GroundingSource {
   path: string;
 }
 
+/**
+ * Defense in depth for historic turns produced before backend prompt-scope
+ * isolation. Agent profile pages must never be shown as ordinary project
+ * evidence under another agent's response.
+ */
+export function isPrivateAgentGroundingSource(source: GroundingSource): boolean {
+  const path = source.path.replaceAll("\\", "/").replace(/^\.\/?/, "").toLowerCase();
+  return path.startsWith("agents/") || path.startsWith("20-backend/26-agents/");
+}
+
 export interface Turn {
   id: string;
   threadId: string;

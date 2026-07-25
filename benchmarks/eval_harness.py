@@ -94,7 +94,24 @@ class Trajectory:
 
     def tool_names(self) -> list[str]:
         """Every ``tool_start`` name in order. Useful for "did agent call X?" graders."""
-        return [str(s.payload.get("tool_name", "")) for s in self.steps if s.kind == "tool_start"]
+        names: list[str] = []
+        for step in self.steps:
+            if step.kind != "tool_start":
+                continue
+            flat = str(step.payload.get("tool_name") or "")
+            item = step.payload.get("item")
+            item = item if isinstance(item, dict) else {}
+            # Octopus realtime wraps skills as a camelCase commandExecution
+            # item and preserves the real skill name in ``item.command``.
+            # Codex uses snake_case command_execution for arbitrary shell
+            # commands, where exposing the command text as a tool name would
+            # make cross-system counts incomparable.
+            item_type = str(item.get("type") or "")
+            if item_type == "commandExecution" and item.get("command"):
+                names.append(str(item["command"]))
+            else:
+                names.append(flat or str(item.get("tool_name") or item_type or ""))
+        return names
 
     def runtime_ms(self) -> float:
         end = self.ended_at or time.time()

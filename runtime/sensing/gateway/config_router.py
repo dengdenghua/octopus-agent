@@ -62,6 +62,7 @@ except ImportError:  # pragma: no cover
     BaseModel = object  # type: ignore[assignment, misc]
     Field = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 # ═══════════════════════════════════════════════════════════
 # Response models · shape contracts for the frontend
@@ -111,6 +112,8 @@ if FASTAPI_AVAILABLE:
         display_name: str
         has_api_key: bool
         max_tokens: int | None = None
+        context_window: int | None = None
+        enable_1m_context: bool = False
         supports_thinking: bool | None = None
         supports_vision: bool | None = None
         supports_tool_use: bool | None = None
@@ -248,8 +251,7 @@ def create_config_router(
         Where to persist user-added models. Default preserves the
         pre-split location. Tests override with a tmp_path.
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     def _auth_dep(request: Request) -> None:
         # Router-level gate keeps the whole config surface aligned with
@@ -387,6 +389,24 @@ def create_config_router(
             upstreams = legacy or [model_id]
         return upstreams
 
+    def _entry_context_window(entry: dict[str, Any], upstreams: list[str]) -> int:
+        """Return the provider input window, distinct from output max_tokens."""
+        raw = entry.get("context_window")
+        try:
+            explicit = int(raw)
+        except (TypeError, ValueError):
+            explicit = 0
+        if 8_192 <= explicit <= 2_000_000:
+            return explicit
+        return 256_000
+
+    def _entry_1m_enabled(entry: dict[str, Any], upstreams: list[str]) -> bool:
+        explicit = entry.get("enable_1m_context")
+        if isinstance(explicit, bool):
+            return explicit
+        probe = " ".join(upstreams).lower()
+        return any(model in probe for model in ("glm-5.2", "deepseek-v4-flash", "deepseek-v4-pro"))
+
     def _entry_route_ids(entry: dict[str, Any], fallback_id: str = "") -> list[str]:
         model_id = _entry_model_id(entry) or fallback_id
         route_ids: list[str] = []
@@ -394,6 +414,8 @@ def create_config_router(
             route_id = str(raw or "").strip()
             if route_id and route_id not in route_ids:
                 route_ids.append(route_id)
+        if _entry_1m_enabled(entry, _entry_upstreams(entry, model_id)):
+            route_ids.extend(f"{route_id}::1m" for route_id in list(route_ids))
         return route_ids
 
     def _unregister_entry(
@@ -505,8 +527,9 @@ def create_config_router(
                 self._default = self._upstreams[0] if self._upstreams else ""
 
             def _resolve(self, request: _MR) -> str:
-                if request.model in self._upstreams:
-                    return request.model
+                requested = request.model.removesuffix("::1m")
+                if requested in self._upstreams:
+                    return requested
                 return self._default
 
             def call(self, request: _MR):
@@ -637,6 +660,13 @@ def create_config_router(
         """
         header_names = _default_header_names(entry)
         safe = {k: v for k, v in entry.items() if k not in {"api_key", "default_headers"}}
+        model_id = _entry_model_id(entry)
+        upstreams = _entry_upstreams(entry, model_id)
+        safe["context_window"] = _entry_context_window(
+            entry,
+            upstreams,
+        )
+        safe["enable_1m_context"] = _entry_1m_enabled(entry, upstreams)
         safe["has_api_key"] = bool(entry.get("api_key"))
         safe["default_header_names"] = header_names
         safe["has_default_headers"] = bool(header_names)
@@ -892,6 +922,20 @@ def create_config_router(
                 models.append(legacy_primary.strip())
         if not models:
             models = [model_id]
+        raw_context_window = (
+            body.get("context_window") if "context_window" in body else prev.get("context_window")
+        )
+        try:
+            context_window = int(raw_context_window)
+        except (TypeError, ValueError):
+            context_window = 0
+        if not 8_192 <= context_window <= 2_000_000:
+            context_window = _entry_context_window({}, models)
+        enable_1m_context = (
+            bool(body["enable_1m_context"])
+            if "enable_1m_context" in body
+            else _entry_1m_enabled(prev, models)
+        )
         entry = {
             "id": model_id,
             "name": body.get("name") or model_id,
@@ -899,6 +943,8 @@ def create_config_router(
             "base_url": body.get("base_url") or prev.get("base_url") or "",
             "api_key": body.get("api_key") or prev.get("api_key") or "",
             "models": models,
+            "context_window": context_window,
+            "enable_1m_context": enable_1m_context,
             "display_name": (body.get("display_name") or body.get("name") or model_id),
             "supports_thinking": (
                 body["supports_thinking"]
@@ -1373,6 +1419,8 @@ def create_config_router(
                 # at least appears (the user can edit the entry to
                 # add a real model id).
                 variants = [entry_id]
+            context_window = _entry_context_window(e, variants)
+            enable_1m_context = _entry_1m_enabled(e, variants)
 
             for variant in variants:
                 # Show the concrete variant name only — no entry-id
@@ -1382,29 +1430,41 @@ def create_config_router(
                 # model entry the variant came from (e.g. credentials
                 # / base_url lookup).
                 display = entry_label if len(variants) == 1 else (variant or entry_label)
-                custom.append(
-                    {
-                        "id": variant,
-                        "name": variant,
-                        "display_name": display,
-                        "provider": provider,
-                        "supports_thinking": supports_thinking,
-                        "supports_vision": supports_vision,
-                        "supports_tool_use": supports_tool_use,
-                        "omit_sampling_parameters": (
-                            bool(omit_sampling_parameters)
-                            if omit_sampling_parameters is not None
-                            else None
-                        ),
-                        "compat_profile": e.get("compat_profile"),
-                        "thinking_request_style": e.get("thinking_request_style"),
-                        "drop_tool_choice": e.get("drop_tool_choice"),
-                        "strict_tool_schema": e.get("strict_tool_schema"),
-                        "max_temperature": e.get("max_temperature"),
-                        "custom": True,
-                        "entry_id": entry_id,
-                    }
-                )
+                row = {
+                    "id": variant,
+                    "name": variant,
+                    "model": variant,
+                    "display_name": display,
+                    "provider": provider,
+                    "supports_thinking": supports_thinking,
+                    "supports_vision": supports_vision,
+                    "supports_tool_use": supports_tool_use,
+                    "context_window": context_window,
+                    "context_profile": "default",
+                    "omit_sampling_parameters": (
+                        bool(omit_sampling_parameters)
+                        if omit_sampling_parameters is not None
+                        else None
+                    ),
+                    "compat_profile": e.get("compat_profile"),
+                    "thinking_request_style": e.get("thinking_request_style"),
+                    "drop_tool_choice": e.get("drop_tool_choice"),
+                    "strict_tool_schema": e.get("strict_tool_schema"),
+                    "max_temperature": e.get("max_temperature"),
+                    "custom": True,
+                    "entry_id": entry_id,
+                }
+                custom.append(row)
+                if enable_1m_context:
+                    custom.append(
+                        {
+                            **row,
+                            "id": f"{variant}::1m",
+                            "name": f"{variant}::1m",
+                            "context_window": 1_000_000,
+                            "context_profile": "1m",
+                        }
+                    )
         # Octopus Mix — built-in mixture-of-agents virtual model. Selecting
         # it routes /v1/chat/completions through proposers + aggregator
         # (see openai_gateway/mix.py). Listed first as the octopus-native

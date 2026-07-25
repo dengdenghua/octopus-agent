@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment,misc]
     StreamingResponse = None  # type: ignore[assignment,misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.execution.parallel_agents.models import DispatchRequest, SplitRequest
 from runtime.execution.parallel_agents.orchestrator import ParallelAgentOrchestrator
 
@@ -29,8 +30,7 @@ def create_parallel_agents_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["parallel-agents"])
 

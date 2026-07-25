@@ -87,3 +87,108 @@ def test_codex_cli_runner_records_nonzero_exit(monkeypatch, tmp_path) -> None:
             "error": {"returncode": 7, "stderr": "provider failed"},
         }
     ]
+
+
+def test_codex_cli_runner_classifies_stream_disconnect_as_infrastructure(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    stdout = json.dumps(
+        {
+            "type": "error",
+            "message": (
+                "Reconnecting... 5/5 (stream disconnected before completion: "
+                "tls handshake eof)"
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        codex_cli_runner.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=stdout,
+            stderr="",
+        ),
+    )
+
+    events = list(
+        codex_cli_runner.CodexCliTrialRunner(
+            executable="codex",
+            workspace=tmp_path,
+        )("work")
+    )
+
+    assert events == [
+        {
+            "kind": "infrastructure_error",
+            "error": {
+                "type": "error",
+                "message": (
+                    "Reconnecting... 5/5 (stream disconnected before completion: "
+                    "tls handshake eof)"
+                ),
+            },
+        }
+    ]
+
+
+def test_codex_cli_runner_classifies_provider_nonzero_exit_as_infrastructure(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(
+        codex_cli_runner.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr="provider unavailable: HTTP 503",
+        ),
+    )
+
+    events = list(
+        codex_cli_runner.CodexCliTrialRunner(
+            executable="codex",
+            workspace=tmp_path,
+        )("work")
+    )
+
+    assert events == [
+        {
+            "kind": "infrastructure_error",
+            "error": {
+                "returncode": 1,
+                "stderr": "provider unavailable: HTTP 503",
+                "type": "infrastructure",
+            },
+        }
+    ]
+
+
+def test_codex_cli_runner_classifies_http_402_as_infrastructure(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(
+        codex_cli_runner.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr="HTTP 402 payment required: insufficient balance",
+        ),
+    )
+
+    events = list(
+        codex_cli_runner.CodexCliTrialRunner(
+            executable="codex",
+            workspace=tmp_path,
+        )("work")
+    )
+
+    assert events[0]["kind"] == "infrastructure_error"
+    assert events[0]["error"]["type"] == "infrastructure"

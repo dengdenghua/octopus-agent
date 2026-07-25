@@ -138,6 +138,41 @@ CODE_CHANGE_ROUND_BUDGET = 160
 # underlying task just to produce progress prose.
 PUBLIC_NARRATIVE_SILENCE_S = 0.0
 PUBLIC_NARRATIVE_TIMEOUT_S = 6.0
+_PUBLIC_CHECKPOINT_PROTOCOL_RE = re.compile(
+    r"(?:<[/]?(?:tool|tool_use|tool_call|function|thinking|thought|"
+    r"TextBlock|ReasoningBlock|ToolCallBlock|ToolResultBlock|ExecutionBlock|"
+    r"ThinkingBlock)\b|tool_use_id|```|^\s*[{[]|\b(?:Action|Observation|Thought|"
+    r"Final Answer)\s*:)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_PUBLIC_CHECKPOINT_TOOL_RE = re.compile(
+    r"\b(?:read_file|read_text_file|list_cwd|grep_text|glob_files|exec_shell|"
+    r"shell_command|run_command|todo_write|write_todos|apply_patch|"
+    r"str_replace|edit_file|write_file|web_search)\b",
+    re.IGNORECASE,
+)
+_PUBLIC_CHECKPOINT_SECRET_RE = re.compile(
+    r"(?:sk-[\w-]+|bearer\s+[a-z0-9._-]+|api[_-]?key|token|secret|"
+    r"credential|password|passwd|id_rsa|id_ed25519|\.pem\b|\.key\b)",
+    re.IGNORECASE,
+)
+_PUBLIC_CHECKPOINT_STAGE_RE = re.compile(
+    r"^\s*(?:phase|stage|step|阶段|步骤)\s*[\d一二三四五六七八九十]+(?:\.\d+)?"
+    r"\s*[:：.)、-]?\s*",
+    re.IGNORECASE,
+)
+_PUBLIC_CHECKPOINT_BOILERPLATE_RE = re.compile(
+    r"^(?:(?:我|我们)?(?:还在|正在|继续|接着|马上|即将)"
+    r"(?:思考|处理|执行|整理|分析|工作|调用工具)|"
+    r"(?:still|currently|continuing to|about to)\s+"
+    r"(?:think|work|process|analy[sz]e|execute|run))[。.!！\s]*$",
+    re.IGNORECASE,
+)
+_PUBLIC_CHECKPOINT_CODE_RE = re.compile(
+    r"(?:^|\n)\s*(?:async\s+)?(?:def|class|function|const|let|var|return|raise)\b"
+    r"|(?:^|\n)\s*[@#][A-Za-z_]\w*|[{}]\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 _LONG_RUNNING_PUBLIC_NARRATIVE_TOOLS = {
     "exec_shell",
     "run_command",
@@ -321,22 +356,24 @@ def _iter_native_model_stream_with_deadline(
 def _native_public_checkpoint(text: str) -> str:
     """Return a compact tool-round preamble safe for the main timeline."""
     value = " ".join(str(text or "").strip().split())
+    value = re.sub(r"^\s*(?:Update|Progress)\s*:\s*", "", value, flags=re.IGNORECASE)
+    value = _PUBLIC_CHECKPOINT_STAGE_RE.sub("", value).strip()
     value = re.sub(r"^#{1,6}\s+", "", value).strip()
     for marker in ("**", "__"):
         if value.startswith(marker) and value.endswith(marker) and len(value) > 4:
             value = value[len(marker) : -len(marker)].strip()
     if not value or len(value) < 8:
         return ""
-    lowered = value.lower()
-    if any(
-        marker in lowered
-        for marker in (
-            "<tool_",
-            "<function",
-            "tool_use_id",
-            "```json",
-        )
+    if (
+        _PUBLIC_CHECKPOINT_PROTOCOL_RE.search(value)
+        or _PUBLIC_CHECKPOINT_TOOL_RE.search(value)
+        or _PUBLIC_CHECKPOINT_SECRET_RE.search(value)
+        or _PUBLIC_CHECKPOINT_BOILERPLATE_RE.fullmatch(value)
     ):
+        return ""
+    if len(value) > 420:
+        return ""
+    if value.count("\n") >= 2 and _PUBLIC_CHECKPOINT_CODE_RE.search(value):
         return ""
     sentence_ends = list(re.finditer(r"[。！？!?]|\.(?:\s+|$)", value))
     if len(sentence_ends) >= 2:
@@ -495,16 +532,16 @@ def _generate_native_public_checkpoint(
 ) -> tuple[str, int, int]:
     """Run one small tools-disabled model continuation for public narration."""
     message_text = " ".join(
-        str(message.content)
-        for message in messages
-        if isinstance(message.content, str)
+        str(message.content) for message in messages if isinstance(message.content, str)
     )
     if re.search(r"[\uac00-\ud7af]", message_text):
         prompt += "\nThe user's language is Korean. Write this update in Korean."
     elif re.search(r"[\u3040-\u30ff]", message_text):
         prompt += "\nThe user's language is Japanese. Write this update in Japanese."
     elif re.search(r"[\u3400-\u9fff]", message_text):
-        prompt += "\nThe user's language is Simplified Chinese. Write this update in Simplified Chinese."
+        prompt += (
+            "\nThe user's language is Simplified Chinese. Write this update in Simplified Chinese."
+        )
     checkpoint_messages = list(messages)
     if (
         checkpoint_messages
@@ -521,11 +558,14 @@ def _generate_native_public_checkpoint(
         checkpoint_messages[-1] = Message(role="user", content=merged_content)
     else:
         checkpoint_messages.append(Message(role="user", content=prompt))
-    narrator_model = _next_custom_model_fallback(
-        model,
-        set(),
-        require_tool_use=False,
-    ) or model
+    narrator_model = (
+        _next_custom_model_fallback(
+            model,
+            set(),
+            require_tool_use=False,
+        )
+        or model
+    )
     request = ModelRequest(
         model=narrator_model,
         messages=checkpoint_messages,
@@ -624,6 +664,74 @@ def _generate_native_action_checkpoint(
     )
 
 
+def _public_checkpoint_language(goal: str) -> str:
+    if re.search(r"[\u3400-\u9fff]", goal):
+        return "zh"
+    if re.search(r"[\uac00-\ud7af]", goal):
+        return "ko"
+    if re.search(r"[\u3040-\u30ff]", goal):
+        return "ja"
+    return "en"
+
+
+def _safe_public_source_title(value: str) -> str:
+    candidate = " ".join(str(value or "").split()).strip()
+    if not candidate:
+        return ""
+    if (
+        _PUBLIC_CHECKPOINT_PROTOCOL_RE.search(candidate)
+        or _PUBLIC_CHECKPOINT_TOOL_RE.search(candidate)
+        or _PUBLIC_CHECKPOINT_SECRET_RE.search(candidate)
+    ):
+        return ""
+    return candidate
+
+
+def _render_result_checkpoint(
+    *,
+    language: str,
+    kind: str,
+    count: int,
+    titles: list[str] | None = None,
+) -> str:
+    safe_titles = [title for title in titles or [] if title][:3]
+    if language == "zh":
+        if safe_titles:
+            rendered = "、".join(f"《{title}》" for title in safe_titles)
+            return f"已拿到 {rendered} 等可用资料；接下来基于这些证据继续收束判断。"
+        if kind == "web_fetch":
+            return f"已读取 {count} 份网页正文；接下来基于正文证据整理判断。"
+        if kind == "web_search":
+            return f"已完成 {count} 项资料检索并取得可用结果；接下来打开可靠来源核验。"
+        return ""
+    if language == "ja":
+        if safe_titles:
+            rendered = "、".join(f"「{title}」" for title in safe_titles)
+            return f"{rendered} などの利用できる資料を確認しました。次はその証拠をもとに判断を整理します。"
+        if kind == "web_fetch":
+            return f"{count} 件のページ本文を確認しました。次は本文の証拠をもとに判断を整理します。"
+        if kind == "web_search":
+            return f"{count} 件の検索結果を得ました。次は信頼できる本文で確認します。"
+        return ""
+    if language == "ko":
+        if safe_titles:
+            rendered = "、".join(f"「{title}」" for title in safe_titles)
+            return f"{rendered} 등 사용할 수 있는 자료를 확인했습니다. 다음에는 이 근거를 바탕으로 판단을 정리하겠습니다."
+        if kind == "web_fetch":
+            return f"웹 본문 {count}건을 확인했습니다. 다음에는 본문 근거를 바탕으로 판단을 정리하겠습니다."
+        if kind == "web_search":
+            return f"검색 결과 {count}건을 확보했습니다. 다음에는 신뢰할 수 있는 원문으로 확인하겠습니다."
+        return ""
+    if safe_titles:
+        rendered = ", ".join(f"“{title}”" for title in safe_titles)
+        return f"I found usable evidence from {rendered}; next I’ll synthesize what those sources support."
+    if kind == "web_fetch":
+        return f"I read {count} webpage body {'entry' if count == 1 else 'entries'}; next I’ll synthesize what the text supports."
+    if kind == "web_search":
+        return f"I found {count} usable search {'result' if count == 1 else 'results'}; next I’ll open reliable sources to verify them."
+    return ""
+
+
 def _native_result_checkpoint(
     calls: list[ToolCall],
     result_blocks: list[dict[str, Any]],
@@ -638,6 +746,7 @@ def _native_result_checkpoint(
     evidence-backed stage result without inventing model reasoning.
     """
     successful: list[tuple[ToolCall, str]] = []
+    language = _public_checkpoint_language(goal)
     for call, block in zip(calls, result_blocks, strict=False):
         if block.get("is_error") or call.name == "todo_write":
             continue
@@ -653,7 +762,7 @@ def _native_result_checkpoint(
         if isinstance(value, dict):
             for key, nested in value.items():
                 if str(key).lower() in {"title", "page_title", "name"} and isinstance(nested, str):
-                    candidate = " ".join(nested.split()).strip()
+                    candidate = _safe_public_source_title(nested)
                     if 8 <= len(candidate) <= 140 and candidate not in titles:
                         titles.append(candidate)
                 else:
@@ -671,7 +780,7 @@ def _native_result_checkpoint(
                 output,
                 flags=re.IGNORECASE,
             ):
-                candidate = match.group(1).strip(" '\",}")
+                candidate = _safe_public_source_title(match.group(1).strip(" '\",}"))
                 if candidate and candidate not in titles:
                     titles.append(candidate)
                 if len(titles) >= 3:
@@ -679,19 +788,23 @@ def _native_result_checkpoint(
 
     names = {call.name for call, _output in successful}
     if titles:
-        rendered = "、".join(f"《{title}》" for title in titles[:3])
-        return (
-            f"本轮已从真实工具结果中拿到 {rendered} 等资料；"
-            "下一步会继续读取正文并交叉核对关键交互差异。"
+        return _render_result_checkpoint(
+            language=language,
+            kind="sources",
+            count=len(successful),
+            titles=titles,
         )
     if names & {"web_fetch", "fetch_url", "read_url", "browser_read"}:
-        return (
-            f"本轮已成功读取 {len(successful)} 份网页正文；下一步会基于正文证据提炼差异并补齐来源。"
+        return _render_result_checkpoint(
+            language=language,
+            kind="web_fetch",
+            count=len(successful),
         )
     if names & {"web_search", "search_web", "browser_search"}:
-        return (
-            f"本轮已完成 {len(successful)} 项资料检索并取得可用结果；"
-            "下一步会打开可靠来源正文进行核验。"
+        return _render_result_checkpoint(
+            language=language,
+            kind="web_search",
+            count=len(successful),
         )
     local_reads = [
         (call, output)
@@ -705,16 +818,13 @@ def _native_result_checkpoint(
         size_match = re.search(r'"size"\s*:\s*(\d+)', output)
         complete = bool(re.search(r'"truncated"\s*:\s*false', output, re.IGNORECASE))
         size = int(size_match.group(1)) if size_match else None
-        requested = [
-            item.replace("\\", "/").lstrip("./")
-            for item in _explicit_source_paths(goal)
-        ]
+        requested = [item.replace("\\", "/").lstrip("./") for item in _explicit_source_paths(goal)]
         current = path.lstrip("./")
         next_path = ""
         with contextlib.suppress(ValueError, IndexError):
             next_path = requested[requested.index(current) + 1]
         next_label = os.path.basename(next_path) if next_path else ""
-        if re.search(r"[\u3400-\u9fff]", goal):
+        if language == "zh":
             if size is not None:
                 fact = (
                     f"已完整取得 {label} 的 {size:,} 字节内容"
@@ -727,6 +837,28 @@ def _native_result_checkpoint(
                 f"{fact}；接下来核对 {next_label}。"
                 if next_label
                 else f"{fact}；所需证据已经齐全，现在收束结论。"
+            )
+        if language == "ja":
+            fact = (
+                f"{label} の {size:,} バイトの内容を取得しました"
+                if size is not None
+                else f"{label} の実際の内容を取得しました"
+            )
+            return (
+                f"{fact}。次に {next_label} を確認します。"
+                if next_label
+                else f"{fact}。必要な証拠がそろったので結論をまとめます。"
+            )
+        if language == "ko":
+            fact = (
+                f"{label}의 {size:,}바이트 내용을 확보했습니다"
+                if size is not None
+                else f"{label}의 실제 내용을 확보했습니다"
+            )
+            return (
+                f"{fact}. 다음에는 {next_label}을 확인하겠습니다."
+                if next_label
+                else f"{fact}. 필요한 근거가 모였으니 결론을 정리하겠습니다."
             )
         fact = (
             f"I now have all {size:,} bytes of {label}"
@@ -1948,10 +2080,11 @@ def stream_agentic_fallback(
                     "your tool list.\n"
                     "Accepted payloads: prefer `items=[...]` or `todos=[...]` "
                     "as arrays; JSON strings are tolerated for compatibility. Each "
-                    "item may use `content`, `text`, `title`, or `task`, plus "
+                    "item may use `content`, `text`, `title`, or `task`, plus an "
+                    "optional stable `id`, "
                     "`status` (`pending` / `in_progress` / `completed`) and "
-                    "optional `activeForm` / `active_form`. Always pass the "
-                    "complete list, not a diff.\n\n"
+                    "optional `activeForm` / `active_form`. Preserve returned IDs "
+                    "and always pass the complete list, not a diff.\n\n"
                     + render_todo_protocol_guidance(
                         required=_todo_protocol_required,
                         mode=_todo_protocol_mode,
@@ -2273,16 +2406,18 @@ def stream_agentic_fallback(
                     ),
                 )
             )
+        _round_plan_bootstrap_mode = (
+            _todo_protocol_required
+            and _has_todo_write
+            and not _todo_seen
+            and _completed_tool_count == 0
+        )
         _round_todo_only_mode = _green_convergence_todo_only
         _round_convergence_mode = _force_convergence_next
         _force_convergence_next = False
-        _round_tool_specs = (
-            evidence_tool_specs if _completed_tool_count > 0 else tool_specs
-        )
-        if _round_todo_only_mode:
-            _active_tool_specs = [
-                spec for spec in _round_tool_specs if spec.name == "todo_write"
-            ]
+        _round_tool_specs = evidence_tool_specs if _completed_tool_count > 0 else tool_specs
+        if _round_plan_bootstrap_mode or _round_todo_only_mode:
+            _active_tool_specs = [spec for spec in _round_tool_specs if spec.name == "todo_write"]
         elif _round_convergence_mode:
             _active_tool_specs = []
         else:
@@ -2295,7 +2430,7 @@ def stream_agentic_fallback(
             tools=_active_tool_specs,
             require_tool_use=(
                 True
-                if _round_todo_only_mode
+                if _round_plan_bootstrap_mode or _round_todo_only_mode
                 else False
                 if _round_convergence_mode
                 else (
@@ -2457,8 +2592,8 @@ def stream_agentic_fallback(
                     _stall_failovers += 1
                     _model_timeout_recoveries = 0
             recovery_update = (
-                "这一轮推理超过单轮时限；已保留前面的有效结果，"
-                "现在关闭扩展工具调用，直接收敛阶段结论或最终答案。"
+                "这一轮响应超过单轮时限；已保留前面的有效结果，"
+                "现在会减少额外操作，直接收拢阶段结论或最终答案。"
             )
             yield ("commentary_runtime", recovery_update, None)
             messages.append(
@@ -2492,8 +2627,8 @@ def stream_agentic_fallback(
         _current_native_batch_fingerprint = ""
         _structured_public_checkpoint = ""
         if round_tool_calls:
-            round_tool_calls, _structured_public_checkpoint = (
-                _native_calls_with_public_checkpoint(round_tool_calls)
+            round_tool_calls, _structured_public_checkpoint = _native_calls_with_public_checkpoint(
+                round_tool_calls
             )
             round_tool_calls, _duplicate_native_calls = _deduplicate_native_tool_calls(
                 round_tool_calls
@@ -2538,8 +2673,7 @@ def stream_agentic_fallback(
                 round_tool_calls = [
                     call
                     for call in round_tool_calls
-                    if _native_tool_call_fingerprint(call)
-                    not in _successful_native_read_calls
+                    if _native_tool_call_fingerprint(call) not in _successful_native_read_calls
                 ]
                 _repeated_failure_guard_hits += 1
                 messages.append(
@@ -2557,9 +2691,7 @@ def stream_agentic_fallback(
                 if not round_tool_calls:
                     _force_convergence_next = True
                     continue
-            _current_native_batch_fingerprint = _native_tool_batch_fingerprint(
-                round_tool_calls
-            )
+            _current_native_batch_fingerprint = _native_tool_batch_fingerprint(round_tool_calls)
             failed_count, definitive_failure = _failed_native_batches.get(
                 _current_native_batch_fingerprint,
                 (0, False),
@@ -3104,9 +3236,7 @@ def stream_agentic_fallback(
             # direct path.
             serial_pool = (
                 ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool-bridge-steerable")
-                if (
-                    steering_drain is not None or _action_narration_future is not None
-                )
+                if (steering_drain is not None or _action_narration_future is not None)
                 and not _tool_batch_redirected
                 else None
             )
@@ -3227,9 +3357,7 @@ def stream_agentic_fallback(
                     strict=True,
                 ):
                     if call.name in repeatable_read_names and not block.get("is_error"):
-                        _successful_native_read_calls.add(
-                            _native_tool_call_fingerprint(call)
-                        )
+                        _successful_native_read_calls.add(_native_tool_call_fingerprint(call))
 
         messages.append(
             Message(

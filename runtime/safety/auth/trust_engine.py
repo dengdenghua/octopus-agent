@@ -161,7 +161,12 @@ class TrustEngine:
         adaptive tier a real, sound effect while its pre-execute quarantine
         path stays inert (that path needs a cost *prediction* the runtime
         doesn't supply yet — observed-vs-baseline is the sound substitute)."""
-        if self.adaptive is None:
+        # The check path exempts self-whitelisted orchestration callers from
+        # adaptive immunity (I2: no autoimmunity). Learning must honor the
+        # same boundary: otherwise internal eval/agent traffic can poison the
+        # shared baseline and quarantine a skill for later external callers,
+        # even though the originating self-call could never be blocked.
+        if self.adaptive is None or self._is_self(call):
             return
         sucker = str(call.sucker_id)
         score = self.adaptive.score_observed(sucker, latency_ms=latency_ms, tokens=tokens)
@@ -178,7 +183,8 @@ class TrustEngine:
         self.adaptive.learn(sucker, latency_ms=latency_ms, tokens=tokens)
 
     def _is_self(self, call: ToolCall) -> bool:
-        return any(fnmatch.fnmatch(call.caller, pattern) for pattern in self.self_whitelist)
+        caller = str(getattr(call, "caller", "") or "")
+        return any(fnmatch.fnmatch(caller, pattern) for pattern in self.self_whitelist)
 
     def _is_trusted(self, entity_id: str) -> bool:
         return any(fnmatch.fnmatch(entity_id, pattern) for pattern in self.trusted_sources)

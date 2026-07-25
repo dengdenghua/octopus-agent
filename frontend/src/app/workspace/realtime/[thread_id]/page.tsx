@@ -46,6 +46,7 @@ import {
   ChatInputBox,
   type DeepResearchComposerOptions,
 } from "@/components/workspace/chat-input-box";
+import { ComposerStepProgress } from "@/components/workspace/composer-step-progress";
 import type {
   AgentModeName,
   AuditIntensity,
@@ -70,6 +71,7 @@ import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   MessageList,
 } from "@/components/workspace/messages";
+import { convertToSteps } from "@/components/workspace/messages/message-group";
 import { extractResultUrl } from "@/components/workspace/messages/message-output-summary";
 import { LoadOlderTurnsBanner } from "@/components/workspace/messages/load-older-turns-banner";
 import { ThreadProviders } from "@/components/workspace/messages/context";
@@ -111,6 +113,7 @@ import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useDeferredRouteCommit } from "@/core/router/use-deferred-route-commit";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
+import { buildProgressOutline } from "@/core/threads/progress-outline";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { ReasoningEffort } from "@/core/threads";
 import {
@@ -137,7 +140,10 @@ import {
   TASK_COLLABORATOR_PRESET_EVENT,
   type TaskCollaboratorPreset,
 } from "@/core/collaboration/task-collaborator-preset";
-import { collaborationRosterFromThread } from "@/core/collaboration/thread-collaboration";
+import {
+  collaborationRosterFromThread,
+  hydrateCollaborationRoster,
+} from "@/core/collaboration/thread-collaboration";
 import {
   buildCoworkSelectionSyncPlan,
   coworkGroupToCollaborationRoster,
@@ -183,6 +189,7 @@ function normalizeReasoningEffortForUi(
 const CHAT_WORKDIR_KEY = "chat:workdir:lastUsed";
 const CODE_WORKDIR_KEY = "code:workdir:lastUsed";
 const RECENT_WORKDIRS_KEY = "octopus:recentWorkdirs";
+const AGENT_WORKBENCH_OPEN_KEY = "octopus:agent-workbench-open";
 const MAX_RECENT_WORKDIRS = 6;
 
 type ThreadRouteState = {
@@ -218,6 +225,16 @@ function rememberChatWorkDir(dir: string) {
     window.localStorage.setItem(RECENT_WORKDIRS_KEY, JSON.stringify(next));
   } catch (e) {
     swallow(e, "storage");
+  }
+}
+
+function readAgentWorkbenchOpenPreference(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(AGENT_WORKBENCH_OPEN_KEY) === "1";
+  } catch (e) {
+    swallow(e, "storage");
+    return false;
   }
 }
 
@@ -342,6 +359,12 @@ function RightPanelMenu({
     hasResearchHistory;
 
   if (!hasAnyPanel) return null;
+
+  // The Agent workbench already owns a visible, labelled collapse control in
+  // its header. Hiding this global toggle while that panel is open avoids two
+  // different buttons performing the same close action; once collapsed, the
+  // global button returns as the stable way to reopen it.
+  if (activePage === "agent") return null;
 
   const openDefaultPanel = () => {
     if (hasAgentWorkbench) {
@@ -715,9 +738,7 @@ function TaskCollaboratorControl({
                       className="size-full object-cover"
                     />
                   ) : agent.icon?.trim() ? (
-                    <span className="text-xs leading-none">
-                      {agent.icon}
-                    </span>
+                    <span className="text-xs leading-none">{agent.icon}</span>
                   ) : (
                     agent.display_name.charAt(0).toUpperCase()
                   )}
@@ -1026,7 +1047,7 @@ function RealtimePageContent({
     useState(false);
   const [agentWorkbenchDismissed, setAgentWorkbenchDismissed] = useState(false);
   const [agentWorkbenchManuallyOpened, setAgentWorkbenchManuallyOpened] =
-    useState(false);
+    useState(readAgentWorkbenchOpenPreference);
   const [focusedWorkbenchAgentId, setFocusedWorkbenchAgentId] = useState<
     string | null
   >(null);
@@ -1053,6 +1074,7 @@ function RealtimePageContent({
     string | null
   >(null);
   const settledWorkbenchAutoDismissedRef = useRef<string | null>(null);
+  const emptyWorkbenchAutoDismissedRef = useRef<string | null>(null);
   const [discussionOnly, setDiscussionOnly] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
   const [projectAgentMode, setProjectAgentMode] =
@@ -1165,6 +1187,17 @@ function RealtimePageContent({
   }, []);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        AGENT_WORKBENCH_OPEN_KEY,
+        agentWorkbenchManuallyOpened ? "1" : "0",
+      );
+    } catch (e) {
+      swallow(e, "storage");
+    }
+  }, [agentWorkbenchManuallyOpened]);
+
+  useEffect(() => {
     collaboratorSelectionTouchedRef.current = false;
     lastCoworkSyncSignatureRef.current = null;
     setSelectedCollaboratorIds([]);
@@ -1178,7 +1211,6 @@ function RealtimePageContent({
     setFocusedWorkbenchEventKind(null);
     setFocusedWorkbenchEventView(null);
     setFocusedWorkbenchEffectKey(null);
-    setAgentWorkbenchManuallyOpened(false);
   }, [threadId]);
 
   const navigate = useNavigate();
@@ -1528,14 +1560,24 @@ function RealtimePageContent({
       primary === collaborationRoster
         ? savedCollaborationRoster
         : collaborationRoster;
-    if (secondary.length === 0) return primary;
+    if (secondary.length === 0) {
+      return hydrateCollaborationRoster(primary, coworkCollaborationProfiles);
+    }
     const seen = new Map<string, ChatCollaborationRosterEntry>();
     for (const entry of primary) seen.set(entry.agent_id, entry);
     for (const entry of secondary) {
       if (!seen.has(entry.agent_id)) seen.set(entry.agent_id, entry);
     }
-    return Array.from(seen.values());
-  }, [collaborationEnabled, collaborationRoster, savedCollaborationRoster]);
+    return hydrateCollaborationRoster(
+      Array.from(seen.values()),
+      coworkCollaborationProfiles,
+    );
+  }, [
+    collaborationEnabled,
+    collaborationRoster,
+    coworkCollaborationProfiles,
+    savedCollaborationRoster,
+  ]);
   const visibleCollaborationEnabled = visibleCollaborationRoster.length > 1;
   const collaborationRosterSeats = useMemo<WorkbenchRosterSeat[]>(
     () =>
@@ -1755,6 +1797,30 @@ function RealtimePageContent({
     (id: string) => `/workspace/realtime/${encodeURIComponent(id)}`,
     [],
   );
+  const markSidebarThreadRunning = useCallback(
+    (id: string) => {
+      const targetThreadId = id.trim();
+      if (!targetThreadId) return;
+      eventBus.emit("thread:run-status", {
+        href: threadRouteFor(targetThreadId),
+        state: "running",
+        threadId: targetThreadId,
+      });
+    },
+    [threadRouteFor],
+  );
+  const clearSidebarThreadStatus = useCallback(
+    (id: string) => {
+      const targetThreadId = id.trim();
+      if (!targetThreadId) return;
+      eventBus.emit("thread:run-status", {
+        href: threadRouteFor(targetThreadId),
+        state: null,
+        threadId: targetThreadId,
+      });
+    },
+    [threadRouteFor],
+  );
   const newThreadRouteForMode = useCallback(
     (mode: string, prompt?: string) => {
       const agentId =
@@ -1896,7 +1962,7 @@ function RealtimePageContent({
     thread,
     sendMessage,
     ,
-    liveToolEvents,
+    ,
     lastTurnToolEvents,
     realtimeApprovals,
   ] = useThreadStream({
@@ -1957,6 +2023,10 @@ function RealtimePageContent({
       ...collaborationContext,
     },
     onStart: (startedThreadId) => {
+      if (startedThreadId !== threadId) {
+        clearSidebarThreadStatus(threadId);
+      }
+      markSidebarThreadRunning(startedThreadId);
       localStartedThreadIdRef.current = startedThreadId;
       setIsNewThread(false);
       const targetPath = threadRouteFor(startedThreadId);
@@ -2096,9 +2166,8 @@ function RealtimePageContent({
   // task" and auto-switch the workbench to the browser preview tab on
   // completion. The URL is also forwarded to LivePreviewPanel so it can
   // render the deployed site instead of falling back to srcDoc.
-  // Only the current turn is scanned (messages after the last human message):
-  // a deploy URL from an earlier turn must not hijack every later completion.
-  const resultPreviewUrl = useMemo(() => {
+  // Only the current turn is scanned (messages after the last human message).
+  const lastTurnMessages = useMemo(() => {
     let turnStart = 0;
     for (let i = thread.messages.length - 1; i >= 0; i--) {
       const message = thread.messages[i];
@@ -2107,12 +2176,21 @@ function RealtimePageContent({
         break;
       }
     }
-    return extractResultUrl(thread.messages.slice(turnStart));
+    return thread.messages.slice(turnStart);
   }, [thread.messages]);
+  // A deploy URL from an earlier turn must not hijack every later completion.
+  const resultPreviewUrl = useMemo(() => {
+    return extractResultUrl(lastTurnMessages);
+  }, [lastTurnMessages]);
+  // 侧边栏「进展」面板的叙事大纲：按 iteration 分组（意图/执行计数/事实）。
+  const progressOutline = useMemo(
+    () => buildProgressOutline(convertToSteps(lastTurnMessages)),
+    [lastTurnMessages],
+  );
 
   const latestPersistedTodoEvents = useMemo(
-    () => latestPersistedTodoEventsFromMessages(thread.messages),
-    [thread.messages],
+    () => latestPersistedTodoEventsFromMessages(lastTurnMessages),
+    [lastTurnMessages],
   );
   const restoredTodoEvents = useMemo(
     () =>
@@ -2124,11 +2202,8 @@ function RealtimePageContent({
     [lastTurnToolEvents, latestPersistedTodoEvents, thread.isLoading],
   );
   const agentDisplayEvents = useMemo(
-    () => [
-      ...(lastTurnToolEvents.length > 0 ? lastTurnToolEvents : liveToolEvents),
-      ...restoredTodoEvents,
-    ],
-    [lastTurnToolEvents, liveToolEvents, restoredTodoEvents],
+    () => [...lastTurnToolEvents, ...restoredTodoEvents],
+    [lastTurnToolEvents, restoredTodoEvents],
   );
   const latestWorkspaceFocusTab = useMemo(
     () => workspaceFocusTabFromEvents(agentDisplayEvents),
@@ -2338,6 +2413,10 @@ function RealtimePageContent({
     const latestMessage = thread.messages[thread.messages.length - 1];
     return `${threadId}:${latestMessage?.id ?? thread.messages.length}`;
   }, [thread.messages, threadId]);
+  const hasCurrentTurnAgentResponse = useMemo(
+    () => lastTurnMessages.some((message) => isAIMessage(message)),
+    [lastTurnMessages],
+  );
 
   useEffect(() => {
     if (!canOpenAgentWorkbench) {
@@ -2372,6 +2451,42 @@ function RealtimePageContent({
     settledWorkbenchTurnKey,
     shouldHideSettledProcessChrome,
     showAgentPlan,
+  ]);
+
+  useEffect(() => {
+    if (
+      collaborationEnabled ||
+      !agentWorkbenchManuallyOpened ||
+      thread.isLoading ||
+      !agentRunSettled ||
+      !hasCurrentTurnAgentResponse ||
+      hasRenderableAgentWorkbench ||
+      artifactsOpen ||
+      showAgentPlan ||
+      previewBlocks ||
+      resultPreviewUrl
+    ) {
+      return;
+    }
+    if (emptyWorkbenchAutoDismissedRef.current === settledWorkbenchTurnKey) {
+      return;
+    }
+    emptyWorkbenchAutoDismissedRef.current = settledWorkbenchTurnKey;
+    setAgentWorkbenchManuallyOpened(false);
+    setAgentWorkbenchDismissed(true);
+    setAgentWorkbenchTabTouched(false);
+  }, [
+    agentRunSettled,
+    agentWorkbenchManuallyOpened,
+    artifactsOpen,
+    collaborationEnabled,
+    hasCurrentTurnAgentResponse,
+    hasRenderableAgentWorkbench,
+    previewBlocks,
+    resultPreviewUrl,
+    settledWorkbenchTurnKey,
+    showAgentPlan,
+    thread.isLoading,
   ]);
 
   useEffect(() => {
@@ -2422,6 +2537,7 @@ function RealtimePageContent({
       // over the whole chat column, so never auto-open it there.
       isMobile ||
       (!previewBlocks && !resultPreviewUrl) ||
+      agentWorkbenchDismissed ||
       agentWorkbenchTabTouched ||
       thread.isLoading ||
       !hasCompletedAgentOutput
@@ -2440,6 +2556,7 @@ function RealtimePageContent({
     isMobile,
     previewBlocks,
     resultPreviewUrl,
+    agentWorkbenchDismissed,
     agentWorkbenchTabTouched,
     thread.isLoading,
     hasCompletedAgentOutput,
@@ -2511,6 +2628,7 @@ function RealtimePageContent({
       const images = message.images ?? [];
       const attachedFiles = message.files ?? [];
       const browserFiles = [...attachedFiles, ...images];
+      markSidebarThreadRunning(threadId);
       if (browserFiles.length === 0) {
         void sendMessage(threadId, { text: message.text, files: [] });
         return;
@@ -2555,20 +2673,21 @@ function RealtimePageContent({
         void sendMessage(threadId, { text: message.text, files });
       });
     },
-    [sendMessage, threadId],
+    [markSidebarThreadRunning, sendMessage, threadId],
   );
   useEffect(() => {
     const handleQuickReply = (event: Event) => {
       const detail = (event as CustomEvent<{ text?: unknown }>).detail;
       const text = typeof detail?.text === "string" ? detail.text.trim() : "";
       if (!text || thread.isLoading) return;
+      markSidebarThreadRunning(threadId);
       void sendMessage(threadId, { text, files: [] });
     };
     window.addEventListener("octopus:quick-reply", handleQuickReply);
     return () => {
       window.removeEventListener("octopus:quick-reply", handleQuickReply);
     };
-  }, [sendMessage, thread.isLoading, threadId]);
+  }, [markSidebarThreadRunning, sendMessage, thread.isLoading, threadId]);
   const handleModeChange = useCallback(
     (mode: ReasoningMode, draft?: string) => {
       if (mode === effectiveMode) return;
@@ -2970,7 +3089,8 @@ function RealtimePageContent({
                 <div
                   className={cn(
                     "relative w-full transition-[max-width,transform] duration-300",
-                    isNewThread && "md:-translate-y-[calc(50vh-168px)]",
+                    isNewThread &&
+                      "-translate-y-[clamp(3rem,12dvh,7rem)] md:-translate-y-[calc(50vh-168px)]",
                     isNewThread ? "max-w-3xl" : "max-w-(--container-width-md)",
                   )}
                 >
@@ -2985,6 +3105,17 @@ function RealtimePageContent({
                         ) : (
                           <Welcome mode={effectiveMode} />
                         ))}
+                      {!isNewThread ? (
+                        <ComposerStepProgress
+                          events={agentDisplayEvents}
+                          hasAnswer={hasCompletedAgentOutput}
+                          isLoading={thread.isLoading}
+                          runSettled={agentRunSettled}
+                          runFailed={agentRunFailed}
+                          paused={hasPausedOrPendingBackgroundTask}
+                          onOpenDetails={() => selectAgentWorkbenchTab("agent")}
+                        />
+                      ) : null}
                       <ChatInputBox
                         key={composerSeed || "empty-composer"}
                         status={
@@ -3136,6 +3267,7 @@ function RealtimePageContent({
                   <AgentWorkbenchPanel
                     activeTab={agentWorkbenchTab}
                     events={agentDisplayEvents}
+                    progressOutline={progressOutline}
                     focusedAgentId={focusedWorkbenchAgentId}
                     focusedAgentView={focusedWorkbenchAgentView}
                     focusedAgentNonce={focusedWorkbenchAgentNonce}
@@ -3154,7 +3286,11 @@ function RealtimePageContent({
                     workDir={workDir}
                     browserPreviewBlocks={previewBlocks}
                     resultPreviewUrl={resultPreviewUrl}
+                    mainAgentName={
+                      displayAgent?.display_name || effectiveAgentId
+                    }
                     rosterSeats={collaborationRosterSeats}
+                    onClose={closeAgentWorkbenchPanel}
                     onSelectTab={selectAgentWorkbenchTab}
                     onOpenArtifact={openWorkbenchArtifact}
                   />
@@ -3168,7 +3304,7 @@ function RealtimePageContent({
                 (showResearch && (!!researchJob || !!researchError))
               }
               sidebarWidth="min(420px, 40vw)"
-              secondaryPanelWidth="min(600px, 42vw)"
+              secondaryPanelWidth="min(440px, 34vw)"
             />
           </ChatBox>
           <ChatsDrawer

@@ -125,6 +125,7 @@ except ImportError:  # pragma: no cover
     FileResponse = None  # type: ignore[assignment, misc]
     Response = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 def _avatar_url_for(agent_id: str) -> str | None:
     """Return a URL the UI can <img> load, or None if no avatar on disk.
@@ -355,8 +356,7 @@ def create_agents_router(
     runtime: Any = None,
     thread_store: Any = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["agents"])
 

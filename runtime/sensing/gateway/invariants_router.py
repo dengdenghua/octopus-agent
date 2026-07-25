@@ -58,6 +58,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 # ═══════════════════════════════════════════════════════════
 # Cache · process-wide snapshot
@@ -241,8 +242,7 @@ def create_invariants_router(
         scans ``sys.modules`` directly. Accepted for API symmetry with
         ``create_config_router``.
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     # ``stack`` is intentionally unused for now — see docstring.
     del stack

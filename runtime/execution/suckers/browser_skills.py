@@ -256,6 +256,54 @@ def _higher_track_backends() -> list[Any]:
     return [ExtensionBackend(), ElectronBackend()]
 
 
+def _requested_browser_track() -> Any:
+    """Resolve the trusted per-turn browser track preference, if present."""
+
+    try:
+        from runtime.execution.suckers.browser_backend import Track
+        from runtime.platform.process.session import current_session
+
+        session = current_session()
+        metadata = getattr(session, "metadata", None) if session is not None else None
+        raw = str((metadata or {}).get("browser_track_preference") or "").strip().lower()
+        return Track(raw) if raw else None
+    except (AttributeError, TypeError, ValueError, ImportError):
+        return None
+
+
+def _annotate_browser_track_result(
+    payload: dict[str, Any],
+    *,
+    served_track: Any,
+) -> dict[str, Any]:
+    """Expose whether an explicit @Chrome/@Browser track preference held.
+
+    Previously an extension disconnect silently moved an @Chrome action onto
+    Electron or Playwright.  The operation could succeed in the wrong browser
+    while the model reported that it acted on the signed-in Chrome tab.  This
+    receipt makes the selected track and any fallback explicit to the model,
+    UI, trajectory recorder, and final-answer guards.
+    """
+
+    served = str(getattr(served_track, "value", served_track) or "")
+    requested_track = _requested_browser_track()
+    requested = str(getattr(requested_track, "value", requested_track) or "")
+    result = dict(payload)
+    if served:
+        result.setdefault("track", served)
+    if not requested:
+        return result
+    result["browser_track_preference"] = requested
+    result["browser_track_preference_satisfied"] = served == requested
+    if served != requested:
+        result["browser_track_fallback"] = {
+            "requested": requested,
+            "served": served,
+            "reason": f"{requested}_unavailable",
+        }
+    return result
+
+
 def _dispatch_higher_track(
     verb: str,
     payload: dict[str, Any],
@@ -270,7 +318,10 @@ def _dispatch_higher_track(
     try:
         from runtime.execution.suckers.browser_backend import resolve_backend
 
-        chosen = resolve_backend(_higher_track_backends())
+        chosen = resolve_backend(
+            _higher_track_backends(),
+            prefer=_requested_browser_track(),
+        )
     except Exception:  # noqa: BLE001 — backend layer optional
         return None
     if chosen is None:
@@ -284,7 +335,10 @@ def _dispatch_higher_track(
             if not nav.ok:
                 return _browser_result_payload(nav)
         res = _call_browser_backend(chosen, verb, payload, fallback_url=url)
-        result = _browser_result_payload(res)
+        result = _annotate_browser_track_result(
+            _browser_result_payload(res),
+            served_track=getattr(chosen, "track", ""),
+        )
         if verb == "screenshot" and "error" not in result:
             return _materialize_higher_track_screenshot(result, payload)
         return result
@@ -431,7 +485,9 @@ def _with_page(
     url: str = "",
 ) -> dict[str, Any]:
     if page is not None:
-        return action(page)
+        from runtime.execution.suckers.browser_backend import Track
+
+        return _annotate_browser_track_result(action(page), served_track=Track.PLAYWRIGHT)
 
     # Prefer the user's real browser (extension > desktop Electron) when one is
     # live; fall back to headless Playwright. Unavailable tracks (the common
@@ -465,12 +521,22 @@ def _with_page(
             pool = get_browser_session_pool()
             key = f"thr:{getattr(sess, 'thread_id', None) or threading.get_ident()}"
             try:
-                return pool.get_or_create(key).submit(action)
+                from runtime.execution.suckers.browser_backend import Track
+
+                return _annotate_browser_track_result(
+                    pool.get_or_create(key).submit(action),
+                    served_track=Track.PLAYWRIGHT,
+                )
             except RuntimeError:
                 # The worker was closed (reaper eviction / timeout retirement)
                 # between get_or_create and submit — one fresh retry resolves
                 # the race (get_or_create makes a new worker for a closed key).
-                return pool.get_or_create(key).submit(action)
+                from runtime.execution.suckers.browser_backend import Track
+
+                return _annotate_browser_track_result(
+                    pool.get_or_create(key).submit(action),
+                    served_track=Track.PLAYWRIGHT,
+                )
         except Exception as e:  # noqa: BLE001
             return {"error": f"browser_error: {type(e).__name__}: {e}"}
 
@@ -480,7 +546,12 @@ def _with_page(
             try:
                 ctx = browser.new_context()
                 new_page = ctx.new_page()
-                return action(new_page)
+                from runtime.execution.suckers.browser_backend import Track
+
+                return _annotate_browser_track_result(
+                    action(new_page),
+                    served_track=Track.PLAYWRIGHT,
+                )
             finally:
                 browser.close()
     except Exception as e:  # noqa: BLE001

@@ -1131,7 +1131,7 @@ def create_app(
         )
     )
 
-    # CLI-team · detect installed coding CLIs (Claude/Codex) + run them as a team
+    # CLI-team · detect installed coding CLIs (Claude/Codex/Trae/Qoder) + run them as a team
     # in isolated worktrees, diff-first review.
     from runtime.sensing.gateway.cli_team_router import create_cli_team_router
 
@@ -2124,6 +2124,36 @@ def create_app(
         logging.getLogger(__name__).warning(
             "remote_backends_router failed to mount: %s",
             _rb_exc,
+        )
+
+    # ─── Workspace HTTP API (feature-flag gated) ─────────────────────────
+    # Mount + membership + file-lease CRUD on top of WorkspaceStore /
+    # MountBackendRegistry / LeaseStore. Registered AFTER the per-thread
+    # ``workspaces_router`` so that router's ``GET /api/workspaces/{thread_id}/outputs``
+    # continues to win for output listing; the new router owns the
+    # create / list / members / lease / health endpoints. The new
+    # ``GET /api/workspaces/{workspace_id}`` is shadowed by the thread
+    # router's ``GET /api/workspaces/{thread_id}`` when both are
+    # mounted — callers that need the Workspace entity by id should
+    # filter the ``GET /api/workspaces?user_id=...`` list response.
+    try:
+        from runtime.sensing.gateway.workspace_api_router import (
+            create_workspace_api_router,
+        )
+
+        app.include_router(
+            create_workspace_api_router(
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
+    except Exception as _wsa_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "workspace_api_router failed to mount: %s",
+            _wsa_exc,
         )
 
     # ─── Prompts hot-reload (feature-flag gated) ───────────────────────────

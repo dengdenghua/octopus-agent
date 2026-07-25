@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
@@ -11,7 +12,7 @@ from typing import Any
 from runtime.adapters.mcp_client.trust import get_trust_store
 
 
-def run_mcp_command(args: Any) -> int:
+def run_mcp_command(args: argparse.Namespace) -> int:
     op = getattr(args, "mcp_op", None)
     if op == "add":
         return _add_server(args)
@@ -29,7 +30,7 @@ def run_mcp_command(args: Any) -> int:
     return 2
 
 
-def _add_server(args: Any) -> int:
+def _add_server(args: argparse.Namespace) -> int:
     tail_options, command = _split_add_tail(getattr(args, "server_command", None) or [])
     if not command:
         print(
@@ -63,7 +64,7 @@ def _add_server(args: Any) -> int:
     return 0
 
 
-def _list_servers(args: Any) -> int:
+def _list_servers(args: argparse.Namespace) -> int:
     data = _read_config()
     servers = data.get("mcpServers") or {}
     trust = {entry.server_name: entry for entry in get_trust_store().list_all()}
@@ -96,7 +97,7 @@ def _list_servers(args: Any) -> int:
     return 0
 
 
-def _remove_server(args: Any) -> int:
+def _remove_server(args: argparse.Namespace) -> int:
     data = _read_config()
     servers = data.setdefault("mcpServers", {})
     name = str(args.name)
@@ -112,7 +113,7 @@ def _remove_server(args: Any) -> int:
     return 1
 
 
-def _trust_server(args: Any) -> int:
+def _trust_server(args: argparse.Namespace) -> int:
     name = str(args.name)
     tools = list(getattr(args, "tools", None) or [])
     note = getattr(args, "note", None) or "trusted by octopus-agent mcp trust"
@@ -121,7 +122,7 @@ def _trust_server(args: Any) -> int:
     return 0
 
 
-def _revoke_server(args: Any) -> int:
+def _revoke_server(args: argparse.Namespace) -> int:
     name = str(args.name)
     ok = get_trust_store().revoke(name)
     if ok:
@@ -217,7 +218,7 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def _serve_mcp(args: Any) -> int:
+def _serve_mcp(args: argparse.Namespace) -> int:
     """启动 MCP Server（stdio 或 SSE 模式）.
 
     用法::

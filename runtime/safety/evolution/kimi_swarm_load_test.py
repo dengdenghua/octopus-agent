@@ -708,7 +708,7 @@ def _next_stage_action(
         return f"Resolve the latest {next_stage} provider failure before rerun."
     if provider_state == "missing":
         return (
-            "Configure the Kimi Coding custom model, then run the recommended "
+            "Configure the Kimi K3 custom model, then run the recommended "
             f"{next_stage} payload."
         )
     if provider_state == "unknown":

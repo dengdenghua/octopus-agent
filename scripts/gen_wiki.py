@@ -157,7 +157,9 @@ def _load_catalog() -> dict[str, dict[str, Any]]:
             for tgt in node.targets:
                 if isinstance(tgt, ast.Name) and tgt.id == "_CATALOG":
                     return ast.literal_eval(node.value)
-    raise RuntimeError("_CATALOG dict not found in all_skills/__init__.py")
+    raise RuntimeError(
+        f"_CATALOG dict not found in {src!r} at {ROOT / 'runtime/execution/all_skills/__init__.py'}"
+    )
 
 
 def _load_arm_skill_map() -> dict[str, list[str]]:

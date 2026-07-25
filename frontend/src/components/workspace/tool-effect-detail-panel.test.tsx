@@ -127,4 +127,26 @@ describe("ToolEffectDetailPanel", () => {
       screen.queryByRole("button", { name: "确认未发生并允许一次重试" }),
     ).not.toBeInTheDocument();
   });
+
+  it("does not expose a raw internal tool name in the operator panel", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...snapshot,
+          receipts: [{ ...snapshot.receipts[0], sucker_id: "exec_shell" }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    renderWithProviders(
+      <ToolEffectsProvider>
+        <ToolEffectDetailPanel effectKey="effect:payment" onBack={vi.fn()} />
+      </ToolEffectsProvider>,
+      { locale: "zh-CN" },
+    );
+
+    expect(await screen.findByText("外部动作")).toBeInTheDocument();
+    expect(screen.queryByText("exec_shell")).not.toBeInTheDocument();
+  });
 });

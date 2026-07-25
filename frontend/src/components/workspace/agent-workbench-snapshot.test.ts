@@ -196,6 +196,11 @@ describe("agent workbench snapshot", () => {
     );
 
     expect(snapshot.currentPhase?.id).toBe("server-phase-2");
+    expect(snapshot.currentPhase?.title).toBe("Run tests");
+    expect(snapshot.phases.map((phase) => phase.title)).toEqual([
+      "Read docs",
+      "Run tests",
+    ]);
     expect(snapshot.currentBlock?.id).toBe("shell-server");
     expect(snapshot.focusedTab).toBe("terminal");
     expect(snapshot.phases.map((phase) => phase.id)).toEqual([
@@ -268,7 +273,7 @@ describe("agent workbench snapshot", () => {
                   id: "phase-read",
                   index: 1,
                   total: 2,
-                  title: "Phase 1: 理解任务与准备上下文",
+                  title: "Phase 1: 补齐上下文",
                   status: "done",
                   activeItemId: "read-package",
                 },
@@ -276,7 +281,7 @@ describe("agent workbench snapshot", () => {
                   id: "phase-deliver",
                   index: 2,
                   total: 2,
-                  title: "Phase 2: 整理结果与交付",
+                  title: "Phase 2: 收拢答案",
                   status: "waiting_approval",
                   activeItemId: "verify-required",
                 },

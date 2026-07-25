@@ -711,6 +711,36 @@ class _StreamingRouter:
 
 
 class TestSubTextDeltaStreaming:
+    def test_first_round_stream_provider_error_is_not_reported_as_success(self):
+        """A provider failure before any role output must reach the bridge.
+
+        Returning an empty string here makes ``run_ephemeral_definition``
+        label the role successful with zero iterations, allowing TeamRunner to
+        continue through an entirely empty topology.
+        """
+
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+
+        class _BrokenStreamingRouter:
+            default_model = "broken"
+
+            def call_stream(self, request):  # noqa: ARG002
+                raise ValueError("OpenAIRouterError: http_402")
+                yield  # pragma: no cover - keeps this a generator
+
+        runner = make_llm_ephemeral_runner(
+            _BrokenStreamingRouter(),
+            registry=_StubRegistry({"bb_write": lambda **kw: {"ok": True}}),
+            default_model="broken",
+        )
+        call = _make_call()
+        call.context["tool_allowlist"] = ["bb_write"]
+
+        with pytest.raises(ValueError, match="http_402"):
+            runner(call)
+
     def test_streaming_router_emits_sub_text_delta_chunks(self):
         """Live observability: when the router can stream, the runner
         forwards each text chunk as ``sub_text_delta`` so swarm

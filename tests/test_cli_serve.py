@@ -80,6 +80,38 @@ class TestServeBasics:
         out = capsys.readouterr().out
         assert "http://127.0.0.1:9090" in out
 
+    def test_serve_wires_the_opt_in_storage_supervisor(self, tmp_path: Path, monkeypatch, capsys):
+        """The desktop/local entrypoint is ``serve``, not the legacy ``ui`` command."""
+        cfg = _write_cfg(tmp_path)
+        calls: list[str] = []
+
+        import uvicorn
+        from runtime.sensing.gateway import storage_supervisor
+
+        monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            storage_supervisor,
+            "maybe_start_storage",
+            lambda: calls.append("start") or "already_running",
+        )
+        monkeypatch.setattr(
+            storage_supervisor,
+            "start_storage_heartbeat",
+            lambda: calls.append("heartbeat"),
+        )
+
+        from runtime.cli import run_serve
+
+        assert run_serve(
+            config_path=cfg,
+            host="127.0.0.1",
+            port=9092,
+            learn_interval_s=0,
+            color=False,
+        ) == 0
+        assert calls == ["start", "heartbeat"]
+        assert "local knowledge storage: ready" in capsys.readouterr().out
+
     def test_missing_config_returns_2(self, tmp_path: Path, capsys):
         from runtime.cli import run_serve
 

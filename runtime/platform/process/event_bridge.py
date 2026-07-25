@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 from runtime.platform.process.eventbus import EventBus, get_eventbus
 
 _LOG = logging.getLogger(__name__)
+_BRIDGE_LOCK = threading.Lock()
+_SIGNAL_BUSES: set[int] = set()
+_TYPED_PAIRS: set[tuple[int, str]] = set()
+_HOOK_REGISTRIES: set[int] = set()
 
 
 def bridge_signal_bus_to_eventbus(signal_bus: Any) -> None:
     if signal_bus is None or not hasattr(signal_bus, "subscribe"):
         return
+
+    with _BRIDGE_LOCK:
+        key = id(signal_bus)
+        if key in _SIGNAL_BUSES:
+            return
+        _SIGNAL_BUSES.add(key)
 
     bus = get_eventbus()
 
@@ -54,6 +65,11 @@ def bridge_typed_bus_to_eventbus(typed_bus: Any) -> None:
 
 def _bridge_event_cls(typed_bus: Any, event_cls: type, bus: EventBus) -> None:
     cls_name = event_cls.__name__
+    with _BRIDGE_LOCK:
+        key = (id(typed_bus), cls_name)
+        if key in _TYPED_PAIRS:
+            return
+        _TYPED_PAIRS.add(key)
 
     def _on_typed_event(nerves_event: Any) -> None:
         payload = {}
@@ -71,6 +87,12 @@ def _bridge_event_cls(typed_bus: Any, event_cls: type, bus: EventBus) -> None:
 def bridge_hook_registry_to_eventbus(hook_registry: Any) -> None:
     if hook_registry is None or not hasattr(hook_registry, "add_hook"):
         return
+
+    with _BRIDGE_LOCK:
+        key = id(hook_registry)
+        if key in _HOOK_REGISTRIES:
+            return
+        _HOOK_REGISTRIES.add(key)
 
     bus = get_eventbus()
 

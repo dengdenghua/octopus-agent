@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -105,6 +106,59 @@ def _append_capped_stream_content(existing: str, delta: str) -> str:
     )
 
 
+_PUBLIC_NARRATIVE_UNSAFE_RE = re.compile(
+    r"(<[^>]+>|[`$]|(?:^|\s)(?:[A-Za-z]:)?[/~][^\s]+|(?:token|secret|key|password)\s*[=:])",
+    re.IGNORECASE,
+)
+
+
+def _safe_public_description(source: Any) -> str | None:
+    """Return a short human-authored description if it is safe for main chat."""
+
+    if not isinstance(source, dict):
+        return None
+    for key in (
+        "public_description",
+        "public_summary",
+        "public_result",
+        "description",
+        "summary",
+        "title",
+    ):
+        value = source.get(key)
+        if not isinstance(value, str):
+            continue
+        text = " ".join(value.split())
+        if not text or len(text) > 80:
+            continue
+        if _PUBLIC_NARRATIVE_UNSAFE_RE.search(text):
+            continue
+        return text
+    return None
+
+
+def _tool_start_public_narrative(evt: dict[str, Any]) -> str | None:
+    return _safe_public_description(evt) or _safe_public_description(evt.get("input_preview"))
+
+
+def _tool_done_public_narrative(
+    evt: dict[str, Any],
+) -> str | None:
+    description = _safe_public_description(evt) or _safe_public_description(
+        evt.get("output_preview")
+    )
+    if description:
+        return description
+    status = str(evt.get("status") or "success").casefold()
+    if status in {"rejected", "declined"}:
+        return "这一步需要授权，已暂停等待确认。"
+    if status in {"cancelled", "interrupted"}:
+        return "这一步已经停止，我会按当前状态收束。"
+    if status == "error":
+        return "这一步没有按预期完成，我会换个角度处理。"
+    return None
+
+
 # ── Bridge state — open agentMessage / reasoning / tool items ─
 
 
@@ -141,6 +195,7 @@ class _ReactBridgeState:
         self.current_phase_id: str | None = None
         self.reasoning: ReasoningItem | None = None
         self.tools: dict[str, CommandExecutionItem] = {}
+        self.tool_public_narrative_started: dict[str, bool] = {}
         self.phases: list[AgentPhaseSnapshot] = []
         self.workbench_snapshot_version = 0
         self.background_tasks: list[asyncio.Task[None]] = []
@@ -242,6 +297,11 @@ class _ReactBridgeState:
     ) -> None:
         if not delta:
             return
+        if self.commentary_message is not None:
+            await self._flush_pending_delta()
+            self.commentary_message.status = ItemStatus.COMPLETED
+            await self._emit_completed(turn, log, emitter, self.commentary_message)
+            self.commentary_message = None
         first = self.agent_message is None
         if first:
             self.agent_message = AgentMessageItem(text="")
@@ -431,9 +491,11 @@ class _ReactBridgeState:
         emitter: EventEmitter,
         evt: dict[str, Any],
     ) -> None:
+        has_open_public_prose = bool(
+            self.commentary_message is not None and str(self.commentary_message.text or "").strip()
+        )
         # Flush any open prose so the tool item appears after the
         # reasoning that produced it.
-        await self.flush(turn, log, emitter)
         call_id = str(evt.get("tool_call_id") or "")
         # Disambiguate when the same tool_call_id appears twice (e.g.
         # swarm sub_tool ids built from ``agent-round-skill`` collide
@@ -454,8 +516,23 @@ class _ReactBridgeState:
             input_preview=evt.get("input_preview"),
             **({"id": call_id} if call_id else {}),
         )
+        # Keep the lifecycle lookup key aligned with incoming tool_end events.
+        # If an adapter omits tool_call_id, both start/end use the empty key;
+        # the item itself still gets a generated id for the public protocol.
+        call_key = call_id
+        start_narrative = None if has_open_public_prose else _tool_start_public_narrative(evt)
+        self.tool_public_narrative_started[call_key] = bool(start_narrative)
+        if start_narrative:
+            await self.append_commentary(
+                turn,
+                log,
+                emitter,
+                start_narrative,
+                start_new_segment=True,
+            )
+        await self.flush(turn, log, emitter)
         self._bind_timeline(item)
-        self.tools[call_id] = item
+        self.tools[call_key] = item
         turn.items.append(item)
         await self._emit_started(turn, log, emitter, item)
         phases = _phases_from_todo_preview(item.input_preview, active_item_id=item.id)
@@ -625,6 +702,7 @@ class _ReactBridgeState:
         if item is None:
             # Unknown tool_call_id — skip rather than synthesize.
             return
+        emitted_start_narrative = self.tool_public_narrative_started.pop(call_id, False)
         status = evt.get("status", "success")
         if status == "rejected":
             item.status = ItemStatus.DECLINED
@@ -709,6 +787,16 @@ class _ReactBridgeState:
                 turn.items.append(verification_item)
                 await self._emit_started(turn, log, emitter, verification_item)
                 await self._emit_completed(turn, log, emitter, verification_item)
+        if emitted_start_narrative:
+            done_narrative = _tool_done_public_narrative(evt)
+            if done_narrative:
+                await self.append_commentary(
+                    turn,
+                    log,
+                    emitter,
+                    done_narrative,
+                    start_new_segment=True,
+                )
 
     async def flush(
         self,

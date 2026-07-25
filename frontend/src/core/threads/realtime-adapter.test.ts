@@ -502,6 +502,21 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(ai.additional_kwargs?.grounding).toEqual(grounding);
   });
 
+  it("does not attach legacy teammate profile grounding to an AI reply", () => {
+    const turn: Turn = {
+      ...makeTurn([userMsg("q"), agentMsg("answer")]),
+      grounding: [
+        {
+          kind: "doc",
+          title: "✨ Luna · vibe_selling",
+          path: "20-backend/26-agents/vibe_selling.md",
+        },
+      ],
+    };
+    const state = conversationToAgentThreadState(makeConv([turn]));
+    expect(state.messages[1]?.additional_kwargs?.grounding).toBeUndefined();
+  });
+
   it("anchors grounding before synthesis when a public narrative exists", () => {
     const grounding = [
       { kind: "source" as const, title: "items.py", path: "runtime/items.py" },
@@ -558,6 +573,36 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
       (state.messages[1]?.additional_kwargs as Record<string, unknown>)
         .reasoning_content,
     ).toContain("系统要求先创建 todo");
+  });
+
+  it("maps legacy Update-only ReAct text to a public commentary message", () => {
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          userMsg("核对两个文件"),
+          agentMsg(
+            [
+              "Thought: Need to inspect the two files.",
+              "Update: 我先核对两个协议文件，确认字段是否一致。",
+              'Action: read_file({"path":"runtime/protocol/items.py"})',
+            ].join("\n"),
+            "a-update",
+          ),
+        ]),
+      ]),
+    );
+
+    expect(state.messages).toHaveLength(2);
+    expect(state.messages[1]).toMatchObject({
+      id: "a-update",
+      type: "ai",
+      content: "我先核对两个协议文件，确认字段是否一致。",
+    });
+    expect(state.messages[1]?.additional_kwargs?.message_kind).toBe(
+      "commentary",
+    );
+    expect(state.messages[1]?.additional_kwargs?.public_progress).toBe(true);
+    expect(state.messages[1]?.content).not.toMatch(/Thought|Action|read_file/);
   });
 
   it("suppresses post-final todo bookkeeping from the main conversation", () => {
@@ -1254,6 +1299,7 @@ describe("splitReactTrace", () => {
   it("returns full text as finalAnswer when no markers", () => {
     expect(splitReactTrace("hello world")).toEqual({
       thought: "",
+      publicUpdate: "",
       finalAnswer: "hello world",
     });
   });
@@ -1268,6 +1314,7 @@ describe("splitReactTrace", () => {
     ].join("\n");
     const out = splitReactTrace(trace);
     expect(out.finalAnswer).toBe("42 is the answer.");
+    expect(out.publicUpdate).toBe("");
     expect(out.thought).toContain("I need to look up");
     expect(out.thought).toContain("Now I have enough");
     expect(out.thought).not.toContain("web_search");
@@ -1278,13 +1325,40 @@ describe("splitReactTrace", () => {
     const trace = "思考: 这个问题需要分析。\n最终答案: 42";
     const out = splitReactTrace(trace);
     expect(out.finalAnswer).toBe("42");
+    expect(out.publicUpdate).toBe("");
     expect(out.thought).toBe("这个问题需要分析。");
+  });
+
+  it("keeps Update as public progress instead of thought or final answer", () => {
+    const trace = [
+      "Thought: private planning.",
+      "Update: 我先核对两端协议字段，确认是否一致。",
+      'Action: read_file({"path":"items.py"})',
+    ].join("\n");
+    const out = splitReactTrace(trace);
+    expect(out.finalAnswer).toBe("");
+    expect(out.publicUpdate).toBe("我先核对两端协议字段，确认是否一致。");
+    expect(out.thought).toBe("");
+    expect(JSON.stringify(out)).not.toContain("read_file");
+  });
+
+  it("does not mix Update into the final answer", () => {
+    const trace = [
+      "Thought: private planning.",
+      "Update: 已确认字段一致，接下来收拢结论。",
+      "Final Answer: 两端字段一致。",
+    ].join("\n");
+    const out = splitReactTrace(trace);
+    expect(out.publicUpdate).toBe("已确认字段一致，接下来收拢结论。");
+    expect(out.finalAnswer).toBe("两端字段一致。");
+    expect(out.finalAnswer).not.toContain("Update");
   });
 
   it("falls back to thought when no Final Answer yet", () => {
     const trace = "Thought: still thinking…\nAction: foo()";
     const out = splitReactTrace(trace);
     expect(out.finalAnswer).toBe("");
+    expect(out.publicUpdate).toBe("");
     // Final thought is held back as the in-progress placeholder; with
     // only one thought, the held-back set is empty.
     expect(out.thought).toBe("");

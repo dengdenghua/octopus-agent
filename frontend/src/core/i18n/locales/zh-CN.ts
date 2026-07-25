@@ -98,8 +98,8 @@ export const zhCN: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "你好,我是 Octopus",
-    description: "多智能体 AI · 直接说需求,或切到 Agent 模式深入处理。",
+    greeting: "你好，我是 Octopus",
+    description: "多智能体 AI · 直接说需求，或切到 Agent 模式深入处理。",
 
     createYourOwnSkill: "创建你自己的 Agent Skill",
     createYourOwnSkillDescription:
@@ -219,6 +219,7 @@ export const zhCN: Translations = {
     expandable: "可展开",
     agentCluster: "Agent 集群",
     processDetails: "展开线索",
+    completedSteps: (n: number) => `已完成 ${n} 个步骤`,
     statusViewing: "查看中",
     statusCompleted: "已完成",
     statusError: "异常",
@@ -548,8 +549,8 @@ export const zhCN: Translations = {
     editFileAdded: (file: string, added: number) => `编辑 ${file} +${added}行`,
     editFileRemoved: (file: string, removed: number) =>
       `编辑 ${file} -${removed}行`,
-    executeCommand: "运行检查",
-    executeCommandWith: (cmd: string) => `运行检查：${cmd}`,
+    executeCommand: "运行命令",
+    executeCommandWith: (cmd: string) => `运行命令：${cmd}`,
     planStep: "规划步骤",
     think: "思考",
     hideProcessReplay: "收起过程回放",
@@ -576,9 +577,50 @@ export const zhCN: Translations = {
     teammateTimeout: "团队成员暂未返回，Octopus 接管",
     factSummaryPath: (value: string) => `已确认：${value}`,
     factSummaryCount: (value: string) => `已确认：共 ${value} 项`,
-    factSummaryStatus: (value: string) => `已确认：状态 ${value}`,
+    factSummaryStatus: (value: string) => `已确认：${value}`,
     factSummaryTitle: (value: string) => `已确认：${value}`,
     factSummaryText: (value: string) => `已确认：${value}`,
+    factSummaryDuration: (value: string) => `耗时 ${value}`,
+    factSummaryLines: (value: string) => `${value} 行`,
+    factSummaryMatches: (value: string) => `${value} 处匹配`,
+    factSummarySucceeded: "执行成功",
+    factSummaryFailed: "执行失败",
+    factSummaryExitCode: (value: string) => `退出码 ${value}`,
+    effectNeedsReview: "需核对",
+    capabilityDisabled: (toolName: string) => `${toolName} 被配置关闭`,
+    enableCapability: "启用",
+    enablingCapability: "启用中…",
+    actionLabels: {
+      createFile: "创建",
+      editFile: "编辑",
+      searchFiles: "搜索文件",
+      viewDirectory: "查看目录",
+      readFile: "读取",
+      runCommand: "运行",
+      searchWeb: "搜索网页",
+      browseWeb: "浏览网页",
+      browserClick: "点击",
+      browserType: "输入",
+      browserScreenshot: "截图",
+      browserNavigate: "导航到",
+      browserAction: "操作浏览器",
+      updatePlan: "更新计划",
+      delegateTask: "委派任务",
+      deleteFile: "删除",
+      moveFile: "移动/重命名",
+      startPreview: "启动预览",
+      networkRequest: "网络请求",
+      aggregateFileWrite: (count: number) => `编辑了 ${count} 个文件`,
+      aggregateFileRead: (count: number) => `查看了 ${count} 个文件`,
+      aggregateCommand: (count: number) => `运行了 ${count} 条命令`,
+      aggregateWebSearch: (count: number) => `搜索了 ${count} 次`,
+      aggregateBrowser: (count: number) => `浏览器操作 ${count} 次`,
+      aggregateTeammate: (count: number) => `委派了 ${count} 个任务`,
+      aggregateTodo: (count: number) => `更新了 ${count} 次计划`,
+      aggregateOther: (count: number) => `执行了 ${count} 个操作`,
+    },
+    thinkingDuration: (value: string) => `思考了 ${value}`,
+    thinking: "思考中",
   },
 
   // Trace generator labels
@@ -1067,6 +1109,8 @@ export const zhCN: Translations = {
     executingTask: "执行任务中...",
     waitingToContinue: "等待继续",
     currentProgress: "当前进度",
+    stepProgress: (current: number, total: number) =>
+      `第 ${current} / ${total} 步`,
     minimizeProgress: "收起进度",
     restoreProgress: "展开进度",
     closeWorkspace: "关闭工作区",
@@ -1146,7 +1190,12 @@ export const zhCN: Translations = {
     statusDone: "已完成",
     progress: "进展",
     roundTitle: (iteration) => `第 ${iteration} 轮`,
-    roundActionCount: (count) => `${count} 个动作`,
+    roundActivitySummary: (actionCount, factCount) =>
+      actionCount > 0 && factCount > 0
+        ? `${actionCount} 次操作 · ${factCount} 条确认`
+        : actionCount > 0
+          ? `${actionCount} 次操作`
+          : `${factCount} 条确认`,
     artifacts: "产物",
     generatedArtifacts: "生成产物",
     changedFiles: "变更文件",
@@ -1610,6 +1659,8 @@ export const zhCN: Translations = {
     groupTasks: "协作任务",
     recentThreadsSummary: (recent, hidden) =>
       `最近 ${recent} 条 · 其余 ${hidden} 条在历史抽屉`,
+    showMoreProjectThreads: (count) => `展开其余 ${count} 个任务`,
+    showFewerProjectThreads: "收起旧任务",
     // Header/footer tooltips
     newChatTooltip: "新对话",
     searchTooltip: "搜索 (⌘K)",
@@ -1618,7 +1669,8 @@ export const zhCN: Translations = {
     deleteProjectTooltip: "删除项目",
     deleteThreadTooltip: "删除对话",
     actionSort: "排序",
-    actionNewProject: "添加工作区/项目",
+    actionNewProject: "选择项目空间",
+    projectPickerFailed: "未能打开系统文件夹选择器，请确认本地服务正在运行。",
     actionNewTask: "新建任务",
     actionNewChat: "新建对话",
     actionNew: "新建",
@@ -2721,7 +2773,7 @@ export const zhCN: Translations = {
   toolCalls: {
     moreSteps: (count: number) => `还有 ${count} 个步骤`,
     lessSteps: "收起步骤",
-    executeCommand: "运行检查",
+    executeCommand: "运行命令",
     presentFiles: "展示文件",
     needYourHelp: "需要你的帮助",
     useTool: () => "执行操作",
@@ -5756,6 +5808,7 @@ export const zhCN: Translations = {
     gitDiff: "Git 差异",
     streamRecovery: "流式恢复",
     running: "运行中...",
+    genericAction: "其他操作",
   },
 
   liveToolTimeline: {
@@ -8208,7 +8261,7 @@ export const zhCN: Translations = {
     empty: "暂无已注册的工作空间。",
     loading: "正在加载工作空间…",
     loadFailed: (error) => `加载工作空间失败：${error}`,
-    addWorkspace: "添加工作空间",
+    addWorkspace: "连接文件夹或远程目录",
     switchWorkspaceAria: (name) => `切换到 ${name}`,
     activeWorkspace: "当前",
     typeLocal: "本地",
@@ -8220,7 +8273,7 @@ export const zhCN: Translations = {
     mountTarget: "挂载地址",
 
     mountDialog: {
-      title: "添加工作空间",
+      title: "连接文件夹或远程目录",
       nameLabel: "名称",
       namePlaceholder: "工作空间名称",
       protocolLabel: "协议",

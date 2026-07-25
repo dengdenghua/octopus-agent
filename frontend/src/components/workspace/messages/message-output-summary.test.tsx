@@ -377,6 +377,45 @@ describe("MessageList receipt wiring", () => {
     expect(screen.getByText("测试通过")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /做同款/ })).toBeInTheDocument();
   });
+
+  it("keeps unknown verification tool names and protocol details out of receipts", () => {
+    const human: Message = {
+      id: "user-1",
+      type: "human",
+      content: "验证一下",
+    };
+    const verificationAi: AIMessage = {
+      id: "ai-tools",
+      type: "ai",
+      content: "",
+      tool_calls: [{ id: "verify-1", name: "verify_contract_case", args: {} }],
+    };
+    const verificationResult: ToolMessage = {
+      id: "tool-verify-1",
+      type: "tool",
+      content: JSON.stringify({
+        success: false,
+        error:
+          "Action: read_file\n失败原因：token=super-secret\nObservation: exec_shell returned 1",
+      }),
+      tool_call_id: "verify-1",
+      status: "error",
+    };
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[human, verificationAi, verificationResult]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getAllByText("验证").length).toBeGreaterThan(0);
+    expect(screen.queryByText("verify_contract_case")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/read_file|Observation|super-secret/i),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/失败原因：token=«redacted»/)).toBeInTheDocument();
+    expect(screen.queryByText(/operation returned 1/i)).not.toBeInTheDocument();
+  });
 });
 
 describe("MessageList failure visibility", () => {

@@ -132,14 +132,32 @@ class SkillRegistry:
 
     def get(self, name: str) -> Skill:
         with self._lock:
+            lookup_name = self._canonical_lookup(name)
             try:
-                return self._by_name[name]
+                return self._by_name[lookup_name]
             except KeyError as e:
                 raise SkillNotFound(f"no skill named {name!r}") from e
 
     def has(self, name: str) -> bool:
         with self._lock:
-            return name in self._by_name
+            return self._canonical_lookup(name) in self._by_name
+
+    @staticmethod
+    def _canonical_lookup(name: str) -> str:
+        """Resolve legacy skill ids without duplicating registry entries.
+
+        Aliases are compatibility input, not catalog entries: the planner and
+        audit trail continue to expose the canonical skill name while old
+        prompts/configs still resolve successfully.
+        """
+        try:
+            from runtime.execution.skill_aliases import canonical_skill_id
+
+            return canonical_skill_id(name)
+        except (ImportError, TypeError):
+            # Keep the registry usable in minimal deployments that omit the
+            # optional alias table.
+            return name
 
     def unregister(self, name: str) -> bool:
         with self._lock:

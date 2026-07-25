@@ -28,6 +28,10 @@ export interface WorkBlock {
 
 export type WorkBlockStatus = LiveToolEvent["status"] | "warning";
 
+export type WorkBlockStatusLabels = Partial<
+  Record<WorkBlockStatus, string>
+>;
+
 export interface SettledRunDisplayOptions {
   hasAnswer?: boolean;
   runSettled?: boolean;
@@ -134,12 +138,18 @@ export function isWorkRunning(blocks: WorkBlock[]): boolean {
   );
 }
 
-export function statusText(status: WorkBlockStatus): string {
-  if (status === "running") return "正在执行";
-  if (status === "waiting_approval") return "等待确认";
-  if (status === "warning") return "已恢复";
-  if (status === "error") return "执行失败";
-  return "已完成";
+export function statusText(
+  status: WorkBlockStatus,
+  labels?: WorkBlockStatusLabels,
+): string {
+  const fallback: Record<WorkBlockStatus, string> = {
+    running: "正在执行",
+    waiting_approval: "等待确认",
+    warning: "已恢复",
+    error: "执行失败",
+    done: "已完成",
+  };
+  return labels?.[status] || fallback[status];
 }
 
 function toWorkBlock(event: LiveToolEvent): WorkBlock {
@@ -255,10 +265,9 @@ function workSubtitle(event: LiveToolEvent, fallbackTarget: string): string {
     "url",
     "query",
     "pattern",
-    "command",
     "cwd",
   ]);
-  if (inputTarget) return compact(inputTarget, 88);
+  if (inputTarget) return compact(publicInputTarget(inputTarget, event), 88);
   if (fallbackTarget) return compact(fallbackTarget, 88);
   if (event.agentName) return event.agentName;
   return statusText(workBlockStatus(event));
@@ -321,14 +330,24 @@ function workTarget(event: LiveToolEvent, kind: WorkBlockKind): string {
     firstString(event.input, ["path", "file_path", "filepath", "filename"]);
   const url = firstString(event.input, ["url"]);
   const query = firstString(event.input, ["query", "pattern"]);
-  const command =
-    firstString(event.input, ["description", "label", "title"]) ||
-    firstString(event.input, ["command", "cmd"]);
+  const commandSummary = firstString(event.input, [
+    "description",
+    "label",
+    "title",
+  ]);
   if ((kind === "read" || kind === "file") && path) return basename(path);
   if (kind === "browser" && url) return hostOf(url);
   if (kind === "search" && query) return compact(query, 48);
-  if (kind === "terminal" && command) return compact(command, 48);
+  if (kind === "terminal" && commandSummary) return compact(commandSummary, 48);
   return "";
+}
+
+function publicInputTarget(value: string, event: LiveToolEvent): string {
+  const kind = workKind(event.name);
+  if (kind === "browser") return hostOf(value);
+  if (kind === "read" || kind === "file") return basename(value);
+  if (kind === "terminal" && /[\\/]/.test(value)) return basename(value);
+  return value;
 }
 
 function isManualVerificationRequiredEvent(event: LiveToolEvent): boolean {

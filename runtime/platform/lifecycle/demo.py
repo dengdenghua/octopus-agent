@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import time
 
+# Public compatibility export. Keep the demo importable for downstream
+# launchers, but do not treat it as a runtime dependency.
+COMPATIBILITY_STATUS = "legacy-demo"
+
 
 class InteractiveDemo:
     def __init__(self, slow: bool = True) -> None:

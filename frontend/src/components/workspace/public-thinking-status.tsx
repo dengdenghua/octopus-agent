@@ -14,7 +14,7 @@ interface PublicThinkingStatusProps {
   className?: string;
 }
 
-function compact(value: unknown, max = 120): string | undefined {
+function compact(value: unknown, max = 80): string | undefined {
   if (value === undefined || value === null) return undefined;
   const text = typeof value === "string" ? value : JSON.stringify(value);
   const normalized = text.replace(/\s+/g, " ").trim();
@@ -24,17 +24,82 @@ function compact(value: unknown, max = 120): string | undefined {
     : normalized;
 }
 
-function eventSummary(event: LiveToolEvent | undefined): string | undefined {
-  if (!event) return undefined;
+function basenamePath(value: string): string {
+  const normalized = value.replace(/\\/g, "/").replace(/\/+$/, "");
+  return normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+}
+
+function compactUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    return url.hostname || value;
+  } catch {
+    return value;
+  }
+}
+
+function eventTarget(event: LiveToolEvent): string | undefined {
   const input = event.input ?? {};
-  const main =
-    compact(input.query) ??
-    compact(input.command) ??
-    compact(input.path) ??
-    compact(input.file_path) ??
-    compact(input.url);
-  const name = event.name.replace(/_/g, " ");
-  return main ? `${name}: ${main}` : name;
+  const queryTarget = compact(input.query);
+  if (queryTarget && !isSensitiveTarget(queryTarget)) return queryTarget;
+  const urlTarget = compact(input.url);
+  if (urlTarget && !isSensitiveTarget(urlTarget)) return compactUrl(urlTarget);
+  const fileTarget = compact(input.path) ?? compact(input.file_path);
+  if (fileTarget) return basenamePath(fileTarget);
+  return undefined;
+}
+
+function isSensitiveTarget(value: string): boolean {
+  return /(?:sk-[\w-]+|bearer\s+[a-z0-9._-]+|api[_-]?key|token|secret|credential|password|passwd)/i.test(
+    value,
+  );
+}
+
+function eventActionLabel(
+  event: LiveToolEvent,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const name = event.name.toLowerCase();
+  if (
+    name === "call_agent" ||
+    name === "call_agent_parallel" ||
+    name === "delegate_agent" ||
+    name === "spawn_agent"
+  ) {
+    return t.messageGrouping.callTeammate;
+  }
+  if (name.includes("search") || name.includes("glob")) {
+    return t.messageGrouping.searchSources;
+  }
+  if (
+    name.includes("fetch") ||
+    name.includes("browser") ||
+    name.includes("web")
+  ) {
+    return t.messageGrouping.readWebpage;
+  }
+  if (name.includes("read") || name === "ls" || name === "list_cwd") {
+    return t.messageGrouping.readFile;
+  }
+  if (
+    name.includes("write") ||
+    name.includes("edit") ||
+    name.includes("replace") ||
+    name.includes("patch")
+  ) {
+    return t.messageGrouping.updateFile;
+  }
+  return t.messageGrouping.runAction;
+}
+
+function eventSummary(
+  event: LiveToolEvent | undefined,
+  t: ReturnType<typeof useI18n>["t"],
+): string | undefined {
+  if (!event) return undefined;
+  const label = eventActionLabel(event, t);
+  const target = eventTarget(event);
+  return target ? `${label}: ${target}` : label;
 }
 
 function latestRunningEvent(events: LiveToolEvent[]) {
@@ -73,7 +138,7 @@ export function PublicThinkingStatus({
           ? t.publicThinkingStatus.waitingForModel
           : t.publicThinkingStatus.modelWorking;
   const elapsedSeconds = Math.floor((vitals?.elapsedMs ?? 0) / 1000);
-  const detail = running ? eventSummary(running) : undefined;
+  const detail = running ? eventSummary(running, t) : undefined;
 
   return (
     <div

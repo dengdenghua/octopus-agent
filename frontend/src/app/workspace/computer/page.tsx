@@ -1825,7 +1825,7 @@ function getDeviceState(status: ComputerStatus | null): DeviceState {
     : "屏幕已连接";
   return {
     label: "已连接",
-    detail: `可以观察当前屏幕，并在确认后执行动作。${screen}`,
+    detail: `可以观察当前屏幕，并在确认后执行操作。${screen}`,
     tone: "ok",
   };
 }
@@ -1965,7 +1965,7 @@ function getActiveAction({
       vision: "请求视觉模型",
       plan: "生成计划",
       preview: "生成确认",
-      execute: "执行动作",
+      execute: "执行操作",
       release: "释放接管",
       stream: "切换实时屏幕",
     };

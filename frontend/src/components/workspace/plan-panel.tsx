@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { type Message, hasToolCalls } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
+import { taskPlanItemId } from "@/core/todos/task-plan";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,7 +106,12 @@ function extractPlanFromMessages(messages: Message[]): PlanStep[] {
 
 function extractTodosAsSteps(
   todos:
-    | Array<{ content: string; status: string; activeForm?: string }>
+    | Array<{
+        id?: string;
+        content: string;
+        status: string;
+        activeForm?: string;
+      }>
     | undefined,
   labels?: { completed: string; inProgress: string; pending: string },
 ): PlanStep[] {
@@ -121,17 +127,23 @@ function extractTodosAsSteps(
       : s === "in_progress"
         ? (labels?.inProgress ?? "in_progress")
         : (labels?.pending ?? "pending");
-  return todos.map((todo, i) => ({
-    id: `todo-${i}`,
-    description: todo.content,
-    status:
-      todo.status === "completed"
-        ? "completed"
-        : todo.status === "in_progress"
-          ? "in_progress"
-          : "pending",
-    detail: todo.activeForm || `${statusLabel(todo.status)} · ${todo.content}`,
-  }));
+  const occurrences = new Map<string, number>();
+  return todos.map((todo) => {
+    const occurrence = occurrences.get(todo.content) ?? 0;
+    occurrences.set(todo.content, occurrence + 1);
+    return {
+      id: `todo-${taskPlanItemId(todo as unknown as Record<string, unknown>, occurrence)}`,
+      description: todo.content,
+      status:
+        todo.status === "completed"
+          ? "completed"
+          : todo.status === "in_progress"
+            ? "in_progress"
+            : "pending",
+      detail:
+        todo.activeForm || `${statusLabel(todo.status)} · ${todo.content}`,
+    };
+  });
 }
 
 /**
@@ -141,7 +153,12 @@ function extractTodosAsSteps(
  */
 export function computePlanSteps(
   messages: Message[],
-  todos?: Array<{ content: string; status: string; activeForm?: string }>,
+  todos?: Array<{
+    id?: string;
+    content: string;
+    status: string;
+    activeForm?: string;
+  }>,
   labels?: { completed: string; inProgress: string; pending: string },
 ): PlanStep[] {
   const todoSteps = extractTodosAsSteps(todos, labels);
@@ -294,7 +311,12 @@ export function PlanPanel({
   className,
 }: {
   messages: Message[];
-  todos?: Array<{ content: string; status: string; activeForm?: string }>;
+  todos?: Array<{
+    id?: string;
+    content: string;
+    status: string;
+    activeForm?: string;
+  }>;
   open: boolean;
   onClose: () => void;
   className?: string;

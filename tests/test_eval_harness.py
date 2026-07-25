@@ -77,6 +77,22 @@ def test_trajectory_tool_names() -> None:
     assert result.passes == 1
 
 
+def test_trajectory_tool_names_unwraps_octopus_command_execution() -> None:
+    trajectory = Trajectory(trial_id="t", case_id="case")
+    trajectory.append(
+        "tool_start",
+        tool_name="command_execution",
+        item={"type": "commandExecution", "command": "browser_navigate"},
+    )
+    trajectory.append(
+        "tool_start",
+        tool_name="command_execution",
+        item={"type": "command_execution", "command": "python -m pytest"},
+    )
+
+    assert trajectory.tool_names() == ["browser_navigate", "command_execution"]
+
+
 def test_pass_at_k_vs_pow_k_diverge_on_flaky() -> None:
     _mock_runner_flaky._n = 0  # reset counter
     case = EvalCase(

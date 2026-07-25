@@ -332,8 +332,18 @@ const XML_TOOL_INVOCATION_RE =
   /<tool_invocation\b[^>]*(?:\/>|>[\s\S]*?(?:<\/tool_invocation>|$))/gi;
 const XML_FUNCTION_CALL_RE =
   /<function=(?:fs_writer|fs_writen|fs_written|write_file|write_text_file|edit_text_file|str_replace|apply_patch|deep_research|web_search|search)>[\s\S]*?(?:<\/function>|$)/gi;
+const INTERNAL_CONTROL_TAG_LINE_RE =
+  /^\s*(?:<read_only>\s*<\/read_only>|<\/?read_only>)\s*$/i;
+const INTERNAL_CONTROL_TAG_INLINE_RE =
+  /<read_only>\s*<\/read_only>|<\/?read_only>/gi;
+const INTERNAL_RENDERER_COMPONENT_TAG_INLINE_RE =
+  /`?<\/?(?:TextBlock|ReasoningBlock|ToolCallBlock|ToolResultBlock|ThinkingBlock|ExecutionBlock)\b[^<>`]*>`?/g;
 const REACT_ACTION_BLOCK_RE =
   /^\s*Action:\s*(?!(?:none|null|n\/a)\s*$).*?(?=\n\s*(?:Thought|Action|Observation|Final Answer):|\s*$)/gims;
+const REACT_OBSERVATION_BLOCK_RE =
+  /^\s*Observation:\s*[\s\S]*?(?=\n\s*(?:Thought|Action|Observation|Final Answer):|\s*$)/gim;
+const SENSITIVE_ASSIGNMENT_RE =
+  /\b(token|secret|api[_-]?key|password|authorization)\s*[:=]\s*([^\s,;]+)/gi;
 const ROLE_NO_OUTPUT_PLACEHOLDER_RE =
   /^\s*\[[^\]\n]{1,80}\]\s*\((?:no output|no visible output|empty output)\)\s*$/i;
 const NO_OUTPUT_PLACEHOLDER_RE =
@@ -352,18 +362,58 @@ function stripLeakedTeamRoleNoise(content: string): string {
     .trim();
 }
 
+export function stripLeakedRendererMarkup(
+  content: string,
+  options: { trim?: boolean } = {},
+): string {
+  let insideFence = false;
+  const lines: string[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    if (/^\s*```/.test(line)) {
+      insideFence = !insideFence;
+      lines.push(line);
+      continue;
+    }
+    if (!insideFence && INTERNAL_CONTROL_TAG_LINE_RE.test(line)) continue;
+    lines.push(
+      insideFence
+        ? line
+        : line
+            .replace(INTERNAL_CONTROL_TAG_INLINE_RE, "")
+            .replace(INTERNAL_RENDERER_COMPONENT_TAG_INLINE_RE, "")
+            .replace(/[ \t]{2,}/g, " ")
+            .replace(/\s+([，。！？；：,.!?;:])/g, "$1"),
+    );
+  }
+  const stripped = lines.join("\n").replace(/^\n+/, "");
+  return options.trim === false ? stripped : stripped.trim();
+}
+
 function stripReactProtocol(content: string): string {
-  let cleaned = content.replace(REACT_ACTION_BLOCK_RE, "").trim();
+  let cleaned = content
+    .replace(REACT_ACTION_BLOCK_RE, "")
+    .replace(REACT_OBSERVATION_BLOCK_RE, "")
+    .trim();
   const finalAnswer = cleaned.match(/(?:^|\n)Final Answer:\s*([\s\S]*)$/i);
   if (finalAnswer?.[1]?.trim()) {
     cleaned = finalAnswer[1].trim();
   }
+  // Context compaction can prompt a model to emit an internal continuation
+  // hand-off. It is useful for recovery, but it is not a user-facing answer
+  // and often contains paths, iteration counters, or protocol vocabulary.
+  cleaned = cleaned
+    .replace(
+      /(^|[\n。！？.!?])\s*(?:\*\*|__)?\s*(?:resume\s+state|continuation\s+note|恢复状态|恢复摘要)\s*:\s*(?:\*\*|__)?\s*[\s\S]*?(?=\n\s*\n|$)/im,
+      "$1",
+    )
+    .trim();
   return cleaned
     .replace(
       /^\s*Thought:\s*[\s\S]*?(?=\n\s*Final Answer:|\n\s*Action:|$)/gim,
       "",
     )
     .replace(/^\s*Final Answer:\s*/gim, "")
+    .replace(SENSITIVE_ASSIGNMENT_RE, "$1=[redacted]")
     .trim();
 }
 
@@ -401,7 +451,7 @@ export function stripInternalToolProtocol(content: string): string {
 
 function visibleAIContent(content: string): string {
   const visible = stripLeakedTeamRoleNoise(
-    stripInternalToolProtocol(content.trim()),
+    stripLeakedRendererMarkup(stripInternalToolProtocol(content.trim())),
   );
   return ROLE_NO_OUTPUT_PLACEHOLDER_RE.test(visible) ||
     NO_OUTPUT_PLACEHOLDER_RE.test(visible) ||

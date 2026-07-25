@@ -15,8 +15,49 @@ import {
   isClarificationToolMessage,
   isLikelyFinalAnswerContent,
   parseUploadedFiles,
+  stripInternalToolProtocol,
   stripUploadedFilesTag,
 } from "./utils";
+
+describe("public assistant text sanitization", () => {
+  it("removes internal context-recovery handoffs from the visible answer", () => {
+    const text =
+      "Resume state: inspected items.py and reducer.ts; continue from the next file.\n\nThe public conclusion follows.";
+    expect(stripInternalToolProtocol(text)).toBe("The public conclusion follows.");
+  });
+
+  it("does not expose a recovery handoff when it is the entire answer", () => {
+    expect(
+      stripInternalToolProtocol(
+        "Resume state: continue checking the remaining evidence.",
+      ),
+    ).toBe("");
+  });
+
+  it("removes a recovery handoff appended after a normal sentence", () => {
+    expect(
+      stripInternalToolProtocol(
+        "任务已完成。 Resume state: 继续检查剩余证据。",
+      ),
+    ).toBe("任务已完成。");
+  });
+
+  it("removes a recovery handoff embedded in a process paragraph", () => {
+    expect(
+      stripInternalToolProtocol(
+        "所有文件读取任务已完成，任务清单状态全部更新为已完成。Resume state: 本任务继续核对 reducer.ts。",
+      ),
+    ).toBe("所有文件读取任务已完成，任务清单状态全部更新为已完成。");
+  });
+
+  it("removes markdown-emphasized recovery handoffs", () => {
+    expect(
+      stripInternalToolProtocol(
+        "所有文件读取任务已完成。 **Resume state:** 继续核对剩余证据。",
+      ),
+    ).toBe("所有文件读取任务已完成。");
+  });
+});
 
 describe("groupMessages", () => {
   it("returns empty array for empty messages", () => {
@@ -494,6 +535,50 @@ describe("message content helpers", () => {
     expect(hasContent(message)).toBe(false);
   });
 
+  it("treats leaked read-only control tags as no visible AI content", () => {
+    const message = {
+      type: "ai",
+      content: "<read_only> </read_only>",
+    } as Message;
+
+    expect(extractTextFromMessage(message)).toBe("");
+    expect(hasContent(message)).toBe(false);
+  });
+
+  it("strips inline read-only control tags before grouping visibility checks", () => {
+    const message = {
+      type: "ai",
+      content: "我先核对实现。<read_only> </read_only> 现在信息已经足够。",
+    } as Message;
+
+    expect(extractTextFromMessage(message)).toBe(
+      "我先核对实现。 现在信息已经足够。",
+    );
+    expect(hasContent(message)).toBe(true);
+  });
+
+  it("strips leaked renderer component tags before grouping visibility checks", () => {
+    const message = {
+      type: "ai",
+      content: "摘要应显示为 `<TextBlock>`，不是阶段分析。",
+    } as Message;
+
+    expect(extractTextFromMessage(message)).toBe(
+      "摘要应显示为，不是阶段分析。",
+    );
+    expect(hasContent(message)).toBe(true);
+  });
+
+  it("keeps internal renderer tags in fenced code examples", () => {
+    const message = {
+      type: "ai",
+      content: "```tsx\n<TextBlock>hello</TextBlock>\n```",
+    } as Message;
+
+    expect(extractTextFromMessage(message)).toContain("<TextBlock>");
+    expect(hasContent(message)).toBe(true);
+  });
+
   it("strips leaked task JSON command fences but keeps surrounding prose", () => {
     const message = {
       type: "ai",
@@ -546,6 +631,29 @@ describe("message content helpers", () => {
     expect(extractTextFromMessage(message)).toBe("计划已经准备好了。");
     expect(extractTextFromMessage(message)).not.toContain("write_file");
     expect(extractTextFromMessage(message)).not.toContain("Bryce");
+  });
+
+  it("strips leaked ReAct observations and redacts secret assignments", () => {
+    const observationMessage = {
+      type: "ai",
+      content:
+        "我先核对环境。\nObservation: token=super-secret api_key=sk-test-123\nFinal Answer: 环境检查完成。",
+    } as Message;
+
+    expect(extractTextFromMessage(observationMessage)).toBe("环境检查完成。");
+    expect(extractTextFromMessage(observationMessage)).not.toContain(
+      "super-secret",
+    );
+    expect(extractTextFromMessage(observationMessage)).not.toContain("sk-test");
+
+    const proseMessage = {
+      type: "ai",
+      content: "配置已读取，token=super-secret 将不会展示。",
+    } as Message;
+
+    expect(extractTextFromMessage(proseMessage)).toBe(
+      "配置已读取，token=[redacted] 将不会展示。",
+    );
   });
 
   it("extracts image URL content as markdown", () => {

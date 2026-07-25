@@ -87,13 +87,16 @@ _TRANSIENT_ERROR_NAME_HINTS = (
 def _restore_trusted_browser_loopback_access(
     sucker_id: SkillId,
     args: dict[str, Any],
+    *,
+    trusted_runtime_grant: bool = False,
 ) -> dict[str, Any]:
-    """Authorize only loopback navigation in an explicit Browser session.
+    """Authorize loopback navigation for trusted Browser/UI-regression sessions.
 
     Model-supplied ``allow_private`` remains stripped unconditionally.  This
     trusted runtime grant is reconstructed from session metadata and is
-    limited to browser tools plus localhost/loopback destinations; LAN and
-    cloud-metadata addresses remain blocked.
+    limited to browser tools plus localhost/loopback destinations.  Code-mode
+    browser regression is included without turning the whole task into a
+    browser-only workflow; LAN and cloud-metadata addresses remain blocked.
     """
     if not str(sucker_id).startswith("browser_"):
         return args
@@ -108,17 +111,18 @@ def _restore_trusted_browser_loopback_access(
     except (AttributeError, ImportError):
         metadata = None
     if not isinstance(metadata, dict):
-        return args
+        metadata = {}
     surfaces = metadata.get("runtime_surfaces")
     surface_names = (
         {str(item).strip().lower() for item in surfaces} if isinstance(surfaces, list) else set()
     )
     explicit_browser = bool(
         metadata.get("browser_operation_mode") is True
+        or metadata.get("browser_regression_enabled") is True
         or str(metadata.get("browser_surface") or "").strip().lower() in {"browser", "chrome"}
         or {"browser", "chrome"} & surface_names
     )
-    if not explicit_browser:
+    if not explicit_browser and not trusted_runtime_grant:
         return args
     host = urlparse(raw_url).hostname
     if not host:
@@ -460,8 +464,7 @@ def _declared_scope_command_violation(
     if program.startswith("python") and any(token in {"-c", "-"} for token in lowered[:2]):
         return "inline Python can perform arbitrary filesystem writes outside the declared file set"
     if program in {"npm", "pnpm", "yarn", "bun"} and any(
-        token in {"add", "install", "update", "upgrade", "link", "init"}
-        for token in lowered[:2]
+        token in {"add", "install", "update", "upgrade", "link", "init"} for token in lowered[:2]
     ):
         return f"{program!r} package mutation is outside the declared file set"
     if program == "cargo" and any(token in {"add", "install", "update"} for token in lowered[:2]):
@@ -582,6 +585,7 @@ class ToolExecutor:
         budget: Budget,
         predicted_cost: CostEntry | None = None,
         actor: str | None = None,
+        trusted_browser_loopback: bool = False,
     ) -> Step:
         with trace_stage(
             "beak.execute_step",
@@ -603,7 +607,11 @@ class ToolExecutor:
             # defeat the sensitive-file / SSRF guards. Trusted internal callers
             # set these by invoking handlers directly, never via execute_step.
             args, _stripped_overrides = strip_model_controlled_overrides(args)
-            args = _restore_trusted_browser_loopback_access(sucker_id, args)
+            args = _restore_trusted_browser_loopback_access(
+                sucker_id,
+                args,
+                trusted_runtime_grant=trusted_browser_loopback,
+            )
             if _stripped_overrides:
                 span.set_attribute(
                     "octopus.args.stripped_overrides",

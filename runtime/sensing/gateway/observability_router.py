@@ -44,6 +44,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
     StreamingResponse = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 # Standard SSE headers · keep proxies (nginx, Cloudflare) from buffering or
 # killing long-lived event streams. X-Accel-Buffering disables nginx response
@@ -234,8 +235,7 @@ def create_observability_router(
         counts react_loop trajectories. None → endpoint returns
         ``{"enabled": False}`` (planner-less test harness).
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     def _auth_dep(request: Request) -> None:
         # Router-level auth gate · mirrors create_browser_router. These

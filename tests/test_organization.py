@@ -210,6 +210,42 @@ def test_team_runner_sequential_bails_on_role_error() -> None:
     assert result.error == "planner(p): boom"
 
 
+def test_team_runner_continues_after_advisory_critic_error() -> None:
+    topology = TeamTopology(
+        name="critic-degraded",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={
+            Role.PLANNER: AgentSpec(agent_id="p"),
+            Role.CRITIC: AgentSpec(agent_id="c"),
+            Role.SYNTHESIZER: AgentSpec(agent_id="s"),
+        },
+    )
+    runner = TeamRunner(
+        role_caller=_stub_caller(
+            {
+                "p": {"output": "plan", "success": True},
+                "c": {
+                    "output": "partial fact check",
+                    "success": False,
+                    "error": "round cap",
+                },
+                "s": {"output": "verified final artifact", "success": True},
+            }
+        )
+    )
+
+    result = runner.run(topology, "x")
+
+    assert result.success is True
+    assert result.final_output == "verified final artifact"
+    assert [output.role for output in result.role_outputs] == [
+        Role.PLANNER,
+        Role.CRITIC,
+        Role.SYNTHESIZER,
+    ]
+    assert result.role_outputs[1].error == "round cap"
+
+
 def test_team_runner_blocks_retired_subagent_for_high_risk_task(tmp_path: Path) -> None:
     from runtime.memory.learning.review_queue import ReviewQueue
 

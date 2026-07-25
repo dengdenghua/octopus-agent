@@ -16,6 +16,8 @@ from runtime.platform.process.session import Session, session_scope
 from runtime.safety.auth import TrustEngine
 from runtime.sensing.gateway.tool_bridge import (
     _execute_tool_call,
+    _native_public_checkpoint,
+    _native_result_checkpoint,
     _reflection_checkpoint_message,
     build_anthropic_tool_specs,
     stream_agentic_fallback,
@@ -81,6 +83,82 @@ def _stack_with_todo(router=None):
     )
 
 
+def test_native_public_checkpoint_keeps_only_safe_public_prose():
+    assert (
+        _native_public_checkpoint("Update: 我先核对消息桥接层，确认事件是否按顺序进入主对话。")
+        == "我先核对消息桥接层，确认事件是否按顺序进入主对话。"
+    )
+    assert (
+        _native_public_checkpoint("Phase 1: I’ll inspect the reducer and verify the stream order.")
+        == "I’ll inspect the reducer and verify the stream order."
+    )
+
+    blocked = [
+        'Action: read_file({"path":"runtime/protocol/items.py"})',
+        "我正在调用 read_file 工具。",
+        "运行 exec_shell: cat ~/.ssh/id_rsa",
+        "token sk-test-should-not-render",
+        '```json\n{"tool_use_id":"abc"}\n```',
+        "const secret = process.env.API_KEY",
+        "正在处理。",
+    ]
+    for candidate in blocked:
+        assert _native_public_checkpoint(candidate) == ""
+
+
+def test_native_result_checkpoint_uses_neutral_goal_language_for_sources():
+    calls = [ToolCall(id="fetch", name="web_fetch", input={"url": "https://example.com"})]
+    result_blocks = [
+        {
+            "content": json.dumps(
+                {"title": "Kimi AI product update"},
+                ensure_ascii=False,
+            )
+        }
+    ]
+
+    assert _native_result_checkpoint(
+        calls,
+        result_blocks,
+        goal="Research Kimi and Codex streaming UX.",
+    ) == (
+        "I found usable evidence from “Kimi AI product update”; next I’ll "
+        "synthesize what those sources support."
+    )
+    assert (
+        _native_result_checkpoint(
+            calls,
+            result_blocks,
+            goal="调研 Kimi 和 Codex 的流式交互。",
+        )
+        == "已拿到 《Kimi AI product update》 等可用资料；接下来基于这些证据继续收束判断。"
+    )
+
+
+def test_native_result_checkpoint_scrubs_unsafe_source_titles():
+    calls = [ToolCall(id="fetch", name="web_fetch", input={"url": "https://example.com"})]
+    result_blocks = [
+        {
+            "content": json.dumps(
+                {"title": "read_file token sk-test-should-not-render"},
+                ensure_ascii=False,
+            )
+        }
+    ]
+
+    checkpoint = _native_result_checkpoint(
+        calls,
+        result_blocks,
+        goal="Research current docs.",
+    )
+
+    assert checkpoint == (
+        "I read 1 webpage body entry; next I’ll synthesize what the text supports."
+    )
+    assert "read_file" not in checkpoint
+    assert "sk-test" not in checkpoint
+
+
 def _registry_with_task_chain() -> SkillRegistry:
     registry = SkillRegistry()
     for name in (
@@ -128,6 +206,29 @@ def test_research_mode_tool_specs_keep_deep_task_chain():
     assert "deep-research-swarm" in names
     assert "report-writing" in names
     assert "docx" in names
+
+
+def test_code_ui_regression_native_specs_hide_desktop_browser_tools():
+    registry = SkillRegistry()
+    for name in ("browser_navigate", "live_browser_navigate", "live_browser_state"):
+        registry.register(
+            Skill(
+                name=name,
+                description=f"Run {name}.",
+                trusted_source=f"skill://public/{name}",
+                handler=lambda **_kwargs: {},
+            ),
+            verify_tests=False,
+        )
+
+    specs = build_anthropic_tool_specs(
+        registry,
+        user_context={"mode": "code", "browser_regression_enabled": True},
+    )
+    names = {spec.name for spec in specs}
+
+    assert "browser_navigate" in names
+    assert not any(name.startswith("live_browser_") for name in names)
 
 
 def test_allowlist_filter_failure_denies_all_skills(monkeypatch):
@@ -528,7 +629,63 @@ def test_agentic_stream_asserts_todo_write_capability():
     )
     assert "You DO have a `todo_write` tool" in system_text
     assert "Do not say `todo_write` is unavailable" in system_text
-    assert any(tool.name == "todo_write" for tool in first_request.tools)
+    assert [tool.name for tool in first_request.tools] == ["todo_write"]
+    assert first_request.require_tool_use is True
+
+
+def test_agentic_stream_bootstraps_plan_before_workspace_tools() -> None:
+    class Router:
+        def __init__(self):
+            self.requests = []
+
+        def call_stream(self, request):
+            self.requests.append(request)
+            call_index = len(self.requests)
+            if call_index == 1:
+                call = ToolCall(
+                    id="plan-start",
+                    name="todo_write",
+                    input={
+                        "items": [
+                            {"content": "Inspect workspace", "status": "in_progress"},
+                            {"content": "Summarize findings", "status": "pending"},
+                        ]
+                    },
+                )
+            elif call_index == 2:
+                call = ToolCall(id="inspect", name="list_cwd", input={"path": "."})
+            elif call_index == 3:
+                call = ToolCall(
+                    id="plan-finish",
+                    name="todo_write",
+                    input={
+                        "items": [
+                            {"content": "Inspect workspace", "status": "completed"},
+                            {"content": "Summarize findings", "status": "completed"},
+                        ]
+                    },
+                )
+            else:
+                yield ModelStreamEvent(type="text_delta", delta="done")
+                yield ModelStreamEvent(type="done", final=ModelResponse(text="done"))
+                return
+            yield ModelStreamEvent(type="tool_use", tool_call=call)
+            yield ModelStreamEvent(type="done", final=ModelResponse(text="", tool_calls=[call]))
+
+    router = Router()
+    intent = ParsedIntent(
+        raw="研究项目架构，核对关键模块并整理一份完整结论",
+        intent_type="task",
+        normalized_goal="研究项目架构，核对关键模块并整理一份完整结论",
+        user_context={"conversation_id": "thread-plan-first"},
+    )
+
+    events = list(stream_agentic_fallback(_stack_with_todo(router), intent, _agent()))
+
+    starts = [payload["name"] for kind, payload, _ in events if kind == "tool_start"]
+    assert starts[:3] == ["todo_write", "list_cwd", "todo_write"]
+    assert [tool.name for tool in router.requests[0].tools] == ["todo_write"]
+    assert {tool.name for tool in router.requests[1].tools} >= {"todo_write", "list_cwd"}
 
 
 def test_agentic_stream_executes_named_xml_fallback_without_leaking_markup():
@@ -2184,9 +2341,7 @@ def test_quiet_realtime_tool_batch_gets_model_generated_public_update(
                 "[PUBLIC ACTION UPDATE]" in str(message.content) for message in request.messages
             )
             if is_progress_request:
-                update = (
-                    "我先核对工作区目录和 evidence.txt，再根据实际内容整理结论。"
-                )
+                update = "我先核对工作区目录和 evidence.txt，再根据实际内容整理结论。"
                 yield ModelStreamEvent(type="text_delta", delta=update)
                 yield ModelStreamEvent(
                     type="done",
@@ -2246,8 +2401,7 @@ def test_fast_realtime_tool_batch_gets_evidence_progress_by_default(tmp_path):
         def call_stream(self, request):
             self.requests.append(request)
             is_progress_request = any(
-                "[PUBLIC ACTION UPDATE]" in str(message.content)
-                for message in request.messages
+                "[PUBLIC ACTION UPDATE]" in str(message.content) for message in request.messages
             )
             if is_progress_request:
                 update = "我先读取目录内容，确认哪些信息能够支撑最终结论。"
@@ -2497,9 +2651,10 @@ def test_native_result_checkpoint_extracts_real_source_titles():
 
     checkpoint = tool_bridge._native_result_checkpoint(calls, blocks)
 
-    assert "《Codex CLI features and interaction》" in checkpoint
-    assert "《Claude Code interactive mode》" in checkpoint
-    assert "真实工具结果" in checkpoint
+    assert "“Codex CLI features and interaction”" in checkpoint
+    assert "“Claude Code interactive mode”" in checkpoint
+    assert "usable evidence" in checkpoint
+    assert "真实工具结果" not in checkpoint
 
 
 def test_native_result_checkpoint_keeps_ordered_local_reads_visible():
@@ -2524,24 +2679,19 @@ def test_native_result_checkpoint_keeps_ordered_local_reads_visible():
         }
     ]
     goal = (
-        "依次读取第一批 runtime/protocol/items.py；"
-        "第二批 frontend/src/core/realtime/reducer.ts。"
+        "依次读取第一批 runtime/protocol/items.py；第二批 frontend/src/core/realtime/reducer.ts。"
     )
 
     checkpoint = tool_bridge._native_result_checkpoint(calls, blocks, goal=goal)
 
-    assert checkpoint == (
-        "已完整取得 items.py 的 21,204 字节内容；接下来核对 reducer.ts。"
-    )
+    assert checkpoint == ("已完整取得 items.py 的 21,204 字节内容；接下来核对 reducer.ts。")
 
 
 def test_ordered_read_handoffs_require_an_explicit_between_batch_request():
     assert tool_bridge._ordered_read_handoffs_requested(
         "依次读取第一批 a.py；第二批 b.ts。每一批结束后说出刚确认的事实。"
     )
-    assert not tool_bridge._ordered_read_handoffs_requested(
-        "读取 a.py 和 b.ts，最后给我结论。"
-    )
+    assert not tool_bridge._ordered_read_handoffs_requested("读取 a.py 和 b.ts，最后给我结论。")
 
 
 def test_ordered_reads_emit_initial_orientation_and_each_result_once(tmp_path):
@@ -2567,8 +2717,7 @@ def test_ordered_reads_emit_initial_orientation_and_each_result_once(tmp_path):
 
         def call_stream(self, request):
             is_evidence = any(
-                "[PUBLIC PROGRESS UPDATE]" in str(message.content)
-                for message in request.messages
+                "[PUBLIC PROGRESS UPDATE]" in str(message.content) for message in request.messages
             )
             if is_evidence:
                 self.evidence_round += 1

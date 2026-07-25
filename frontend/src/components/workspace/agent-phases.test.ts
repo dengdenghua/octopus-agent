@@ -29,7 +29,7 @@ describe("agent phases", () => {
     );
 
     expect(state.currentPhase?.status).toBe("done");
-    expect(state.currentPhase?.title).toContain("Phase 2");
+    expect(state.currentPhase?.title).toBe("收拢答案");
     expect(progressForPhases(state.phases, state.currentPhase!)).toEqual({
       current: 2,
       total: 2,
@@ -150,7 +150,7 @@ describe("agent phases", () => {
       "pending",
       "pending",
     ]);
-    expect(state.currentPhase?.title).toBe("Phase 2: run deep research");
+    expect(state.currentPhase?.title).toBe("run deep research");
     expect(progressForPhases(state.phases, state.currentPhase!)).toEqual({
       current: 2,
       total: 4,
@@ -210,11 +210,48 @@ describe("agent phases", () => {
       "running",
       "pending",
     ]);
-    expect(state.currentPhase?.title).toBe("Phase 2: deep research NAS market");
+    expect(state.currentPhase?.title).toBe("deep research NAS market");
     expect(progressForPhases(state.phases, state.currentPhase!)).toEqual({
       current: 2,
       total: 3,
     });
+  });
+
+  test("keeps todo phase identity stable across progress updates and reordering", () => {
+    const initial = deriveAgentPhases([
+      event({
+        id: "todo-initial",
+        name: "todo_write",
+        input: {
+          items: [
+            { content: "Inspect architecture", status: "in_progress" },
+            { content: "Run verification", status: "pending" },
+          ],
+        },
+      }),
+    ]);
+    const updated = deriveAgentPhases([
+      event({
+        id: "todo-updated",
+        name: "todo_write",
+        input: {
+          items: [
+            { content: "Run verification", status: "in_progress" },
+            { content: "Inspect architecture", status: "completed" },
+          ],
+        },
+      }),
+    ]);
+
+    expect(
+      Object.fromEntries(
+        initial.phases.map((phase) => [phase.title, phase.id]),
+      ),
+    ).toEqual(
+      Object.fromEntries(
+        updated.phases.map((phase) => [phase.title, phase.id]),
+      ),
+    );
   });
 
   test("plain research-shaped events use generic phases instead of a fixed research template", () => {
@@ -313,7 +350,7 @@ describe("agent phases", () => {
 
     expect(state.phases.length).toBe(2);
     expect(state.phases.map((phase) => phase.status)).toEqual(["done", "done"]);
-    expect(state.currentPhase?.title).toBe("Phase 2: 整理结果与交付");
+    expect(state.currentPhase?.title).toBe("收拢答案");
     expect(progressForPhases(state.phases, state.currentPhase!)).toEqual({
       current: 2,
       total: 2,

@@ -16,7 +16,7 @@ import {
   MoreHorizontalIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   phaseStatusText,
@@ -31,6 +31,12 @@ import {
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
+import type { OutlineRound } from "@/core/threads/progress-outline";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   type AgentTile,
   type DiffEntry,
@@ -39,11 +45,7 @@ import {
   agentEventGroupId,
   DIFF_TAB_LABEL,
 } from "./agent-workbench-utils";
-import type { AgentWorkbenchProcessEventSnapshot } from "./agent-workbench-events";
-import {
-  agentRunStatusLightClass,
-  agentRunStatusLightPulseClass,
-} from "./agent-run-status";
+import { type AgentWorkbenchProcessEventSnapshot } from "./agent-workbench-events";
 
 // ── Shared UI primitives ──────────────────────────────────────────────
 
@@ -167,7 +169,6 @@ const OBSERVED_REFERENCE_TABS: ObservedReferenceTabId[] = [
   "plans",
   "web",
   "memory",
-  "other",
 ];
 
 const OBSERVED_REFERENCE_META: Record<
@@ -714,6 +715,7 @@ export function AgentSummaryPage({
   agentTiles,
   blocks,
   focusedProcessEvent,
+  progressOutline,
   onSelectTab,
   onOpenArtifact,
 }: {
@@ -722,13 +724,23 @@ export function AgentSummaryPage({
   agentTiles: AgentTile[];
   blocks: WorkBlock[];
   focusedProcessEvent?: AgentWorkbenchProcessEventSnapshot | null;
+  focusedEventId?: string | null;
+  /** 「进展」面板的叙事大纲（按 iteration 分组）；缺省或为空时回退为 phase 平铺。 */
+  progressOutline?: OutlineRound[];
   onSelectTab?: (tabId: AgentWorkbenchTabId) => void;
   onOpenArtifact?: (path: string) => void;
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(["progress", "references", "artifacts"]),
+    () => new Set(["progress", "artifacts"]),
   );
+  const manuallyToggledSections = useRef(new Set<string>());
+  const previousRunActive = useRef(false);
+  // 叙事大纲分组折叠态：仅记录用户手动切换的分组；未切换的分组遵循
+  // 「默认仅展开最近一轮」。
+  const [roundOpenOverrides, setRoundOpenOverrides] = useState<
+    ReadonlyMap<number, boolean>
+  >(() => new Map());
   const [refTab, setRefTab] = useState<ObservedReferenceTabId>("files");
   const artifactDiffEntries = useMemo(
     () => diffEntries.filter((entry) => entry.created),
@@ -762,11 +774,58 @@ export function AgentSummaryPage({
     (phase) =>
       phase.status === "running" || phase.status === "waiting_approval",
   );
+  const runActive = Boolean(runningPhase);
   const toggleSection = (section: string) => {
+    manuallyToggledSections.current.add(section);
     setExpandedSections((prev) => {
       const next = new Set(prev);
       if (next.has(section)) next.delete(section);
       else next.add(section);
+      return next;
+    });
+  };
+  // Keep the phase outline visible during and after a run. The conversation
+  // carries the live narrative, while the workbench is the durable overview
+  // users return to for "what happened" and "what remains". Manual collapse
+  // is still respected.
+  useEffect(() => {
+    const wasActive = previousRunActive.current;
+    previousRunActive.current = runActive;
+
+    if (runActive && !wasActive) {
+      manuallyToggledSections.current.delete("progress");
+      setExpandedSections((previous) => {
+        const next = new Set(previous);
+        next.add("progress");
+        return next;
+      });
+      return;
+    }
+
+    if (phases.length > 0 && !manuallyToggledSections.current.has("progress")) {
+      setExpandedSections((previous) => {
+        if (previous.has("progress")) return previous;
+        const next = new Set(previous);
+        next.add("progress");
+        return next;
+      });
+    }
+  }, [phases.length, runActive]);
+  const showOutline =
+    progressOutline !== undefined && progressOutline.length > 0;
+  const latestOutlineIteration = showOutline
+    ? Math.max(...progressOutline.map((round) => round.iteration))
+    : null;
+  const outlineExecutionCount = showOutline
+    ? progressOutline.reduce((sum, round) => sum + round.executionCount, 0)
+    : 0;
+  const outlineFactCount = showOutline
+    ? progressOutline.reduce((sum, round) => sum + round.facts.length, 0)
+    : 0;
+  const toggleRound = (iteration: number, open: boolean) => {
+    setRoundOpenOverrides((prev) => {
+      const next = new Map(prev);
+      next.set(iteration, open);
       return next;
     });
   };
@@ -786,6 +845,39 @@ export function AgentSummaryPage({
     (sum, tab) => sum + tab.items.length,
     0,
   );
+  useEffect(() => {
+    if (runActive) return;
+
+    setExpandedSections((previous) => {
+      const next = new Set(previous);
+      if (diffEntries.length > 0) {
+        if (!manuallyToggledSections.current.has("artifacts")) {
+          next.add("artifacts");
+        }
+        if (!manuallyToggledSections.current.has("references")) {
+          next.delete("references");
+        }
+      } else if (
+        phases.length === 0 &&
+        totalReferenceItems > 0 &&
+        !manuallyToggledSections.current.has("references")
+      ) {
+        next.add("references");
+      } else if (
+        phases.length > 0 &&
+        !manuallyToggledSections.current.has("references")
+      ) {
+        next.delete("references");
+      }
+      if (
+        next.size === previous.size &&
+        [...next].every((section) => previous.has(section))
+      ) {
+        return previous;
+      }
+      return next;
+    });
+  }, [diffEntries.length, phases.length, runActive, totalReferenceItems]);
   const agentHealth = useMemo(() => {
     const total = agentTiles.length;
     const done = agentTiles.filter((agent) => agent.status === "done").length;
@@ -823,10 +915,16 @@ export function AgentSummaryPage({
       const referenceItems = referenceItemsForBlock(block, t);
       if (referenceItems.length === 0) continue;
 
+      const referenceTab = referenceTabForBlock(block);
+      // Commands and generic tool status belong to their dedicated evidence
+      // surfaces. Counting them as "other context" makes the source total
+      // look larger than the evidence the user can actually inspect.
+      if (!OBSERVED_REFERENCE_TABS.includes(referenceTab)) continue;
+
       const inputTokens = estimateTokens(block.inputText || "");
       const outputTokens = estimateTokens(block.outputText || "");
       const total = inputTokens + outputTokens;
-      tokenByTab[referenceTabForBlock(block)] += total;
+      tokenByTab[referenceTab] += total;
 
       if (block.kind === "file" || block.kind === "read") {
         fileTokens += total;
@@ -866,8 +964,14 @@ export function AgentSummaryPage({
     };
   }, [blocks, t]);
 
+  // A tiny context sample is not a useful percentage and reads like task
+  // completion. Keep the exact token count in the context section, but only
+  // surface the compact percentage once it carries real signal.
+  const showContextEstimate = contextStats.percentage >= 5;
+
   const isCompletelyEmpty =
     !focusedProcessEvent &&
+    !showOutline &&
     phases.length === 0 &&
     diffEntries.length === 0 &&
     agentTiles.length === 0 &&
@@ -876,127 +980,8 @@ export function AgentSummaryPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
-        {focusedProcessEvent && (
-          <section
-            className="border-b border-border-subtle pb-4"
-            data-testid="focused-process-event"
-            data-process-event-kind={focusedProcessEvent.kind}
-            data-process-event-status={focusedProcessEvent.status}
-          >
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="relative flex size-2 shrink-0 items-center justify-center">
-                <span
-                  className={cn(
-                    "absolute inline-flex size-2 rounded-full opacity-25",
-                    agentRunStatusLightClass(
-                      focusedProcessEvent.status ?? "done",
-                    ),
-                    agentRunStatusLightPulseClass(
-                      focusedProcessEvent.status ?? "done",
-                    ),
-                  )}
-                />
-                <span
-                  className={cn(
-                    "relative inline-flex size-1.5 rounded-full",
-                    agentRunStatusLightClass(
-                      focusedProcessEvent.status ?? "done",
-                    ),
-                  )}
-                />
-              </span>
-              <span className="font-medium text-foreground/80">
-                {focusedProcessEvent.kind === "thinking"
-                  ? t.message.thinkingProcess
-                  : t.message.executionProcess}
-              </span>
-              {(focusedProcessEvent.count ?? 0) > 1 && (
-                <span className="tabular-nums opacity-60">
-                  ×{focusedProcessEvent.count}
-                </span>
-              )}
-              {focusedProcessEvent.phaseId && (
-                <span className="ml-auto truncate font-mono text-xs opacity-60">
-                  {focusedProcessEvent.phaseId}
-                </span>
-              )}
-            </div>
-            <div className="mt-2 text-sm leading-6 text-foreground/85">
-              {focusedProcessEvent.detail || focusedProcessEvent.summary}
-            </div>
-            {focusedProcessEvent.timelineSequence != null && (
-              <div className="mt-2 font-mono text-xs text-muted-foreground/50">
-                #{focusedProcessEvent.timelineSequence}
-              </div>
-            )}
-          </section>
-        )}
-        {phases.length === 0 &&
-          (diffEntries.length > 0 ||
-            totalReferenceItems > 0 ||
-            agentTiles.length > 0) && (
-            <section className="border-b border-border-subtle pb-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-semibold text-foreground">
-                    {runningPhase?.title ??
-                      (errorPhaseCount > 0
-                        ? t.agentWorkbenchPages.progress
-                        : t.agentWorkbenchPages.dashboardOverview)}
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground/85">
-                    {phases.length > 0 && (
-                      <span>
-                        {donePhaseCount}/{phases.length}{" "}
-                        {phaseStatusText("done")}
-                      </span>
-                    )}
-                    {errorPhaseCount > 0 && (
-                      <span className="text-destructive">
-                        {errorPhaseCount} {phaseStatusText("error")}
-                      </span>
-                    )}
-                    {diffEntries.length > 0 && (
-                      <span>
-                        {t.agentWorkbenchPages.artifacts} {diffEntries.length}
-                      </span>
-                    )}
-                    {totalReferenceItems > 0 && (
-                      <span>
-                        {t.agentWorkbenchPages.sourceCount(totalReferenceItems)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {contextStats.percentage > 0 && (
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {t.agentWorkbenchPages.estimatePercentage(
-                      contextStats.percentage,
-                    )}
-                  </span>
-                )}
-              </div>
-              {phases.length > 0 && (
-                <div className="mt-2 h-px overflow-hidden bg-border/35">
-                  <div
-                    className={cn(
-                      "h-full transition-all",
-                      errorPhaseCount > 0
-                        ? "bg-destructive"
-                        : runningPhase?.status === "waiting_approval"
-                          ? "bg-amber-500"
-                          : "bg-emerald-500",
-                    )}
-                    style={{
-                      width: `${Math.max(6, Math.round((donePhaseCount / phases.length) * 100))}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </section>
-          )}
         {/* 进展 */}
-        {phases.length > 0 && (
+        {!focusedProcessEvent && (phases.length > 0 || showOutline) && (
           <section className="border-b border-border-subtle py-4">
             <button
               type="button"
@@ -1008,20 +993,17 @@ export function AgentSummaryPage({
                 {t.agentWorkbenchPages.progress}
               </h3>
               <span className="ml-auto truncate text-xs text-muted-foreground">
-                {donePhaseCount}/{phases.length} {phaseStatusText("done")}
-                {errorPhaseCount > 0
+                {phases.length > 0
+                  ? `${donePhaseCount}/${phases.length} ${phaseStatusText("done")}`
+                  : t.agentWorkbenchPages.roundActivitySummary(
+                      outlineExecutionCount,
+                      outlineFactCount,
+                    )}
+                {phases.length > 0 && errorPhaseCount > 0
                   ? ` · ${errorPhaseCount} ${phaseStatusText("error")}`
                   : ""}
                 {diffEntries.length > 0
                   ? ` · ${t.agentWorkbenchPages.artifacts} ${diffEntries.length}`
-                  : ""}
-                {totalReferenceItems > 0
-                  ? ` · ${t.agentWorkbenchPages.sourceCount(totalReferenceItems)}`
-                  : ""}
-                {contextStats.percentage > 0
-                  ? ` · ${t.agentWorkbenchPages.estimatePercentage(
-                      contextStats.percentage,
-                    )}`
                   : ""}
               </span>
               {expandedSections.has("progress") ? (
@@ -1030,39 +1012,113 @@ export function AgentSummaryPage({
                 <ChevronRightIcon className="size-3.5 text-muted-foreground" />
               )}
             </button>
-            <div className="mt-2 h-px overflow-hidden bg-border/35">
-              <div
-                className="h-full bg-muted-foreground/35 transition-all"
-                style={{
-                  width: `${Math.max(6, Math.round((donePhaseCount / phases.length) * 100))}%`,
-                }}
-              />
-            </div>
-            {expandedSections.has("progress") && (
-              <ul className="mt-3 space-y-2">
-                {phases.map((phase) => (
-                  <li key={phase.id} className="flex items-center gap-2">
-                    {phase.status === "done" ? (
-                      <span className="flex size-4 shrink-0 items-center justify-center">
-                        <CheckIcon className="size-2.5 text-muted-foreground" />
-                      </span>
-                    ) : phase.status === "running" ? (
-                      <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
-                    ) : phase.status === "waiting_approval" ? (
-                      <CircleIcon className="size-3.5 shrink-0 text-amber-500" />
-                    ) : (
-                      <CircleIcon className="size-3.5 shrink-0 text-muted-foreground/40" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-xs text-foreground">
-                      {phase.title}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {phaseStatusText(phase.status)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            {phases.length > 0 && (
+              <div className="mt-2 h-px overflow-hidden bg-border/35">
+                <div
+                  className="h-full bg-muted-foreground/35 transition-all"
+                  style={{
+                    width: `${Math.max(6, Math.round((donePhaseCount / phases.length) * 100))}%`,
+                  }}
+                />
+              </div>
             )}
+            {expandedSections.has("progress") &&
+              (showOutline ? (
+                <div className="mt-3 space-y-1">
+                  {progressOutline.map((round) => {
+                    const isOpen =
+                      roundOpenOverrides.get(round.iteration) ??
+                      round.iteration === latestOutlineIteration;
+                    const title =
+                      round.intentText ??
+                      t.agentWorkbenchPages.roundTitle(round.iteration);
+                    const countText =
+                      t.agentWorkbenchPages.roundActivitySummary(
+                        round.executionCount,
+                        round.facts.length,
+                      );
+                    if (round.facts.length === 0) {
+                      return (
+                        <div
+                          key={round.iteration}
+                          className="flex items-center gap-1.5 py-0.5"
+                        >
+                          <span className="size-3 shrink-0" aria-hidden />
+                          <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground">
+                            {title}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                            {countText}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <Collapsible
+                        key={round.iteration}
+                        open={isOpen}
+                        onOpenChange={(open) =>
+                          toggleRound(round.iteration, open)
+                        }
+                      >
+                        <CollapsibleTrigger
+                          aria-label={title}
+                          className="flex w-full items-center gap-1.5 py-0.5 text-left transition-colors hover:text-foreground"
+                        >
+                          <ChevronRightIcon
+                            className={cn(
+                              "size-3 shrink-0 text-muted-foreground transition-transform",
+                              isOpen && "rotate-90",
+                            )}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground">
+                            {title}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                            {countText}
+                          </span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <ul className="mt-1.5 space-y-1.5 pl-[18px]">
+                            {round.facts.map((fact, factIndex) => (
+                              <li
+                                key={factIndex}
+                                className="break-words text-[13px] leading-5 text-muted-foreground/90"
+                              >
+                                {fact}
+                              </li>
+                            ))}
+                          </ul>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
+                </div>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {phases.map((phase) => (
+                    <li key={phase.id} className="flex items-center gap-2">
+                      {phase.status === "done" ? (
+                        <span className="flex size-4 shrink-0 items-center justify-center">
+                          <CheckIcon className="size-2.5 text-muted-foreground" />
+                        </span>
+                      ) : phase.status === "running" ? (
+                        <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
+                      ) : phase.status === "waiting_approval" ? (
+                        <CircleIcon className="size-3.5 shrink-0 text-amber-500" />
+                      ) : (
+                        <CircleIcon className="size-3.5 shrink-0 text-muted-foreground/40" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+                        {phase.title}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {phaseStatusText(phase.status)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ))}
           </section>
         )}
 
@@ -1095,7 +1151,7 @@ export function AgentSummaryPage({
                 <ChevronRightIcon className="size-3.5 text-muted-foreground" />
               )}
             </button>
-            {expandedSections.has("artifacts") ? (
+            {expandedSections.has("artifacts") && (
               <div className="mt-3">
                 {artifactDiffEntries.length > 0 && (
                   <>
@@ -1138,12 +1194,6 @@ export function AgentSummaryPage({
                   </>
                 )}
               </div>
-            ) : (
-              <SummaryDiffEntryList
-                entries={diffEntries.slice(0, 3)}
-                kind={artifactDiffEntries.length > 0 ? "artifact" : "change"}
-                onOpenEntry={openDiffEntry}
-              />
             )}
           </section>
         )}
@@ -1301,7 +1351,7 @@ export function AgentSummaryPage({
                 {totalReferenceItems > 0
                   ? t.agentWorkbenchPages.sourceCount(totalReferenceItems)
                   : t.agentWorkbenchPages.noSources}
-                {contextStats.percentage > 0
+                {showContextEstimate
                   ? ` · ${t.agentWorkbenchPages.estimatePercentage(
                       contextStats.percentage,
                     )}`
@@ -1364,7 +1414,7 @@ export function AgentSummaryPage({
                         );
                       })
                     )}
-                    {contextStats.totalTokens > 0 && (
+                    {showContextEstimate && (
                       <span className="ml-auto font-mono text-xs text-muted-foreground/60">
                         {t.agentWorkbenchPages.estimatedTokens(
                           contextStats.totalTokens,
@@ -1372,56 +1422,84 @@ export function AgentSummaryPage({
                       </span>
                     )}
                   </div>
-                  <div className="h-1 overflow-hidden rounded-full bg-border/35">
-                    <div
-                      className="flex h-full"
-                      style={{ width: `${contextStats.percentage}%` }}
-                    >
-                      {contextStats.segments.length === 0 ? (
-                        <div className="h-full w-full bg-muted-foreground/25" />
-                      ) : (
-                        contextStats.segments.map((segment) => (
-                          <div
-                            key={segment.id}
-                            className={cn(
-                              "h-full transition-all",
-                              OBSERVED_REFERENCE_META[segment.id].barClassName,
-                            )}
-                            style={{ width: `${segment.percentage}%` }}
-                            title={`${segment.label} ${t.agentWorkbenchPages.estimatedTokens(segment.tokens)}`}
-                          />
-                        ))
-                      )}
+                  {showContextEstimate ? (
+                    <div className="h-1 overflow-hidden rounded-full bg-border/35">
+                      <div
+                        className="flex h-full"
+                        style={{ width: `${contextStats.percentage}%` }}
+                      >
+                        {contextStats.segments.length === 0 ? (
+                          <div className="h-full w-full bg-muted-foreground/25" />
+                        ) : (
+                          contextStats.segments.map((segment) => (
+                            <div
+                              key={segment.id}
+                              className={cn(
+                                "h-full transition-all",
+                                OBSERVED_REFERENCE_META[segment.id]
+                                  .barClassName,
+                              )}
+                              style={{ width: `${segment.percentage}%` }}
+                              title={`${segment.label} ${t.agentWorkbenchPages.estimatedTokens(segment.tokens)}`}
+                            />
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                 </div>
                 {/* 上下文列表 */}
-                <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+                <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-0.5">
                   {observedReferenceTabs.length === 0 ? (
                     <li className="py-4 text-center text-xs text-muted-foreground">
                       {t.agentWorkbenchPages.noObservableReferences}
                     </li>
                   ) : (
-                    activeRefItems.map((ref) => (
-                      <li key={ref.id} className="flex items-center gap-3">
-                        <ReferenceIcon
-                          fallbackClassName={activeRefMeta.iconClassName}
-                          Icon={ActiveRefIcon}
-                          item={ref}
-                          tabId={activeRefTab}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <span className="block truncate text-xs text-foreground">
-                            {ref.title}
-                          </span>
-                        </div>
-                        {ref.tag && (
-                          <span className="shrink-0 text-xs text-muted-foreground/70">
-                            {ref.tag}
-                          </span>
-                        )}
-                      </li>
-                    ))
+                    activeRefItems.map((ref) => {
+                      const row = (
+                        <>
+                          <ReferenceIcon
+                            fallbackClassName={activeRefMeta.iconClassName}
+                            Icon={ActiveRefIcon}
+                            item={ref}
+                            tabId={activeRefTab}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="block truncate text-xs text-foreground">
+                              {ref.title}
+                            </span>
+                          </div>
+                          {ref.tag && (
+                            <span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground/70">
+                              {ref.tag}
+                            </span>
+                          )}
+                          {ref.url && (
+                            <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/35 transition-colors group-hover:text-muted-foreground" />
+                          )}
+                        </>
+                      );
+
+                      return (
+                        <li key={ref.id}>
+                          {ref.url ? (
+                            <a
+                              href={ref.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={ref.subtitle || ref.url}
+                              className="group -mx-1 flex min-h-9 items-center gap-3 rounded-md px-1 py-1.5 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            >
+                              {row}
+                            </a>
+                          ) : (
+                            <div className="-mx-1 flex min-h-9 items-center gap-3 px-1 py-1.5">
+                              {row}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })
                   )}
                 </ul>
               </div>

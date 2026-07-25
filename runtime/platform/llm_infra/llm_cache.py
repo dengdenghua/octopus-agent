@@ -38,7 +38,7 @@ Wrap any ``ModelRouter``::
     from runtime.platform.llm_infra.llm_cache import CachedModelRouter
 
     primary = AnthropicModelRouter(api_key=...)
-    cached = CachedModelRouter(primary, ttl_seconds=3600)
+    cached = CachedModelRouter(primary, ttl_seconds=60 * 60)
 
     response = cached.call(request)  # cache miss → underlying call
     response = cached.call(request)  # cache hit → no network

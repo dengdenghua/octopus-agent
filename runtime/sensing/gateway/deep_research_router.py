@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment,misc]
     Request = None  # type: ignore[assignment,misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.platform.process.paths import app_paths, project_root
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
 from runtime.research.deep_research import (
@@ -45,8 +46,7 @@ def create_deep_research_router(
     jwt_audience: str | None = None,
 ) -> Any:
     """Create `/api/research/deep/*` endpoints."""
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["deep-research"])
     planner = DeepResearchPlanner()

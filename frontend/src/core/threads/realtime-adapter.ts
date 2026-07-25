@@ -17,6 +17,7 @@ import type {
   ToolCall,
 } from "@/core/api/types";
 import type { Todo } from "@/core/todos";
+import { isPrivateAgentGroundingSource } from "@/core/realtime/items";
 
 import type {
   AgentMessageItem,
@@ -403,7 +404,10 @@ function turnToMessages(turn: Turn): Message[] {
         const am = item as AgentMessageItem;
         const isInterruptedMessage = am.id === interruptedMessageId;
         const isFailedMessage = am.status === "failed";
-        const messageKind = am.messageKind ?? "answer";
+        const split = splitReactTrace(am.text || "");
+        const messageKind =
+          am.messageKind ??
+          (split.publicUpdate && !split.finalAnswer ? "commentary" : "answer");
         // The backend's ReAct loop streams the LLM's raw trajectory:
         // "Thought: ...\nAction: tool(...)\nFinal Answer: ..." into
         // a single ``agentMessage`` item. Rendering that verbatim dumps
@@ -412,7 +416,6 @@ function turnToMessages(turn: Turn): Message[] {
         // the thought process falls through to ``reasoning_content``
         // (collapsible) and the Action line is dropped (the tool call
         // is already surfaced as a separate commandExecution item).
-        const split = splitReactTrace(am.text || "");
         const kwargs = buildAiAdditionalKwargs(pending);
         // Merge any Thought text extracted from the agentMessage into
         // whatever reasoning the earlier ``reasoning`` items already
@@ -484,7 +487,7 @@ function turnToMessages(turn: Turn): Message[] {
           content:
             isInterruptedMessage || isFailedMessage
               ? ""
-              : (split.finalAnswer ?? ""),
+              : (split.finalAnswer || split.publicUpdate || ""),
           additional_kwargs: kwargs,
           ...(pending.toolCalls.length > 0
             ? { tool_calls: pending.toolCalls }
@@ -658,7 +661,10 @@ function attachGroundingToNarrativeAnchor(
   messages: Message[],
   grounding: GroundingSource[] | undefined,
 ): void {
-  if (!grounding || grounding.length === 0) return;
+  const safeGrounding = grounding?.filter(
+    (source) => !isPrivateAgentGroundingSource(source),
+  );
+  if (!safeGrounding || safeGrounding.length === 0) return;
   let fallbackIndex = -1;
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
@@ -678,7 +684,7 @@ function attachGroundingToNarrativeAnchor(
     ...anchor,
     additional_kwargs: {
       ...(anchor.additional_kwargs ?? {}),
-      grounding,
+      grounding: safeGrounding,
     },
   };
 }
@@ -1047,24 +1053,27 @@ function isNoOutputPlannerFailure(turn: Turn): boolean {
  */
 export function splitReactTrace(text: string): {
   thought: string;
+  publicUpdate: string;
   finalAnswer: string;
 } {
-  if (!text) return { thought: "", finalAnswer: "" };
+  if (!text) return { thought: "", publicUpdate: "", finalAnswer: "" };
   // Markers are recognised across all supported locales (en / zh /
   // ja / ko). The union regex lives in `@/core/i18n/llmMarkers` so
   // the spelling stays in one place — keep this function free of
   // hardcoded bilingual alternations.
   if (!hasLLMTraceMarkers(text)) {
-    return { thought: "", finalAnswer: text };
+    return { thought: "", publicUpdate: "", finalAnswer: text };
   }
   const segs = segmentLLMTrace(text);
 
   const thoughts: string[] = [];
+  const updates: string[] = [];
   let finalAnswer = "";
   for (const seg of segs) {
     const clean = seg.text.trim();
     if (!clean) continue;
     if (seg.kind === "thought") thoughts.push(clean);
+    else if (seg.kind === "update") updates.push(clean);
     else if (seg.kind === "finalAnswer") finalAnswer = clean; // last one wins
     // action + observation + prelude are intentionally dropped
   }
@@ -1073,7 +1082,15 @@ export function splitReactTrace(text: string): {
   // thought as the placeholder bubble text so the message isn't
   // empty. Otherwise the Final Answer wins outright.
   if (!finalAnswer && thoughts.length > 0) {
-    return { thought: thoughts.slice(0, -1).join("\n\n"), finalAnswer: "" };
+    return {
+      thought: thoughts.slice(0, -1).join("\n\n"),
+      publicUpdate: updates.at(-1) ?? "",
+      finalAnswer: "",
+    };
   }
-  return { thought: thoughts.join("\n\n"), finalAnswer };
+  return {
+    thought: thoughts.join("\n\n"),
+    publicUpdate: updates.at(-1) ?? "",
+    finalAnswer,
+  };
 }

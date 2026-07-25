@@ -26,13 +26,7 @@ import {
   TerminalIcon,
   type LucideIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { currentActorId } from "@/core/auth/api";
@@ -73,6 +67,11 @@ const MOUNT_TYPE_LABEL_KEY: Record<
 const MENU_WIDTH = 320;
 const MENU_MARGIN = 12;
 
+/** Keep the shared sidebar quiet until there is an actual choice to make. */
+export function shouldShowWorkspaceSwitcher(workspaces: Workspace[]): boolean {
+  return workspaces.length > 1;
+}
+
 export function WorkspaceSwitcher({
   activeWorkspaceId,
   onSwitch,
@@ -99,8 +98,7 @@ export function WorkspaceSwitcher({
   } | null>(null);
 
   const activeWorkspace = useMemo(
-    () =>
-      workspaces.find((ws) => ws.id === activeWorkspaceId) ?? null,
+    () => workspaces.find((ws) => ws.id === activeWorkspaceId) ?? null,
     [workspaces, activeWorkspaceId],
   );
 
@@ -132,9 +130,17 @@ export function WorkspaceSwitcher({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    // Load once on mount so the switcher can disappear entirely in the common
+    // one-workspace case, rather than reserving a permanent navigation row.
     void reload();
-  }, [open, reload]);
+  }, [reload]);
+
+  useEffect(() => {
+    const refresh = () => void reload();
+    window.addEventListener("octopus:workspaces-changed", refresh);
+    return () =>
+      window.removeEventListener("octopus:workspaces-changed", refresh);
+  }, [reload]);
 
   const updateMenuPosition = useCallback(() => {
     if (!containerRef.current) return;
@@ -150,10 +156,7 @@ export function WorkspaceSwitcher({
     const spaceBelow = window.innerHeight - rect.bottom - MENU_MARGIN;
     const spaceAbove = rect.top - MENU_MARGIN;
     const openUp = spaceAbove > spaceBelow;
-    const maxHeight = Math.max(
-      200,
-      openUp ? spaceAbove - 6 : spaceBelow - 6,
-    );
+    const maxHeight = Math.max(200, openUp ? spaceAbove - 6 : spaceBelow - 6);
     setMenuRect({
       left,
       width,
@@ -210,9 +213,7 @@ export function WorkspaceSwitcher({
   const handleCreated = useCallback(
     (workspace: Workspace) => {
       setWorkspaces((prev) =>
-        prev.some((ws) => ws.id === workspace.id)
-          ? prev
-          : [workspace, ...prev],
+        prev.some((ws) => ws.id === workspace.id) ? prev : [workspace, ...prev],
       );
       handlePick(workspace);
     },
@@ -222,6 +223,15 @@ export function WorkspaceSwitcher({
   const ActiveIcon = activeWorkspace
     ? MOUNT_TYPE_ICON[activeWorkspace.mount_type]
     : HardDriveIcon;
+
+  // A switcher with no alternative is visual noise, especially on library
+  // pages where it reads like a second level of navigation. The selected
+  // workspace remains attached to the thread; only this redundant trigger is
+  // hidden. If loading fails we fail closed as well, so an unavailable remote
+  // workspace API never leaves a dead control in the sidebar.
+  if (!shouldShowWorkspaceSwitcher(workspaces)) {
+    return null;
+  }
 
   return (
     <div
@@ -278,9 +288,7 @@ export function WorkspaceSwitcher({
               className="fixed z-[100]"
               style={{
                 top:
-                  menuRect.top !== undefined
-                    ? `${menuRect.top}px`
-                    : undefined,
+                  menuRect.top !== undefined ? `${menuRect.top}px` : undefined,
                 bottom:
                   menuRect.bottom !== undefined
                     ? `${menuRect.bottom}px`
@@ -397,9 +405,7 @@ export function WorkspaceSwitcher({
                     <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                       <PlusIcon className="size-3.5" />
                     </span>
-                    <span className="min-w-0 flex-1">
-                      {tr.addWorkspace}
-                    </span>
+                    <span className="min-w-0 flex-1">{tr.addWorkspace}</span>
                   </button>
                 </div>
               </div>

@@ -29,4 +29,9 @@ describe("compact relative timestamps", () => {
     expect(formatCompactRelativeTimestamp(recentDate, "zh-CN")).toBe("18m");
     expect(formatCompactRelativeTimestamp(recentDate, "en-US")).toBe("18m");
   });
+
+  test("does not throw for an unfinished thread timestamp", () => {
+    expect(formatCompactRelativeTimestamp("", "zh-CN")).toBe("");
+    expect(formatRelativeTimestamp("not-a-date", "zh-CN")).toBe("");
+  });
 });

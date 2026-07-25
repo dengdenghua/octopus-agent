@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { BotIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -68,6 +68,8 @@ export function WorkstationSeat({
   className,
   ariaLabel,
 }: WorkstationSeatProps) {
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const showAvatarImage = Boolean(avatarUrl && avatarUrl !== failedAvatarUrl);
   const base = iconOnly
     ? iconCaption
       ? "group/seat relative inline-flex h-10 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border text-left transition-colors"
@@ -86,10 +88,11 @@ export function WorkstationSeat({
         iconOnly && iconCaption ? "size-6 text-xs" : "size-7 text-sm",
       )}
     >
-      {avatarUrl ? (
+      {showAvatarImage && avatarUrl ? (
         <img
           src={avatarUrl}
           alt={iconOnly ? "" : name}
+          onError={() => setFailedAvatarUrl(avatarUrl ?? null)}
           className="size-full object-cover"
         />
       ) : avatar?.trim() ? (

@@ -29,8 +29,8 @@ def test_kimi_swarm_certification_is_evidence_backed(tmp_path) -> None:
     assert report["summary"]["benchmark_case_ready"] is True
     assert report["provider_load_test_next_stage"]["schema"] == ("octopus.kimi_swarm_next_stage.v1")
     assert report["provider_load_test_next_stage"]["next_stage"] == "provider_canary"
-    assert report["provider_load_test_next_stage"]["provider_id"] == "kimi_coding"
-    assert report["provider_load_test_next_stage"]["model"] == "kimi-for-coding"
+    assert report["provider_load_test_next_stage"]["provider_id"] == "volcengine_ark"
+    assert report["provider_load_test_next_stage"]["model"] == "kimi-k3"
     assert report["provider_load_test_next_stage"]["recommended_payload"]["real_provider"] is True
     assert report["provider_load_test_resume_plan"]["schema"] == (
         "octopus.kimi_swarm_resume_plan.v1"
@@ -73,8 +73,8 @@ def test_kimi_swarm_certification_reports_provider_quota_limit(
     run_kimi_swarm_load_test(
         config=KimiSwarmLoadTestConfig(
             session_id="cert-quota-limit",
-            provider_id="kimi_coding",
-            model="kimi-for-coding",
+            provider_id="volcengine_ark",
+            model="kimi-k3",
             agent_count=300,
             step_count=4000,
             max_concurrency=1,

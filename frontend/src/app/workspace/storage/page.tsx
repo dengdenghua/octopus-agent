@@ -47,6 +47,7 @@ import {
   getNASBaseURL,
   getNASManifest,
   getNASPolicy,
+  isNASAuthenticationError,
   listNASSources,
   searchNAS,
   startNASService,
@@ -56,6 +57,7 @@ import {
   type NASSearchHit,
   type NASSource,
 } from "@/core/storage/api";
+import { pickLocalDirectory } from "@/core/workspace/pick-local-directory";
 import { basename, isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 
@@ -423,7 +425,6 @@ export default function StoragePage() {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isIndexing, setIsIndexing] = useState(false);
-  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const didAutoStartRef = useRef(false);
 
   const libraryParam = searchParams.get("library");
@@ -451,7 +452,13 @@ export default function StoragePage() {
     } catch (error) {
       setManifest(null);
       setSources([]);
-      setServiceError(error instanceof Error ? error.message : String(error));
+      setServiceError(
+        isNASAuthenticationError(error)
+          ? "本地知识库已启动，但连接凭据已失效。正在重新连接…"
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      );
       return false;
     }
   }, []);
@@ -510,29 +517,13 @@ export default function StoragePage() {
   const pickFolder = async () => {
     setIsPickingFolder(true);
     try {
-      if (window.octopus?.dialog?.open) {
-        const result = await window.octopus.dialog.open({
-          properties: ["openDirectory"],
-        });
-        const selected = result.filePaths[0];
-        if (!result.canceled && selected) {
-          await addSource(selected);
-          return;
-        }
-      }
-      folderInputRef.current?.click();
+      const selected = await pickLocalDirectory();
+      if (selected) await addSource(selected);
     } catch (err) {
       setServiceError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsPickingFolder(false);
     }
-  };
-
-  const onFolderInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    event.target.value = "";
-    setServiceError(
-      "浏览器目录选择无法提供安全的本机绝对路径，请在桌面壳中添加文件夹。",
-    );
   };
 
   const reconnectNAS = async () => {
@@ -606,9 +597,7 @@ export default function StoragePage() {
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
               {serviceError && (
                 <div className="flex items-center justify-between gap-3 border-b border-amber-300/70 bg-amber-50 px-4 py-2 text-xs text-amber-900">
-                  <span className="min-w-0 truncate">
-                    本地知识库服务未连接：{getNASBaseURL()}
-                  </span>
+                  <span className="min-w-0 truncate">{serviceError}</span>
                   <Button
                     size="sm"
                     variant="outline"
@@ -687,8 +676,6 @@ export default function StoragePage() {
                   onPickFolder={pickFolder}
                   onReconnect={() => void reconnectNAS()}
                   onRemoveSource={removeSource}
-                  folderInputRef={folderInputRef}
-                  onFolderInputChange={onFolderInputChange}
                 />
               ) : hasSearchResult ? (
                 <SearchResultsView
@@ -1136,7 +1123,9 @@ function TopicNavRow({
       type="button"
       className={cn(
         "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
-        active ? "bg-white shadow-[var(--shadow-xs)] ring-1 ring-black/5" : "hover:bg-white/70",
+        active
+          ? "bg-white shadow-[var(--shadow-xs)] ring-1 ring-black/5"
+          : "hover:bg-white/70",
       )}
     >
       <span
@@ -1642,8 +1631,6 @@ function SourcesView({
   onPickFolder,
   onReconnect,
   onRemoveSource,
-  folderInputRef,
-  onFolderInputChange,
 }: {
   sources: NASSource[];
   stats: { files: number; chunks: number; sources: number };
@@ -1654,8 +1641,6 @@ function SourcesView({
   onPickFolder: () => void;
   onReconnect: () => void;
   onRemoveSource: (id: string) => Promise<void>;
-  folderInputRef: React.RefObject<HTMLInputElement | null>;
-  onFolderInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
@@ -1786,10 +1771,7 @@ function SourcesView({
                   <FolderPlusIcon className="size-4" />
                 ) : (
                   <RefreshCwIcon
-                    className={cn(
-                      "size-4",
-                      isReconnecting && "animate-spin",
-                    )}
+                    className={cn("size-4", isReconnecting && "animate-spin")}
                   />
                 )}
                 {manifest
@@ -1826,18 +1808,6 @@ function SourcesView({
           <span>扫描队列: 等待扫描 0 · OCR 处理中 0 · 失败文件 0</span>
         </div>
       </div>
-
-      <input
-        ref={folderInputRef}
-        type="file"
-        // @ts-expect-error - Chromium/WebKit folder picker fallback
-        webkitdirectory=""
-        directory=""
-        multiple
-        hidden
-        aria-label="选择文件夹"
-        onChange={onFolderInputChange}
-      />
     </main>
   );
 }

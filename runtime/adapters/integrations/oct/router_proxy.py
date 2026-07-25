@@ -26,6 +26,7 @@ except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from .client import OctClientError, get_auth, is_dead_token
 from .config import OctConfig
 from .links import OctLinkStore
@@ -44,8 +45,7 @@ def create_proxy_router(
     jwt_audience: str | None = None,
     http_client: Any = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(prefix="/api/oct/openai/v1", tags=["oct", "llm"])
     base = config.base_url.rstrip("/")

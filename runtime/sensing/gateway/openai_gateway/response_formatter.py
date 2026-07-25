@@ -112,21 +112,6 @@ def _assistant_text_from_trajectory(traj: Any) -> str:
     return "\n".join(lines + ["", summary])
 
 
-def _wrap_with_thinking_block(
-    thinking: str,
-    reply: str,
-    *,
-    open_default: bool = False,
-) -> str:
-    safe_thinking = thinking.replace("[", "\\[").replace("]", "\\]")
-    open_attr = " open" if open_default else ""
-    return (
-        f"<details{open_attr}>\n<summary>💭 思考过程</summary>\n\n"
-        f"{safe_thinking}\n\n</details>\n\n"
-        f"{reply}"
-    )
-
-
 def _format_research_report_fallback(
     *,
     goal: str,

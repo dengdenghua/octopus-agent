@@ -19,6 +19,8 @@ Prefer the explicit group path `from runtime.<group>.X` in new code.
 
 __version__ = "0.2.0"
 
+from typing import Any
+
 _LAZY_EXPORTS = {
     # core
     "cerebrum": "runtime.core.cerebrum",
@@ -64,7 +66,7 @@ _LAZY_EXPORTS = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     target = _LAZY_EXPORTS.get(name)
     if target is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

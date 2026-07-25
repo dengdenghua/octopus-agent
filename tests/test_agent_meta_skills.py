@@ -9,6 +9,10 @@ from runtime.execution.suckers.agent_meta_skills import (
 from runtime.execution.suckers.registry import Skill, SkillRegistry
 
 
+def _without_ids(items: list[dict]) -> list[dict]:
+    return [{key: value for key, value in item.items() if key != "id"} for item in items]
+
+
 def test_todo_write_accepts_model_friendly_aliases() -> None:
     result = _todo_write(
         todos=[
@@ -24,7 +28,7 @@ def test_todo_write_accepts_model_friendly_aliases() -> None:
 
     assert result["ok"] is True
     assert result["count"] == 3
-    assert result["todos"] == [
+    assert _without_ids(result["todos"]) == [
         {
             "content": "List project files",
             "status": "completed",
@@ -54,7 +58,7 @@ def test_todo_write_accepts_json_string_todos() -> None:
 
     assert result["ok"] is True
     assert result["count"] == 2
-    assert result["todos"] == [
+    assert _without_ids(result["todos"]) == [
         {
             "content": "Confirm task",
             "status": "completed",
@@ -86,7 +90,7 @@ def test_todo_write_accepts_tasks_description_alias() -> None:
 
     assert result["ok"] is True
     assert result["count"] == 2
-    assert result["todos"] == [
+    assert _without_ids(result["todos"]) == [
         {
             "content": "Audit frontend streaming",
             "status": "completed",
@@ -98,6 +102,7 @@ def test_todo_write_accepts_tasks_description_alias() -> None:
             "activeForm": "Check browser regression",
         },
     ]
+    assert [item["id"] for item in result["todos"]] == ["1", "2"]
 
 
 def test_todo_write_accepts_name_alias() -> None:
@@ -112,13 +117,32 @@ def test_todo_write_accepts_name_alias() -> None:
 
     assert result["ok"] is True
     assert result["count"] == 1
-    assert result["todos"] == [
+    assert _without_ids(result["todos"]) == [
         {
             "content": "Query call_agent_parallel schema",
             "status": "completed",
             "activeForm": "Query call_agent_parallel schema",
         },
     ]
+
+
+def test_todo_write_keeps_stable_ids_across_status_updates_and_reordering() -> None:
+    first = _todo_write(
+        items=[
+            {"content": "Inspect architecture", "status": "in_progress"},
+            {"content": "Run verification", "status": "pending"},
+        ]
+    )
+    first_ids = {item["content"]: item["id"] for item in first["todos"]}
+
+    updated = _todo_write(
+        items=[
+            {"content": "Run verification", "status": "in_progress"},
+            {"content": "Inspect architecture", "status": "completed"},
+        ]
+    )
+
+    assert {item["content"]: item["id"] for item in updated["todos"]} == first_ids
 
 
 def test_todo_write_allows_only_one_in_progress_item() -> None:

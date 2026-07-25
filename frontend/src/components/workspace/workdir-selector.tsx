@@ -31,6 +31,7 @@ import {
   type MountType,
   type Workspace,
 } from "@/core/workspace/api";
+import { pickLocalDirectory } from "@/core/workspace/pick-local-directory";
 import { basename, isAbsolutePath, joinPath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -66,28 +67,6 @@ const MOUNT_TYPE_ICON: Record<MountType, LucideIcon> = {
   sftp: TerminalIcon,
   s3: DatabaseIcon,
 };
-
-// Native folder picker via the Electron preload bridge.
-async function openNativeFolderPicker(
-  currentDir: string,
-): Promise<string | null> {
-  const api = window.octopus;
-  if (api?.dialog?.open) {
-    try {
-      const result = await api.dialog.open({
-        properties: ["openDirectory", "createDirectory"],
-        defaultPath: currentDir,
-      });
-      if (!result.canceled && result.filePaths.length > 0) {
-        return result.filePaths[0] || null;
-      }
-    } catch (error) {
-      console.error("Electron folder picker failed:", error);
-    }
-  }
-
-  return null;
-}
 
 function readRecentWorkdirs(): string[] {
   if (typeof window === "undefined") return [];
@@ -186,10 +165,10 @@ function entryDisplayName(entry: FsTreeEntry): string {
 // Kept self-contained (not in the shared i18n bundle) so this touch-up stays
 // decoupled from concurrently-edited locale files.
 const WEB_PICKER_HINT: Record<"zh" | "en" | "ja" | "ko", string> = {
-  zh: "网页版无法直接选择本地文件夹。选最近用过的工作区,或在下方粘贴完整路径;需要文件夹选择器请用桌面版。",
-  en: "The web app can't pick a local folder directly. Choose a recent workspace, or paste a full path below — use the desktop app for a folder picker.",
-  ja: "ウェブ版はローカルフォルダを直接選択できません。最近のワークスペースを選ぶか、下に絶対パスを貼り付けてください（フォルダ選択はデスクトップ版）。",
-  ko: "웹 버전은 로컬 폴더를 직접 선택할 수 없습니다. 최근 작업 공간을 선택하거나 아래에 전체 경로를 붙여넣으세요(폴더 선택기는 데스크톱 앱).",
+  zh: "未能打开系统文件夹选择器。你仍可选择最近使用的工作区，或在下方粘贴完整路径。",
+  en: "The system folder picker could not be opened. Choose a recent workspace or paste its full path below.",
+  ja: "システムのフォルダ選択を開けませんでした。最近のワークスペースを選ぶか、完全なパスを貼り付けてください。",
+  ko: "시스템 폴더 선택기를 열 수 없습니다. 최근 작업 공간을 선택하거나 전체 경로를 붙여넣으세요.",
 };
 
 const LOCKED_WORKDIR_TEXT: Record<
@@ -249,12 +228,6 @@ export function WorkDirSelector({
   const isMutedVariant = variant === "muted";
   const { t, locale } = useI18n();
   const trRemote = t.remoteWorkspace;
-  // Native folder picker is only reachable through the Electron preload bridge.
-  // In a plain browser there is none — `showDirectoryPicker` can only hand back a
-  // folder *name*, never an absolute path the local backend can use — so the
-  // web flow leans on recent workspaces + manual paste instead of a dead picker.
-  const hasNativePicker =
-    typeof window !== "undefined" && Boolean(window.octopus?.dialog?.open);
   const [isPicking, setIsPicking] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   // ``browsePath`` drives the in-menu folder browser. When the user
@@ -509,31 +482,26 @@ export function WorkDirSelector({
 
   const handlePrimaryAction = useCallback(async () => {
     if (isPicking) return;
-    if (!hasNativePicker) {
-      // Web mode: don't pop the OS folder picker — it can't return a usable path
-      // and only confuses ("picked a folder, now paste it anyway"). Open the menu
-      // straight to recents + manual paste instead.
-      setShowMenu(true);
-      setNoBridgeHint(true);
-      if (!isMutedVariant) setBrowserOpen(true);
-      requestAnimationFrame(() => {
-        manualInputRef.current?.focus();
-      });
-      return;
-    }
     setIsPicking(true);
     try {
-      const selected = await openNativeFolderPicker(workDir);
+      const selected = await pickLocalDirectory(workDir);
       if (selected) {
         applyWorkDir(selected);
         return;
       }
-      setShowMenu(true);
-      if (!isMutedVariant) setBrowserOpen(true);
+    } catch (error) {
+      swallow(error);
+      setNoBridgeHint(true);
     } finally {
       setIsPicking(false);
     }
-  }, [applyWorkDir, hasNativePicker, isMutedVariant, isPicking, workDir]);
+
+    setShowMenu(true);
+    if (!isMutedVariant) setBrowserOpen(true);
+    requestAnimationFrame(() => {
+      manualInputRef.current?.focus();
+    });
+  }, [applyWorkDir, isMutedVariant, isPicking, workDir]);
 
   const handleMenuToggle = useCallback(() => {
     if (isPicking) return;
@@ -612,22 +580,25 @@ export function WorkDirSelector({
 
   const upDir = parentDir(browsePath);
 
-  // The "open folder" CTA only renders when a native picker exists (Electron),
-  // so this is the native path; web mode never reaches it.
   const handleOpenFolderCta = useCallback(async () => {
     setIsPicking(true);
     try {
-      const selected = await openNativeFolderPicker(workDir);
+      const selected = await pickLocalDirectory(workDir);
       if (selected) {
         applyWorkDir(selected);
         return;
       }
-      setBrowserOpen(true);
-      requestAnimationFrame(() => manualInputRef.current?.focus());
+    } catch (error) {
+      swallow(error);
+      setNoBridgeHint(true);
     } finally {
       setIsPicking(false);
     }
-  }, [applyWorkDir, workDir]);
+
+    setShowMenu(true);
+    if (!isMutedVariant) setBrowserOpen(true);
+    requestAnimationFrame(() => manualInputRef.current?.focus());
+  }, [applyWorkDir, isMutedVariant, workDir]);
 
   // CTA tile for the implemented workspace picker entry point.
   const cta = (opts: {
@@ -684,15 +655,15 @@ export function WorkDirSelector({
         enableRemoteTab
           ? ""
           : "border border-border-default bg-popover/95 backdrop-blur " +
-            (isMutedVariant
-              ? "rounded-lg shadow-[var(--shadow-md)]"
-              : "rounded-lg shadow-2xl"),
+              (isMutedVariant
+                ? "rounded-lg shadow-[var(--shadow-md)]"
+                : "rounded-lg shadow-2xl"),
       )}
     >
-      {/* Primary entry point for adding a workspace. Only meaningful with a
-          native picker (Electron); web mode leans on recents + manual paste. */}
+      {/* The same system picker is available in both the desktop shell and the
+          local web app; the backend supplies the absolute path in web mode. */}
       <div className={cn("shrink-0", isMutedVariant ? "p-1.5" : "p-2.5")}>
-        {hasNativePicker && folderPickerCta}
+        {folderPickerCta}
         {isWorkDirLocked && (
           <div className="mt-1.5 rounded-md border border-primary/15 bg-primary/5 px-2 py-1.5 text-xs leading-snug text-muted-foreground">
             {lockedCopy.hint}
@@ -908,9 +879,7 @@ export function WorkDirSelector({
           : "border border-border-default bg-popover/95 backdrop-blur rounded-lg shadow-2xl",
       )}
     >
-      <div
-        className={cn("shrink-0", isMutedVariant ? "p-1.5" : "p-2.5")}
-      >
+      <div className={cn("shrink-0", isMutedVariant ? "p-1.5" : "p-2.5")}>
         <div className="mb-2 flex items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {trRemote.switcherTitle}
@@ -924,10 +893,7 @@ export function WorkDirSelector({
             aria-label={trRemote.searchPlaceholder}
           >
             <Loader2Icon
-              className={cn(
-                "size-3",
-                remoteLoading && "animate-spin",
-              )}
+              className={cn("size-3", remoteLoading && "animate-spin")}
             />
           </button>
         </div>
@@ -960,9 +926,7 @@ export function WorkDirSelector({
                   title={ws.mount_target}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition-colors",
-                    active
-                      ? "bg-primary/10 text-primary"
-                      : "hover:bg-muted/55",
+                    active ? "bg-primary/10 text-primary" : "hover:bg-muted/55",
                   )}
                 >
                   <span

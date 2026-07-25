@@ -28,6 +28,7 @@ except Exception:  # pragma: no cover - fastapi optional at import time
     APIRouter = None  # type: ignore[assignment, misc]
     Depends = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 # registry 除 skill 外还托管 role / twin-role(数字分身岗位模板)/ plugin / task /
 # twin / experience(见 asset.type,api.octoapk.com 实测 473 条)。角色类(role/
@@ -170,8 +171,7 @@ def create_registry_consumer_router(
     registry_base: str | None = None,
     skills_root: Path | str | None = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     import os
 

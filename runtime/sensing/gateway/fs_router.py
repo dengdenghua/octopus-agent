@@ -73,6 +73,7 @@ except ImportError:  # pragma: no cover
     UploadFile = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 # ═══════════════════════════════════════════════════════════
 # Response models
@@ -395,13 +396,41 @@ def create_fs_router(
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    workspace_store: Any = None,
+    lease_store: Any = None,
+    mount_registry: Any = None,
+    group_store: Any = None,
 ) -> Any:
     """Build the FastAPI router. State is per-request (the path
     parameter); auth, when an identity store is wired and ``require_auth``
     is set, is enforced once at the router level for every fs endpoint.
+
+    Remote-workspace routing (Task 6):
+
+      When ``workspace_store`` + ``mount_registry`` are wired, endpoints
+      accept a ``workspace_id:`` prefix on the ``path`` parameter (e.g.
+      ``ws-abc123:/src/main.py``). The prefix selects a registered
+      Workspace; the remainder is the path within the workspace's mount,
+      routed through ``MountBackend.read_file`` / ``write_file`` /
+      ``list_dir`` instead of the local filesystem.
+
+      ACL (Task 7) is enforced on remote-workspace ops only — local-path
+      requests keep the existing fail-closed-to-allowed-roots behaviour
+      so the desktop file browser is unchanged. ``user_id`` is taken from
+      the ``user_id`` query param, then the ``X-User-Id`` header. Write
+      ops require ``owner`` or ``editor``; read ops accept any role;
+      no role → 403.
+
+      Lease checks (Task 6.3): on writes, if ``holder_id`` is supplied,
+      an existing exclusive lease held by *another* holder returns 409
+      with the conflict details; otherwise the lease is auto-acquired
+      (or renewed in place for the same holder).
+
+      Broadcast (Task 6.4): after a successful write, if ``group_store``
+      + ``thread_id`` are supplied, ``broadcast_file_written`` appends a
+      ``file_written`` entry to the thread's shared blackboard.
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     def _auth_dep(request: Request) -> None:
         # Router-level gate: applies to every fs endpoint at once. A
@@ -501,6 +530,254 @@ def create_fs_router(
                 "thread_id": thread_id,
             },
         )
+
+    # ═══════════════════════════════════════════════════════════
+    # Remote-workspace routing (Task 6 + 7)
+    # ═══════════════════════════════════════════════════════════
+
+    def _parse_workspace_path(
+        value: str | None,
+    ) -> tuple[str | None, str]:
+        """Split ``workspace_id:/path/to/file`` into ``(workspace_id, path)``.
+
+        Returns ``(None, value)`` when ``value`` doesn't carry a
+        ``workspace_id:`` prefix, when the prefix is a single Windows drive
+        letter (``C:/...``), or when either side of the ``:`` is empty.
+
+        The workspace_id is *not* validated against ``workspace_store`` here
+        — that happens in ``_resolve_remote_workspace`` so callers can choose
+        to treat an unknown prefix as a local path (fail-open) or raise.
+        """
+        if not value or not isinstance(value, str):
+            return (None, value)
+        # Skip Windows drive letters (e.g. "C:/Users/...").
+        if (
+            len(value) >= 2
+            and value[1] == ":"
+            and value[0].isalpha()
+            and (len(value) == 2 or value[2] in ("/", "\\"))
+        ):
+            return (None, value)
+        if ":" not in value:
+            return (None, value)
+        workspace_id, _, rest = value.partition(":")
+        if not workspace_id or not rest:
+            return (None, value)
+        return (workspace_id, rest)
+
+    def _resolve_remote_workspace(
+        workspace_id: str | None,
+    ) -> Any:
+        """Look up the Workspace row. Returns ``None`` if the workspace is
+        unknown or remote-workspace support is not wired.
+        """
+        if not workspace_id or workspace_store is None:
+            return None
+        try:
+            return workspace_store.get_workspace(workspace_id)
+        except Exception:  # noqa: BLE001 — store errors fall through to local path
+            return None
+
+    def _remote_backend_for(ws: Any):
+        """Get or create the cached MountBackend for a Workspace row.
+
+        Returns ``None`` if no registry is wired or the mount_type has no
+        registered adapter.
+        """
+        if mount_registry is None or ws is None:
+            return None
+        try:
+            return mount_registry.get_or_create(
+                ws.id, ws.mount_type, ws.mount_target, ws.mount_options
+            )
+        except KeyError:
+            return None
+        except Exception:  # noqa: BLE001 — backend init failure
+            return None
+
+    def _extract_user_id(
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> str | None:
+        """User identity for ACL.
+
+        Resolution order: ``user_id`` query param → ``X-User-Id`` header →
+        ``user_id`` body field (POST endpoints only).
+        """
+        uid = request.query_params.get("user_id") if request is not None else None
+        if not uid and request is not None:
+            uid = request.headers.get("X-User-Id") or request.headers.get("x-user-id")
+        if not uid and isinstance(body, dict):
+            uid = body.get("user_id")
+        if isinstance(uid, str):
+            uid = uid.strip()
+            return uid if uid else None
+        return None
+
+    def _check_acl(
+        request: Request,
+        workspace_id: str,
+        *,
+        write: bool,
+        body: dict[str, Any] | None = None,
+    ) -> str:
+        """Enforce workspace-level ACL.
+
+        Returns the member's role on success. Raises ``HTTPException(403)``
+        if the user is not a member (or ``write`` is requested but the role
+        is below ``editor``).
+        """
+        if workspace_store is None:
+            # Remote-workspace support not wired — caller should have
+            # short-circuited before reaching ACL. Fail closed.
+            raise HTTPException(
+                403,
+                {
+                    "error": "workspace_store_not_configured",
+                    "workspace_id": workspace_id,
+                },
+            )
+        user_id = _extract_user_id(request, body)
+        if not user_id:
+            raise HTTPException(
+                403,
+                {
+                    "error": "user_id_required",
+                    "workspace_id": workspace_id,
+                    "hint": "pass ?user_id= or X-User-Id header",
+                },
+            )
+        role = workspace_store.get_member_role(workspace_id, user_id)
+        if role is None:
+            raise HTTPException(
+                403,
+                {
+                    "error": "not_a_member",
+                    "workspace_id": workspace_id,
+                    "user_id": user_id,
+                },
+            )
+        if write and role not in ("owner", "editor"):
+            raise HTTPException(
+                403,
+                {
+                    "error": "write_requires_editor",
+                    "workspace_id": workspace_id,
+                    "user_id": user_id,
+                    "role": role,
+                    "required": ["owner", "editor"],
+                },
+            )
+        return role
+
+    def _check_lease_conflict_or_acquire(
+        workspace_id: str,
+        file_path: str,
+        holder_id: str | None,
+    ) -> None:
+        """Pre-write lease gate (Task 6.3).
+
+        If ``holder_id`` is supplied and another holder currently owns an
+        exclusive lease on this file, raise ``HTTPException(409)`` with the
+        conflict details. If ``holder_id`` is supplied and no conflict
+        exists, auto-acquire (or renew) the lease so the write is
+        protected against concurrent writers.
+
+        If ``lease_store`` is None or ``holder_id`` is empty, this is a
+        no-op — the write proceeds without lease protection (back-compat
+        for callers that haven't adopted leases yet).
+        """
+        if lease_store is None or not holder_id:
+            return
+        existing = lease_store.get_by_path(workspace_id, file_path)
+        if existing is not None and existing.holder_id != holder_id:
+            raise HTTPException(
+                409,
+                {
+                    "error": "lease_conflict",
+                    "workspace_id": workspace_id,
+                    "file_path": file_path,
+                    "holder_id": existing.holder_id,
+                    "expires_at": existing.expires_at,
+                    "lease_id": existing.lease_id,
+                },
+            )
+        # Auto-acquire (or renew-in-place for the same holder) so the
+        # write is exclusive for the lease TTL window.
+        try:
+            lease_store.acquire(
+                workspace_id=workspace_id,
+                file_path=file_path,
+                holder_id=holder_id,
+                ttl_seconds=1800,
+                kind="exclusive",
+            )
+        except Exception:  # noqa: BLE001 — lease acquisition must not block the write
+            pass
+
+    def _broadcast_file_written(
+        workspace_id: str,
+        file_path: str,
+        writer_id: str,
+        thread_id: str | None,
+    ) -> None:
+        """Best-effort broadcast of a ``file_written`` event on the bound
+        cowork group's blackboard. Silently skips when ``group_store`` or
+        ``thread_id`` is missing."""
+        if group_store is None or not thread_id:
+            return
+        try:
+            from runtime.workspace.cowork_bridge import broadcast_file_written
+
+            broadcast_file_written(
+                group_store,
+                thread_id,
+                file_path,
+                writer_id,
+                workspace_id=workspace_id,
+            )
+        except Exception:  # noqa: BLE001 — broadcast failures must not fail the write
+            pass
+
+    def _dir_entry_to_tree(
+        entry: Any,
+        *,
+        depth: int,
+    ) -> dict[str, Any]:
+        """Convert a MountBackend ``DirEntry`` to the ``FsTreeEntry`` shape."""
+        is_dir = bool(getattr(entry, "is_dir", False))
+        return {
+            "name": getattr(entry, "name", "") or getattr(entry, "path", ""),
+            "path": getattr(entry, "path", ""),
+            "type": "dir" if is_dir else "file",
+            "depth": depth,
+            "size": getattr(entry, "size", None),
+        }
+
+    def _tree_depth_of(entry_path: str, base_path: str) -> int:
+        """Compute the relative depth of a MountBackend DirEntry.path
+        against the requested base. ``list_dir`` already filters by depth
+        internally, so this is a best-effort rendering hint for the UI."""
+        try:
+            rel = (entry_path or "").strip("/")
+            base = (base_path or "").strip("/")
+            if base:
+                rel = rel[len(base):].lstrip("/") if rel.startswith(base) else rel
+            return rel.count("/") if rel else 0
+        except Exception:  # noqa: BLE001
+            return 0
+
+    # Names that should never appear in a remote tree listing — mirrors
+    # the local ``TREE_IGNORED_DIRS`` filter for ``.git`` / ``node_modules``
+    # / ``.octopus`` / ``logs`` so a remote workspace gets the same noise
+    # suppression as a local one.
+    _REMOTE_IGNORED_DIRS = {
+        ".git", "node_modules", ".octopus", "logs",
+    }
+
+    def _is_ignored_remote_dir(entry: Any) -> bool:
+        name = (getattr(entry, "name", "") or "").casefold()
+        return bool(getattr(entry, "is_dir", False)) and name in _REMOTE_IGNORED_DIRS
 
     def _serialize_tree_entry(
         root: Path,
@@ -660,6 +937,36 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         value = completed.stdout.strip()
         return value or None
 
+    def _pick_directory_macos(default_path: str | None) -> str | None:
+        script = """
+on run argv
+  set startPath to item 1 of argv
+  try
+    activate
+    if startPath is "" then
+      set pickedFolder to choose folder with prompt "选择工作区文件夹"
+    else
+      set pickedFolder to choose folder with prompt "选择工作区文件夹" default location POSIX file startPath
+    end if
+    return POSIX path of pickedFolder
+  on error number -128
+    return ""
+  end try
+end run
+"""
+        completed = subprocess.run(
+            ["osascript", "-e", script, default_path or ""],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(completed.stderr.strip() or "folder picker failed")
+        value = completed.stdout.strip()
+        if value != "/":
+            value = value.rstrip("/")
+        return value or None
+
     def _pick_directory_tk(default_path: str | None) -> str | None:
         import tkinter as tk
         from tkinter import filedialog
@@ -681,11 +988,12 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         default_path: str | None = Query(default=None),
     ) -> dict[str, Any]:
         try:
-            path = (
-                _pick_directory_windows(default_path)
-                if sys.platform.startswith("win")
-                else _pick_directory_tk(default_path)
-            )
+            if sys.platform.startswith("win"):
+                path = _pick_directory_windows(default_path)
+            elif sys.platform == "darwin":
+                path = _pick_directory_macos(default_path)
+            else:
+                path = _pick_directory_tk(default_path)
         except Exception as exc:  # pragma: no cover - depends on local GUI
             return {
                 "success": False,
@@ -754,13 +1062,45 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         return {"success": True, "path": str(import_root), "files": saved}
 
     @router.get("/api/fs/tree", response_model=FsTreeResponse)
-    def api_fs_tree(
+    async def api_fs_tree(
+        request: Request,
         path: str,
         depth: int = Query(default=2, ge=0, le=6),
         thread_id: str | None = None,
         workspace_path: str | None = None,
         include_ignored: bool = Query(default=False),
     ) -> dict[str, Any]:
+        # Remote-workspace routing: if ``path`` carries a ``workspace_id:``
+        # prefix and the workspace exists, list_dir via the MountBackend.
+        workspace_id, rel_path = _parse_workspace_path(path)
+        ws = _resolve_remote_workspace(workspace_id)
+        if ws is not None:
+            _check_acl(request, ws.id, write=False)
+            backend = _remote_backend_for(ws)
+            if backend is None:
+                raise HTTPException(
+                    500,
+                    {
+                        "error": "mount_backend_unavailable",
+                        "workspace_id": ws.id,
+                        "mount_type": ws.mount_type,
+                    },
+                )
+            try:
+                entries = await backend.list_dir(rel_path, depth)
+            except FileNotFoundError as exc:
+                raise HTTPException(404, str(exc)) from exc
+            except NotADirectoryError as exc:
+                raise HTTPException(404, str(exc)) from exc
+            except Exception as exc:  # noqa: BLE001 — backend error
+                raise HTTPException(500, f"backend list_dir failed: {exc}") from exc
+            tree = [
+                _dir_entry_to_tree(e, depth=_tree_depth_of(e.path, rel_path))
+                for e in entries
+                if not _is_ignored_remote_dir(e)
+            ]
+            return {"entries": tree}
+        # Local-path fallback (existing behaviour).
         root = _assert_in_scope(
             Path(path),
             thread_id=thread_id,
@@ -775,12 +1115,47 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         }
 
     @router.get("/api/fs/read", response_model=FsReadResponse)
-    def api_fs_read(
+    async def api_fs_read(
+        request: Request,
         path: str,
         max_lines: int = Query(default=500, ge=1, le=5000),
         thread_id: str | None = None,
         workspace_path: str | None = None,
     ) -> dict[str, Any]:
+        # Remote-workspace routing: if ``path`` carries a ``workspace_id:``
+        # prefix and the workspace exists, read_file via the MountBackend.
+        workspace_id, rel_path = _parse_workspace_path(path)
+        ws = _resolve_remote_workspace(workspace_id)
+        if ws is not None:
+            _check_acl(request, ws.id, write=False)
+            backend = _remote_backend_for(ws)
+            if backend is None:
+                raise HTTPException(
+                    500,
+                    {
+                        "error": "mount_backend_unavailable",
+                        "workspace_id": ws.id,
+                        "mount_type": ws.mount_type,
+                    },
+                )
+            try:
+                raw = await backend.read_file(rel_path)
+            except FileNotFoundError as exc:
+                raise HTTPException(404, str(exc)) from exc
+            except Exception as exc:  # noqa: BLE001 — backend error
+                raise HTTPException(500, f"backend read_file failed: {exc}") from exc
+            if isinstance(raw, (bytes, bytearray)):
+                content = raw.decode("utf-8", errors="replace")
+            else:
+                content = str(raw)
+            lines = content.splitlines()
+            return {
+                "path": f"{ws.id}:{rel_path}",
+                "content": "\n".join(lines[:max_lines]),
+                "lines": lines[:max_lines],
+                "truncated": len(lines) > max_lines,
+            }
+        # Local-path fallback (existing behaviour).
         file_path = _assert_in_scope(
             Path(path),
             thread_id=thread_id,
@@ -804,13 +1179,67 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
         }
 
     @router.post("/api/fs/write", response_model=FsWriteResponse)
-    def api_fs_write(body: dict[str, Any]) -> dict[str, Any]:
+    async def api_fs_write(
+        request: Request,
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
         path_value = body.get("path")
         content = body.get("content", "")
         if not isinstance(path_value, str) or not path_value.strip():
             raise HTTPException(400, "path is required")
         if not isinstance(content, str):
             raise HTTPException(400, "content must be a string")
+        # Remote-workspace routing: if ``path`` carries a ``workspace_id:``
+        # prefix and the workspace exists, write_file via the MountBackend.
+        workspace_id, rel_path = _parse_workspace_path(path_value)
+        ws = _resolve_remote_workspace(workspace_id)
+        if ws is not None:
+            _check_acl(
+                request,
+                ws.id,
+                write=True,
+                body=body,
+            )
+            holder_id = (
+                body.get("holder_id")
+                if isinstance(body.get("holder_id"), str)
+                else None
+            )
+            thread_id = (
+                body.get("thread_id")
+                if isinstance(body.get("thread_id"), str)
+                else None
+            )
+            # Task 6.3: lease gate + auto-acquire.
+            _check_lease_conflict_or_acquire(ws.id, rel_path, holder_id)
+            backend = _remote_backend_for(ws)
+            if backend is None:
+                raise HTTPException(
+                    500,
+                    {
+                        "error": "mount_backend_unavailable",
+                        "workspace_id": ws.id,
+                        "mount_type": ws.mount_type,
+                    },
+                )
+            payload = content.encode("utf-8")
+            try:
+                await backend.write_file(rel_path, payload)
+            except Exception as exc:  # noqa: BLE001 — backend error
+                raise HTTPException(500, f"backend write_file failed: {exc}") from exc
+            # Task 6.4: broadcast file_written to the bound cowork group.
+            _broadcast_file_written(
+                ws.id,
+                rel_path,
+                holder_id or _extract_user_id(request, body) or "anonymous",
+                thread_id,
+            )
+            return {
+                "success": True,
+                "path": f"{ws.id}:{rel_path}",
+                "bytes": len(payload),
+            }
+        # Local-path fallback (existing behaviour).
         file_path = _assert_in_scope(
             Path(path_value),
             thread_id=body.get("thread_id") if isinstance(body.get("thread_id"), str) else None,

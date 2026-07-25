@@ -31,7 +31,9 @@ MemberRole = Literal["participant", "observer"]
 GrantScope = Literal["all", "from_join", "range", "summary"]
 GroupMode = Literal["chat", "cluster", "swarm", "project"]
 
-EventAction = Literal["invite", "leave", "mute", "unmute", "mode", "room_link"]
+EventAction = Literal[
+    "invite", "leave", "mute", "unmute", "mode", "room_link", "workspace_link"
+]
 
 DEFAULT_MODE: GroupMode = "chat"
 # "project" is the milestone-driven collaboration mode — there is no separate
@@ -79,6 +81,9 @@ class MemberEvent:
     at_message: int | None = None  # message index this event is anchored to
     ts: str = ""  # ISO timestamp (stamped by the store)
     seq: int = 0  # monotonic order within the thread (stamped by the store)
+    # For action="workspace_link": {"id", "name", "mount_type"} describing the
+    # bound workspace. ``None`` for all other actions.
+    workspace: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -92,14 +97,19 @@ class MemberEvent:
             "at_message": self.at_message,
             "ts": self.ts,
             "seq": self.seq,
+            "workspace": self.workspace,
         }
 
     @classmethod
     def from_dict(cls, raw: dict) -> MemberEvent:
         action = raw.get("action")
-        if action not in ("invite", "leave", "mute", "unmute", "mode", "room_link"):
+        if action not in (
+            "invite", "leave", "mute", "unmute", "mode", "room_link", "workspace_link"
+        ):
             raise ValueError(f"unknown member event action: {action!r}")
         mode = raw.get("mode")
+        ws_raw = raw.get("workspace")
+        workspace = dict(ws_raw) if isinstance(ws_raw, dict) else None
         return cls(
             action=action,
             actor=str(raw.get("actor") or ""),
@@ -111,6 +121,7 @@ class MemberEvent:
             at_message=_as_int(raw.get("at_message")),
             ts=str(raw.get("ts") or ""),
             seq=int(raw.get("seq") or 0),
+            workspace=workspace,
         )
 
 
@@ -146,6 +157,10 @@ class GroupState:
     mode: GroupMode = DEFAULT_MODE
     event_count: int = 0
     room_id: str | None = None  # linked Team Room (the session's other surface)
+    # Linked Workspace info (``{"id", "name", "mount_type"}``) when a
+    # ``workspace_link`` event has been folded in; ``None`` otherwise. The
+    # *latest* ``workspace_link`` event wins, mirroring the ``room_link`` rule.
+    workspace: dict | None = None
 
     @property
     def is_one_to_one(self) -> bool:
@@ -165,6 +180,7 @@ class GroupState:
             "event_count": self.event_count,
             "is_one_to_one": self.is_one_to_one,
             "room_id": self.room_id,
+            "workspace": self.workspace,
         }
 
 
@@ -189,6 +205,7 @@ def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> Group
     members: dict[str, Member] = {}
     mode: GroupMode = DEFAULT_MODE
     room_id: str | None = None
+    workspace: dict | None = None
     scoped = events if until_seq is None else [e for e in events if e.seq <= until_seq]
     for ev in sorted(scoped, key=lambda e: e.seq):
         if ev.action == "invite":
@@ -213,11 +230,19 @@ def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> Group
             mode = ev.mode  # type: ignore[assignment]
         elif ev.action == "room_link":
             room_id = ev.target_id or None
+        elif ev.action == "workspace_link":
+            # The latest workspace_link event wins; fall back to target_id for
+            # the workspace id when the ``workspace`` dict isn't populated.
+            ws = dict(ev.workspace) if isinstance(ev.workspace, dict) else {}
+            if ev.target_id and not ws.get("id"):
+                ws["id"] = ev.target_id
+            workspace = ws or None
     return GroupState(
         roster=list(members.values()),
         mode=mode,
         event_count=len(scoped),
         room_id=room_id,
+        workspace=workspace,
     )
 
 

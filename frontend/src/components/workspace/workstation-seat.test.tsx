@@ -11,7 +11,9 @@ describe("WorkstationSeat", () => {
 
   it("is a button that fires onClick when clickable", () => {
     const onClick = vi.fn();
-    render(<WorkstationSeat name="coder" onClick={onClick} ariaLabel="@coder" />);
+    render(
+      <WorkstationSeat name="coder" onClick={onClick} ariaLabel="@coder" />,
+    );
     const seat = screen.getByRole("button", { name: "@coder" });
     fireEvent.click(seat);
     expect(onClick).toHaveBeenCalledTimes(1);
@@ -23,9 +25,24 @@ describe("WorkstationSeat", () => {
   });
 
   it("renders an image avatar with the name as alt text", () => {
-    render(<WorkstationSeat name="coder" avatarUrl="/api/agents/coder/avatar" />);
+    render(
+      <WorkstationSeat name="coder" avatarUrl="/api/agents/coder/avatar" />,
+    );
     const img = screen.getByRole("img", { name: "coder" });
     expect(img).toHaveAttribute("src", "/api/agents/coder/avatar");
+  });
+
+  it("falls back to the emoji when an image avatar fails to load", () => {
+    render(
+      <WorkstationSeat
+        name="coder"
+        avatar="🤖"
+        avatarUrl="/api/agents/coder/avatar"
+      />,
+    );
+    fireEvent.error(screen.getByRole("img", { name: "coder" }));
+    expect(screen.queryByRole("img", { name: "coder" })).toBeNull();
+    expect(screen.getByText("🤖")).toBeInTheDocument();
   });
 
   it("falls back to an uppercased initial when no avatar is given", () => {

@@ -100,7 +100,7 @@ describe("SettingsDialog", () => {
       screen.getByRole("heading", { name: "运行可观测性" }),
     ).toBeInTheDocument();
     expect(screen.getByText("实时活动")).toBeInTheDocument();
-    expect(screen.getByText("工具与文件轨迹")).toBeInTheDocument();
+    expect(screen.getByText("操作与文件轨迹")).toBeInTheDocument();
     expect(screen.getByText("运行健康")).toBeInTheDocument();
 
     await user.click(

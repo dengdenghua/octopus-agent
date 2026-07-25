@@ -115,10 +115,10 @@ DIMENSIONS: tuple[AutomationRadarDimension, ...] = (
             "then prefer the extension relay for current-tab state, actions, "
             "screenshots, and site-policy aware automation."
         ),
-        scores={"codex": 96, "claude_code": 95, "cursor": 84, "octopus": 96},
+        scores={"codex": 96, "claude_code": 95, "cursor": 84, "octopus": 97},
         evidence_check_ids=("thread_native_external_chrome_activation",),
         next_actions=(
-            "Keep @Chrome activation distinct from @Browser and verify the extension relay before fallback.",
+            "Keep @Chrome activation distinct from @Browser and persist the requested/served track receipt for every fallback.",
         ),
     ),
     AutomationRadarDimension(

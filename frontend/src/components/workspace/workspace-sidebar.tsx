@@ -25,12 +25,9 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { swallow } from "@/core/utils/log";
-import {
-  useEvent,
-  eventBus,
-  emitProjectsChanged,
-} from "@/core/events";
+import { useEvent, eventBus, emitProjectsChanged } from "@/core/events";
 
 import { SettingsDialog } from "./settings";
 import { AgentFooter } from "./sidebar-footer";
@@ -78,6 +75,7 @@ import {
 } from "@/components/ui/tooltip";
 import { getAPIClient } from "@/core/api";
 import { getBackendBaseURL } from "@/core/config";
+import { pickLocalDirectory } from "@/core/workspace/pick-local-directory";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -196,6 +194,7 @@ const PROJECTS_KEY = "octopus.projects";
 const RECENT_WORKDIRS_KEY = "octopus:recentWorkdirs";
 const PROJECT_GROUPING_KEY = "octopus.sidebar.project-grouping-enabled";
 const ONGOING_THREADS_LIMIT = 5;
+const PROJECT_THREAD_PREVIEW_LIMIT = 6;
 
 type OngoingThreadSummary = ThreadSummary & {
   runStatus: ThreadRunStatus;
@@ -295,11 +294,29 @@ function buildOngoingThreadSummaries({
       return runStatus ? [{ ...thread, runStatus }] : [];
     })
     .sort((a, b) => {
-      const byStatus = statusPriority[b.runStatus] - statusPriority[a.runStatus];
+      const byStatus =
+        statusPriority[b.runStatus] - statusPriority[a.runStatus];
       if (byStatus !== 0) return byStatus;
       return (b.updatedAt || "").localeCompare(a.updatedAt || "");
     })
     .slice(0, limit);
+}
+
+function excludeActiveThread<T extends ThreadSummary>(
+  threads: T[],
+  pathname: string,
+): T[] {
+  const activeId = activeWorkspaceThreadIdFromPathname(pathname);
+  if (!activeId) return threads;
+  return threads.filter((thread) => thread.id !== activeId);
+}
+
+function projectThreadsForPreview<T>(
+  threads: T[],
+  showAll: boolean,
+  limit = PROJECT_THREAD_PREVIEW_LIMIT,
+): T[] {
+  return showAll ? threads : threads.slice(0, limit);
 }
 
 export function syncedSidebarPathname(
@@ -563,19 +580,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     setProjectGroupingEnabled((enabled) => !enabled);
   }, []);
 
-  // "New project" flow:
-  //   1. Try the native directory picker (Chromium) — lets the user
-  //      either pick an existing folder or type a new folder name.
-  //   2. Fall back to a hidden <input type="file" webkitdirectory> in
-  //      Safari / Firefox where showDirectoryPicker isn't available.
-  //   3. Final fallback: an inline input row in the sidebar (used when
-  //      even the file input is blocked, e.g. in sandboxed webviews).
-  const folderInputRef = useRef<HTMLInputElement | null>(null);
-  const [projectDraftOpen, setProjectDraftOpen] = useState(false);
-
   const saveProjectName = useCallback((name: string) => {
     const trimmed = name.trim();
-    setProjectDraftOpen(false);
     if (!trimmed) return;
     const next = Array.from(new Set([trimmed, ...readUserProjects()]));
     writeUserProjects(next);
@@ -583,89 +589,21 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     emitProjectsChanged();
   }, []);
 
-  const saveProjectPath = useCallback(
-    (path: string) => {
-      const trimmed = path.trim();
-      if (!trimmed || !isAbsolutePath(trimmed)) return;
-      saveProjectName(basename(trimmed) || trimmed);
-      emitWorkDirSelected(trimmed);
-    },
-    [saveProjectName],
-  );
-
+  // The same system chooser is used by the desktop shell and local web app.
+  // In web mode the local backend opens the OS dialog and returns the absolute
+  // path, which keeps the project label, workspace binding, and permissions in
+  // sync instead of creating a name-only project.
   const pickProjectFolder = useCallback(async () => {
-    if (window.octopus?.dialog?.open) {
-      try {
-        const result = await window.octopus.dialog.open({
-          properties: ["openDirectory", "createDirectory"],
-        });
-        const selected = result.filePaths[0];
-        if (!result.canceled && selected) {
-          saveProjectPath(selected);
-          return;
-        }
-      } catch (err) {
-        swallow(err);
-      }
+    try {
+      const selected = await pickLocalDirectory();
+      if (!selected) return;
+      saveProjectName(basename(selected) || selected);
+      emitWorkDirSelected(selected);
+    } catch (error) {
+      swallow(error);
+      toast.error(t.sidebar.projectPickerFailed);
     }
-
-    // 1. Native picker — supported in modern Chromium. Gives the user
-    //    both "pick existing" and "new folder" in one OS dialog.
-    type DirPicker = () => Promise<{ name: string }>;
-    const picker = (window as unknown as { showDirectoryPicker?: DirPicker })
-      .showDirectoryPicker;
-    if (typeof picker === "function") {
-      try {
-        const handle = await picker();
-        if (handle?.name) {
-          saveProjectName(handle.name);
-          return;
-        }
-      } catch (err) {
-        swallow(err);
-        // Cancelled or permission denied. AbortError is the normal
-        // cancel path — fall back to the inline input only when the
-        // picker refused to even open (TypeError, SecurityError).
-        const name =
-          err && typeof err === "object" && "name" in err
-            ? (err as { name?: string }).name
-            : "";
-        if (name === "AbortError") return;
-      }
-    }
-
-    // 2. webkitdirectory input — fallback for browsers without
-    //    showDirectoryPicker. First segment of webkitRelativePath is
-    //    the chosen folder's name.
-    const input = folderInputRef.current;
-    if (input) {
-      input.value = "";
-      input.click();
-      return;
-    }
-
-    // 3. Inline draft row — last resort.
-    setProjectDraftOpen(true);
-  }, [saveProjectName, saveProjectPath]);
-
-  useEffect(() => {
-    const handler = () => void pickProjectFolder();
-    window.addEventListener("octopus:project-new", handler);
-    return () => window.removeEventListener("octopus:project-new", handler);
-  }, [pickProjectFolder]);
-
-  const onFolderInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const rel =
-        (file as File & { webkitRelativePath?: string }).webkitRelativePath ??
-        "";
-      const firstSegment = rel.split("/")[0] || file.name;
-      saveProjectName(firstSegment);
-    },
-    [saveProjectName],
-  );
+  }, [saveProjectName, t.sidebar.projectPickerFailed]);
 
   // Group code/team threads by project. Team history defaults to its bound
   // workspace folder, so multi-agent work sits with the project instead of
@@ -950,7 +888,56 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         ],
         runStatusByHref,
       }),
-    [conversationThreads, projectThreads, runStatusByHref, transientOngoingThreads],
+    [
+      conversationThreads,
+      projectThreads,
+      runStatusByHref,
+      transientOngoingThreads,
+    ],
+  );
+  // The active conversation needs a durable home in the sidebar even when a
+  // user has folded Projects or Chat history. This is the context anchor that
+  // makes the navigation follow the conversation instead of acting like a
+  // disconnected archive.
+  const activeThreadSummary = useMemo<ThreadSummary | null>(() => {
+    const activeId = activeWorkspaceThreadIdFromPathname(sidebarPathname);
+    if (!activeId) return null;
+    return (
+      [
+        ...ongoingThreads,
+        ...projectThreads,
+        ...conversationThreads,
+        ...allHistoryThreads,
+      ].find((thread) => thread.id === activeId) ?? {
+        id: activeId,
+        title: t.sidebar.currentTaskSession,
+        updatedAt: "",
+        mode: "code",
+        href: sidebarPathname,
+        workspacePath: activeTaskWorkspacePath ?? undefined,
+        agents: activeAgentId ? [activeAgentId] : [],
+      }
+    );
+  }, [
+    activeAgentId,
+    activeTaskWorkspacePath,
+    allHistoryThreads,
+    conversationThreads,
+    ongoingThreads,
+    projectThreads,
+    sidebarPathname,
+    t.sidebar.currentTaskSession,
+  ]);
+  const activeThreadRunStatus = activeThreadSummary
+    ? runStatusByHref.get(activeThreadSummary.href)
+    : undefined;
+  const backgroundOngoingThreads = useMemo(
+    () => excludeActiveThread(ongoingThreads, sidebarPathname),
+    [ongoingThreads, sidebarPathname],
+  );
+  const backgroundHistoryThreads = useMemo(
+    () => excludeActiveThread(allHistoryThreads, sidebarPathname),
+    [allHistoryThreads, sidebarPathname],
   );
 
   return (
@@ -998,8 +985,12 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
               workspacePath={activeTaskWorkspacePath}
             />
           </SidebarGroup>
+          <ActiveConversationSection
+            thread={activeThreadSummary}
+            runStatus={activeThreadRunStatus}
+          />
           <OngoingThreadsSection
-            threads={ongoingThreads}
+            threads={backgroundOngoingThreads}
             pathname={sidebarPathname}
           />
           {/* Unified sidebar — no more surface branching. All navigation
@@ -1023,19 +1014,17 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 groups={projectOrder}
                 byProject={byProject}
                 pathname={sidebarPathname}
-                draftOpen={projectDraftOpen}
                 deletableProjects={deletableProjects}
                 deletingProject={deletingProject}
                 groupingEnabled={projectGroupingEnabled}
                 runStatusByHref={runStatusByHref}
-                onDraftCommit={saveProjectName}
-                onDraftCancel={() => setProjectDraftOpen(false)}
                 onDeleteProject={deleteProject}
                 onToggleGrouping={toggleProjectGrouping}
                 onOpenFiles={openThreadFiles}
+                onNewProject={() => void pickProjectFolder()}
               />
               <ChatsSection
-                threads={allHistoryThreads}
+                threads={backgroundHistoryThreads}
                 pathname={sidebarPathname}
                 label={t.sidebar.sectionChats}
                 agentId={activeAgentId}
@@ -1044,21 +1033,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
               />
             </>
           )}
-          {/* Hidden directory input — used as the Safari/Firefox fallback
-            when showDirectoryPicker is unavailable. webkitdirectory
-            forces a folder selection instead of a single file. */}
-          <input
-            ref={folderInputRef}
-            type="file"
-            // @ts-expect-error — non-standard but supported across Chromium/WebKit
-            webkitdirectory=""
-            directory=""
-            multiple
-            hidden
-            tabIndex={-1}
-            aria-hidden="true"
-            onChange={onFolderInputChange}
-          />
         </SidebarContent>
 
         <SidebarFooter className="border-t border-border-subtle p-1.5">
@@ -1471,6 +1445,8 @@ export const __testing = {
   buildProjectSectionActions,
   buildChatsSectionActions,
   buildOngoingThreadSummaries,
+  excludeActiveThread,
+  projectThreadsForPreview,
   syncedSidebarPathname,
   activeTeamTaskRoomId,
 };
@@ -1911,6 +1887,57 @@ function OngoingThreadsSection({
   );
 }
 
+function ActiveConversationSection({
+  thread,
+  runStatus,
+}: {
+  thread: ThreadSummary | null;
+  runStatus?: ThreadRunStatus;
+}) {
+  const { t } = useI18n();
+  if (!thread) return null;
+  const statusLabel = runStatus ? threadRunStatusLabel(runStatus, t) : null;
+  return (
+    <SidebarGroup className="p-0 px-1 pb-1 group-data-[collapsible=icon]:hidden">
+      <Link
+        to={thread.href}
+        state={{
+          threadOwnerAgentId:
+            thread.agents.length === 1 ? thread.agents[0] : undefined,
+          workspacePath: thread.workspacePath,
+        }}
+        onMouseDown={() => syncThreadAgentSelection(thread.agents)}
+        aria-current="page"
+        className="group/current-task flex min-h-11 min-w-0 items-center gap-2 rounded-lg bg-[color:color-mix(in_oklch,var(--sidebar-accent)_56%,transparent)] px-2 py-1.5 text-foreground transition-colors hover:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_75%,transparent)]"
+      >
+        <span className="relative shrink-0">
+          <ThreadAvatar agents={thread.agents} className="size-5" />
+          <ThreadRunStatusLight
+            status={runStatus}
+            idle="queue"
+            className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar"
+          />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium leading-tight">
+            {thread.title}
+          </span>
+          <span className="mt-0.5 flex items-center gap-1 text-[10px] leading-none text-muted-foreground/75">
+            <span>{t.sidebar.currentTaskSession}</span>
+            {statusLabel && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="truncate">{statusLabel}</span>
+              </>
+            )}
+          </span>
+        </span>
+        <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/55 transition-transform group-hover/current-task:translate-x-0.5" />
+      </Link>
+    </SidebarGroup>
+  );
+}
+
 function ProjectGroup({
   project,
   threads,
@@ -1931,7 +1958,29 @@ function ProjectGroup({
   onOpenFiles: (thread: ThreadSummary, project: string) => void;
 }) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(true);
+  const containsActiveThread = threads.some(
+    (thread) => activeWorkspaceThreadIdFromPathname(pathname) === thread.id,
+  );
+  const backgroundThreads = excludeActiveThread(threads, pathname);
+  // Project folders are an archive, not the primary task surface. Start them
+  // folded unless they contain the active task; this keeps the sidebar useful
+  // during a live conversation instead of filling it with old sessions.
+  const [open, setOpen] = useState(() => containsActiveThread);
+  const [showAllThreads, setShowAllThreads] = useState(false);
+  useEffect(() => {
+    if (containsActiveThread) setOpen(true);
+  }, [containsActiveThread]);
+  useEffect(() => {
+    if (!open) setShowAllThreads(false);
+  }, [open]);
+  const hiddenThreadCount = Math.max(
+    0,
+    backgroundThreads.length - PROJECT_THREAD_PREVIEW_LIMIT,
+  );
+  const visibleThreads = projectThreadsForPreview(
+    backgroundThreads,
+    showAllThreads,
+  );
   const deleteThread = useDeleteThread();
   const { mutate: renameThread } = useRenameThread();
   const navigate = useNavigate();
@@ -2016,8 +2065,9 @@ function ProjectGroup({
           {/* Keep task content indented, but let the active/hover bar span
               the full project lane like TRAE's code sidebar. */}
           <ul className="mt-0.5 space-y-px">
-            {threads.slice(0, 12).map((thread) => {
-              const active = activeWorkspaceThreadIdFromPathname(pathname) === thread.id;
+            {visibleThreads.map((thread) => {
+              const active =
+                activeWorkspaceThreadIdFromPathname(pathname) === thread.id;
               const runStatus = runStatusByHref.get(thread.href);
               return (
                 <li key={thread.id} className="group/thread relative">
@@ -2121,6 +2171,26 @@ function ProjectGroup({
               );
             })}
           </ul>
+          {hiddenThreadCount > 0 && (
+            <button
+              type="button"
+              aria-expanded={showAllThreads}
+              onClick={() => setShowAllThreads((visible) => !visible)}
+              className="mt-1 flex min-h-8 w-full items-center gap-2 rounded-lg px-3 text-xs text-muted-foreground/75 transition-colors hover:bg-muted/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <ChevronRightIcon
+                className={cn(
+                  "size-3 shrink-0 transition-transform",
+                  showAllThreads && "rotate-90",
+                )}
+              />
+              <span className="truncate">
+                {showAllThreads
+                  ? t.sidebar.showFewerProjectThreads
+                  : t.sidebar.showMoreProjectThreads(hiddenThreadCount)}
+              </span>
+            </button>
+          )}
         </CollapsibleContent>
       </SidebarGroup>
       <Dialog
@@ -2137,9 +2207,7 @@ function ProjectGroup({
           className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-base">
-              {t.common.rename}
-            </DialogTitle>
+            <DialogTitle className="text-base">{t.common.rename}</DialogTitle>
           </DialogHeader>
           <Input
             value={renameValue}
@@ -2188,6 +2256,7 @@ interface SectionAction {
   active?: boolean;
   onClick?: () => void;
   href?: string;
+  menuItems?: SectionAction[];
 }
 
 function buildProjectSectionActions({
@@ -2285,6 +2354,37 @@ function SectionHeader({
               "flex size-8 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-muted/45 hover:text-foreground",
               a.active && "text-foreground",
             );
+            if (a.menuItems) {
+              return (
+                <DropdownMenu key={a.label}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      title={a.label}
+                      aria-label={a.ariaLabel ?? a.label}
+                      onClick={(event) => event.stopPropagation()}
+                      className={cls}
+                    >
+                      <Icon className="size-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-44">
+                    {a.menuItems.map((item) => {
+                      const ItemIcon = item.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={item.label}
+                          onSelect={() => item.onClick?.()}
+                        >
+                          <ItemIcon className="mr-2 size-3.5" />
+                          {item.label}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            }
             if (a.href) {
               return (
                 <Link
@@ -2324,30 +2424,26 @@ function ProjectsSection({
   groups,
   byProject,
   pathname,
-  draftOpen,
   deletableProjects,
   deletingProject,
   groupingEnabled,
   runStatusByHref,
-  onDraftCommit,
-  onDraftCancel,
   onDeleteProject,
   onToggleGrouping,
   onOpenFiles,
+  onNewProject,
 }: {
   groups: string[];
   byProject: Record<string, ThreadSummary[]>;
   pathname: string;
-  draftOpen: boolean;
   deletableProjects: Set<string>;
   deletingProject: string | null;
   groupingEnabled: boolean;
   runStatusByHref: Map<string, ThreadRunStatus>;
-  onDraftCommit: (name: string) => void;
-  onDraftCancel: () => void;
   onDeleteProject: (project: string) => void | Promise<void>;
   onToggleGrouping: () => void;
   onOpenFiles: (thread: ThreadSummary, project: string) => void;
+  onNewProject: () => void;
 }) {
   const { t } = useI18n();
   // Persist the open/closed state in localStorage so it stays
@@ -2383,23 +2479,14 @@ function ProjectsSection({
             }
             setOpen((v) => !v);
           }}
-          actions={[
-            ...buildProjectSectionActions({
-              groupingEnabled,
-              newProjectLabel: t.sidebar.actionNewProject,
-              onNewProject: () =>
-                window.dispatchEvent(new Event("octopus:project-new")),
-            }),
-          ]}
+          actions={buildProjectSectionActions({
+            groupingEnabled,
+            newProjectLabel: t.sidebar.actionNewProject,
+            onNewProject,
+          })}
         />
         {groupingEnabled && open && (
           <div className="mt-0.5">
-            {draftOpen && (
-              <ProjectDraftRow
-                onCommit={onDraftCommit}
-                onCancel={onDraftCancel}
-              />
-            )}
             {groups.map((project) => (
               <ProjectGroup
                 key={project}
@@ -2416,47 +2503,6 @@ function ProjectsSection({
           </div>
         )}
       </SidebarGroup>
-    </div>
-  );
-}
-
-function ProjectDraftRow({
-  onCommit,
-  onCancel,
-}: {
-  onCommit: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const { t } = useI18n();
-  const [value, setValue] = useState("");
-  return (
-    <div className="flex h-8 items-center gap-2 rounded-lg px-1">
-      <FolderIcon className="size-4 shrink-0 opacity-70" />
-      <input
-        autoFocus
-        value={value}
-        placeholder={t.sidebar.projectNamePlaceholder}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onCommit(value);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            onCancel();
-          }
-        }}
-        onBlur={() => {
-          // Commit on blur if the user typed something, otherwise cancel
-          // so clicking elsewhere doesn't leave a ghost draft row.
-          if (value.trim()) onCommit(value);
-          else onCancel();
-        }}
-        className={cn(
-          "min-w-0 flex-1 rounded-lg border border-primary/40 bg-background px-1.5 py-0.5",
-          "text-sm outline-none focus:ring-1 focus:ring-primary/40",
-        )}
-      />
     </div>
   );
 }
@@ -2499,6 +2545,9 @@ function ChatsSection({
       swallow(e);
     }
   }, [open]);
+  useEffect(() => {
+    if (activeWorkspaceThreadIdFromPathname(pathname)) setOpen(true);
+  }, [pathname]);
   const deleteThread = useDeleteThread();
   const { mutate: renameThread } = useRenameThread();
   const navigate = useNavigate();
@@ -2662,9 +2711,7 @@ function ChatsSection({
           className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 sm:max-w-[360px]"
         >
           <DialogHeader className="gap-1 text-left">
-            <DialogTitle className="text-base">
-              {tr.common.rename}
-            </DialogTitle>
+            <DialogTitle className="text-base">{tr.common.rename}</DialogTitle>
           </DialogHeader>
           <Input
             value={renameValue}

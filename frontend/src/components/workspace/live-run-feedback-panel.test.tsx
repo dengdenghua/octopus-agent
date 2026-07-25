@@ -39,9 +39,7 @@ describe("LiveRunFeedbackPanel", () => {
     });
 
     expect(screen.queryByText("Live Feedback")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/Generating action draft/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Shaping the next step/)).not.toBeInTheDocument();
   });
 
   it("ignores meta-only todo events because TodoPanel owns that UI", () => {
@@ -59,7 +57,7 @@ describe("LiveRunFeedbackPanel", () => {
     );
 
     expect(screen.queryByText("Live Feedback")).not.toBeInTheDocument();
-    expect(screen.queryByText("Updating todos")).not.toBeInTheDocument();
+    expect(screen.queryByText("Updating plan")).not.toBeInTheDocument();
   });
 
   it("shows one detail card when a real tool signal exists", () => {
@@ -68,7 +66,9 @@ describe("LiveRunFeedbackPanel", () => {
         liveToolEvents={[
           toolEvent("read_file", {
             status: "running",
-            input: { path: "README.md" },
+            input: {
+              path: "/Users/dangbei/Public/octopus/octopus-agent/README.md",
+            },
           }),
         ]}
         threadId="thread-1"
@@ -88,16 +88,18 @@ describe("LiveRunFeedbackPanel", () => {
     });
 
     expect(screen.getByText("Live Feedback")).toBeInTheDocument();
-    expect(screen.getByText(/Generating action draft/)).toBeInTheDocument();
+    expect(screen.getByText(/Shaping the next step/)).toBeInTheDocument();
     expect(
       screen.getByText(
         (content) =>
-          content.includes("Reading") && content.includes("README.md"),
+          content.includes("Checking") && content.includes("README.md"),
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Users\//)).not.toBeInTheDocument();
+    expect(screen.queryByText(/read_file/)).not.toBeInTheDocument();
   });
 
-  it("uses inputPreview for realtime shell command feedback", () => {
+  it("summarizes realtime shell feedback without leaking raw commands", () => {
     renderWithProviders(
       <LiveRunFeedbackPanel
         liveToolEvents={[
@@ -106,7 +108,7 @@ describe("LiveRunFeedbackPanel", () => {
             input: {
               tool: "exec_shell",
               command: "exec_shell",
-              inputPreview: "npm run typecheck",
+              inputPreview: "cat ~/.ssh/id_rsa && npm run typecheck",
             },
           }),
         ]}
@@ -114,9 +116,10 @@ describe("LiveRunFeedbackPanel", () => {
       />,
     );
 
-    expect(
-      screen.getByText(/Running command: npm run typecheck/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Running local check")).toBeInTheDocument();
+    expect(screen.queryByText(/exec_shell/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cat ~\/.ssh\/id_rsa/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/npm run typecheck/)).not.toBeInTheDocument();
   });
 
   it("shows real-time progress from react step events", () => {
@@ -137,7 +140,7 @@ describe("LiveRunFeedbackPanel", () => {
     });
 
     expect(screen.getByText("Live Feedback")).toBeInTheDocument();
-    expect(screen.getByText("Execute")).toBeInTheDocument();
+    expect(screen.getByText("Working")).toBeInTheDocument();
     expect(screen.getByText("Reading repository context")).toBeInTheDocument();
   });
 });

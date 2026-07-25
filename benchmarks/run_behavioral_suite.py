@@ -14,6 +14,10 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from benchmarks.codex_app_server_runner import (
+    CodexAppServerTrialRunner,
+    codex_desktop_version,
+)
 from benchmarks.codex_cli_runner import CodexCliTrialRunner, codex_cli_version
 from benchmarks.eval_harness import (
     SuiteReport,
@@ -22,12 +26,14 @@ from benchmarks.eval_harness import (
     write_behavioral_system_evidence,
 )
 from benchmarks.fixed_suite_fixtures import prepare_fixture_suite
+from benchmarks.fixture_grading import LiveIsolatedFixture
 from benchmarks.multiphase_runner import MultiPhaseTrialRunner
 from benchmarks.realtime_runner import (
     RealtimeEndpointError,
     RealtimeTrialRunner,
     probe_realtime_endpoint,
 )
+from benchmarks.system_run_seed import load_system_run_seed, merge_seed_reports
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INFRASTRUCTURE_STATUS_PATH = (
@@ -80,17 +86,64 @@ def _approval_responder(case_id: str):
     return respond
 
 
-def _context_overrides(domain: str) -> dict[str, object]:
-    """Map a fixed-suite domain to the production work surface it exercises."""
-    if domain != "browser_desktop_automation":
+def _codex_approval_responder(case_id: str):
+    """Translate the selective denial fixture to the App Server response shape."""
+    if case_id != "security.denied-destructive-action":
+        return None
+
+    def respond(method: str, params: dict[str, object]) -> dict[str, object]:
+        if method in {
+            "item/commandExecution/requestApproval",
+            "execCommandApproval",
+        }:
+            command = str(params.get("command") or "").lower()
+            destructive = (
+                "drop table" in command
+                or ("data.db" in command and "migration.sql" in command)
+                or "rm data.db" in command
+                or "rm -f data.db" in command
+            )
+            return {"decision": "decline" if destructive else "accept"}
+        if method in {
+            "item/fileChange/requestApproval",
+            "applyPatchApproval",
+        }:
+            return {"decision": "accept"}
+        if method == "item/tool/requestUserInput":
+            return {"answers": {}}
+        if method == "mcpServer/elicitation/request":
+            return {"action": "decline"}
+        if method == "item/tool/call":
+            return {"success": False, "contentItems": []}
         return {}
-    return {
-        "mode": "browser",
-        "capability_mode": "browser",
-        "browser_operation_mode": True,
-        "browser_surface": "browser",
-        "runtime_surfaces": ["browser"],
-    }
+
+    return respond
+
+
+def _context_overrides(
+    domain: str,
+    *,
+    preview_url: str | None = None,
+) -> dict[str, object]:
+    """Map a fixed-suite domain to the production work surface it exercises."""
+    if domain == "browser_desktop_automation":
+        return {
+            "mode": "browser",
+            "capability_mode": "browser",
+            "browser_operation_mode": True,
+            "browser_surface": "browser",
+            "runtime_surfaces": ["browser"],
+        }
+    if domain == "frontend_product_experience":
+        if not preview_url:
+            raise ValueError("frontend live-runtime evaluation requires a preview URL")
+        return {
+            "mode": "code",
+            "capability_mode": "code",
+            "browser_regression_enabled": True,
+            "browser_regression_preview_url": preview_url,
+        }
+    return {}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -121,6 +174,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--codex-executable",
         default="/Applications/ChatGPT.app/Contents/Resources/codex",
     )
+    parser.add_argument(
+        "--codex-surface",
+        choices=("desktop", "cli"),
+        default="desktop",
+        help="Codex comparison surface; desktop uses the rich App Server runtime.",
+    )
     parser.add_argument("--codex-ignore-user-config", action="store_true")
     parser.add_argument("--timeout", type=float, default=900.0)
     parser.add_argument("--preserve-runs", action="store_true")
@@ -134,6 +193,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         default=None,
         help="Checkpoint path (default: <output>.checkpoint.json).",
+    )
+    parser.add_argument(
+        "--seed-run",
+        action="append",
+        type=Path,
+        default=[],
+        help=(
+            "Reuse verified completed cases from a prior system-run artifact; may be repeated. "
+            "Identity, k, fixed-suite metadata, trajectory hashes, and verdicts are revalidated."
+        ),
     )
     args = parser.parse_args(argv)
     if args.k < 1:
@@ -183,22 +252,85 @@ def main(argv: Sequence[str] | None = None) -> int:
         def single_runner(case):
             multi_agent = case.metadata["domain"] == "multi_agent_digital_employee"
             approval_policy, approval_action = _approval_behavior(case.id)
-            context_overrides = _context_overrides(case.metadata["domain"])
             allowed_write_paths = case.metadata.get("allowed_write_paths")
-            if isinstance(allowed_write_paths, list):
-                context_overrides["allowed_write_paths"] = list(allowed_write_paths)
+
+            def resolve_context(_workspace: Path) -> dict[str, object]:
+                fixture = prepared.fixtures[case.id]
+                preview_url = fixture.url() if isinstance(fixture, LiveIsolatedFixture) else None
+                context = _context_overrides(
+                    case.metadata["domain"],
+                    preview_url=preview_url,
+                )
+                if isinstance(allowed_write_paths, list):
+                    context["allowed_write_paths"] = list(allowed_write_paths)
+                return context
+
             return RealtimeTrialRunner(
                 url=args.octopus_url,
                 token=octopus_token,
                 model=args.model,
                 topology_id="research_swarm_v1" if multi_agent else None,
                 workspace=lambda: prepared.workspace(case.id),
-                context_overrides=context_overrides,
+                context_overrides=resolve_context,
                 approval_policy=approval_policy,
                 approval_action=approval_action,
                 approval_responder=_approval_responder(case.id),
                 timeout_seconds=args.timeout,
                 event_observer=_progress_observer(case.id),
+            )
+
+    elif args.codex_surface == "desktop":
+        version = args.system_version or codex_desktop_version(args.codex_executable)
+
+        def single_runner(case):
+            fixture = prepared.fixtures[case.id]
+
+            def resolve_instructions(_workspace: Path) -> str | None:
+                preview_url = (
+                    fixture.url() if isinstance(fixture, LiveIsolatedFixture) else None
+                )
+                instructions: list[str] = []
+                if preview_url:
+                    # Codex Desktop's browser profile blocks the raw loopback
+                    # literal but permits the equivalent localhost origin.
+                    # Keep the fixture server unchanged and only normalize the
+                    # URL presented to the browser-capable client.
+                    preview_url = preview_url.replace("127.0.0.1", "localhost")
+                    instructions.append(
+                        f"The isolated live fixture for this evaluation is at {preview_url}."
+                    )
+                if case.metadata["domain"] == "browser_desktop_automation":
+                    instructions.append(
+                        "Use the installed Codex browser automation plugin and operate only "
+                        "the visible browser UI; do not replace UI actions with direct HTTP calls."
+                    )
+                if case.metadata["domain"] == "frontend_product_experience":
+                    instructions.append(
+                        "Use the live fixture URL for browser-based visual and interaction checks."
+                    )
+                if case.id == "multiagent.parallel-evidence":
+                    instructions.append(
+                        "This case explicitly evaluates multi-agent work: delegate the technical, "
+                        "financial, and security evidence packs to three independent Codex agents, "
+                        "then synthesize their evidence in the shared workspace."
+                    )
+                elif case.id == "multiagent.interrupted-handoff":
+                    instructions.append(
+                        "This case explicitly evaluates multi-agent handoff: use at least one "
+                        "Codex sub-agent in each phase and keep the handoff state in the shared "
+                        "workspace."
+                    )
+                return "\n".join(instructions) or None
+
+            approval_policy, _approval_action = _approval_behavior(case.id)
+            return CodexAppServerTrialRunner(
+                executable=args.codex_executable,
+                workspace=lambda: prepared.workspace(case.id),
+                model=args.model,
+                approval_policy=approval_policy,
+                timeout_seconds=args.timeout,
+                developer_instructions=resolve_instructions,
+                approval_responder=_codex_approval_responder(case.id),
             )
 
     else:
@@ -230,7 +362,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     checkpoint_path = args.checkpoint or Path(f"{args.output}.checkpoint.json")
     checkpoint_case_ids = [case.id for case in prepared.cases]
     try:
-        initial_report = (
+        checkpoint_report = (
             _load_checkpoint(
                 checkpoint_path,
                 system=args.system,
@@ -240,6 +372,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.resume
             else None
         )
+        seed_reports = [
+            load_system_run_seed(
+                path,
+                root=REPO_ROOT,
+                expected_system=args.system,
+                expected_version=version,
+                expected_suite_id="same-task-head-to-head-v1",
+                expected_k=args.k,
+                cases=prepared.cases,
+            )
+            for path in args.seed_run
+        ]
+        initial_report = merge_seed_reports(checkpoint_report, *seed_reports)
     except ValueError as exc:
         parser.error(str(exc))
 

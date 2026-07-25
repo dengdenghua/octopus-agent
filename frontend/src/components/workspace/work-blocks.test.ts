@@ -4,6 +4,7 @@ import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   pickCurrentWorkBlock,
   progressForWorkBlocks,
+  statusText,
   toWorkBlocks,
 } from "./work-blocks";
 
@@ -19,6 +20,19 @@ function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
 }
 
 describe("work blocks", () => {
+  test("accepts localized status labels without changing the default fallback", () => {
+    expect(statusText("running")).toBe("正在执行");
+    expect(
+      statusText("running", {
+        running: "Running",
+        waiting_approval: "Waiting",
+        warning: "Recovered",
+        error: "Failed",
+        done: "Done",
+      }),
+    ).toBe("Running");
+  });
+
   test("filters transport and child tool events", () => {
     const blocks = toWorkBlocks([
       event({ id: "transport", name: "response_stream" }),
@@ -39,7 +53,7 @@ describe("work blocks", () => {
       actionLabel: "阅读",
       target: "app.tsx",
       title: "阅读 app.tsx",
-      subtitle: "src/app.tsx",
+      subtitle: "app.tsx",
     });
   });
 
@@ -98,9 +112,12 @@ describe("work blocks", () => {
     });
     expect(blocks[1]).toMatchObject({
       actionLabel: "运行终端",
-      target: "npm run typecheck",
-      title: "运行终端 npm run typecheck",
+      target: "",
+      title: "运行终端",
+      subtitle: "正在执行",
     });
+    expect(blocks[1].title).not.toContain("npm run typecheck");
+    expect(blocks[1].subtitle).not.toContain("npm run typecheck");
     const current = pickCurrentWorkBlock(blocks);
     expect(current?.id).toBe("shell");
     expect(progressForWorkBlocks(blocks, current!)).toEqual({
@@ -190,9 +207,34 @@ describe("work blocks", () => {
     expect(blocks[0]).toMatchObject({
       id: "shell-error",
       actionLabel: "终端运行失败",
-      target: "npm run build",
-      title: "终端运行失败 npm run build",
+      target: "",
+      title: "终端运行失败",
+      subtitle: "执行失败",
     });
+    expect(blocks[0].title).not.toContain("npm run build");
+    expect(blocks[0].subtitle).not.toContain("npm run build");
+  });
+
+  test("uses public terminal summaries without leaking local cwd", () => {
+    const blocks = toWorkBlocks([
+      event({
+        id: "shell-cwd",
+        name: "shell_command",
+        status: "running",
+        input: {
+          command: "cat ~/.ssh/id_rsa && pnpm test",
+          cwd: "/Users/dangbei/Public/octopus/octopus-agent",
+        },
+      }),
+    ]);
+
+    expect(blocks[0]).toMatchObject({
+      id: "shell-cwd",
+      title: "运行终端",
+      subtitle: "octopus-agent",
+    });
+    expect(blocks[0].title).not.toContain("cat ~/.ssh");
+    expect(blocks[0].subtitle).not.toContain("/Users/");
   });
 
   test("classifies swarm dispatch and document skills as workflow blocks", () => {

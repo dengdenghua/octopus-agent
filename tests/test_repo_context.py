@@ -101,6 +101,44 @@ def test_no_overlap_returns_none(tmp_path: Path) -> None:
     assert retrieve_repo_context("quantum entanglement theory", wiki_dir=auto) is None
 
 
+def test_agent_profile_wiki_pages_are_never_auto_grounded(tmp_path: Path) -> None:
+    """A teammate's generated SOUL page must not enter another agent's prompt."""
+    auto = _make_wiki(
+        tmp_path,
+        [
+            ("Luna", "20-backend/26-agents/vibe_selling.md", "growth campaign dream dive"),
+            ("Project growth", "product/growth.md", "growth campaign metrics"),
+        ],
+    )
+    sink: list[dict[str, str]] = []
+    out = retrieve_repo_context("growth campaign", wiki_dir=auto, _sink=sink)
+    assert out is not None
+    assert "Project growth" in out
+    assert "Luna" not in out
+    assert sink == [{"kind": "doc", "title": "Project growth", "path": "product/growth.md"}]
+
+
+def test_agent_type_wiki_pages_are_never_auto_grounded(tmp_path: Path) -> None:
+    auto = _make_wiki(
+        tmp_path,
+        [
+            ("Teammate", "profiles/teammate.md", _page_with_fm("Teammate", "growth campaign")),
+            ("Project growth", "product/growth.md", "growth campaign metrics"),
+        ],
+    )
+    # Keep the path neutral: the frontmatter type alone is enough to enforce
+    # the boundary for future wiki layouts.
+    teammate = auto / "profiles" / "teammate.md"
+    teammate.write_text(
+        teammate.read_text(encoding="utf-8").replace('type: "Doc"', 'type: "Agent"'),
+        encoding="utf-8",
+    )
+    out = retrieve_repo_context("growth campaign", wiki_dir=auto)
+    assert out is not None
+    assert "Project growth" in out
+    assert "Teammate" not in out
+
+
 def test_empty_or_stopword_query_returns_none(tmp_path: Path) -> None:
     auto = _make_wiki(tmp_path, [("Topic", "x.md", "content")])
     assert retrieve_repo_context("", wiki_dir=auto) is None

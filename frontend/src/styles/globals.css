@@ -3310,4 +3310,20 @@
       display: none;
     }
   }
+
+  /* 对话区 ↔ 侧边栏 双向联动高亮：弱显示原则下的一次性提示（≤2s），
+     仅 CSS transition，无循环动画。class 由共享 linkage store 的消费
+     组件按 2s 生命周期添加/移除；transition 挂在定位属性基座上，保证
+     高亮出现与消退都平滑。 */
+  [data-timeline-item-id] {
+    transition:
+      background-color var(--motion-duration-slow, 300ms) ease-out,
+      box-shadow var(--motion-duration-slow, 300ms) ease-out;
+  }
+
+  .timeline-item-linkage-highlight {
+    background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+    box-shadow: inset 2px 0 0
+      color-mix(in oklch, var(--primary) 60%, transparent);
+  }
 }

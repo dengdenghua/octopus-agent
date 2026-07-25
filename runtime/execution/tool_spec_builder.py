@@ -18,6 +18,7 @@ from typing import Any
 
 from runtime.core.cerebrum.capability_router import (
     activate_capabilities,
+    filter_surface_compatible_skills,
     order_skill_names,
 )
 from runtime.core.cerebrum.todo_protocol import context_mode
@@ -199,6 +200,10 @@ def build_anthropic_tool_specs(
             return True
 
     all_names = [name for name in all_names if _enabled(name)]
+    all_names = filter_surface_compatible_skills(
+        all_names,
+        user_context=user_context,
+    )
 
     mode = context_mode(user_context)
     if mode == "chat" or (mode and mode not in TASK_CHAIN_MODES):

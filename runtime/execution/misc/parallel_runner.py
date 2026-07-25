@@ -24,6 +24,8 @@ except ImportError:
     APIRouter = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
+
 _logger = logging.getLogger(__name__)
 
 
@@ -171,8 +173,7 @@ def get_runner() -> ParallelTaskRunner:
 
 
 def create_parallel_task_router() -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["parallel-tasks"])
 

@@ -27,6 +27,7 @@ from runtime.protocol import (
 )
 from runtime.sensing.gateway.realtime_cerebrum import (
     _current_workbench_phase,
+    _phase_title,
     _ReactBridgeState,
     _terminal_workbench_phases,
     _workbench_snapshot,
@@ -34,6 +35,13 @@ from runtime.sensing.gateway.realtime_cerebrum import (
 )
 
 # ── _terminal_workbench_phases ─────────────────────────────────────
+
+
+def test_phase_title_removes_machine_prefixes_instead_of_adding_them() -> None:
+    assert _phase_title("Inspect context", 0) == "Inspect context"
+    assert _phase_title("Phase 2: Patch reducer", 1) == "Patch reducer"
+    assert _phase_title("阶段 3：验证行为", 2) == "验证行为"
+    assert _phase_title("Step 4 - Summarize", 3) == "Summarize"
 
 
 def _phase(

@@ -5,14 +5,30 @@ import {
   GlobeIcon,
   LayoutGridIcon,
   ListChecksIcon,
+  LocateFixedIcon,
   MonitorIcon,
+  PanelRightCloseIcon,
   TerminalIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
+import type { OutlineRound } from "@/core/threads/progress-outline";
+import {
+  findTimelineItemElement,
+  getTimelineLinkageState,
+  subscribeTimelineLinkage,
+  activateTimelineItem,
+} from "@/core/threads/timeline-linkage";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
 import type {
@@ -20,6 +36,7 @@ import type {
   AgentWorkbenchProcessEventSnapshot,
   AgentWorkbenchProcessEventKind,
 } from "./agent-workbench-events";
+import { emitLocateAgentWorkbenchEvent } from "./agent-workbench-events";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   pickCurrentWorkBlock,
@@ -196,6 +213,7 @@ function statusFromBlocks(blocks: WorkBlock[]): AgentPhase["status"] {
 export function AgentWorkbenchPanel({
   activeTab,
   events,
+  progressOutline,
   focusedAgentId,
   focusedAgentView,
   focusedAgentNonce,
@@ -208,6 +226,7 @@ export function AgentWorkbenchPanel({
   hasAnswer,
   isLoading,
   onSelectTab,
+  onClose,
   onOpenArtifact,
   runSettled,
   runFailed,
@@ -217,10 +236,13 @@ export function AgentWorkbenchPanel({
   workDir,
   browserPreviewBlocks,
   resultPreviewUrl,
+  mainAgentName,
   rosterSeats = [],
 }: {
   activeTab?: AgentWorkbenchTabId;
   events: LiveToolEvent[];
+  /** 「进展」面板的叙事大纲（按 iteration 分组）；缺省时回退为 phase 平铺。 */
+  progressOutline?: OutlineRound[];
   focusedAgentId?: string | null;
   /** Which activity view a focusedAgentId intent lands on; defaults to the
    * live computer screen when the caller doesn't say. */
@@ -245,6 +267,7 @@ export function AgentWorkbenchPanel({
    * life. Knowing the turn is live lets the empty shell say so. */
   isLoading?: boolean;
   onSelectTab?: (tab: AgentWorkbenchTabId) => void;
+  onClose?: () => void;
   /** Opens a generated artifact in the artifacts side panel (path comes from
    * the summary page's artifact rows). */
   onOpenArtifact?: (path: string) => void;
@@ -259,6 +282,8 @@ export function AgentWorkbenchPanel({
    * tab renders the live deployed site via BrowserPreviewPanel instead of
    * falling back to inline srcDoc. */
   resultPreviewUrl?: string | null;
+  /** Public identity shown above the main-agent evidence surface. */
+  mainAgentName?: string | null;
   rosterSeats?: WorkbenchRosterSeat[];
 }) {
   const { t } = useI18n();
@@ -310,6 +335,29 @@ export function AgentWorkbenchPanel({
     "deployed" | "inline" | null
   >(null);
 
+  useEffect(() => {
+    if (!onClose) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== "Escape") return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tagName = target.tagName.toLowerCase();
+        if (
+          target.isContentEditable ||
+          tagName === "input" ||
+          tagName === "textarea" ||
+          tagName === "select"
+        ) {
+          return;
+        }
+      }
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
   const phaseBlocks = useMemo(
     () =>
       currentPhase
@@ -323,6 +371,13 @@ export function AgentWorkbenchPanel({
   );
   const selectedBlock =
     phaseBlocks.find((block) => block.id === selectedBlockId) ?? defaultBlock;
+  const locatableTranscriptEventId =
+    focusedEventId?.trim() ||
+    (selectedBlock
+      ? selectedBlock.event.id || selectedBlock.id
+      : focusedProcessEvent
+        ? focusedEventId?.trim()
+        : "");
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedRosterSeatId, setSelectedRosterSeatId] = useState<
     string | null
@@ -346,9 +401,14 @@ export function AgentWorkbenchPanel({
     () => screenBlocksForAgent(blocks, null),
     [blocks],
   );
-  const mainPhases = useMemo(
-    () =>
-      phases.map((phase) => ({
+  const mainPhases = useMemo(() => {
+    // When there are main blocks, phases with no main block belong to a
+    // sub-agent (or are stale server snapshot entries) and must not make the
+    // main workstation look pending. Before the first block arrives, keep
+    // the server phases so an actually-running turn still has a heartbeat.
+    if (mainBlocks.length === 0) return phases;
+    return phases
+      .map((phase) => ({
         ...phase,
         blockIds: phase.blockIds.filter((id) =>
           mainBlocks.some((block) => block.id === id),
@@ -356,9 +416,9 @@ export function AgentWorkbenchPanel({
         status: statusFromBlocks(
           mainBlocks.filter((block) => phase.blockIds.includes(block.id)),
         ),
-      })),
-    [mainBlocks, phases],
-  );
+      }))
+      .filter((phase) => phase.blockIds.length > 0);
+  }, [mainBlocks, phases]);
   const screenFrame = useMemo(
     () =>
       currentScreenFrame(
@@ -492,6 +552,7 @@ export function AgentWorkbenchPanel({
       setManualBlockSelection(false);
     }
     setActivityView(focusedEventView ?? "summary");
+    onSelectTab?.(targetBlock ? evidenceTabForWorkBlock(targetBlock) : "agent");
   }, [
     agentTiles,
     blocks,
@@ -499,7 +560,30 @@ export function AgentWorkbenchPanel({
     focusedEventKind,
     focusedEventNonce,
     focusedEventView,
+    onSelectTab,
   ]);
+
+  // 对话区 → 侧边栏联动：监听共享 linkage store 中来自对话区的激活，
+  // 滚动定位到侧边栏同 id 条目（条目详情的展开仍由上面的 focused*
+  // 流程负责，这里只追加定位）。目标尚未渲染（视图切换中）时不消费
+  // 意图，等下一次渲染重试；消费过的意图不重复滚动。两侧共用同一 id，
+  // 因此查找时以 "sidebar" lane 限定只命中侧边栏条目。
+  const timelineLinkage = useSyncExternalStore(
+    subscribeTimelineLinkage,
+    getTimelineLinkageState,
+    getTimelineLinkageState,
+  );
+  const consumedTimelineLinkageRef = useRef<string | null>(null);
+  useEffect(() => {
+    const itemId = timelineLinkage.activeTimelineItemId;
+    if (timelineLinkage.activeSource !== "chat" || !itemId) return;
+    const intentKey = `${timelineLinkage.nonce}:${itemId}`;
+    if (consumedTimelineLinkageRef.current === intentKey) return;
+    const target = findTimelineItemElement(itemId, "sidebar");
+    if (!target) return;
+    consumedTimelineLinkageRef.current = intentKey;
+    target.scrollIntoView({ block: "nearest" });
+  }, [timelineLinkage, activityView, blocks]);
 
   const visibleRosterSeats = useMemo(() => {
     const runningAgentIds = new Set(
@@ -530,6 +614,11 @@ export function AgentWorkbenchPanel({
         : null,
     );
   }, [rosterSeats]);
+  const rosterBlocks = useMemo(
+    () => screenBlocksForAgent(blocks, selectedRosterSeat?.id),
+    [blocks, selectedRosterSeat?.id],
+  );
+  const activeScreenBlocks = selectedRosterSeat ? rosterBlocks : screenBlocks;
   const openRosterProcess = useCallback(
     (seatId: string) => {
       setSelectedEffectKey(null);
@@ -544,13 +633,23 @@ export function AgentWorkbenchPanel({
   const emptyShell =
     blocks.length === 0 &&
     agentTiles.length === 0 &&
-    visibleRosterSeats.length === 0;
-  const mainRunStatus = workbenchStatus(mainBlocks, mainPhases);
-  const mainRunState = workbenchRunState({
-    blocks: mainBlocks,
-    phases: mainPhases,
-    paused,
+    visibleRosterSeats.length === 0 &&
+    (progressOutline?.length ?? 0) === 0;
+  const mainRunStatus = workbenchStatus(mainBlocks, mainPhases, {
+    settled: runSettled,
+    failed: runFailed,
   });
+  const mainRunState: AgentRunState = runFailed
+    ? "error"
+    : isLoading
+      ? "running"
+      : runSettled
+        ? "done"
+        : workbenchRunState({
+            blocks: mainBlocks,
+            phases: mainPhases,
+            paused,
+          });
   const machineRail = (
     <MachineScopeRail
       agents={agentTiles}
@@ -635,6 +734,9 @@ export function AgentWorkbenchPanel({
   );
 
   const visibleTabs = workbenchTabs.filter((tab) => !closedTabs.has(tab.id));
+  const workspaceLabel =
+    inferredWorkDir?.split(/[\\/]/).filter(Boolean).pop() ||
+    t.agentWorkbenchPanel.mainComputer;
 
   // Browser tab content, shared by the empty shell and the main render path.
   // While the run is live the inline srcDoc blocks track the agent's latest
@@ -656,6 +758,29 @@ export function AgentWorkbenchPanel({
     (browserSourceOverride === "inline" && canShowInlinePreview)
       ? browserSourceOverride
       : autoBrowserSource;
+  // "电脑视图" is a visual replay surface, not another spelling of the
+  // activity list. Do not show it for ordinary file/search work merely
+  // because the agent has run some tools.
+  const hasComputerActivity =
+    Boolean(selectedAgent) ||
+    Boolean(selectedRosterSeat) ||
+    activeScreenBlocks.some((block) => block.kind === "browser") ||
+    canShowDeployedPreview ||
+    canShowInlinePreview;
+  // The main conversation is already the narrative timeline. A second,
+  // identical tool-by-tool trace in the workbench only earns its place once
+  // the user enters an independent agent's workstation.
+  const hasIndependentTrace = Boolean(
+    selectedAgent || (selectedRosterSeat && activeScreenBlocks.length > 0),
+  );
+  const effectiveActivityView =
+    activityView === "screen" && hasComputerActivity
+      ? "screen"
+      : activityView === "screen"
+        ? "summary"
+        : activityView === "trace" && !hasIndependentTrace
+          ? "summary"
+          : activityView;
   const browserTabPage = (
     <div className="flex min-h-0 flex-1 flex-col">
       {canShowDeployedPreview && canShowInlinePreview && (
@@ -747,14 +872,14 @@ export function AgentWorkbenchPanel({
               label={
                 isLoading
                   ? t.agentWorkbenchPanel.agentStatusRunning
-                  : t.agentWorkbenchPanel.agentStatusPending
+                  : mainRunStatus.label
               }
               onClick={openMainProcess}
-              runState={isLoading ? "running" : "pending"}
+              runState={mainRunState}
               title={
                 isLoading
                   ? t.agentWorkbenchPanel.startingRobotProcess
-                  : t.agentWorkbenchPanel.noRunningRobotProcess
+                  : mainRunStatus.label
               }
             />
             <div
@@ -788,8 +913,8 @@ export function AgentWorkbenchPanel({
                     </button>
                     <button
                       type="button"
-                      aria-label={`Close ${tab.label}`}
-                      title={`Close ${tab.label}`}
+                      aria-label={t.editorTabs.closeTabAria(tab.label)}
+                      title={t.editorTabs.closeTabAria(tab.label)}
                       onClick={() => handleCloseTab(tab.id)}
                       className={cn(
                         "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
@@ -836,6 +961,32 @@ export function AgentWorkbenchPanel({
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
+            {locatableTranscriptEventId ? (
+              <button
+                type="button"
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-transparent bg-transparent text-muted-foreground transition-all duration-200 hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+                title={t.agentWorkbenchPanel.locateTranscriptEvent}
+                aria-label={t.agentWorkbenchPanel.locateTranscriptEvent}
+                onClick={() =>
+                  emitLocateAgentWorkbenchEvent({
+                    eventId: locatableTranscriptEventId,
+                  })
+                }
+              >
+                <LocateFixedIcon className="size-3.5" />
+              </button>
+            ) : null}
+            {onClose ? (
+              <button
+                type="button"
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-transparent bg-transparent text-muted-foreground transition-all duration-200 hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+                title={t.agentWorkbenchPanel.collapseWorkbench}
+                aria-label={t.agentWorkbenchPanel.collapseWorkbench}
+                onClick={onClose}
+              >
+                <PanelRightCloseIcon className="size-3.5" />
+              </button>
+            ) : null}
           </div>
         </header>
         <section
@@ -851,12 +1002,27 @@ export function AgentWorkbenchPanel({
 
   const agentKanbanPage = (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* View switch tabs */}
+      {/* Keep the workbench focused: computer replay only becomes a peer view
+          when there is a real browser or independent-agent process to show. */}
       <div className="flex items-center gap-4 border-b border-border-subtle px-5 py-2">
         {[
           { id: "summary" as const, label: t.agentWorkbenchPanel.summaryLabel },
-          { id: "trace" as const, label: t.agentWorkbench.activityTrace },
-          { id: "screen" as const, label: t.agentWorkbench.computerView },
+          ...(hasIndependentTrace
+            ? [
+                {
+                  id: "trace" as const,
+                  label: t.agentWorkbench.activityTrace,
+                },
+              ]
+            : []),
+          ...(hasComputerActivity
+            ? [
+                {
+                  id: "screen" as const,
+                  label: t.agentWorkbench.computerView,
+                },
+              ]
+            : []),
         ].map((view) => (
           <button
             key={view.id}
@@ -864,7 +1030,7 @@ export function AgentWorkbenchPanel({
             onClick={() => setActivityView(view.id)}
             className={cn(
               "border-b border-transparent pb-1 text-xs font-medium transition-colors",
-              activityView === view.id
+              effectiveActivityView === view.id
                 ? "border-foreground/70 text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
@@ -875,12 +1041,14 @@ export function AgentWorkbenchPanel({
         <span className="ml-auto text-xs text-muted-foreground font-mono">
           {selectedRosterSeat
             ? selectedRosterSeat.name
-            : (selectedAgent?.label ?? "Agent 01")}
+            : (selectedAgent?.label ??
+              mainAgentName ??
+              t.agentWorkbenchPanel.mainComputer)}
         </span>
       </div>
 
       {/* View content */}
-      {activityView === "summary" ? (
+      {effectiveActivityView === "summary" ? (
         creationFocusAgent ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70 p-3">
             <div className="mx-auto w-full max-w-xl">
@@ -898,16 +1066,32 @@ export function AgentWorkbenchPanel({
             agentTiles={agentTiles}
             blocks={blocks}
             focusedProcessEvent={focusedProcessEvent}
+            focusedEventId={focusedEventId}
+            progressOutline={progressOutline}
             onSelectTab={onSelectTab}
             onOpenArtifact={onOpenArtifact}
           />
         )
-      ) : activityView === "trace" ? (
+      ) : effectiveActivityView === "trace" ? (
         selectedRosterSeat ? (
-          <RosterComputerPlaceholder
-            seat={selectedRosterSeat}
-            onOpenMain={openMainProcess}
-          />
+          rosterBlocks.length > 0 ? (
+            <ActivityTraceView
+              blocks={rosterBlocks}
+              currentBlockId={pickCurrentWorkBlock(rosterBlocks)?.id ?? null}
+              emptyText={t.agentWorkbenchPanel.waitingForSubagentOutput}
+              subtitle={rosterSeatRoleLabel(selectedRosterSeat, t)}
+              title={selectedRosterSeat.name}
+              onSelectBlock={(blockId) => {
+                setSelectedBlockId(blockId);
+                setManualBlockSelection(true);
+              }}
+            />
+          ) : (
+            <RosterComputerPlaceholder
+              seat={selectedRosterSeat}
+              onOpenMain={openMainProcess}
+            />
+          )
         ) : (
           <ActivityTraceView
             blocks={screenBlocks}
@@ -945,7 +1129,7 @@ export function AgentWorkbenchPanel({
         <div className="flex min-h-0 flex-1 flex-col bg-background/35">
           {/* Header: agent identity + progress (hidden for roster seats — the placeholder shows identity inline) */}
           {!selectedRosterSeat && (
-            <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-5 py-3">
+            <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-5 py-2.5">
               <MonitorIcon className="size-4 shrink-0 text-muted-foreground" />
               <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
                 <span
@@ -956,31 +1140,16 @@ export function AgentWorkbenchPanel({
                       : agentRunDotClass(mainRunState),
                   )}
                 />
-                {t.agentWorkbench.currentProgress}{" "}
-                {screenProgress.total > 0
-                  ? `${screenProgress.current}/${screenProgress.total}`
-                  : phases.length > 0
-                    ? `${Math.max(1, phases.findIndex((p) => p.id === currentPhase?.id) + 1)}/${phases.length}`
-                    : "0/0"}
-              </span>
-              <span className="h-4 w-px bg-border/45" />
-              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                 {selectedAgent
                   ? `${selectedAgent.label} · ${repairMojibakeText(
                       selectedAgent.codename ?? selectedAgent.name,
-                    )}${
-                      selectedAgent.role
-                        ? ` · ${repairMojibakeText(selectedAgent.role)}`
-                        : ""
-                    }`
-                  : (currentPhase?.title ?? t.agentWorkbench.computerView)}
+                    )}`
+                  : mainPhaseStatusLabel(mainPhases, t)}
               </span>
-              <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                <span>
-                  {selectedAgent
-                    ? dockAgentStatusLabel(selectedAgent.status, t)
-                    : mainPhaseStatusLabel(mainPhases, t)}
-                </span>
+              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                {t.agentWorkbench.stepCount(
+                  screenProgress.total || phases.length,
+                )}
               </span>
             </div>
           )}
@@ -1044,10 +1213,24 @@ export function AgentWorkbenchPanel({
 
           {/* Tool call timeline */}
           {selectedRosterSeat ? (
-            <RosterComputerPlaceholder
-              seat={selectedRosterSeat}
-              onOpenMain={openMainProcess}
-            />
+            rosterBlocks.length > 0 ? (
+              <ActivityTraceView
+                blocks={rosterBlocks}
+                currentBlockId={pickCurrentWorkBlock(rosterBlocks)?.id ?? null}
+                emptyText={t.agentWorkbenchPanel.waitingForSubagentOutput}
+                subtitle={rosterSeatRoleLabel(selectedRosterSeat, t)}
+                title={selectedRosterSeat.name}
+                onSelectBlock={(blockId) => {
+                  setSelectedBlockId(blockId);
+                  setManualBlockSelection(true);
+                }}
+              />
+            ) : (
+              <RosterComputerPlaceholder
+                seat={selectedRosterSeat}
+                onOpenMain={openMainProcess}
+              />
+            )
           ) : selectedAgent ? (
             <SubagentProcessView
               agent={selectedAgent}
@@ -1192,10 +1375,26 @@ export function AgentWorkbenchPanel({
             runState={mainRunState}
             title={t.agentWorkbenchPanel.viewMainAgentSlot}
           />
+          {visibleTabs.length === 0 ? (
+            <div className="min-w-0 flex-1 px-0.5">
+              <div
+                className="truncate text-xs font-medium text-foreground/85"
+                title={inferredWorkDir || workspaceLabel}
+              >
+                {workspaceLabel}
+              </div>
+              <div className="mt-0.5 truncate text-xs text-muted-foreground/65">
+                {mainRunStatus.label}
+              </div>
+            </div>
+          ) : null}
           <div
             role="tablist"
             aria-label={t.agentWorkbench.agentComputer}
-            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className={cn(
+              "min-w-0 items-center gap-1 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+              visibleTabs.length === 0 ? "hidden" : "flex flex-1",
+            )}
           >
             {visibleTabs.map(({ id, label, Icon }) => {
               const active = id === effectiveActiveTab;
@@ -1232,8 +1431,8 @@ export function AgentWorkbenchPanel({
                         ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground focus-visible:bg-muted"
                         : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground focus-visible:text-muted-foreground/70 focus-visible:bg-muted",
                     )}
-                    aria-label={`Close ${label}`}
-                    title={`Close ${label}`}
+                    aria-label={t.editorTabs.closeTabAria(label)}
+                    title={t.editorTabs.closeTabAria(label)}
                   >
                     <XIcon className="size-3" />
                   </button>
@@ -1271,6 +1470,32 @@ export function AgentWorkbenchPanel({
               })}
             </DropdownMenuContent>
           </DropdownMenu>
+          {locatableTranscriptEventId ? (
+            <button
+              type="button"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+              title={t.agentWorkbenchPanel.locateTranscriptEvent}
+              aria-label={t.agentWorkbenchPanel.locateTranscriptEvent}
+              onClick={() =>
+                emitLocateAgentWorkbenchEvent({
+                  eventId: locatableTranscriptEventId,
+                })
+              }
+            >
+              <LocateFixedIcon className="size-3.5" />
+            </button>
+          ) : null}
+          {onClose ? (
+            <button
+              type="button"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+              title={t.agentWorkbenchPanel.collapseWorkbench}
+              aria-label={t.agentWorkbenchPanel.collapseWorkbench}
+              onClick={onClose}
+            >
+              <PanelRightCloseIcon className="size-3.5" />
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -1512,35 +1737,44 @@ function RosterComputerPlaceholder({
   const roleLabel = rosterSeatRoleLabel(seat, t);
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
-        <div className="flex flex-col items-center text-center">
-          <div className="flex size-14 items-center justify-center overflow-hidden rounded-full border border-border bg-muted/30 text-2xl">
-            {seat.avatarUrl ? (
-              <img
-                src={seat.avatarUrl}
-                alt={seat.name}
-                className="size-full object-cover"
-              />
-            ) : seat.icon?.trim() ? (
-              <span aria-hidden="true">{seat.icon}</span>
-            ) : (
-              <BotIcon className="size-7 text-muted-foreground" />
-            )}
+      <div className="mx-auto w-full max-w-2xl px-5 py-5">
+        <section className="border-b border-border-subtle pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted/30 text-xl">
+              {seat.avatarUrl ? (
+                <img
+                  src={seat.avatarUrl}
+                  alt={seat.name}
+                  className="size-full object-cover"
+                />
+              ) : seat.icon?.trim() ? (
+                <span aria-hidden="true">{seat.icon}</span>
+              ) : (
+                <BotIcon className="size-7 text-muted-foreground" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-foreground">
+                {seat.name}
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                {roleLabel}
+              </div>
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                <span className="size-1 rounded-full bg-emerald-500" />
+                {t.agentWorkbenchPanel.dockStatusPresent}
+              </span>
+            </div>
           </div>
-          <div className="mt-3 text-sm font-semibold text-foreground">
-            {seat.name}
-          </div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
-            {roleLabel}
-          </div>
-          <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-            <span className="size-1 rounded-full bg-emerald-500" />
-            {t.agentWorkbenchPanel.dockStatusPresent}
-          </span>
-          <div className="mt-4 max-w-[240px] rounded-lg border border-dashed border-border-default bg-muted/10 px-4 py-3 text-center">
-            <MonitorIcon className="mx-auto size-4 text-muted-foreground/50" />
-            <div className="mt-1.5 text-xs font-medium text-foreground">
-              {t.agentWorkbenchPanel.noIndependentProcessActivity}
+          <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-dashed border-border-default bg-muted/10 px-3 py-3">
+            <MonitorIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/55" />
+            <div>
+              <div className="text-xs font-medium text-foreground">
+                {t.agentWorkbenchPanel.noIndependentProcessActivity}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {t.agentWorkbenchPanel.noIndependentProcessActivityDescription}
+              </p>
             </div>
           </div>
           <button
@@ -1550,10 +1784,31 @@ function RosterComputerPlaceholder({
           >
             {t.agentWorkbenchPanel.switchToMainComputer}
           </button>
-        </div>
+        </section>
       </div>
     </div>
   );
+}
+
+/**
+ * The transcript is the narrative; the workbench is the proof surface. Map a
+ * selected action to the one panel where it adds information instead of
+ * opening a second copy of the activity log.
+ */
+function evidenceTabForWorkBlock(block: WorkBlock): AgentWorkbenchTabId {
+  if (block.kind === "terminal") return "terminal";
+  if (block.kind === "browser") return "browser";
+
+  const eventName = block.event.name.trim().toLowerCase();
+  if (
+    /(?:^|_)(?:write|edit|create|delete|rename|move|patch|replace)(?:_|$)/.test(
+      eventName,
+    )
+  ) {
+    return "diff";
+  }
+
+  return "agent";
 }
 
 function ActivityTraceView({
@@ -1605,18 +1860,28 @@ function ActivityTraceView({
               const detail =
                 block.subtitle && block.subtitle !== target
                   ? block.subtitle
-                  : block.outputText || block.inputText;
+                  : "";
+              const showStatusText =
+                block.status === "running" ||
+                block.status === "waiting_approval" ||
+                block.status === "error";
               return (
                 <button
                   key={block.id}
                   type="button"
-                  onClick={() => onSelectBlock(block.id)}
+                  onClick={() => {
+                    onSelectBlock(block.id);
+                    // 侧边栏 → 对话区联动：激活共享 id，对话区滚动定位并短暂高亮
+                    activateTimelineItem(block.event.id || block.id, "sidebar");
+                  }}
                   className={cn(
-                    "flex w-full min-w-0 items-start gap-2 border-l-2 px-1 py-2.5 text-left transition-colors",
+                    "flex w-full min-w-0 items-start gap-2 border-l-2 px-1 py-2 text-left transition-colors",
                     active
                       ? "border-l-primary bg-muted/25"
                       : "border-l-transparent hover:bg-muted/20",
                   )}
+                  data-timeline-item-id={block.event.id || block.id}
+                  data-timeline-lane="sidebar"
                 >
                   <span className="mt-0.5 w-5 shrink-0 font-mono text-xs text-muted-foreground">
                     {index + 1}
@@ -1628,12 +1893,14 @@ function ActivityTraceView({
                   <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
-                      <span className="shrink-0 rounded-sm bg-muted/70 px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                      <span className="shrink-0 text-xs text-muted-foreground">
                         {block.actionLabel}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
-                        {target || block.title}
-                      </span>
+                      {target ? (
+                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+                          {target}
+                        </span>
+                      ) : null}
                     </div>
                     {detail ? (
                       <div className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">
@@ -1641,9 +1908,17 @@ function ActivityTraceView({
                       </div>
                     ) : null}
                   </div>
-                  <span className="shrink-0 pt-0.5 text-xs text-muted-foreground/70">
-                    {statusText(block.status)}
-                  </span>
+                  {showStatusText ? (
+                    <span className="shrink-0 pt-0.5 text-xs text-muted-foreground/70">
+                      {statusText(block.status, {
+                        running: t.messageGrouping.liveProcessRunning,
+                        waiting_approval: t.messageGrouping.liveProcessWaiting,
+                        warning: t.messageGrouping.liveProcessDone,
+                        error: t.messageGrouping.liveProcessError,
+                        done: t.messageGrouping.liveProcessDone,
+                      })}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -1820,7 +2095,13 @@ function SubagentProcessView({
                       )}
                     </div>
                     <span className="shrink-0 text-xs text-muted-foreground/70">
-                      {statusText(block.status)}
+                      {statusText(block.status, {
+                        running: t.messageGrouping.liveProcessRunning,
+                        waiting_approval: t.messageGrouping.liveProcessWaiting,
+                        warning: t.messageGrouping.liveProcessDone,
+                        error: t.messageGrouping.liveProcessError,
+                        done: t.messageGrouping.liveProcessDone,
+                      })}
                     </span>
                   </button>
                 );

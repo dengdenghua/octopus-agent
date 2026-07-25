@@ -1,7 +1,11 @@
 import { useMemo, useRef } from "react";
 
 import type { WorkbenchSnapshotV2 } from "@/core/realtime/items";
-import { deriveAgentPhases, type AgentPhase } from "./agent-phases";
+import {
+  deriveAgentPhases,
+  normalizeAgentPhaseTitle,
+  type AgentPhase,
+} from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   normalizeEventsForSettledDisplay,
@@ -195,7 +199,7 @@ function serverSnapshotToAgentPhases(
       ?.filter((blockId) => blockIds.has(blockId));
     return {
       id: phase.id || `server-phase:${index}`,
-      title: phase.title,
+      title: normalizeAgentPhaseTitle(phase.title),
       detail: phase.detail ?? undefined,
       status: serverPhaseStatus(phase.status, options),
       blockIds: uniqueBlockIds([

@@ -16,16 +16,20 @@ from runtime.core.cerebrum.react_guards import (
     _ambiguous_inflight_leader_election_guard,
     _broad_except_suppression_guard,
     _code_mode_missing_write_guard,
+    _code_semantic_followup_guard,
     _commented_out_as_fix_guard,
     _concurrency_semantic_followup_guard,
     _destructive_waiter_result_guard,
     _false_verification_claim_guard,
     _loader_barrier_deadlock_guard,
+    _path_boundary_decode_guard,
     _stale_immutable_waiter_snapshot_guard,
     _terminal_pending_entry_leak_guard,
+    _wait_while_lock_held_guard,
 )
 from runtime.core.cerebrum.react_parsing import (
     _final_answer_claims_verification,
+    _has_language_specific_verification,
     _has_successful_verification_observation,
     _payload_has_ambiguous_inflight_leader_election,
     _payload_has_broad_except_suppression,
@@ -33,8 +37,10 @@ from runtime.core.cerebrum.react_parsing import (
     _payload_has_executable_python,
     _payload_has_inflight_identity_comparison,
     _payload_has_loader_barrier_deadlock,
+    _payload_has_single_pass_url_decode,
     _payload_has_stale_immutable_waiter_snapshot,
     _payload_has_terminal_pending_entry_leak,
+    _payload_has_wait_while_lock_held,
     _step_introduces_broad_except_suppression,
     _step_replaced_code_with_comment,
 )
@@ -54,6 +60,105 @@ def _step(
         action=action,
         observation=observation,
     )
+
+
+class TestPathBoundaryDecodeGuard:
+    BAD = """\
+from pathlib import Path
+from urllib.parse import unquote
+
+class PathBoundaryError(ValueError):
+    pass
+
+def safe_path(root: Path, user_path: str) -> Path:
+    decoded = unquote(user_path)
+    candidate = (root / decoded).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError as exc:
+        raise PathBoundaryError(user_path) from exc
+    return candidate
+"""
+    GOOD = """\
+from pathlib import Path
+from urllib.parse import unquote
+
+class PathBoundaryError(ValueError):
+    pass
+
+def safe_path(root: Path, user_path: str) -> Path:
+    decoded = user_path
+    for _round in range(6):
+        next_decoded = unquote(decoded)
+        if next_decoded == decoded:
+            break
+        decoded = next_decoded
+    else:
+        raise PathBoundaryError(user_path)
+    candidate = (root / decoded).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError as exc:
+        raise PathBoundaryError(user_path) from exc
+    return candidate
+"""
+
+    def test_detector_flags_only_single_pass_decode(self) -> None:
+        assert _payload_has_single_pass_url_decode(self.BAD)
+        assert not _payload_has_single_pass_url_decode(self.GOOD)
+
+    def test_completion_and_midflight_guards_reject_single_pass_decode(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"file_service.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            )
+        ]
+
+        message = _path_boundary_decode_guard(
+            steps,
+            "All tests pass.",
+            is_code_mode=True,
+        )
+        followup = _code_semantic_followup_guard(steps, is_code_mode=True)
+
+        assert message is not None and "%252e" in message
+        assert followup is not None and followup.startswith("Before verification:")
+
+    def test_surgical_stable_decode_repair_clears_guard(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"file_service.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            ),
+            _step(
+                2,
+                action=(
+                    'edit_file({"path":"file_service.py",'
+                    '"old_string":"decoded = unquote(user_path)",'
+                    '"new_string":"decoded = user_path\\n    for _round in range(6):\\n'
+                    '        next_decoded = unquote(decoded)\\n'
+                    '        if next_decoded == decoded:\\n            break\\n'
+                    '        decoded = next_decoded\\n    else:\\n'
+                    '        raise PathBoundaryError(user_path)"})'
+                ),
+            ),
+        ]
+
+        assert (
+            _path_boundary_decode_guard(
+                steps,
+                "All tests pass.",
+                is_code_mode=True,
+            )
+            is None
+        )
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -135,6 +240,54 @@ class TestHasSuccessfulVerificationObservation:
             ),
         ]
         assert not _has_successful_verification_observation(steps)
+
+    def test_node_verifier_script_is_green_evidence(self) -> None:
+        steps = [
+            _step(
+                1,
+                action='exec_shell({"command": "node verify_all.js"})',
+                observation="Static checks: 6/6 passed\nRace tests: 4/4 passed",
+            ),
+        ]
+
+        assert _has_successful_verification_observation(steps)
+
+    def test_node_inline_harness_requires_real_failure_branch(self) -> None:
+        real_harness = [
+            _step(
+                1,
+                action=(
+                    "exec_shell({\"command\": \"node -e 'let fail = 0; "
+                    "if (!check()) fail++; process.exit(fail > 0 ? 1 : 0);'\"})"
+                ),
+                observation="4/4 tests passed",
+            ),
+        ]
+        fake_green = [
+            _step(
+                1,
+                action=(
+                    "exec_shell({\"command\": \"node -e 'console.log(4); "
+                    "process.exit(0);'\"})"
+                ),
+                observation="4/4 tests passed",
+            ),
+        ]
+
+        assert _has_successful_verification_observation(real_harness)
+        assert not _has_successful_verification_observation(fake_green)
+
+    def test_node_verifier_does_not_satisfy_python_specific_verification(self) -> None:
+        steps = [
+            _step(
+                1,
+                action='exec_shell({"command": "node verify_all.js"})',
+                observation="6/6 checks passed",
+            ),
+        ]
+
+        assert _has_language_specific_verification(steps, language="typescript")
+        assert not _has_language_specific_verification(steps, language="python")
 
 
 class TestFalseVerificationClaimGuard:
@@ -759,10 +912,34 @@ def test_single_flight():
         callers_ready.wait()
         results.append(cache.get_or_load("key", loader))
 """
+    BAD_MAIN_PARTICIPANT = """\
+def test_single_flight():
+    ready = threading.Barrier(5)
+    def loader():
+        ready.wait()
+        return 99
+    def worker():
+        results.append(cache.get_or_load("key", loader))
+    for thread in threads:
+        thread.start()
+    ready.wait()
+"""
+    GOOD_TWO_PARTY = """\
+def test_loader_rendezvous():
+    ready = threading.Barrier(2)
+    def loader():
+        ready.wait()
+        return 99
+    thread = threading.Thread(target=lambda: cache.get_or_load("key", loader))
+    thread.start()
+    ready.wait()
+"""
 
     def test_detector_flags_loader_barrier_deadlock(self) -> None:
         assert _payload_has_loader_barrier_deadlock(self.BAD)
+        assert _payload_has_loader_barrier_deadlock(self.BAD_MAIN_PARTICIPANT)
         assert not _payload_has_loader_barrier_deadlock(self.GOOD)
+        assert not _payload_has_loader_barrier_deadlock(self.GOOD_TWO_PARTY)
 
     def test_completion_and_midflight_guards_reject_deadlock(self) -> None:
         steps = [
@@ -805,6 +982,98 @@ def test_single_flight():
 
         assert (
             _loader_barrier_deadlock_guard(
+                steps,
+                "All tests pass.",
+                is_code_mode=True,
+            )
+            is None
+        )
+
+
+class TestWaitWhileLockHeldGuard:
+    BAD = """\
+with self._lock:
+    pending = self._pending.get(key)
+    if pending is not None:
+        pending.event.wait()
+        return pending.result
+    pending = Pending()
+    self._pending[key] = pending
+value = loader()
+with self._lock:
+    self._values[key] = value
+pending.event.set()
+return value
+"""
+    BAD_MANUAL = """\
+self._lock.acquire()
+pending = self._pending[key]
+pending.event.wait()
+self._lock.release()
+"""
+    GOOD = """\
+with self._lock:
+    pending = self._pending.get(key)
+    is_leader = pending is None
+    if is_leader:
+        pending = Pending()
+        self._pending[key] = pending
+if not is_leader:
+    pending.event.wait()
+    return pending.result
+value = loader()
+with self._lock:
+    self._values[key] = value
+pending.event.set()
+return value
+"""
+
+    def test_detector_flags_wait_under_lock(self) -> None:
+        assert _payload_has_wait_while_lock_held(self.BAD)
+        assert _payload_has_wait_while_lock_held(self.BAD_MANUAL)
+        assert not _payload_has_wait_while_lock_held(self.GOOD)
+
+    def test_completion_and_midflight_guards_reject_deadlock(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            )
+        ]
+
+        message = _wait_while_lock_held_guard(
+            steps,
+            "All tests pass.",
+            is_code_mode=True,
+        )
+        followup = _concurrency_semantic_followup_guard(steps, is_code_mode=True)
+
+        assert message is not None and "two sides deadlock" in message
+        assert followup is not None and followup.startswith("Before verification:")
+
+    def test_clean_full_rewrite_clears_guard(self) -> None:
+        steps = [
+            _step(
+                1,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.BAD)}}})'
+                ),
+            ),
+            _step(
+                2,
+                action=(
+                    'write_text_file({"path":"cache.py",'
+                    f'"content":{json.dumps(self.GOOD)}}})'
+                ),
+            ),
+        ]
+
+        assert (
+            _wait_while_lock_held_guard(
                 steps,
                 "All tests pass.",
                 is_code_mode=True,

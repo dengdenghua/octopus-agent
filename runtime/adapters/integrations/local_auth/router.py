@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover
     BaseModel = object  # type: ignore[assignment, misc]
     Response = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from .config import LocalAuthConfig, verify_password
 
 logger = logging.getLogger(__name__)
@@ -50,8 +51,7 @@ def create_local_auth_router(
     config: LocalAuthConfig,
     identity_store: Any = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(prefix="/api/auth/local", tags=["auth", "local"])
 

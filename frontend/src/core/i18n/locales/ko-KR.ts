@@ -226,6 +226,7 @@ export const koKR: Translations = {
     expandable: "펼칠 수 있음",
     agentCluster: "Agent 클러스터",
     processDetails: "자세히 열기",
+    completedSteps: (n: number) => `${n}개 단계 완료`,
     statusViewing: "보기 중",
     statusCompleted: "완료됨",
     statusError: "오류",
@@ -567,8 +568,8 @@ export const koKR: Translations = {
       `${file} 편집 (+${added}줄)`,
     editFileRemoved: (file: string, removed: number) =>
       `${file} 편집 (-${removed}줄)`,
-    executeCommand: "검사 실행",
-    executeCommandWith: (cmd: string) => `검사 실행: ${cmd}`,
+    executeCommand: "명령 실행",
+    executeCommandWith: (cmd: string) => `명령 실행: ${cmd}`,
     planStep: "계획 단계",
     think: "생각",
     hideProcessReplay: "프로세스 재생 숨기기",
@@ -594,10 +595,52 @@ export const koKR: Translations = {
     runAction: "작업 수행",
     teammateTimeout: "팀원이 제시간에 응답하지 않아 Octopus 가 인계받았습니다",
     factSummaryPath: (value: string) => `확인됨: ${value}`,
-    factSummaryCount: (value: string) => `확인됨: 총 ${value}개`,
-    factSummaryStatus: (value: string) => `확인됨: 상태 ${value}`,
+    factSummaryCount: (value: string) => `확인됨: ${value}개`,
+    factSummaryStatus: (value: string) => `확인됨: ${value}`,
     factSummaryTitle: (value: string) => `확인됨: ${value}`,
     factSummaryText: (value: string) => `확인됨: ${value}`,
+    factSummaryDuration: (value: string) => `${value} 소요`,
+    factSummaryLines: (value: string) => `${value}줄`,
+    factSummaryMatches: (value: string) => `${value}개 일치`,
+    factSummarySucceeded: "실행 성공",
+    factSummaryFailed: "실행 실패",
+    factSummaryExitCode: (value: string) => `종료 코드 ${value}`,
+    effectNeedsReview: "검토 필요",
+    capabilityDisabled: (toolName: string) =>
+      `${toolName} 기능이 설정에서 꺼져 있습니다`,
+    enableCapability: "활성화",
+    enablingCapability: "활성화 중…",
+    actionLabels: {
+      createFile: "만들기",
+      editFile: "편집",
+      searchFiles: "파일 검색",
+      viewDirectory: "폴더 보기",
+      readFile: "읽기",
+      runCommand: "실행",
+      searchWeb: "웹 검색",
+      browseWeb: "웹페이지 보기",
+      browserClick: "클릭",
+      browserType: "입력",
+      browserScreenshot: "스크린샷",
+      browserNavigate: "이동",
+      browserAction: "브라우저 작업",
+      updatePlan: "계획 업데이트",
+      delegateTask: "작업 위임",
+      deleteFile: "삭제",
+      moveFile: "이동/이름 변경",
+      startPreview: "미리보기 시작",
+      networkRequest: "네트워크 요청",
+      aggregateFileWrite: (count: number) => `${count}개 파일 편집`,
+      aggregateFileRead: (count: number) => `${count}개 파일 확인`,
+      aggregateCommand: (count: number) => `${count}개 명령 실행`,
+      aggregateWebSearch: (count: number) => `${count}회 검색`,
+      aggregateBrowser: (count: number) => `${count}회 브라우저 작업`,
+      aggregateTeammate: (count: number) => `${count}개 작업 위임`,
+      aggregateTodo: (count: number) => `${count}회 계획 업데이트`,
+      aggregateOther: (count: number) => `${count}개 작업 실행`,
+    },
+    thinkingDuration: (value: string) => `${value} 생각했습니다`,
+    thinking: "생각 중",
   },
 
   // Trace generator labels
@@ -1102,6 +1145,8 @@ export const koKR: Translations = {
     executingTask: "Executing task...",
     waitingToContinue: "Waiting to Continue",
     currentProgress: "Current Progress",
+    stepProgress: (current: number, total: number) =>
+      `${current} / ${total}단계`,
     minimizeProgress: "Minimize Progress",
     restoreProgress: "Restore Progress",
     closeWorkspace: "Close Workspace",
@@ -1188,7 +1233,12 @@ export const koKR: Translations = {
     statusDone: "완료",
     progress: "진행 상황",
     roundTitle: (iteration) => `라운드 ${iteration}`,
-    roundActionCount: (count) => `${count}개의 작업`,
+    roundActivitySummary: (actionCount, factCount) =>
+      actionCount > 0 && factCount > 0
+        ? `${actionCount}개 작업 · ${factCount}개 확인`
+        : actionCount > 0
+          ? `${actionCount}개 작업`
+          : `${factCount}개 확인`,
     artifacts: "산출물",
     generatedArtifacts: "생성된 산출물",
     changedFiles: "변경된 파일",
@@ -1664,6 +1714,8 @@ export const koKR: Translations = {
     groupTasks: "협업 작업",
     recentThreadsSummary: (recent, hidden) =>
       `최근 ${recent}개 · 나머지 ${hidden}개는 기록에 있습니다`,
+    showMoreProjectThreads: (count) => `나머지 작업 ${count}개 보기`,
+    showFewerProjectThreads: "이전 작업 접기",
     // Header/footer tooltips
     newChatTooltip: "새 채팅",
     searchTooltip: "검색 (⌘K)",
@@ -1672,7 +1724,9 @@ export const koKR: Translations = {
     deleteProjectTooltip: "프로젝트 삭제",
     deleteThreadTooltip: "채팅 삭제",
     actionSort: "정렬",
-    actionNewProject: "워크스페이스/프로젝트 추가",
+    actionNewProject: "프로젝트 폴더 선택",
+    projectPickerFailed:
+      "시스템 폴더 선택기를 열 수 없습니다. 로컬 서비스가 실행 중인지 확인하세요.",
     actionNewTask: "새 작업",
     actionNewChat: "새 채팅",
     actionNew: "새로 만들기",
@@ -2924,7 +2978,7 @@ export const koKR: Translations = {
   toolCalls: {
     moreSteps: (count: number) => `${count} more step${count === 1 ? "" : "s"}`,
     lessSteps: "Less steps",
-    executeCommand: "검사 실행",
+    executeCommand: "명령 실행",
     presentFiles: "Present files",
     needYourHelp: "Need your help",
     useTool: () => "Run action",
@@ -6062,6 +6116,7 @@ Strategy:
     gitDiff: "Git Diff",
     streamRecovery: "Stream recovery",
     running: "running...",
+    genericAction: "기타 작업",
   },
 
   liveToolTimeline: {
@@ -6102,15 +6157,13 @@ Strategy:
     modelPublicReasoningFragment:
       "이번 라운드의 표시 가능한 정리 메모가 도착했습니다.",
     modelPublicReasoningStream: "공개 정리 메모",
-    modelOutputtingReasoning:
-      "표시 가능한 정리 메모를 받고 있습니다.",
+    modelOutputtingReasoning: "표시 가능한 정리 메모를 받고 있습니다.",
     invokeSkillProcess: "Invoking skill/skill retrieval process.",
     understandTask: "Understanding Task",
     readingUserRequirements:
       "Reading user requirements, conversation context, and current work mode.",
     connectRuntime: "Connecting Runtime",
-    establishingCallbackChannel:
-      "실시간 회신 채널을 연결하고 있습니다.",
+    establishingCallbackChannel: "실시간 회신 채널을 연결하고 있습니다.",
     renderingModelOutput: "답변을 표시하고 있습니다",
     incrementalTextReceived:
       "Incremental text received; answer content will continue to be appended to the message area in segments.",
@@ -8577,7 +8630,7 @@ Strategy:
     empty: "등록된 워크스페이스가 없습니다.",
     loading: "워크스페이스를 불러오는 중...",
     loadFailed: (error) => `워크스페이스 불러오기 실패: ${error}`,
-    addWorkspace: "워크스페이스 추가",
+    addWorkspace: "폴더 또는 원격 디렉터리 연결",
     switchWorkspaceAria: (name) => `${name}(으)로 전환`,
     activeWorkspace: "사용 중",
     typeLocal: "로컬",
@@ -8589,7 +8642,7 @@ Strategy:
     mountTarget: "마운트 대상",
 
     mountDialog: {
-      title: "워크스페이스 추가",
+      title: "폴더 또는 원격 디렉터리 연결",
       nameLabel: "이름",
       namePlaceholder: "워크스페이스 이름",
       protocolLabel: "프로토콜",

@@ -225,6 +225,7 @@ export const jaJP: Translations = {
     expandable: "展開可能",
     agentCluster: "Agent クラスタ",
     processDetails: "詳細を開く",
+    completedSteps: (n: number) => `${n} 件のステップを完了`,
     statusViewing: "表示中",
     statusCompleted: "完了",
     statusError: "エラー",
@@ -568,8 +569,8 @@ export const jaJP: Translations = {
       `${file} を編集 (+${added} 行)`,
     editFileRemoved: (file: string, removed: number) =>
       `${file} を編集 (-${removed} 行)`,
-    executeCommand: "チェックを実行",
-    executeCommandWith: (cmd: string) => `チェックを実行: ${cmd}`,
+    executeCommand: "コマンドを実行",
+    executeCommandWith: (cmd: string) => `コマンドを実行: ${cmd}`,
     planStep: "計画ステップ",
     think: "思考",
     hideProcessReplay: "プロセス再生を非表示",
@@ -596,10 +597,51 @@ export const jaJP: Translations = {
     teammateTimeout:
       "チームメンバーが時間内に返答しなかったため、Octopus が引き継ぎました",
     factSummaryPath: (value: string) => `確認済み: ${value}`,
-    factSummaryCount: (value: string) => `確認済み: 全 ${value} 件`,
-    factSummaryStatus: (value: string) => `確認済み: ステータス ${value}`,
+    factSummaryCount: (value: string) => `確認済み: ${value} 件`,
+    factSummaryStatus: (value: string) => `確認済み: ${value}`,
     factSummaryTitle: (value: string) => `確認済み: ${value}`,
     factSummaryText: (value: string) => `確認済み: ${value}`,
+    factSummaryDuration: (value: string) => `${value} かかりました`,
+    factSummaryLines: (value: string) => `${value} 行`,
+    factSummaryMatches: (value: string) => `${value} 件ヒット`,
+    factSummarySucceeded: "実行に成功しました",
+    factSummaryFailed: "実行に失敗しました",
+    factSummaryExitCode: (value: string) => `終了コード ${value}`,
+    effectNeedsReview: "確認が必要",
+    capabilityDisabled: (toolName: string) => `${toolName} は設定で無効です`,
+    enableCapability: "有効にする",
+    enablingCapability: "有効化中…",
+    actionLabels: {
+      createFile: "作成",
+      editFile: "編集",
+      searchFiles: "ファイルを検索",
+      viewDirectory: "フォルダーを表示",
+      readFile: "読み取り",
+      runCommand: "実行",
+      searchWeb: "Web を検索",
+      browseWeb: "Web ページを表示",
+      browserClick: "クリック",
+      browserType: "入力",
+      browserScreenshot: "スクリーンショット",
+      browserNavigate: "移動",
+      browserAction: "ブラウザー操作",
+      updatePlan: "計画を更新",
+      delegateTask: "タスクを委任",
+      deleteFile: "削除",
+      moveFile: "移動/名前変更",
+      startPreview: "プレビューを開始",
+      networkRequest: "ネットワーク要求",
+      aggregateFileWrite: (count: number) => `${count} ファイルを編集`,
+      aggregateFileRead: (count: number) => `${count} ファイルを確認`,
+      aggregateCommand: (count: number) => `${count} コマンドを実行`,
+      aggregateWebSearch: (count: number) => `${count} 回検索`,
+      aggregateBrowser: (count: number) => `${count} 回ブラウザー操作`,
+      aggregateTeammate: (count: number) => `${count} タスクを委任`,
+      aggregateTodo: (count: number) => `${count} 回計画を更新`,
+      aggregateOther: (count: number) => `${count} 操作を実行`,
+    },
+    thinkingDuration: (value: string) => `${value} 考えました`,
+    thinking: "考え中",
   },
 
   // Trace generator labels
@@ -1105,6 +1147,8 @@ export const jaJP: Translations = {
     executingTask: "Executing task...",
     waitingToContinue: "Waiting to Continue",
     currentProgress: "Current Progress",
+    stepProgress: (current: number, total: number) =>
+      `${current} / ${total} ステップ`,
     minimizeProgress: "Minimize Progress",
     restoreProgress: "Restore Progress",
     closeWorkspace: "Close Workspace",
@@ -1191,7 +1235,12 @@ export const jaJP: Translations = {
     statusDone: "完了",
     progress: "進捗",
     roundTitle: (iteration) => `ラウンド ${iteration}`,
-    roundActionCount: (count) => `${count} 件のアクション`,
+    roundActivitySummary: (actionCount, factCount) =>
+      actionCount > 0 && factCount > 0
+        ? `${actionCount} 件の操作 · ${factCount} 件の確認`
+        : actionCount > 0
+          ? `${actionCount} 件の操作`
+          : `${factCount} 件の確認`,
     artifacts: "成果物",
     generatedArtifacts: "生成された成果物",
     changedFiles: "変更ファイル",
@@ -1669,6 +1718,8 @@ export const jaJP: Translations = {
     groupTasks: "共同タスク",
     recentThreadsSummary: (recent, hidden) =>
       `最近 ${recent} 件 · 残り ${hidden} 件は履歴にあります`,
+    showMoreProjectThreads: (count) => `残り ${count} 件のタスクを表示`,
+    showFewerProjectThreads: "古いタスクを折りたたむ",
     // Header/footer tooltips
     newChatTooltip: "新しいチャット",
     searchTooltip: "検索 (⌘K)",
@@ -1677,7 +1728,9 @@ export const jaJP: Translations = {
     deleteProjectTooltip: "プロジェクトを削除",
     deleteThreadTooltip: "チャットを削除",
     actionSort: "並べ替え",
-    actionNewProject: "ワークスペース/プロジェクトを追加",
+    actionNewProject: "プロジェクトフォルダを選択",
+    projectPickerFailed:
+      "システムのフォルダ選択を開けませんでした。ローカルサービスが実行中か確認してください。",
     actionNewTask: "新しいタスク",
     actionNewChat: "新しいチャット",
     actionNew: "新規",
@@ -2929,7 +2982,7 @@ export const jaJP: Translations = {
   toolCalls: {
     moreSteps: (count: number) => `${count} more step${count === 1 ? "" : "s"}`,
     lessSteps: "Less steps",
-    executeCommand: "チェックを実行",
+    executeCommand: "コマンドを実行",
     presentFiles: "Present files",
     needYourHelp: "Need your help",
     useTool: () => "Run action",
@@ -6079,6 +6132,7 @@ Strategy:
     gitDiff: "Git Diff",
     streamRecovery: "Stream recovery",
     running: "running...",
+    genericAction: "その他の操作",
   },
 
   liveToolTimeline: {
@@ -6119,15 +6173,13 @@ Strategy:
     modelPublicReasoningFragment:
       "このラウンドの表示可能な整理メモを受け取りました。",
     modelPublicReasoningStream: "公開整理メモ",
-    modelOutputtingReasoning:
-      "表示可能な整理メモを受信しています。",
+    modelOutputtingReasoning: "表示可能な整理メモを受信しています。",
     invokeSkillProcess: "Invoking skill/skill retrieval process.",
     understandTask: "Understanding Task",
     readingUserRequirements:
       "Reading user requirements, conversation context, and current work mode.",
     connectRuntime: "Connecting Runtime",
-    establishingCallbackChannel:
-      "リアルタイムの回送チャネルを確立しています。",
+    establishingCallbackChannel: "リアルタイムの回送チャネルを確立しています。",
     renderingModelOutput: "回答を表示しています",
     incrementalTextReceived:
       "Incremental text received; answer content will continue to be appended to the message area in segments.",
@@ -8606,7 +8658,7 @@ Strategy:
     empty: "登録されたワークスペースはありません。",
     loading: "ワークスペースを読み込み中...",
     loadFailed: (error) => `ワークスペースの読み込みに失敗しました: ${error}`,
-    addWorkspace: "ワークスペースを追加",
+    addWorkspace: "フォルダーまたはリモートディレクトリを接続",
     switchWorkspaceAria: (name) => `${name} に切り替え`,
     activeWorkspace: "使用中",
     typeLocal: "ローカル",
@@ -8618,7 +8670,7 @@ Strategy:
     mountTarget: "マウント先",
 
     mountDialog: {
-      title: "ワークスペースを追加",
+      title: "フォルダーまたはリモートディレクトリを接続",
       nameLabel: "名前",
       namePlaceholder: "ワークスペース名",
       protocolLabel: "プロトコル",

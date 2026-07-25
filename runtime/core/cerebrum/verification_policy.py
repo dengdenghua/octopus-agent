@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -423,11 +424,27 @@ def command_satisfies_requirement(
         return True
 
     haystack = f" {text.lower()} "
+    dedicated_actions = {
+        match.group(1).lower()
+        for match in re.finditer(
+            r"(?:^|\n)\s*(run_tests|run_checks|lint_check|typecheck|verify)\s*\(",
+            text,
+            re.IGNORECASE,
+        )
+    }
 
     def contains_any(markers: tuple[str, ...]) -> bool:
         return any(marker.strip() in haystack for marker in markers)
 
     if requirement.key == "python-checks":
+        if dedicated_actions & {
+            "run_tests",
+            "run_checks",
+            "lint_check",
+            "typecheck",
+            "verify",
+        }:
+            return True
         return contains_any(
             (
                 " pytest",
@@ -443,6 +460,14 @@ def command_satisfies_requirement(
             )
         )
     if requirement.key == "frontend-typecheck":
+        if dedicated_actions & {
+            "run_tests",
+            "run_checks",
+            "lint_check",
+            "typecheck",
+            "verify",
+        }:
+            return True
         return contains_any(
             (
                 " pnpm typecheck",
@@ -481,6 +506,8 @@ def command_satisfies_requirement(
             )
         )
     if requirement.key == "schema-contract":
+        if dedicated_actions & {"run_tests", "run_checks", "verify"}:
+            return True
         return contains_any(
             (
                 " pytest",
@@ -494,6 +521,8 @@ def command_satisfies_requirement(
             )
         )
     if requirement.key == "api-contract":
+        if dedicated_actions & {"run_tests", "run_checks", "verify"}:
+            return True
         return contains_any(
             (
                 " pytest",

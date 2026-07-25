@@ -62,4 +62,19 @@ describe("GroundingChip", () => {
     );
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("does not expose legacy agent-private grounding under another reply", () => {
+    const { container } = renderWithProviders(
+      <GroundingChip
+        message={aiWithGrounding([
+          {
+            kind: "doc",
+            title: "✨ Luna · vibe_selling",
+            path: "20-backend/26-agents/vibe_selling.md",
+          },
+        ])}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
 });

@@ -15,6 +15,18 @@ describe("<WorkDirSelector />", () => {
       removeItem: vi.fn((key: string) => store.delete(key)),
       clear: vi.fn(() => store.clear()),
     });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: false,
+          path: null,
+          canceled: true,
+          error: null,
+        }),
+      }),
+    );
   });
 
   afterEach(() => {
@@ -95,8 +107,7 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
-    // Web mode: the trigger opens the menu (no OS picker); recents are listed
-    // even in the muted variant so they can be rebound in one click.
+    // Canceling the system picker reveals recent workspaces as the fallback.
     fireEvent.click(screen.getByTitle("Personal space"));
     fireEvent.click(await screen.findByText("Public"));
 
@@ -166,6 +177,18 @@ describe("<WorkDirSelector />", () => {
 
   it("offers manual path entry in web mode and binds a pasted absolute path", async () => {
     const onWorkDirChange = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: false,
+          path: null,
+          canceled: false,
+          error: "picker unavailable",
+        }),
+      }),
+    );
 
     renderWithProviders(
       <WorkDirSelector
@@ -175,8 +198,7 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
-    // Web mode: the trigger opens the menu with a manual-path field (no OS
-    // picker that hands back an unusable folder name).
+    // A picker failure keeps manual path entry available.
     fireEvent.click(screen.getByTitle("Personal space"));
     const input = await screen.findByPlaceholderText(
       "Enter workspace directory path:",
@@ -186,6 +208,38 @@ describe("<WorkDirSelector />", () => {
     fireEvent.submit(input.closest("form")!);
 
     expect(onWorkDirChange).toHaveBeenCalledWith("/Users/dangbei/proj");
+  });
+
+  it("binds the absolute path returned by the local backend picker", async () => {
+    const onWorkDirChange = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          path: "/Users/dangbei/PickedProject",
+          canceled: false,
+          error: null,
+        }),
+      }),
+    );
+
+    renderWithProviders(
+      <WorkDirSelector
+        workDir=""
+        onWorkDirChange={onWorkDirChange}
+        variant="muted"
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle("Personal space"));
+
+    await waitFor(() => {
+      expect(onWorkDirChange).toHaveBeenCalledWith(
+        "/Users/dangbei/PickedProject",
+      );
+    });
   });
 
   it("uses the Electron native folder picker when available", async () => {

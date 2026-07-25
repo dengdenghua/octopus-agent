@@ -3,9 +3,12 @@ import { describe, expect, test, vi } from "vitest";
 import { RealtimeApprovalToasts } from "./realtime-approval-toasts";
 import { renderWithProviders } from "@/test/harness";
 
-const { toastMock } = vi.hoisted(() => ({
-  toastMock: vi.fn(),
+const { toastDismissMock, toastMock } = vi.hoisted(() => ({
+  toastDismissMock: vi.fn(),
+  toastMock: Object.assign(vi.fn(), { dismiss: vi.fn() }),
 }));
+
+toastMock.dismiss = toastDismissMock;
 
 vi.mock("sonner", () => ({
   toast: toastMock,
@@ -39,6 +42,7 @@ describe("<RealtimeApprovalToasts />", () => {
         id: "7",
         description: "plan.md",
         duration: 120_000,
+        dismissible: false,
         action: expect.objectContaining({ label: "Approve" }),
         cancel: expect.objectContaining({ label: "Reject" }),
       }),
@@ -60,5 +64,30 @@ describe("<RealtimeApprovalToasts />", () => {
       <RealtimeApprovalToasts approvals={[]} resolveApproval={vi.fn()} />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  test("dismisses a toast when the server withdraws its approval", () => {
+    const resolveApproval = vi.fn();
+    const approval = {
+      requestId: 9,
+      method: "item/commandExecution/requestApproval",
+      createdAt: "2026-05-09T00:00:00.000Z",
+      params: { tool: "exec_shell", argsPreview: "pnpm test" },
+    };
+    const { rerender } = renderWithProviders(
+      <RealtimeApprovalToasts
+        approvals={[approval]}
+        resolveApproval={resolveApproval}
+      />,
+    );
+
+    rerender(
+      <RealtimeApprovalToasts
+        approvals={[]}
+        resolveApproval={resolveApproval}
+      />,
+    );
+
+    expect(toastDismissMock).toHaveBeenCalledWith("9");
   });
 });

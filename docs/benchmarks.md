@@ -1,5 +1,22 @@
 # Benchmarks · 真实硬数字
 
+## 当前结果入口
+
+当前 Octopus 严格 k=3 的唯一权威索引是
+`benchmarks/octopus-k3-latest.json`。它汇总 14 个最终逐项产物：
+14/14 case 达到 3/3，总计 42/42 trial，`pass^k = 100%`。
+
+读取当前成绩时必须遵守以下规则：
+
+- 优先读取 `*-latest.json` 结果清单，不得从文件名版本号猜测最新结果；
+- `*.checkpoint.json` 只用于中断恢复，不能作为最终评分来源；
+- 清单 `supersedes` 中列出的文件只保留作审计证据；
+- 单项汇总结果与锁定版本的一次性全量复跑必须分别标注，不能混称；
+- 没有同套完整产物的系统不得生成推测分数。
+
+`octopus-full-k3.json.checkpoint.json` 已被当前清单标记为 superseded；它只完成
+了早期部分运行，不代表当前 Octopus 成绩。
+
 > [!IMPORTANT]
 > 下方 2026-04-24 数字是历史基线，不是当前“超越 Codex”证明。旧 SSE bench
 > 入口已退役；在同一题集、同一 rubric、隔离状态下分别重复运行 Octopus 与
@@ -79,11 +96,26 @@ python -m benchmarks.run_behavioral_suite \
   --system octopus --k 3 --timeout 900 \
   --output benchmarks/results/octopus-full.json
 python -m benchmarks.run_behavioral_suite \
-  --system codex --k 3 --timeout 900 --codex-ignore-user-config \
+  --system codex --codex-surface desktop --k 3 --timeout 900 \
   --output benchmarks/results/codex-full.json
+
+`codex` 默认使用 Codex Desktop 的 App Server（富客户端插件、Apps、浏览器/Computer Use
+和多 Agent 运行时）。只有显式传入 `--codex-surface cli` 才会使用非交互式 `codex exec`；
+后者不作为桌面端能力对比的正式结果。
 python -m benchmarks.assemble_behavioral_bundle \
   --octopus-run benchmarks/results/octopus-full.json \
   --codex-run benchmarks/results/codex-full.json
+```
+
+已经完成的 selected k-run 可以在完整运行中安全复用，避免重新消耗 provider
+调用。`--seed-run` 会重新验证 system/version、`k`、固定题集 metadata、每条轨迹
+SHA-256、prompt/rubric 摘要和 verdict 计数；任何不一致都会拒绝启动：
+
+```bash
+python -m benchmarks.run_behavioral_suite \
+  --system octopus --k 3 --timeout 900 \
+  --seed-run benchmarks/results/octopus-concurrent-cache-strict-k3-v34.json \
+  --output benchmarks/results/octopus-full.json
 ```
 
 本地控制面启用认证时，可以从 `OCTOPUS_API_TOKEN` 读取已有 API/JWT token；

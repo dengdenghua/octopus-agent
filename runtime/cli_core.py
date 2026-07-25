@@ -112,7 +112,7 @@ def _build_reflex_router() -> ReflexRouter:
             response={"reply": "嗯,我在。说说看你想做点啥?"},
             priority=10,
         ),
-        CacheMatcher(rule_id="semantic_cache", ttl_seconds=3600, priority=5),
+        CacheMatcher(rule_id="semantic_cache", ttl_seconds=60 * 60, priority=5),
     ]
     try:
         from runtime.core.nerves.reflex.rules_loader import (
@@ -203,7 +203,13 @@ def _build_stack(
 
     if planner_type == "llm":
         router = _make_router(planner_model, mock_response, anthropic_api_key)
-        composer = ContextComposer(registry=registry, journal=journal)
+        from runtime.core.hearts.gill_pump import GillCache, retrieval_gill_enabled
+
+        composer = ContextComposer(
+            registry=registry,
+            journal=journal,
+            gill_cache=GillCache() if retrieval_gill_enabled() else None,
+        )
         planner = LLMPlanner(
             router=router,
             registry=registry,
@@ -318,7 +324,7 @@ def _short_output(output: Any) -> str:
     return text
 
 
-def _export_winning_variants(journal_path, out_dir):
+def _export_winning_variants(journal_path: str, out_dir: str) -> int:
     import json
     import os
 

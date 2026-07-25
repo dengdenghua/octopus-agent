@@ -7,6 +7,13 @@ export interface ThreadCollaborationRosterEntry {
   role: "tl" | "member";
 }
 
+export interface CollaborationAgentProfile {
+  name: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  icon?: string | null;
+}
+
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -125,4 +132,40 @@ export function collaborationRosterFromThread(
     role:
       entry.agent_id === leader || (!leader && index === 0) ? "tl" : "member",
   }));
+}
+
+/**
+ * Refresh persisted roster identities from the current agent catalogue.
+ *
+ * Older thread snapshots often contain only an emoji icon. Keep their
+ * membership order and roles, but prefer current profile fields so an avatar
+ * added later (or a cache-busted avatar URL) is shown immediately.
+ */
+export function hydrateCollaborationRoster(
+  roster: ThreadCollaborationRosterEntry[],
+  profiles: CollaborationAgentProfile[],
+): ThreadCollaborationRosterEntry[] {
+  const profileByIdentity = new Map<string, CollaborationAgentProfile>();
+  for (const profile of profiles) {
+    const identities = [profile.name, profile.display_name]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value));
+    for (const identity of identities) profileByIdentity.set(identity, profile);
+  }
+
+  return roster.map((entry) => {
+    const profile =
+      profileByIdentity.get(entry.agent_id) ??
+      profileByIdentity.get(entry.name) ??
+      profileByIdentity.get(entry.display_name);
+    if (!profile) return entry;
+    return {
+      ...entry,
+      name: profile.name || entry.name,
+      display_name:
+        profile.display_name?.trim() || profile.name || entry.display_name,
+      avatar_url: profile.avatar_url ?? entry.avatar_url ?? null,
+      icon: profile.icon ?? entry.icon ?? null,
+    };
+  });
 }

@@ -3,7 +3,10 @@ import { BookOpenIcon, ChevronDownIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
-import type { GroundingSource } from "@/core/realtime/items";
+import {
+  isPrivateAgentGroundingSource,
+  type GroundingSource,
+} from "@/core/realtime/items";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,9 +24,11 @@ export function GroundingChip({ message }: { message: Message }) {
   const sources = useMemo(() => {
     const g = message.additional_kwargs?.grounding;
     if (!Array.isArray(g) || g.length === 0) return null;
-    return g as GroundingSource[];
+    return (g as GroundingSource[]).filter(
+      (source) => !isPrivateAgentGroundingSource(source),
+    );
   }, [message.additional_kwargs?.grounding]);
-  if (!sources) return null;
+  if (!sources || sources.length === 0) return null;
   const firstSource = sources[0];
   const firstSourceLabel = firstSource?.title || firstSource?.path || "";
   const label = t.message.grounding.summary(firstSourceLabel, sources.length);

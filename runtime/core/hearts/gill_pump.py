@@ -17,6 +17,7 @@ refresh a cache of preprocessed segments that compose() can consume.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -34,6 +35,19 @@ _DEFAULT_PUMP_INTERVAL_S: float = 5.0
 _CACHE_MAX: int = 20
 
 
+def retrieval_gill_enabled() -> bool:
+    """Return whether retrieval caching is enabled (default: on).
+
+    Operators can disable it immediately with ``OCTOPUS_GILL_RETRIEVAL=0``.
+    """
+    return os.environ.get("OCTOPUS_GILL_RETRIEVAL", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
 @dataclass
 class GillCache:
     """Thread-safe cache of preprocessed context segments.
@@ -48,14 +62,27 @@ class GillCache:
     retrieved_memory: list[ContextSegment] = field(default_factory=list)
     last_compressed_ts: float = 0.0
     last_retrieved_ts: float = 0.0
+    retrieved_context_key: str | None = None
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def get_compressed(self) -> list[ContextSegment]:
         with self._lock:
             return list(self.compressed_history)
 
-    def get_memory(self) -> list[ContextSegment]:
+    def get_memory(
+        self,
+        context_key: str | None = None,
+        *,
+        max_age_s: float | None = None,
+    ) -> list[ContextSegment]:
         with self._lock:
+            if context_key is not None and context_key != self.retrieved_context_key:
+                return []
+            if max_age_s is not None and (
+                self.last_retrieved_ts <= 0
+                or (time.time() - self.last_retrieved_ts) >= max_age_s
+            ):
+                return []
             return list(self.retrieved_memory)
 
     def set_compressed(self, segments: list[ContextSegment]) -> None:
@@ -63,9 +90,14 @@ class GillCache:
             self.compressed_history = segments[:_CACHE_MAX]
             self.last_compressed_ts = time.time()
 
-    def set_memory(self, segments: list[ContextSegment]) -> None:
+    def set_memory(
+        self,
+        segments: list[ContextSegment],
+        context_key: str | None = None,
+    ) -> None:
         with self._lock:
             self.retrieved_memory = segments[:_CACHE_MAX]
+            self.retrieved_context_key = context_key
             self.last_retrieved_ts = time.time()
 
     def is_fresh(self, max_age_s: float = 30.0) -> bool:
@@ -111,11 +143,13 @@ class GillHeartPump:
         cache: GillCache,
         compress_fn: Callable[[], list[ContextSegment]] | None = None,
         retrieve_fn: Callable[[], list[ContextSegment]] | None = None,
+        retrieve_context_key: str | Callable[[], str] | None = None,
         interval_s: float = _DEFAULT_PUMP_INTERVAL_S,
     ) -> None:
         self.cache = cache
         self._compress_fn = compress_fn
         self._retrieve_fn = retrieve_fn
+        self._retrieve_context_key = retrieve_context_key
         self._interval_s = interval_s
         self._stop_event = threading.Event()
         self._threads: list[threading.Thread] = []
@@ -135,8 +169,7 @@ class GillHeartPump:
             self._threads.append(t)
         if self._retrieve_fn is not None:
             t = threading.Thread(
-                target=self._pump_loop,
-                args=(self._retrieve_fn, self.cache.set_memory, "retrieval"),
+                target=self._retrieval_loop,
                 daemon=True,
                 name="gill-heart-retrieval",
             )
@@ -174,8 +207,20 @@ class GillHeartPump:
             # Wait for interval or stop signal, whichever comes first.
             self._stop_event.wait(timeout=self._interval_s)
 
+    def _retrieval_loop(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                assert self._retrieve_fn is not None
+                segments = self._retrieve_fn() or []
+                key_source = self._retrieve_context_key
+                context_key = key_source() if callable(key_source) else key_source
+                self.cache.set_memory(segments, context_key=context_key)
+            except Exception:
+                _log.debug("gill heart retrieval pump error", exc_info=True)
+            self._stop_event.wait(timeout=self._interval_s)
+
 
 # Late import to avoid circular dependency at module load.
 from collections.abc import Callable  # noqa: E402
 
-__all__ = ["GillCache", "GillHeartPump"]
+__all__ = ["GillCache", "GillHeartPump", "retrieval_gill_enabled"]

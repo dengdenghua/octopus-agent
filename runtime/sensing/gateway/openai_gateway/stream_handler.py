@@ -17,6 +17,14 @@ from ..openai_formatting import (
 from .context_manager import _build_messages_for_llm, _runtime_soul_for_agent
 from .request_parser import _model_runtime_options, _resolve_custom_model_router
 
+# Pseudo-stream throttling: when a non-streaming call is re-emitted as a
+# stream (or when a real stream's text_delta is chunked for display), we
+# sleep briefly between chunks so the UI feels like streaming.  The length
+# gate avoids throttling on trivially short outputs.
+_PSEUDO_STREAM_MIN_LEN = 40
+_SYNC_CALL_CHUNK_DELAY = 0.004
+_TEXT_DELTA_CHUNK_DELAY = 0.012
+
 
 def _strip_inline_thinking_markup(text: str) -> str:
     """Remove provider/model control markup from user-facing text.
@@ -352,8 +360,8 @@ def _stream_direct_llm_fallback(
         final_text = _normalize_markdown(_clean_final_text(raw_text))
         for _piece in _display_deltas(final_text):
             yield ("text", _piece, None)
-            if len(final_text) > 40:
-                time.sleep(0.004)
+            if len(final_text) > _PSEUDO_STREAM_MIN_LEN:
+                time.sleep(_SYNC_CALL_CHUNK_DELAY)
         _usage_dict = {
             "input_tokens": int(getattr(resp, "input_tokens", 0) or 0),
             "output_tokens": int(getattr(resp, "output_tokens", 0) or 0),
@@ -374,8 +382,8 @@ def _stream_direct_llm_fallback(
                 public_delta = _strip_inline_thinking_markup(event.delta)
                 for _piece in _display_deltas(public_delta):
                     yield ("text", _piece, None)
-                    if len(public_delta) > 40:
-                        time.sleep(0.012)
+                    if len(public_delta) > _PSEUDO_STREAM_MIN_LEN:
+                        time.sleep(_TEXT_DELTA_CHUNK_DELAY)
             elif etype == "thinking_delta":
                 thinking_buf.append(event.delta)
                 yield ("reasoning", event.delta, None)

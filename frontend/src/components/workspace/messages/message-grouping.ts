@@ -19,7 +19,6 @@ import {
   isFileMutationToolName,
   isReadToolName,
   isShellToolName,
-  shellCommandFromInput,
 } from "../tool-name-groups";
 
 // `import type` is erased at build time so there is no runtime dependency
@@ -203,6 +202,9 @@ export interface MessageGroupingLabels {
   executeCommandWith: (cmd: string) => string;
   planStep: string;
   think: string;
+  searchSources?: string;
+  readFile?: string;
+  readWebpage?: string;
 }
 
 const DEFAULT_LABELS: MessageGroupingLabels = {
@@ -213,10 +215,13 @@ const DEFAULT_LABELS: MessageGroupingLabels = {
   editFileAddRemove: (f, added, removed) => `Edit ${f} (+${added} -${removed})`,
   editFileAdded: (f, added) => `Edit ${f} +${added} lines`,
   editFileRemoved: (f, removed) => `Edit ${f} -${removed} lines`,
-  executeCommand: "Run command",
-  executeCommandWith: (cmd) => `Run ${cmd}`,
+  executeCommand: "Run checks",
+  executeCommandWith: () => "Run checks",
   planStep: "Plan step",
   think: "Thinking",
+  searchSources: "Search sources",
+  readFile: "Read file",
+  readWebpage: "Read webpage",
 };
 
 function buildFileOpLabel(
@@ -256,18 +261,43 @@ function buildShellLabel(
   args: Record<string, unknown>,
   labels: MessageGroupingLabels,
 ): string {
-  const command = shellCommandFromInput(
-    args,
-    typeof args.tool === "string" ? args.tool : undefined,
-  );
-  if (!command) return labels.executeCommand;
-  const single = command.replace(/\s+/g, " ").trim();
-  return labels.executeCommandWith(truncate(single, 40));
+  const explicitSummary =
+    typeof args.description === "string"
+      ? args.description.trim()
+      : typeof args.label === "string"
+        ? args.label.trim()
+        : typeof args.title === "string"
+          ? args.title.trim()
+          : "";
+  return explicitSummary
+    ? labels.executeCommandWith(truncate(explicitSummary, 40))
+    : labels.executeCommand;
 }
 
-function buildReadLabel(name: string, args: Record<string, unknown>): string {
+const SENSITIVE_LABEL_VALUE_RE =
+  /(sk-[\w-]+|token|secret|credential|password|passwd|api[_-]?key|bearer\s+[a-z0-9._-]+|id_rsa|id_ed25519|\.pem\b|\.key\b)/i;
+
+function safeTargetLabel(value: string): string {
+  const text = value.trim();
+  if (!text || SENSITIVE_LABEL_VALUE_RE.test(text)) return "";
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      return new URL(text).hostname || text;
+    } catch {
+      return truncate(text, 48);
+    }
+  }
+  if (/[\\/]/.test(text)) return basename(text);
+  return truncate(text, 48);
+}
+
+function buildReadLabel(
+  name: string,
+  args: Record<string, unknown>,
+  labels: MessageGroupingLabels,
+): string {
   // First string-ish arg (path / pattern / query).
-  const keys = ["path", "pattern", "query", "filepath", "file_path"];
+  const keys = ["path", "url", "pattern", "query", "filepath", "file_path"];
   let value: string | undefined;
   for (const key of keys) {
     const v = args[key];
@@ -276,15 +306,18 @@ function buildReadLabel(name: string, args: Record<string, unknown>): string {
       break;
     }
   }
-  if (!value) {
-    const firstString = Object.values(args).find(
-      (v) => typeof v === "string" && v.length > 0,
-    );
-    if (typeof firstString === "string") value = firstString;
-  }
-  const short = value ? truncate(value, 48) : "";
-  if (short) return `${name} ${short}`;
-  return name;
+  const target = value ? safeTargetLabel(value) : "";
+  const lower = name.toLowerCase();
+  const action =
+    lower.includes("search") ||
+    lower.includes("grep") ||
+    lower.includes("glob") ||
+    lower === "find"
+      ? (labels.searchSources ?? DEFAULT_LABELS.searchSources!)
+      : lower.includes("web") || lower.includes("fetch")
+        ? (labels.readWebpage ?? DEFAULT_LABELS.readWebpage!)
+        : (labels.readFile ?? DEFAULT_LABELS.readFile!);
+  return target ? `${action}: ${target}` : action;
 }
 
 function buildPlanLabel(
@@ -418,7 +451,7 @@ function toActivityItem(
   if (isShellToolName(toolCall.name)) {
     label = buildShellLabel(args, labels);
   } else {
-    label = buildReadLabel(toolCall.name, args);
+    label = buildReadLabel(toolCall.name, args, labels);
   }
   return {
     item: {

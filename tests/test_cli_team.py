@@ -262,9 +262,50 @@ def test_detect_installed_partners(monkeypatch) -> None:
 
 def test_detect_none_when_nothing_installed(monkeypatch) -> None:
     from runtime.execution.agents import cli_team as ct
+    from runtime.sensing.gateway import agents_local_partner as alp
 
     monkeypatch.setattr(ct.shutil, "which", lambda _c: None)
+    monkeypatch.setattr(alp.shutil, "which", lambda _c: None)
+    monkeypatch.setattr(alp, "_login_shell_path", lambda: "")
+    monkeypatch.setattr(alp, "_common_local_bin_entries", lambda: [])
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
     assert ct.detect_installed_partners() == []
+
+
+def test_detect_uses_login_shell_path_when_service_path_is_minimal(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from runtime.execution.agents import cli_team as ct
+    from runtime.sensing.gateway import agents_local_partner as alp
+
+    custom_bin = tmp_path / "custom-bin"
+    custom_bin.mkdir()
+    claude = custom_bin / "claude"
+    claude.write_text("#!/bin/sh\nexit 0\n")
+    claude.chmod(0o755)
+    shell = tmp_path / "fake-shell"
+    shell.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"-lc\" ]; then\n"
+        f"  PATH='{custom_bin}:'\"$PATH\"\n"
+        "  export PATH\n"
+        "  eval \"$2\"\n"
+        "fi\n"
+    )
+    shell.chmod(0o755)
+    alp._login_shell_path.cache_clear()
+    monkeypatch.setenv("SHELL", str(shell))
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.setattr(ct.shutil, "which", lambda _c: None)
+
+    mems = ct.detect_installed_partners()
+
+    assert {
+        "agent_id": "local_claude_code",
+        "partner_id": "claude-code",
+        "command": str(claude.resolve()),
+    } in mems
+    alp._login_shell_path.cache_clear()
 
 
 def test_cli_team_skill_judges_a_winner(monkeypatch) -> None:

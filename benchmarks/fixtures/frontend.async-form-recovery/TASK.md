@@ -4,6 +4,7 @@ Repair the supplied account form without replacing the fixture app.
 
 Acceptance requirements:
 
+- Use the isolated live preview URL in `EVAL_URL.txt` for browser regression checks.
 - A slow validation result must never overwrite a newer fast input result.
 - Preserve the user's current input value during validation and submission.
 - Add a visible `<label for="email">` and announce validation status with

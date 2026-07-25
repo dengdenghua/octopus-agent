@@ -114,6 +114,28 @@ _RERANK_POOL = 8  # fused top-N a real reranker (Cohere) reorders, when configur
 # page's OKF frontmatter; absent/unknown → 1.0 (no effect).
 _TIER_WEIGHT = {"core": 1.15, "standard": 1.0}
 
+# Agent profile material is prompt-private by default.  The generated project
+# wiki used to include full SOUL / IDENTITY exports under ``26-agents``; because
+# repo grounding searched every wiki page, a general-agent turn could receive a
+# teammate's persona as ordinary project context.  Keep this policy close to
+# the retriever so every caller inherits the safe default.
+_AGENT_PROFILE_WIKI_PREFIX = "20-backend/26-agents/"
+
+
+def is_private_agent_context_path(path: str) -> bool:
+    """Whether a repo/wiki path is agent-private prompt material.
+
+    This is intentionally a narrow path policy: runtime code such as
+    ``runtime/execution/agents`` remains searchable, while top-level agent
+    packs and their generated wiki mirrors never enter automatic grounding.
+    Explicit user file reads go through the tool path and are governed by that
+    tool's authorization policy, not this automatic prompt prefetch.
+    """
+    normalized = str(path or "").replace("\\", "/").lstrip("./").lower()
+    return normalized.startswith("agents/") or normalized.startswith(
+        _AGENT_PROFILE_WIKI_PREFIX
+    )
+
 
 def _maybe_rerank(
     query: str, scored: list[tuple[float, dict[str, Any]]]
@@ -260,6 +282,12 @@ def _build_index(wiki_dir: Path) -> dict[str, Any]:
         with contextlib.suppress(OSError):
             raw = (wiki_dir / rel).read_text(encoding="utf-8")
         meta, body = _split_frontmatter(raw)
+        # Agent pages are derived from prompt-private SOUL / IDENTITY files.
+        # Do not place them in the searchable corpus at all: filtering after
+        # ranking would still let them affect BM25/semantic scores and graph
+        # expansion for unrelated project material.
+        if is_private_agent_context_path(rel) or str(meta.get("type") or "").lower() == "agent":
+            continue
         desc = str(meta.get("description") or "")
         tier = str(meta.get("tier") or "standard")
         tags = meta.get("tags") or []

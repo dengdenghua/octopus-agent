@@ -61,6 +61,19 @@ _logger = logging.getLogger(__name__)
 _SINGLE_AGENT_HEARTBEAT_INTERVAL_S = 5.0
 
 
+def _safe_stream_error_message(exc: BaseException, *, limit: int = 1200) -> str:
+    """Redact an exception before it becomes a user-visible error item."""
+
+    message = str(exc).strip() or type(exc).__name__
+    try:
+        from runtime.platform.observability.redactor import redact_text
+
+        message = redact_text(message)
+    except Exception:  # pragma: no cover - error reporting must not recurse
+        message = type(exc).__name__
+    return message[:limit]
+
+
 async def _emit_turn_heartbeat(emitter: EventEmitter, turn: Turn, started_at: float) -> None:
     """Best-effort ``turn/heartbeat`` for a solo turn's idle stretches.
 
@@ -374,7 +387,7 @@ async def _drive_reflection_fast_path(
                     {
                         "type": "react_error",
                         "kind": exc.__class__.__name__,
-                        "message": str(exc),
+                        "message": _safe_stream_error_message(exc),
                     }
                 )
             finally:
@@ -643,7 +656,7 @@ async def _drive_react(
                     {
                         "type": "react_error",
                         "kind": exc.__class__.__name__,
-                        "message": str(exc),
+                        "message": _safe_stream_error_message(exc),
                     }
                 )
             finally:

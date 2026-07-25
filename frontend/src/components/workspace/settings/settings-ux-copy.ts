@@ -83,11 +83,11 @@ const COPY: Record<Locale, SettingsUxCopy> = {
     observability: {
       title: "运行可观测性",
       description:
-        "集中查看任务执行、工具调用和运行状态。设置窗口只提供入口，完整数据会在独立工作台中展示。",
+        "集中查看任务执行、操作记录和运行状态。设置窗口只提供入口，完整数据会在独立工作台中展示。",
       activityTitle: "实时活动",
       activityDescription: "跟踪正在执行的任务、步骤与事件。",
-      tracesTitle: "工具与文件轨迹",
-      tracesDescription: "核对工具调用、文件改动和执行结果。",
+      tracesTitle: "操作与文件轨迹",
+      tracesDescription: "核对操作记录、文件改动和执行结果。",
       healthTitle: "运行健康",
       healthDescription: "定位失败、延迟与异常状态。",
       openDashboard: "打开可观测性工作台",

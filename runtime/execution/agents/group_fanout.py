@@ -30,6 +30,14 @@ _ARBITRATION_SCHEMA = "octopus.group_fanout_arbitration.v1"
 _SYNTHESIS_SCHEMA = "octopus.group_fanout_synthesis.v1"
 _CAPACITY_SCHEMA = "octopus.group_fanout_capacity.v1"
 
+# Capacity tier thresholds for _capacity_tier().  These are descriptive
+# buckets, not scaling limits — they drive the capacity verdict reported
+# back to the UI so team surfaces can reason about fan-out size.
+_KIMI_SCALE_MEMBERS = 300
+_LARGE_TIER_MEMBERS = 64
+_TEAM_TIER_MEMBERS = 16
+_ROOM_TIER_MEMBERS = 2
+
 
 def _response_id(turn_id: str | None, index: int, agent_id: str) -> str:
     prefix = str(turn_id or "fanout").strip() or "fanout"
@@ -61,13 +69,13 @@ def _reply_status(reply: dict[str, Any]) -> str:
 
 
 def _capacity_tier(dispatched_members: int, requested_members: int) -> str:
-    if requested_members >= 300:
+    if requested_members >= _KIMI_SCALE_MEMBERS:
         return "kimi_scale"
-    if dispatched_members >= 64:
+    if dispatched_members >= _LARGE_TIER_MEMBERS:
         return "large"
-    if dispatched_members >= 16:
+    if dispatched_members >= _TEAM_TIER_MEMBERS:
         return "team_scale"
-    if dispatched_members >= 2:
+    if dispatched_members >= _ROOM_TIER_MEMBERS:
         return "room_scale"
     return "single"
 

@@ -56,6 +56,7 @@ class TestCatalog:
         prompt = BUILTIN_ROLES["synthesizer"].system_prompt
         assert "topology-specific instructions" in prompt
         assert "Do not invent a generic summary format" in prompt
+        assert "write and read back the exact file" in prompt
         assert "- Executive summary" not in prompt
 
     def test_is_ephemeral_role_lookup(self):
@@ -276,6 +277,59 @@ class TestContextSharing:
         assert "Topology-specific instructions" in prompt
         assert "complete final report" in prompt
         assert "override the generic role template" in prompt
+
+    def test_workspace_task_contract_is_injected_for_file_delivery(self, tmp_path):
+        from runtime.execution.suckers.ephemeral_agents import (
+            run_ephemeral_role,
+            set_ephemeral_role_runner,
+        )
+
+        (tmp_path / "TASK.md").write_text(
+            "Write `decision_memo.json` with `recommendation` at top level.",
+            encoding="utf-8",
+        )
+        captured = {}
+
+        def capture(call):
+            captured["prompt"] = call.composed_system_prompt
+            return "ok"
+
+        set_ephemeral_role_runner(capture)
+        run_ephemeral_role(
+            "synthesizer",
+            "produce the decision memo",
+            context={"workspace_path": str(tmp_path)},
+        )
+
+        prompt = captured["prompt"]
+        assert "Workspace task contract (TASK.md)" in prompt
+        assert "decision_memo.json" in prompt
+        assert "a prose-only answer does not satisfy the contract" in prompt
+
+    def test_advisory_role_does_not_inherit_final_file_contract(self, tmp_path):
+        from runtime.execution.suckers.ephemeral_agents import (
+            run_ephemeral_role,
+            set_ephemeral_role_runner,
+        )
+
+        (tmp_path / "TASK.md").write_text(
+            "Write `decision_memo.json`.",
+            encoding="utf-8",
+        )
+        captured = {}
+
+        def capture(call):
+            captured["prompt"] = call.composed_system_prompt
+            return "ok"
+
+        set_ephemeral_role_runner(capture)
+        run_ephemeral_role(
+            "arbiter",
+            "fact-check the evidence",
+            context={"workspace_path": str(tmp_path)},
+        )
+
+        assert "Workspace task contract (TASK.md)" not in captured["prompt"]
 
 
 class TestToolAllowlist:

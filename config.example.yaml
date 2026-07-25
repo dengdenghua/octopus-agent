@@ -74,7 +74,7 @@ budget:
 #   - skill://all_skills/plugin-creator  本地内置插件脚手架技能
 #   - mcp://anthropic/* Anthropic 官方 MCP 服务器
 # self_whitelist: fnmatch 模式匹配的"自己人"（不会被免疫攻击）
-#   - cerebrum / ganglia / arms/*  核心器官
+#   - cerebrum / ganglia / arms/* / react_loop / react_arm  核心器官与内部执行循环
 # unknown_policy: quarantine（隔离观察）| reject（拒绝）| allow（放行）
 immunity:
   trusted_sources:
@@ -86,6 +86,8 @@ immunity:
     - "cerebrum"
     - "ganglia"
     - "arms/*"
+    - "react_loop"
+    - "react_arm"
     - "intel_collector/*"
   unknown_policy: quarantine
   # ── Memory tier · 抗体记忆 ──

@@ -400,8 +400,6 @@ def _skill_context_from_spec(
     return context or None
 
 
-
-
 # ── Per-turn delegation budget (smart-budget, 2026-06) ──
 #
 # Budget is tracked per Session.turn_id. The legacy hard cap of 1
@@ -2475,7 +2473,7 @@ def _run_tournament(
     }
 
 
-# ── cli_team: a team of EXTERNAL CLI agents (Claude/Codex) ──────────────
+# ── cli_team: a team of EXTERNAL CLI agents (Claude/Codex/Trae/Qoder) ──────────────
 def _run_cli_team(
     goal: str = "",
     *,
@@ -2488,10 +2486,10 @@ def _run_cli_team(
     **kw: Any,
 ) -> dict[str, Any]:
     """Run a team of the user's OWN external coding-agent CLIs (Claude Code /
-    Codex) in parallel — each in its own isolated git worktree, briefed from and
-    harvesting to the shared blackboard — then judge-pick the best diff. Detects
-    installed CLIs automatically; never auto-merges (returns the winning diff for
-    review). The Conductor/orca pattern on octopus's pieces."""
+    Codex / Trae / Qoder) in parallel — each in its own isolated git worktree, briefed
+    from and harvesting to the shared blackboard — then judge-pick the best diff.
+    Detects installed CLIs automatically; never auto-merges (returns the winning
+    diff for review). The Conductor/orca pattern on octopus's pieces."""
     import os
 
     from runtime.execution.agents.cli_team import detect_installed_partners, run_cli_team
@@ -2505,7 +2503,10 @@ def _run_cli_team(
     if not mems:
         return {
             "ok": False,
-            "error": "no installed coding-agent CLI detected (install Claude Code or Codex)",
+            "error": (
+                "no installed coding-agent CLI detected "
+                "(install Claude Code, Codex, Trae CLI, or Qoder CLI)"
+            ),
             "members": [],
             "winner": None,
         }

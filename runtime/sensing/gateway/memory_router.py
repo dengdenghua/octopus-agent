@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover
     Query = None  # type: ignore[assignment,misc]
     Request = None  # type: ignore[assignment,misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 def create_memory_router(
     *,
@@ -30,8 +31,7 @@ def create_memory_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     from runtime.memory import user_store
 

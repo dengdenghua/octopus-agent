@@ -73,6 +73,8 @@ def _responsive_settings(workspace: Path) -> list[str]:
 
 
 def _async_form(workspace: Path) -> list[str]:
+    index_source = (workspace / "index.html").read_text(encoding="utf-8")
+    regression_test = _async_race_regression_test(workspace, index_source)
     with _serve(workspace) as url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page()
@@ -98,7 +100,68 @@ def _async_form(workspace: Path) -> list[str]:
         if email.input_value() != "fast@example.com":
             raise AssertionError("entered value was not preserved")
         browser.close()
-    return ["stale response ignored", "accessible status", "keyboard submit", "value preserved"]
+    return [
+        "stale response ignored",
+        "accessible status",
+        "keyboard submit",
+        "value preserved",
+        f"persistent race regression: {regression_test.name}",
+    ]
+
+
+def _async_race_regression_test(workspace: Path, index_source: str) -> Path:
+    """Require a separate executable-looking slow/fast race regression.
+
+    Runtime Playwright assertions above prove the current page works.  This
+    check proves the requested regression was also left behind for future
+    changes.  A test file must be independent from production page startup,
+    contain the two ordering inputs, timing/asynchrony, and a real failure
+    signal rather than a prose-only checklist.
+    """
+
+    candidates = sorted(
+        path
+        for path in workspace.rglob("*")
+        if path.is_file()
+        and path.name != "index.html"
+        and path.suffix.lower() in {".html", ".js", ".mjs", ".cjs", ".ts"}
+        and any(marker in path.stem.lower() for marker in ("test", "spec", "race"))
+    )
+    if not candidates:
+        raise AssertionError("separate persistent race regression test is missing")
+
+    index_lower = index_source.lower()
+    for candidate in candidates:
+        source = candidate.read_text(encoding="utf-8")
+        lowered = source.lower()
+        relative_name = candidate.relative_to(workspace).as_posix().lower()
+        if candidate.name.lower() in index_lower or relative_name in index_lower:
+            continue
+        has_inputs = "slow" in lowered and "fast" in lowered
+        has_async_boundary = any(
+            marker in lowered
+            for marker in ("settimeout", "waitfortimeout", "promise", "sleep", "timeout")
+        )
+        has_interaction = any(
+            marker in lowered
+            for marker in ("dispatchEvent".lower(), ".fill(", "input", "validate")
+        )
+        has_failure_signal = any(
+            marker in lowered
+            for marker in (
+                "assert",
+                "expect(",
+                "throw new error",
+                "process.exit(1",
+                "fail",
+            )
+        )
+        if has_inputs and has_async_boundary and has_interaction and has_failure_signal:
+            return candidate
+
+    raise AssertionError(
+        "race regression must be separate from index.html and assert the slow/fast ordering"
+    )
 
 
 def _dynamic_crud(workspace: Path) -> list[str]:
@@ -279,9 +342,15 @@ def _local_plugin(workspace: Path) -> list[str]:
 
 def _skill_roundtrip(workspace: Path) -> list[str]:
     skill = (workspace / "skill" / "SKILL.md").read_text(encoding="utf-8").lower()
-    for term in ("discard", "negative", "square", "sort"):
-        if term not in skill:
-            raise AssertionError(f"skill omits procedure step: {term}")
+    concepts = {
+        "discard": ("discard", "filter out", "remove", "丢弃", "过滤掉", "去除"),
+        "negative": ("negative", "< 0", "less than zero", "负数", "小于 0"),
+        "square": ("square", "** 2", "x²", "平方", "求二次方"),
+        "sort": ("sort", "ascending", "升序", "排序"),
+    }
+    for concept, alternatives in concepts.items():
+        if not any(term in skill for term in alternatives):
+            raise AssertionError(f"skill omits procedure step: {concept}")
     result = json.loads((workspace / "result.json").read_text(encoding="utf-8"))
     if result != {"values": [0, 9, 25]}:
         raise AssertionError(f"fresh-task skill result is incorrect: {result}")

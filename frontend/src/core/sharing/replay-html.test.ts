@@ -100,4 +100,45 @@ describe("buildReplayHtml", () => {
     expect(html).not.toContain("</script><script>alert(1)");
     expect(html).toContain("<\\/script>");
   });
+
+  it("does not package leaked renderer or protocol tags into replay data", () => {
+    const html = buildReplayHtml(
+      sample({
+        title: "<TextBlock>Run</TextBlock>",
+        footer: "<read_only> </read_only> 2026-06-13",
+        steps: [
+          {
+            title: "<TextBlock>读取协议</TextBlock>",
+            subtitle: "<read_only> </read_only> runtime/protocol/items.py",
+            body: "<read_only> </read_only>\n<ToolCallBlock>private tool args</ToolCallBlock>\n已确认",
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain("Run");
+    expect(html).toContain("读取协议");
+    expect(html).toContain("runtime/protocol/items.py");
+    expect(html).toContain("已确认");
+    expect(html).not.toContain("private tool args");
+    expect(html).not.toMatch(/read_only|TextBlock|ToolCallBlock/);
+  });
+
+  it("scrubs raw tool names and secrets even when replay data is passed directly", () => {
+    const html = buildReplayHtml(
+      sample({
+        steps: [
+          {
+            title: "read_file",
+            subtitle: "exec_shell",
+            body: "Authorization: Bearer abcdefghijklmnop\n12 passed",
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain("operation");
+    expect(html).toContain("12 passed");
+    expect(html).not.toMatch(/read_file|exec_shell|Bearer abcdef/i);
+  });
 });

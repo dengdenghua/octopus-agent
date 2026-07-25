@@ -63,6 +63,17 @@ def test_browser_domain_selects_browser_work_surface() -> None:
         "browser_surface": "browser",
         "runtime_surfaces": ["browser"],
     }
+    assert _context_overrides(
+        "frontend_product_experience",
+        preview_url="http://127.0.0.1:4321/index.html",
+    ) == {
+        "mode": "code",
+        "capability_mode": "code",
+        "browser_regression_enabled": True,
+        "browser_regression_preview_url": "http://127.0.0.1:4321/index.html",
+    }
+    with pytest.raises(ValueError, match="preview URL"):
+        _context_overrides("frontend_product_experience")
     assert _context_overrides("production_coding") == {}
 
 
@@ -112,6 +123,41 @@ def test_provider_billing_failure_is_infrastructure_not_agent_behavior() -> None
                 "type": "error",
                 "status": "failed",
                 "message": "http_429: insufficient balance; check billing details",
+            }
+        },
+    )
+
+    assert events[0]["kind"] == "infrastructure_error"
+    assert events[0]["error"]["category"] == "provider_unavailable"
+
+
+def test_provider_http_402_chinese_balance_failure_is_infrastructure() -> None:
+    events = _notification_events(
+        "item/completed",
+        {
+            "item": {
+                "type": "error",
+                "status": "failed",
+                "message": "http_402: 模型账户余额不足，请充值当前模型供应商账户",
+            }
+        },
+    )
+
+    assert events[0]["kind"] == "infrastructure_error"
+    assert events[0]["error"]["category"] == "provider_unavailable"
+
+
+def test_provider_api_key_failure_is_infrastructure_not_agent_behavior() -> None:
+    events = _notification_events(
+        "item/completed",
+        {
+            "item": {
+                "type": "error",
+                "status": "failed",
+                "message": (
+                    "http_401: 模型 API Key 无效或没有权限 "
+                    "(Incorrect API key provided)"
+                ),
             }
         },
     )
@@ -275,6 +321,42 @@ async def test_realtime_trial_runner_applies_context_overrides_without_changing_
         "workspace_scope": "project",
         "workspace_path": str(tmp_path.resolve()),
     }
+
+
+@pytest.mark.asyncio
+async def test_realtime_trial_runner_resolves_context_after_workspace_setup(tmp_path) -> None:
+    received: dict[str, object] = {}
+
+    async def handler(websocket) -> None:
+        start = json.loads(await websocket.recv())
+        received["start"] = start
+        await websocket.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": start["id"],
+                    "result": {"turn": {"status": "completed", "items": []}},
+                }
+            )
+        )
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        await RealtimeTrialRunner(
+            url=f"ws://127.0.0.1:{port}/api/realtime",
+            workspace=lambda: tmp_path,
+            context_overrides=lambda workspace: {
+                "browser_regression_preview_url": (
+                    f"http://127.0.0.1:4321/{workspace.name}/index.html"
+                )
+            },
+            timeout_seconds=5,
+        ).run("verify the live preview")
+
+    context = received["start"]["params"]["input"][0]["metadata"]["context"]
+    assert context["browser_regression_preview_url"] == (
+        f"http://127.0.0.1:4321/{tmp_path.name}/index.html"
+    )
 
 
 @pytest.mark.asyncio

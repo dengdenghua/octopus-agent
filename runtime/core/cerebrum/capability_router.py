@@ -22,6 +22,46 @@ def _dedupe(items: Iterable[str]) -> tuple[str, ...]:
     return tuple(out)
 
 
+def isolated_code_ui_regression(user_context: dict[str, Any] | None) -> bool:
+    """Return whether UI verification should use the isolated browser lane.
+
+    Code-evaluation fixtures expose a loopback preview URL but do not imply an
+    interactive Codex/Electron surface.  Keeping that distinction centralized
+    prevents the text and native tool catalogs from offering ``live_browser``
+    tools that cannot work in a headless runtime.
+    """
+
+    context = user_context if isinstance(user_context, dict) else {}
+    metadata = context.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    regression_enabled = bool(
+        context.get("browser_regression_enabled")
+        or metadata.get("browser_regression_enabled")
+    )
+    browser_surface = str(
+        context.get("browser_surface") or metadata.get("browser_surface") or ""
+    ).strip().lower()
+    browser_only = bool(
+        context.get("browser_operation_mode")
+        or metadata.get("browser_operation_mode")
+        or browser_surface in {"browser", "chrome"}
+    )
+    return regression_enabled and not browser_only
+
+
+def filter_surface_compatible_skills(
+    names: Iterable[str],
+    *,
+    user_context: dict[str, Any] | None,
+) -> list[str]:
+    """Remove tools that are incompatible with the active runtime surface."""
+
+    values = list(names)
+    if isolated_code_ui_regression(user_context):
+        return [name for name in values if not name.startswith("live_browser_")]
+    return values
+
+
 @dataclass(frozen=True)
 class CapabilityActivation:
     labels: tuple[str, ...] = ()
@@ -522,6 +562,21 @@ def activate_capabilities(
         )
         skills = [*leading_browser_skills, *skills]
 
+    if isolated_code_ui_regression(user_context):
+        labels.append("code-ui-regression")
+        leading_code_ui_skills = (
+            "browser_navigate",
+            "browser_state",
+            "browser_type",
+            "browser_click",
+            "browser_extract",
+            "browser_wait",
+            "browser_find",
+            "browser_screenshot",
+            "browser_get",
+        )
+        skills = [*leading_code_ui_skills, *skills]
+
     # Pinned skills + pack-expanded skills always lead the priority list
     # (they're an explicit user signal, stronger than keyword inference).
     # Filter through _skill_available so we don't claim a skill that
@@ -537,6 +592,10 @@ def activate_capabilities(
             labels.append("pinned")
 
     skills = [name for name in _dedupe(skills) if _skill_available(registry, name)]
+    skills = filter_surface_compatible_skills(
+        skills,
+        user_context=user_context,
+    )
     if skills:
         for name in (
             "search_capabilities",

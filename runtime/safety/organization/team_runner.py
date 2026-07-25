@@ -176,6 +176,34 @@ def _first_role_error(outputs: list[RoleOutput]) -> str | None:
     return None
 
 
+def _has_fatal_role_error(outputs: list[RoleOutput]) -> bool:
+    """Whether an error prevented a valid terminal team deliverable.
+
+    A critic is advisory. If it fails but a later synthesizer completes, the
+    team has a degraded review lane rather than a failed delivery. The error
+    stays attached to the critic's RoleOutput for observability.
+    """
+    successful_synth_index = next(
+        (
+            index
+            for index, output in reversed(list(enumerate(outputs)))
+            if output.role == Role.SYNTHESIZER and output.output and not output.error
+        ),
+        None,
+    )
+    for index, output in enumerate(outputs):
+        if not output.error:
+            continue
+        if (
+            output.role == Role.CRITIC
+            and successful_synth_index is not None
+            and index < successful_synth_index
+        ):
+            continue
+        return True
+    return False
+
+
 # ── Runner ────────────────────────────────────────────────────
 
 
@@ -242,7 +270,7 @@ class TeamRunner:
             else:  # pragma: no cover - guard for future protocols
                 raise ValueError(f"unknown protocol: {topology.protocol}")
             # Mark success when no role recorded an error and we have output.
-            if result.final_output and not any(o.error for o in result.role_outputs):
+            if result.final_output and not _has_fatal_role_error(result.role_outputs):
                 result.success = True
             elif result.error is None:
                 result.error = _first_role_error(result.role_outputs)
@@ -278,6 +306,11 @@ class TeamRunner:
             result.role_outputs.append(role_out)
             prior_outputs.append(role_out)
             if role_out.error:
+                if role == Role.CRITIC and Role.SYNTHESIZER in topology.agents:
+                    # A fact-check/review lane is advisory. Preserve its partial
+                    # output and error in the handoff, then let the synthesizer
+                    # finish and independently verify the final deliverable.
+                    continue
                 # Sequential protocol bails on first hard error to
                 # avoid downstream roles consuming a garbage handoff.
                 return

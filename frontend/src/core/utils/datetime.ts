@@ -5,6 +5,16 @@ import { zhCN as dateFnsZhCN } from "date-fns/locale/zh-CN";
 import { detectLocale, type Locale } from "@/core/i18n";
 import { getLocaleFromCookie } from "@/core/i18n/cookies";
 
+/**
+ * Server timestamps are part of the live-stream surface and may briefly be
+ * absent while a new thread is being created. Never let an invalid timestamp
+ * take down the whole chat tree (date-fns throws for Invalid Date).
+ */
+function toValidDate(value: Date | string | number): Date | null {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
 function getDateFnsLocale(locale: Locale) {
   switch (locale) {
     case "zh-CN":
@@ -16,12 +26,14 @@ function getDateFnsLocale(locale: Locale) {
 }
 
 export function formatTimeAgo(date: Date | string | number, locale?: Locale) {
+  const safeDate = toValidDate(date);
+  if (!safeDate) return "";
   const effectiveLocale =
     locale ??
     (getLocaleFromCookie() as Locale | null) ??
     // Fallback when cookie is missing (or on first render)
     detectLocale();
-  return formatDistanceToNow(date, {
+  return formatDistanceToNow(safeDate, {
     addSuffix: true,
     locale: getDateFnsLocale(effectiveLocale),
   });
@@ -31,7 +43,8 @@ export function formatDate(
   date: Date | string | number,
   locale?: Locale,
 ): string {
-  const d = typeof date === "string" ? new Date(date) : date;
+  const d = toValidDate(date);
+  if (!d) return "";
   const effectiveLocale =
     locale ?? (getLocaleFromCookie() as Locale | null) ?? detectLocale();
 
@@ -46,7 +59,8 @@ export function formatRelativeTimestamp(
   date: Date | string | number,
   locale?: Locale,
 ): string {
-  const d = typeof date === "string" ? new Date(date) : new Date(date);
+  const d = toValidDate(date);
+  if (!d) return "";
   const effectiveLocale =
     locale ?? (getLocaleFromCookie() as Locale | null) ?? detectLocale();
 
@@ -72,7 +86,8 @@ export function formatCompactRelativeTimestamp(
   date: Date | string | number,
   locale?: Locale,
 ): string {
-  const d = typeof date === "string" ? new Date(date) : new Date(date);
+  const d = toValidDate(date);
+  if (!d) return "";
   const effectiveLocale =
     locale ?? (getLocaleFromCookie() as Locale | null) ?? detectLocale();
 

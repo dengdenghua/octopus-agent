@@ -31,6 +31,7 @@ def entry_matches_model(entry: Any, model: str) -> bool:
     target = (model or "").strip()
     if not target:
         return False
+    target = target.removesuffix("::1m")
     candidates = {
         str(value).strip()
         for value in (
@@ -103,3 +104,17 @@ def custom_model_supports_thinking(model: str) -> bool:
         if entry_matches_model(entry, model):
             return bool(entry.get("supports_thinking"))
     return False
+
+
+def model_context_window(model: str) -> int | None:
+    """Return the operator-declared input window for a custom model."""
+    entry = custom_model_entry_for(model)
+    if not isinstance(entry, dict):
+        return None
+    if model.strip().endswith("::1m"):
+        return 1_000_000
+    try:
+        value = int(entry.get("context_window"))
+    except (TypeError, ValueError):
+        return None
+    return value if 8_192 <= value <= 2_000_000 else 256_000

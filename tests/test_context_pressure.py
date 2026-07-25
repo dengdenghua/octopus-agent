@@ -15,6 +15,7 @@ from runtime.core.cerebrum.react_context import (
     _compress_context,
     _content_to_text,
     _estimate_messages_tokens,
+    context_budget_tokens_for_model,
 )
 from runtime.core.cerebrum.react_loop import _estimate_context_fullness
 
@@ -29,6 +30,31 @@ class _Msg:
 
     content: Any
     role: str = "user"
+
+
+def test_long_context_models_default_to_256k_profile() -> None:
+    assert context_budget_tokens_for_model("glm-5.2") == 230_400
+    assert context_budget_tokens_for_model("deepseek-v4-flash") == 230_400
+    assert context_budget_tokens_for_model("deepseek-v4-pro") == 230_400
+
+
+def test_custom_model_1m_alias_selects_extended_profile(monkeypatch) -> None:
+    from runtime.sensing.model_router import custom_model_flags
+
+    monkeypatch.setattr(
+        custom_model_flags,
+        "read_custom_models",
+        lambda: {
+            "deepseek": {
+                "id": "deepseek",
+                "models": ["deepseek-v4-pro"],
+                "context_window": 256_000,
+                "enable_1m_context": True,
+            }
+        },
+    )
+    assert custom_model_flags.model_context_window("deepseek-v4-pro") == 256_000
+    assert custom_model_flags.model_context_window("deepseek-v4-pro::1m") == 1_000_000
 
 
 # ─── 1. Empty / zero-length input ───────────────────────────────

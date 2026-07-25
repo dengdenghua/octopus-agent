@@ -39,6 +39,7 @@ from runtime.tentacle.mobile.apks.tool_bridge import (
 )
 from runtime.tentacle.mobile.apks.version import OCTOPUS_MOBILE_VERSION, is_compatible
 from runtime.tentacle.mobile.mcp_server import TentacleMcpServer
+from runtime.tentacle.mobile.capabilities import android_capabilities
 
 # ── 1. 包导入测试 ─────────────────────────────────────────
 
@@ -107,6 +108,8 @@ def test_android_capabilities_complete():
     actual = set(ANDROID_CAPABILITIES)
     assert len(expected) == 30
     assert expected == actual, f"missing: {expected - actual}, extra: {actual - expected}"
+    # device.py is a compatibility export; manifests remain the source of truth.
+    assert tuple(sorted(ANDROID_CAPABILITIES)) == android_capabilities()
 
 
 def test_tentacle_mcp_tool_name_maps_to_canonical_skill():

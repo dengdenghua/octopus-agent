@@ -34,6 +34,10 @@ class CollaborationSession:
     room_messages: list[dict[str, Any]]  # linked room's recent transcript, if any
     room_participants: list[dict[str, Any]]  # linked room's participant config, if any
     room_tasks: list[dict[str, Any]]  # linked room's team tasks (the 3rd source), if any
+    # Linked Workspace (``{"id", "name", "mount_type"}``) when a
+    # ``workspace_link`` event has been folded into the group state. ``None``
+    # when the thread has no workspace bound to it.
+    workspace: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,6 +51,7 @@ class CollaborationSession:
             "room_messages": self.room_messages,
             "room_participants": self.room_participants,
             "room_tasks": self.room_tasks,
+            "workspace": self.workspace,
         }
 
 
@@ -118,6 +123,7 @@ def resolve_session(
         room_messages=room_messages,
         room_participants=room_participants,
         room_tasks=room_tasks,
+        workspace=state.workspace,
     )
 
 

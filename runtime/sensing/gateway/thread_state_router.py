@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
     Response = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 def create_thread_state_router(
     *,
@@ -29,8 +30,7 @@ def create_thread_state_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["threads"])
 

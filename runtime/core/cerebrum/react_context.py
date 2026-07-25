@@ -61,6 +61,18 @@ def context_budget_tokens_for_model(model: str | None) -> int:
     character.
     """
     name = (model or "").lower()
+    try:
+        from runtime.sensing.model_router.custom_model_flags import model_context_window
+
+        configured_window = model_context_window(model or "")
+    except ImportError:
+        configured_window = None
+    if configured_window is not None:
+        # Reserve 10% for the next response, tool schemas and provider-side
+        # accounting differences instead of filling the advertised window.
+        return max(25_000, int(configured_window * 0.9))
+    if any(model_id in name for model_id in ("glm-5.2", "deepseek-v4-flash", "deepseek-v4-pro")):
+        return 230_400
     if "claude-3-5" in name or "claude-4" in name or "claude-sonnet" in name:
         return 150_000
     if "gpt-4o" in name or "gpt-5" in name:
@@ -356,6 +368,13 @@ def _format_skill_catalog(
     if include_names is not None:
         allowed_names = frozenset(include_names)
         names = [name for name in names if name in allowed_names]
+
+    # A code regression preview runs in Octopus' isolated Playwright browser,
+    # not the desktop Electron surface.  Hide incompatible live-browser tools
+    # instead of relying on the model to recover after a guaranteed failure.
+    from runtime.core.cerebrum.capability_router import filter_surface_compatible_skills
+
+    names = filter_surface_compatible_skills(names, user_context=user_context)
 
     if agent is not None:
         allowed: set[str] | None

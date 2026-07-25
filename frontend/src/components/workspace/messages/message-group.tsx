@@ -17,7 +17,7 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { BundledLanguage } from "shiki";
 
@@ -51,8 +51,11 @@ import {
   findToolCallResult,
   hasToolCalls,
   isLikelyFinalAnswerContent,
+  stripInternalToolProtocol,
+  stripLeakedRendererMarkup,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
+import { activateTimelineItem } from "@/core/threads/timeline-linkage";
 import { extractTitleFromMarkdown } from "@/core/utils/markdown";
 import { cn } from "@/lib/utils";
 
@@ -69,9 +72,33 @@ import {
 import { Tooltip } from "../tooltip";
 
 import { ClarificationChoiceCard } from "./clarification-choice-card";
+import {
+  extractFactSummary,
+  isToolResultError,
+  type FactSummary,
+} from "./fact-summary";
 import { GroundingChip } from "./grounding-chip";
 import { MarkdownContent } from "./markdown-content";
 import { stripTraceLabelPrefixes } from "./trace-labels";
+import {
+  assignTimelineRoles,
+  isAnswerContent,
+  type RoleAssignableStep,
+  type TimelineRole,
+} from "./timeline-role";
+import {
+  getActionDisplay,
+  getActionIcon,
+  aggregateIconName,
+  type ActionDisplay,
+  type ActionAggregateKind,
+} from "./action-display";
+import {
+  aggregateSimilarToolCalls,
+  isAggregatedToolGroup,
+  type TimelineItemLike,
+} from "./activity-aggregator";
+import { projectToolNarrative } from "./narrative-block";
 
 const HIDDEN_TIMELINE_TOOL_NAMES = new Set([
   "task",
@@ -86,6 +113,14 @@ const HIDDEN_TIMELINE_TOOL_NAMES = new Set([
   "deep-research-swarm",
   "recall",
 ]);
+const INTERNAL_PROCESS_BLOCK_RE =
+  /`?<(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)\b[^<>`]*>[\s\S]*?<\/(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)>`?/g;
+const PROCESS_TEXT_SECRET_RE =
+  /\b(?:sk|pk|rk|ghp|gho|ghs|ghu|xox[baprs])[-_][A-Za-z0-9]{8,}\b|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}|\b(?:Bearer|Authorization:?)\s+[A-Za-z0-9._-]{10,}|(["']?(?:api[_-]?key|secret|password|passwd|token)["']?\s*[:=]\s*)["']?[^\s"',}]{4,}/gi;
+const PROCESS_TEXT_RAW_TOOL_RE =
+  /\b(?:read_file|glob_files|find_files|exec_shell|shell_command|run_command|todo_write|apply_patch|write_file|edit_file|str_replace)\b/gi;
+const PROCESS_TEXT_PROTOCOL_PREFIX_RE =
+  /\b(?:Thought|Action|Observation|Final Answer|Tool|Tool Result)\s*:\s*/gi;
 
 function isHiddenTimelineToolName(name: string): boolean {
   const normalized = name.toLowerCase();
@@ -137,19 +172,59 @@ function publicActionTextFromTraceTool(
   ) {
     return withTarget(t.messageGrouping.updateFile);
   }
+  if (isShellToolName(normalized)) {
+    return t.toolCalls.executeCommand;
+  }
   // Unknown trace actions are implementation details, not a meaningful
-  // public update. Do not invent a generic "Run action" timeline item.
+  // public update. Do not invent a generic operation timeline item.
   return null;
 }
 
 function normalizePublicTimelineChunk(chunk: string): string | null {
   const stripped = stripTraceLabelPrefixes(
-    chunk
+    stripLeakedRendererMarkup(
+      stripInternalToolProtocol(chunk.replace(INTERNAL_PROCESS_BLOCK_RE, "")),
+    )
       .replace(/<\/?(?:tool|tool_call|function|thought|thinking)[^>]*>/gi, " ")
       .replace(/\s+/g, " ")
       .trim(),
   );
-  return stripped || null;
+  const cleaned = redactPublicProcessText(stripped);
+  return cleaned || null;
+}
+
+function redactPublicProcessText(value: string): string {
+  return value
+    .replace(PROCESS_TEXT_SECRET_RE, (_match, prefix?: string) =>
+      prefix ? `${prefix}«redacted»` : "«redacted»",
+    )
+    .replace(PROCESS_TEXT_RAW_TOOL_RE, "operation")
+    .replace(PROCESS_TEXT_PROTOCOL_PREFIX_RE, "")
+    .trim();
+}
+
+function publicProcessText(value: string): string {
+  return (
+    normalizePublicTimelineChunk(value) ??
+    redactPublicProcessText(
+      stripTraceLabelPrefixes(
+        stripLeakedRendererMarkup(
+          stripInternalToolProtocol(
+            value.replace(INTERNAL_PROCESS_BLOCK_RE, ""),
+          ),
+        ),
+      ).replace(/\s+/g, " "),
+    )
+  );
+}
+
+function firstPublicProcessLine(value: string): string {
+  return (
+    value
+      .split(/\r?\n/)
+      .map((line) => publicProcessText(line))
+      .find(Boolean) ?? ""
+  );
 }
 
 function dedupeTimelineChunks(chunks: string[]): string[] {
@@ -172,6 +247,14 @@ function timelineNarrativeFingerprint(value: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+function formatDuration(ms: number): string {
+  const roundedSeconds = Math.round(ms / 1000);
+  if (roundedSeconds < 60) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(roundedSeconds / 60);
+  const remainingSeconds = roundedSeconds % 60;
+  return `${minutes}m${remainingSeconds}s`;
 }
 
 export function MessageGroup({
@@ -204,6 +287,8 @@ export function MessageGroup({
   const [openActionGroups, setOpenActionGroups] = useState<
     Record<string, boolean>
   >({});
+  const thinkingStartTimeRef = useRef<number | null>(null);
+  const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
   const steps = useMemo(() => convertToSteps(messages), [messages]);
   const showInterruptedReceipt =
     !isLoading &&
@@ -317,10 +402,6 @@ export function MessageGroup({
     setOpenActionGroups({});
   }, [isLiveTimeline, stepsFingerprint]);
 
-  if (steps.length === 0) {
-    return null;
-  }
-
   // Helper: render an iteration divider when the iteration number changes
   // between consecutive steps.
   function renderIterationDivider(
@@ -361,14 +442,19 @@ export function MessageGroup({
       isCurrentFrame || (!isHistoryReplay && idx === items.length - 1);
     if (item.type === "commentary") {
       const commentaryState = runStateForCurrentStep(item.step, itemIsLoading);
-      const commentarySummary = summarizeCurrentStep(item.step, t);
+      const commentaryText = publicProcessText(item.step.commentary);
+      const commentarySummary = publicProcessText(
+        summarizeCurrentStep(item.step, t),
+      );
       return (
         <div
           key={item.id}
           role="button"
           tabIndex={0}
           aria-label={commentarySummary}
-          onClick={() =>
+          onClick={() => {
+            // 双向联动：只追加激活，不改变既有点击行为
+            activateTimelineItem(timelineItemLinkageId(item), "chat");
             emitOpenAgentWorkbench({
               tab: "agent",
               eventId: item.step.messageId ?? item.step.id,
@@ -377,15 +463,15 @@ export function MessageGroup({
               processEvent: {
                 kind: "thinking",
                 summary: commentarySummary,
-                detail: item.step.commentary,
+                detail: commentaryText || commentarySummary,
                 status: commentaryState,
                 count: 1,
                 phaseId: item.step.phaseId,
                 parentItemId: item.step.parentItemId,
                 timelineSequence: item.step.timelineSequence,
               },
-            })
-          }
+            });
+          }}
           onKeyDown={(event) => {
             if (event.key !== "Enter" && event.key !== " ") return;
             event.preventDefault();
@@ -394,6 +480,8 @@ export function MessageGroup({
           className="group/progress-row my-1 flex min-w-0 cursor-pointer items-start gap-1.5 text-xs leading-5 text-foreground/75 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
           data-testid="public-progress-event"
           data-process-event-id={item.step.messageId ?? item.step.id}
+          data-timeline-item-id={timelineItemLinkageId(item)}
+          data-timeline-lane="chat"
           data-process-event-kind="thinking"
           data-process-event-status={commentaryState}
           data-phase-id={item.step.phaseId}
@@ -419,7 +507,7 @@ export function MessageGroup({
           </span>
           <div className="min-w-0 flex-1">
             <MarkdownContent
-              content={item.step.commentary}
+              content={commentaryText}
               isLoading={itemIsLoading}
               rehypePlugins={rehypePlugins}
             />
@@ -427,14 +515,15 @@ export function MessageGroup({
               <GroundingChip message={item.step.groundingMessage} />
             )}
           </div>
-          <PanelRightOpenIcon className="mt-1 size-3 shrink-0 opacity-0 transition-opacity group-hover/progress-row:opacity-40 group-focus-visible/progress-row:opacity-40" />
         </div>
       );
     }
     if (item.type === "reasoningGroup") {
-      const open =
-        isCurrentFrame ||
-        (openReasoningGroups[item.id] ?? (codeMode || item.steps.length <= 3));
+      // Process details are a secondary surface. Keep them collapsed in the
+      // transcript by default (including the live frame); the status dot and
+      // one-line summary are enough to show that work is moving. Users can
+      // expand a group here or open the full payload in the workbench.
+      const open = openReasoningGroups[item.id] ?? false;
       const isActiveGroup =
         isCurrentFrame || (itemIsLoading && isLast && item.steps.length > 0);
       const content = (
@@ -444,6 +533,7 @@ export function MessageGroup({
           isLoading={itemIsLoading}
           open={open}
           active={isActiveGroup}
+          timelineItemId={timelineItemLinkageId(item)}
           onOpenChange={(nextOpen) =>
             setOpenReasoningGroups((current) => ({
               ...current,
@@ -465,9 +555,9 @@ export function MessageGroup({
       );
     }
     if (item.type === "actionCallbackGroup") {
-      const open =
-        isCurrentFrame ||
-        (openActionGroups[item.id] ?? (codeMode || item.steps.length <= 3));
+      // Actions follow the same quiet default as reasoning. The compact row
+      // remains visible, while the complete callback details are opt-in.
+      const open = openActionGroups[item.id] ?? false;
       const isActiveGroup =
         isCurrentFrame || (itemIsLoading && isLast && item.steps.length > 0);
       const content = (
@@ -495,8 +585,20 @@ export function MessageGroup({
         content
       );
     }
+    // aggregatedToolGroup only appears in compact timeline, not in expanded renderTimelineItem
+    if (item.type === "aggregatedToolGroup") {
+      return null;
+    }
     const content = (
-      <div key={item.id}>
+      <div
+        key={item.id}
+        data-timeline-item-id={timelineItemLinkageId(item)}
+        data-timeline-lane="chat"
+        onClick={() =>
+          // 双向联动：只追加激活，ToolCall 自身的展开/选择行为不变
+          activateTimelineItem(timelineItemLinkageId(item), "chat")
+        }
+      >
         {renderIterationDivider(prevStep, item.step)}
         <ToolCall {...item.step} isLast={isLast} isLoading={itemIsLoading} />
       </div>
@@ -513,17 +615,63 @@ export function MessageGroup({
   // Keep process events on the same chronological lane as the answer while
   // letting the answer retain visual priority. The main transcript shows only
   // compact public summaries; complete event payloads live in the workbench.
-  const compactTimelineItems = retainIndeterminateToolCalls(
-    timelineItems,
-    // The main conversation keeps the latest public thought and latest action.
-    // Earlier process events remain in the right workbench. This is structural
-    // and independent of model wording, language, or hard-coded phase names.
-    selectCompactTimelineItems(timelineItems),
-    receiptsByCallId,
-  );
-  const compactExecutionCoverage = executionCoverageByVisibleItem(
-    timelineItems,
-    compactTimelineItems,
+  const compactTimelineItems = useMemo(() => {
+    const selected = retainIndeterminateToolCalls(
+      timelineItems,
+      // The main conversation keeps the latest public thought and latest action.
+      // Earlier process events remain in the right workbench. This is structural
+      // and independent of model wording, language, or hard-coded phase names.
+      selectCompactTimelineItems(timelineItems),
+      receiptsByCallId,
+    );
+    // Build index for quick lookup of original ToolCallTimelineItem by step id
+    const toolItemById = new Map<string, ToolCallTimelineItem>();
+    for (const item of selected) {
+      if (item.type === "toolCall" && item.step.id) {
+        toolItemById.set(item.step.id, item);
+      }
+    }
+    // Apply activity aggregation: group consecutive similar tool calls
+    const aggregated = aggregateSimilarToolCalls(
+      selected as unknown as readonly TimelineItemLike[],
+    );
+    // Adapt to local TimelineItem type
+    return aggregated.map((item): TimelineItem => {
+      if (isAggregatedToolGroup(item)) {
+        const mappedItems: ToolCallTimelineItem[] = [];
+        for (const toolLike of item.items) {
+          const stepId = toolLike.step.id;
+          if (stepId) {
+            const original = toolItemById.get(stepId);
+            if (original) {
+              mappedItems.push(original);
+              continue;
+            }
+          }
+          // Aggregation preserves the original object. Falling back by tool
+          // name maps repeated anonymous calls to the wrong evidence row.
+          mappedItems.push(toolLike as unknown as ToolCallTimelineItem);
+        }
+        return {
+          id: item.id,
+          type: "aggregatedToolGroup",
+          aggregateKind: item.aggregateKind,
+          count: item.count,
+          phaseId: item.phaseId,
+          items:
+            mappedItems.length > 0
+              ? mappedItems
+              : (item.items as unknown as ToolCallTimelineItem[]),
+          role: item.role as TimelineRole | undefined,
+          inferred: item.inferred,
+        };
+      }
+      return item as unknown as TimelineItem;
+    });
+  }, [timelineItems, receiptsByCallId]);
+  const compactExecutionCoverage = useMemo(
+    () => executionCoverageByVisibleItem(timelineItems, compactTimelineItems),
+    [timelineItems, compactTimelineItems],
   );
   const hasPublicCommentary = compactTimelineItems.some(
     (item) => item.type === "commentary",
@@ -542,13 +690,130 @@ export function MessageGroup({
     streamingAnswerText && !hasPublicCommentary && firstExecutionIndex >= 0
       ? compactTimelineItems.slice(firstExecutionIndex)
       : [];
+  // 最终回答视觉分层：流式结束后，在过程段落与最终回答正文之间加分界。
+  // 判定口径与 groupMessages 一致（tool_calls + isLikelyFinalAnswerContent 的
+  // 消息会以独立 assistant 组在下方渲染正文），且必须是同组最后一条可见正文，
+  // 避免给中途的过程组或 checkpoint 收尾的组误加分界。
+  const showFinalAnswerBoundary =
+    !isLiveTimeline &&
+    compactTimelineItems.length > 0 &&
+    messages.some(
+      (message) =>
+        isAnswerContent(message, messages) &&
+        hasToolCalls(message) &&
+        isLikelyFinalAnswerContent(message),
+    );
+
+  const lastCompactItem = compactTimelineItems[compactTimelineItems.length - 1];
+  const isCurrentlyThinking = useMemo(() => {
+    if (!isLoading || !isLiveTimeline) return false;
+    if (!lastCompactItem) return false;
+    return (
+      lastCompactItem.type === "reasoningGroup" ||
+      lastCompactItem.type === "commentary"
+    );
+  }, [isLoading, isLiveTimeline, lastCompactItem]);
+
+  useEffect(() => {
+    if (isCurrentlyThinking) {
+      if (thinkingStartTimeRef.current === null) {
+        thinkingStartTimeRef.current = Date.now();
+        setThinkingElapsedMs(0);
+      }
+      const intervalId = setInterval(() => {
+        if (thinkingStartTimeRef.current !== null) {
+          setThinkingElapsedMs(Date.now() - thinkingStartTimeRef.current);
+        }
+      }, 1000);
+      return () => clearInterval(intervalId);
+    } else {
+      thinkingStartTimeRef.current = null;
+      setThinkingElapsedMs(0);
+    }
+  }, [isCurrentlyThinking]);
+
+  if (steps.length === 0) {
+    return null;
+  }
 
   function renderCompactTimelineItems(
     items: TimelineItem[],
     keyPrefix: string,
   ) {
+    // A live agent often emits several records for one phase. Leaving every
+    // completed record open turns the transcript into a terminal log, so keep
+    // only the active phase in full view. The compact receipt still opens the
+    // exact phase in the Workbench; no evidence is thrown away.
+    const activeTimelineItem =
+      compactTimelineItems[compactTimelineItems.length - 1] ??
+      items[items.length - 1];
+    const activePhaseId = activeTimelineItem
+      ? lastTimelineStep(activeTimelineItem).phaseId
+      : undefined;
+    const historicalPhaseItems = new Map<string, TimelineItem[]>();
+    if (isLiveTimeline && isLoading) {
+      for (const timelineItem of items) {
+        const phaseId = lastTimelineStep(timelineItem).phaseId;
+        if (!phaseId || phaseId === activePhaseId) continue;
+        const group = historicalPhaseItems.get(phaseId) ?? [];
+        group.push(timelineItem);
+        historicalPhaseItems.set(phaseId, group);
+      }
+    }
+
     return items.map((item) => {
       const step = lastTimelineStep(item);
+      const phaseItems = step.phaseId
+        ? historicalPhaseItems.get(step.phaseId)
+        : undefined;
+      if (phaseItems && phaseItems.length > 1) {
+        if (phaseItems[0] !== item) return null;
+        const completedSummary = t.message.completedSteps(phaseItems.length);
+        const phaseDetail = phaseItems
+          .map((phaseItem) =>
+            publicProcessText(
+              phaseItem.type === "toolCall"
+                ? summarizeCurrentStep(phaseItem.step, t)
+                : phaseItem.type === "commentary"
+                  ? phaseItem.step.commentary
+                  : stepText(lastTimelineStep(phaseItem)),
+            ),
+          )
+          .filter(Boolean)
+          .join("\n");
+        return (
+          <button
+            key={`${keyPrefix}-phase-${step.phaseId}`}
+            type="button"
+            className="flex min-w-0 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] text-muted-foreground/45 transition-colors hover:text-muted-foreground"
+            onClick={() => {
+              activateTimelineItem(timelineItemLinkageId(item), "chat");
+              emitOpenAgentWorkbench({
+                tab: "agent",
+                eventId: step.messageId ?? step.id,
+                eventKind: "execution",
+                view: "trace",
+                processEvent: {
+                  kind: "execution",
+                  summary: completedSummary,
+                  detail: phaseDetail || completedSummary,
+                  status: "done",
+                  count: phaseItems.length,
+                  phaseId: step.phaseId,
+                  parentItemId: step.parentItemId,
+                  timelineSequence: step.timelineSequence,
+                },
+              });
+            }}
+            data-testid="collapsed-history-phase"
+            data-phase-id={step.phaseId}
+          >
+            <span className="size-1 shrink-0 rounded-full bg-emerald-500/70" />
+            <span className="truncate">{completedSummary}</span>
+            <PanelRightOpenIcon className="size-3 shrink-0 opacity-60" />
+          </button>
+        );
+      }
       const isLastOverall =
         item === compactTimelineItems[compactTimelineItems.length - 1];
       const state = runStateForCurrentStep(
@@ -556,7 +821,10 @@ export function MessageGroup({
         isLiveTimeline && isLastOverall && isLoading,
       );
       if (item.type === "commentary") {
-        const commentarySummary = summarizeCurrentStep(item.step, t);
+        const commentaryText = publicProcessText(item.step.commentary);
+        const commentarySummary = publicProcessText(
+          summarizeCurrentStep(item.step, t),
+        );
         return (
           <div
             key={`${keyPrefix}-${item.id}`}
@@ -566,7 +834,9 @@ export function MessageGroup({
               role="button"
               tabIndex={0}
               aria-label={commentarySummary}
-              onClick={() =>
+              onClick={() => {
+                // 双向联动：只追加激活，不改变既有点击行为
+                activateTimelineItem(timelineItemLinkageId(item), "chat");
                 emitOpenAgentWorkbench({
                   tab: "agent",
                   eventId: item.step.messageId ?? item.step.id,
@@ -575,15 +845,15 @@ export function MessageGroup({
                   processEvent: {
                     kind: "thinking",
                     summary: commentarySummary,
-                    detail: item.step.commentary,
+                    detail: commentaryText || commentarySummary,
                     status: state,
                     count: 1,
                     phaseId: item.step.phaseId,
                     parentItemId: item.step.parentItemId,
                     timelineSequence: item.step.timelineSequence,
                   },
-                })
-              }
+                });
+              }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" && event.key !== " ") return;
                 event.preventDefault();
@@ -592,6 +862,8 @@ export function MessageGroup({
               className="group/progress-row my-1 flex min-w-0 flex-1 cursor-pointer items-start gap-1.5 text-xs leading-5 text-foreground/75 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
               data-testid="public-progress-event"
               data-process-event-id={item.step.messageId ?? item.step.id}
+              data-timeline-item-id={timelineItemLinkageId(item)}
+              data-timeline-lane="chat"
               data-process-event-kind="thinking"
               data-process-event-status={state}
               data-phase-id={item.step.phaseId}
@@ -616,7 +888,7 @@ export function MessageGroup({
               </span>
               <div className="min-w-0 flex-1">
                 <MarkdownContent
-                  content={item.step.commentary}
+                  content={commentaryText}
                   isLoading={isLiveTimeline && isLastOverall && isLoading}
                   rehypePlugins={rehypePlugins}
                 />
@@ -624,7 +896,6 @@ export function MessageGroup({
                   <GroundingChip message={item.step.groundingMessage} />
                 )}
               </div>
-              <PanelRightOpenIcon className="mt-1 size-3 shrink-0 opacity-0 transition-opacity group-hover/progress-row:opacity-40 group-focus-visible/progress-row:opacity-40" />
             </div>
             {isLastOverall && showTimelineToggle && (
               <button
@@ -643,149 +914,292 @@ export function MessageGroup({
         );
       }
       const isThinking = item.type === "reasoningGroup";
+      const isAggregatedGroup = item.type === "aggregatedToolGroup";
       const coveredItems =
         compactExecutionCoverage.get(item.id) ?? ([item] as TimelineItem[]);
       const groupedTargetSummary =
-        summarizeCompactExecutionTargets(coveredItems);
+        summarizeCompactExecutionTargets(coveredItems) ??
+        (isAggregatedGroup
+          ? summarizeCompactExecutionTargets(item.items)
+          : null);
       const concreteTargetSummary =
         item.type === "toolCall" ? compactToolTarget(item.step) : null;
-      const count = coveredItems.reduce(
-        (total, coveredItem) =>
-          total +
-          (coveredItem.type === "toolCall" || coveredItem.type === "commentary"
-            ? 1
-            : coveredItem.steps.length),
-        0,
-      );
+      const count = isAggregatedGroup
+        ? item.count
+        : coveredItems.reduce(
+            (total, coveredItem) =>
+              total +
+              (coveredItem.type === "toolCall" ||
+              coveredItem.type === "commentary"
+                ? 1
+                : coveredItem.type === "aggregatedToolGroup"
+                  ? coveredItem.count
+                  : coveredItem.steps.length),
+            0,
+          );
+
+      // Use action-display for human-readable verb + icon
+      let actionVerb: string;
+      let actionObject: string;
+      let ActionIcon: React.ComponentType<{ className?: string }>;
+      let factSummaryText: string | null = null;
+      let actionWorkbenchTab:
+        | "agent"
+        | "terminal"
+        | "browser"
+        | "diff"
+        | "artifacts" = "agent";
+
+      if (isAggregatedGroup) {
+        actionVerb = localizedAggregateVerb(item.aggregateKind, item.count, t);
+        actionObject = "";
+        ActionIcon = getActionIcon(aggregateIconName(item.aggregateKind));
+        factSummaryText = null;
+        // Map aggregate kind to workbench tab
+        switch (item.aggregateKind) {
+          case "file_write":
+            actionWorkbenchTab = "diff";
+            break;
+          case "command":
+            actionWorkbenchTab = "terminal";
+            break;
+          case "web_search":
+          case "browser":
+            actionWorkbenchTab = "browser";
+            break;
+          default:
+            actionWorkbenchTab = "agent";
+        }
+      } else if (item.type === "toolCall") {
+        const display = getActionDisplay(item.step.name, item.step.args);
+        const narrative = projectToolNarrative({
+          id: item.step.id ?? item.id,
+          toolName: item.step.name,
+          args: item.step.args,
+          result: item.step.result,
+          phaseId: item.step.phaseId,
+          state,
+        });
+        actionVerb = localizedActionVerb(display, t);
+        actionObject = narrative.object ?? "";
+        ActionIcon = getActionIcon(display.iconName);
+        actionWorkbenchTab =
+          narrative.evidenceRefs[0]?.tab ?? display.workbenchTab;
+        // 事实摘要：仅当该行单独代表一个工具调用且结果可提取时附加
+        factSummaryText =
+          coveredItems.length === 1
+            ? formatFactSummary(
+                narrative.fact ??
+                  extractFactSummary(item.step.name, item.step.result),
+                t,
+              )
+            : null;
+      } else if (item.type === "actionCallbackGroup") {
+        actionVerb = summarizeActionGroup(item, t);
+        actionObject = "";
+        ActionIcon = WrenchIcon;
+        factSummaryText = null;
+        actionWorkbenchTab = "agent";
+      } else {
+        actionVerb = summarizeReasoningGroup(item, t);
+        actionObject = "";
+        ActionIcon = WrenchIcon;
+        factSummaryText = null;
+        actionWorkbenchTab = "agent";
+      }
+
       const summary =
         item.type === "reasoningGroup"
           ? summarizeReasoningGroup(item, t)
           : item.type === "actionCallbackGroup"
             ? summarizeActionGroup(item, t)
-            : (groupedTargetSummary ??
-              concreteTargetSummary ??
-              summarizeCurrentStep(item.step, t));
-      const workbenchEventId =
-        item.type === "toolCall" ? item.step.id : step.messageId;
+            : isAggregatedGroup
+              ? [actionVerb, groupedTargetSummary].filter(Boolean).join(" · ")
+              : (groupedTargetSummary ??
+                concreteTargetSummary ??
+                (actionObject ? `${actionVerb} ${actionObject}` : actionVerb));
+      const workbenchEventId = isAggregatedGroup
+        ? item.items[item.items.length - 1]?.step.id
+        : item.type === "toolCall"
+          ? item.step.id
+          : step.messageId;
       const effectReceipt =
-        (item.type === "toolCall" ? item.step.effectReceipt : undefined) ??
-        (workbenchEventId ? receiptsByCallId.get(workbenchEventId) : undefined);
+        !isAggregatedGroup && item.type === "toolCall"
+          ? (item.step.effectReceipt ??
+            (workbenchEventId
+              ? receiptsByCallId.get(workbenchEventId)
+              : undefined))
+          : undefined;
       const needsEffectReview = effectReceipt?.state === "indeterminate";
       const processEventDetail = dedupeTimelineChunks(
-        coveredItems.flatMap((coveredItem) =>
-          coveredItem.type === "reasoningGroup"
-            ? coveredItem.steps
-                .map((reasoningStep) => reasoningStep.reasoning?.trim() ?? "")
-                .filter(Boolean)
-            : coveredItem.type === "actionCallbackGroup"
-              ? coveredItem.steps
-                  .map((actionStep) => actionStep.actionText.trim())
-                  .filter(Boolean)
-              : coveredItem.type === "toolCall"
-                ? [summarizeCurrentStep(coveredItem.step, t)]
-                : [coveredItem.step.commentary],
-        ),
+        isAggregatedGroup
+          ? item.items.map((toolItem) =>
+              publicProcessText(summarizeCurrentStep(toolItem.step, t)),
+            )
+          : coveredItems.flatMap((coveredItem) =>
+              coveredItem.type === "reasoningGroup"
+                ? coveredItem.steps
+                    .map((reasoningStep) =>
+                      publicProcessText(reasoningStep.reasoning ?? ""),
+                    )
+                    .filter(Boolean)
+                : coveredItem.type === "actionCallbackGroup"
+                  ? coveredItem.steps
+                      .map((actionStep) =>
+                        publicProcessText(actionStep.actionText),
+                      )
+                      .filter(Boolean)
+                  : coveredItem.type === "aggregatedToolGroup"
+                    ? coveredItem.items.map((toolItem) =>
+                        publicProcessText(
+                          summarizeCurrentStep(toolItem.step, t),
+                        ),
+                      )
+                    : coveredItem.type === "toolCall"
+                      ? [
+                          publicProcessText(
+                            summarizeCurrentStep(coveredItem.step, t),
+                          ),
+                        ]
+                      : [publicProcessText(coveredItem.step.commentary)],
+            ),
       ).join("\n");
+      const processEventSummary = publicProcessText(summary);
 
       return (
-        <div
-          key={`${keyPrefix}-${item.id}`}
-          className="group/process-row flex min-w-0 items-center gap-0.5"
-        >
-          <button
-            type="button"
-            onClick={() =>
-              emitOpenAgentWorkbench({
-                tab: "agent",
-                eventId: workbenchEventId,
-                eventKind: isThinking ? "thinking" : "execution",
-                view: isThinking ? "summary" : "trace",
-                processEvent: {
-                  kind: isThinking ? "thinking" : "execution",
-                  summary,
-                  detail: processEventDetail || summary,
-                  status: state,
-                  count,
-                  phaseId: step.phaseId,
-                  parentItemId: step.parentItemId,
-                  timelineSequence: step.timelineSequence,
-                },
-                effectKey: needsEffectReview
-                  ? "effect_key" in effectReceipt
-                    ? effectReceipt.effect_key
-                    : effectReceipt.effectKey
-                  : undefined,
-              })
-            }
-            className={cn(
-              "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] transition-colors",
-              needsEffectReview
-                ? "text-amber-700/80 hover:text-amber-800 dark:text-amber-300/80 dark:hover:text-amber-200"
-                : "text-muted-foreground/60 hover:text-muted-foreground",
-            )}
-            data-process-event-id={workbenchEventId}
-            data-process-event-kind={isThinking ? "thinking" : "execution"}
-            data-process-event-status={state}
-            data-effect-receipt-state={effectReceipt?.state}
-            data-phase-id={step.phaseId}
-            data-parent-item-id={step.parentItemId}
-            data-timeline-sequence={step.timelineSequence}
-            data-testid={`process-timeline-event-${isThinking ? "thinking" : "execution"}`}
-          >
-            <span className="relative flex size-1.5 shrink-0 items-center justify-center">
-              <span
-                className={cn(
-                  "absolute inline-flex size-1.5 rounded-full opacity-25",
-                  needsEffectReview
-                    ? "bg-amber-500"
-                    : agentRunStatusLightClass(state),
-                  needsEffectReview
-                    ? "animate-pulse"
-                    : agentRunStatusLightPulseClass(state),
-                )}
-              />
-              <span
-                className={cn(
-                  "relative inline-flex size-1 rounded-full",
-                  needsEffectReview
-                    ? "bg-amber-500"
-                    : agentRunStatusLightClass(state),
-                )}
-              />
-            </span>
-            <span className="flex min-w-0 flex-1 items-center gap-1">
-              <span className="truncate">{summary}</span>
-              {count > 1 && !groupedTargetSummary && (
-                <span className="shrink-0 tabular-nums opacity-60">
-                  ×{count}
-                </span>
-              )}
-              {needsEffectReview && (
-                <span
-                  className="shrink-0 rounded-full bg-amber-500/10 px-1.5 text-xs font-medium text-amber-700 dark:text-amber-300"
-                  data-testid="tool-effect-review-badge"
-                >
-                  需核对
-                </span>
-              )}
-            </span>
-            <PanelRightOpenIcon className="size-3 shrink-0 opacity-0 transition-opacity group-hover/process-row:opacity-50" />
-            {isLastOverall && isLiveTimeline && codeMode && (
-              <span className="sr-only" data-testid="live-process-strip" />
-            )}
-          </button>
-          {isLastOverall && showTimelineToggle && (
+        <div key={`${keyPrefix}-${item.id}`} className="min-w-0">
+          <div className="group/process-row flex min-w-0 items-center gap-0.5">
             <button
               type="button"
-              onClick={openProcessDetails}
-              className="p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
-              aria-label={t.message.processDetails}
-              title={t.message.processDetails}
-              data-testid="process-details-trigger"
+              onClick={() => {
+                // 双向联动：只追加激活，不改变既有点击行为
+                activateTimelineItem(timelineItemLinkageId(item), "chat");
+                emitOpenAgentWorkbench({
+                  tab: actionWorkbenchTab,
+                  eventId: workbenchEventId,
+                  eventKind: isThinking ? "thinking" : "execution",
+                  view: isThinking ? "summary" : "trace",
+                  processEvent: {
+                    kind: isThinking ? "thinking" : "execution",
+                    summary: processEventSummary,
+                    detail: processEventDetail || processEventSummary,
+                    status: state,
+                    count,
+                    phaseId: step.phaseId,
+                    parentItemId: step.parentItemId,
+                    timelineSequence: step.timelineSequence,
+                  },
+                  effectKey: needsEffectReview
+                    ? "effect_key" in effectReceipt
+                      ? effectReceipt.effect_key
+                      : effectReceipt.effectKey
+                    : undefined,
+                });
+              }}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] transition-colors",
+                needsEffectReview
+                  ? "text-amber-700/80 hover:text-amber-800 dark:text-amber-300/80 dark:hover:text-amber-200"
+                  : "text-muted-foreground/60 hover:text-muted-foreground",
+              )}
+              data-process-event-id={workbenchEventId}
+              data-timeline-item-id={timelineItemLinkageId(item)}
+              data-timeline-lane="chat"
+              data-process-event-kind={isThinking ? "thinking" : "execution"}
+              data-process-event-status={state}
+              data-effect-receipt-state={effectReceipt?.state}
+              data-phase-id={step.phaseId}
+              data-parent-item-id={step.parentItemId}
+              data-timeline-sequence={step.timelineSequence}
+              data-testid={`process-timeline-event-${isThinking ? "thinking" : "execution"}`}
             >
-              <span className="sr-only">{t.message.processDetails}</span>
-              <PanelRightOpenIcon className="size-3" />
+              {isThinking ? (
+                <span className="relative flex size-1.5 shrink-0 items-center justify-center">
+                  <span
+                    className={cn(
+                      "absolute inline-flex size-1.5 rounded-full opacity-25",
+                      needsEffectReview
+                        ? "bg-amber-500"
+                        : agentRunStatusLightClass(state),
+                      needsEffectReview
+                        ? "animate-pulse"
+                        : agentRunStatusLightPulseClass(state),
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "relative inline-flex size-1 rounded-full",
+                      needsEffectReview
+                        ? "bg-amber-500"
+                        : agentRunStatusLightClass(state),
+                    )}
+                  />
+                </span>
+              ) : (
+                <ActionIcon className="size-3.5 shrink-0 opacity-70" />
+              )}
+              <span className="flex min-w-0 flex-1 items-center gap-1">
+                <span className="truncate">
+                  {isThinking ? (
+                    processEventSummary || summary
+                  ) : actionObject ? (
+                    <>
+                      <span className="text-foreground/80">{actionVerb}</span>
+                      <span className="ml-1.5 font-mono text-[11px] text-muted-foreground/70">
+                        {" "}
+                        {actionObject}
+                      </span>
+                    </>
+                  ) : (
+                    <span>{processEventSummary || summary}</span>
+                  )}
+                </span>
+                {isThinking &&
+                  isLastOverall &&
+                  isCurrentlyThinking &&
+                  thinkingElapsedMs > 200 && (
+                    <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/40">
+                      {t.messageGrouping.thinkingDuration(
+                        formatDuration(thinkingElapsedMs),
+                      )}
+                    </span>
+                  )}
+                {count > 1 && !isAggregatedGroup && !groupedTargetSummary && (
+                  <span className="shrink-0 tabular-nums opacity-60">
+                    ×{count}
+                  </span>
+                )}
+                {needsEffectReview && (
+                  <span
+                    className="shrink-0 rounded-full bg-amber-500/10 px-1.5 text-xs font-medium text-amber-700 dark:text-amber-300"
+                    data-testid="tool-effect-review-badge"
+                  >
+                    {t.messageGrouping.effectNeedsReview}
+                  </span>
+                )}
+              </span>
+              {isLastOverall && isLiveTimeline && codeMode && (
+                <span className="sr-only" data-testid="live-process-strip" />
+              )}
             </button>
+            {isLastOverall && showTimelineToggle && (
+              <button
+                type="button"
+                onClick={openProcessDetails}
+                className="p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
+                aria-label={t.message.processDetails}
+                title={t.message.processDetails}
+                data-testid="process-details-trigger"
+              >
+                <span className="sr-only">{t.message.processDetails}</span>
+                <PanelRightOpenIcon className="size-3" />
+              </button>
+            )}
+          </div>
+          {factSummaryText && (
+            <div className="truncate pb-0.5 pl-3 text-xs leading-[18px] text-muted-foreground/60">
+              {factSummaryText}
+            </div>
           )}
         </div>
       );
@@ -802,11 +1216,14 @@ export function MessageGroup({
     const detail = steps
       .map((step) =>
         step.type === "toolCall"
-          ? summarizeCurrentStep(step, t)
-          : stepText(step).trim(),
+          ? publicProcessText(summarizeCurrentStep(step, t))
+          : publicProcessText(stepText(step)),
       )
       .filter(Boolean)
       .join("\n");
+    const publicDetail = detail.trim();
+    const summary =
+      firstPublicProcessLine(publicDetail) || t.message.processDetails;
     emitOpenAgentWorkbench({
       tab: "agent",
       eventId: last.messageId ?? last.id,
@@ -814,8 +1231,8 @@ export function MessageGroup({
       view: kind === "thinking" ? "summary" : "trace",
       processEvent: {
         kind,
-        summary: t.message.processDetails,
-        detail,
+        summary,
+        detail: publicDetail || summary,
         status: runStateForCurrentStep(last, isLoading),
         count: steps.length,
         phaseId: last.phaseId,
@@ -894,6 +1311,15 @@ export function MessageGroup({
           })}
         </ChainOfThoughtContent>
       )}
+      {showFinalAnswerBoundary && (
+        // 过程段落与最终回答之间的弱化分界：仅留白 + 细分隔线，
+        // 语义 token、无装饰元素、无阴影、无动画；流式进行中不渲染避免跳动。
+        <div
+          aria-hidden="true"
+          data-testid="final-answer-boundary"
+          className="my-2 border-t border-border/50"
+        />
+      )}
       {clarificationContent && (
         <ClarificationChoiceCard
           active={enableClarificationActions && !isLoading}
@@ -919,6 +1345,7 @@ function ReasoningStepGroup({
   isLoading,
   open,
   active,
+  timelineItemId,
   onOpenChange,
   rehypePlugins,
   renderIterationDivider,
@@ -927,6 +1354,8 @@ function ReasoningStepGroup({
   isLoading: boolean;
   open: boolean;
   active: boolean;
+  /** 双向联动共享 id：传入时根节点带 data-timeline-item-id 并在点击时激活联动 */
+  timelineItemId?: string;
   onOpenChange: (open: boolean) => void;
   rehypePlugins: ReturnType<typeof useRehypeSplitWordsIntoSpans>;
   renderIterationDivider: () => ReactNode;
@@ -940,7 +1369,18 @@ function ReasoningStepGroup({
   const onlyStep = group.steps[0];
   if (!onlyStep) return null;
   return (
-    <div key={group.id}>
+    <div
+      key={group.id}
+      data-timeline-item-id={timelineItemId}
+      data-timeline-lane={timelineItemId ? "chat" : undefined}
+      onClick={
+        timelineItemId
+          ? () =>
+              // 双向联动：只追加激活，折叠/展开行为不变
+              activateTimelineItem(timelineItemId, "chat")
+          : undefined
+      }
+    >
       {renderIterationDivider()}
       <Collapsible open={open} onOpenChange={onOpenChange}>
         {group.steps.length > 1 && (
@@ -965,7 +1405,6 @@ function ReasoningStepGroup({
             index={1}
             step={onlyStep}
             isLoading={isLoading}
-            active={active}
             rehypePlugins={rehypePlugins}
             showNumber={false}
           />
@@ -977,7 +1416,6 @@ function ReasoningStepGroup({
                 index={index + 1}
                 step={step}
                 isLoading={isLoading}
-                active={active && index === group.steps.length - 1}
                 rehypePlugins={rehypePlugins}
                 showNumber
               />
@@ -1090,6 +1528,7 @@ function NumberedActionStep({
   return (
     <ChainOfThoughtStep
       className="items-start"
+      showConnector={false}
       icon={showNumber ? <StepNumber index={index} /> : undefined}
       label={
         canExpand ? (
@@ -1123,7 +1562,7 @@ function ActionCallbackLabel({
 
 function StepNumber({ index }: { index: number }) {
   return (
-    <span className="bg-muted text-muted-foreground flex size-5 items-center justify-center rounded-full font-mono text-xs">
+    <span className="flex min-w-5 items-center justify-center font-mono text-[10px] text-muted-foreground/45">
       {String(index).padStart(2, "0")}
     </span>
   );
@@ -1133,28 +1572,28 @@ function NumberedReasoningStep({
   index,
   step,
   isLoading,
-  active,
   rehypePlugins,
   showNumber,
 }: {
   index: number;
   step: CoTReasoningStep;
   isLoading: boolean;
-  active: boolean;
   rehypePlugins: ReturnType<typeof useRehypeSplitWordsIntoSpans>;
   showNumber: boolean;
 }) {
-  const reasoningText = stripTraceLabelPrefixes(step.reasoning);
+  const reasoningText = publicProcessText(
+    stripTraceLabelPrefixes(step.reasoning),
+  );
   const reasoningSummary = compactReasoningSummary(reasoningText, 120);
-  const canExpand =
-    showNumber && isExpandableStepText(reasoningText, reasoningSummary);
+  const canExpand = isExpandableStepText(reasoningText, reasoningSummary);
   return (
     <ChainOfThoughtStep
       className="items-start"
+      showConnector={false}
       icon={showNumber ? <StepNumber index={index} /> : undefined}
       label={
         canExpand ? (
-          <NestedStepDisclosure defaultOpen={active} summary={reasoningSummary}>
+          <NestedStepDisclosure defaultOpen={false} summary={reasoningSummary}>
             <MarkdownContent
               content={reasoningText}
               isLoading={isLoading}
@@ -1186,14 +1625,14 @@ function NestedStepDisclosure({
     <Collapsible defaultOpen={defaultOpen}>
       <CollapsibleTrigger
         className={cn(
-          "group/nested-step flex min-w-0 items-start gap-1.5 rounded-md px-1 py-0.5 text-left",
-          "text-xs leading-5 text-foreground/75 transition-colors hover:bg-muted/40 hover:text-foreground",
+          "group/nested-step flex min-w-0 items-start gap-1.5 py-0.5 text-left",
+          "text-xs leading-5 text-foreground/70 transition-colors hover:text-foreground",
         )}
       >
         <ChevronDownIcon className="mt-1 size-3 shrink-0 -rotate-90 text-muted-foreground transition-transform group-data-[state=open]/nested-step:rotate-0" />
         <span className="min-w-0 flex-1 break-words">{summary}</span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1 border-l border-border-default pl-2 data-[state=closed]:animate-out data-[state=open]:animate-in">
+      <CollapsibleContent className="mt-1 pl-4 text-muted-foreground/80 data-[state=closed]:animate-out data-[state=open]:animate-in">
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -1214,7 +1653,7 @@ function inlineActionLabel(action: React.ReactNode, detail?: React.ReactNode) {
     <div className="flex min-w-0 items-center gap-2">
       <span className="text-foreground shrink-0">{action}</span>
       {detail && (
-        <span className="text-muted-foreground bg-muted/60 min-w-0 truncate rounded-md px-1.5 py-0.5 font-mono text-xs">
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground/65">
           {detail}
         </span>
       )}
@@ -1235,6 +1674,17 @@ const _PATH_KEYS = [
   "query",
 ] as const;
 const _DESC_KEYS = ["description", "desc", "purpose", "reason"] as const;
+const _SAFE_CONTEXT_KEYS = [
+  "path",
+  "file_path",
+  "filepath",
+  "filename",
+  "directory",
+  "url",
+  "query",
+] as const;
+const SENSITIVE_ARG_VALUE_RE =
+  /(sk-[\w-]+|token|secret|credential|password|passwd|api[_-]?key|bearer\s+[a-z0-9._-]+|id_rsa|id_ed25519|\.pem\b|\.key\b)/i;
 
 function extractPathFromArgs(
   args: Record<string, unknown>,
@@ -1251,7 +1701,23 @@ function extractDescFromArgs(
 ): string | undefined {
   for (const key of _DESC_KEYS) {
     const val = args[key];
-    if (typeof val === "string" && val.trim()) return val.trim();
+    if (typeof val !== "string") continue;
+    const text = val.trim();
+    if (!text || SENSITIVE_ARG_VALUE_RE.test(text)) continue;
+    return text;
+  }
+  return undefined;
+}
+
+function extractSafeContextFromArgs(
+  args: Record<string, unknown>,
+): string | undefined {
+  for (const key of _SAFE_CONTEXT_KEYS) {
+    const val = args[key];
+    if (typeof val !== "string") continue;
+    const text = val.trim();
+    if (!text || SENSITIVE_ARG_VALUE_RE.test(text)) continue;
+    return text;
   }
   return undefined;
 }
@@ -1309,6 +1775,53 @@ function ToolCall({
   const { setOpen, autoOpen, autoSelect, selectedArtifact, select } =
     useArtifacts();
 
+  // The expanded transcript is still a conversation surface, not a debug
+  // console. Keep the same public projection used by the compact stream and
+  // move raw inputs/results to the Workbench. Approval requests are the one
+  // exception: they remain actionable in place below.
+  if (shouldRenderPublicToolProjection(result)) {
+    const display = getActionDisplay(name, args);
+    const narrative = projectToolNarrative({
+      id: id ?? `${messageId ?? "tool"}-${name}`,
+      toolName: name,
+      args,
+      result,
+      state: isLoading && isLast ? "running" : "done",
+    });
+    const ActionIcon = getActionIcon(display.iconName);
+    const localizedVerb = localizedActionVerb(display, t);
+    const label = narrative.object
+      ? `${localizedVerb} ${narrative.object}`
+      : localizedVerb;
+    const detail = [label, formatFactSummary(narrative.fact ?? null, t)]
+      .filter(Boolean)
+      .join("\n");
+    return (
+      <ChainOfThoughtStep
+        key={id}
+        showConnector={false}
+        className="cursor-pointer text-muted-foreground/70 hover:text-foreground"
+        label={<span className="min-w-0 truncate">{label}</span>}
+        icon={ActionIcon}
+        onClick={() =>
+          emitOpenAgentWorkbench({
+            tab: narrative.evidenceRefs[0]?.tab ?? display.workbenchTab,
+            eventId: id ?? messageId,
+            eventKind: "execution",
+            view: "trace",
+            processEvent: {
+              kind: "execution",
+              summary: label,
+              detail: detail || label,
+              status: isLoading && isLast ? "running" : "done",
+              count: 1,
+            },
+          })
+        }
+      />
+    );
+  }
+
   if (name === "web_search") {
     let label: React.ReactNode = t.toolCalls.searchForRelatedInfo;
     if (typeof args.query === "string") {
@@ -1318,6 +1831,7 @@ function ToolCall({
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate">{label}</span>
@@ -1346,6 +1860,7 @@ function ToolCall({
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate">{label}</span>
@@ -1392,6 +1907,7 @@ function ToolCall({
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate">{t.toolCalls.viewWebPage}</span>
@@ -1420,6 +1936,7 @@ function ToolCall({
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
             {inlineActionLabel(description, path)}
@@ -1437,6 +1954,7 @@ function ToolCall({
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
             {inlineActionLabel(description, path)}
@@ -1466,6 +1984,7 @@ function ToolCall({
       return (
         <ChainOfThoughtStep
           key={id}
+          showConnector={false}
           label={t.toolApproval.requiresApproval}
           icon={ShieldAlertIcon}
         >
@@ -1490,6 +2009,7 @@ function ToolCall({
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         className="cursor-pointer"
         label={
           <div className="flex min-w-0 items-center gap-2">
@@ -1526,6 +2046,7 @@ function ToolCall({
       return (
         <ChainOfThoughtStep
           key={id}
+          showConnector={false}
           label={t.toolApproval.requiresApproval}
           icon={ShieldAlertIcon}
         >
@@ -1534,26 +2055,18 @@ function ToolCall({
       );
     }
 
-    const command: string | undefined = (args as { command: string })?.command;
     const resultText = resultToText(result);
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
-            {inlineActionLabel(description, command)}
+            {inlineActionLabel(description)}
           </div>
         }
         icon={SquareTerminalIcon}
       >
-        {command && (
-          <CodeBlock
-            className="mx-0 cursor-pointer border-none px-0"
-            showLineNumbers={false}
-            language="bash"
-            code={command}
-          />
-        )}
         {resultText && !isApproval && (
           <ToolResultPreview content={resultText} language="bash" />
         )}
@@ -1563,6 +2076,7 @@ function ToolCall({
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate">{t.toolCalls.needYourHelp}</span>
@@ -1577,6 +2091,7 @@ function ToolCall({
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
             {inlineActionLabel(description, target)}
@@ -1589,6 +2104,7 @@ function ToolCall({
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate">{t.toolCalls.writeTodos}</span>
@@ -1598,12 +2114,14 @@ function ToolCall({
       />
     );
   } else {
-    const description = extractDescFromArgs(args) ?? t.toolCalls.useTool(name);
-    const path = extractPathFromArgs(args);
+    const description =
+      extractDescFromArgs(args) ?? t.messageGrouping.runAction;
+    const path = extractSafeContextFromArgs(args);
     const resultText = resultToText(result);
     return (
       <ChainOfThoughtStep
         key={id}
+        showConnector={false}
         label={
           <div className="flex min-w-0 items-center gap-2">
             {inlineActionLabel(description, path)}
@@ -1615,6 +2133,12 @@ function ToolCall({
       </ChainOfThoughtStep>
     );
   }
+}
+
+// Keep this as a plain boolean helper rather than an inline type guard. The
+// legacy approval branches below still need their original result type.
+function shouldRenderPublicToolProjection(result: unknown): boolean {
+  return !(typeof result === "string" && isApprovalRequest(result));
 }
 
 const MAX_PREVIEW_LINES = 8;
@@ -1842,6 +2366,10 @@ interface GenericCoTStep<T extends string = string> {
   parentItemId?: string;
   progressSequence?: number;
   timelineSequence?: number;
+  /** 语义角色，驱动主对话的 compact 时间线选择与弱化展示。 */
+  role?: TimelineRole;
+  /** true 表示角色来自 fallback 推断（无结构化协议字段） */
+  inferred?: boolean;
 }
 
 interface CoTReasoningStep extends GenericCoTStep<"reasoning"> {
@@ -1866,7 +2394,7 @@ interface CoTToolCallStep extends GenericCoTStep<"toolCall"> {
   >;
 }
 
-type CoTStep =
+export type CoTStep =
   | CoTReasoningStep
   | CoTActionCallbackStep
   | CoTCommentaryStep
@@ -1876,31 +2404,52 @@ interface ReasoningStepGroupItem {
   id: string;
   type: "reasoningGroup";
   steps: CoTReasoningStep[];
+  /** 语义角色（取自组内首个步骤，附加信息） */
+  role?: TimelineRole;
+  inferred?: boolean;
 }
 
 interface ToolCallTimelineItem {
   id: string;
   type: "toolCall";
   step: CoTToolCallStep;
+  role?: TimelineRole;
+  inferred?: boolean;
 }
 
 interface ActionCallbackGroupItem {
   id: string;
   type: "actionCallbackGroup";
   steps: CoTActionCallbackStep[];
+  role?: TimelineRole;
+  inferred?: boolean;
 }
 
 interface CommentaryTimelineItem {
   id: string;
   type: "commentary";
   step: CoTCommentaryStep;
+  role?: TimelineRole;
+  inferred?: boolean;
 }
 
-type TimelineItem =
+interface AggregatedToolGroupTimelineItem {
+  id: string;
+  type: "aggregatedToolGroup";
+  aggregateKind: ActionAggregateKind;
+  count: number;
+  phaseId?: string;
+  items: ToolCallTimelineItem[];
+  role?: TimelineRole;
+  inferred?: boolean;
+}
+
+export type TimelineItem =
   | ReasoningStepGroupItem
   | ActionCallbackGroupItem
   | CommentaryTimelineItem
-  | ToolCallTimelineItem;
+  | ToolCallTimelineItem
+  | AggregatedToolGroupTimelineItem;
 
 export function hasVisibleMessageGroupContent(
   messages: Message[],
@@ -1931,6 +2480,9 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
         id: `${step.id ?? "commentary"}-${items.length}`,
         type: "commentary",
         step,
+        // 语义角色直接沿用步骤上已填充的值（附加信息，不影响渲染）
+        role: step.role,
+        inferred: step.inferred,
       });
       continue;
     }
@@ -1941,6 +2493,9 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
           id: `${step.id ?? "reasoning"}-group`,
           type: "reasoningGroup",
           steps: [],
+          // 组内步骤连续且无工具调用穿插，角色与首个步骤一致
+          role: step.role,
+          inferred: step.inferred,
         };
       }
       currentGroup.steps.push(step);
@@ -1954,6 +2509,8 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
           id: `${step.id ?? "action"}-group`,
           type: "actionCallbackGroup",
           steps: [],
+          role: step.role,
+          inferred: step.inferred,
         };
       }
       currentActionGroup.steps.push(step);
@@ -1966,6 +2523,8 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
       id: `${step.messageId ?? step.id ?? "tool"}-${items.length}`,
       type: "toolCall",
       step,
+      role: step.role,
+      inferred: step.inferred,
     });
   }
 
@@ -1975,38 +2534,173 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
 }
 
 const MAX_PUBLIC_PROGRESS_ANCHORS = 4;
+// 语义保底（每轮 intent + 最新 fact）超出基础额度时，commentary 总额放宽到的上限
+const MAX_SEMANTIC_PROGRESS_ANCHORS = 6;
 
-function representativeCommentaryAnchors(
-  commentary: CommentaryTimelineItem[],
-): CommentaryTimelineItem[] {
-  if (commentary.length <= MAX_PUBLIC_PROGRESS_ANCHORS) return commentary;
-
-  const lastIndex = commentary.length - 1;
-  return Array.from({ length: MAX_PUBLIC_PROGRESS_ANCHORS }, (_, slot) => {
-    const index = Math.round(
-      (slot * lastIndex) / (MAX_PUBLIC_PROGRESS_ANCHORS - 1),
-    );
-    return commentary[index]!;
-  });
+/** 条目所属轮次：缺失 iteration 的旧数据归第 1 轮。 */
+function timelineItemIteration(item: TimelineItem): number {
+  if (item.type === "reasoningGroup" || item.type === "actionCallbackGroup") {
+    return item.steps[0]?.iteration ?? 1;
+  }
+  if (item.type === "aggregatedToolGroup") {
+    return item.items[item.items.length - 1]?.step.iteration ?? 1;
+  }
+  return item.step.iteration ?? 1;
 }
 
-function selectCompactTimelineItems(items: TimelineItem[]): TimelineItem[] {
+/** 条目在角色推断视角下的最小步骤形状（与 RoleAssignableStep 结构兼容）。 */
+function roleAssignableViewOf(item: TimelineItem): RoleAssignableStep {
+  if (item.type === "reasoningGroup" || item.type === "actionCallbackGroup") {
+    return (
+      item.steps[0] ?? {
+        type: item.type === "reasoningGroup" ? "reasoning" : "actionCallback",
+      }
+    );
+  }
+  if (item.type === "aggregatedToolGroup") {
+    return (
+      item.items[0]?.step ?? {
+        type: "toolCall" as const,
+        name: "",
+        args: {},
+      }
+    );
+  }
+  return item.step;
+}
+
+/**
+ * 解析每个条目的语义角色。
+ * 优先沿用条目自带 role；兼容 role 为 undefined 的旧数据时，用
+ * assignTimelineRoles 在判定副本上补齐 —— 选择器返回的仍是原 item 引用，
+ * 不破坏下游 React memo 的引用相等。
+ */
+function resolveTimelineItemRoles(
+  items: TimelineItem[],
+): Map<TimelineItem, TimelineRole | undefined> {
+  const roles = new Map<TimelineItem, TimelineRole | undefined>();
+  if (!items.some((item) => item.role === undefined)) {
+    for (const item of items) roles.set(item, item.role);
+    return roles;
+  }
+  const assigned = assignTimelineRoles(items.map(roleAssignableViewOf));
+  items.forEach((item, index) => {
+    roles.set(item, item.role ?? assigned[index]?.role);
+  });
+  return roles;
+}
+
+/**
+ * 语义感知采样（长任务）：
+ * - 每个 iteration 必留 ≥1 个 intent 条目（该轮首个 intent 角色的
+ *   commentary / reasoningGroup；该轮无 intent 角色条目则按位置取首个
+ *   commentary）；
+ * - 全部条目里最新一个 fact 条目必留（无 fact 角色条目时跳过）；
+ * - 剩余 commentary 名额按原有均匀采样补足，保底超额时总额放宽到
+ *   MAX_SEMANTIC_PROGRESS_ANCHORS。
+ */
+function representativeNarrativeAnchors(
+  items: TimelineItem[],
+  commentary: CommentaryTimelineItem[],
+  roles: Map<TimelineItem, TimelineRole | undefined>,
+): {
+  anchors: Set<TimelineItem>;
+  visibleCommentary: CommentaryTimelineItem[];
+} {
+  const anchors = new Set<TimelineItem>();
+
+  // 按轮分组叙事条目，逐轮保底 intent 锚点
+  const narrativeByIteration = new Map<number, TimelineItem[]>();
+  for (const item of items) {
+    if (item.type !== "commentary" && item.type !== "reasoningGroup") continue;
+    const iteration = timelineItemIteration(item);
+    const group = narrativeByIteration.get(iteration);
+    if (group) {
+      group.push(item);
+    } else {
+      narrativeByIteration.set(iteration, [item]);
+    }
+  }
+  for (const group of narrativeByIteration.values()) {
+    const intentAnchor =
+      group.find((item) => roles.get(item) === "intent") ??
+      group.find((item) => item.type === "commentary");
+    if (intentAnchor) anchors.add(intentAnchor);
+  }
+
+  // 最新一个 fact 条目必留
+  const lastFact = [...items]
+    .reverse()
+    .find((item) => roles.get(item) === "fact");
+  if (lastFact) anchors.add(lastFact);
+
+  // 剩余 commentary 名额按均匀采样补足；保底超额时不再追加采样
+  const guaranteedCount = commentary.filter((item) => anchors.has(item)).length;
+  const budget = Math.min(
+    Math.max(MAX_PUBLIC_PROGRESS_ANCHORS, guaranteedCount),
+    MAX_SEMANTIC_PROGRESS_ANCHORS,
+  );
+  const remainingSlots = budget - guaranteedCount;
+  if (remainingSlots > 0) {
+    const candidates = commentary.filter((item) => !anchors.has(item));
+    if (candidates.length <= remainingSlots) {
+      candidates.forEach((item) => anchors.add(item));
+    } else {
+      const lastIndex = candidates.length - 1;
+      for (let slot = 0; slot < remainingSlots; slot += 1) {
+        const index = Math.round(
+          remainingSlots === 1
+            ? lastIndex / 2
+            : (slot * lastIndex) / (remainingSlots - 1),
+        );
+        anchors.add(candidates[index]!);
+      }
+    }
+  }
+  return {
+    anchors,
+    visibleCommentary: commentary.filter((item) => anchors.has(item)),
+  };
+}
+
+// 导出供单测直接触达（渲染层行为不变）
+export function selectCompactTimelineItems(
+  items: TimelineItem[],
+): TimelineItem[] {
   const commentary = items.filter((item) => item.type === "commentary");
-  const visibleCommentary = representativeCommentaryAnchors(commentary);
+  const executionCount = items.filter(isExecutionTimelineItem).length;
+  // Short tool runs are still a conversation, not a log archive. Keep their
+  // complete causal sequence so the aggregator can present one faithful
+  // summary row and the Workbench can recover every evidence reference.
+  if (commentary.length === 0 && executionCount > 0 && executionCount <= 12) {
+    return items;
+  }
   const latestThinking = [...items]
     .reverse()
     .find((item) => item.type === "reasoningGroup");
   const selected = new Set<TimelineItem>();
-  // Keep short conversations intact. For genuinely long runs, retain four
-  // evenly spaced public checkpoints instead of reducing the model's whole
-  // side of the conversation to only an opening and a closing sentence. This
-  // is based on event position, not model wording or hard-coded phase labels;
-  // the complete event chain still remains available in the workbench.
+  let visibleCommentary: CommentaryTimelineItem[];
+  if (commentary.length <= MAX_PUBLIC_PROGRESS_ANCHORS) {
+    // 短对话：行为完全不变，commentary 全量保留
+    visibleCommentary = commentary;
+  } else {
+    // 长任务：语义保真采样，保证每轮意图与最新事实不被均匀采样裁掉。
+    // 采样基于语义角色与轮次位置，不依赖模型措辞或硬编码阶段名；
+    // 完整事件链仍可在工作台查看。
+    const result = representativeNarrativeAnchors(
+      items,
+      commentary,
+      resolveTimelineItemRoles(items),
+    );
+    result.anchors.forEach((item) => selected.add(item));
+    visibleCommentary = result.visibleCommentary;
+  }
   visibleCommentary.forEach((item) => selected.add(item));
   if (latestThinking) selected.add(latestThinking);
-  // Preserve one quiet execution anchor in every visible conversational
-  // interval. A long run then reads naturally as “said → did → said → did”
-  // without expanding every tool call into a transcript row.
+  // Preserve every execution that falls inside a visible conversational
+  // interval. Consecutive same-kind calls are folded by the aggregator below,
+  // so the transcript still reads as "said → did → said → did" while the
+  // workbench can recover every evidence reference.
   const visibleCommentaryIndexes = visibleCommentary
     .map((item) => items.indexOf(item))
     .filter(
@@ -2022,11 +2716,12 @@ function selectCompactTimelineItems(items: TimelineItem[]): TimelineItem[] {
   ) {
     const start = boundaries[boundaryIndex]! + 1;
     const end = boundaries[boundaryIndex + 1]!;
-    const executionAnchor = items
+    const intervalExecutionItems = items
       .slice(start, end)
-      .reverse()
-      .find(isExecutionTimelineItem);
-    if (executionAnchor) selected.add(executionAnchor);
+      .filter(isExecutionTimelineItem);
+    for (const execItem of intervalExecutionItems) {
+      selected.add(execItem);
+    }
   }
   return items.filter((item) => selected.has(item));
 }
@@ -2040,38 +2735,160 @@ function executionCoverageByVisibleItem(
   );
   const visibleExecution = visibleItems
     .filter(isExecutionTimelineItem)
-    .sort(
-      (a, b) =>
-        (positionByItem.get(a) ?? Number.MAX_SAFE_INTEGER) -
-        (positionByItem.get(b) ?? Number.MAX_SAFE_INTEGER),
-    );
+    .map((item) => {
+      const coveredItems =
+        item.type === "aggregatedToolGroup" ? item.items : [item];
+      const positions = coveredItems
+        .map((covered) => positionByItem.get(covered) ?? Number.MAX_SAFE_INTEGER)
+        .sort((a, b) => a - b);
+      return {
+        item,
+        startIdx: positions[0] ?? Number.MAX_SAFE_INTEGER,
+        endIdx: positions[positions.length - 1] ?? Number.MAX_SAFE_INTEGER,
+      };
+    })
+    .sort((a, b) => a.startIdx - b.startIdx);
   if (visibleExecution.length === 0) return new Map();
 
   const coverage = new Map<string, TimelineItem[]>(
-    visibleExecution.map((item) => [item.id, []]),
+    visibleExecution.map(({ item }) => [item.id, []]),
   );
   for (const item of allItems.filter(isExecutionTimelineItem)) {
     const itemIndex = positionByItem.get(item) ?? Number.MAX_SAFE_INTEGER;
     const anchor =
       visibleExecution.find(
-        (candidate) =>
-          (positionByItem.get(candidate) ?? Number.MAX_SAFE_INTEGER) >=
-          itemIndex,
-      ) ?? visibleExecution[visibleExecution.length - 1]!;
-    coverage.get(anchor.id)!.push(item);
+        ({ startIdx, endIdx }) => itemIndex >= startIdx && itemIndex <= endIdx,
+      ) ??
+      visibleExecution.find(({ startIdx }) => startIdx >= itemIndex) ??
+      visibleExecution[visibleExecution.length - 1]!;
+    coverage.get(anchor.item.id)!.push(item);
   }
   return coverage;
 }
 
 function isExecutionTimelineItem(
   item: TimelineItem,
-): item is ToolCallTimelineItem | ActionCallbackGroupItem {
-  return item.type === "toolCall" || item.type === "actionCallbackGroup";
+): item is
+  | ToolCallTimelineItem
+  | ActionCallbackGroupItem
+  | AggregatedToolGroupTimelineItem {
+  return (
+    item.type === "toolCall" ||
+    item.type === "actionCallbackGroup" ||
+    item.type === "aggregatedToolGroup"
+  );
 }
 
 function compactToolTarget(step: CoTToolCallStep): string | null {
   const targets = compactToolTargets(step);
   return targets.length > 0 ? targets.join(" · ") : null;
+}
+
+/** 渲染层拼句子：按事实 kind 选择 i18n 模板，null 直接透传。 */
+function formatFactSummary(
+  fact: FactSummary | null,
+  t: ReturnType<typeof useI18n>["t"],
+): string | null {
+  if (!fact) return null;
+  switch (fact.kind) {
+    case "path":
+      return t.messageGrouping.factSummaryPath(fact.value);
+    case "count":
+      return t.messageGrouping.factSummaryCount(fact.value);
+    case "status":
+      return t.messageGrouping.factSummaryStatus(fact.value);
+    case "title":
+      return t.messageGrouping.factSummaryTitle(fact.value);
+    case "text":
+      return t.messageGrouping.factSummaryText(fact.value);
+    case "duration":
+      return t.messageGrouping.factSummaryDuration(fact.value);
+    case "lines":
+      return t.messageGrouping.factSummaryLines(fact.value);
+    case "matches":
+      return t.messageGrouping.factSummaryMatches(fact.value);
+    case "succeeded":
+      return t.messageGrouping.factSummarySucceeded;
+    case "failed":
+      return t.messageGrouping.factSummaryFailed;
+    case "exit_code":
+      return t.messageGrouping.factSummaryExitCode(fact.value);
+  }
+}
+
+function localizedActionVerb(
+  display: ActionDisplay,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const labels = t.messageGrouping.actionLabels;
+  switch (display.labelKey) {
+    case "create_file":
+      return labels.createFile;
+    case "edit_file":
+      return labels.editFile;
+    case "search_files":
+      return labels.searchFiles;
+    case "view_directory":
+      return labels.viewDirectory;
+    case "read_file":
+      return labels.readFile;
+    case "run_command":
+      return labels.runCommand;
+    case "search_web":
+      return labels.searchWeb;
+    case "browse_web":
+      return labels.browseWeb;
+    case "browser_click":
+      return labels.browserClick;
+    case "browser_type":
+      return labels.browserType;
+    case "browser_screenshot":
+      return labels.browserScreenshot;
+    case "browser_navigate":
+      return labels.browserNavigate;
+    case "browser_action":
+      return labels.browserAction;
+    case "update_plan":
+      return labels.updatePlan;
+    case "delegate_task":
+      return labels.delegateTask;
+    case "delete_file":
+      return labels.deleteFile;
+    case "move_file":
+      return labels.moveFile;
+    case "start_preview":
+      return labels.startPreview;
+    case "network_request":
+      return labels.networkRequest;
+    case "raw":
+      return display.verb;
+  }
+}
+
+function localizedAggregateVerb(
+  kind: ActionAggregateKind,
+  count: number,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const labels = t.messageGrouping.actionLabels;
+  switch (kind) {
+    case "file_write":
+      return labels.aggregateFileWrite(count);
+    case "file_read":
+      return labels.aggregateFileRead(count);
+    case "command":
+      return labels.aggregateCommand(count);
+    case "web_search":
+      return labels.aggregateWebSearch(count);
+    case "browser":
+      return labels.aggregateBrowser(count);
+    case "teammate":
+      return labels.aggregateTeammate(count);
+    case "todo":
+      return labels.aggregateTodo(count);
+    case "other":
+      return labels.aggregateOther(count);
+  }
 }
 
 function compactToolTargets(step: CoTToolCallStep): string[] {
@@ -2083,7 +2900,7 @@ function compactToolTargets(step: CoTToolCallStep): string[] {
     // The first concrete subject is the stable evidence anchor; every other
     // operand remains inspectable in the workbench.
     if (targets.length > 0) return targets.slice(0, 1);
-    return [compactReasoningSummary(command, 48)];
+    return [];
   }
   const target = isReadToolName(step.name)
     ? extractReadEvidenceTarget(step.args)
@@ -2139,14 +2956,37 @@ function shellEvidenceTargets(command: string): string[] {
   for (const match of command.matchAll(pathPattern)) {
     const raw = match[1]?.replace(/[,:]+$/, "");
     if (!raw) continue;
+    if (isSensitiveShellEvidencePath(raw)) continue;
     const target = raw.split("/").filter(Boolean).at(-1)?.trim();
     if (!target || target === "." || target === "..") continue;
+    if (isSensitiveShellEvidenceTarget(target)) continue;
     const key = target.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     targets.push(target);
   }
   return targets;
+}
+
+function isSensitiveShellEvidencePath(raw: string): boolean {
+  const normalized = raw.replace(/\\/g, "/").toLowerCase();
+  return (
+    normalized.startsWith("~/.") ||
+    normalized.includes("/.ssh/") ||
+    normalized.includes("/.gnupg/") ||
+    normalized.includes("/keychain/") ||
+    normalized.includes("/secrets/") ||
+    normalized.includes("/private/var/") ||
+    normalized.startsWith("/tmp/") ||
+    normalized.includes("/etc/") ||
+    /^\/(?:var|private|etc)\//i.test(normalized)
+  );
+}
+
+function isSensitiveShellEvidenceTarget(target: string): boolean {
+  return /(?:id_rsa|id_dsa|id_ecdsa|id_ed25519|known_hosts|authorized_keys|\.pem|\.key|token|secret|credential|password)/i.test(
+    target,
+  );
 }
 
 function summarizeCompactExecutionTargets(
@@ -2165,16 +3005,15 @@ function summarizeCompactExecutionTargets(
     ),
   );
   if (targets.length < 2) return null;
-  // Long exploratory runs also touch roots, `..`, and search scopes. Once the
-  // row has more candidates than it can show, prefer concrete file artifacts
-  // so the summary reflects what the user can actually inspect.
+  // Long exploratory runs also touch roots, `..`, and search scopes. Prefer
+  // concrete file artifacts so the summary reflects what the user can actually
+  // inspect, while still falling back to directory/search scopes when artifacts
+  // are missing.
   const artifactTargets = targets.filter(isFileArtifactEvidence);
-  const visibleTargets = (
-    targets.length > 3 && artifactTargets.length >= 2
-      ? artifactTargets
-      : targets
-  ).slice(-3);
-  const hiddenCount = targets.length - visibleTargets.length;
+  const sourceTargets =
+    artifactTargets.length >= 2 ? artifactTargets : targets;
+  const visibleTargets = sourceTargets.slice(-3);
+  const hiddenCount = sourceTargets.length - visibleTargets.length;
   return `${visibleTargets.join(" · ")}${hiddenCount > 0 ? ` +${hiddenCount}` : ""}`;
 }
 
@@ -2200,7 +3039,21 @@ function retainIndeterminateToolCalls(
 
 function lastTimelineStep(item: TimelineItem): CoTStep {
   if (item.type === "toolCall" || item.type === "commentary") return item.step;
+  if (item.type === "aggregatedToolGroup")
+    return item.items[item.items.length - 1]!.step;
   return item.steps[item.steps.length - 1]!;
+}
+
+/**
+ * 双向联动共享 id：与侧边栏条目使用同一个工作台事件 id
+ * （即行上的 data-process-event-id），两侧只存 id、不复制时间线数据。
+ * 事件 id 缺失时回退到 TimelineItem.id，保证 DOM 定位属性稳定。
+ */
+function timelineItemLinkageId(item: TimelineItem): string {
+  if (item.type === "toolCall") return item.step.id ?? item.id;
+  if (item.type === "aggregatedToolGroup") return item.id;
+  const step = lastTimelineStep(item);
+  return step.messageId ?? step.id ?? item.id;
 }
 
 function timelineItemFromStep(step: CoTStep, suffix: string): TimelineItem {
@@ -2209,6 +3062,8 @@ function timelineItemFromStep(step: CoTStep, suffix: string): TimelineItem {
       id: `${step.messageId ?? step.id ?? "tool"}-${suffix}`,
       type: "toolCall",
       step,
+      role: step.role,
+      inferred: step.inferred,
     };
   }
   if (step.type === "commentary") {
@@ -2216,6 +3071,8 @@ function timelineItemFromStep(step: CoTStep, suffix: string): TimelineItem {
       id: `${step.id ?? "commentary"}-${suffix}`,
       type: "commentary",
       step,
+      role: step.role,
+      inferred: step.inferred,
     };
   }
   if (step.type === "actionCallback") {
@@ -2223,12 +3080,16 @@ function timelineItemFromStep(step: CoTStep, suffix: string): TimelineItem {
       id: `${step.id ?? "action"}-${suffix}`,
       type: "actionCallbackGroup",
       steps: [step],
+      role: step.role,
+      inferred: step.inferred,
     };
   }
   return {
     id: `${step.id ?? "reasoning"}-${suffix}`,
     type: "reasoningGroup",
     steps: [step],
+    role: step.role,
+    inferred: step.inferred,
   };
 }
 
@@ -2265,21 +3126,7 @@ function runStateForCurrentStep(
 
 function stepHasError(step: CoTStep): boolean {
   if (step.type !== "toolCall") return false;
-  const result = step.result;
-  if (typeof result === "string") {
-    return (
-      /\b(?:error|failed|failure|traceback|exception)\b/i.test(result) ||
-      /\b(?:错误|失败|异常|报错)\b/.test(result)
-    );
-  }
-  if (typeof result !== "object" || result === null) return false;
-  const record = result as Record<string, unknown>;
-  return (
-    record.error != null ||
-    record.exception != null ||
-    record.status === "error" ||
-    record.status === "failed"
-  );
+  return isToolResultError(step.result);
 }
 
 function stepIsWaiting(step: CoTStep): boolean {
@@ -2329,10 +3176,14 @@ function summarizeCurrentStep(
   }
   const publicAction = publicActionTextFromTraceTool(
     step.name,
-    extractPathFromArgs(step.args) ?? extractTeamCallTarget(step.args),
+    extractSafeContextFromArgs(step.args) ?? extractTeamCallTarget(step.args),
     t,
   );
-  return publicAction ?? t.toolCalls.useTool(step.name);
+  return (
+    publicAction ??
+    extractDescFromArgs(step.args) ??
+    t.messageGrouping.runAction
+  );
 }
 
 function summarizeReasoningGroup(
@@ -2367,7 +3218,7 @@ function compactReasoningSummary(
     .replace(/^\s*[-*•]\s+/, "")
     .trim();
   if (!normalized)
-    return t?.messageGrouping.reasoningFallback ?? "Synthesize reasoning";
+    return t?.messageGrouping.reasoningFallback ?? "Summarize public progress";
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max).trimEnd()}...`;
 }
@@ -2384,10 +3235,21 @@ function extractPublicReasoningSummary(message: Message): string | null {
   return typeof nested === "string" && nested.trim() ? nested.trim() : null;
 }
 
-function convertToSteps(messages: Message[]): CoTStep[] {
+export function convertToSteps(messages: Message[]): CoTStep[] {
   const steps: CoTStep[] = [];
   const seenPublicNarrative = new Set<string>();
   const seenToolCallIds = new Set<string>();
+  // 来源消息带 public_progress 协议标记的消息 id 集合（供语义角色判定）
+  const publicProgressMessageIds = new Set<string>();
+  for (const message of messages) {
+    if (
+      message.type === "ai" &&
+      message.additional_kwargs?.public_progress === true &&
+      message.id
+    ) {
+      publicProgressMessageIds.add(message.id);
+    }
+  }
   let iteration = 1;
   let lastStepType: "reasoning" | "toolCall" | null = null;
 
@@ -2499,7 +3361,9 @@ function convertToSteps(messages: Message[]): CoTStep[] {
           steps.push(toToolCallStep(message, toolCall));
           lastStepType = "toolCall";
         }
-        const commentary = extractContentFromMessage(message).trim();
+        const commentary = publicProcessText(
+          extractContentFromMessage(message),
+        );
         const commentaryFingerprint = timelineNarrativeFingerprint(commentary);
         for (let index = 0; index < reasoningChunks.length; index += 1) {
           const reasoningChunk = reasoningChunks[index];
@@ -2563,7 +3427,8 @@ function convertToSteps(messages: Message[]): CoTStep[] {
       }
     }
   }
-  return steps;
+  // 出口处填充语义角色（纯附加信息：不改变步骤顺序、内容与去重结果）
+  return assignTimelineRoles(steps, { publicProgressMessageIds });
 }
 
 function splitReasoningIntoTimelineChunks(reasoning: string): string[] {

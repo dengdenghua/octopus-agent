@@ -35,7 +35,7 @@ describe("<AgentProgressPill />", () => {
     renderWithProviders(<AgentProgressPill events={[]} isLoading />);
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Waiting for the model's first response",
+      "Reading this through",
     );
   });
 
@@ -44,7 +44,7 @@ describe("<AgentProgressPill />", () => {
       <AgentProgressPill events={[]} hasAnswer hasStreamingAnswer isLoading />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Model is working");
+    expect(screen.getByRole("status")).toHaveTextContent("Organizing");
   });
 
   test("keeps heartbeat-only waiting distinct from model work", () => {
@@ -57,7 +57,7 @@ describe("<AgentProgressPill />", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Waiting for the model's first response · 9s",
+      "Reading this through · 9s",
     );
   });
 
@@ -80,8 +80,8 @@ describe("<AgentProgressPill />", () => {
     );
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("Still working");
-    expect(status).not.toHaveTextContent("Organizing reply");
+    expect(status).toHaveTextContent("Still on it");
+    expect(status).not.toHaveTextContent("Model");
     expect(status).toHaveAttribute("data-stream-phase", "slow");
     expect(status).toHaveAttribute("data-stream-stalled", "true");
     expect(status).toHaveAttribute("data-stream-ttft-ms", "840");
@@ -100,7 +100,7 @@ describe("<AgentProgressPill />", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Connection lost — reconnecting",
+      "Connection dropped — reconnecting",
     );
     expect(screen.getByRole("status")).toHaveAttribute(
       "data-stream-phase",
@@ -145,7 +145,7 @@ describe("<AgentProgressPill />", () => {
       name: /Current Progress 2\/2/,
     });
     expect(screen.getByText("Current Progress 2/2")).toBeInTheDocument();
-    expect(screen.getByText(/Phase 2:/)).toBeInTheDocument();
+    expect(screen.getByText(/处理线索/)).toBeInTheDocument();
 
     fireEvent.click(pill);
     expect(pill).toHaveAttribute("aria-expanded", "true");
@@ -355,7 +355,7 @@ describe("<AgentProgressPill />", () => {
     );
 
     expect(
-      screen.getByText("Phase 2: create board deck - check and fix"),
+      screen.getByText("create board deck - check and fix"),
     ).toBeInTheDocument();
   });
 
@@ -386,7 +386,8 @@ describe("<AgentProgressPill />", () => {
       />,
     );
 
-    expect(screen.getAllByText(/pnpm test/).length).toBeGreaterThan(0);
+    expect(screen.getByText("运行终端")).toBeInTheDocument();
+    expect(screen.queryByText(/pnpm test/)).not.toBeInTheDocument();
   });
 
   test("expanded todo plans include upcoming phases", () => {
@@ -414,7 +415,7 @@ describe("<AgentProgressPill />", () => {
       screen.getByRole("button", { name: /Current Progress 2\/4/ }),
     );
 
-    expect(screen.getByText("Phase 4: deliver final")).toBeInTheDocument();
+    expect(screen.getByText("deliver final")).toBeInTheDocument();
   });
 
   test("does not mark stale pending todo steps as failed after a settled answer", () => {
@@ -440,9 +441,7 @@ describe("<AgentProgressPill />", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Restore Progress" }));
 
-    expect(screen.getAllByText("Phase 2: run research").length).toBeGreaterThan(
-      0,
-    );
+    expect(screen.getAllByText("run research").length).toBeGreaterThan(0);
     expect(container.querySelector(".animate-spin")).toBeNull();
     expect(container.querySelector(".text-destructive")).toBeNull();
   });
@@ -465,7 +464,7 @@ describe("<AgentProgressPill />", () => {
     expect(
       screen.getByRole("button", { name: /Current Progress 1\/2/ }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Phase 1:/)).toBeInTheDocument();
+    expect(screen.getByText(/处理线索/)).toBeInTheDocument();
   });
 
   test("does not keep a stale approval running after the run settles", () => {
@@ -489,6 +488,6 @@ describe("<AgentProgressPill />", () => {
     expect(
       screen.getByRole("button", { name: /Current Progress 2\/2/ }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/Phase 2:/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/收拢答案/).length).toBeGreaterThan(0);
   });
 });

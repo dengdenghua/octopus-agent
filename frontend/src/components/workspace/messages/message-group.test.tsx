@@ -7,7 +7,13 @@ import { renderWithProviders } from "@/test/harness";
 import { groupMessages } from "@/core/messages/utils";
 
 import { AGENT_WORKBENCH_OPEN_EVENT } from "../agent-workbench-events";
-import { hasVisibleMessageGroupContent, MessageGroup } from "./message-group";
+import {
+  hasVisibleMessageGroupContent,
+  MessageGroup,
+  convertToSteps,
+  selectCompactTimelineItems,
+  type TimelineItem,
+} from "./message-group";
 
 vi.mock("../artifacts", () => ({
   useArtifacts: () => ({
@@ -20,6 +26,23 @@ vi.mock("../artifacts", () => ({
 }));
 
 describe("MessageGroup todo_write rendering", () => {
+  it("removes recovery handoff text from public timeline steps", () => {
+    const steps = convertToSteps([
+      {
+        id: "ai-recovery",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary:
+            "所有文件读取任务已完成。Resume state: 继续核对剩余证据。",
+        },
+      } as AIMessage,
+    ]);
+    expect(
+      steps.map((step) => ("reasoning" in step ? step.reasoning : "")),
+    ).toEqual(["所有文件读取任务已完成。"]);
+  });
+
   it("hides todo_write tool calls from the execution timeline", () => {
     const message: AIMessage = {
       id: "ai-1",
@@ -92,13 +115,21 @@ describe("MessageGroup todo_write rendering", () => {
       screen.queryByText(/verification required/i),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("Process details"));
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(screen.getByTitle("Open details"));
 
+    const processEvent = opened.at(-1)?.detail.processEvent;
+    expect(processEvent?.summary).not.toBe("Open details");
+    expect(processEvent?.summary).toMatch(/notes\.md/);
+    expect(processEvent?.detail).toMatch(/notes\.md/);
     expect(screen.queryByText(/verification/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/verification required/i),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/notes\.md/)).toBeInTheDocument();
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
   it("treats auto-verification-only groups as empty", () => {
@@ -175,7 +206,7 @@ describe("MessageGroup reasoning grouping", () => {
     const opened: CustomEvent[] = [];
     const handleOpen = (event: Event) => opened.push(event as CustomEvent);
     window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
-    fireEvent.click(screen.getByTitle("过程细节"));
+    fireEvent.click(screen.getByTitle("展开线索"));
     expect(opened.at(-1)?.detail).toMatchObject({
       eventKind: "execution",
       view: "trace",
@@ -349,10 +380,10 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(screen.getAllByTestId("public-progress-event")).toHaveLength(4);
     expect(screen.getByText(updates[0]!)).toBeInTheDocument();
-    expect(screen.getByText(updates[2]!)).toBeInTheDocument();
+    expect(screen.getByText(updates[1]!)).toBeInTheDocument();
     expect(screen.getByText(updates[4]!)).toBeInTheDocument();
     expect(screen.getByText(updates[6]!)).toBeInTheDocument();
-    expect(screen.queryByText(updates[1]!)).not.toBeInTheDocument();
+    expect(screen.queryByText(updates[2]!)).not.toBeInTheDocument();
     expect(screen.queryByText(updates[3]!)).not.toBeInTheDocument();
     expect(screen.queryByText(updates[5]!)).not.toBeInTheDocument();
   });
@@ -412,7 +443,7 @@ describe("MessageGroup reasoning grouping", () => {
     const thinkingEvent = screen.getByTestId("process-timeline-event-thinking");
     expect(thinkingEvent).toBeInTheDocument();
     expect(thinkingEvent).not.toHaveTextContent(/^思考过程(?:\s|·)/);
-    const replayToggle = screen.getByTitle("过程细节");
+    const replayToggle = screen.getByTitle("展开线索");
     const currentFrame = screen.getByText("再整理成可执行步骤");
     expect(replayToggle).toBeInTheDocument();
     expect(currentFrame).toBeInTheDocument();
@@ -455,7 +486,7 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByTitle("Process details")).toBeInTheDocument();
+    expect(screen.getByTitle("Open details")).toBeInTheDocument();
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.queryByText("03")).not.toBeInTheDocument();
     expect(
@@ -466,7 +497,7 @@ describe("MessageGroup reasoning grouping", () => {
     const opened: CustomEvent[] = [];
     const handleOpen = (event: Event) => opened.push(event as CustomEvent);
     window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
-    fireEvent.click(screen.getByTitle("Process details"));
+    fireEvent.click(screen.getByTitle("Open details"));
 
     expect(
       screen.queryByText("Latest trace thought 1."),
@@ -476,6 +507,43 @@ describe("MessageGroup reasoning grouping", () => {
     );
     expect(opened.at(-1)?.detail.processEvent.count).toBe(4);
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+  });
+
+  it("keeps compact process rows visually quiet instead of card-like", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-quiet-expanded-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary:
+            "第一段足够长，需要展开才能看到完整内容。\n继续说明这一段的细节。",
+        },
+      },
+      {
+        id: "ai-quiet-expanded-2",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary:
+            "第二段也足够长，需要展开才能看到完整内容。\n继续说明这一段的细节。",
+        },
+      },
+    ];
+
+    const { container } = renderWithProviders(
+      <MessageGroup messages={messages} keepOpen />,
+      {
+        locale: "zh-CN",
+      },
+    );
+
+    const row = screen.getByTestId("process-timeline-event-thinking");
+    expect(row).not.toHaveClass("rounded-md");
+    expect(row).not.toHaveClass("border");
+    expect(row).not.toHaveClass("bg-muted");
+    expect(row).not.toHaveClass("shadow");
+    expect(container.querySelector("[data-cot-connector='true']")).toBeNull();
   });
 
   it("never turns private reasoning tool protocol into public actions", () => {
@@ -540,7 +608,7 @@ describe("MessageGroup reasoning grouping", () => {
     const opened: CustomEvent[] = [];
     const handleOpen = (event: Event) => opened.push(event as CustomEvent);
     window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
-    fireEvent.click(screen.getByTitle("Process details"));
+    fireEvent.click(screen.getByTitle("Open details"));
 
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.queryByText("02")).not.toBeInTheDocument();
@@ -577,11 +645,11 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "en-US",
     });
 
-    expect(screen.getByTitle("Process details")).toBeInTheDocument();
+    expect(screen.getByTitle("Open details")).toBeInTheDocument();
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.getByText(/laser engraving market 2025/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("Process details"));
+    fireEvent.click(screen.getByTitle("Open details"));
 
     expect(screen.queryByTitle("Hide saved steps")).not.toBeInTheDocument();
     expect(
@@ -623,7 +691,7 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
-    expect(screen.getByTitle("Process details")).toBeInTheDocument();
+    expect(screen.getByTitle("Open details")).toBeInTheDocument();
     expect(
       screen.queryByText("Inspect the user request before editing."),
     ).not.toBeInTheDocument();
@@ -667,7 +735,7 @@ describe("MessageGroup reasoning grouping", () => {
 
     rerender(<MessageGroup codeMode messages={messages as never} />);
 
-    expect(screen.getByTitle("Process details")).toBeInTheDocument();
+    expect(screen.getByTitle("Open details")).toBeInTheDocument();
     expect(screen.queryByTitle("Hide saved steps")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Clarify task direction"),
@@ -1051,7 +1119,10 @@ describe("MessageGroup reasoning grouping", () => {
     expect(
       screen.queryByText("我先读取消息组件，再把证据串起来。"),
     ).not.toBeInTheDocument();
-    const execution = screen.getByTestId("process-timeline-event-execution");
+    const executions = screen.getAllByTestId(
+      "process-timeline-event-execution",
+    );
+    const execution = executions[0]!;
     expect(execution).toHaveTextContent("message-group.tsx");
     expect(execution).not.toHaveTextContent("查看文件");
     expect(execution).not.toHaveTextContent("执行动作");
@@ -1095,11 +1166,14 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(screen.queryByText("已浏览目录")).not.toBeInTheDocument();
     expect(screen.queryByText("已读取")).not.toBeInTheDocument();
-    const execution = screen.getByTestId("process-timeline-event-execution");
-    expect(execution).toHaveTextContent("src · app.tsx · plan.md");
-    expect(
-      screen.getAllByTestId("process-timeline-event-execution"),
-    ).toHaveLength(1);
+    const executions = screen.getAllByTestId(
+      "process-timeline-event-execution",
+    );
+    expect(executions).toHaveLength(2);
+    expect(executions[0]).toHaveTextContent("src");
+    expect(executions[0]).toHaveTextContent("app.tsx");
+    expect(executions[1]).toHaveTextContent("plan.md");
+    const execution = executions[0]!;
 
     const opened: CustomEvent[] = [];
     const handleOpen = (event: Event) => opened.push(event as CustomEvent);
@@ -1108,17 +1182,17 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(opened.at(-1)?.detail.processEvent).toMatchObject({
       kind: "execution",
-      count: 3,
+      count: 2,
     });
     expect(opened.at(-1)?.detail.processEvent.detail).toContain("src/app.tsx");
-    expect(opened.at(-1)?.detail.processEvent.detail).toContain("plan.md");
 
-    fireEvent.click(screen.getByTitle("过程细节"));
+    fireEvent.click(
+      screen.getAllByTestId("process-timeline-event-execution")[1]!,
+    );
+    expect(opened.at(-1)?.detail.processEvent.detail).toContain("plan.md");
 
     expect(screen.queryByText("已浏览目录")).not.toBeInTheDocument();
     expect(screen.queryByText("已读取")).not.toBeInTheDocument();
-    expect(opened.at(-1)?.detail.processEvent).toMatchObject({ count: 3 });
-    expect(opened.at(-1)?.detail.processEvent.detail).toContain("src/app.tsx");
     expect(opened.at(-1)?.detail.processEvent.detail).toContain("plan.md");
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
@@ -1181,7 +1255,10 @@ describe("MessageGroup reasoning grouping", () => {
       locale: "zh-CN",
     });
 
-    const execution = screen.getByTestId("process-timeline-event-execution");
+    const executions = screen.getAllByTestId(
+      "process-timeline-event-execution",
+    );
+    const execution = executions[0]!;
     expect(execution).toHaveTextContent(
       "message-group.tsx · items.py · reducer.ts",
     );
@@ -1190,9 +1267,210 @@ describe("MessageGroup reasoning grouping", () => {
     expect(execution).not.toHaveTextContent("cat ");
     expect(execution).not.toHaveTextContent("cp ");
     expect(execution).not.toHaveTextContent("_items_readonly_copy.py");
-    expect(
-      screen.getAllByTestId("process-timeline-event-execution"),
-    ).toHaveLength(1);
+    // Shell file-read workarounds and concrete read_file calls are folded into
+    // one evidence cluster so the transcript stays concise.
+    expect(executions).toHaveLength(1);
+  });
+
+  it("attributes every execution inside a commentary interval to its visible anchor", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-progress",
+        type: "ai",
+        content: "我先核对这几个文件。",
+        additional_kwargs: {
+          public_progress: true,
+          timeline_sequence: 1,
+        },
+      },
+      {
+        id: "ai-reads",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "read-a",
+            name: "read_file",
+            args: { path: "src/a.ts" },
+            timelineSequence: 2,
+          },
+          {
+            id: "read-b",
+            name: "read_file",
+            args: { path: "src/b.ts" },
+            timelineSequence: 3,
+          },
+          {
+            id: "read-c",
+            name: "read_file",
+            args: { path: "src/c.ts" },
+            timelineSequence: 4,
+          },
+        ],
+      },
+      {
+        id: "ai-final",
+        type: "ai",
+        content: "核对完成。",
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} />, {
+      locale: "zh-CN",
+    });
+
+    const executions = screen.getAllByTestId(
+      "process-timeline-event-execution",
+    );
+    expect(executions).toHaveLength(1);
+    expect(executions[0]).toHaveTextContent("a.ts · b.ts · c.ts");
+
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+    fireEvent.click(executions[0]!);
+
+    const detail = opened.at(-1)?.detail.processEvent.detail as string;
+    expect(detail).toContain("a.ts");
+    expect(detail).toContain("b.ts");
+    expect(detail).toContain("c.ts");
+    expect(opened.at(-1)?.detail.processEvent.count).toBe(3);
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+  });
+
+  it("keeps mixed-kind execution clusters separate within the same interval", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-progress",
+        type: "ai",
+        content: "读取并验证。",
+        additional_kwargs: {
+          public_progress: true,
+          timeline_sequence: 1,
+        },
+      },
+      {
+        id: "ai-tools",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "read-a",
+            name: "read_file",
+            args: { path: "src/a.ts" },
+            timelineSequence: 2,
+          },
+          {
+            id: "read-b",
+            name: "read_file",
+            args: { path: "src/b.ts" },
+            timelineSequence: 3,
+          },
+          {
+            id: "run-test",
+            name: "exec_shell",
+            args: { command: "npm test" },
+            timelineSequence: 4,
+          },
+        ],
+      },
+      {
+        id: "ai-final",
+        type: "ai",
+        content: "完成。",
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} />, {
+      locale: "zh-CN",
+    });
+
+    const executions = screen.getAllByTestId(
+      "process-timeline-event-execution",
+    );
+    expect(executions).toHaveLength(2);
+    expect(executions[0]).toHaveTextContent("a.ts · b.ts");
+    expect(executions[1]).toHaveTextContent("运行");
+  });
+
+  it("does not render raw shell commands for a single shell tool call", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-shell",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "shell-1",
+            name: "exec_shell",
+            args: {
+              command: "cat ~/.ssh/id_rsa && npm run typecheck",
+            },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} isLoading />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getByText("运行")).toBeInTheDocument();
+    expect(screen.queryByText(/cat ~\/.ssh\/id_rsa/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/npm run typecheck/)).not.toBeInTheDocument();
+  });
+
+  it("uses a public fallback for unknown tool names", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-unknown-tool",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "custom-1",
+            name: "mcp_secret_probe",
+            args: {
+              token: "sk-test-should-not-render",
+            },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} isLoading />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getByText("执行操作")).toBeInTheDocument();
+    expect(screen.queryByText(/mcp_secret_probe/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sk-test/)).not.toBeInTheDocument();
+  });
+
+  it("keeps explicit human descriptions for unknown tools", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-described-tool",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "custom-2",
+            name: "mcp_custom_bridge",
+            args: {
+              description: "同步外部任务状态",
+            },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} isLoading />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getByText("同步外部任务状态")).toBeInTheDocument();
+    expect(screen.queryByText(/mcp_custom_bridge/)).not.toBeInTheDocument();
   });
 });
 
@@ -1272,6 +1550,95 @@ describe("MessageGroup streaming lifecycle", () => {
         count: 1,
       },
     });
+
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+  });
+
+  it("opens right-side process details without leaked protocol or internal blocks", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-thinking",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary:
+            "<read_only> </read_only>\n<TextBlock>先确认公开进展</TextBlock>\nAction: read_file\n失败原因：token=super-secret\n<ToolCallBlock>private tool args</ToolCallBlock>",
+        },
+      },
+      {
+        id: "ai-tool",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "read-1",
+            name: "read_file",
+            args: { path: "src/chat.tsx" },
+          },
+        ],
+      },
+    ];
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+
+    renderWithProviders(
+      <MessageGroup messages={messages as never} isLoading />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.queryByText(/read_only|ToolCallBlock|read_file/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/super-secret/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("process-timeline-event-thinking"));
+
+    const processEvent = opened.at(-1)?.detail.processEvent;
+    expect(processEvent).toMatchObject({
+      kind: "thinking",
+      summary: expect.stringContaining("先确认公开进展"),
+    });
+    expect(processEvent?.detail).toContain("先确认公开进展");
+    expect(JSON.stringify(processEvent)).not.toMatch(
+      /read_only|TextBlock|ToolCallBlock|private tool args|read_file|super-secret/i,
+    );
+
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+  });
+
+  it("cleans public progress body before rendering it in the main timeline", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-public-progress",
+        type: "ai",
+        content:
+          "<read_only> </read_only>\n<TextBlock>已确认主线展示。</TextBlock>\nAction: read_file\nObservation: token=super-secret",
+        additional_kwargs: {
+          public_progress: true,
+        },
+      },
+    ];
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+
+    renderWithProviders(
+      <MessageGroup messages={messages as never} isLoading />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByText(/已确认主线展示/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/read_only|TextBlock|read_file|Observation/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/super-secret/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("public-progress-event"));
+    const processEvent = opened.at(-1)?.detail.processEvent;
+    expect(processEvent?.summary).toContain("已确认主线展示");
+    expect(JSON.stringify(processEvent)).not.toMatch(
+      /read_only|TextBlock|read_file|Observation|super-secret/i,
+    );
 
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
@@ -1372,8 +1739,8 @@ describe("MessageGroup streaming lifecycle", () => {
 
     rerender(<MessageGroup messages={messages as never} />);
 
-    expect(screen.getByTitle("Process details")).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("Process details"));
+    expect(screen.getByTitle("Open details")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Open details"));
     expect(screen.getAllByText(/test query/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/notes\.md/).length).toBeGreaterThan(0);
   });
@@ -1514,7 +1881,7 @@ describe("MessageGroup streaming lifecycle", () => {
     const opened: CustomEvent[] = [];
     const handleOpen = (event: Event) => opened.push(event as CustomEvent);
     window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
-    fireEvent.click(screen.getByTitle("Process details"));
+    fireEvent.click(screen.getByTitle("Open details"));
     expect(screen.queryByText(/First thinking step/)).not.toBeInTheDocument();
     expect(opened.at(-1)?.detail.processEvent.detail).toContain(
       "First thinking step",
@@ -1527,7 +1894,7 @@ describe("MessageGroup streaming lifecycle", () => {
       />,
     );
 
-    expect(screen.getByTitle("Process details")).toBeInTheDocument();
+    expect(screen.getByTitle("Open details")).toBeInTheDocument();
     expect(screen.queryByText(/First thinking step/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Second thinking step/).length).toBeGreaterThan(
       0,
@@ -1580,5 +1947,241 @@ describe("MessageGroup streaming lifecycle", () => {
     );
 
     expect(screen.getByText(/reference docs/)).toBeInTheDocument();
+  });
+});
+
+describe("MessageGroup 紧凑模式叙事保真", () => {
+  // 构造 6 轮「意图 → 工具 → 事实」长任务：意图消息的 reasoning 紧跟上一轮
+  // 工具调用（iteration 由此递增），事实以 public_progress checkpoint 呈现。
+  function buildLongRunMessages(): AIMessage[] {
+    const intentMessage = (round: number): AIMessage => ({
+      id: `ai-intent-${round}`,
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        public_reasoning_summary: `第 ${round} 轮意图：读取 round-${round}.ts`,
+      },
+    });
+    const toolsMessage = (round: number): AIMessage => ({
+      id: `ai-tools-${round}`,
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: `call-${round}`,
+          name: "read_file",
+          args: { path: `src/round-${round}.ts` },
+        },
+      ],
+    });
+    const factMessage = (round: number): AIMessage => ({
+      id: `ai-fact-${round}`,
+      type: "ai",
+      content: `已确认第 ${round} 轮事实`,
+      additional_kwargs: { public_progress: true },
+    });
+
+    const messages: AIMessage[] = [intentMessage(1), toolsMessage(1)];
+    for (let round = 2; round <= 6; round += 1) {
+      messages.push(
+        intentMessage(round),
+        factMessage(round - 1),
+        toolsMessage(round),
+      );
+    }
+    messages.push(factMessage(6));
+    return messages;
+  }
+
+  it("长任务压缩后每轮至少保留一个叙事锚点、最新事实必留", () => {
+    renderWithProviders(<MessageGroup messages={buildLongRunMessages()} />, {
+      locale: "zh-CN",
+    });
+
+    // 6 个事实 checkpoint 全部被语义保底（每轮兜底锚点 + 最新事实）
+    expect(screen.getAllByTestId("public-progress-event")).toHaveLength(6);
+    for (let round = 1; round <= 6; round += 1) {
+      expect(screen.getByText(`已确认第 ${round} 轮事实`)).toBeInTheDocument();
+    }
+    // 第 1 轮意图（该轮 intent 锚点）与最近一轮思考（latestThinking）可见
+    expect(screen.getByText(/第 1 轮意图/)).toBeInTheDocument();
+    expect(screen.getByText(/第 6 轮意图/)).toBeInTheDocument();
+    // 中间轮的意图仍被压缩掉，完整事件链留在工作台
+    expect(screen.queryByText(/第 3 轮意图/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/第 4 轮意图/)).not.toBeInTheDocument();
+    expect(
+      screen.getAllByTestId("process-timeline-event-thinking"),
+    ).toHaveLength(2);
+    // 纯过程组没有最终回答，不出现分界
+    expect(screen.queryByTestId("final-answer-boundary")).toBeNull();
+  });
+});
+
+describe("selectCompactTimelineItems 语义保真采样", () => {
+  // 手搓 TimelineItem：每轮 intent commentary + 工具 + fact commentary
+  function buildRoundItems(withRoles: boolean) {
+    const items: TimelineItem[] = [];
+    const intents: TimelineItem[] = [];
+    const facts: TimelineItem[] = [];
+    for (let round = 1; round <= 6; round += 1) {
+      const intent: TimelineItem = {
+        id: `intent-${round}`,
+        type: "commentary",
+        step: {
+          id: `intent-step-${round}`,
+          type: "commentary",
+          commentary: `第 ${round} 轮意图`,
+          iteration: round,
+        },
+        ...(withRoles ? { role: "intent" as const } : {}),
+      };
+      const tool: TimelineItem = {
+        id: `tool-${round}`,
+        type: "toolCall",
+        step: {
+          id: `call-${round}`,
+          type: "toolCall",
+          name: "read_file",
+          args: { path: `src/round-${round}.ts` },
+          iteration: round,
+        },
+        ...(withRoles ? { role: "execution" as const } : {}),
+      };
+      const fact: TimelineItem = {
+        id: `fact-${round}`,
+        type: "commentary",
+        step: {
+          id: `fact-step-${round}`,
+          type: "commentary",
+          commentary: `第 ${round} 轮事实`,
+          iteration: round,
+        },
+        ...(withRoles ? { role: "fact" as const } : {}),
+      };
+      items.push(intent, tool, fact);
+      intents.push(intent);
+      facts.push(fact);
+    }
+    return { items, intents, facts };
+  }
+
+  it("每个 iteration 必留 intent 条目、最新 fact 必留，且返回原引用", () => {
+    const { items, intents, facts } = buildRoundItems(true);
+
+    const result = selectCompactTimelineItems(items);
+
+    for (const intent of intents) {
+      expect(result).toContain(intent);
+    }
+    expect(result).toContain(facts[5]!);
+    // 保底已超额，较早的 fact 不再额外补样
+    expect(result).not.toContain(facts[1]!);
+    expect(result).not.toContain(facts[2]!);
+    // 引用相等：选择器返回原 item，不破坏下游 React memo
+    for (const item of result) {
+      expect(items).toContain(item);
+    }
+    expect(result[0]).toBe(items[0]);
+  });
+
+  it("role 缺失的旧数据按位置兜底，行为正常", () => {
+    const { items, intents, facts } = buildRoundItems(false);
+
+    const result = selectCompactTimelineItems(items);
+
+    // 角色由 assignTimelineRoles 在判定副本上补齐：第 1 轮首个 commentary
+    // 推断为 intent，其余轮按位置取首个 commentary 兜底，最新 fact 必留
+    for (const intent of intents) {
+      expect(result).toContain(intent);
+    }
+    expect(result).toContain(facts[5]!);
+    for (const item of result) {
+      expect(items).toContain(item);
+    }
+  });
+
+  it("短对话（commentary ≤ 4）行为完全不变", () => {
+    const items: TimelineItem[] = [];
+    const commentaries: TimelineItem[] = [];
+    for (let round = 1; round <= 4; round += 1) {
+      const commentary: TimelineItem = {
+        id: `commentary-${round}`,
+        type: "commentary",
+        step: {
+          id: `commentary-step-${round}`,
+          type: "commentary",
+          commentary: `进展 ${round}`,
+          iteration: round,
+        },
+        role: round === 1 ? "intent" : "fact",
+      };
+      commentaries.push(commentary);
+      items.push(commentary);
+      if (round < 4) {
+        items.push({
+          id: `tool-${round}`,
+          type: "toolCall",
+          step: {
+            id: `call-${round}`,
+            type: "toolCall",
+            name: "read_file",
+            args: { path: `src/round-${round}.ts` },
+            iteration: round,
+          },
+          role: "execution",
+        });
+      }
+    }
+
+    const result = selectCompactTimelineItems(items);
+
+    for (const commentary of commentaries) {
+      expect(result).toContain(commentary);
+    }
+  });
+});
+
+describe("MessageGroup 最终回答视觉分层", () => {
+  const longAnswer = [
+    "# 调查结论",
+    "",
+    "这是一段足够长的最终回答，用于触发最终回答判定阈值。",
+    "",
+    "1. 第一点结论",
+    "2. 第二点结论",
+    "3. 第三点结论",
+    "4. 第四点结论",
+    "",
+    "这一段继续补充正文长度，确保超过 320 字符的最终回答阈值，",
+    "使该消息被视为最终回答而不是过程旁白，从而在下方独立渲染。",
+  ].join("\n");
+
+  const answerMessage: AIMessage = {
+    id: "ai-answer-with-tools",
+    type: "ai",
+    content: longAnswer,
+    tool_calls: [
+      {
+        id: "search-1",
+        name: "web_search",
+        args: { query: "reference docs" },
+      },
+    ],
+  };
+
+  it("流式结束后过程段落与最终回答之间出现分界", () => {
+    renderWithProviders(<MessageGroup messages={[answerMessage]} />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getByTestId("final-answer-boundary")).toBeInTheDocument();
+  });
+
+  it("流式进行中不渲染分界，避免跳动", () => {
+    renderWithProviders(<MessageGroup messages={[answerMessage]} isLoading />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.queryByTestId("final-answer-boundary")).toBeNull();
   });
 });

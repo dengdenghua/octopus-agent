@@ -49,6 +49,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 _log = logging.getLogger("runtime.execution.ephemeral")
@@ -316,6 +317,9 @@ BUILTIN_ROLES: dict[str, EphemeralRoleDef] = {
         system_prompt=(
             "You are the synthesizer. Read everything siblings wrote "
             "on the blackboard via bb_keys() then bb_read(key) for each. "
+            "Treat an injected Workspace task contract (TASK.md) as a hard "
+            "delivery contract. When it names a file, write and read back the "
+            "exact file before you return; never substitute chat prose for it. "
             "Produce the final answer in the format required by any "
             "topology-specific instructions or the caller's request. "
             "Do not invent a generic summary format when a more specific "
@@ -704,6 +708,30 @@ def _compose_system_prompt(
             "conflict.\n\n"
             f"{addendum.strip()}"
         )
+    workspace_path = (context or {}).get("workspace_path")
+    delivery_roles = {"generator", "implementer", "synthesizer"}
+    if (
+        role.id in delivery_roles
+        and isinstance(workspace_path, str)
+        and workspace_path.strip()
+    ):
+        try:
+            workspace_root = Path(workspace_path).expanduser().resolve()
+            task_path = (workspace_root / "TASK.md").resolve()
+            if task_path.parent == workspace_root and task_path.is_file():
+                task_contract = task_path.read_text(encoding="utf-8")[:12_000].strip()
+                if task_contract:
+                    parts.append(
+                        "## Workspace task contract (TASK.md)\n\n"
+                        "This is part of the caller's task, not optional background. "
+                        "Satisfy every machine-checkable deliverable before returning. "
+                        "If it names an output file or exact path, use the workspace "
+                        "file tools to write that file and read it back; a prose-only "
+                        "answer does not satisfy the contract.\n\n"
+                        f"{task_contract}"
+                    )
+        except (OSError, RuntimeError, UnicodeError):
+            _log.debug("workspace TASK.md injection skipped", exc_info=True)
     grant_note = (context or {}).get("dynamic_skill_grant_note")
     if isinstance(grant_note, str) and grant_note.strip():
         parts.append("## Granted Skills\n\n" + grant_note.strip())

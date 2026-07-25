@@ -280,7 +280,16 @@ def _build_planner(
                 default_model=p.model,
             )
             router = ModelDispatchRouter(fallback=_base_router)
-        composer = ContextComposer(registry=registry, journal=journal)
+        from runtime.core.hearts.gill_pump import GillCache, retrieval_gill_enabled
+
+        gill_cache = None
+        if retrieval_gill_enabled():
+            gill_cache = GillCache()
+        composer = ContextComposer(
+            registry=registry,
+            journal=journal,
+            gill_cache=gill_cache,
+        )
         return LLMPlanner(
             router=router,
             registry=registry,

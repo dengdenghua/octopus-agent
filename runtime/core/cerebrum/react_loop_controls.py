@@ -241,10 +241,9 @@ _CONTEXT_PRESSURE_NUDGE = (
     "[context-pressure] (level={level})\n"
     "You are approaching the context window. Before this turn ends:\n"
     "1. Update todo_write so every in-flight item shows accurate status.\n"
-    '2. In your next Thought, write a one-paragraph "resume state":\n'
-    "   - what you were about to do\n"
-    "   - any file paths you've written to\n"
-    "   - the next concrete action you'd take if continuing\n"
+    "2. Record a compact continuation note in the internal trajectory only;\n"
+    "   never copy this note into the user-facing answer. Include the next\n"
+    "   concrete action and any evidence needed after compaction.\n"
     "This message survives compaction; raw step history may not."
 )
 

@@ -448,7 +448,9 @@ def make_llm_ephemeral_runner(
                         type(exc).__name__,
                         exc,
                     )
-                    return accumulated_text or ""
+                    if not accumulated_text:
+                        raise
+                    return accumulated_text
                 text = str(getattr(resp, "text", None) or "")
                 tool_calls = list(getattr(resp, "tool_calls", []) or [])
                 int(getattr(resp, "input_tokens", 0) or 0)
@@ -496,7 +498,10 @@ def make_llm_ephemeral_runner(
                         type(exc).__name__,
                         exc,
                     )
-                    return accumulated_text + text or accumulated_text
+                    partial = accumulated_text + text
+                    if not partial:
+                        raise
+                    return partial
 
             if text:
                 accumulated_text += text

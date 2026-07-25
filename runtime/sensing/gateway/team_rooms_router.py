@@ -51,6 +51,7 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment,misc]
     WebSocket = None  # type: ignore[assignment,misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 class TeamMemberWire(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -194,8 +195,7 @@ def create_team_rooms_router(
     imports the model/execution layer (it stays an import leaf). None
     disables twin speaking — the human/host paths are unaffected.
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["team-rooms"])
     path = state_path or (app_paths().data_dir / "team_rooms.json")

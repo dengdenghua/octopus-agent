@@ -148,7 +148,7 @@ describe("groupActivities", () => {
     }
   });
 
-  test("bash label truncates long commands", () => {
+  test("bash label avoids raw command text", () => {
     const longCmd = "a".repeat(60);
     const messages = [
       aiToolCallMsg("a1", "bash", { command: longCmd }),
@@ -157,14 +157,13 @@ describe("groupActivities", () => {
     const chunks = groupActivities(messages as any);
     expect(chunks.length).toBe(1);
     if (chunks[0].kind === "activity") {
-      expect(
-        chunks[0].items[0].label.length < longCmd.length + 10,
-      ).toBeTruthy();
-      expect(chunks[0].items[0].label.endsWith("...")).toBeTruthy();
+      expect(chunks[0].items[0].label).toBe("Run checks");
+      expect(chunks[0].items[0].label).not.toContain(longCmd);
+      expect(chunks[0].items[1].label).not.toContain("ls");
     }
   });
 
-  test("realtime shell tool names aggregate and label the actual command", () => {
+  test("realtime shell tool names aggregate without labeling the raw command", () => {
     const messages = [
       aiToolCallMsg("a1", "exec_shell", {
         tool: "exec_shell",
@@ -177,8 +176,10 @@ describe("groupActivities", () => {
     expect(chunks.length).toBe(1);
     if (chunks[0].kind === "activity") {
       expect(chunks[0].activityKind).toBe("tool_calls");
-      expect(chunks[0].items[0].label).toContain("npm test");
-      expect(chunks[0].items[1].label).toContain("npm run typecheck");
+      expect(chunks[0].items[0].label).toBe("Run checks");
+      expect(chunks[0].items[1].label).toBe("Run checks");
+      expect(chunks[0].items[0].label).not.toContain("npm test");
+      expect(chunks[0].items[1].label).not.toContain("npm run typecheck");
     }
   });
 
@@ -223,6 +224,26 @@ describe("groupActivities", () => {
     const chunks = groupActivities(messages as any);
     if (chunks[0].kind === "activity") {
       expect(chunks[0].activityKind).toBe("tool_calls");
+    }
+  });
+
+  test("read tool aggregation uses public labels instead of raw tool names", () => {
+    const messages = [
+      aiToolCallMsg("a1", "read_file", { path: "/repo/src/chat.ts" }),
+      aiToolCallMsg("a2", "grep", { pattern: "TODO" }),
+      aiToolCallMsg("a3", "read_file", { path: "~/.ssh/id_rsa" }),
+    ];
+    const chunks = groupActivities(messages as any);
+    expect(chunks.length).toBe(1);
+    if (chunks[0].kind === "activity") {
+      const labels = chunks[0].items.map((item) => item.label).join("\n");
+      expect(labels).toContain("Read file: chat.ts");
+      expect(labels).toContain("Search sources: TODO");
+      expect(labels).toContain("Read file");
+      expect(labels).not.toContain("read_file");
+      expect(labels).not.toContain("grep ");
+      expect(labels).not.toContain("/repo/src");
+      expect(labels).not.toContain("id_rsa");
     }
   });
 

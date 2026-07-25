@@ -15,6 +15,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   memo,
 } from "react";
 
@@ -40,10 +41,20 @@ import type { StreamVitals } from "@/core/realtime/stream-vitals";
 import type { Subtask } from "@/core/tasks";
 import { useUpdateSubtask } from "@/core/tasks/context";
 import type { AgentThreadState } from "@/core/threads";
+import {
+  findTimelineItemElement,
+  getTimelineLinkageState,
+  subscribeTimelineLinkage,
+  TIMELINE_ITEM_HIGHLIGHT_CLASS,
+} from "@/core/threads/timeline-linkage";
 import { cn } from "@/lib/utils";
 
 import { ArtifactFileList } from "../artifacts/artifact-file-list";
-import { emitOpenAgentWorkbench } from "../agent-workbench-events";
+import {
+  AGENT_WORKBENCH_LOCATE_EVENT,
+  emitOpenAgentWorkbench,
+  type AgentWorkbenchLocateDetail,
+} from "../agent-workbench-events";
 import type { LiveToolEvent } from "../live-tool-timeline";
 import { PublicThinkingStatus } from "../public-thinking-status";
 import {
@@ -111,6 +122,12 @@ const EMPTY_AGENT_ROSTER: MessageListAgentRosterEntry[] = [];
 const TURN_LOCATOR_VISIBLE_LIMIT = 17;
 const TURN_SCROLL_VIEWPORT_CLASS = "message-list-scroll-viewport";
 const STREAM_PROGRESS_TAIL_LENGTH = 240;
+
+function cssEscape(value: string): string {
+  const escape = globalThis.CSS?.escape;
+  if (typeof escape === "function") return escape(value);
+  return value.replace(/["\\]/g, "\\$&");
+}
 
 export interface MessageTurnSlice {
   /** Indexes into the grouped-message array, kept contiguous and ordered. */
@@ -342,9 +359,7 @@ export function turnMarkerKindFromMessages(
     if (
       workbenchSnapshot &&
       typeof workbenchSnapshot === "object" &&
-      Array.isArray(
-        (workbenchSnapshot as { phases?: unknown }).phases,
-      ) &&
+      Array.isArray((workbenchSnapshot as { phases?: unknown }).phases) &&
       ((workbenchSnapshot as { phases: unknown[] }).phases.length ?? 0) > 0
     ) {
       return "phase";
@@ -739,6 +754,56 @@ export function MessageList({
     loadingProgressAtRef.current = Date.now();
     setLoadingAgeMs((age) => (age === 0 ? age : 0));
   }, [thread.isLoading, contentFingerprint]);
+
+  // 侧边栏 → 对话区联动：共享 linkage store 出现高亮条目时，滚动定位到同一
+  // 时间线项并短暂高亮（≤2s）。高亮 class 随 store 的 2s 定时器清除
+  // （highlightedTimelineItemId 归零触发本 effect 的清理函数），组件卸载时
+  // 也会兜底移除；样式全程仅 CSS transition，无循环动画。两侧共用同一 id，
+  // 因此查找时以 "chat" lane 限定只命中对话区行。
+  const timelineLinkage = useSyncExternalStore(
+    subscribeTimelineLinkage,
+    getTimelineLinkageState,
+    getTimelineLinkageState,
+  );
+  useEffect(() => {
+    const itemId = timelineLinkage.highlightedTimelineItemId;
+    if (!itemId) return;
+    const row = findTimelineItemElement(itemId, "chat");
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.add(TIMELINE_ITEM_HIGHLIGHT_CLASS);
+    return () => row.classList.remove(TIMELINE_ITEM_HIGHLIGHT_CLASS);
+  }, [timelineLinkage.highlightedTimelineItemId, timelineLinkage.nonce]);
+
+  useEffect(() => {
+    const handleLocate = (event: Event) => {
+      const detail = (event as CustomEvent<AgentWorkbenchLocateDetail>).detail;
+      const eventId =
+        typeof detail?.eventId === "string" ? detail.eventId.trim() : "";
+      if (!eventId) return;
+      const row = document.querySelector<HTMLElement>(
+        `[data-process-event-id="${cssEscape(eventId)}"]`,
+      );
+      if (!row) return;
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.animate(
+        [
+          { backgroundColor: "transparent", boxShadow: "none" },
+          {
+            backgroundColor:
+              "color-mix(in oklch, var(--primary) 12%, transparent)",
+            boxShadow:
+              "inset 2px 0 0 color-mix(in oklch, var(--primary) 70%, transparent)",
+          },
+          { backgroundColor: "transparent", boxShadow: "none" },
+        ],
+        { duration: 1100, easing: "ease-out" },
+      );
+    };
+    window.addEventListener(AGENT_WORKBENCH_LOCATE_EVENT, handleLocate);
+    return () =>
+      window.removeEventListener(AGENT_WORKBENCH_LOCATE_EVENT, handleLocate);
+  }, []);
 
   useEffect(() => {
     if (!thread.isLoading) {
@@ -1524,6 +1589,12 @@ export function MessageList({
     return <MessageListSkeleton />;
   }
 
+  const showEmptyPendingAssistantFrame =
+    messageTurns.length === 0 && thread.isLoading && !hasStreamingAnswer;
+  const emptyPendingAssistantIdentity = showEmptyPendingAssistantFrame
+    ? resolveAgentIdentity()
+    : null;
+
   return (
     <Conversation
       className={cn(
@@ -1539,9 +1610,50 @@ export function MessageList({
         className="mx-auto w-full max-w-(--container-width-md) gap-7 px-4 pt-2"
       >
         {header}
+        {showEmptyPendingAssistantFrame &&
+          renderAssistantFrame({
+            key: "pending-agent-frame/empty-turn",
+            agentName: emptyPendingAssistantIdentity?.name,
+            agentAvatar: emptyPendingAssistantIdentity?.avatar,
+            agentIcon: emptyPendingAssistantIdentity?.icon,
+            agentRole: emptyPendingAssistantIdentity?.role,
+            children: (
+              <PublicThinkingStatus
+                isLoading={thread.isLoading}
+                liveToolEvents={liveToolEvents ?? []}
+                hasStreamingMessage={hasStreamingAnswer}
+                vitals={streamVitals}
+                className="ml-0"
+              />
+            ),
+          })}
         {messageTurns.map((turn, turnIndex) => {
           const isLatestTurn = turnIndex === messageTurns.length - 1;
           const markerKey = turn.key.startsWith("human:") ? turn.key : null;
+          // A submitted turn can spend several seconds waiting for its first
+          // model event. During that gap there is no assistant message group
+          // to own the avatar, which made the activity line look detached
+          // from the agent. Reserve the same assistant frame immediately;
+          // it disappears as soon as a visible assistant group arrives.
+          const latestTurnHasVisibleAssistantGroup = turn.groupIndexes.some(
+            (groupIndex) => {
+              const group = groupedMessages[groupIndex];
+              if (!group) return false;
+              return (
+                (group.type === "assistant" ||
+                  group.type === "assistant:processing") &&
+                hasVisibleMessageGroupContent(group.messages, t)
+              );
+            },
+          );
+          const showPendingAssistantFrame =
+            isLatestTurn &&
+            thread.isLoading &&
+            !hasStreamingAnswer &&
+            !latestTurnHasVisibleAssistantGroup;
+          const pendingAssistantIdentity = showPendingAssistantFrame
+            ? resolveAgentIdentity()
+            : null;
 
           return (
             <div
@@ -1649,14 +1761,38 @@ export function MessageList({
                   </Fragment>
                 );
               })}
-              {isLatestTurn && (
-                <PublicThinkingStatus
-                  isLoading={thread.isLoading}
-                  liveToolEvents={liveToolEvents ?? []}
-                  hasStreamingMessage={hasStreamingAnswer}
-                  vitals={streamVitals}
-                />
-              )}
+              {isLatestTurn &&
+                (showPendingAssistantFrame ? (
+                  renderAssistantFrame({
+                    key: `pending-agent-frame/${turn.key}`,
+                    agentName: pendingAssistantIdentity?.name,
+                    agentAvatar: pendingAssistantIdentity?.avatar,
+                    agentIcon: pendingAssistantIdentity?.icon,
+                    agentRole: pendingAssistantIdentity?.role,
+                    children: (
+                      <PublicThinkingStatus
+                        isLoading={thread.isLoading}
+                        liveToolEvents={liveToolEvents ?? []}
+                        hasStreamingMessage={hasStreamingAnswer}
+                        vitals={streamVitals}
+                        className="ml-0"
+                      />
+                    ),
+                  })
+                ) : (
+                  <div
+                    className="ml-11"
+                    data-testid="assistant-continuation-activity"
+                  >
+                    <PublicThinkingStatus
+                      isLoading={thread.isLoading}
+                      liveToolEvents={liveToolEvents ?? []}
+                      hasStreamingMessage={hasStreamingAnswer}
+                      vitals={streamVitals}
+                      className="ml-0"
+                    />
+                  </div>
+                ))}
             </div>
           );
         })}
@@ -1695,9 +1831,7 @@ export function MessageList({
                   )}
                 </div>
                 {!isNetworkError && (
-                  <div className="text-sm opacity-80">
-                    {errorBannerText}
-                  </div>
+                  <div className="text-sm opacity-80">{errorBannerText}</div>
                 )}
                 {isNetworkError && <span>{errorBannerText}</span>}
                 {!isNetworkError && (
@@ -1804,11 +1938,9 @@ function TurnLocatorRail({
         />
         {visibleMarkers.map((marker) => {
           const active = marker.key === activeKey;
-          const phaseMarker =
-            marker.kind === "phase" ? `（${t.message.phaseTask}）` : "";
           const label = t.message.turnNumberLabel(
             marker.number,
-            `${phaseMarker}${marker.label}`,
+            marker.label,
           );
           return (
             <button

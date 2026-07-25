@@ -39,7 +39,7 @@ describe("ExecutionChecklistPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Execution Steps")).toBeInTheDocument();
+    expect(screen.getByText("Progress Checklist")).toBeInTheDocument();
     expect(screen.getByText("Read context")).toBeInTheDocument();
   });
 
@@ -58,9 +58,11 @@ describe("ExecutionChecklistPanel", () => {
       screen.getByText(
         (content) =>
           content.includes("Write/modify file") &&
-          content.includes("Run command"),
+          content.includes("Run checks"),
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Run command/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/npm test/)).not.toBeInTheDocument();
   });
 
   it("lets TodoPanel own explicit todo_write events", () => {

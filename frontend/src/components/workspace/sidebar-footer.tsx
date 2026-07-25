@@ -23,10 +23,11 @@ import {
 import {
   useAgents,
   useLocalCliAgents,
+  useLocalCliPartnerAgents,
   dedupeAgentsByName,
   dedupePersonaAgentsByDisplayName,
 } from "@/core/agents";
-import type { Agent } from "@/core/agents";
+import type { Agent, LocalCliPartnerAgent } from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import {
   LOCAL_AGENT_IDS,
@@ -84,10 +85,21 @@ function sortHubDefaultAgents(left: Agent, right: Agent): number {
 /** Resolve ``Agent.avatar_url`` to an absolute URL the browser can load. */
 function resolveAvatarUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith("http://") || url.startsWith("https://")) {
+  if (
+    url.startsWith("http://") ||
+    url.startsWith("https://") ||
+    url.startsWith("data:") ||
+    url.startsWith("blob:")
+  ) {
     return withAgentAvatarVersion(url);
   }
-  return withAgentAvatarVersion(`${getBackendBaseURL()}${url}`);
+  // API avatars belong to the Python gateway. Imported Vite assets must stay
+  // on the frontend origin (and may be relative in the packaged Electron app).
+  if (url.startsWith("/api/") || url.startsWith("api/")) {
+    const path = url.startsWith("/") ? url : `/${url}`;
+    return withAgentAvatarVersion(`${getBackendBaseURL()}${path}`);
+  }
+  return withAgentAvatarVersion(url);
 }
 
 // ─── Avatar components ───────────────────────────────────────────
@@ -143,6 +155,12 @@ export function AgentFooter() {
     isError: cliAgentsFailed,
     refresh: refreshCliAgents,
   } = useLocalCliAgents();
+  const {
+    partners: allCliPartners,
+    isFetching: isFetchingAllCliPartners,
+    isError: cliPartnersFailed,
+    refresh: refreshAllCliPartners,
+  } = useLocalCliPartnerAgents();
   const { user, isGuest, logout } = useAuth();
   const _navigate = useNavigate();
   const { pathname, search } = useLocation();
@@ -198,6 +216,26 @@ export function AgentFooter() {
     () => footerAgents.filter(isLocalCliAgent),
     [footerAgents],
   );
+  const cliPartnerAgentNames = useMemo(
+    () => new Set(cliPartnerAgents.map((agent) => agent.name)),
+    [cliPartnerAgents],
+  );
+  const cliPartnerRows = useMemo<LocalCliPartnerAgent[]>(() => {
+    if (allCliPartners.length > 0) {
+      return allCliPartners;
+    }
+    return cliPartnerAgents.map((agent) => ({
+      agent,
+      partnerId:
+        String(agent.capabilities?.local_partner_id || "") ||
+        agent.name.replace(/^local_/, "").replaceAll("_", "-"),
+      detected: true,
+      ready: true,
+      registered: false,
+      status: "detected",
+      fixHint: null,
+    }));
+  }, [allCliPartners, cliPartnerAgents]);
   const effectiveName = lock?.agent ?? activeName ?? "general";
 
   const active: Agent | undefined =
@@ -246,6 +284,63 @@ export function AgentFooter() {
               ? t.sidebar.currentAgent
               : a.description || t.sidebar.soloChat}
           </span>
+        </span>
+        {isActive && (
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <CheckIcon className="size-3" />
+          </span>
+        )}
+      </DropdownMenuItem>
+    );
+  };
+
+  const renderCliPartnerItem = (row: LocalCliPartnerAgent) => {
+    const a = row.agent;
+    const isSelectable = row.detected && row.ready;
+    const isActive = a.name === active?.name;
+    const command =
+      typeof a.capabilities?.local_partner_command === "string"
+        ? a.capabilities.local_partner_command
+        : "";
+    const statusText = row.detected
+      ? row.registered || cliPartnerAgentNames.has(a.name)
+        ? t.localAgentConnect.statusConnected
+        : t.localAgentConnect.statusDetected
+      : t.localAgentConnect.statusNotDetected;
+    return (
+      <DropdownMenuItem
+        key={a.name}
+        disabled={!isSelectable}
+        onSelect={() => {
+          if (isSelectable) selectAgent(a.name);
+        }}
+        className={cn(
+          "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs",
+          "opacity-85 transition-colors focus:bg-muted/60 focus:text-foreground focus:opacity-100",
+          isActive && "bg-muted/35 opacity-100",
+          !isSelectable && "opacity-45 focus:bg-transparent",
+        )}
+      >
+        <AgentAvatar agent={a} className="size-8 rounded-lg text-xs" />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate font-medium leading-none">
+            {a.display_name || a.name}
+          </span>
+          <span className="truncate text-xs font-normal leading-tight text-muted-foreground">
+            {row.detected
+              ? command || a.description || statusText
+              : row.fixHint || t.localAgentConnect.noPartnersAvailable}
+          </span>
+        </span>
+        <span
+          className={cn(
+            "shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-medium",
+            row.detected
+              ? "bg-emerald-500/10 text-emerald-600"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          {statusText}
         </span>
         {isActive && (
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -338,40 +433,42 @@ export function AgentFooter() {
             </span>
             <button
               type="button"
-              disabled={isFetchingCliAgents}
+              disabled={isFetchingCliAgents || isFetchingAllCliPartners}
               title={t.localAgentConnect.retryDetect}
               aria-label={t.localAgentConnect.retryDetect}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                void refreshCliAgents();
+                void Promise.all([refreshCliAgents(), refreshAllCliPartners()]);
               }}
               className="-mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-50"
             >
               <RefreshCwIcon
                 className={cn(
                   "size-3.5",
-                  isFetchingCliAgents && "animate-spin",
+                  (isFetchingCliAgents || isFetchingAllCliPartners) &&
+                    "animate-spin",
                 )}
               />
             </button>
           </DropdownMenuLabel>
           <div aria-live="polite">
-            {cliAgentsFailed ? (
+            {cliAgentsFailed && cliPartnersFailed ? (
               <div className="px-2.5 py-2 text-xs text-destructive">
                 {t.localAgentConnect.detectFailed}
               </div>
-            ) : isFetchingCliAgents && cliPartnerAgents.length === 0 ? (
+            ) : (isFetchingCliAgents || isFetchingAllCliPartners) &&
+              cliPartnerRows.length === 0 ? (
               <div className="px-2.5 py-2 text-xs text-muted-foreground">
                 {t.localAgentConnect.detecting}
               </div>
-            ) : cliPartnerAgents.length === 0 ? (
+            ) : cliPartnerRows.length === 0 ? (
               <div className="px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
                 {t.localAgentConnect.noPartnersAvailable}
               </div>
             ) : null}
           </div>
-          {cliPartnerAgents.map(renderAgentItem)}
+          {cliPartnerRows.map(renderCliPartnerItem)}
           <DropdownMenuSeparator />
           {displayAgent ? (
             <>

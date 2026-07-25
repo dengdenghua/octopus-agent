@@ -167,7 +167,29 @@ export function useAgentWorkbenchI18n() {
     return agentRunTextClass(status);
   }
 
-  function workbenchStatus(blocks: WorkBlock[], phases: AgentPhase[]) {
+  function workbenchStatus(
+    blocks: WorkBlock[],
+    phases: AgentPhase[],
+    options?: { settled?: boolean; failed?: boolean },
+  ) {
+    // The server can leave a stale pending phase in a replayed snapshot even
+    // after the turn has emitted its final answer. Once the host tells us the
+    // run is settled, that lifecycle signal is authoritative for the compact
+    // header badge; the detailed phase list remains available below.
+    if (options?.failed) {
+      return {
+        label: t.agentWorkbench.statusError,
+        className: agentRunBadgeClass("error"),
+        dotClassName: agentRunDotClass("error"),
+      };
+    }
+    if (options?.settled) {
+      return {
+        label: t.agentWorkbench.statusCompleted,
+        className: agentRunBadgeClass("done"),
+        dotClassName: agentRunDotClass("done"),
+      };
+    }
     if (blocks.length === 0 && phases.length === 0) {
       return {
         label: t.agentWorkbenchPanel.agentStatusPending,

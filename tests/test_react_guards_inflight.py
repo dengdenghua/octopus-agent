@@ -248,6 +248,29 @@ class TestRedundantGreenVerificationGuard:
         assert "already green" in message
         assert "Final Answer now" in message
 
+    def test_two_real_node_harness_rounds_force_convergence(self) -> None:
+        steps = [
+            _step(1, action='write_text_file({"path": "index.html", "content": "x"})'),
+            _step(
+                2,
+                action='exec_shell({"command": "node verify.js"})',
+                observation="Static checks: 6/6 passed",
+            ),
+            _step(
+                3,
+                action=(
+                    "exec_shell({\"command\": \"node -e 'let fail = 0; "
+                    "if (!race()) fail++; process.exit(fail > 0 ? 1 : 0);'\"})"
+                ),
+                observation="Race tests: 4/4 passed",
+            ),
+        ]
+
+        message = _redundant_green_verification_guard(steps, is_code_mode=True)
+
+        assert message is not None
+        assert "already green" in message
+
     def test_new_write_resets_green_round_count(self) -> None:
         steps = [
             _step(1, action='run_tests({"cwd": "."})', observation="6 passed"),

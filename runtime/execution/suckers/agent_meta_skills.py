@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 from typing import Any
@@ -17,6 +18,13 @@ _VALID_STATUS = {"pending", "in_progress", "completed"}
 _TODO_LOCK = threading.Lock()
 _TODO_BY_SCOPE: dict[str, list[dict[str, Any]]] = {}
 _LATEST_SCOPE = "__latest__"
+
+
+def _todo_item_id(content: str, occurrence: int) -> str:
+    """Return a compact deterministic identity for a checklist item."""
+
+    digest = hashlib.sha1(f"{content.casefold()}\0{occurrence}".encode()).hexdigest()[:12]
+    return f"task-{digest}"
 
 
 def _todo_scope() -> str:
@@ -67,6 +75,9 @@ def _todo_write(
               while status is ``in_progress``, e.g. "Running
               tests". ``active_form`` is accepted as an alias.
               Defaults to ``content`` when missing.
+            - ``id`` · stable task identity. Optional on the first call; keep
+              the returned value on later updates. ``taskId`` / ``task_id``
+              are accepted aliases.
 
     Returns:
         ``{"ok": True, "count": <n>, "todos": [...]}`` · the
@@ -93,6 +104,17 @@ def _todo_write(
         raw = _coerce_todo_items(todos)
     if not raw:
         raw = _coerce_todo_items(tasks)
+    scope = _todo_scope()
+    with _TODO_LOCK:
+        previous = [dict(item) for item in _TODO_BY_SCOPE.get(scope, [])]
+    previous_ids_by_content: dict[str, list[str]] = {}
+    for item in previous:
+        previous_content = str(item.get("content") or "").strip().casefold()
+        previous_id = str(item.get("id") or "").strip()
+        if previous_content and previous_id:
+            previous_ids_by_content.setdefault(previous_content, []).append(previous_id)
+    content_occurrences: dict[str, int] = {}
+
     for t in raw:
         if not isinstance(t, dict):
             continue
@@ -107,6 +129,16 @@ def _todo_write(
         ).strip()
         if not content:
             continue
+        content_key = content.casefold()
+        occurrence = content_occurrences.get(content_key, 0)
+        content_occurrences[content_key] = occurrence + 1
+        explicit_id = str(t.get("id") or t.get("taskId") or t.get("task_id") or "").strip()
+        matching_previous_ids = previous_ids_by_content.get(content_key, [])
+        item_id = (
+            explicit_id
+            or (matching_previous_ids[occurrence] if occurrence < len(matching_previous_ids) else "")
+            or _todo_item_id(content, occurrence)
+        )
         status = t.get("status", "pending")
         if status not in _VALID_STATUS:
             status = "pending"
@@ -122,12 +154,12 @@ def _todo_write(
         active = str(t.get("activeForm") or t.get("active_form") or content).strip()
         out.append(
             {
+                "id": item_id,
                 "content": content,
                 "status": status,
                 "activeForm": active,
             }
         )
-    scope = _todo_scope()
     with _TODO_LOCK:
         _TODO_BY_SCOPE[scope] = [dict(item) for item in out]
         _TODO_BY_SCOPE[_LATEST_SCOPE] = [dict(item) for item in out]
@@ -301,8 +333,8 @@ def register_agent_meta_skills(registry: SkillRegistry) -> int:
             description=(
                 "用途: 维护 agent 的任务清单 (实时进度面板) — 多步任务一开始全列出 (pending)，每完成 / 切换一步重传完整列表 (一项 in_progress, 完成的 completed)。\n"
                 "何时不用: 只是看当前清单用 todo_read；单步小任务不必拆；不要拿这个工具传 diff (必须传完整列表)；最终答复仍走正常输出，不要塞这里。\n"
-                "关键参数: items (必填, list[{content, status: pending|in_progress|completed, activeForm}]; todos 是兼容别名; 同时只能一个 in_progress, 否则后续被降级为 pending)。\n"
-                '示例: todo_write({"items": [{"content": "Run tests", "status": "in_progress", "activeForm": "Running tests"}]})'
+                "关键参数: items (必填, list[{id?, content, status: pending|in_progress|completed, activeForm}]; todos 是兼容别名; 同时只能一个 in_progress, 否则后续被降级为 pending)。首次可省略 id，后续更新应原样保留返回的 id。\n"
+                '示例: todo_write({"items": [{"id": "tests", "content": "Run tests", "status": "in_progress", "activeForm": "Running tests"}]})'
             ),
             affinity=["meta", "plan", "ui"],
             cost_profile="low",

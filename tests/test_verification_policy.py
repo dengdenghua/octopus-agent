@@ -92,6 +92,16 @@ def test_command_satisfies_frontend_requirement() -> None:
     )
 
 
+def test_dedicated_verifiers_satisfy_python_and_frontend_requirements() -> None:
+    (python_req,) = verification_requirements_for_paths(["runtime/cache.py"])
+    (frontend_req,) = verification_requirements_for_paths(["frontend/src/App.tsx"])
+
+    assert command_satisfies_requirement("run_tests({})\n8 passed", python_req)
+    assert command_satisfies_requirement("lint_check({})\nAll checks passed", python_req)
+    assert command_satisfies_requirement("typecheck({})\nsuccess", frontend_req)
+    assert not command_satisfies_requirement("format_code({})\nformatted", python_req)
+
+
 def test_static_html_uses_smoke_check_not_typescript_requirement() -> None:
     (req,) = verification_requirements_for_paths(["output/final/snake-game.html"])
 

@@ -31,6 +31,7 @@ except ImportError:
     Query = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 def create_meta_skill_router(
     *,
@@ -41,8 +42,7 @@ def create_meta_skill_router(
     jwt_audience: str | None = None,
 ) -> Any:
     """Build a FastAPI router over the MetaSkill catalog."""
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     # Imported lazily so this module is importable in tests without
     # pulling the full runtime into memory.

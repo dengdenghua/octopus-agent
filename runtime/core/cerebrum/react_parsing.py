@@ -222,11 +222,23 @@ _DIRECT_NAMED_TOOL_CONTAINER_RE = re.compile(
     r"</tool_calls>",
     re.IGNORECASE | re.DOTALL,
 )
+_MAIN_NAMED_TOOL_CONTAINER_RE = re.compile(
+    r"<main>\s*"
+    r"<(?P<name>[A-Za-z_][A-Za-z0-9_./:-]*)>\s*"
+    r"(?P<args>.*?)\s*"
+    r"</(?P=name)>\s*"
+    r"</main>",
+    re.IGNORECASE | re.DOTALL,
+)
 _BARE_NAMED_TOOL_TAG_RE = re.compile(
     r"<(?P<name>[a-z][a-z0-9]*(?:_[a-z0-9]+)+)>\s*"
     r"(?P<args>\{.*?\})\s*"
     r"</(?P=name)>",
     re.DOTALL,
+)
+_BARE_TODO_ARRAY_TAG_RE = re.compile(
+    r"<todo_write>\s*(?P<args>\[.*?\])\s*</todo_write>",
+    re.IGNORECASE | re.DOTALL,
 )
 _XML_ARG_RE = re.compile(
     r"<(?P<key>[A-Za-z_][A-Za-z0-9_:-]*)>(?P<value>.*?)</(?P=key)>",
@@ -454,6 +466,29 @@ def _xml_args_from_body(body: str) -> dict[str, Any]:
 
 def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
     actions: list[str] = []
+    # DeepSeek-compatible endpoints may expose a complete tool call through a
+    # ``<main><tool_name>{json}</tool_name></main>`` envelope.  ``todo_write``
+    # commonly carries a top-level JSON array while ordinary tools carry an
+    # object.  The explicit outer boundary plus a successful JSON decode keeps
+    # this conservative: normal HTML ``<main>`` content is not executable.
+    for xml in _MAIN_NAMED_TOOL_CONTAINER_RE.finditer(text):
+        try:
+            payload = json.loads(xml.group("args"))
+        except json.JSONDecodeError:
+            continue
+        name = _normalize_action_name(xml.group("name").strip())
+        if isinstance(payload, list) and name == "todo_write":
+            args: dict[str, Any] = {"items": payload}
+        elif isinstance(payload, dict):
+            args = payload
+            if name == "todo_write" and "todos" in args and "items" not in args:
+                args["items"] = args.pop("todos")
+        else:
+            continue
+        actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
     # Some OpenAI-compatible providers expose their internal function wire
     # format as assistant text:
     # ``<tool_calls><invoke name="fn"><parameter name="arg">...``.
@@ -545,6 +580,20 @@ def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
     # must close with the same name, and the body must be one closed JSON
     # object.  This path only runs after every anchored format above found
     # nothing, so ordinary responses never reach it.
+    # The checklist tool is the one deliberate array-valued exception.  Keep
+    # it in a dedicated, exact-name parser instead of broadening every bare
+    # tool tag to array payloads.
+    for xml in _BARE_TODO_ARRAY_TAG_RE.finditer(text):
+        try:
+            items = json.loads(xml.group("args"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(items, list):
+            continue
+        actions.append(_format_action("todo_write", {"items": items}))
+    if actions:
+        return actions
+
     for xml in _BARE_NAMED_TOOL_TAG_RE.finditer(text):
         try:
             args = json.loads(xml.group("args"))
@@ -580,14 +629,19 @@ def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
             continue
         if not isinstance(payload, dict):
             continue
-        name = payload.get("command") or payload.get("tool") or payload.get("name")
+        name = (
+            payload.get("command")
+            or payload.get("tool")
+            or payload.get("name")
+            or payload.get("action")
+        )
         if not isinstance(name, str) or not name.strip():
             continue
         args = payload.get("kwargs") or payload.get("args") or {}
         if not isinstance(args, dict):
             args = {}
-        return [_format_action(_normalize_action_name(name.strip()), args)]
-    return []
+        actions.append(_format_action(_normalize_action_name(name.strip()), args))
+    return actions
 
 
 def _extract_tool_action_from_loose_output(text: str) -> str | None:
@@ -1015,11 +1069,11 @@ def _payload_has_loader_barrier_deadlock(text: str) -> bool:
     lines = text.splitlines()
     for index, line in enumerate(lines):
         definition = re.match(
-            r"^(?P<indent>[ \t]+)def\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*loader[A-Za-z0-9_]*)\s*\(",
+            r"^(?P<indent>[ \t]+)def\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
             line,
             re.IGNORECASE,
         )
-        if definition is None:
+        if definition is None or "loader" not in definition.group("name").lower():
             continue
         indent_width = len(definition.group("indent").expandtabs(4))
         body_lines: list[str] = []
@@ -1037,10 +1091,12 @@ def _payload_has_loader_barrier_deadlock(text: str) -> bool:
             body,
         ):
             barrier = wait.group("barrier")
-            if not re.search(
-                rf"\b{re.escape(barrier)}\s*=\s*(?:threading\.)?Barrier\s*\(",
+            assignment = re.search(
+                rf"\b{re.escape(barrier)}\s*=\s*(?:threading\.)?Barrier\s*\("
+                r"\s*(?P<parties>\d+)",
                 text,
-            ):
+            )
+            if assignment is None:
                 continue
             total_waits = len(
                 re.findall(rf"\b{re.escape(barrier)}\.wait\s*\(", text)
@@ -1050,9 +1106,109 @@ def _payload_has_loader_barrier_deadlock(text: str) -> bool:
                 rf"get_or_load\s*\([^\n]{{0,300}}\b{loader_name}\b",
                 text,
             )
-            if total_waits == 1 and passed_to_cache:
+            parties = int(assignment.group("parties"))
+            # The only bounded loader-barrier shape we tolerate is an
+            # explicit two-party rendezvous between the elected loader and
+            # one controller thread.  With N>2, extra static wait sites do
+            # not prove N runtime participants (v31 had Barrier(5) but only
+            # loader + main thread could ever reach it).  Worker threads in a
+            # single-flight test wait on the flight event, not in loader.
+            if passed_to_cache and not (parties == 2 and total_waits >= 2):
                 return True
     return False
+
+
+def _payload_has_wait_while_lock_held(text: str) -> bool:
+    """Detect blocking on an event/future while retaining a map mutex."""
+    if not text or ".wait(" not in text or "lock" not in text.lower():
+        return False
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        context = re.match(
+            r"^(?P<indent>[ \t]*)with\s+(?P<lock>(?:self\.)?[A-Za-z_][A-Za-z0-9_]*lock[A-Za-z0-9_]*)\s*:",
+            line,
+            re.IGNORECASE,
+        )
+        if context is None:
+            continue
+        indent_width = len(context.group("indent").expandtabs(4))
+        body_lines: list[str] = []
+        for candidate in lines[index + 1 :]:
+            if not candidate.strip():
+                body_lines.append(candidate)
+                continue
+            candidate_indent = len(candidate) - len(candidate.lstrip(" \t"))
+            if candidate_indent <= indent_width:
+                break
+            body_lines.append(candidate)
+        body = "\n".join(body_lines)
+        if re.search(r"\b[A-Za-z_][A-Za-z0-9_.]*\.wait\s*\(", body):
+            return True
+    for acquire in re.finditer(
+        r"(?P<lock>(?:self\.)?[A-Za-z_][A-Za-z0-9_]*lock[A-Za-z0-9_]*)"
+        r"\.acquire\s*\(",
+        text,
+        re.IGNORECASE,
+    ):
+        lock_name = re.escape(acquire.group("lock"))
+        release = re.search(rf"{lock_name}\.release\s*\(", text[acquire.end() :])
+        segment_end = acquire.end() + (release.start() if release is not None else 1600)
+        segment = text[acquire.end() : segment_end]
+        if re.search(r"\b[A-Za-z_][A-Za-z0-9_.]*\.wait\s*\(", segment):
+            return True
+    return False
+
+
+_SINGLE_PASS_URL_DECODE_RE = re.compile(r"\bunquote(?:_plus)?\s*\(")
+_PATH_BOUNDARY_PAYLOAD_MARKERS = (
+    "pathboundaryerror",
+    "relative_to(",
+    "commonpath(",
+    "is_relative_to(",
+    "symlink",
+    "path traversal",
+)
+
+
+def _payload_has_single_pass_url_decode(text: str) -> bool:
+    """Detect one-shot URL decoding in path-boundary validation.
+
+    A single ``unquote`` turns a double-encoded traversal into a still-
+    encoded path, so a subsequent canonical containment check sees an
+    innocuous filename.  Repeated decoding in a loop (or two explicit nested
+    decodes) is not flagged.  Callers must separately establish that the
+    payload belongs to path-boundary code before treating this as a defect.
+    """
+
+    if not text:
+        return False
+    calls = list(_SINGLE_PASS_URL_DECODE_RE.finditer(text))
+    if len(calls) != 1:
+        return False
+    call_line_start = text.rfind("\n", 0, calls[0].start()) + 1
+    call_line = text[call_line_start : text.find("\n", calls[0].end())]
+    call_indent = len(call_line) - len(call_line.lstrip(" \t"))
+    prefix_lines = text[:call_line_start].splitlines()
+    for line in reversed(prefix_lines):
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" \t"))
+        if indent >= call_indent:
+            continue
+        stripped = line.strip()
+        if re.match(r"(?:while\b|for\b).*:\s*(?:#.*)?$", stripped):
+            return False
+        # The nearest enclosing block is not a loop; outer blocks cannot
+        # make the call repeat without the call being nested under them.
+        break
+    return True
+
+
+def _payload_looks_like_path_boundary(text: str) -> bool:
+    lowered = str(text or "").lower()
+    return "unquote" in lowered and any(
+        marker in lowered for marker in _PATH_BOUNDARY_PAYLOAD_MARKERS
+    )
 
 
 _DEDICATED_VERIFY_TOOLS: frozenset[str] = frozenset(
@@ -1159,6 +1315,35 @@ def _step_command_text(step: ReActStep) -> str:
     return f"{step.action or ''} {command}".lower()
 
 
+_NODE_VERIFY_SCRIPT_RE = re.compile(
+    r"^\s*node(?:\s+--?[a-z0-9_-]+)*\s+"
+    r"(?!-e(?:\s|$))"
+    r"[^\n]*?(?:test|spec|verify|verification|check)[^\n]*$",
+    re.IGNORECASE,
+)
+_NODE_INLINE_FAILURE_BRANCH_RE = re.compile(
+    r"^\s*node\s+-e(?:\s|$)[\s\S]*?"
+    r"process\.exit\s*\(\s*(?:1\b|[^)]*\b(?:fail|failed|error|errors)\b[^)]*)\)",
+    re.IGNORECASE,
+)
+
+
+def _node_command_is_verification(command: str) -> bool:
+    """Recognize executable Node verification without trusting fake green text.
+
+    Static fixtures often have no package manifest, so agents reasonably run
+    ``node verify.js`` or an inline race harness.  A script name must carry a
+    verification marker; inline code must contain a genuine non-zero failure
+    branch.  Merely printing ``tests passed`` and exiting zero is deliberately
+    excluded.
+    """
+
+    return bool(
+        _NODE_VERIFY_SCRIPT_RE.search(command)
+        or _NODE_INLINE_FAILURE_BRANCH_RE.search(command)
+    )
+
+
 def _step_is_verify(step: ReActStep, *, markers: tuple[str, ...]) -> bool:
     actions = step.actions or ([step.action] if step.action else [])
     for action in actions:
@@ -1171,6 +1356,8 @@ def _step_is_verify(step: ReActStep, *, markers: tuple[str, ...]) -> bool:
         if name not in _VERIFY_TOOLS:
             continue
         command = str(args.get("command") or args.get("cmd") or "")
+        if "tsc" in markers and _node_command_is_verification(command):
+            return True
         haystack = f"{action} {command}".lower()
         if any(marker in haystack for marker in markers):
             return True

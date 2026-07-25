@@ -12,6 +12,7 @@ except ImportError:
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 
 def _node_status_from_events(
     task_id: str,
@@ -122,8 +123,7 @@ def create_dag_debugger_router(
     journal: Any,
     planner: Any = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["dag-debugger"])
 

@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -40,8 +41,7 @@ def create_retrieve_router(
     jwt_audience: str | None = None,
 ) -> Any:
     """Build the router. ``app.include_router(create_retrieve_router())``."""
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["retrieve"])
 

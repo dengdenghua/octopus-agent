@@ -511,7 +511,9 @@ export function AgentProgressPill({
               <div className="mt-1.5 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700">
                 <WifiOffIcon className="size-3 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">
-                  {capabilityDisabledInfo.toolName} 被配置关闭
+                  {t.messageGrouping.capabilityDisabled(
+                    capabilityDisabledInfo.toolName,
+                  )}
                 </span>
                 <button
                   type="button"
@@ -519,7 +521,9 @@ export function AgentProgressPill({
                   disabled={enablingCapability}
                   className="shrink-0 rounded bg-amber-600 px-1.5 py-0.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
                 >
-                  {enablingCapability ? "启用中…" : "启用"}
+                  {enablingCapability
+                    ? t.messageGrouping.enablingCapability
+                    : t.messageGrouping.enableCapability}
                 </button>
               </div>
             ) : null}

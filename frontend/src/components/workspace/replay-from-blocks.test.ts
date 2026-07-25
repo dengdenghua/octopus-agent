@@ -54,7 +54,7 @@ describe("buildReplayFromBlocks", () => {
     });
   });
 
-  it("renders a terminal step body as `$ cmd` plus output", () => {
+  it("renders a terminal step body as public output without the raw command", () => {
     const data = buildReplayFromBlocks(
       [
         block({
@@ -66,7 +66,8 @@ describe("buildReplayFromBlocks", () => {
       ],
       { title: "Run" },
     );
-    expect(data.steps[0].body).toBe("$ ls -la\nfile1\nfile2");
+    expect(data.steps[0].body).toBe("file1\nfile2");
+    expect(data.steps[0].body).not.toContain("ls -la");
   });
 
   it("drops sub-agent lifecycle blocks", () => {
@@ -189,6 +190,63 @@ describe("buildReplayFromBlocks", () => {
     );
     expect(data.steps[0].body!.length).toBeLessThan(1300);
     expect(data.steps[0].body!.endsWith("…")).toBe(true);
+  });
+
+  it("strips protocol tags, renderer markers and machine phase prefixes", () => {
+    const data = buildReplayFromBlocks(
+      [
+        block({
+          kind: "read",
+          title: "Phase 1: <TextBlock>读取协议</TextBlock>",
+          subtitle: "<read_only> </read_only> runtime/protocol/items.py",
+          inputText:
+            "<read_only> </read_only>\n<TextBlock>只读比较字段</TextBlock>",
+          outputText:
+            "<ToolCallBlock>private tool args</ToolCallBlock>\n已确认字段一致",
+        }),
+      ],
+      { title: "Run" },
+    );
+
+    expect(data.steps[0]).toMatchObject({
+      title: "读取协议",
+      subtitle: "runtime/protocol/items.py",
+    });
+    expect(data.steps[0].body).toContain("只读比较字段");
+    expect(data.steps[0].body).toContain("已确认字段一致");
+    expect(data.steps[0].body).not.toContain("private tool args");
+    expect(JSON.stringify(data)).not.toMatch(
+      /read_only|TextBlock|Phase 1/i,
+    );
+  });
+
+  it("does not package raw tool names or terminal commands into share replay data", () => {
+    const data = buildReplayFromBlocks(
+      [
+        block({
+          kind: "terminal",
+          title: "exec_shell",
+          subtitle: "read_file",
+          event: {
+            input: {
+              command: "cat ~/.ssh/id_rsa && pnpm test",
+            },
+          },
+          outputText:
+            "12 passed\nAction: exec_shell\nObservation: token=super-secret",
+        }),
+      ],
+      { title: "Run" },
+    );
+
+    expect(data.steps[0]).toMatchObject({
+      title: "operation",
+      subtitle: "operation",
+    });
+    expect(data.steps[0].body).toContain("12 passed");
+    expect(JSON.stringify(data)).not.toMatch(
+      /exec_shell|read_file|cat ~\/\.ssh|pnpm test|super-secret|Observation:/i,
+    );
   });
 
   it("passes meta through to the replay data", () => {

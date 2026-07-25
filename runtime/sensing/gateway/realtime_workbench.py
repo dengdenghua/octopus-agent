@@ -53,7 +53,7 @@ def _phases_from_todo_preview(
             id=f"todo-phase:{index}",
             index=index + 1,
             total=total,
-            title=_phase_title(title, index),
+            title=_phase_title(title),
             status=status,  # type: ignore[arg-type]
             active_item_id=active_item_id if status == "running" else None,
         )
@@ -182,11 +182,15 @@ def _todo_phase_status(value: Any) -> str:
     return "pending"
 
 
-def _phase_title(title: str, index: int) -> str:
+def _phase_title(title: str) -> str:
     clean = re.sub(r"\s+", " ", title).strip()
-    if re.match(r"^phase\s+\d+", clean, flags=re.IGNORECASE):
-        return clean
-    return f"Phase {index + 1}: {clean}"
+    without_machine_prefix = re.sub(
+        r"^(?:phase|阶段|step|步骤)\s*[\d一二三四五六七八九十]+(?:\.\d+)?\s*[:：.)、-]?\s*",
+        "",
+        clean,
+        flags=re.IGNORECASE,
+    ).strip()
+    return without_machine_prefix or clean or "进行中"
 
 
 def _workspace_focus_for_tool(item: CommandExecutionItem) -> WorkspaceFocus:

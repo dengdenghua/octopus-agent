@@ -162,6 +162,33 @@ class TestExecutorStripsPrivilegeFlags:
 
         assert "allow_private" not in args
 
+    def test_code_mode_browser_regression_restores_loopback_only(self) -> None:
+        from runtime.execution.tool_engine.executor import (
+            _restore_trusted_browser_loopback_access,
+        )
+
+        with session_scope(
+            Session(
+                thread_id="code-ui-regression",
+                metadata={
+                    "mode": "code",
+                    "browser_regression_enabled": True,
+                    "browser_regression_preview_url": "http://127.0.0.1:8123/app",
+                },
+            )
+        ):
+            loopback = _restore_trusted_browser_loopback_access(
+                SkillId("browser_navigate"),
+                {"url": "http://127.0.0.1:8123/app"},
+            )
+            private_lan = _restore_trusted_browser_loopback_access(
+                SkillId("browser_navigate"),
+                {"url": "http://10.0.0.5/admin"},
+            )
+
+        assert loopback["allow_private"] is True
+        assert "allow_private" not in private_lan
+
 
 class TestStripHelper:
     def test_strips_both_flags_and_reports_them_sorted(self) -> None:

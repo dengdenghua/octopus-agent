@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
     APIRouter = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from .client import OctClientError, get_auth, is_dead_token, post_auth
 from .config import OctConfig
 from .links import OctLink, OctLinkStore
@@ -59,8 +60,7 @@ def create_account_router(
     jwt_audience: str | None = None,
     http_client: Any = None,
 ) -> Any:
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(prefix="/api/account/oct", tags=["oct"])
     base = config.base_url.rstrip("/")

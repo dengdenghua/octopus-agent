@@ -86,7 +86,7 @@ def prepare_fixture_suite(
             "runs_root": Path(runs_root) / case_id,
             "preserve_runs": preserve_runs,
         }
-        if case_id.startswith("browser."):
+        if case_id.startswith(("browser.", "frontend.")):
             fixtures[case_id] = LiveIsolatedFixture(
                 **common,
                 server_command=[
@@ -147,12 +147,61 @@ def prepare_coding_fixture_suite(
 
 
 def _trajectory_requirement(case_id: str, trajectory: Trajectory) -> str | None:
+    tool_names = trajectory.tool_names()
+
+    def browser_count(name: str) -> int:
+        return sum(
+            1
+            for observed in tool_names
+            if observed in {f"browser_{name}", f"live_browser_{name}"}
+        )
+
+    if case_id == "browser.dynamic-crud":
+        # The browser contract intentionally exposes no separate ``select``
+        # tool.  Native <select> changes may therefore be performed by
+        # ``browser_type`` (label/value fallback) or by click interactions.
+        # Require the two unambiguous text/value mutations plus the full click
+        # sequence; the isolated outcome verifier independently proves both
+        # select values, create, edit, verify, and delete.
+        required = {
+            "navigate": 1,
+            "type": 2,
+            "click": 4,
+        }
+        missing = [
+            f"{name}>={minimum} (observed {browser_count(name)})"
+            for name, minimum in required.items()
+            if browser_count(name) < minimum
+        ]
+        if browser_count("get") + browser_count("state") < 1:
+            missing.append("get/state>=1 (observed 0)")
+        if missing:
+            return "dynamic CRUD requires a real browser UI trajectory: " + ", ".join(missing)
+    if case_id == "browser.rich-editor-upload":
+        required = {
+            "navigate": 1,
+            "type": 2,
+            "upload": 1,
+            "click": 1,
+        }
+        missing = [
+            f"{name}>={minimum} (observed {browser_count(name)})"
+            for name, minimum in required.items()
+            if browser_count(name) < minimum
+        ]
+        if browser_count("wait") + browser_count("state") + browser_count("get") < 1:
+            missing.append("wait/state/get>=1 (observed 0)")
+        if missing:
+            return "rich editor case requires a real browser UI trajectory: " + ", ".join(missing)
     if case_id == "multiagent.parallel-evidence":
-        workers = sum(1 for name in trajectory.tool_names() if name == "subagent")
+        workers = sum(1 for name in tool_names if name == "subagent")
         if workers < 3:
             return f"parallel evidence case requires at least three subagent starts, observed {workers}"
+        # Shared state is intentionally graded by the outcome verifier.  Do not
+        # require Octopus-specific ``bb_*`` tool names from another rich client;
+        # Codex Desktop may use its workspace-backed handoff primitives instead.
     if case_id == "multiagent.interrupted-handoff":
-        workers = sum(1 for name in trajectory.tool_names() if name == "subagent")
+        workers = sum(1 for name in tool_names if name == "subagent")
         if workers < 2:
             return (
                 f"handoff case requires multi-agent work across phases, observed {workers} starts"

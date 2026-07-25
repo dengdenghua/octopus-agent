@@ -47,6 +47,7 @@ except ImportError:  # pragma: no cover
     FileResponse = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
+from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.platform.process.paths import app_paths
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
 
@@ -117,8 +118,7 @@ def create_uploads_router(
         captures this value · passing a different path later
         requires a fresh router.
     """
-    if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed")
+    require_fastapi(__name__)
 
     router = APIRouter(tags=["uploads"])
     legacy_root = legacy_upload_root or upload_root

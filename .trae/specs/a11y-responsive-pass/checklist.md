@@ -60,5 +60,5 @@
 
 ## 提交
 
-- [ ] commit message: `style(workspace): a11y + responsive pass for keyboard and mobile usability`
-- [ ] 仅提交本次走查相关文件，不混入未追踪的非相关变更
+- [x] commit `3bf7687df`: `style(workspace): a11y + responsive pass for keyboard and mobile usability`
+- [x] 仅提交本次走查相关文件（63 files +509/-82），未混入 message-list 与 pre-existing benchmarks/runtime/tests 修改
