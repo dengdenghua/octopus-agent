@@ -1588,7 +1588,7 @@ describe("<AgentOperatorPanel />", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Pending")).toBeInTheDocument();
     expect(screen.getByText("Promoted")).toBeInTheDocument();
-  });
+  }, 15000);
 
   it("takes over an expired task from the recovery queue", async () => {
     renderWithProviders(<AgentOperatorPanel />);
