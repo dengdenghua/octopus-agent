@@ -308,8 +308,10 @@ class _ReactBridgeState:
             self._bind_timeline(self.agent_message)
             turn.items.append(self.agent_message)
             await self._emit_started(turn, log, emitter, self.agent_message)
-        self.agent_message.text = _append_capped_stream_content(
-            self.agent_message.text,
+        agent_message = self.agent_message
+        assert agent_message is not None
+        agent_message.text = _append_capped_stream_content(
+            agent_message.text,
             delta,
         )
         await self._buffer_delta(
@@ -336,8 +338,10 @@ class _ReactBridgeState:
             self._bind_timeline(self.reasoning)
             turn.items.append(self.reasoning)
             await self._emit_started(turn, log, emitter, self.reasoning)
-        self.reasoning.content = _append_capped_stream_content(
-            self.reasoning.content,
+        reasoning = self.reasoning
+        assert reasoning is not None
+        reasoning.content = _append_capped_stream_content(
+            reasoning.content,
             delta,
         )
         await self._buffer_delta(
@@ -387,8 +391,10 @@ class _ReactBridgeState:
             self._bind_timeline(self.commentary_message, phase_id=phase_id)
             turn.items.append(self.commentary_message)
             await self._emit_started(turn, log, emitter, self.commentary_message)
-        self.commentary_message.text = _append_capped_stream_content(
-            self.commentary_message.text,
+        commentary_message = self.commentary_message
+        assert commentary_message is not None
+        commentary_message.text = _append_capped_stream_content(
+            commentary_message.text,
             delta,
         )
         await self._buffer_delta(

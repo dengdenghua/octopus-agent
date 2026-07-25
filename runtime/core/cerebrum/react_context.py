@@ -610,9 +610,13 @@ def _git_status_summary(root: Any) -> str:
     upstream = _git("rev-list", "--left-right", "--count", "@{u}...HEAD")
     if upstream:
         # Output is "<behind>\t<ahead>" relative to upstream.
-        parts = upstream.split()
-        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-            behind, ahead = int(parts[0]), int(parts[1])
+        upstream_parts = upstream.split()
+        if (
+            len(upstream_parts) == 2
+            and upstream_parts[0].isdigit()
+            and upstream_parts[1].isdigit()
+        ):
+            behind, ahead = int(upstream_parts[0]), int(upstream_parts[1])
 
     last = _git("log", "-1", "--pretty=format:%h %s")
     last_short = (last[:60] + "…") if len(last) > 60 else last

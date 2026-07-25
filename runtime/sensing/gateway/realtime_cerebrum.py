@@ -75,7 +75,8 @@ def _format_project_os_result(state: dict[str, Any]) -> str:
     """Human-readable Project OS result for the realtime chat surface."""
     project = state.get("project") if isinstance(state.get("project"), dict) else {}
     result = state.get("result") if isinstance(state.get("result"), dict) else {}
-    milestones = state.get("milestones") if isinstance(state.get("milestones"), list) else []
+    raw_milestones = state.get("milestones")
+    milestones: list[Any] = raw_milestones if isinstance(raw_milestones, list) else []
     tasks_by_ms = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
     roster = [str(member) for member in (state.get("roster") or []) if str(member).strip()]
 
@@ -139,7 +140,8 @@ def _format_project_os_result(state: dict[str, Any]) -> str:
 def _project_os_todo_item(state: dict[str, Any]) -> TodoListItem | None:
     """Map Project OS milestones to the existing realtime todo-list item."""
     project = state.get("project") if isinstance(state.get("project"), dict) else {}
-    milestones = state.get("milestones") if isinstance(state.get("milestones"), list) else []
+    raw_milestones = state.get("milestones")
+    milestones: list[Any] = raw_milestones if isinstance(raw_milestones, list) else []
     tasks_by_ms = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
     if not milestones:
         return None
@@ -1224,6 +1226,7 @@ class CerebrumRuntime:
             if local_active:
                 if not self._turn_steering_accepting.get(turn_id, False):
                     raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is finalizing")
+                assert active is not None
                 turn = active[0]
             else:
                 if not self._has_fresh_active_turn_lease(
@@ -1768,12 +1771,13 @@ class CerebrumRuntime:
             )
             return
         project = state.get("project") if isinstance(state.get("project"), dict) else {}
-        if project.get("id") and isinstance(state.get("trace"), dict):
+        project_id = project.get("id")
+        if project_id and isinstance(state.get("trace"), dict):
             state["trace"]["audit_events"] = self._project_store.events_for_project(
-                str(project["id"]),
+                str(project_id),
                 limit=20,
             )
-        if project.get("id") and state.get("control"):
+        if project_id and state.get("control"):
             state["trace"] = {
                 "schema": "octopus.projectos.control_trace.v1",
                 "thread_id": thread_id,
@@ -1789,7 +1793,7 @@ class CerebrumRuntime:
                 "control": state.get("control"),
                 "intervention": state.get("intervention"),
                 "audit_events": self._project_store.events_for_project(
-                    str(project["id"]),
+                    str(project_id),
                     limit=20,
                 ),
             }

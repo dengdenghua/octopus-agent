@@ -123,7 +123,9 @@ def _dispatch_parallel_actions(
     try:
         from runtime.execution.all_skills import is_known_but_disabled_tool
     except ImportError:  # pragma: no cover — defensive
-        is_known_but_disabled_tool = lambda _n: (False, None)  # noqa: E731
+
+        def is_known_but_disabled_tool(_n: str) -> tuple[bool, str | None]:
+            return (False, None)
     for p in parsed_pairs:
         if p is None:
             resolved_names.append(None)
@@ -168,8 +170,9 @@ def _dispatch_parallel_actions(
     # Emit tool_start for every action up-front so the UI shows them
     # in parallel even if we end up running serially below.
     for idx in range(len(actions)):
-        name = resolved_names[idx] or (parsed_pairs[idx][0] if parsed_pairs[idx] else "unknown")
-        _input_preview = parsed_pairs[idx][1] if parsed_pairs[idx] else None
+        parsed_pair = parsed_pairs[idx]
+        name = resolved_names[idx] or (parsed_pair[0] if parsed_pair else "unknown")
+        _input_preview = parsed_pair[1] if parsed_pair else None
         yield tool_lifecycle_event_to_react_event(
             normalize_tool_lifecycle_event(
                 "tool_start",
@@ -197,7 +200,8 @@ def _dispatch_parallel_actions(
         if resolved_names[idx] is None:
             _di = disabled_infos[idx]
             if _di is not None:
-                _tool_name = parsed_pairs[idx][0] if parsed_pairs[idx] else "unknown"
+                _parsed_pair = parsed_pairs[idx]
+                _tool_name = _parsed_pair[0] if _parsed_pair else "unknown"
                 return (
                     f"(工具未注册) {_tool_name} 所属组 '{_di['group']}' 被配置关闭"
                     f"({_di['config_flag']}=false)。如需启用:在 config.local.yaml "
@@ -283,7 +287,8 @@ def _dispatch_parallel_actions(
             # used to disappear from that ledger, so a successful fallback
             # batch could still leave a complete answer marked as failed.
             beak_step_sink.append(bk)
-        name = resolved_names[idx] or (parsed_pairs[idx][0] if parsed_pairs[idx] else "unknown")
+        _parsed_pair = parsed_pairs[idx]
+        name = resolved_names[idx] or (_parsed_pair[0] if _parsed_pair else "unknown")
         _ok = not (
             obs is not None
             and isinstance(obs, str)

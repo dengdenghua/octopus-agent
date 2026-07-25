@@ -1454,7 +1454,7 @@ def create_observability_router(
 
         iteration_raw = body.get("iteration")
         try:
-            iteration = int(iteration_raw)
+            iteration = int(iteration_raw) if iteration_raw is not None else 0
         except (TypeError, ValueError) as exc:
             raise HTTPException(400, "iteration (int) required") from exc
 

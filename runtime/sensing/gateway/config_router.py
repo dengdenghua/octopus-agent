@@ -393,7 +393,7 @@ def create_config_router(
         """Return the provider input window, distinct from output max_tokens."""
         raw = entry.get("context_window")
         try:
-            explicit = int(raw)
+            explicit = int(raw) if raw is not None else 0
         except (TypeError, ValueError):
             explicit = 0
         if 8_192 <= explicit <= 2_000_000:
@@ -926,7 +926,7 @@ def create_config_router(
             body.get("context_window") if "context_window" in body else prev.get("context_window")
         )
         try:
-            context_window = int(raw_context_window)
+            context_window = int(raw_context_window) if raw_context_window is not None else 0
         except (TypeError, ValueError):
             context_window = 0
         if not 8_192 <= context_window <= 2_000_000:

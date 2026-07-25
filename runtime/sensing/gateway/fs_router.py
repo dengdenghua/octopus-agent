@@ -549,7 +549,7 @@ def create_fs_router(
         to treat an unknown prefix as a local path (fail-open) or raise.
         """
         if not value or not isinstance(value, str):
-            return (None, value)
+            return (None, value or "")
         # Skip Windows drive letters (e.g. "C:/Users/...").
         if (
             len(value) >= 2

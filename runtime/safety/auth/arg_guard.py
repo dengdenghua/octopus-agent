@@ -123,7 +123,7 @@ def _strip_delegation_context_overrides(
         return value, [], False
 
     changed = False
-    stripped: list[str] = []
+    stripped = []
     output: dict[Any, Any] = {}
     for key, item in value.items():
         key_text = str(key)

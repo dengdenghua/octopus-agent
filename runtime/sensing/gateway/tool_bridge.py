@@ -266,8 +266,11 @@ def _iter_native_model_stream_with_deadline(
     event_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=64)
     stop_event = threading.Event()
     caller_context = contextvars.copy_context()
+    _cancellation: Any = None
     try:
-        from runtime.safety.approval import cancellation as _cancellation
+        from runtime.safety.approval import cancellation as _cancellation_module
+
+        _cancellation = _cancellation_module
     except ImportError:  # pragma: no cover - optional subsystem
         _cancellation = None
 
@@ -1073,7 +1076,8 @@ def _filter_tool_specs_for_workspace_contract(
 
 def _is_code_change_task(intent: ParsedIntent) -> bool:
     context = intent.user_context or {}
-    nested = context.get("metadata") if isinstance(context.get("metadata"), dict) else {}
+    raw_metadata = context.get("metadata")
+    nested = raw_metadata if isinstance(raw_metadata, dict) else {}
     mode = str(context.get("mode") or nested.get("mode") or "").lower()
     code_mode = context.get("code_mode", nested.get("code_mode"))
     if mode != "code" and code_mode is not True:
@@ -3256,7 +3260,7 @@ def stream_agentic_fallback(
                         output, is_error = _run_serial_one(call)
                     else:
                         future = serial_pool.submit(
-                            contextvars.copy_context().run,
+                            contextvars.copy_context().run,  # type: ignore[arg-type]
                             _run_serial_one,
                             call,
                         )
@@ -3275,7 +3279,7 @@ def stream_agentic_fallback(
                                     reason="user redirected active tool batch"
                                 )
                         try:
-                            output, is_error = future.result()
+                            output, is_error = future.result()  # type: ignore[assignment]
                         except Exception as exc:  # noqa: BLE001 — surface as tool failure
                             output, is_error = f"(serial exec error: {exc})", True
                             _logger.warning("serial tool exec future failed: %s", exc)
@@ -3299,7 +3303,7 @@ def stream_agentic_fallback(
                         },
                         None,
                     )
-                    block: dict[str, Any] = {
+                    block = {
                         "type": "tool_result",
                         "tool_use_id": call.id,
                         "content": output,

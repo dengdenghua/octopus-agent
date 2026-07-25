@@ -1079,10 +1079,13 @@ def _iter_model_stream_with_deadline(
     event_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=64)
     stop_event = threading.Event()
     caller_context = contextvars.copy_context()
+    _current_cancellation_token: Any = None
     try:
         from runtime.safety.approval.cancellation import (
-            current_cancellation_token as _current_cancellation_token,
+            current_cancellation_token as _imported_token,
         )
+
+        _current_cancellation_token = _imported_token
     except ImportError:  # pragma: no cover - optional subsystem
         _current_cancellation_token = None
 
@@ -1117,7 +1120,7 @@ def _iter_model_stream_with_deadline(
     visible_activity: Any = None
     try:
         while True:
-            token = _current_cancellation_token() if _current_cancellation_token else None
+            token = _current_cancellation_token() if _current_cancellation_token is not None else None
             if token is not None and token.is_cancelled:
                 return
             current_visible_activity = visible_started()
@@ -1171,7 +1174,7 @@ def _collect_model_stream_text_with_deadline(
         router,
         request,
         timeout_s,
-        lambda state=visible_state: state["chars"],
+        lambda: visible_state["chars"],
     ):
         if event is _MODEL_STREAM_DEADLINE:
             return _MODEL_STREAM_DEADLINE
@@ -5305,7 +5308,7 @@ def stream_react_loop(
         if tool_action_requested and _should_accumulate_quiet_evidence(
             step,
             succeeded=tool_ok,
-            observation=observation,
+            observation=observation or "",
         ):
             _quiet_evidence_steps.append(step)
             # Keep prompts bounded when a provider repeatedly inspects new
@@ -5981,6 +5984,7 @@ def stream_react_loop(
                     "preserving public stage conclusions",
                 )
             else:
+                assert isinstance(convergence_result, tuple)
                 text, _convergence_response = convergence_result
             text = "" if final_answer is not None else text.strip()
             convergence_final = _extract_final_answer(text)
