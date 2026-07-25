@@ -201,6 +201,10 @@ evidence/kimi-desktop/
 output/
 ura-artifacts/
 evidence/
+# Local design-QA screenshots and codex audit captures
+.codex-audit/
+.design-qa/
+design-qa.md
 
 # Avatar-generation intermediate backups — keep on disk, not in git
 agents/*/visuals/backups/
