@@ -8,4 +8,5 @@
 - [x] `pnpm tsc --noEmit` 通过，无 i18n key 缺失或类型不匹配
 - [x] `pnpm vitest run` 受影响单测全部通过（21/21，重点：deep-research-panel/evolution-panel/quest-panel/teach-repeat-panel/remote-backends-panel/observability）
 - [x] 4 份 locale 文件（zh-CN/en-US/ja-JP/ko-KR）与 `types.ts` 顶层 key 数量一致，无遗漏无多余
-- [ ] commit message 遵循 `style(workspace): ...` 风格，仅包含本 spec 涉及的文件
+- [x] commit message 遵循 `style(workspace): ...` 风格，仅包含本 spec 涉及的文件
+  - 证据：commit `e35013add` message 为 `style(workspace): i18n + consistency pass for secondary workbench`，符合 `style(workspace): ...` 约束；`git show --stat e35013add` 显示该 commit 涉及文件全部为本 spec 范围内（deep-research-panel/desktop-organizer/i18n locales/9 个次级工作台文件字号与颜色语义化），无越界文件
