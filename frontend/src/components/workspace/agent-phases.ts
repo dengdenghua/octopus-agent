@@ -120,9 +120,14 @@ function extractTodoPhases(
       const activeLabel = taskPlanItemActiveLabel(record);
       const displayTitle =
         status === "running" && activeLabel ? activeLabel : content;
+      const businessKey =
+        normalizeBusinessPhaseKey(record.phaseKind ?? record.phase_kind) ??
+        businessAgentPhaseKey(displayTitle) ??
+        undefined;
       return {
         id: `todo-phase:${taskPlanItemId(record, occurrence)}`,
         title: phaseTitle(displayTitle),
+        businessKey,
         status,
         blockIds:
           status === "running" || status === "waiting_approval"
@@ -324,6 +329,40 @@ export function businessAgentPhaseKey(title: string): BusinessAgentPhaseKey | nu
     return "exploring";
   }
   return null;
+}
+
+/**
+ * Validate a backend-provided ``phase_kind`` value. Returns null for
+ * "other", unknown strings, or missing values so the caller can fall back
+ * to the local ``businessAgentPhaseKey`` mapping.
+ */
+export function normalizeBusinessPhaseKey(
+  value: unknown,
+): BusinessAgentPhaseKey | null {
+  if (
+    value === "planning" ||
+    value === "exploring" ||
+    value === "implementing" ||
+    value === "testing" ||
+    value === "deploying"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+/**
+ * Resolve the text the UI should show for a phase: the localized generic
+ * bucket label first, then the localized business phase label, and finally
+ * the raw title. The raw title stays available for tooltips.
+ */
+export function agentPhaseDisplayTitle(
+  phase: AgentPhase,
+  labels: Record<AgentPhaseTitleKey | BusinessAgentPhaseKey, string>,
+): string {
+  if (phase.titleKey) return labels[phase.titleKey];
+  if (phase.businessKey) return labels[phase.businessKey];
+  return phase.title;
 }
 
 export function normalizeAgentPhaseTitle(title: string) {

@@ -99,26 +99,17 @@ function streamWireText(item: Item): string {
 }
 
 // Materialize buffered chunks into the item's own wire field. Called
-// whenever an item leaves the streaming hot path (completed snapshot,
-// turn close) so the settled object is self-contained for persistence
-// and for readers that bypass ``itemStreamText``.
-//
-// ``chunkSource`` overrides where buffered chunks are looked up: a
-// replacement snapshot is a fresh object with no chunks of its own,
-// but the item it REPLACES may still hold undelivered deltas.
-function withMaterializedStreamText(item: Item, chunkSource?: Item): Item {
-  const source = chunkSource ?? item;
-  const chunks = streamChunks.get(source);
+// whenever an item leaves the streaming hot path (turn close) so the
+// settled object is self-contained for persistence and for readers
+// that bypass ``itemStreamText``.
+function withMaterializedStreamText(item: Item): Item {
+  const chunks = streamChunks.get(item);
   if (!chunks || chunks.length === 0) return item;
   const field = STREAM_TEXT_FIELDS[item.type];
   if (!field) return item;
-  const base =
-    chunkSource && streamChunks.get(item)?.length
-      ? streamWireText(item) + (streamChunks.get(item) ?? []).join("")
-      : streamWireText(item);
   return {
     ...item,
-    [field]: base + chunks.join(""),
+    [field]: streamWireText(item) + chunks.join(""),
   } as Item;
 }
 
@@ -797,12 +788,16 @@ function preserveTimelineCoordinates(existing: Item, incoming: Item): Item {
 function preserveCompletedStreamText(existing: Item, incoming: Item): Item {
   const merged = preserveTimelineCoordinates(existing, incoming);
   const field = STREAM_TEXT_FIELDS[merged.type];
-  if (!field || streamWireText(merged)) return merged;
-  const materialized = withMaterializedStreamText(existing);
-  const bufferedText = streamWireText(materialized);
-  return bufferedText
-    ? ({ ...merged, [field]: bufferedText } as Item)
-    : merged;
+  if (!field) return merged;
+  // Server snapshots can lag the live delta stream. The buffer is keyed
+  // on the REPLACED object identity, so materialize its chunks into the
+  // snapshot's wire field — otherwise those chunks would be stranded
+  // and the text would silently shrink on settle.
+  const existingText = streamWireText(withMaterializedStreamText(existing));
+  if (!existingText) return merged;
+  const snapshotText = streamWireText(merged);
+  if (snapshotText.startsWith(existingText)) return merged;
+  return { ...merged, [field]: existingText + snapshotText } as Item;
 }
 
 /**

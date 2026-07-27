@@ -427,6 +427,7 @@ function phaseSnapshotsToLiveEvent(
         index: phase.index,
         total: phase.total,
         activeItemId: phase.activeItemId,
+        phaseKind: phase.phaseKind ?? null,
       })),
       workspaceFocus: turn.workspaceFocus,
       workbenchSnapshot: turn.workbenchSnapshot ?? null,

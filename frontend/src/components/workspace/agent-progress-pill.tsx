@@ -9,7 +9,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { deriveAgentPhases, progressForPhases } from "./agent-phases";
+import {
+  agentPhaseDisplayTitle,
+  deriveAgentPhases,
+  progressForPhases,
+} from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   normalizeEventsForSettledDisplay,
@@ -408,7 +412,12 @@ export function AgentProgressPill({
                   )}
                 >
                   <StatusIcon status={phase.status} />
-                  <span className="min-w-0 flex-1 truncate">{phase.title}</span>
+                  <span
+                    className="min-w-0 flex-1 truncate"
+                    title={phase.title}
+                  >
+                    {agentPhaseDisplayTitle(phase, t.agentPhases)}
+                  </span>
                   {active ? (
                     <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-xs font-medium tabular-nums text-primary">
                       {progress.current}/{progress.total}
@@ -475,8 +484,9 @@ export function AgentProgressPill({
                   "min-w-0 flex-1 truncate",
                   running ? "text-foreground" : "text-foreground/80",
                 )}
+                title={displayPhase.title}
               >
-                {displayPhase.title}
+                {agentPhaseDisplayTitle(displayPhase, t.agentPhases)}
               </span>
               <span className="shrink-0 rounded-full bg-muted/70 px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
                 {progressLabel}

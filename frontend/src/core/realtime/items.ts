@@ -93,6 +93,10 @@ export interface AgentPhaseSnapshot {
   detail?: string | null;
   status: "pending" | "running" | "done" | "error" | "waiting_approval";
   activeItemId?: string | null;
+  /** Backend-mapped business phase (planning/exploring/implementing/testing/
+   * deploying/other). Optional — older backends omit it and the frontend
+   * falls back to mapping the title locally. */
+  phaseKind?: string | null;
 }
 
 export type WorkspaceFocusView =
