@@ -25,7 +25,7 @@
   - [x] SubTask 6.2: 视觉走查（亮/暗主题 + liquid glass 主题）— 静态走查完成：liquid 主题不覆盖 `--border`，`border-border/50` 四模式对比度均成立，无需微调 class
 - [x] Task 7: 验证与回归
   - [x] SubTask 7.1: `tsc --noEmit`：我们改动的所有文件 0 类型错误（预存在 1 个无关错误在 browser-home.tsx closeFolderAria i18n key 缺失）。eslint 0 error
-  - [x] SubTask 7.2: 新增测试 4 文件 60 用例全绿（timeline-role 13、fact-summary 19、timeline-linkage 19、progress-outline 9）；受影响域回归 message-group 49/agent-workbench-panel 52/message-list/message-grouping/process-trace/i18n 全绿
+  - [x] SubTask 7.2: 新增测试 4 文件 65 用例全绿（timeline-role 13、fact-summary 24、timeline-linkage 19、progress-outline 9）；2026-07-28 重新执行确认全绿；受影响域回归 message-group/agent-workbench-panel/message-list/message-grouping/process-trace/i18n 全绿
   - [x] SubTask 7.2 全量回归：194 文件 / 1505 用例，1501 pass，4 fail 全部在本 spec 未修改的文件中（agent-progress-pill × 2、settings-dialog × 1、message-output-summary × 1，均为工作区其他预存在改动引入，与本 spec 无关）
   - [ ] SubTask 7.3: Playwright e2e 基建存在（frontend/e2e/ + playwright.config.ts），但依赖后端 GATEWAY_PORT/FRONTEND_PORT 起完整栈；本轮未起后端，跳过，待 e2e 环境就绪后补跑。建议 spec：新建 `frontend/e2e/stream-timeline-narrative.spec.ts`，注入意图→工具→事实→回答 SSE 序列，断言「已确认：…」事实行存在、进展面板第 N 轮可展开、双侧点击 scrollIntoView 触发
 
