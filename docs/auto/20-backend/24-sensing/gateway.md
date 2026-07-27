@@ -143,16 +143,19 @@ tier: "standard"
 | `verify_router.py` | Verification router · ``/api/verify/*``. |
 | `wiki_generic.py` | Project-agnostic wiki generator · scans an arbitrary user-selected folder and writes a navigable static documentation tree under ``<root>/.octopus-wiki/``. |
 | `wiki_router.py` | — |
+| `workspace_api_router.py` | Workspace HTTP API · ``/api/workspaces/*``. |
 | `workspaces_router.py` | Workspace manifest API. |
 
 ## Who imports this
 
-**7** file(s) reference this package:
+**8** file(s) reference this package:
 
 - **`runtime/cli.py/`** · 1 file(s)
   - `runtime/cli.py`
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
+- **`runtime/execution/`** · 1 file(s)
+  - `runtime/execution/agents/cli_team.py`
 - **`runtime/platform/`** · 5 file(s)
   - `runtime/platform/ui/app.py`
   - `runtime/platform/ui/health_router.py`

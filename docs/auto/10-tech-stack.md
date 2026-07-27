@@ -40,5 +40,5 @@ tier: "standard"
 - `@radix-ui/react-toggle`
 - `@radix-ui/react-toggle-group`
 - `@radix-ui/react-tooltip`
-- … 共 69 个依赖
+- … 共 66 个依赖
 

@@ -42,6 +42,8 @@ tier: "core"
 - `TaskProgressSnapshot`
 - `TaskProgressTracker`
 - `TaskStartedEvent`
+- `ToolEffectIntentEvent`
+- `ToolEffectReconciliationEvent`
 - `TrajectoryEvent`
 - `all_task_progress`
 - `current_agent_id`
@@ -63,7 +65,7 @@ tier: "core"
 
 ## Who imports this
 
-**41** file(s) reference this package:
+**42** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/channels/manager.py`
@@ -79,10 +81,11 @@ tier: "core"
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/resume_cli.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 4 file(s)
+- **`runtime/execution/`** · 5 file(s)
   - `runtime/execution/suckers/browser_act_skills.py`
   - `runtime/execution/suckers/ephemeral_runner.py`
   - `runtime/execution/swarm/runtime.py`
+  - `runtime/execution/tool_engine/effect_receipts.py`
   - `runtime/execution/tool_engine/executor.py`
 - **`runtime/memory/`** · 2 file(s)
   - `runtime/memory/hemolymph/composer.py`

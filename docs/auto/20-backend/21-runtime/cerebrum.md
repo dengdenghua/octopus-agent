@@ -37,6 +37,7 @@ tier: "core"
 | `prompt_persistence.py` | — |
 | `react_checkpointing.py` | Periodic auto-checkpoint + distributed mirror for the ReAct loop. |
 | `react_context.py` | — |
+| `react_convergence.py` | Deterministic evidence-to-answer convergence for bounded ReAct turns. |
 | `react_execution.py` | — |
 | `react_guards.py` | ReAct trajectory guards: post-step / pre-Final-Answer quality gates. |
 | `react_loop.py` | — |

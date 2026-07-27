@@ -1,6 +1,56 @@
 {
   "components": {
     "schemas": {
+      "AcquireLeaseBody": {
+        "properties": {
+          "file_path": {
+            "minLength": 1,
+            "title": "File Path",
+            "type": "string"
+          },
+          "holder_id": {
+            "minLength": 1,
+            "title": "Holder Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "exclusive",
+            "title": "Kind",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "default": 1800,
+            "exclusiveMinimum": 0.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_path",
+          "holder_id"
+        ],
+        "title": "AcquireLeaseBody",
+        "type": "object"
+      },
+      "AddMemberBody": {
+        "properties": {
+          "member_id": {
+            "minLength": 1,
+            "title": "Member Id",
+            "type": "string"
+          },
+          "role": {
+            "default": "viewer",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id"
+        ],
+        "title": "AddMemberBody",
+        "type": "object"
+      },
       "AgentDetailWire": {
         "properties": {
           "allowed_skills": {
@@ -1314,6 +1364,43 @@
         "title": "CreateTeamTaskRequest",
         "type": "object"
       },
+      "CreateWorkspaceBody": {
+        "properties": {
+          "mount_options": {
+            "additionalProperties": true,
+            "title": "Mount Options",
+            "type": "object"
+          },
+          "mount_target": {
+            "minLength": 1,
+            "title": "Mount Target",
+            "type": "string"
+          },
+          "mount_type": {
+            "minLength": 1,
+            "title": "Mount Type",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_id": {
+            "minLength": 1,
+            "title": "Owner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "mount_type",
+          "mount_target",
+          "owner_id"
+        ],
+        "title": "CreateWorkspaceBody",
+        "type": "object"
+      },
       "CurrentModeBody": {
         "properties": {
           "mode": {
@@ -1403,6 +1490,17 @@
             ],
             "title": "Compat Profile"
           },
+          "context_window": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Window"
+          },
           "default_header_names": {
             "items": {
               "type": "string"
@@ -1424,6 +1522,11 @@
               }
             ],
             "title": "Drop Tool Choice"
+          },
+          "enable_1m_context": {
+            "default": false,
+            "title": "Enable 1M Context",
+            "type": "boolean"
           },
           "has_api_key": {
             "title": "Has Api Key",
@@ -2781,6 +2884,251 @@
         "title": "LinkRoomBody",
         "type": "object"
       },
+      "LocalPartnerCommandHint": {
+        "properties": {
+          "behavior": {
+            "title": "Behavior",
+            "type": "string"
+          },
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "scope",
+          "behavior"
+        ],
+        "title": "LocalPartnerCommandHint",
+        "type": "object"
+      },
+      "LocalPartnerDiagnosticItem": {
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "tone": {
+            "default": "neutral",
+            "title": "Tone",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "LocalPartnerDiagnosticItem",
+        "type": "object"
+      },
+      "LocalPartnerDoctorGroup": {
+        "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "next_action": {
+            "default": "",
+            "title": "Next Action",
+            "type": "string"
+          },
+          "partner_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Partner Ids",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "label"
+        ],
+        "title": "LocalPartnerDoctorGroup",
+        "type": "object"
+      },
+      "LocalPartnerDoctorResponse": {
+        "properties": {
+          "detected": {
+            "default": 0,
+            "title": "Detected",
+            "type": "integer"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/LocalPartnerDoctorGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "needs_attention": {
+            "default": 0,
+            "title": "Needs Attention",
+            "type": "integer"
+          },
+          "next_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Next Actions",
+            "type": "array"
+          },
+          "ready": {
+            "default": 0,
+            "title": "Ready",
+            "type": "integer"
+          },
+          "registered": {
+            "default": 0,
+            "title": "Registered",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "LocalPartnerDoctorResponse",
+        "type": "object"
+      },
+      "LocalPartnerProbeResponse": {
+        "properties": {
+          "agent_id": {
+            "default": "",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "detected": {
+            "default": false,
+            "title": "Detected",
+            "type": "boolean"
+          },
+          "elapsed_ms": {
+            "default": 0,
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "error": {
+            "default": "",
+            "title": "Error",
+            "type": "string"
+          },
+          "executable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executable"
+          },
+          "failure_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Kind"
+          },
+          "failure_title": {
+            "default": "",
+            "title": "Failure Title",
+            "type": "string"
+          },
+          "fix_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Hint"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ok": {
+            "default": false,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "output": {
+            "default": "",
+            "title": "Output",
+            "type": "string"
+          },
+          "raw_error": {
+            "default": "",
+            "title": "Raw Error",
+            "type": "string"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "status": {
+            "default": "missing",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "LocalPartnerProbeResponse",
+        "type": "object"
+      },
       "LocalPartnerRegisterItem": {
         "properties": {
           "alias": {
@@ -2890,6 +3238,17 @@
             "title": "Agent Id",
             "type": "string"
           },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
           "command": {
             "anyOf": [
               {
@@ -2900,6 +3259,13 @@
               }
             ],
             "title": "Command"
+          },
+          "command_hints": {
+            "items": {
+              "$ref": "#/components/schemas/LocalPartnerCommandHint"
+            },
+            "title": "Command Hints",
+            "type": "array"
           },
           "default_alias": {
             "title": "Default Alias",
@@ -2914,6 +3280,18 @@
             "title": "Detected",
             "type": "boolean"
           },
+          "diagnostic_items": {
+            "items": {
+              "$ref": "#/components/schemas/LocalPartnerDiagnosticItem"
+            },
+            "title": "Diagnostic Items",
+            "type": "array"
+          },
+          "effective_status": {
+            "default": "missing",
+            "title": "Effective Status",
+            "type": "string"
+          },
           "executable": {
             "anyOf": [
               {
@@ -2925,23 +3303,131 @@
             ],
             "title": "Executable"
           },
+          "fix_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Hint"
+          },
+          "headless_supported": {
+            "default": false,
+            "title": "Headless Supported",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
           },
+          "install_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Install Command"
+          },
+          "interaction_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Hint"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "native_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Native Command"
+          },
+          "native_launch_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Native Launch Command"
+          },
+          "native_launch_cwd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Native Launch Cwd"
+          },
+          "readiness_message": {
+            "default": "",
+            "title": "Readiness Message",
+            "type": "string"
+          },
+          "readiness_status": {
+            "default": "missing",
+            "title": "Readiness Status",
+            "type": "string"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
           },
           "registered": {
             "default": false,
             "title": "Registered",
             "type": "boolean"
           },
+          "setup_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Hint"
+          },
           "status": {
             "default": "missing",
             "title": "Status",
             "type": "string"
+          },
+          "verify_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verify Command"
           }
         },
         "required": [
@@ -3678,6 +4164,26 @@
         "title": "ModesResponse",
         "type": "object"
       },
+      "MoveThreadBody": {
+        "properties": {
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "thread_id": {
+            "minLength": 1,
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "project_id"
+        ],
+        "title": "MoveThreadBody",
+        "type": "object"
+      },
       "PauseTaskBody": {
         "properties": {
           "note": {
@@ -3892,6 +4398,18 @@
           }
         },
         "title": "RecoverBody",
+        "type": "object"
+      },
+      "RenewLeaseBody": {
+        "properties": {
+          "ttl_seconds": {
+            "default": 1800,
+            "exclusiveMinimum": 0.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "RenewLeaseBody",
         "type": "object"
       },
       "RepairRoutePromotionQueueBody": {
@@ -10209,6 +10727,27 @@
         ]
       }
     },
+    "/api/agents/local-partners/doctor": {
+      "get": {
+        "operationId": "local_partners_doctor_api_agents_local_partners_doctor_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalPartnerDoctorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Local Partners Doctor",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/agents/local-partners/register": {
       "post": {
         "operationId": "register_local_partners_api_agents_local_partners_register_post",
@@ -10289,6 +10828,48 @@
           }
         },
         "summary": "Get Local Partner Model",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/agents/local-partners/{partner_id}/probe": {
+      "post": {
+        "operationId": "probe_local_partner_api_agents_local_partners__partner_id__probe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "partner_id",
+            "required": true,
+            "schema": {
+              "title": "Partner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalPartnerProbeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Probe Local Partner",
         "tags": [
           "agents"
         ]
@@ -25087,6 +25668,30 @@
         ]
       }
     },
+    "/api/local-brain/storage/start": {
+      "post": {
+        "description": "Start/probe Storage and provide its ephemeral local-session token.\n\nThe storage service deliberately requires a bearer token.  A browser\nreload clears its sessionStorage, so a local, authenticated bridge is\nrequired to reconnect without weakening Storage itself.  The token is\nnever persisted by this API and is refused for non-loopback callers.",
+        "operationId": "api_local_brain_storage_start_api_local_brain_storage_start_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Local Brain Storage Start Api Local Brain Storage Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Local Brain Storage Start",
+        "tags": [
+          "local-brain"
+        ]
+      }
+    },
     "/api/loops": {
       "get": {
         "operationId": "api_loop_list_api_loops_get",
@@ -28845,7 +29450,117 @@
         ]
       }
     },
+    "/api/projects/move": {
+      "post": {
+        "operationId": "move_thread_api_projects_move_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveThreadBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Move Thread Api Projects Move Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Move Thread",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
+    "/api/projects/thread-map": {
+      "get": {
+        "operationId": "thread_project_map_api_projects_thread_map_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Thread Project Map Api Projects Thread Map Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Thread Project Map",
+        "tags": [
+          "projectos"
+        ]
+      }
+    },
     "/api/projects/{project_id}": {
+      "delete": {
+        "operationId": "delete_project_api_projects__project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Project Api Projects  Project Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Project",
+        "tags": [
+          "projectos"
+        ]
+      },
       "get": {
         "operationId": "get_project_api_projects__project_id__get",
         "parameters": [
@@ -35374,6 +36089,127 @@
         ]
       }
     },
+    "/api/tool-effects": {
+      "get": {
+        "description": "List fenced external-effect receipts without exposing arguments/results.",
+        "operationId": "api_tool_effects_api_tool_effects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Tool Effects Api Tool Effects Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Tool Effects",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/tool-effects/{effect_key}/authorize-retry": {
+      "post": {
+        "description": "Authorize one retry after an operator verifies no effect occurred.",
+        "operationId": "api_tool_effect_authorize_retry_api_tool_effects__effect_key__authorize_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "effect_key",
+            "required": true,
+            "schema": {
+              "title": "Effect Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Tool Effect Authorize Retry Api Tool Effects  Effect Key  Authorize Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Tool Effect Authorize Retry",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
     "/api/trace/recent": {
       "get": {
         "operationId": "_trace_recent_api_trace_recent_get",
@@ -36087,6 +36923,94 @@
         ]
       }
     },
+    "/api/workspaces": {
+      "get": {
+        "description": "List workspaces accessible to ``user_id``.",
+        "operationId": "list_workspaces_api_workspaces_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Workspaces Api Workspaces Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Workspaces",
+        "tags": [
+          "workspace-api"
+        ]
+      },
+      "post": {
+        "description": "Create a workspace. The mount must be reachable first.",
+        "operationId": "create_workspace_api_workspaces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkspaceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Workspace Api Workspaces Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Workspace",
+        "tags": [
+          "workspace-api"
+        ]
+      }
+    },
     "/api/workspaces/{thread_id}": {
       "get": {
         "operationId": "api_workspace_info_api_workspaces__thread_id__get",
@@ -36261,6 +37185,502 @@
         "summary": "Api Workspace Output File",
         "tags": [
           "workspaces"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}": {
+      "delete": {
+        "description": "Delete a workspace. Cascades to members.",
+        "operationId": "delete_workspace_api_workspaces__workspace_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Workspace Api Workspaces  Workspace Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Workspace",
+        "tags": [
+          "workspace-api"
+        ]
+      },
+      "get": {
+        "description": "Get a single workspace by id.",
+        "operationId": "get_workspace_api_workspaces__workspace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Workspace Api Workspaces  Workspace Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workspace",
+        "tags": [
+          "workspace-api"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/health": {
+      "post": {
+        "description": "Re-probe the workspace's mount connection.",
+        "operationId": "health_api_workspaces__workspace_id__health_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Api Workspaces  Workspace Id  Health Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "workspace-api"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/lease": {
+      "post": {
+        "operationId": "acquire_lease_api_workspaces__workspace_id__lease_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcquireLeaseBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Acquire Lease Api Workspaces  Workspace Id  Lease Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Acquire Lease",
+        "tags": [
+          "workspace-api"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/lease/{lease_id}": {
+      "delete": {
+        "operationId": "release_lease_api_workspaces__workspace_id__lease__lease_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Release Lease Api Workspaces  Workspace Id  Lease  Lease Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Lease",
+        "tags": [
+          "workspace-api"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/lease/{lease_id}/renew": {
+      "post": {
+        "operationId": "renew_lease_api_workspaces__workspace_id__lease__lease_id__renew_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewLeaseBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Renew Lease Api Workspaces  Workspace Id  Lease  Lease Id  Renew Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Renew Lease",
+        "tags": [
+          "workspace-api"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/leases": {
+      "get": {
+        "operationId": "list_leases_api_workspaces__workspace_id__leases_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Leases Api Workspaces  Workspace Id  Leases Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Leases",
+        "tags": [
+          "workspace-api"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/members": {
+      "get": {
+        "operationId": "list_members_api_workspaces__workspace_id__members_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Members Api Workspaces  Workspace Id  Members Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Members",
+        "tags": [
+          "workspace-api"
+        ]
+      },
+      "post": {
+        "operationId": "add_member_api_workspaces__workspace_id__members_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Add Member Api Workspaces  Workspace Id  Members Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Member",
+        "tags": [
+          "workspace-api"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/members/{member_id}": {
+      "delete": {
+        "operationId": "remove_member_api_workspaces__workspace_id__members__member_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remove Member Api Workspaces  Workspace Id  Members  Member Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Member",
+        "tags": [
+          "workspace-api"
         ]
       }
     },

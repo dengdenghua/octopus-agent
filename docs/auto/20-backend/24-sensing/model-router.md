@@ -75,10 +75,11 @@ tier: "standard"
 | `pooled_router.py` | — |
 | `prompt_cache.py` | Anthropic prompt-cache hint helpers. |
 | `provider.py` | — |
+| `rescue_policy.py` | Shared model-rescue policy for streamed agent loops. |
 
 ## Who imports this
 
-**25** file(s) reference this package:
+**27** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -86,6 +87,9 @@ tier: "standard"
   - `runtime/cli_reflect.py`
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
+- **`runtime/core/`** · 2 file(s)
+  - `runtime/core/cerebrum/react_context.py`
+  - `runtime/core/cerebrum/react_loop.py`
 - **`runtime/execution/`** · 2 file(s)
   - `runtime/execution/suckers/computer_use_loop.py`
   - `runtime/execution/suckers/ephemeral_runner.py`

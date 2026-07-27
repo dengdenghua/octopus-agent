@@ -40,7 +40,10 @@ tier: "core"
 
 | Module | Summary |
 | --- | --- |
+| `effect_receipts.py` | Crash-safe tool effect receipts for durable agent turns. |
+| `effect_store.py` | Transactional cross-process coordination for tool side effects. |
 | `executor.py` | — |
+| `redis_effect_store.py` | Redis-backed, cross-host tool-effect receipts. |
 | `skill_gate.py` | Shared pre-execution safety gate for direct skill dispatch. |
 | `tool_protocol.py` | — |
 | `tool_taxonomy.py` | Unified tool identity layer · stable taxonomy for audit & grouping. |
