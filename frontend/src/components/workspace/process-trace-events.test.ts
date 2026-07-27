@@ -2,7 +2,10 @@ import { describe, expect, test } from "vitest";
 
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { publicTraceEventLabel } from "./messages/process-trace";
-import { getProcessTraceEvents } from "./process-trace-events";
+import {
+  getProcessTraceEvents,
+  isCollapsibleAutoVerificationEvent,
+} from "./process-trace-events";
 
 function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
   return {

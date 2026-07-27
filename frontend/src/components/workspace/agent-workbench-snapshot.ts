@@ -2,8 +2,10 @@ import { useMemo, useRef } from "react";
 
 import type { WorkbenchSnapshotV2 } from "@/core/realtime/items";
 import {
+  businessAgentPhaseKey,
   deriveAgentPhases,
   normalizeAgentPhaseTitle,
+  normalizeBusinessPhaseKey,
   type AgentPhase,
 } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
@@ -183,7 +185,8 @@ function isLiveRunInProgress(options: AgentWorkbenchSnapshotOptions): boolean {
 function optimisticPlanningPhase(): AgentPhase {
   return {
     id: "optimistic:planning",
-    title: "\u89c4\u5212\u4e2d",
+    title: "规划中",
+    businessKey: "planning",
     status: "running",
     blockIds: [],
   };
@@ -231,6 +234,10 @@ function serverSnapshotToAgentPhases(
     return {
       id: phase.id || `server-phase:${index}`,
       title: normalizeAgentPhaseTitle(phase.title),
+      businessKey:
+        normalizeBusinessPhaseKey(phase.phaseKind) ??
+        businessAgentPhaseKey(phase.title) ??
+        undefined,
       detail: phase.detail ?? undefined,
       status: serverPhaseStatus(phase.status, options),
       blockIds: uniqueBlockIds([
@@ -482,6 +489,7 @@ function fingerprintWorkbenchSnapshot(
     phases: snapshot.phases.map((phase) => [
       phase.id,
       phase.title,
+      phase.businessKey ?? "",
       phase.status,
       phase.blockIds,
     ]),

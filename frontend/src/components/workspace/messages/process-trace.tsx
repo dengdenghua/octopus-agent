@@ -19,7 +19,11 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import { DotProgress } from "@/components/workspace/swarm/dot-progress";
 
-import { deriveAgentPhases, progressForPhases } from "../agent-phases";
+import {
+  agentPhaseDisplayTitle,
+  deriveAgentPhases,
+  progressForPhases,
+} from "../agent-phases";
 import { emitAgentWorkbenchFocus } from "../agent-workbench-events";
 import {
   type AgentRunState,
@@ -194,8 +198,9 @@ export function ProcessTrace({
                       ? "text-muted-foreground"
                       : "text-foreground",
                   )}
+                  title={phase.title}
                 >
-                  {phase.title}
+                  {agentPhaseDisplayTitle(phase, t.agentPhases)}
                 </span>
               </div>
             ))

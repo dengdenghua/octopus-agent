@@ -1,22 +1,10 @@
 import { swallow } from "@/core/utils/log";
 import type { AIMessage, Message } from "@/core/api/types";
 import {
-  BookOpenTextIcon,
   ChevronDownIcon,
-  ChevronUp,
-  FolderOpenIcon,
-  GlobeIcon,
-  ListTodoIcon,
-  MessageCircleQuestionMarkIcon,
-  NotebookPenIcon,
   PanelRightOpenIcon,
-  SearchIcon,
-  ShieldAlertIcon,
-  SquareTerminalIcon,
-  UsersIcon,
   WrenchIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import {
   useEffect,
   useMemo,
@@ -25,31 +13,13 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import type { BundledLanguage } from "shiki";
-
-import {
-  ChainOfThought,
-  ChainOfThoughtContent,
-  ChainOfThoughtSearchResult,
-  ChainOfThoughtSearchResults,
-  ChainOfThoughtStep,
-} from "@/components/ai-elements/chain-of-thought";
-import { CodeBlock } from "@/components/ai-elements/code-block";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  isApprovalRequest,
-  ToolApprovalCard,
-} from "@/components/workspace/tool-approval-card";
+import { ChainOfThought } from "@/components/ai-elements/chain-of-thought";
+import { isApprovalRequest } from "@/components/workspace/tool-approval-card";
 import {
   type AgentRunState,
   agentRunStatusLightClass,
   agentRunStatusLightPulseClass,
 } from "../agent-run-status";
-import { IterationDivider } from "@/components/workspace/taor-indicator";
 import { useI18n } from "@/core/i18n/hooks";
 import { useToolEffects } from "@/core/observability/tool-effects-context";
 import {
@@ -61,15 +31,13 @@ import {
   stripLeakedRendererMarkup,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
-import { activateTimelineItem } from "@/core/threads/timeline-linkage";
 import {
+  activateTimelineItem,
   getTimelineLinkageState,
   subscribeTimelineLinkage,
 } from "@/core/threads/timeline-linkage";
-import { extractTitleFromMarkdown } from "@/core/utils/markdown";
 import { cn } from "@/lib/utils";
 
-import { useArtifacts } from "../artifacts";
 import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 import { FlipDisplay } from "../flip-display";
 import { isAutoVerificationToolName } from "../process-trace-events";
@@ -79,7 +47,6 @@ import {
   isShellToolName,
   shellCommandFromInput,
 } from "../tool-name-groups";
-import { Tooltip } from "../tooltip";
 
 import { ClarificationChoiceCard } from "./clarification-choice-card";
 import {
@@ -289,12 +256,7 @@ export function MessageGroup({
   // Keep the live turn focused on the current frame. Older steps move behind
   // a replay disclosure so streaming never becomes a long historical pile.
   const isLiveTimeline = isLoading || keepOpen;
-  const [_showSteps, setShowSteps] = useState(false);
-  const [_savedStepsOpen, setSavedStepsOpen] = useState(false);
-  const [openReasoningGroups, setOpenReasoningGroups] = useState<
-    Record<string, boolean>
-  >({});
-  const [openActionGroups, setOpenActionGroups] = useState<
+  const [expandedAggregatedGroups, setExpandedAggregatedGroups] = useState<
     Record<string, boolean>
   >({});
   const [expandedHistoryPhases, setExpandedHistoryPhases] = useState<
@@ -324,10 +286,6 @@ export function MessageGroup({
         .join("\n\n"),
     [steps],
   );
-  const stepsFingerprint = useMemo(
-    () => messages.map((message) => message.id).join("|"),
-    [messages],
-  );
   const timelineItems = useMemo(
     () => groupConsecutiveReasoningSteps(steps),
     [steps],
@@ -353,25 +311,6 @@ export function MessageGroup({
         : replaySteps,
     [isLiveTimeline, leadInSteps.length, replaySteps],
   );
-  const currentTimelineItem = useMemo(
-    () => (currentStep ? timelineItemFromStep(currentStep, "current") : null),
-    [currentStep],
-  );
-  const leadInTimelineItems = useMemo(
-    () => groupConsecutiveReasoningSteps(leadInSteps),
-    [leadInSteps],
-  );
-  const replayTimelineItems = useMemo(
-    () =>
-      isLiveTimeline
-        ? groupConsecutiveReasoningSteps(replayOnlySteps)
-        : timelineItems,
-    [isLiveTimeline, replayOnlySteps, timelineItems],
-  );
-  const totalIterations = useMemo(() => {
-    const last = steps[steps.length - 1];
-    return last?.iteration ?? 1;
-  }, [steps]);
   // A tool-carrying AI message can also contain the answer currently being
   // streamed. Keep that text in the conversation lane instead of burying it
   // inside the process replay.
@@ -391,248 +330,10 @@ export function MessageGroup({
     ? replayOnlySteps.length
     : steps.length;
   const showTimelineToggle = replayStepCount > 0;
-  const useCompactToggleLabel = replayStepCount > 12;
   // The transcript has one disclosure model: compact events stay inline and
   // their detail opens in the right workbench. Expanding the same replay a
   // second time inside the conversation duplicated checkpoints and tool rows,
   // making one model turn read like several competing logs.
-  const timelineExpanded = false;
-  const timelineToggleLabel = isLiveTimeline
-    ? timelineExpanded
-      ? t.messageGrouping.hideProcessReplay
-      : useCompactToggleLabel
-        ? t.messageGrouping.processReplay
-        : t.messageGrouping.replayNSteps(replayStepCount)
-    : timelineExpanded
-      ? t.messageGrouping.hideSavedSteps
-      : useCompactToggleLabel
-        ? t.messageGrouping.viewProcessSummary
-        : t.messageGrouping.viewNSavedSteps(steps.length);
-  useEffect(() => {
-    setShowSteps(false);
-    setSavedStepsOpen(false);
-    setOpenReasoningGroups({});
-    setOpenActionGroups({});
-  }, [isLiveTimeline, stepsFingerprint]);
-
-  // Helper: render an iteration divider when the iteration number changes
-  // between consecutive steps.
-  function renderIterationDivider(
-    prevStep: CoTStep | undefined,
-    currentStep: CoTStep,
-  ) {
-    if (
-      prevStep &&
-      currentStep.iteration != null &&
-      prevStep.iteration != null &&
-      currentStep.iteration > prevStep.iteration
-    ) {
-      return (
-        <IterationDivider
-          key={`iter-${currentStep.iteration}`}
-          iteration={currentStep.iteration}
-          maxIterations={totalIterations > 1 ? totalIterations : undefined}
-        />
-      );
-    }
-    return null;
-  }
-
-  function renderTimelineItem(
-    item: TimelineItem,
-    idx: number,
-    items: TimelineItem[],
-    options?: { current?: boolean },
-  ) {
-    const isCurrentFrame = Boolean(options?.current);
-    const isHistoryReplay = isLiveTimeline && !isCurrentFrame;
-    const itemIsLoading = isCurrentFrame
-      ? isLoading
-      : !isHistoryReplay && isLoading;
-    const prevItem = idx > 0 ? items[idx - 1] : undefined;
-    const prevStep = prevItem ? lastTimelineStep(prevItem) : undefined;
-    const isLast =
-      isCurrentFrame || (!isHistoryReplay && idx === items.length - 1);
-    if (item.type === "commentary") {
-      const commentaryState = runStateForCurrentStep(item.step, itemIsLoading);
-      const commentaryText = publicProcessText(item.step.commentary);
-      const commentarySummary = publicProcessText(
-        summarizeCurrentStep(item.step, t),
-      );
-      return (
-        <div
-          key={item.id}
-          role="button"
-          tabIndex={0}
-          aria-label={commentarySummary}
-          onClick={() => {
-            // 双向联动：只追加激活，不改变既有点击行为
-            activateTimelineItem(timelineItemLinkageId(item), "chat");
-            emitOpenAgentWorkbench({
-              tab: "agent",
-              eventId: item.step.messageId ?? item.step.id,
-              eventKind: "thinking",
-              view: "summary",
-              processEvent: {
-                kind: "thinking",
-                summary: commentarySummary,
-                detail: commentaryText || commentarySummary,
-                status: commentaryState,
-                count: 1,
-                phaseId: item.step.phaseId,
-                parentItemId: item.step.parentItemId,
-                timelineSequence: item.step.timelineSequence,
-              },
-            });
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            event.preventDefault();
-            event.currentTarget.click();
-          }}
-          className="group/progress-row my-1 flex min-w-0 cursor-pointer items-start gap-1.5 text-xs leading-5 text-foreground/75 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
-          data-testid="public-progress-event"
-          data-process-event-id={item.step.messageId ?? item.step.id}
-          data-timeline-item-id={timelineItemLinkageId(item)}
-          data-timeline-lane="chat"
-          data-process-event-kind="thinking"
-          data-process-event-status={commentaryState}
-          data-phase-id={item.step.phaseId}
-          data-parent-item-id={item.step.parentItemId}
-          data-progress-sequence={item.step.progressSequence}
-          data-timeline-sequence={item.step.timelineSequence}
-        >
-          {renderIterationDivider(prevStep, item.step)}
-          <span className="relative mt-[7px] flex size-1.5 shrink-0 items-center justify-center">
-            <span
-              className={cn(
-                "absolute inline-flex size-1.5 rounded-full opacity-25",
-                agentRunStatusLightClass(commentaryState),
-                agentRunStatusLightPulseClass(commentaryState),
-              )}
-            />
-            <span
-              className={cn(
-                "relative inline-flex size-1 rounded-full",
-                agentRunStatusLightClass(commentaryState),
-              )}
-            />
-          </span>
-          <div className="min-w-0 flex-1">
-            <MarkdownContent
-              content={commentaryText}
-              isLoading={itemIsLoading}
-              rehypePlugins={rehypePlugins}
-            />
-            {item.step.groundingMessage && (
-              <GroundingChip message={item.step.groundingMessage} />
-            )}
-          </div>
-        </div>
-      );
-    }
-    if (item.type === "reasoningGroup") {
-      // Process details are a secondary surface. Keep them collapsed in the
-      // transcript by default (including the live frame); the status dot and
-      // one-line summary are enough to show that work is moving. Users can
-      // expand a group here or open the full payload in the workbench.
-      const open = openReasoningGroups[item.id] ?? false;
-      const isActiveGroup =
-        isCurrentFrame || (itemIsLoading && isLast && item.steps.length > 0);
-      const content = (
-        <ReasoningStepGroup
-          key={item.id}
-          group={item}
-          isLoading={itemIsLoading}
-          open={open}
-          active={isActiveGroup}
-          timelineItemId={timelineItemLinkageId(item)}
-          onOpenChange={(nextOpen) =>
-            setOpenReasoningGroups((current) => ({
-              ...current,
-              [item.id]: nextOpen,
-            }))
-          }
-          rehypePlugins={rehypePlugins}
-          renderIterationDivider={() =>
-            renderIterationDivider(prevStep, item.steps[0]!)
-          }
-        />
-      );
-      return isCurrentFrame ? (
-        <FlipDisplay key={item.id} uniqueKey={item.id}>
-          {content}
-        </FlipDisplay>
-      ) : (
-        content
-      );
-    }
-    if (item.type === "actionCallbackGroup") {
-      // Actions follow the same quiet default as reasoning. The compact row
-      // remains visible, while the complete callback details are opt-in.
-      const open = openActionGroups[item.id] ?? false;
-      const isActiveGroup =
-        isCurrentFrame || (itemIsLoading && isLast && item.steps.length > 0);
-      const content = (
-        <ActionCallbackGroup
-          key={item.id}
-          group={item}
-          open={open}
-          active={isActiveGroup}
-          onOpenChange={(nextOpen) =>
-            setOpenActionGroups((current) => ({
-              ...current,
-              [item.id]: nextOpen,
-            }))
-          }
-          renderIterationDivider={() =>
-            renderIterationDivider(prevStep, item.steps[0]!)
-          }
-        />
-      );
-      return isCurrentFrame ? (
-        <FlipDisplay key={item.id} uniqueKey={item.id}>
-          {content}
-        </FlipDisplay>
-      ) : (
-        content
-      );
-    }
-    // aggregatedToolGroup only appears in compact timeline, not in expanded renderTimelineItem
-    if (item.type === "aggregatedToolGroup") {
-      return null;
-    }
-    const content = (
-      <div
-        key={item.id}
-        role="button"
-        tabIndex={0}
-        aria-label={publicProcessText(summarizeCurrentStep(item.step, t))}
-        data-timeline-item-id={timelineItemLinkageId(item)}
-        data-timeline-lane="chat"
-        onClick={() =>
-          // 双向联动：只追加激活，ToolCall 自身的展开/选择行为不变
-          activateTimelineItem(timelineItemLinkageId(item), "chat")
-        }
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          event.preventDefault();
-          event.currentTarget.click();
-        }}
-      >
-        {renderIterationDivider(prevStep, item.step)}
-        <ToolCall {...item.step} isLast={isLast} isLoading={itemIsLoading} />
-      </div>
-    );
-    return isCurrentFrame ? (
-      <FlipDisplay key={item.id} uniqueKey={item.id}>
-        {content}
-      </FlipDisplay>
-    ) : (
-      content
-    );
-  }
-
   // Keep process events on the same chronological lane as the answer while
   // letting the answer retain visual priority. The main transcript shows only
   // compact public summaries; complete event payloads live in the workbench.
@@ -694,6 +395,43 @@ export function MessageGroup({
     () => executionCoverageByVisibleItem(timelineItems, compactTimelineItems),
     [timelineItems, compactTimelineItems],
   );
+  // 侧边栏 → 对话区联动：命中被折叠进聚合组的子项时，对话区只有聚合行带
+  // data-timeline-item-id，子项不在 DOM 中无法定位高亮。这里订阅共享
+  // linkage store：高亮 id 命中聚合组本身或其任一子项时自动展开该组，
+  // 子项渲染后带自己的定位属性，message-list 的滚动/高亮逻辑随后接管。
+  // 聚合组若被收进历史阶段折叠条，同时展开该阶段保证子项真实渲染。
+  const timelineLinkage = useSyncExternalStore(
+    subscribeTimelineLinkage,
+    getTimelineLinkageState,
+    getTimelineLinkageState,
+  );
+  useEffect(() => {
+    const highlightedId = timelineLinkage.highlightedTimelineItemId;
+    if (!highlightedId || timelineLinkage.activeSource !== "sidebar") return;
+    for (const item of compactTimelineItems) {
+      if (item.type !== "aggregatedToolGroup") continue;
+      const hitsGroup = timelineItemLinkageId(item) === highlightedId;
+      const hitsChild = item.items.some(
+        (child) => timelineItemLinkageId(child) === highlightedId,
+      );
+      if (!hitsGroup && !hitsChild) continue;
+      setExpandedAggregatedGroups((current) =>
+        current[item.id] ? current : { ...current, [item.id]: true },
+      );
+      const phaseId = lastTimelineStep(item).phaseId;
+      if (phaseId) {
+        setExpandedHistoryPhases((current) =>
+          current[phaseId] ? current : { ...current, [phaseId]: true },
+        );
+      }
+      break;
+    }
+  }, [
+    timelineLinkage.highlightedTimelineItemId,
+    timelineLinkage.nonce,
+    timelineLinkage.activeSource,
+    compactTimelineItems,
+  ]);
   const hasPublicCommentary = compactTimelineItems.some(
     (item) => item.type === "commentary",
   );
@@ -760,7 +498,10 @@ export function MessageGroup({
   function renderCompactTimelineItems(
     items: TimelineItem[],
     keyPrefix: string,
+    options?: { nested?: boolean },
   ) {
+    // 嵌套渲染（聚合组展开的子项）跳过历史阶段二次折叠，保证子项全部可见
+    const nested = options?.nested ?? false;
     // A live agent often emits several records for one phase. Leaving every
     // completed record open turns the transcript into a terminal log, so keep
     // only the active phase in full view. After streaming ends the historical
@@ -773,13 +514,15 @@ export function MessageGroup({
       ? lastTimelineStep(activeTimelineItem).phaseId
       : undefined;
     const historicalPhaseItems = new Map<string, TimelineItem[]>();
-    for (const timelineItem of items) {
-      const phaseId = lastTimelineStep(timelineItem).phaseId;
-      if (!phaseId || phaseId === activePhaseId) continue;
-      if (expandedHistoryPhases[phaseId]) continue;
-      const group = historicalPhaseItems.get(phaseId) ?? [];
-      group.push(timelineItem);
-      historicalPhaseItems.set(phaseId, group);
+    if (!nested) {
+      for (const timelineItem of items) {
+        const phaseId = lastTimelineStep(timelineItem).phaseId;
+        if (!phaseId || phaseId === activePhaseId) continue;
+        if (expandedHistoryPhases[phaseId]) continue;
+        const group = historicalPhaseItems.get(phaseId) ?? [];
+        group.push(timelineItem);
+        historicalPhaseItems.set(phaseId, group);
+      }
     }
 
     return items.map((item) => {
@@ -790,48 +533,25 @@ export function MessageGroup({
       if (phaseItems && phaseItems.length > 1) {
         if (phaseItems[0] !== item) return null;
         const completedSummary = t.message.completedSteps(phaseItems.length);
-        const phaseDetail = phaseItems
-          .map((phaseItem) =>
-            publicProcessText(
-              phaseItem.type === "toolCall"
-                ? summarizeCurrentStep(phaseItem.step, t)
-                : phaseItem.type === "commentary"
-                  ? phaseItem.step.commentary
-                  : stepText(lastTimelineStep(phaseItem)),
-            ),
-          )
-          .filter(Boolean)
-          .join("\n");
+        const collapsedPhaseId = step.phaseId;
         return (
           <button
-            key={`${keyPrefix}-phase-${step.phaseId}`}
+            key={`${keyPrefix}-phase-${collapsedPhaseId}`}
             type="button"
             className="flex min-w-0 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] text-muted-foreground/45 transition-colors hover:text-muted-foreground"
             onClick={() => {
-              activateTimelineItem(timelineItemLinkageId(item), "chat");
-              emitOpenAgentWorkbench({
-                tab: "agent",
-                eventId: step.messageId ?? step.id,
-                eventKind: "execution",
-                view: "trace",
-                processEvent: {
-                  kind: "execution",
-                  summary: completedSummary,
-                  detail: phaseDetail || completedSummary,
-                  status: "done",
-                  count: phaseItems.length,
-                  phaseId: step.phaseId,
-                  parentItemId: step.parentItemId,
-                  timelineSequence: step.timelineSequence,
-                },
-              });
+              if (!collapsedPhaseId) return;
+              setExpandedHistoryPhases((prev) => ({
+                ...prev,
+                [collapsedPhaseId]: true,
+              }));
             }}
             data-testid="collapsed-history-phase"
-            data-phase-id={step.phaseId}
+            data-phase-id={collapsedPhaseId}
           >
             <span className="size-1 shrink-0 rounded-full bg-emerald-500/70" />
             <span className="truncate">{completedSummary}</span>
-            <PanelRightOpenIcon className="size-3 shrink-0 opacity-60" />
+            <ChevronDownIcon className="size-3 shrink-0 opacity-60" />
           </button>
         );
       }
@@ -936,6 +656,8 @@ export function MessageGroup({
       }
       const isThinking = item.type === "reasoningGroup";
       const isAggregatedGroup = item.type === "aggregatedToolGroup";
+      const aggregatedExpanded =
+        isAggregatedGroup && (expandedAggregatedGroups[item.id] ?? false);
       const coveredItems =
         compactExecutionCoverage.get(item.id) ?? ([item] as TimelineItem[]);
       const groupedTargetSummary =
@@ -1087,8 +809,11 @@ export function MessageGroup({
       ).join("\n");
       const processEventSummary = publicProcessText(summary);
 
+      const rowKey = isAggregatedGroup
+        ? `${keyPrefix}-agg-${item.items[0]?.id ?? item.aggregateKind}`
+        : `${keyPrefix}-${item.id}`;
       return (
-        <div key={`${keyPrefix}-${item.id}`} className="min-w-0">
+        <div key={rowKey} className="min-w-0">
           <div className="group/process-row flex min-w-0 items-center gap-0.5">
             <button
               type="button"
@@ -1171,6 +896,12 @@ export function MessageGroup({
                         {actionObject}
                       </span>
                     </>
+                  ) : isAggregatedGroup && isLiveTimeline ? (
+                    <FlipDisplay uniqueKey={item.id} className="min-w-0">
+                      <span className="block truncate">
+                        {processEventSummary || summary}
+                      </span>
+                    </FlipDisplay>
                   ) : (
                     <span>{processEventSummary || summary}</span>
                   )}
@@ -1203,6 +934,36 @@ export function MessageGroup({
                 <span className="sr-only" data-testid="live-process-strip" />
               )}
             </button>
+            {isAggregatedGroup && (
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedAggregatedGroups((current) => ({
+                    ...current,
+                    [item.id]: !aggregatedExpanded,
+                  }))
+                }
+                className="p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
+                aria-label={
+                  aggregatedExpanded
+                    ? t.agentWorkbenchPages.collapse
+                    : t.agentWorkbenchPages.expandDetails
+                }
+                title={
+                  aggregatedExpanded
+                    ? t.agentWorkbenchPages.collapse
+                    : t.agentWorkbenchPages.expandDetails
+                }
+                data-testid="aggregated-group-toggle"
+              >
+                <ChevronDownIcon
+                  className={cn(
+                    "size-3 transition-transform",
+                    aggregatedExpanded ? "rotate-180" : "",
+                  )}
+                />
+              </button>
+            )}
             {isLastOverall && showTimelineToggle && (
               <button
                 type="button"
@@ -1220,6 +981,18 @@ export function MessageGroup({
           {factSummaryText && (
             <div className="truncate pb-0.5 pl-3 text-xs leading-[18px] text-muted-foreground/60">
               {factSummaryText}
+            </div>
+          )}
+          {isAggregatedGroup && aggregatedExpanded && (
+            <div
+              className="ml-2 space-y-0.5 border-l border-border/40 pl-2"
+              data-testid="aggregated-group-children"
+            >
+              {renderCompactTimelineItems(
+                item.items,
+                `${keyPrefix}-${item.id}-sub`,
+                { nested: true },
+              )}
             </div>
           )}
         </div>
@@ -1270,7 +1043,7 @@ export function MessageGroup({
       open={true}
       data-process-mode={codeMode ? "code" : "chat"}
     >
-      {!timelineExpanded && compactItemsBeforeAnswer.length > 0 && (
+      {compactItemsBeforeAnswer.length > 0 && (
         <div className="space-y-0.5" data-testid="interleaved-process-timeline">
           {renderCompactTimelineItems(compactItemsBeforeAnswer, "before")}
         </div>
@@ -1283,54 +1056,13 @@ export function MessageGroup({
           className="kimi-streaming-tail"
         />
       )}
-      {timelineExpanded && showTimelineToggle && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => {
-              if (isLiveTimeline) {
-                setShowSteps(false);
-              } else {
-                setSavedStepsOpen(false);
-              }
-            }}
-            className="inline-flex items-center gap-1 py-0.5 text-xs leading-4 text-muted-foreground/45 transition-colors hover:text-muted-foreground"
-            aria-label={timelineToggleLabel}
-            title={timelineToggleLabel}
-          >
-            <span className="sr-only">{timelineToggleLabel}</span>
-            <ChevronUp className="size-3 rotate-180" />
-          </button>
-        </div>
-      )}
-      {!timelineExpanded && compactItemsAfterAnswer.length > 0 && (
+      {compactItemsAfterAnswer.length > 0 && (
         <div
           className="mt-0.5 space-y-0.5"
           data-testid="interleaved-process-timeline"
         >
           {renderCompactTimelineItems(compactItemsAfterAnswer, "after")}
         </div>
-      )}
-      {timelineExpanded && leadInTimelineItems.length > 0 && (
-        <ChainOfThoughtContent className="px-0 pb-1 opacity-60">
-          {leadInTimelineItems.map((item, idx) =>
-            renderTimelineItem(item, idx, leadInTimelineItems),
-          )}
-        </ChainOfThoughtContent>
-      )}
-      {timelineExpanded && replayTimelineItems.length > 0 && (
-        <ChainOfThoughtContent className="max-h-[320px] overflow-y-auto px-0 pb-1 opacity-60">
-          {replayTimelineItems.map((item, idx) =>
-            renderTimelineItem(item, idx, replayTimelineItems),
-          )}
-        </ChainOfThoughtContent>
-      )}
-      {timelineExpanded && currentTimelineItem && (
-        <ChainOfThoughtContent className="px-0 pb-1 opacity-60">
-          {renderTimelineItem(currentTimelineItem, 0, [currentTimelineItem], {
-            current: true,
-          })}
-        </ChainOfThoughtContent>
       )}
       {showFinalAnswerBoundary && (
         // 过程段落与最终回答之间的弱化分界：仅留白 + 细分隔线，
@@ -1358,339 +1090,6 @@ export function MessageGroup({
         </div>
       )}
     </ChainOfThought>
-  );
-}
-
-function ReasoningStepGroup({
-  group,
-  isLoading,
-  open,
-  active,
-  timelineItemId,
-  onOpenChange,
-  rehypePlugins,
-  renderIterationDivider,
-}: {
-  group: ReasoningStepGroupItem;
-  isLoading: boolean;
-  open: boolean;
-  active: boolean;
-  /** 双向联动共享 id：传入时根节点带 data-timeline-item-id 并在点击时激活联动 */
-  timelineItemId?: string;
-  onOpenChange: (open: boolean) => void;
-  rehypePlugins: ReturnType<typeof useRehypeSplitWordsIntoSpans>;
-  renderIterationDivider: () => ReactNode;
-}) {
-  const { t } = useI18n();
-  const summary = summarizeReasoningGroup(group, t);
-  const countLabel =
-    group.steps.length > 1
-      ? t.messageGrouping.countItems(group.steps.length)
-      : "";
-  const onlyStep = group.steps[0];
-  if (!onlyStep) return null;
-  return (
-    <div
-      key={group.id}
-      role={timelineItemId ? "button" : undefined}
-      tabIndex={timelineItemId ? 0 : undefined}
-      aria-label={timelineItemId ? summary : undefined}
-      data-timeline-item-id={timelineItemId}
-      data-timeline-lane={timelineItemId ? "chat" : undefined}
-      onClick={
-        timelineItemId
-          ? () =>
-              // 双向联动：只追加激活，折叠/展开行为不变
-              activateTimelineItem(timelineItemId, "chat")
-          : undefined
-      }
-      onKeyDown={
-        timelineItemId
-          ? (event) => {
-              if (event.key !== "Enter" && event.key !== " ") return;
-              event.preventDefault();
-              event.currentTarget.click();
-            }
-          : undefined
-      }
-    >
-      {renderIterationDivider()}
-      <Collapsible open={open} onOpenChange={onOpenChange}>
-        {group.steps.length > 1 && (
-          <div className="mb-1 flex min-w-0 items-center gap-2">
-            <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-4 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
-              <ProcessStateDot active={active} />
-              <span className="text-muted-foreground/70 shrink-0 text-xs font-medium">
-                {countLabel.trim()}
-              </span>
-              <span className="min-w-0 flex-1 truncate">{summary}</span>
-              <ChevronDownIcon
-                className={cn(
-                  "size-3.5 shrink-0 transition-transform",
-                  open ? "rotate-180" : "",
-                )}
-              />
-            </CollapsibleTrigger>
-          </div>
-        )}
-        {group.steps.length === 1 ? (
-          <NumberedReasoningStep
-            index={1}
-            step={onlyStep}
-            isLoading={isLoading}
-            rehypePlugins={rehypePlugins}
-            showNumber={false}
-          />
-        ) : (
-          <CollapsibleContent className="space-y-1.5 data-[state=closed]:animate-out data-[state=open]:animate-in">
-            {group.steps.map((step, index) => (
-              <NumberedReasoningStep
-                key={step.id ?? `${group.id}-${index}`}
-                index={index + 1}
-                step={step}
-                isLoading={isLoading}
-                rehypePlugins={rehypePlugins}
-                showNumber
-              />
-            ))}
-          </CollapsibleContent>
-        )}
-      </Collapsible>
-    </div>
-  );
-}
-
-function ActionCallbackGroup({
-  group,
-  open,
-  active,
-  onOpenChange,
-  renderIterationDivider,
-}: {
-  group: ActionCallbackGroupItem;
-  open: boolean;
-  active: boolean;
-  onOpenChange: (open: boolean) => void;
-  renderIterationDivider: () => ReactNode;
-}) {
-  const { t } = useI18n();
-  const summary = summarizeActionGroup(group, t);
-  const countLabel =
-    group.steps.length > 1
-      ? t.messageGrouping.countItems(group.steps.length)
-      : "";
-  const onlyStep = group.steps[0];
-  if (!onlyStep) return null;
-  return (
-    <div key={group.id}>
-      {renderIterationDivider()}
-      <Collapsible open={open} onOpenChange={onOpenChange}>
-        {group.steps.length > 1 && (
-          <div className="mb-1 flex min-w-0 items-center gap-2">
-            <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-4 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
-              <ProcessStateDot active={active} />
-              <span className="shrink-0 font-medium text-muted-foreground/60">
-                {countLabel.trim()}
-              </span>
-              <span className="min-w-0 flex-1 truncate">{summary}</span>
-              <ChevronDownIcon
-                className={cn(
-                  "size-3.5 shrink-0 transition-transform",
-                  open ? "rotate-180" : "",
-                )}
-              />
-            </CollapsibleTrigger>
-          </div>
-        )}
-        {group.steps.length === 1 ? (
-          <NumberedActionStep
-            index={1}
-            step={onlyStep}
-            active={active}
-            showNumber={false}
-          />
-        ) : (
-          <CollapsibleContent className="space-y-1.5 data-[state=closed]:animate-out data-[state=open]:animate-in">
-            {group.steps.map((step, index) => (
-              <NumberedActionStep
-                key={step.id ?? `${group.id}-${index}`}
-                index={index + 1}
-                step={step}
-                active={active && index === group.steps.length - 1}
-                showNumber
-              />
-            ))}
-          </CollapsibleContent>
-        )}
-      </Collapsible>
-    </div>
-  );
-}
-
-function ProcessStateDot({ active }: { active: boolean }) {
-  return (
-    <span className="relative flex size-1.5 shrink-0 items-center justify-center">
-      {active && (
-        <span className="absolute inline-flex size-1.5 animate-pulse rounded-full bg-primary/25" />
-      )}
-      <span
-        className={cn(
-          "relative inline-flex size-1 rounded-full",
-          active ? "bg-primary/60" : "bg-muted-foreground/30",
-        )}
-      />
-    </span>
-  );
-}
-
-function NumberedActionStep({
-  index,
-  step,
-  active,
-  showNumber,
-}: {
-  index: number;
-  step: CoTActionCallbackStep;
-  active: boolean;
-  showNumber: boolean;
-}) {
-  const actionText = stripTraceLabelPrefixes(step.actionText);
-  const actionSummary = compactReasoningSummary(actionText, 120);
-  const canExpand =
-    showNumber && isExpandableStepText(actionText, actionSummary);
-  return (
-    <ChainOfThoughtStep
-      className="items-start"
-      showConnector={false}
-      icon={showNumber ? <StepNumber index={index} /> : undefined}
-      label={
-        canExpand ? (
-          <NestedStepDisclosure defaultOpen={active} summary={actionSummary}>
-            <ActionCallbackLabel text={actionText} expanded />
-          </NestedStepDisclosure>
-        ) : (
-          <ActionCallbackLabel text={actionText} />
-        )
-      }
-    />
-  );
-}
-
-function ActionCallbackLabel({
-  expanded,
-  text,
-}: {
-  expanded?: boolean;
-  text: string;
-}) {
-  const summary = expanded
-    ? text
-    : compactReasoningSummary(stripTraceLabelPrefixes(text), 140);
-  return (
-    <div className="max-w-full break-words text-xs leading-4 text-muted-foreground/75">
-      {summary}
-    </div>
-  );
-}
-
-function StepNumber({ index }: { index: number }) {
-  return (
-    <span className="flex min-w-5 items-center justify-center font-mono text-[10px] text-muted-foreground/45">
-      {String(index).padStart(2, "0")}
-    </span>
-  );
-}
-
-function NumberedReasoningStep({
-  index,
-  step,
-  isLoading,
-  rehypePlugins,
-  showNumber,
-}: {
-  index: number;
-  step: CoTReasoningStep;
-  isLoading: boolean;
-  rehypePlugins: ReturnType<typeof useRehypeSplitWordsIntoSpans>;
-  showNumber: boolean;
-}) {
-  const reasoningText = publicProcessText(
-    stripTraceLabelPrefixes(step.reasoning),
-  );
-  const reasoningSummary = compactReasoningSummary(reasoningText, 120);
-  const canExpand = isExpandableStepText(reasoningText, reasoningSummary);
-  return (
-    <ChainOfThoughtStep
-      className="items-start"
-      showConnector={false}
-      icon={showNumber ? <StepNumber index={index} /> : undefined}
-      label={
-        canExpand ? (
-          <NestedStepDisclosure defaultOpen={false} summary={reasoningSummary}>
-            <MarkdownContent
-              content={reasoningText}
-              isLoading={isLoading}
-              rehypePlugins={rehypePlugins}
-            />
-          </NestedStepDisclosure>
-        ) : (
-          <MarkdownContent
-            content={reasoningText}
-            isLoading={isLoading}
-            rehypePlugins={rehypePlugins}
-          />
-        )
-      }
-    ></ChainOfThoughtStep>
-  );
-}
-
-function NestedStepDisclosure({
-  children,
-  defaultOpen,
-  summary,
-}: {
-  children: ReactNode;
-  defaultOpen?: boolean;
-  summary: string;
-}) {
-  return (
-    <Collapsible defaultOpen={defaultOpen}>
-      <CollapsibleTrigger
-        className={cn(
-          "group/nested-step flex min-w-0 items-start gap-1.5 py-0.5 text-left",
-          "text-xs leading-5 text-foreground/70 transition-colors hover:text-foreground",
-        )}
-      >
-        <ChevronDownIcon className="mt-1 size-3 shrink-0 -rotate-90 text-muted-foreground transition-transform group-data-[state=open]/nested-step:rotate-0" />
-        <span className="min-w-0 flex-1 break-words">{summary}</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1 pl-4 text-muted-foreground/80 data-[state=closed]:animate-out data-[state=open]:animate-in">
-        {children}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function isExpandableStepText(raw: string | null | undefined, summary: string) {
-  const normalized = (raw ?? "").replace(/\s+/g, " ").trim();
-  return normalized.length > summary.length || (raw ?? "").includes("\n");
-}
-
-// Single-line tool-call label: action verb on the left, target filename as
-// an inline muted chip on the right. This compacts the previous two-row
-// Implementation note.
-// bar.csv" density seen in other IDE-style products.
-function inlineActionLabel(action: React.ReactNode, detail?: React.ReactNode) {
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className="text-foreground shrink-0">{action}</span>
-      {detail && (
-        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground/65">
-          {detail}
-        </span>
-      )}
-    </div>
   );
 }
 
@@ -1785,609 +1184,6 @@ function extractTeamCallTarget(
     /(Zero|Eve|Kane|Raven|Noah|Luna|Shion|Leon|Market Researcher|Coder|Vibe Selling|Ecommerce Mind)/i,
   );
   return knownAgentMatch?.[1];
-}
-
-function ToolCall({
-  id,
-  messageId,
-  name,
-  args,
-  result,
-  isLast = false,
-  isLoading = false,
-}: {
-  id?: string;
-  messageId?: string;
-  name: string;
-  args: Record<string, unknown>;
-  result?: string | Record<string, unknown> | unknown[];
-  isLast?: boolean;
-  isLoading?: boolean;
-}) {
-  const { t } = useI18n();
-  const { setOpen, autoOpen, autoSelect, selectedArtifact, select } =
-    useArtifacts();
-
-  // The expanded transcript is still a conversation surface, not a debug
-  // console. Keep the same public projection used by the compact stream and
-  // move raw inputs/results to the Workbench. Approval requests are the one
-  // exception: they remain actionable in place below.
-  if (shouldRenderPublicToolProjection(result)) {
-    const display = getActionDisplay(name, args);
-    const narrative = projectToolNarrative({
-      id: id ?? `${messageId ?? "tool"}-${name}`,
-      toolName: name,
-      args,
-      result,
-      state: isLoading && isLast ? "running" : "done",
-    });
-    const ActionIcon = getActionIcon(display.iconName);
-    const localizedVerb = localizedActionVerb(display, t);
-    const label = narrative.object
-      ? `${localizedVerb} ${narrative.object}`
-      : localizedVerb;
-    const detail = [label, formatFactSummary(narrative.fact ?? null, t)]
-      .filter(Boolean)
-      .join("\n");
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        className="cursor-pointer text-muted-foreground/70 hover:text-foreground"
-        label={<span className="min-w-0 truncate">{label}</span>}
-        icon={ActionIcon}
-        onClick={() =>
-          emitOpenAgentWorkbench({
-            tab: narrative.evidenceRefs[0]?.tab ?? display.workbenchTab,
-            eventId: id ?? messageId,
-            eventKind: "execution",
-            view: "trace",
-            processEvent: {
-              kind: "execution",
-              summary: label,
-              detail: detail || label,
-              status: isLoading && isLast ? "running" : "done",
-              count: 1,
-            },
-          })
-        }
-      />
-    );
-  }
-
-  if (name === "web_search") {
-    let label: React.ReactNode = t.toolCalls.searchForRelatedInfo;
-    if (typeof args.query === "string") {
-      label = t.toolCalls.searchOnWebFor(args.query);
-    }
-    const results = extractSearchResults(result);
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate">{label}</span>
-          </div>
-        }
-        icon={SearchIcon}
-      >
-        <SearchResultsList results={results} />
-      </ChainOfThoughtStep>
-    );
-  } else if (name === "image_search") {
-    let label: React.ReactNode = t.toolCalls.searchForRelatedImages;
-    if (typeof args.query === "string") {
-      label = t.toolCalls.searchForRelatedImagesFor(args.query);
-    }
-    const results = (
-      result as {
-        results: {
-          source_url: string;
-          thumbnail_url: string;
-          image_url: string;
-          title: string;
-        }[];
-      }
-    )?.results;
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate">{label}</span>
-          </div>
-        }
-        icon={SearchIcon}
-      >
-        {Array.isArray(results) && (
-          <ChainOfThoughtSearchResults>
-            {Array.isArray(results) &&
-              results.map((item) => (
-                <Tooltip key={item.image_url} content={item.title}>
-                  <a
-                    className="size-24 overflow-hidden rounded-lg object-cover"
-                    href={item.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <div className="bg-accent size-24">
-                      <img
-                        className="size-full object-cover"
-                        src={item.thumbnail_url}
-                        alt={item.title}
-                        width={100}
-                        height={100}
-                      />
-                    </div>
-                  </a>
-                </Tooltip>
-              ))}
-          </ChainOfThoughtSearchResults>
-        )}
-      </ChainOfThoughtStep>
-    );
-  } else if (name === "web_fetch") {
-    const url = (args as { url: string })?.url;
-    let title = url;
-    if (typeof result === "string") {
-      const potentialTitle = extractTitleFromMarkdown(result);
-      if (potentialTitle && potentialTitle.toLowerCase() !== "untitled") {
-        title = potentialTitle;
-      }
-    }
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate">{t.toolCalls.viewWebPage}</span>
-          </div>
-        }
-        icon={GlobeIcon}
-      >
-        <ChainOfThoughtSearchResult>
-          {url && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="cursor-pointer"
-            >
-              {title}
-            </a>
-          )}
-        </ChainOfThoughtSearchResult>
-      </ChainOfThoughtStep>
-    );
-  } else if (name === "ls" || name === "list_cwd") {
-    const description = extractDescFromArgs(args) || t.toolCalls.listFolder;
-    const path = extractPathFromArgs(args);
-    const resultText = resultToText(result);
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            {inlineActionLabel(description, path)}
-          </div>
-        }
-        icon={FolderOpenIcon}
-      >
-        {resultText && <ToolResultPreview content={resultText} />}
-      </ChainOfThoughtStep>
-    );
-  } else if (name === "read_file" || name === "read_file_range") {
-    const description = extractDescFromArgs(args) || t.toolCalls.readFile;
-    const path = extractPathFromArgs(args);
-    const resultText = resultToText(result);
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            {inlineActionLabel(description, path)}
-          </div>
-        }
-        icon={BookOpenTextIcon}
-      >
-        {resultText && <ToolResultPreview content={resultText} />}
-      </ChainOfThoughtStep>
-    );
-  } else if (
-    name === "write_file" ||
-    name === "str_replace" ||
-    name === "edit_code"
-  ) {
-    const description = extractDescFromArgs(args) || t.toolCalls.writeFile;
-    const path = extractPathFromArgs(args);
-    const resultText = resultToText(result);
-    // Show diff preview if available in result
-    const diffPreview =
-      typeof result === "object" && result && "diff_preview" in result
-        ? String(result.diff_preview)
-        : null;
-
-    const isApproval = typeof result === "string" && isApprovalRequest(result);
-    if (isApproval) {
-      return (
-        <ChainOfThoughtStep
-          key={id}
-          showConnector={false}
-          label={t.toolApproval.requiresApproval}
-          icon={ShieldAlertIcon}
-        >
-          <ToolApprovalCard content={result as string} />
-        </ChainOfThoughtStep>
-      );
-    }
-
-    if (isLoading && isLast && autoOpen && autoSelect && path) {
-      setTimeout(() => {
-        const url = new URL(
-          `write-file:${path}?message_id=${messageId}&tool_call_id=${id}`,
-        ).toString();
-        if (selectedArtifact === url) {
-          return;
-        }
-        select(url, true);
-        setOpen(true);
-      }, 100);
-    }
-
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        className="cursor-pointer"
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            {inlineActionLabel(description, path)}
-          </div>
-        }
-        icon={NotebookPenIcon}
-        onClick={() => {
-          select(
-            new URL(
-              `write-file:${path}?message_id=${messageId}&tool_call_id=${id}`,
-            ).toString(),
-          );
-          setOpen(true);
-        }}
-      >
-        {diffPreview && (
-          <ToolResultPreview content={diffPreview} language="diff" />
-        )}
-        {resultText && !diffPreview && (
-          <ToolResultPreview content={resultText} />
-        )}
-      </ChainOfThoughtStep>
-    );
-  } else if (
-    name === "bash" ||
-    name === "exec_shell" ||
-    name === "mcp_exec_shell"
-  ) {
-    const description = extractDescFromArgs(args) || t.toolCalls.executeCommand;
-
-    const isApproval = typeof result === "string" && isApprovalRequest(result);
-    if (isApproval) {
-      return (
-        <ChainOfThoughtStep
-          key={id}
-          showConnector={false}
-          label={t.toolApproval.requiresApproval}
-          icon={ShieldAlertIcon}
-        >
-          <ToolApprovalCard content={result as string} />
-        </ChainOfThoughtStep>
-      );
-    }
-
-    const resultText = resultToText(result);
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            {inlineActionLabel(description)}
-          </div>
-        }
-        icon={SquareTerminalIcon}
-      >
-        {resultText && !isApproval && (
-          <ToolResultPreview content={resultText} language="bash" />
-        )}
-      </ChainOfThoughtStep>
-    );
-  } else if (name === "ask_clarification" || name === "ask_user_question") {
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate">{t.toolCalls.needYourHelp}</span>
-          </div>
-        }
-        icon={MessageCircleQuestionMarkIcon}
-      ></ChainOfThoughtStep>
-    );
-  } else if (isTeamCallToolName(name)) {
-    const target = extractTeamCallTarget(args);
-    const description = t.messageGrouping.callTeammate;
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            {inlineActionLabel(description, target)}
-          </div>
-        }
-        icon={UsersIcon}
-      />
-    );
-  } else if (name === "write_todos" || name === "todo_write") {
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate">{t.toolCalls.writeTodos}</span>
-          </div>
-        }
-        icon={ListTodoIcon}
-      />
-    );
-  } else {
-    const description =
-      extractDescFromArgs(args) ?? t.messageGrouping.runAction;
-    const path = extractSafeContextFromArgs(args);
-    const resultText = resultToText(result);
-    return (
-      <ChainOfThoughtStep
-        key={id}
-        showConnector={false}
-        label={
-          <div className="flex min-w-0 items-center gap-2">
-            {inlineActionLabel(description, path)}
-          </div>
-        }
-        icon={WrenchIcon}
-      >
-        {resultText && <ToolResultPreview content={resultText} />}
-      </ChainOfThoughtStep>
-    );
-  }
-}
-
-// Keep this as a plain boolean helper rather than an inline type guard. The
-// legacy approval branches below still need their original result type.
-function shouldRenderPublicToolProjection(result: unknown): boolean {
-  return !(typeof result === "string" && isApprovalRequest(result));
-}
-
-const MAX_PREVIEW_LINES = 8;
-const MAX_SEARCH_RESULTS = 8;
-
-interface SearchResultItem {
-  title: string;
-  url?: string;
-}
-
-function isSearchResultItem(value: unknown): value is SearchResultItem {
-  const record = asRecord(value);
-  return (
-    !!record &&
-    (typeof record.title === "string" || typeof record.url === "string")
-  );
-}
-
-function extractSearchResults(
-  result: string | Record<string, unknown> | unknown[] | undefined,
-): SearchResultItem[] {
-  const parsed = typeof result === "string" ? parseMaybeJson(result) : result;
-  const candidates = collectSearchResultCandidates(parsed);
-  const results: SearchResultItem[] = [];
-  const seen = new Set<string>();
-  for (const item of candidates) {
-    if (isSearchResultItem(item)) {
-      const label = item.title || item.url;
-      if (!label) continue;
-      const key = item.url || label;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      results.push({
-        title: compactReasoningSummary(label, 96),
-        url: item.url,
-      });
-      if (results.length >= MAX_SEARCH_RESULTS) break;
-      continue;
-    }
-    const record = asRecord(item);
-    if (!record) continue;
-    const title = firstStringValue(record, [
-      "title",
-      "name",
-      "text",
-      "snippet",
-      "description",
-    ]);
-    const url = firstStringValue(record, [
-      "url",
-      "link",
-      "href",
-      "source_url",
-      "sourceUrl",
-    ]);
-    const label = title || url;
-    if (!label) continue;
-    const key = url || label;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    results.push({ title: compactReasoningSummary(label, 96), url });
-    if (results.length >= MAX_SEARCH_RESULTS) break;
-  }
-  return results;
-}
-
-function collectSearchResultCandidates(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  const record = asRecord(value);
-  if (!record) return [];
-  for (const key of [
-    "results",
-    "items",
-    "sources",
-    "pages",
-    "web_results",
-    "webResults",
-    "search_results",
-    "searchResults",
-  ]) {
-    const list = record[key];
-    if (Array.isArray(list)) return list;
-  }
-  return [record];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function firstStringValue(
-  record: Record<string, unknown>,
-  keys: string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number") return String(value);
-  }
-  return undefined;
-}
-
-function parseMaybeJson(value: string): unknown {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  try {
-    return JSON.parse(trimmed);
-  } catch (e) {
-    swallow(e);
-    return undefined;
-  }
-}
-
-function SearchResultsList({ results }: { results: SearchResultItem[] }) {
-  const { t } = useI18n();
-  const [isOpen, setIsOpen] = useState(true);
-  if (results.length === 0) return null;
-
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mt-1">
-      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors">
-        <ChevronDownIcon
-          className={cn(
-            "size-3.5 transition-transform",
-            isOpen ? "rotate-180" : "",
-          )}
-        />
-        {t.liveToolTimeline.searchedPages(results.length)}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1 data-[state=closed]:animate-out data-[state=open]:animate-in">
-        <ChainOfThoughtSearchResults className="flex-col items-stretch gap-1 overflow-visible">
-          {results.map((item, index) => (
-            <ChainOfThoughtSearchResult
-              key={`${item.url ?? item.title}-${index}`}
-              className="w-fit max-w-full justify-start gap-2 rounded-md bg-transparent px-0 py-0 text-sm text-muted-foreground shadow-none hover:text-foreground"
-            >
-              <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground/70">
-                {index + 1}
-              </span>
-              {item.url ? (
-                <a
-                  className="min-w-0 truncate"
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {item.title}
-                </a>
-              ) : (
-                <span className="min-w-0 truncate">{item.title}</span>
-              )}
-            </ChainOfThoughtSearchResult>
-          ))}
-        </ChainOfThoughtSearchResults>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function resultToText(
-  result: string | Record<string, unknown> | unknown[] | undefined,
-): string | null {
-  if (result == null) return null;
-  if (typeof result === "string") return result;
-  try {
-    return JSON.stringify(result, null, 2);
-  } catch (e) {
-    swallow(e);
-    return String(result);
-  }
-}
-
-function ToolResultPreview({
-  content,
-  language,
-}: {
-  content: string;
-  language?: BundledLanguage;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const lines = content.split("\n");
-  const isLong = lines.length > MAX_PREVIEW_LINES;
-  const displayContent = isOpen
-    ? content
-    : lines.slice(0, MAX_PREVIEW_LINES).join("\n");
-  const { t } = useI18n();
-
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mt-1">
-      <div className="relative">
-        <CodeBlock
-          className="mx-0 border-none px-0 text-xs"
-          showLineNumbers={false}
-          language={language ?? ("text" as BundledLanguage)}
-          code={displayContent}
-        />
-        {isLong && !isOpen && (
-          <div className="from-background/95 pointer-events-none absolute right-0 bottom-0 left-0 h-8 bg-gradient-to-t to-transparent" />
-        )}
-      </div>
-      {isLong && (
-        <CollapsibleTrigger className="text-muted-foreground hover:text-foreground mt-0.5 flex items-center gap-1 text-xs transition-colors hover:underline">
-          <ChevronDownIcon
-            className={cn(
-              "size-3 transition-transform",
-              isOpen ? "rotate-180" : "",
-            )}
-          />
-          {isOpen ? t.toolCalls.lessSteps : t.toolCalls.clickToViewContent}
-        </CollapsibleTrigger>
-      )}
-    </Collapsible>
-  );
 }
 
 interface GenericCoTStep<T extends string = string> {
@@ -3089,43 +1885,6 @@ function timelineItemLinkageId(item: TimelineItem): string {
   if (item.type === "aggregatedToolGroup") return item.id;
   const step = lastTimelineStep(item);
   return step.messageId ?? step.id ?? item.id;
-}
-
-function timelineItemFromStep(step: CoTStep, suffix: string): TimelineItem {
-  if (step.type === "toolCall") {
-    return {
-      id: `${step.messageId ?? step.id ?? "tool"}-${suffix}`,
-      type: "toolCall",
-      step,
-      role: step.role,
-      inferred: step.inferred,
-    };
-  }
-  if (step.type === "commentary") {
-    return {
-      id: `${step.id ?? "commentary"}-${suffix}`,
-      type: "commentary",
-      step,
-      role: step.role,
-      inferred: step.inferred,
-    };
-  }
-  if (step.type === "actionCallback") {
-    return {
-      id: `${step.id ?? "action"}-${suffix}`,
-      type: "actionCallbackGroup",
-      steps: [step],
-      role: step.role,
-      inferred: step.inferred,
-    };
-  }
-  return {
-    id: `${step.id ?? "reasoning"}-${suffix}`,
-    type: "reasoningGroup",
-    steps: [step],
-    role: step.role,
-    inferred: step.inferred,
-  };
 }
 
 function leadInStepsBeforeStructuredPhase(

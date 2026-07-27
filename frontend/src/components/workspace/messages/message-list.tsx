@@ -782,11 +782,31 @@ export function MessageList({
   useEffect(() => {
     const itemId = timelineLinkage.highlightedTimelineItemId;
     if (!itemId) return;
-    const row = findTimelineItemElement(itemId, "chat");
-    if (!row) return;
-    row.scrollIntoView({ behavior: "smooth", block: "center" });
-    row.classList.add(TIMELINE_ITEM_HIGHLIGHT_CLASS);
-    return () => row.classList.remove(TIMELINE_ITEM_HIGHLIGHT_CLASS);
+    let row: HTMLElement | null = null;
+    let frame = 0;
+    let disposed = false;
+    const locate = (): boolean => {
+      row = findTimelineItemElement(itemId, "chat");
+      if (!row) return false;
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add(TIMELINE_ITEM_HIGHLIGHT_CLASS);
+      return true;
+    };
+    // 命中聚合组子项时，MessageGroup 需先在本轮状态更新后渲染子项，首帧
+    // 可能定位不到，按帧重试（上限 3 帧 ≈ 50ms，高亮总时长 2s 不受影响）。
+    let attempts = 0;
+    const retry = () => {
+      if (disposed) return;
+      if (locate()) return;
+      attempts += 1;
+      if (attempts < 3) frame = window.requestAnimationFrame(retry);
+    };
+    if (!locate()) frame = window.requestAnimationFrame(retry);
+    return () => {
+      disposed = true;
+      if (frame) window.cancelAnimationFrame(frame);
+      row?.classList.remove(TIMELINE_ITEM_HIGHLIGHT_CLASS);
+    };
   }, [timelineLinkage.highlightedTimelineItemId, timelineLinkage.nonce]);
 
   useEffect(() => {

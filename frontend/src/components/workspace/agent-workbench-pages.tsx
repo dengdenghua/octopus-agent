@@ -20,6 +20,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  agentPhaseDisplayTitle,
   phaseStatusText,
   type AgentPhase,
   type AgentPhaseStatus,
@@ -707,6 +708,87 @@ function ReferenceIcon({
   );
 }
 
+// 子 agent 行 — 与对话区 MiniSubtaskRow 同一实体化体验：
+// 头像 + hover popover（复用 SubtaskHoverPreview）+ 点击/按钮跳转。
+function SummaryAgentRow({ tile }: { tile: AgentTile }) {
+  const { t } = useI18n();
+  const subtask = useSubtask(tile.id);
+  const displayLabel = tile.taskLabel ?? tile.codename ?? tile.name ?? tile.label;
+  const previewId = `subtask-preview-${tile.id}`;
+  const statusLabel = subtask
+    ? (() => {
+        const raw = t.subagents[subtask.status as keyof typeof t.subagents];
+        return typeof raw === "string" ? raw : subtask.status;
+      })()
+    : "";
+  const avatarEmoji = subtask?.avatarEmoji ?? tile.avatar;
+  const hue = subtask?.hue;
+
+  const handleClick = () => {
+    emitAgentWorkbenchFocus({
+      agentId: tile.id,
+      tab: "agent",
+      view: "summary",
+    });
+  };
+
+  return (
+    <li className="group/subtask-row relative flex items-start gap-3">
+      <button
+        type="button"
+        onClick={handleClick}
+        // See MiniSubtaskRow: suppress mouse-click focus so the hover
+        // preview doesn't stay pinned via group-focus-within after a click.
+        onMouseDown={(e) => e.preventDefault()}
+        aria-label={displayLabel}
+        aria-describedby={subtask ? previewId : undefined}
+        className="absolute inset-0 cursor-pointer rounded-lg"
+      />
+      <span
+        className="flex size-5 shrink-0 items-center justify-center rounded-md text-xs text-muted-foreground"
+        style={hue != null ? { background: `hsl(${hue} 70% 92%)` } : undefined}
+      >
+        {avatarEmoji ?? <BotIcon className="size-3" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+            {displayLabel}
+          </span>
+          <span
+            className={cn(
+              "size-1.5 shrink-0 rounded-full",
+              tile.status === "error"
+                ? "bg-destructive"
+                : tile.status === "running"
+                  ? "bg-emerald-500"
+                  : tile.status === "waiting_approval"
+                    ? "bg-amber-500"
+                    : tile.status === "done"
+                      ? "bg-muted-foreground/45"
+                      : "bg-muted-foreground/35",
+            )}
+            aria-hidden="true"
+          />
+        </span>
+        {(tile.resultSummary ?? tile.error ?? tile.lastThought) && (
+          <span className="mt-0.5 block line-clamp-2 text-xs leading-4 text-muted-foreground">
+            {tile.error ?? tile.resultSummary ?? tile.lastThought}
+          </span>
+        )}
+      </span>
+      <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/50" />
+      {subtask && (
+        <SubtaskHoverPreview
+          task={subtask}
+          statusLabel={statusLabel}
+          id={previewId}
+        />
+      )}
+    </li>
+  );
+}
+
 // ============================================================================
 // 看板概要页 (Agent Summary Dashboard)
 // ============================================================================
@@ -740,7 +822,7 @@ export function AgentSummaryPage({
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    () => new Set(["progress", "artifacts"]),
+    () => new Set(["progress", "inputs", "artifacts"]),
   );
   const manuallyToggledSections = useRef(new Set<string>());
   const previousRunActive = useRef(false);
@@ -816,6 +898,13 @@ export function AgentSummaryPage({
   }, [phases.length, runActive]);
   const showOutline =
     progressOutline !== undefined && progressOutline.length > 0;
+  const inputText = userInput?.text.trim() ?? "";
+  const inputUploadedFiles = userInput?.uploadedFiles ?? [];
+  const inputAttachments = userInput?.attachments ?? [];
+  const showInputs =
+    inputText.length > 0 ||
+    inputUploadedFiles.length > 0 ||
+    inputAttachments.length > 0;
   const outlineExecutionCount = showOutline
     ? progressOutline.reduce((sum, round) => sum + round.executionCount, 0)
     : 0;
@@ -1030,7 +1119,7 @@ export function AgentSummaryPage({
                         className="min-w-0 flex-1 truncate text-xs text-foreground"
                         title={phase.title}
                       >
-                        {phase.titleKey ? t.agentPhases[phase.titleKey] : phase.title}
+                        {agentPhaseDisplayTitle(phase, t.agentPhases)}
                       </span>
                       <span className="shrink-0 text-[11px] text-muted-foreground">
                         {phaseStatusText(phase.status)}
@@ -1059,6 +1148,87 @@ export function AgentSummaryPage({
                   ))}
                 </ul>
               ))}
+          </section>
+        )}
+
+        {/* 输入 */}
+        {showInputs && (
+          <section className="border-b border-border-subtle py-4">
+            <button
+              type="button"
+              aria-expanded={expandedSections.has("inputs")}
+              onClick={() => toggleSection("inputs")}
+              className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
+            >
+              <h3 className="text-xs font-medium text-foreground">
+                {t.agentWorkbenchPages.inputs}
+              </h3>
+              <span className="ml-auto truncate text-xs text-muted-foreground">
+                {inputUploadedFiles.length > 0
+                  ? t.agentWorkbenchPages.inputsUploadedFiles(
+                      inputUploadedFiles.length,
+                    )
+                  : ""}
+                {inputUploadedFiles.length > 0 && inputAttachments.length > 0
+                  ? " · "
+                  : ""}
+                {inputAttachments.length > 0
+                  ? t.agentWorkbenchPages.inputsAttachments(
+                      inputAttachments.length,
+                    )
+                  : ""}
+              </span>
+              {expandedSections.has("inputs") ? (
+                <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+              ) : (
+                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
+              )}
+            </button>
+            {expandedSections.has("inputs") && (
+              <div className="mt-3 space-y-3">
+                {inputText.length > 0 && (
+                  <p className="whitespace-pre-wrap text-xs leading-5 text-foreground">
+                    {inputText}
+                  </p>
+                )}
+                {inputUploadedFiles.length > 0 && (
+                  <ul className="space-y-1">
+                    {inputUploadedFiles.map((file) => (
+                      <li
+                        key={file.path}
+                        className="flex min-h-6 items-center gap-2"
+                      >
+                        <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span
+                          className="min-w-0 flex-1 truncate text-xs text-foreground"
+                          title={file.path}
+                        >
+                          {file.filename}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {inputAttachments.length > 0 && (
+                  <ul className="space-y-1">
+                    {inputAttachments.map((attachment, index) => (
+                      <li
+                        key={`${attachment.filename}-${index}`}
+                        className="flex min-h-6 items-center gap-2"
+                      >
+                        <PaperclipIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span
+                          className="min-w-0 flex-1 truncate text-xs text-foreground"
+                          title={attachment.filename}
+                        >
+                          {attachment.filename}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -1215,48 +1385,9 @@ export function AgentSummaryPage({
                     </div>
                   )}
                 </div>
-                <ul className="max-h-48 space-y-3 overflow-y-auto">
+                <ul className="space-y-3">
                   {agentTiles.map((tile) => (
-                    <li key={tile.id} className="flex items-start gap-3">
-                      <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
-                        <BotIcon className="size-3" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-                            {tile.taskLabel ??
-                              tile.codename ??
-                              tile.name ??
-                              tile.label}
-                          </span>
-                          <span
-                            className={cn(
-                              "size-1.5 shrink-0 rounded-full",
-                              tile.status === "error"
-                                ? "bg-destructive"
-                                : tile.status === "running"
-                                  ? "bg-emerald-500"
-                                  : tile.status === "waiting_approval"
-                                    ? "bg-amber-500"
-                                    : tile.status === "done"
-                                      ? "bg-muted-foreground/45"
-                                      : "bg-muted-foreground/35",
-                            )}
-                            aria-hidden="true"
-                          />
-                        </span>
-                        {(tile.resultSummary ??
-                          tile.error ??
-                          tile.lastThought) && (
-                          <span className="mt-0.5 block line-clamp-2 text-xs leading-4 text-muted-foreground">
-                            {tile.error ??
-                              tile.resultSummary ??
-                              tile.lastThought}
-                          </span>
-                        )}
-                      </span>
-                      <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/50" />
-                    </li>
+                    <SummaryAgentRow key={tile.id} tile={tile} />
                   ))}
                 </ul>
               </div>
