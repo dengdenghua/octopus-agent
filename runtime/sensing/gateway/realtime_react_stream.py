@@ -648,6 +648,7 @@ async def _drive_react(
                         reasoning_effort=(intent.user_context or {}).get(
                             "reasoning_effort",
                         ),
+                        steering_drain=lambda: runtime._drain_turn_steering(turn.id),
                     )
                     for evt in events:
                         _safe_put(evt)

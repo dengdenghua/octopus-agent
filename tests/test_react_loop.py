@@ -1162,6 +1162,62 @@ def test_public_update_is_emitted_before_its_tool_execution() -> None:
     assert commentary["delta"] == "已定位到消息桥接层，下一步核对事件顺序。"
 
 
+def test_live_steering_preempts_finalization_and_gets_priority_prompt() -> None:
+    router = _CapturingRouter(
+        [
+            "Final Answer: 原任务的旧结论",
+            "Final Answer: 当前仍在整理证据；我已经回答你的问题并继续原任务。",
+        ]
+    )
+    sent = False
+
+    def steering_drain() -> list[str]:
+        nonlocal sent
+        if router.requests and not sent:
+            sent = True
+            return ["什么情况？"]
+        return []
+
+    events, result = _drain(
+        stream_react_loop(
+            _FakeStack(router),
+            _intent("完成一项长任务"),
+            agent=None,
+            max_iterations=2,
+            steering_drain=steering_drain,
+        )
+    )
+
+    assert result is not None
+    assert result.final_answer == "当前仍在整理证据；我已经回答你的问题并继续原任务。"
+    assert len(router.requests) == 2
+    second_messages = router.requests[1].messages
+    priority_index = next(
+        index
+        for index, message in enumerate(second_messages)
+        if message.role == "system"
+        and "LIVE USER FOLLOW-UP — HIGH PRIORITY" in str(message.content)
+    )
+    assert second_messages[priority_index + 1].role == "user"
+    assert second_messages[priority_index + 1].content == "什么情况？"
+    assert sum(event["type"] == "react_completed" for event in events) == 1
+
+
+def test_continuation_react_turn_prioritizes_live_steering_from_bootstrap() -> None:
+    router = _CapturingRouter(["Final Answer: 已先回答，再继续。"])
+    intent = _intent("什么情况？")
+    intent.user_context["live_steering"] = True
+
+    result = run_react_loop(_FakeStack(router), intent, agent=None)
+
+    assert result is not None
+    messages = router.requests[0].messages
+    user_index = max(index for index, message in enumerate(messages) if message.role == "user")
+    assert messages[user_index].content == "什么情况？"
+    assert messages[user_index - 1].role == "system"
+    assert "LIVE USER FOLLOW-UP — HIGH PRIORITY" in str(messages[user_index - 1].content)
+
+
 def test_missing_public_update_does_not_invent_runtime_commentary() -> None:
     router = _ScriptedRouter(
         [

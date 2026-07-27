@@ -2281,6 +2281,13 @@ def stream_agentic_fallback(
     _pending_steering: list[str] = []
     _last_steering_probe_at = 0.0
 
+    if (intent.user_context or {}).get("live_steering"):
+        from runtime.core.cerebrum.live_steering import (
+            insert_live_steering_protocol,
+        )
+
+        insert_live_steering_protocol(messages)
+
     def _capture_steering(*, force: bool = False) -> bool:
         """Collect live user input without exposing it to two rounds.
 
@@ -2310,7 +2317,11 @@ def stream_agentic_fallback(
     def _append_pending_steering() -> None:
         if not _pending_steering:
             return
-        messages.extend(Message(role="user", content=text) for text in _pending_steering)
+        from runtime.core.cerebrum.live_steering import (
+            append_live_steering_messages,
+        )
+
+        append_live_steering_messages(messages, _pending_steering)
         _pending_steering.clear()
 
     def _observe_code_tool_result(

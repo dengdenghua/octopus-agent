@@ -165,6 +165,39 @@ def test_late_steering_supersedes_a_provisional_final_answer() -> None:
     assert "corrected answer" in "".join(str(event[1]) for event in events if event[0] == "text")
 
 
+def test_continuation_steering_starts_with_priority_response_protocol() -> None:
+    class Router:
+        def __init__(self) -> None:
+            self.requests = []
+
+        def call_stream(self, req):
+            self.requests.append(req)
+            yield ModelStreamEvent(type="text_delta", delta="已先回答，再继续。")
+            yield ModelStreamEvent(
+                type="done",
+                final=ModelResponse(text="已先回答，再继续。"),
+            )
+
+    router = Router()
+    intent = ParsedIntent(
+        raw="什么情况？",
+        intent_type="task",
+        normalized_goal="什么情况？",
+        user_context={
+            "conversation_id": "thread-steer-continuation",
+            "live_steering": True,
+        },
+    )
+
+    list(stream_agentic_fallback(_make_stack(router), intent, _agent()))
+
+    messages = router.requests[0].messages
+    user_index = max(index for index, message in enumerate(messages) if message.role == "user")
+    assert messages[user_index].content == "什么情况？"
+    assert messages[user_index - 1].role == "system"
+    assert "LIVE USER FOLLOW-UP — HIGH PRIORITY" in str(messages[user_index - 1].content)
+
+
 def test_steering_cancels_a_cooperative_tool_and_continues_the_same_turn() -> None:
     started = threading.Event()
     cancelled = threading.Event()
@@ -254,6 +287,12 @@ def test_steering_cancels_a_cooperative_tool_and_continues_the_same_turn() -> No
     assert len(router.requests) == 2
     assert any(
         message.role == "user" and message.content == "停止等待，直接给出当前结论"
+        for message in router.requests[1].messages
+    )
+    assert any(
+        message.role == "system"
+        and "LIVE USER FOLLOW-UP — HIGH PRIORITY" in str(message.content)
+        and "directly answer or acknowledge" in str(message.content)
         for message in router.requests[1].messages
     )
     tool_end = next(event for event in events if event[0] == "tool_end")
@@ -521,6 +560,11 @@ def test_steering_abandons_an_idle_model_stream_without_waiting_for_timeout() ->
     assert len(router.requests) == 2
     assert any(
         message.role == "user" and message.content == "不要再等，换一个方向回答"
+        for message in router.requests[1].messages
+    )
+    assert any(
+        message.role == "system"
+        and "LIVE USER FOLLOW-UP — HIGH PRIORITY" in str(message.content)
         for message in router.requests[1].messages
     )
     visible = "".join(str(event[1]) for event in events if event[0] == "text")

@@ -2083,6 +2083,7 @@ def stream_react_loop(
     step_evaluator: Callable[[dict[str, Any]], float | None] | None = None,
     planning_mode: bool = False,
     reasoning_effort: str | None = None,
+    steering_drain: Callable[[], list[str]] | None = None,
 ) -> Generator[dict[str, Any], None, ReActResult | None]:
     # ╔══════════════════════════════════════════════════════════════════╗
     # ║ stream_react_loop · navigation map (comment-only; do not split). ║
@@ -3258,6 +3259,12 @@ def stream_react_loop(
             ),
         ),
     )
+    if intent.user_context.get("live_steering"):
+        from runtime.core.cerebrum.live_steering import (
+            insert_live_steering_protocol,
+        )
+
+        insert_live_steering_protocol(messages)
 
     # ── PHASE 4 · message bootstrap done; emit react_started ───────────
     yield {
@@ -3501,6 +3508,26 @@ def stream_react_loop(
     _format_violation_bail_at = 2
     _context_pressure_signaled: bool = False
 
+    def _append_pending_live_steering() -> int:
+        if steering_drain is None:
+            return 0
+        try:
+            pending = steering_drain()
+        except Exception:  # noqa: BLE001 — live steering must not break the turn
+            _logger.warning("live steering poll failed", exc_info=True)
+            return 0
+        from runtime.core.cerebrum.live_steering import (
+            append_live_steering_messages,
+        )
+
+        count = append_live_steering_messages(messages, pending)
+        if count:
+            _logger.info(
+                "react_loop accepted %d priority user follow-up(s) at a safe boundary",
+                count,
+            )
+        return count
+
     from runtime.platform.models.llm import (
         model_supports_thinking as _supports_thinking,
     )
@@ -3601,6 +3628,11 @@ def stream_react_loop(
                 break
         except (ImportError, AttributeError, TypeError):  # noqa: BLE001 — cancellation subsystem unavailable; proceed normally
             pass
+
+        # User follow-ups are durable, high-priority inputs. Consume them at
+        # the first model-safe boundary so the next response acknowledges the
+        # user before the original task continues.
+        _append_pending_live_steering()
 
         if _pause.is_pause_requested(str(react_task_id) if react_task_id else None):
             terminated_reason = "paused"
@@ -5528,6 +5560,16 @@ def stream_react_loop(
             )
             maybe_final = None
             _force_convergence_next = True
+
+        # Close the race where a follow-up arrives while the model is composing
+        # what would otherwise be the terminal answer. Keep that answer as
+        # conversation history, then give the latest user message the next
+        # model round instead of finalizing over it.
+        if maybe_final and _append_pending_live_steering():
+            maybe_final = None
+            _logger.info(
+                "react_loop deferred finalization for a priority user follow-up",
+            )
 
         if maybe_final:
             _deferred_final_emit = not _final_stream_started and (
