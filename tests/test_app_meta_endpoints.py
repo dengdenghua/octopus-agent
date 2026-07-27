@@ -104,6 +104,7 @@ def secured_meta_client(
         create_meta_router(
             registry=registry,
             identity_store=store,
+            require_auth=True,
         )
     )
     with TestClient(app) as test_client:

@@ -1463,6 +1463,7 @@ def create_app(
             molili_jwt_secret=cocoloop_jwt_secret,
             jwt_issuer=cocoloop_jwt_issuer,
             jwt_audience=cocoloop_jwt_audience,
+            require_auth=cocoloop_require_auth,
         )
     )
 
@@ -1900,7 +1901,7 @@ def create_app(
             registry=state.registry,
             planner=getattr(stack, "planner", None) if stack is not None else None,
             effect_store=(
-                stack.executor.effect_store
+                getattr(stack.executor, "effect_store", None)
                 if stack is not None and getattr(stack, "executor", None) is not None
                 else None
             ),

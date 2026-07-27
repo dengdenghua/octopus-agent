@@ -244,6 +244,7 @@ def create_meta_router(
     molili_jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    require_auth: bool = False,
 ) -> Any:
     """Build the FastAPI router.
 
@@ -850,10 +851,12 @@ def create_meta_router(
                 response[key] = value.strip()
         return response
 
-    # Leave the route to the compatibility stub when auth is disabled and no
-    # real identity store exists; otherwise the generic handler would shadow
-    # the stub's anonymous development response.
-    if identity_store is not None:
+    # Leave the route to the compatibility stub when auth is disabled
+    # (require_auth=False). The stub returns anonymous on bad/missing JWT
+    # instead of 401, which is the desired behavior in dev mode. Only
+    # register the strict handler when the app is actually enforcing auth —
+    # at that point stub_router is disabled, so there's no route conflict.
+    if identity_store is not None and require_auth:
         router.add_api_route("/api/auth/me", auth_me, methods=["GET"])
 
     # ─── Auth providers ─────────────────────────────────────
