@@ -15,15 +15,15 @@
   - [x] SubTask 2.3: 单测覆盖：`tests/test_phase_kind_mapping.py` 56 个用例（EN/CN 关键词 + 优先级 + 子串陷阱 + 默认值 + round-trip + 集成）全部通过
   - **核查修正**：首次核查误判为未实装（grep 只匹配 `_phases_from_todo` 未显示 `_phase_kind`）。代码实际已完整实装
 
-- [ ] Task 3: 强制 commentary fallback
-  - [ ] SubTask 3.1: `runtime/core/cerebrum/react_loop.py` 的 commentary 生成逻辑：模型未守 `Update:` 协议时强制启用 runtime fallback
-  - [ ] SubTask 3.2: 单测覆盖：模型不守协议时 commentary item 仍生成，协议字段齐全
-  - **核查状态**：未实装。react_loop.py 有 8 处 `commentary_delta` emit 点，但 grep `commentary.*fallback|_commentary_fallback` 零匹配
+- [x] Task 3: 强制 commentary fallback
+  - [x] SubTask 3.1: `runtime/core/cerebrum/react_loop.py:555-580,4844-4862` `_runtime_fallback_public_update()` 函数 + 检测 `_model_supplied_update=False` 时调用
+  - [x] SubTask 3.2: 单测覆盖：`tests/test_react_loop.py:1221-1242` `test_missing_public_update_emits_runtime_fallback_commentary` 验证 fallback 触发 + 字段齐全
+  - **核查修正**：首次核查 grep `commentary.*fallback|_commentary_fallback` 零匹配误判。实际函数名是 `_runtime_fallback_public_update`，grep 关键词过窄
 
-- [ ] Task 4: text_delta 路径 strip 协议标签
-  - [ ] SubTask 4.1: `runtime/sensing/gateway/realtime_event_bridge.py` 的 text_delta emit 前 strip `<ReasoningBlock>` 等泄漏标签
-  - [ ] SubTask 4.2: 单测覆盖：泄漏标签被 strip，正常文本不受影响
-  - **核查状态**：未实装。grep `INTERNAL_PROCESS_BLOCK_RE|ReasoningBlock.*strip` 在 `runtime/` 零匹配；strip 逻辑只在前端 `message-group.tsx:163`
+- [x] Task 4: text_delta 路径 strip 协议标签
+  - [x] SubTask 4.1: `runtime/sensing/gateway/tool_bridge.py:146-170,173` 三层正则 + `strip_leaked_protocol_tags()` 函数；`realtime_event_bridge.py:55,312` 在 text_delta 路径调用
+  - [x] SubTask 4.2: 单测覆盖：`tests/test_realtime_event_bridge.py:62-141` 25+ 用例（成对块/单标签/正常文本/CJK/代码块/JSON）
+  - **核查修正**：首次核查 grep `ReasoningBlock.*strip` 要求同行匹配误判。实际正则定义、函数、调用分三处，grep 关键词过窄
 
 ## 前端体验收尾（9 项）
 
@@ -87,8 +87,7 @@
 
 # 当前状态总结（2026-07-27 核查）
 
-- 已完成：Task 1, 2, 5, 6, 7, 9, 10, 11, 12, 13（10 项）
-- 半完成：Task 8（前端就绪，后端 phase_kind 已实装，可联调）
-- 未实装：Task 3, 4（2 项后端协议）
-- 阻塞中：Task 14（已解锁，可联调）、Task 15（已解锁，等前端实装回放读取）
-- **下一步优先级**：实装 Task 3 + Task 4（最后两项后端协议），然后联调 Task 8/14/15
+- 已完成：Task 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13（13 项）
+- 已解锁：Task 14（phase_kind 联动，后端已就绪）、Task 15（duration_ms 回放，后端已就绪）
+- **核查失误记录**：Task 2/3/4 首次核查均误判为未实装，根因是 grep 关键词过窄（要求多个关键词同行匹配）。实际代码均已完整实装且有测试覆盖
+- **下一步**：所有后端协议 + 前端体验项已完成，剩余 Task 14/15 为前端联调工作
