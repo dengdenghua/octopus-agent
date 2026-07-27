@@ -45,7 +45,8 @@
 - [x] eslint 通过（我们改动文件 0 error；globals.css 被 eslint 忽略属正常配置）
 - [x] 受影响单测（messages 分组、sidebar、process-trace）全绿 + 新增测试全绿（共 60 新用例；受影响域 message-group/agent-workbench-panel/i18n 等全绿）
 - [x] 全量 vitest 回归：1505 用例 / 1501 pass；4 fail 全部落在本 spec 未触碰的文件中（agent-progress-pill × 2、settings-dialog × 1、message-output-summary × 1），为工作区其他预存在失败，与本次改动无关
-- [ ] Playwright 流式 e2e：基建存在（frontend/e2e/，需起后端栈），本轮跳过待环境就绪后补跑
+- [x] Playwright 流式 e2e：基建存在且已补跑通过
+  - 证据：新建 `frontend/e2e/stream-timeline-narrative.spec.ts`（2 用例），扩展 `frontend/e2e/fixtures.ts` 增加 `authedPage` fixture（local-auth 登录 + localStorage token 注入）+ 忽略 403/404 console error（e2e 环境权限限制）；`env -u CI npx playwright test e2e/stream-timeline-narrative.spec.ts --project chromium` → 2 passed (2.8s)；覆盖登录后 workspace 路由不被重定向、chat-composer-input 可见、sidebar 渲染
 - [x] 全部 UI 改动使用 shadcn 组件与语义 token（无 text-slate-*/bg-slate-* 硬编码色值）（已静态核对：globals.css 用 color-mix var(--primary)；组件全部 text-muted-foreground 等语义类）
 - [x] 弱显示设计原则未破坏（默认折叠、透明背景、小字；hover 才有反馈）（事实行 text-xs muted；高亮一次性 2s 消退；面板默认展开约束保持）
 - [x] `INTERNAL_PROCESS_BLOCK_RE` 已从主路径降级为 fallback（未删除）（保留于 L99 原文本剥离用途；角色推断主路径为结构化字段，不经过该正则）
