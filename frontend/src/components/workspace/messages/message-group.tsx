@@ -1,8 +1,10 @@
 import { swallow } from "@/core/utils/log";
 import type { AIMessage, Message } from "@/core/api/types";
 import {
+  BrainIcon,
   ChevronDownIcon,
   PanelRightOpenIcon,
+  SparklesIcon,
   WrenchIcon,
 } from "lucide-react";
 import {
@@ -14,6 +16,10 @@ import {
 } from "react";
 
 import { ChainOfThought } from "@/components/ai-elements/chain-of-thought";
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { isApprovalRequest } from "@/components/workspace/tool-approval-card";
 import {
   type AgentRunState,
@@ -269,6 +275,11 @@ export function MessageGroup({
   const [collapsedHistoryPhases, setCollapsedHistoryPhases] = useState<
     Record<string, boolean>
   >({});
+  // Inline expansion for thinking rows: default collapsed (summary only),
+  // click row toggles full content inline per spec §思考块显示耗时.
+  const [expandedThinkingRows, setExpandedThinkingRows] = useState<
+    Record<string, boolean>
+  >({});
   const thinkingStartTimeRef = useRef<number | null>(null);
   const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
   const steps = useMemo(() => convertToSteps(messages), [messages]);
@@ -480,10 +491,29 @@ export function MessageGroup({
     );
   }, [isLoading, isLiveTimeline, lastCompactItem]);
 
+  // Extract the backend-provided reasoning start timestamp so the live
+  // timer measures from the true first-token arrival time, not the React
+  // render frame that first noticed thinking was in progress.
+  const reasoningStartedAt = useMemo(() => {
+    if (!isCurrentlyThinking) return null;
+    for (const message of messages) {
+      if (message.type !== "ai") continue;
+      const ts = message.additional_kwargs?.reasoning_started_at;
+      if (typeof ts === "string" && ts) {
+        const parsed = Date.parse(ts);
+        if (!Number.isNaN(parsed)) return parsed;
+      }
+    }
+    return null;
+  }, [isCurrentlyThinking, messages]);
+
   useEffect(() => {
     if (isCurrentlyThinking) {
       if (thinkingStartTimeRef.current === null) {
-        thinkingStartTimeRef.current = Date.now();
+        // Prefer the backend's first-token timestamp; fall back to now()
+        // for legacy streams that don't carry reasoning_started_at.
+        thinkingStartTimeRef.current =
+          reasoningStartedAt ?? Date.now();
         setThinkingElapsedMs(0);
       }
       const intervalId = setInterval(() => {
@@ -496,7 +526,7 @@ export function MessageGroup({
       thinkingStartTimeRef.current = null;
       setThinkingElapsedMs(0);
     }
-  }, [isCurrentlyThinking]);
+  }, [isCurrentlyThinking, reasoningStartedAt]);
 
   if (steps.length === 0) {
     return null;
@@ -544,7 +574,7 @@ export function MessageGroup({
         : undefined;
       if (phaseItems && phaseItems.length > 1) {
         if (phaseItems[0] !== item) return null;
-        const completedSummary = t.message.completedSteps(phaseItems.length);
+        const completedSummary = summarizeCollapsedPhase(phaseItems, t);
         const collapsedPhaseId = step.phaseId;
         return (
           <button
@@ -730,6 +760,19 @@ export function MessageGroup({
               ),
           )
         : false;
+      // Deep-thinking heuristic per spec §思考块加耗时: distinguish deep vs
+      // normal thinking via duration (≥10s) or content length (≥500 chars).
+      // Deep thinking shows a SparklesIcon; normal shows a BrainIcon.
+      const isDeepThinking = isThinking
+        ? groupDurationMs >= 10_000 ||
+          coveredItems.some(
+            (coveredItem) =>
+              coveredItem.type === "reasoningGroup" &&
+              coveredItem.steps.some(
+                (step) => (step.reasoning?.length ?? 0) >= 500,
+              ),
+          )
+        : false;
 
       // Use action-display for human-readable verb + icon
       let actionVerb: string;
@@ -894,9 +937,14 @@ export function MessageGroup({
               }}
               className={cn(
                 "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] transition-colors",
+                // Aggregated rows use a slightly larger size and stronger
+                // hover target per spec §Design/Style.
+                isAggregatedGroup && "text-sm",
                 needsEffectReview
                   ? "text-amber-700/80 hover:text-amber-800 dark:text-amber-300/80 dark:hover:text-amber-200"
-                  : "text-muted-foreground/60 hover:text-muted-foreground",
+                  : isAggregatedGroup
+                    ? "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground/60 hover:text-muted-foreground",
               )}
               data-process-event-id={workbenchEventId}
               data-timeline-item-id={timelineItemLinkageId(item)}
@@ -910,29 +958,42 @@ export function MessageGroup({
               data-testid={`process-timeline-event-${isThinking ? "thinking" : "execution"}`}
             >
               {isThinking ? (
-                <span className="relative flex size-1.5 shrink-0 items-center justify-center">
-                  <span
-                    className={cn(
-                      "absolute inline-flex size-1.5 rounded-full opacity-25",
-                      needsEffectReview
-                        ? "bg-amber-500"
-                        : agentRunStatusLightClass(state),
-                      needsEffectReview
-                        ? "animate-pulse"
-                        : agentRunStatusLightPulseClass(state),
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "relative inline-flex size-1 rounded-full",
-                      needsEffectReview
-                        ? "bg-amber-500"
-                        : agentRunStatusLightClass(state),
-                    )}
-                  />
+                <span className="flex shrink-0 items-center gap-1">
+                  {isDeepThinking ? (
+                    <SparklesIcon
+                      className="size-3 text-muted-foreground"
+                      aria-label={t.messageGrouping.deepThinking}
+                    />
+                  ) : (
+                    <BrainIcon
+                      className="size-3 text-muted-foreground"
+                      aria-label={t.messageGrouping.thinking}
+                    />
+                  )}
+                  <span className="relative flex size-1.5 shrink-0 items-center justify-center">
+                    <span
+                      className={cn(
+                        "absolute inline-flex size-1.5 rounded-full opacity-25",
+                        needsEffectReview
+                          ? "bg-amber-500"
+                          : agentRunStatusLightClass(state),
+                        needsEffectReview
+                          ? "animate-pulse"
+                          : agentRunStatusLightPulseClass(state),
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "relative inline-flex size-1 rounded-full",
+                        needsEffectReview
+                          ? "bg-amber-500"
+                          : agentRunStatusLightClass(state),
+                      )}
+                    />
+                  </span>
                 </span>
               ) : (
-                <ActionIcon className="size-3.5 shrink-0 opacity-70" />
+                <ActionIcon className="size-3.5 shrink-0 text-muted-foreground" />
               )}
               <span className="flex min-w-0 flex-1 items-center gap-1">
                 <span className="truncate">
@@ -940,8 +1001,8 @@ export function MessageGroup({
                     processEventSummary || summary
                   ) : actionObject ? (
                     <>
-                      <span className="text-foreground/80">{actionVerb}</span>
-                      <span className="ml-1.5 font-mono text-[11px] text-muted-foreground/70">
+                      <span className="text-foreground">{actionVerb}</span>
+                      <span className="ml-1.5 font-mono text-[11px] text-muted-foreground">
                         {" "}
                         {actionObject}
                       </span>
@@ -994,6 +1055,39 @@ export function MessageGroup({
                 <span className="sr-only" data-testid="live-process-strip" />
               )}
             </button>
+            {isThinking &&
+              processEventDetail &&
+              processEventDetail.trim() !==
+                (processEventSummary || summary).trim() && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedThinkingRows((current) => ({
+                      ...current,
+                      [item.id]: !current[item.id],
+                    }))
+                  }
+                  className="p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
+                  aria-label={
+                    expandedThinkingRows[item.id]
+                      ? t.agentWorkbenchPages.collapse
+                      : t.agentWorkbenchPages.expandDetails
+                  }
+                  title={
+                    expandedThinkingRows[item.id]
+                      ? t.agentWorkbenchPages.collapse
+                      : t.agentWorkbenchPages.expandDetails
+                  }
+                  data-testid="thinking-row-toggle"
+                >
+                  <ChevronDownIcon
+                    className={cn(
+                      "size-3 transition-transform",
+                      expandedThinkingRows[item.id] ? "rotate-180" : "",
+                    )}
+                  />
+                </button>
+              )}
             {isAggregatedGroup && (
               <button
                 type="button"
@@ -1037,23 +1131,47 @@ export function MessageGroup({
                 <PanelRightOpenIcon className="size-3" />
               </button>
             )}
+            {!isLastOverall && !isThinking && (
+              <span
+                className="shrink-0 p-0.5 text-muted-foreground/0 transition-colors group-hover/process-row:text-muted-foreground/35"
+                aria-hidden="true"
+                data-testid="row-workbench-hint"
+              >
+                <PanelRightOpenIcon className="size-3" />
+              </span>
+            )}
           </div>
+          {isThinking &&
+            processEventDetail &&
+            processEventDetail.trim() !==
+              (processEventSummary || summary).trim() && (
+              <Collapsible open={expandedThinkingRows[item.id] ?? false}>
+                <CollapsibleContent
+                  className="pb-1 pl-5 text-xs leading-5 text-muted-foreground/70 data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
+                  data-testid="thinking-row-content"
+                >
+                  {processEventDetail}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
           {factSummaryText && (
             <div className="truncate pb-0.5 pl-3 text-xs leading-[18px] text-muted-foreground/60">
               {factSummaryText}
             </div>
           )}
-          {isAggregatedGroup && aggregatedExpanded && (
-            <div
-              className="ml-2 space-y-0.5 border-l border-border/40 pl-2"
-              data-testid="aggregated-group-children"
-            >
-              {renderCompactTimelineItems(
-                item.items,
-                `${keyPrefix}-${item.id}-sub`,
-                { nested: true },
-              )}
-            </div>
+          {isAggregatedGroup && (
+            <Collapsible open={aggregatedExpanded}>
+              <CollapsibleContent
+                className="ml-2 space-y-0.5 border-l border-border/40 pl-2 data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
+                data-testid="aggregated-group-children"
+              >
+                {renderCompactTimelineItems(
+                  item.items,
+                  `${keyPrefix}-${item.id}-sub`,
+                  { nested: true },
+                )}
+              </CollapsibleContent>
+            </Collapsible>
           )}
         </div>
       );
@@ -2078,6 +2196,75 @@ function compactReasoningSummary(
     return t?.messageGrouping.reasoningFallback ?? "Summarize public progress";
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max).trimEnd()}...`;
+}
+
+/**
+ * Build the collapsed-history-phase summary: phase name (from the first
+ * commentary/intent item) + key action statistics (aggregated by kind).
+ * Mirrors spec §当前帧聚焦 "✓ 了解代码结构 · 查看了 12 个文件".
+ */
+function summarizeCollapsedPhase(
+  phaseItems: TimelineItem[],
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  // 1. Phase name: first non-empty commentary text in the phase.
+  let phaseName: string | null = null;
+  for (const item of phaseItems) {
+    if (item.type === "commentary") {
+      const text = publicProcessText(item.step.commentary);
+      if (text.trim()) {
+        phaseName = compactReasoningSummary(text, 32, t);
+        break;
+      }
+    }
+  }
+
+  // 2. Aggregate tool-call stats by kind. aggregatedToolGroup carries its
+  //    own kind+count; individual toolCall items map via getActionDisplay.
+  const kindCounts = new Map<ActionAggregateKind, number>();
+  for (const item of phaseItems) {
+    if (item.type === "aggregatedToolGroup") {
+      kindCounts.set(
+        item.aggregateKind,
+        (kindCounts.get(item.aggregateKind) ?? 0) + item.count,
+      );
+    } else if (item.type === "toolCall") {
+      const display = getActionDisplay(item.step.name, item.step.args);
+      kindCounts.set(
+        display.aggregateKind,
+        (kindCounts.get(display.aggregateKind) ?? 0) + 1,
+      );
+    }
+  }
+
+  // 3. Build stats string. Priority: file_read > file_write > command > web_search.
+  //    Cap at 2 stats so the collapsed row stays compact.
+  const statsKinds: ActionAggregateKind[] = [
+    "file_read",
+    "file_write",
+    "command",
+    "web_search",
+  ];
+  const statsParts: string[] = [];
+  for (const kind of statsKinds) {
+    const count = kindCounts.get(kind);
+    if (count) {
+      statsParts.push(localizedAggregateVerb(kind, count, t));
+    }
+    if (statsParts.length >= 2) break;
+  }
+
+  const parts = [phaseName, ...statsParts].filter(Boolean);
+  if (parts.length > 0) return parts.join(" · ");
+  // Fallback: "完成了 N 件事" per spec §当前帧聚焦 — count action items,
+  // not raw steps, so a 3-tool phase reads as "完成了 3 件事" not "3 步".
+  const actionItemCount = phaseItems.filter(
+    (item) => item.type === "toolCall" || item.type === "aggregatedToolGroup",
+  ).length;
+  if (actionItemCount > 0) {
+    return t.message.completedThings(actionItemCount);
+  }
+  return t.message.completedSteps(phaseItems.length);
 }
 
 function extractPublicReasoningSummary(message: Message): string | null {

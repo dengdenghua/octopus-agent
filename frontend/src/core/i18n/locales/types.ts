@@ -172,6 +172,7 @@ export interface Translations {
     agentCluster: string;
     processDetails: string;
     completedSteps: (n: number) => string;
+    completedThings: (n: number) => string;
     statusViewing: string;
     statusCompleted: string;
     statusError: string;
@@ -565,6 +566,7 @@ export interface Translations {
     };
     thinkingDuration: (value: string) => string;
     thinking: string;
+    deepThinking: string;
   };
 
   // Trace generator (swarm simulation label bag)

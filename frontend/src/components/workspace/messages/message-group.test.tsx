@@ -2210,3 +2210,83 @@ describe("MessageGroup 最终回答视觉分层", () => {
     expect(screen.queryByTestId("final-answer-boundary")).toBeNull();
   });
 });
+
+describe("MessageGroup 收敛摘要行", () => {
+  // 构造两个 phase 的流式任务：phase-1 已完成（含 commentary + 3 个 read_file），
+  // phase-2 进行中。流式中 phase-1 应收敛为摘要行，含 phase 名称 + 关键统计。
+  function buildMultiPhaseMessages(): AIMessage[] {
+    return [
+      // phase-1: commentary (phase intent) + 3 个 read_file
+      {
+        id: "ai-phase1-intent",
+        type: "ai",
+        content: "了解代码结构",
+        additional_kwargs: {
+          public_progress: true,
+          phase_id: "turn-1:progress:1",
+        },
+      },
+      {
+        id: "ai-phase1-tools",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "read-1",
+            name: "read_file",
+            args: { path: "src/auth.ts" },
+            phaseId: "turn-1:progress:1",
+          },
+          {
+            id: "read-2",
+            name: "read_file",
+            args: { path: "src/middleware.ts" },
+            phaseId: "turn-1:progress:1",
+          },
+          {
+            id: "read-3",
+            name: "read_file",
+            args: { path: "src/config.ts" },
+            phaseId: "turn-1:progress:1",
+          },
+        ],
+      },
+      // phase-2: 进行中
+      {
+        id: "ai-phase2-intent",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary: "开始修改代码",
+          phase_id: "turn-1:progress:2",
+        },
+      },
+    ];
+  }
+
+  it("收敛摘要行包含 phase 名称 + 关键统计", () => {
+    renderWithProviders(
+      <MessageGroup messages={buildMultiPhaseMessages() as never} isLoading />,
+      { locale: "zh-CN" },
+    );
+
+    const collapsed = screen.getByTestId("collapsed-history-phase");
+    expect(collapsed).toBeInTheDocument();
+    // phase 名称（来自 phase-1 的 commentary）
+    expect(collapsed).toHaveTextContent("了解代码结构");
+    // 关键统计（3 个 read_file → file_read 聚合）
+    expect(collapsed).toHaveTextContent("查看了 3 个文件");
+  });
+
+  it("点击收敛摘要行展开对应 phase", () => {
+    renderWithProviders(
+      <MessageGroup messages={buildMultiPhaseMessages() as never} isLoading />,
+      { locale: "zh-CN" },
+    );
+
+    const collapsed = screen.getByTestId("collapsed-history-phase");
+    fireEvent.click(collapsed);
+    // 展开后收敛行消失，phase 内容可见
+    expect(screen.queryByTestId("collapsed-history-phase")).toBeNull();
+  });
+});

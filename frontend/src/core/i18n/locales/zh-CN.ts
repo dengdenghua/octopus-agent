@@ -223,6 +223,7 @@ export const zhCN: Translations = {
     agentCluster: "Agent 集群",
     processDetails: "展开线索",
     completedSteps: (n: number) => `已完成 ${n} 个步骤`,
+    completedThings: (n: number) => `完成了 ${n} 件事`,
     statusViewing: "查看中",
     statusCompleted: "已完成",
     statusError: "异常",
@@ -627,6 +628,7 @@ export const zhCN: Translations = {
     },
     thinkingDuration: (value: string) => `思考了 ${value}`,
     thinking: "思考中",
+    deepThinking: "深度思考",
   },
 
   // Trace generator labels

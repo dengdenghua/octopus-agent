@@ -229,6 +229,7 @@ export const jaJP: Translations = {
     agentCluster: "Agent クラスタ",
     processDetails: "詳細を開く",
     completedSteps: (n: number) => `${n} 件のステップを完了`,
+    completedThings: (n: number) => `${n} 件完了`,
     statusViewing: "表示中",
     statusCompleted: "完了",
     statusError: "エラー",
@@ -648,6 +649,7 @@ export const jaJP: Translations = {
     },
     thinkingDuration: (value: string) => `${value} 考えました`,
     thinking: "考え中",
+    deepThinking: "深い思考",
   },
 
   // Trace generator labels

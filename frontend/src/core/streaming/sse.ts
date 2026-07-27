@@ -152,6 +152,9 @@ export function openSseStream(options: OpenSseStreamOptions): () => void {
       scheduleRetry();
     } catch (err) {
       if (aborted) return;
+      const isAbort =
+        err instanceof DOMException && err.name === "AbortError";
+      if (isAbort) return;
       lastError = err instanceof Error ? err : new Error(String(err));
       swallow(lastError);
       scheduleRetry();

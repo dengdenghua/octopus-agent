@@ -270,12 +270,17 @@ function turnToMessages(turn: Turn): Message[] {
     // Sum of reasoning item durationMs contributing to this AI message.
     // Null when no reasoning item carried a duration (legacy data).
     reasoningDurationMs: number | null;
+    // ISO timestamp of the earliest reasoning item's createdAt — used by
+    // the UI to start the live thinking timer at the true first-token
+    // arrival time instead of the React render frame.
+    reasoningStartedAt: string | null;
   };
   const newPending = (): PendingAi => ({
     reasoning: [],
     plan: null,
     toolCalls: [],
     reasoningDurationMs: null,
+    reasoningStartedAt: null,
   });
   let pending: PendingAi = newPending();
 
@@ -359,6 +364,15 @@ function turnToMessages(turn: Turn): Message[] {
         if (typeof r.durationMs === "number" && r.durationMs >= 0) {
           pending.reasoningDurationMs =
             (pending.reasoningDurationMs ?? 0) + r.durationMs;
+        }
+        // Keep the earliest reasoning item's createdAt so the UI can start
+        // the live timer at the true first-token arrival time.
+        if (
+          r.createdAt &&
+          (pending.reasoningStartedAt === null ||
+            r.createdAt < pending.reasoningStartedAt)
+        ) {
+          pending.reasoningStartedAt = r.createdAt;
         }
         break;
       }
@@ -956,6 +970,7 @@ function buildAiAdditionalKwargs(pending: {
   reasoning: string[];
   plan: string | null;
   reasoningDurationMs?: number | null;
+  reasoningStartedAt?: string | null;
 }): Record<string, unknown> {
   const kwargs: Record<string, unknown> = {};
   if (pending.reasoning.length > 0) {
@@ -966,6 +981,9 @@ function buildAiAdditionalKwargs(pending: {
   }
   if (typeof pending.reasoningDurationMs === "number") {
     kwargs.reasoning_duration_ms = pending.reasoningDurationMs;
+  }
+  if (pending.reasoningStartedAt) {
+    kwargs.reasoning_started_at = pending.reasoningStartedAt;
   }
   return kwargs;
 }

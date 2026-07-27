@@ -532,8 +532,17 @@ function failureKind(
   code?: string,
 ): FailurePresentation["kind"] {
   const signal = `${code ?? ""}\n${detail}`;
+  const normalized = signal.toLowerCase();
+  const isClientClose =
+    /client closed/.test(normalized) ||
+    /websocket closed \(1000/.test(normalized);
+  const isAbort =
+    /aborterror/.test(normalized) || /^abort$/i.test(detail.trim());
+  if (isClientClose || isAbort) {
+    return "error";
+  }
   if (
-    /network|fetch|abort|timeout|ECONNREFUSED|websocket|transport|connection/i.test(
+    /network error|fetch failed|econnrefused|timeout|websocket closed \(1006|transport error|connection (refused|reset|lost)/i.test(
       signal,
     )
   ) {
@@ -1919,7 +1928,6 @@ export function MessageList({
                 {!isNetworkError && (
                   <div className="text-sm opacity-80">{errorBannerText}</div>
                 )}
-                {isNetworkError && <span>{errorBannerText}</span>}
                 {!isNetworkError && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button

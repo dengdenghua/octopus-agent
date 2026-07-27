@@ -230,6 +230,7 @@ export const koKR: Translations = {
     agentCluster: "Agent 클러스터",
     processDetails: "자세히 열기",
     completedSteps: (n: number) => `${n}개 단계 완료`,
+    completedThings: (n: number) => `${n}건 완료`,
     statusViewing: "보기 중",
     statusCompleted: "완료됨",
     statusError: "오류",
@@ -647,6 +648,7 @@ export const koKR: Translations = {
     },
     thinkingDuration: (value: string) => `${value} 생각했습니다`,
     thinking: "생각 중",
+    deepThinking: "심층 사고",
   },
 
   // Trace generator labels

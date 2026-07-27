@@ -40,6 +40,10 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    if (this.isHmrRefreshError(error, errorInfo)) {
+      setTimeout(() => this.setState({ hasError: false, error: null }), 0);
+      return;
+    }
     console.error("[ErrorBoundary] Uncaught error:", error, errorInfo);
     if (this.isChunkLoadError(error)) {
       const key = "octopus:chunk-reload-once";
@@ -65,6 +69,16 @@ export class ErrorBoundary extends Component<
       /Loading chunk .* failed/i.test(msg) ||
       /Failed to fetch dynamically imported module/i.test(msg) ||
       /Importing a module script failed/i.test(msg)
+    );
+  }
+
+  private isHmrRefreshError(err: Error, errorInfo: ErrorInfo): boolean {
+    if (import.meta.env.PROD) return false;
+    const stack = errorInfo.componentStack || "";
+    const combined = `${err.message}\n${err.stack || ""}\n${stack}`;
+    return (
+      /@react-refresh|performReactRefresh|scheduleRefresh/i.test(combined) &&
+      /must be used within an|Context\.Provider/i.test(combined)
     );
   }
 

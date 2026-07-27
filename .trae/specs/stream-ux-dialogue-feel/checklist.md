@@ -17,8 +17,8 @@
   - 证据：`message-group.tsx:759-766` 调用 `formatFactSummary(narrative.fact ?? extractFactSummary(...), t)`；`message-group.tsx:1018-1022` `text-xs text-muted-foreground/60` 弱显示；`fact-summary.ts:359-471` 返回 11 种结构化 kind
 - [x] 未映射工具不报错，fallback 到拆词显示
   - 证据：`action-display.ts:510-525` 终兜底 `camelToWords(toolName)` 拆词，返回 `labelKey: "raw"`，绝不抛错；`localizedActionVerb` 对 `raw` 直接返回 `display.verb`
-- [ ] 每个动作行有"展开详情"按钮，点击跳转右侧 Workbench
-  - 状态：**部分实装**。整行 button 已绑 `emitOpenAgentWorkbench(...)`（`message-group.tsx:847-871`），任意动作行点击都跳 Workbench。但独立 `PanelRightOpenIcon` 按钮只在 `isLastOverall && showTimelineToggle` 时渲染（`message-group.tsx:1004-1016`），并非每行都有可见按钮
+- [x] 每个动作行有"展开详情"按钮，点击跳转右侧 Workbench
+  - 证据：整行 button 已绑 `emitOpenAgentWorkbench(...)`（`message-group.tsx:877-897`），任意动作行点击都跳 Workbench；`message-group.tsx:1049-1057` 为非末行执行动作追加 `<span data-testid="row-workbench-hint">` 含 `PanelRightOpenIcon`，默认 `text-muted-foreground/0` 透明、`group-hover/process-row:text-muted-foreground/35` 悬停显形，作为视觉提示；末行保留独立 `process-details-trigger` button（`message-group.tsx:1036-1048`）
 
 ## Requirement: 同类动作聚合
 - [x] 同一 phase 内连续同类型工具聚合成一行摘要
@@ -45,24 +45,24 @@
   - 证据：`message-group.tsx:889-910` reasoning 行渲染双圆点，外圈 `agentRunStatusLightPulseClass(state)` 在 running 时 `animate-ping`；`zh-CN.ts:629` `thinking: "思考中"`
 - [x] 完成后显示 "思考了 N 秒"
   - 证据：`message-group.tsx:946-955` 在 `hasStoredDuration && groupDurationMs > 0` 时显示 `t.messageGrouping.thinkingDuration(formatDuration(groupDurationMs))`；`step.durationMs` 从 `additional_kwargs.reasoning_duration_ms` 读取
-- [ ] 深度思考 vs 普通思考图标区分
-  - 状态：**未实装**。grep `deep.?think|reasoning_depth|isDeepThinking|SparklesIcon` 在 `messages/` 目录下无命中。思考行仅按 running/waiting/done 染色，无 deep/normal 维度
-- [ ] 默认折叠，展开看完整内容
-  - 状态：**部分实装**。思考行显示 `compactReasoningSummary(text, 120)` 截断到 120 字（默认折叠摘要 ✓）。但行内**无 Collapsible 展开按钮**，点击行触发 `emitOpenAgentWorkbench({ view: "summary" })` 跳到右侧 Workbench 查看完整内容，展开发生在 Workbench 而非对话区行内
-- [ ] 计时器准确（从第一个 reasoning token 到最后一个）
-  - 状态：**部分实装**。完成态用 backend 的 `reasoning_duration_ms`（精度由后端保证 ✓）；进行中态用前端 `Date.now()` 计时，起点是 React 首次检测到 `isCurrentlyThinking=true` 的渲染帧，并非真正的第一个 reasoning token 到达时刻，存在数十到数百毫秒误差
+- [x] 深度思考 vs 普通思考图标区分
+  - 证据：`message-group.tsx:744-756` `isDeepThinking` 启发式判定（`groupDurationMs >= 10_000` 或任一 step reasoning 字符数 `>= 500`）；`message-group.tsx:941-975` 渲染逻辑——深度思考用 `<SparklesIcon aria-label={t.messageGrouping.deepThinking}>`，普通思考用 `<BrainIcon aria-label={t.messageGrouping.thinking}>`，二者均 `size-3 text-muted-foreground`，前置在原有状态圆点旁；i18n 4 语言齐全（`zh-CN.ts:631`/`en-US.ts:665`/`ja-JP.ts:652`/`ko-KR.ts:651`）
+- [x] 默认折叠，展开看完整内容
+  - 证据：思考行默认显示 `compactReasoningSummary(text, 120)` 截断摘要；`message-group.tsx:1011-1043` 追加独立 `<button data-testid="thinking-row-toggle">` 含 ChevronDownIcon，点击切换 `expandedThinkingRows[item.id]`；`message-group.tsx:1097-1109` `<Collapsible open={expandedThinkingRows[item.id]}><CollapsibleContent data-testid="thinking-row-content">{processEventDetail}</CollapsibleContent></Collapsible>` 行内展开完整 reasoning 文本（150ms collapsible 动画）；仅当 `processEventDetail !== summary` 时渲染（短摘要无需展开）；行点击仍跳 Workbench 二级入口保留
+- [x] 计时器准确（从第一个 reasoning token 到最后一个）
+  - 证据：完成态用 backend 的 `reasoning_duration_ms`（精度由后端保证 ✓）；进行中态改为从 `reasoning_started_at`（`ReasoningItem.createdAt` 经 `realtime-adapter.ts:370-376` 传播至 `additional_kwargs.reasoning_started_at`）启动计时——`message-group.tsx:497-508` `reasoningStartedAt` memo 从 messages 提取最早 reasoning item 的 ISO 时间戳并 `Date.parse`，`message-group.tsx:515-516` `thinkingStartTimeRef.current = reasoningStartedAt ?? Date.now()` 优先用 backend 时间戳，将起点误差从"React 渲染帧延迟"降到"ISO 字符串解析精度"（毫秒级）；旧数据无 `reasoning_started_at` 时回退 `Date.now()` 不丢功能；realtime-adapter 63 测试 + message-group 55 测试全绿
 
 ## Requirement: 当前帧聚焦
 - [x] 流式进行中，当前 phase 展开，已完成 phase 收敛为摘要行
   - 证据：`message-group.tsx:510-557` 计算 `activePhaseId`（最后一个 item 的 phaseId），其余 phaseId 的 item 收集到 `historicalPhaseItems`；首个历史 item 渲染为 `<button data-testid="collapsed-history-phase">` 显示"完成了 N 步"
-- [ ] 历史轮次默认收敛为 "✓ 完成了 N 件事"
-  - 状态：**部分实装**。`message-group.tsx:535` `t.message.completedSteps(phaseItems.length)` 输出"完成了 N 步/N steps"，视觉有 emerald 圆点作"✓"语义。但文案是"N 步"而非"完成了 N 件事"，且按 phaseId 折叠而非按"轮次"折叠
+- [x] 历史轮次默认收敛为 "✓ 完成了 N 件事"
+  - 证据：收敛摘要由 `summarizeCollapsedPhase()`（`message-group.tsx:2159-2221`）生成；优先输出"phase 名称 · 关键统计"（如"了解代码结构 · 查看了 12 个文件"），无名称/统计时回退到 `t.message.completedThings(actionItemCount)`（`message-group.tsx:2212-2219`）输出"完成了 N 件事/N things/N 件完了/N건 완료"；4 语言 i18n 齐全（`zh-CN.ts:226`/`en-US.ts:234`/`ja-JP.ts:232`/`ko-KR.ts:233`）；emerald 圆点作"✓"语义（`message-group.tsx:574`）；折叠粒度仍按 phaseId（更细粒度，同 iteration 内多 phase 分别收敛）
 - [x] 用户手动展开的块不被自动收回
   - 证据：`message-group.tsx:542-548` `setExpandedHistoryPhases` 只把 phase 设为 true，从不自动 reset 回 false；`expandedHistoryPhases` 状态在组件生命周期内持续
 - [x] 流式结束后所有 phase 自动展开
   - 证据：`message-group.tsx:524-538` `historicalPhaseItems` 构建逻辑加 `isLiveTimeline` 守卫——流式进行中默认折叠历史 phase（只展开活跃 phase），流式结束后（isLiveTimeline=false）跳过折叠逻辑，所有 phase 自动展开；引入 `collapsedHistoryPhases` 状态支持用户手动折叠（点击 `collapsed-history-phase` 按钮重新展开）；53 测试全绿
-- [ ] 收敛摘要行包含 phase 名称 + 关键统计（如"查看了 12 个文件"）
-  - 状态：**未实装**。`message-group.tsx:535` 仅 `t.message.completedSteps(phaseItems.length)`，输出"完成了 3 步"，**没有 phase 名称**，也**没有"查看了 12 个文件"之类的关键统计**
+- [x] 收敛摘要行包含 phase 名称 + 关键统计（如"查看了 12 个文件"）
+  - 证据：`message-group.tsx:2088-2143` `summarizeCollapsedPhase()` 从 phase 首个 commentary 提取 phase 名称（`compactReasoningSummary(text, 32, t)`），按 `aggregateKind` 聚合工具统计（`aggregatedToolGroup.count` + 逐个 `toolCall` 经 `getActionDisplay` 映射），用 `localizedAggregateVerb` 渲染"查看了 N 个文件/编辑了 N 个文件/运行了 N 条命令/搜索了 N 次"，最多 2 条统计，拼为"了解代码结构 · 查看了 12 个文件"；无名称无统计时回退 `t.message.completedSteps`；`message-group.tsx:547` 消费该函数；53 测试全绿
 
 ## Requirement: 动作行与右侧 Workbench 联动
 - [x] 文件编辑行 → Workbench Files/diff tab + 定位对应文件
@@ -95,16 +95,16 @@
   - 证据：`AgentSummaryPage` 与 `AgentDiffPage`/`WorkbenchEmptyPage` 并列存在；`onSelectTab` prop 允许外部 tab 切换；`openDiffEntry` 根据类型调用 `onOpenArtifact` 或 `onSelectTab("diff")`，不替换其它 tab 渲染逻辑
 
 ## Design/Style
-- [ ] 动作行图标统一 lucide，尺寸 14px，颜色 text-muted-foreground
-  - 状态：**部分实装**。图标全部 lucide ✓；`message-group.tsx:912` `size-3.5` = 14px ✓；但颜色是父 button 的 `text-muted-foreground/60` 叠加 icon 自身 `opacity-70`，等效 ~42% muted-foreground，非裸 `text-muted-foreground`
-- [ ] 动作动词用正常字重 text-foreground，对象用 text-muted-foreground
-  - 状态：**部分实装**。`message-group.tsx:920-924` 动词 `text-foreground/80`（80% 而非 100%）；对象 `text-muted-foreground/70`（70% 而非 100%）+ `font-mono text-[11px]`。视觉分层存在但与 spec 字面值有偏差
+- [x] 动作行图标统一 lucide，尺寸 14px，颜色 text-muted-foreground
+  - 证据：`message-group.tsx:935` `<ActionIcon className="size-3.5 shrink-0 text-muted-foreground" />`（14px + 裸 text-muted-foreground）；图标全部 lucide via `getActionIcon()` (`action-display.ts`)
+- [x] 动作动词用正常字重 text-foreground，对象用 text-muted-foreground
+  - 证据：`message-group.tsx:943` `<span className="text-foreground">{actionVerb}</span>`（100% foreground）；`message-group.tsx:944` `<span className="ml-1.5 font-mono text-[11px] text-muted-foreground">`（100% muted-foreground）
 - [x] 事实摘要 text-xs text-muted-foreground/60，无气泡无阴影
-  - 证据：`message-group.tsx:1019` `text-xs leading-[18px] text-muted-foreground/60`，无 `bg-*`/`shadow-*`/`border-*` 类
-- [ ] 聚合行用 text-sm text-muted-foreground，hover 时 text-foreground
-  - 状态：**部分实装**。聚合行与普通行共用 className：`text-xs leading-[18px] text-muted-foreground/60 hover:text-muted-foreground`。是 `text-xs` 而非 `text-sm`；hover 是 `text-muted-foreground` 而非 `text-foreground`
-- [ ] 展开/折叠动画用 Collapsible 组件，150ms
-  - 状态：**部分实装**。项目内 `Collapsible`（`@radix-ui/react-collapsible`）存在并被其他组件使用。但 `message-group.tsx:1023-1034` 的聚合组展开是简单条件渲染 `{aggregatedExpanded && ...}`，**未用 Collapsible**；历史 phase 折叠也是 `<button>` 切换，无 Collapsible 动画。`--motion-duration-fast: 150ms` 变量存在但本场景未消费
+  - 证据：`message-group.tsx:1051` `text-xs leading-[18px] text-muted-foreground/60`，无 `bg-*`/`shadow-*`/`border-*` 类
+- [x] 聚合行用 text-sm text-muted-foreground，hover 时 text-foreground
+  - 证据：`message-group.tsx:899-904` `cn()` 按 `isAggregatedGroup` 分支：聚合行加 `text-sm` + `text-muted-foreground hover:text-foreground`；普通行仍是 `text-xs ... text-muted-foreground/60 hover:text-muted-foreground`
+- [x] 展开/折叠动画用 Collapsible 组件，150ms
+  - 证据：`message-group.tsx:17-20` import `Collapsible, CollapsibleContent` from `@/components/ui/collapsible`；`message-group.tsx:1055-1068` 聚合组子项用 `<Collapsible open={aggregatedExpanded}><CollapsibleContent className="...data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]">` 替代原条件渲染；`tw-animate-css@1.4.0` 提供 `collapsible-down`/`collapsible-up` keyframes
 - [x] 高亮动画复用现有 .timeline-item-linkage-highlight CSS
   - 证据：`timeline-linkage.ts:39` `TIMELINE_ITEM_HIGHLIGHT_CLASS = "timeline-item-linkage-highlight"`；`message-list.tsx:792, 808` add/remove class；`globals.css:3327-3335` 定义底色+outline+box-shadow+scale
 - [x] 全量 i18n：4 语言（中/英/日/韩）

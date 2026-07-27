@@ -231,6 +231,8 @@ export const enUS: Translations = {
     agentCluster: "Agent Cluster",
     processDetails: "Open details",
     completedSteps: (n: number) => `Completed ${n} step${n === 1 ? "" : "s"}`,
+    completedThings: (n: number) =>
+      `Completed ${n} ${n === 1 ? "thing" : "things"}`,
     statusViewing: "Viewing",
     statusCompleted: "Completed",
     statusError: "Error",
@@ -660,6 +662,7 @@ export const enUS: Translations = {
     },
     thinkingDuration: (value: string) => `Thought for ${value}`,
     thinking: "Thinking",
+    deepThinking: "Deep thinking",
   },
 
   // Trace generator labels
