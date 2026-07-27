@@ -326,7 +326,7 @@ class TestRegistryRouting:
 
 
 class TestEndToEndPersonaFlow:
-    def test_full_persona_to_arm_to_soul(self):
+    def test_full_persona_to_arm_to_soul(self, monkeypatch):
         """Implementation note."""
         import json
 
@@ -335,6 +335,12 @@ class TestEndToEndPersonaFlow:
         from runtime.memory.hemolymph import ContextComposer
         from runtime.memory.journal import InMemoryJournal
         from runtime.sensing.model_router import MockModelRouter
+
+        # Disable codebase grounding so the persona flow is tested in
+        # isolation — otherwise the retrieved source chunks bloat the
+        # system prompt past the 8k token budget and compression drops
+        # the entire system segment (including the soul).
+        monkeypatch.setenv("OCTOPUS_CODEBASE_CONTEXT", "0")
 
         # minimal registry
         reg = SkillRegistry()

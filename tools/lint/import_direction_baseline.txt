@@ -3,3 +3,6 @@
 # '<relpath>\t<target_module>'. Fixed an edge? Delete its line so
 # the audit locks in the win. Regenerate with --write-baseline.
 
+runtime/core/cerebrum/react_context.py	sensing.model_router.custom_model_flags
+runtime/core/cerebrum/react_loop.py	sensing.model_router.rescue_policy
+runtime/execution/agents/cli_team.py	sensing.gateway.agents_local_partner

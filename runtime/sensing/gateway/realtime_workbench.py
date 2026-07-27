@@ -182,7 +182,7 @@ def _todo_phase_status(value: Any) -> str:
     return "pending"
 
 
-def _phase_title(title: str) -> str:
+def _phase_title(title: str, _index: int = 0) -> str:
     clean = re.sub(r"\s+", " ", title).strip()
     without_machine_prefix = re.sub(
         r"^(?:phase|阶段|step|步骤)\s*[\d一二三四五六七八九十]+(?:\.\d+)?\s*[:：.)、-]?\s*",

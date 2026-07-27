@@ -33,7 +33,14 @@ from runtime.core.cerebrum.react_types import REACT_SYSTEM_PROMPT_BASE
 # above — the model needs the full delegation catalog every turn, and
 # test_base_prompt_has_no_mode_specific_sections confirms it isn't
 # mode-specific. Headroom kept tight so further creep still re-fires.
-BASE_PROMPT_BUDGET_CHARS = 3100
+#
+# Raised 3100 → 3600 (2026-07-25): WIP commit 3859048f3 expanded the
+# cli_team partner list (Claude Code / Codex / Trae / Qoder) and earlier
+# prose polish around evidence-backed Update guidance pushed the observed
+# size to 3562. Same sanctioned reason — the partner list is factual
+# catalog info the model needs every turn, not mode-specific. Headroom
+# kept tight so further creep still re-fires.
+BASE_PROMPT_BUDGET_CHARS = 3600
 
 
 def test_base_prompt_within_budget() -> None:
