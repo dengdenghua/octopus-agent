@@ -13,9 +13,17 @@ export type AgentPhaseStatus =
   | "done"
   | "error";
 
+export type AgentPhaseTitleKey =
+  | "genericPrepare"
+  | "genericExecute"
+  | "genericDeliver";
+
 export interface AgentPhase {
   id: string;
   title: string;
+  /** When set, the UI renders the localized label for this key instead of
+   * the raw ``title`` (which stays available as the accessible/tooltip text). */
+  titleKey?: AgentPhaseTitleKey;
   detail?: string;
   status: AgentPhaseStatus;
   blockIds: string[];
@@ -132,24 +140,32 @@ function buildGenericPhases(
   options: DeriveAgentPhasesOptions,
 ): AgentPhase[] {
   if (blocks.length === 0) return [];
-  const buckets = [
+  const buckets: Array<{
+    id: string;
+    title: string;
+    titleKey: AgentPhaseTitleKey;
+    blocks: WorkBlock[];
+  }> = [
     {
       id: "generic:prepare",
-      title: "补齐上下文",
+      title: "Gather context",
+      titleKey: "genericPrepare",
       blocks: blocks.filter((block) =>
         /read|recall|skill|agent/i.test(block.event.name),
       ),
     },
     {
       id: "generic:execute",
-      title: "处理线索",
+      title: "Work through leads",
+      titleKey: "genericExecute",
       blocks: blocks.filter((block) =>
         /browser|search|web|fetch|terminal|shell|file/i.test(block.kind),
       ),
     },
     {
       id: "generic:deliver",
-      title: "收拢答案",
+      title: "Pull the answer together",
+      titleKey: "genericDeliver",
       blocks: blocks.filter((block) =>
         /todo|write|report|artifact|verification/i.test(
           `${block.event.name} ${block.kind} ${block.title}`,
@@ -161,7 +177,8 @@ function buildGenericPhases(
     .filter((bucket) => bucket.blocks.length > 0)
     .map((bucket) => ({
       id: bucket.id,
-      title: phaseTitle(bucket.title),
+      title: bucket.title,
+      titleKey: bucket.titleKey,
       status: statusFromBlockList(bucket.blocks, options),
       blockIds: bucket.blocks.map((block) => block.id),
     }));
@@ -255,6 +272,53 @@ function todoStatus(value: unknown): AgentPhaseStatus {
 function phaseTitle(title: string) {
   const displayTitle = normalizeAgentPhaseTitle(title);
   return displayTitle || `进行中`;
+}
+
+export type BusinessAgentPhaseKey =
+  | "planning"
+  | "exploring"
+  | "implementing"
+  | "testing"
+  | "deploying";
+
+/**
+ * Map a free-form phase title (usually a todo item written by the model) to a
+ * coarse business phase so the workbench outline can show a readable label
+ * ("Analyzing requirements") instead of the raw technical wording. Returns
+ * null when nothing matches — the raw title is shown unchanged.
+ */
+export function businessAgentPhaseKey(title: string): BusinessAgentPhaseKey | null {
+  const text = title.toLowerCase();
+  if (
+    /deploy|release|publish|ship|部署|上线|发布/.test(text)
+  ) {
+    return "deploying";
+  }
+  if (
+    /test|verify|validat|check|qa|lint|build|测试|验证|确认|检查|构建|打包/.test(
+      text,
+    )
+  ) {
+    return "testing";
+  }
+  if (
+    /implement|edit|fix|code|refactor|write|add|update|modify|change|create|patch|实现|修改|修复|改|新增|添加|更新|重构|接入|迁移|搭建/.test(
+      text,
+    )
+  ) {
+    return "implementing";
+  }
+  if (/plan|design|scope|spec|todo|规划|计划|设计|方案/.test(text)) {
+    return "planning";
+  }
+  if (
+    /explore|read|inspect|analy[sz]e|investigat|research|scan|review|understand|study|浏览|阅读|了解|分析|调研|研究|排查|查看|梳理/.test(
+      text,
+    )
+  ) {
+    return "exploring";
+  }
+  return null;
 }
 
 export function normalizeAgentPhaseTitle(title: string) {

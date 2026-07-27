@@ -114,6 +114,77 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
 
+  test("shows the current turn user input in the summary inputs section", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "read-1",
+            name: "read_file",
+            input: { path: "src/app.tsx" },
+          }),
+        ]}
+        userInput={{
+          text: "把登录页改成暗色主题",
+          uploadedFiles: [{ filename: "design.md", path: "/tmp/design.md" }],
+          attachments: [{ filename: "screenshot.png" }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("输入")).toBeInTheDocument();
+    expect(screen.getByText("把登录页改成暗色主题")).toBeInTheDocument();
+    expect(screen.getByText("上传文件 1 个")).toBeInTheDocument();
+    expect(screen.getByText("design.md")).toBeInTheDocument();
+    expect(screen.getByText("附件 1 个")).toBeInTheDocument();
+    expect(screen.getByText("screenshot.png")).toBeInTheDocument();
+  });
+
+  test("omits the inputs section when there is no user input", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "read-1",
+            name: "read_file",
+            input: { path: "src/app.tsx" },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText("输入")).not.toBeInTheDocument();
+  });
+
+  test("adds a business phase badge next to free-form todo phase titles", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "todo-1",
+            name: "todo_write",
+            input: {
+              items: [
+                { content: "阅读鉴权模块源码", status: "completed" },
+                { content: "修改登录页实现", status: "in_progress" },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    // Raw todo text stays as the visible title…
+    expect(screen.getByText("阅读鉴权模块源码")).toBeInTheDocument();
+    expect(screen.getByText("修改登录页实现")).toBeInTheDocument();
+    // …and the coarse business label appears as a supplementary badge.
+    expect(screen.getByText("了解代码结构")).toBeInTheDocument();
+    expect(screen.getByText("开始修改代码")).toBeInTheDocument();
+  });
+
   test("renders the main agent workstation dock placeholder", () => {
     renderWorkbench(
       <AgentWorkbenchPanel

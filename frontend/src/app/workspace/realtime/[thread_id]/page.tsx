@@ -161,6 +161,10 @@ import {
 } from "@/core/cowork";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, isHumanMessage, type Message } from "@/core/api/types";
+import {
+  parseUploadedFiles,
+  stripUploadedFilesTag,
+} from "@/core/messages/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import { ToolEffectsProvider } from "@/core/observability/tool-effects-context";
 import {
@@ -2225,6 +2229,34 @@ function RealtimePageContent({
     }
     return thread.messages.slice(turnStart);
   }, [thread.messages]);
+  const lastTurnUserInput = useMemo(() => {
+    const human = [...thread.messages].reverse().find(isHumanMessage);
+    if (!human) return null;
+    const raw =
+      typeof human.content === "string"
+        ? human.content
+        : human.content
+            .filter(
+              (c): c is { type: "text"; text: string } => c.type === "text",
+            )
+            .map((c) => c.text)
+            .join("\n");
+    const text = stripUploadedFilesTag(raw);
+    const uploaded = parseUploadedFiles(raw)
+      .filter((f): f is typeof f & { path: string } => Boolean(f.path))
+      .map((f) => ({
+        filename: f.filename,
+        path: f.path,
+      }));
+    const attachments = Array.isArray(human.additional_kwargs?.attachments)
+      ? (human.additional_kwargs.attachments as Array<{ filename?: string }>)
+          .map((a) => ({ filename: a.filename ?? "" }))
+          .filter((a) => a.filename)
+      : [];
+    if (!text && uploaded.length === 0 && attachments.length === 0) return null;
+    return { text, uploadedFiles: uploaded, attachments };
+  }, [thread.messages]);
+
   // A deploy URL from an earlier turn must not hijack every later completion.
   const resultPreviewUrl = useMemo(() => {
     return extractResultUrl(lastTurnMessages);
@@ -3338,6 +3370,7 @@ function RealtimePageContent({
                     activeTab={agentWorkbenchTab}
                     events={agentDisplayEvents}
                     progressOutline={progressOutline}
+                    userInput={lastTurnUserInput}
                     focusedAgentId={focusedWorkbenchAgentId}
                     focusedAgentView={focusedWorkbenchAgentView}
                     focusedAgentNonce={focusedWorkbenchAgentNonce}

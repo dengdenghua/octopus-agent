@@ -1179,6 +1179,16 @@ export const zhCN: Translations = {
   },
 
   // Agent workbench pages
+  agentPhases: {
+    planning: "分析需求中",
+    exploring: "了解代码结构",
+    implementing: "开始修改代码",
+    testing: "验证修改",
+    deploying: "部署中",
+    genericPrepare: "补齐上下文",
+    genericExecute: "处理线索",
+    genericDeliver: "收拢答案",
+  },
   agentWorkbenchPages: {
     collapse: "收起",
     expandDetails: "展开详情",
@@ -1212,6 +1222,9 @@ export const zhCN: Translations = {
     subagentsRunning: (count) => `${count} 运行中`,
     subagentsPending: (count) => `${count} 等待中`,
     failedLanes: (lanes) => `失败 lane: ${lanes}`,
+    inputs: "输入",
+    inputsUploadedFiles: (count) => `上传文件 ${count} 个`,
+    inputsAttachments: (count) => `附件 ${count} 个`,
     context: "上下文",
     observableThisRound: "本轮可观测",
     sourceCount: (count) => `来源 ${count} 条`,

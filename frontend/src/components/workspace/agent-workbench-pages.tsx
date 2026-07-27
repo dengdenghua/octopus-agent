@@ -6,8 +6,10 @@ import {
   ChevronRightIcon,
   CircleIcon,
   BrainCircuitIcon,
+  FileIcon,
   FilePlus2Icon,
   FileTextIcon,
+  PaperclipIcon,
   GitBranchIcon,
   GlobeIcon,
   ListChecksIcon,
@@ -19,6 +21,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  businessAgentPhaseKey,
   phaseStatusText,
   type AgentPhase,
   type AgentPhaseStatus,
@@ -711,6 +714,7 @@ export function AgentSummaryPage({
   blocks,
   focusedProcessEvent,
   progressOutline,
+  userInput,
   onSelectTab,
   onOpenArtifact,
 }: {
@@ -722,6 +726,12 @@ export function AgentSummaryPage({
   focusedEventId?: string | null;
   /** 「进展」面板的叙事大纲（按 iteration 分组）；缺省或为空时回退为 phase 平铺。 */
   progressOutline?: OutlineRound[];
+  /** 本轮用户输入（原始请求 + 上传文件/附件）；用于概要页 Inputs 区。 */
+  userInput?: {
+    text: string;
+    uploadedFiles: Array<{ filename: string; path: string }>;
+    attachments: Array<{ filename: string }>;
+  } | null;
   onSelectTab?: (tabId: AgentWorkbenchTabId) => void;
   onOpenArtifact?: (path: string) => void;
 }) {
@@ -959,6 +969,73 @@ export function AgentSummaryPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
+        {/* 输入（本轮用户请求 + 上传文件/附件） */}
+        {userInput && (
+          <section className="border-b border-border-subtle py-4">
+            <h3 className="text-xs font-medium text-foreground">
+              {t.agentWorkbenchPages.inputs}
+            </h3>
+            {userInput.text && (
+              <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-foreground/90">
+                {userInput.text}
+              </p>
+            )}
+            {userInput.uploadedFiles.length > 0 && (
+              <div className="mt-2">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <FileIcon className="size-3 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {t.agentWorkbenchPages.inputsUploadedFiles(
+                      userInput.uploadedFiles.length,
+                    )}
+                  </span>
+                </div>
+                <ul className="space-y-1">
+                  {userInput.uploadedFiles.map((file) => (
+                    <li
+                      key={file.path}
+                      className="flex min-w-0 items-center gap-2"
+                    >
+                      <FileIcon className="size-3 shrink-0 text-muted-foreground" />
+                      <span
+                        className="min-w-0 flex-1 truncate text-xs text-foreground"
+                        title={file.path}
+                      >
+                        {file.filename}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {userInput.attachments.length > 0 && (
+              <div className="mt-2">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <PaperclipIcon className="size-3 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {t.agentWorkbenchPages.inputsAttachments(
+                      userInput.attachments.length,
+                    )}
+                  </span>
+                </div>
+                <ul className="space-y-1">
+                  {userInput.attachments.map((att, index) => (
+                    <li
+                      key={`${att.filename}-${index}`}
+                      className="flex min-w-0 items-center gap-2"
+                    >
+                      <PaperclipIcon className="size-3 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+                        {att.filename}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* 进展 */}
         {!focusedProcessEvent && (phases.length > 0 || showOutline) && (
           <section className="border-b border-border-subtle py-4">
@@ -1017,8 +1094,14 @@ export function AgentSummaryPage({
                         className="min-w-0 flex-1 truncate text-xs text-foreground"
                         title={phase.title}
                       >
-                        {phase.title}
+                        {phase.titleKey ? t.agentPhases[phase.titleKey] : phase.title}
                       </span>
+                      {!phase.titleKey &&
+                        businessAgentPhaseKey(phase.title) && (
+                          <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary">
+                            {t.agentPhases[businessAgentPhaseKey(phase.title)!]}
+                          </span>
+                        )}
                       <span className="shrink-0 text-[11px] text-muted-foreground">
                         {phaseStatusText(phase.status)}
                       </span>

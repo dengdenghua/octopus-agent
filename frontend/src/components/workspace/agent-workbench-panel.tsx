@@ -214,6 +214,7 @@ export function AgentWorkbenchPanel({
   activeTab,
   events,
   progressOutline,
+  userInput,
   focusedAgentId,
   focusedAgentView,
   focusedAgentNonce,
@@ -243,6 +244,11 @@ export function AgentWorkbenchPanel({
   events: LiveToolEvent[];
   /** 「进展」面板的叙事大纲（按 iteration 分组）；缺省时回退为 phase 平铺。 */
   progressOutline?: OutlineRound[];
+  userInput?: {
+    text: string;
+    uploadedFiles: Array<{ filename: string; path: string }>;
+    attachments: Array<{ filename: string }>;
+  } | null;
   focusedAgentId?: string | null;
   /** Which activity view a focusedAgentId intent lands on; defaults to the
    * live computer screen when the caller doesn't say. */
@@ -297,6 +303,7 @@ export function AgentWorkbenchPanel({
   const workbenchSnapshot = useAgentWorkbenchSnapshot(events, {
     deriveAgentTiles,
     hasAnswer,
+    isLoading,
     runSettled,
     runFailed,
     paused,
@@ -1068,6 +1075,7 @@ export function AgentWorkbenchPanel({
             focusedProcessEvent={focusedProcessEvent}
             focusedEventId={focusedEventId}
             progressOutline={progressOutline}
+            userInput={userInput}
             onSelectTab={onSelectTab}
             onOpenArtifact={onOpenArtifact}
           />

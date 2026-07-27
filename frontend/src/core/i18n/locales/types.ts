@@ -1023,6 +1023,17 @@ export interface Translations {
   };
 
   // Agent workbench pages
+  agentPhases: {
+    planning: string;
+    exploring: string;
+    implementing: string;
+    testing: string;
+    deploying: string;
+    genericPrepare: string;
+    genericExecute: string;
+    genericDeliver: string;
+  };
+
   agentWorkbenchPages: {
     collapse: string;
     expandDetails: string;

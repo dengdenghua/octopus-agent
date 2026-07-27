@@ -23,6 +23,7 @@ _COMPLEXITY_CUE_RE = re.compile(
     r"implement|fix|debug|refactor|review|audit|optimi[sz]e|verify|test|build|"
     r"research|investigate|compare|analy[sz]e|report|plan|todo|"
     r"继续|开始|开干|修|优化|审计|排查|调研|研究|分析|实现|测试|验证|打包|"
+    r"改成|改为|换成|改造|重做|新增|添加|接入|迁移|上线|部署|搭建|改版|美化|"
     r"多步|复杂|全局|完整|报告|方案|流程|团队|协作|深度"
     r")",
     re.IGNORECASE,
@@ -75,6 +76,25 @@ _READ_ONLY_RE = re.compile(
     r"\b(?:read[ -]?only|do not (?:modify|edit|write|create)|without (?:modifying|editing|writing|creating))\b",
     re.IGNORECASE,
 )
+_NO_TODO_RE = re.compile(
+    r"(?:不要|无需|不需要|禁止|不得|不可)\s*(?:调用|使用)?\s*todo_write\b|"
+    r"(?:不要|无需|不需要|禁止|不得|不可)\s*(?:创建|生成|维护|使用)?\s*(?:任务)?清单|"
+    r"\b(?:do\s+not|don't|never)\s+(?:call|use|create|write)?\s*todo_write\b|"
+    r"\bwithout\s+(?:calling|using|creating|writing)\s+todo_write\b|"
+    r"\b(?:no\s+(?:task\s+)?checklist|"
+    r"without\s+(?:a\s+)?(?:task\s+)?checklist)\b",
+    re.IGNORECASE,
+)
+
+
+_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+
+
+def _effective_length(text: str) -> int:
+    """Length weighted for CJK density: one CJK char carries roughly the
+    information of 2-3 Latin chars, so Chinese prompts hit the long-form
+    threshold at ~27 characters instead of 80."""
+    return len(text) + 2 * len(_CJK_RE.findall(text))
 
 
 def _is_narrow_single_source_lookup(text: str) -> bool:
@@ -169,6 +189,11 @@ def should_require_todo_protocol(
     text = (goal or "").strip()
     if not text or _SHORT_ACK_RE.match(text):
         return False
+    # A checklist is a user-facing coordination aid, not a safety boundary.
+    # Respect an explicit request to skip it instead of overriding the user's
+    # interaction contract with code-mode defaults.
+    if _NO_TODO_RE.search(text):
+        return False
 
     mode = context_mode(user_context)
     metadata = user_context.get("metadata") if isinstance(user_context, dict) else None
@@ -201,7 +226,7 @@ def should_require_todo_protocol(
     if mode in {"code", "deep", "deep_research", "research"}:
         return True
 
-    if "\n" in text or len(text) >= 80:
+    if "\n" in text or _effective_length(text) >= 80:
         return True
     if _COMPLEXITY_CUE_RE.search(text):
         return True

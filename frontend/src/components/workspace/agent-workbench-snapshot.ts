@@ -25,6 +25,7 @@ import {
 export type AgentWorkbenchSnapshotOptions = {
   deriveAgentTiles: (events: LiveToolEvent[]) => AgentTile[];
   hasAnswer?: boolean;
+  isLoading?: boolean;
   paused?: boolean;
   runFailed?: boolean;
   runSettled?: boolean;
@@ -62,6 +63,7 @@ export function useAgentWorkbenchSnapshot(
   const {
     deriveAgentTiles,
     hasAnswer,
+    isLoading,
     paused,
     runFailed,
     runSettled,
@@ -71,6 +73,7 @@ export function useAgentWorkbenchSnapshot(
     const candidate = buildAgentWorkbenchSnapshot(events, {
       deriveAgentTiles,
       hasAnswer,
+      isLoading,
       paused,
       runFailed,
       runSettled,
@@ -90,6 +93,7 @@ export function useAgentWorkbenchSnapshot(
     events,
     deriveAgentTiles,
     hasAnswer,
+    isLoading,
     paused,
     runFailed,
     runSettled,
@@ -116,9 +120,15 @@ export function buildAgentWorkbenchSnapshot(
       options,
       observedPhaseBlockIds,
     ) ?? derived.phases;
+  const optimisticPhase =
+    phases.length === 0 && isLiveRunInProgress(options)
+      ? optimisticPlanningPhase()
+      : null;
+  const visiblePhases = optimisticPhase ? [optimisticPhase] : phases;
   const currentPhase =
-    currentPhaseFromServerSnapshot(serverSnapshot, phases, options) ??
-    derived.currentPhase;
+    currentPhaseFromServerSnapshot(serverSnapshot, visiblePhases, options) ??
+    derived.currentPhase ??
+    optimisticPhase;
   const currentBlocks = currentPhase
     ? blocks.filter((block) => currentPhase.blockIds.includes(block.id))
     : blocks;
@@ -146,15 +156,36 @@ export function buildAgentWorkbenchSnapshot(
     focusedTab:
       tabFromServerWorkbenchSnapshot(serverSnapshot) ??
       workspaceFocusTabFromEvents(displayEvents),
-    hasContent: Boolean(currentPhase && phases.length > 0 && blocks.length > 0),
+    hasContent: Boolean(
+      currentPhase && visiblePhases.length > 0 && blocks.length > 0,
+    ),
     inferredWorkDir: inferWorkbenchCwd(blocks, options.workDir),
-    phases,
+    phases: visiblePhases,
     version: 0,
     visibleDiffEntries,
   };
   return {
     ...snapshot,
     fingerprint: fingerprintWorkbenchSnapshot(snapshot, options),
+  };
+}
+
+function isLiveRunInProgress(options: AgentWorkbenchSnapshotOptions): boolean {
+  return Boolean(
+    options.isLoading &&
+      !options.runSettled &&
+      !options.runFailed &&
+      !options.paused &&
+      !options.hasAnswer,
+  );
+}
+
+function optimisticPlanningPhase(): AgentPhase {
+  return {
+    id: "optimistic:planning",
+    title: "\u89c4\u5212\u4e2d",
+    status: "running",
+    blockIds: [],
   };
 }
 

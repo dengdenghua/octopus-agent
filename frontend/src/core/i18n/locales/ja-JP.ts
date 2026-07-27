@@ -1224,6 +1224,16 @@ export const jaJP: Translations = {
   },
 
   // Agent workbench pages
+  agentPhases: {
+    planning: "要件を分析中",
+    exploring: "コード構造を確認中",
+    implementing: "コードを編集中",
+    testing: "変更を検証中",
+    deploying: "デプロイ中",
+    genericPrepare: "コンテキストを収集中",
+    genericExecute: "手がかりを処理中",
+    genericDeliver: "回答をまとめ中",
+  },
   agentWorkbenchPages: {
     collapse: "折りたたむ",
     expandDetails: "詳細を展開",
@@ -1257,6 +1267,9 @@ export const jaJP: Translations = {
     subagentsRunning: (count) => `${count} 件実行中`,
     subagentsPending: (count) => `${count} 件待機中`,
     failedLanes: (lanes) => `失敗したレーン: ${lanes}`,
+    inputs: "入力",
+    inputsUploadedFiles: (count) => `アップロードファイル ${count} 件`,
+    inputsAttachments: (count) => `添付 ${count} 件`,
     context: "コンテキスト",
     observableThisRound: "今ラウンドの観測対象",
     sourceCount: (count) => `ソース ${count} 件`,

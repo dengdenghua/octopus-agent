@@ -679,4 +679,62 @@ describe("agent workbench snapshot", () => {
       ["phase-test", ["shell-server"]],
     ]);
   });
+
+  test("shows an optimistic planning phase while a live run has no events yet", () => {
+    const snapshot = buildAgentWorkbenchSnapshot([], {
+      deriveAgentTiles,
+      isLoading: true,
+    });
+
+    expect(snapshot.phases.map((phase) => [phase.id, phase.status])).toEqual([
+      ["optimistic:planning", "running"],
+    ]);
+    expect(snapshot.currentPhase?.id).toBe("optimistic:planning");
+  });
+
+  test("drops the optimistic phase once real phases exist", () => {
+    const snapshot = buildAgentWorkbenchSnapshot(
+      [
+        event({
+          id: "todo-1",
+          name: "todo_write",
+          input: {
+            items: [
+              { content: "\u8bfb\u53d6\u4ee3\u7801", status: "in_progress" },
+              { content: "\u4fee\u6539\u5b9e\u73b0", status: "pending" },
+            ],
+          },
+        }),
+      ],
+      { deriveAgentTiles },
+    );
+
+    expect(
+      snapshot.phases.some((phase) => phase.id === "optimistic:planning"),
+    ).toBe(false);
+    expect(snapshot.phases.length).toBeGreaterThan(0);
+  });
+
+  test("hides the optimistic phase when the run is not explicitly loading", () => {
+    const snapshot = buildAgentWorkbenchSnapshot([], { deriveAgentTiles });
+    expect(snapshot.phases).toEqual([]);
+    expect(snapshot.currentPhase).toBeNull();
+  });
+
+  test("hides the optimistic phase for settled, failed, paused, or answered runs", () => {
+    for (const options of [
+      { runSettled: true },
+      { runFailed: true },
+      { paused: true },
+      { hasAnswer: true },
+    ]) {
+      const snapshot = buildAgentWorkbenchSnapshot([], {
+        deriveAgentTiles,
+        isLoading: true,
+        ...options,
+      });
+      expect(snapshot.phases).toEqual([]);
+      expect(snapshot.currentPhase).toBeNull();
+    }
+  });
 });

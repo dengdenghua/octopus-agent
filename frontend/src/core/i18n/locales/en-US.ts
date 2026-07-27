@@ -1235,6 +1235,16 @@ export const enUS: Translations = {
   },
 
   // Agent workbench pages
+  agentPhases: {
+    planning: "Analyzing requirements",
+    exploring: "Exploring the codebase",
+    implementing: "Editing code",
+    testing: "Verifying changes",
+    deploying: "Deploying",
+    genericPrepare: "Gathering context",
+    genericExecute: "Working through leads",
+    genericDeliver: "Pulling the answer together",
+  },
   agentWorkbenchPages: {
     collapse: "Collapse",
     expandDetails: "Expand details",
@@ -1268,6 +1278,9 @@ export const enUS: Translations = {
     subagentsRunning: (count) => `${count} running`,
     subagentsPending: (count) => `${count} pending`,
     failedLanes: (lanes) => `Failed lanes: ${lanes}`,
+    inputs: "Inputs",
+    inputsUploadedFiles: (count) => `${count} uploaded files`,
+    inputsAttachments: (count) => `${count} attachments`,
     context: "Context",
     observableThisRound: "Observable this round",
     sourceCount: (count) => `${count} sources`,

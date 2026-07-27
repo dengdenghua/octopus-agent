@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { deriveAgentPhases, progressForPhases } from "./agent-phases";
+import {
+  businessAgentPhaseKey,
+  deriveAgentPhases,
+  progressForPhases,
+} from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
 
 function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
@@ -29,7 +33,8 @@ describe("agent phases", () => {
     );
 
     expect(state.currentPhase?.status).toBe("done");
-    expect(state.currentPhase?.title).toBe("收拢答案");
+    expect(state.currentPhase?.titleKey).toBe("genericDeliver");
+    expect(state.currentPhase?.title).toBe("Pull the answer together");
     expect(progressForPhases(state.phases, state.currentPhase!)).toEqual({
       current: 2,
       total: 2,
@@ -350,10 +355,28 @@ describe("agent phases", () => {
 
     expect(state.phases.length).toBe(2);
     expect(state.phases.map((phase) => phase.status)).toEqual(["done", "done"]);
-    expect(state.currentPhase?.title).toBe("收拢答案");
+    expect(state.currentPhase?.titleKey).toBe("genericDeliver");
+    expect(state.currentPhase?.title).toBe("Pull the answer together");
     expect(progressForPhases(state.phases, state.currentPhase!)).toEqual({
       current: 2,
       total: 2,
     });
+  });
+
+  test("maps free-form phase titles to business phase keys", () => {
+    expect(businessAgentPhaseKey("分析需求并给出方案")).toBe("planning");
+    expect(businessAgentPhaseKey("了解代码结构")).toBe("exploring");
+    expect(businessAgentPhaseKey("修改登录页实现")).toBe("implementing");
+    expect(businessAgentPhaseKey("运行测试验证修改")).toBe("testing");
+    expect(businessAgentPhaseKey("部署到预发环境")).toBe("deploying");
+    expect(businessAgentPhaseKey("随便聊聊")).toBeNull();
+  });
+
+  test("generic phases expose an i18n title key", () => {
+    const state = deriveAgentPhases([
+      event({ id: "read-1", name: "read_file", input: { path: "a.ts" } }),
+    ]);
+    expect(state.phases.length).toBeGreaterThan(0);
+    expect(state.phases.every((phase) => Boolean(phase.titleKey))).toBe(true);
   });
 });

@@ -1222,6 +1222,16 @@ export const koKR: Translations = {
   },
 
   // Agent workbench pages
+  agentPhases: {
+    planning: "요구사항 분석 중",
+    exploring: "코드 구조 파악 중",
+    implementing: "코드 수정 중",
+    testing: "변경 사항 확인 중",
+    deploying: "배포 중",
+    genericPrepare: "컨텍스트 수집 중",
+    genericExecute: "단서 처리 중",
+    genericDeliver: "답변 정리 중",
+  },
   agentWorkbenchPages: {
     collapse: "접기",
     expandDetails: "상세 펼치기",
@@ -1255,6 +1265,9 @@ export const koKR: Translations = {
     subagentsRunning: (count) => `${count}개 실행 중`,
     subagentsPending: (count) => `${count}개 대기 중`,
     failedLanes: (lanes) => `실패한 레인: ${lanes}`,
+    inputs: "입력",
+    inputsUploadedFiles: (count) => `업로드 파일 ${count}개`,
+    inputsAttachments: (count) => `첨부 ${count}개`,
     context: "컨텍스트",
     observableThisRound: "이번 라운드 관측 대상",
     sourceCount: (count) => `소스 ${count}개`,

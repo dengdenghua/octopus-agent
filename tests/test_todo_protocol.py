@@ -75,6 +75,23 @@ def test_todo_protocol_skips_narrow_read_only_shell_command_in_code_mode() -> No
     )
 
 
+def test_todo_protocol_respects_explicit_no_checklist_instruction() -> None:
+    assert not should_require_todo_protocol(
+        "严格回归测试：请立刻调用 exec_shell，command 参数必须为"
+        "「printf approval-ui-fixed」。不要调用 todo_write、不要解释，"
+        "调用后直接返回命令结果。",
+        {"mode": "code", "capability_mode": "code"},
+    )
+    assert not should_require_todo_protocol(
+        "运行一次 pwd，不要创建任务清单，直接返回结果。",
+        {"mode": "code"},
+    )
+    assert not should_require_todo_protocol(
+        "Run pwd once without a task checklist and return the result.",
+        {"mode": "code"},
+    )
+
+
 def test_todo_protocol_keeps_broad_or_mutating_file_comparison() -> None:
     assert should_require_todo_protocol(
         "比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts，"
@@ -132,3 +149,16 @@ def test_todo_protocol_guidance_marks_required_state() -> None:
 
     assert "TASK CHECKLIST PROTOCOL REQUIRED for team mode" in guidance
     assert "todo_write" in guidance
+
+
+def test_todo_protocol_detects_short_chinese_execution_requests() -> None:
+    assert should_require_todo_protocol("\u628a\u767b\u5f55\u9875\u6539\u6210\u6697\u8272\u4e3b\u9898")
+    assert should_require_todo_protocol("\u7ed9\u9879\u76ee\u63a5\u5165\u5fae\u4fe1\u652f\u4ed8")
+    assert should_require_todo_protocol("\u628a\u8fd9\u4e2a\u670d\u52a1\u90e8\u7f72\u5230\u9884\u53d1\u73af\u5883")
+
+
+def test_todo_protocol_cjk_density_lowers_length_threshold() -> None:
+    assert should_require_todo_protocol(
+        "\u5e2e\u6211\u628a\u8fd9\u4e2a\u4ed3\u5e93\u91cc\u9762\u6240\u6709\u6587\u6863\u7684\u76ee\u5f55\u7ed3\u6784\u91cd\u65b0\u6574\u7406\u4e00\u904d\u7136\u540e\u8f93\u51fa\u4e00\u4efd\u8bf4\u660e"
+    )
+    assert not should_require_todo_protocol("\u8fd9\u4e2a\u51fd\u6570\u662f\u505a\u4ec0\u4e48\u7684")
