@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRightIcon,
@@ -53,17 +53,17 @@ function EmailLoginForm() {
   const [sending, setSending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
-    tickRef.current = setInterval(() => {
+    const id = setInterval(() => {
       setCooldown((s) => Math.max(0, s - 1));
     }, 1000);
-    return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-  }, [cooldown]);
+    return () => clearInterval(id);
+    // cooldown only gates whether the interval runs; the tick itself uses the
+    // functional updater so it never depends on the current value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cooldown > 0]);
 
   async function sendCode() {
     const addr = email.trim();
@@ -75,7 +75,7 @@ function EmailLoginForm() {
     try {
       const r = await octAuthApi.emailSend(addr);
       toast.success(t.auth.success.emailCodeSent);
-      if (r.dev_code) toast.message(`验证码(开发模式): ${r.dev_code}`);
+      if (r.dev_code) toast.message(t.auth.devCodeNotice(r.dev_code));
       setCooldown(SMS_COOLDOWN_SECONDS);
     } catch (err) {
       if (err instanceof OctApiError && err.status === 503) {

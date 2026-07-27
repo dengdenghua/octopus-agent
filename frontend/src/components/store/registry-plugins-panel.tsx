@@ -4,6 +4,7 @@ import { Info, Loader2, LockIcon, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listRegistryPlugins, type RegistryPlugin } from "@/core/registry/api";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/core/i18n/hooks";
 
 import { RegistryAssetCard } from "./registry-asset-card";
 
@@ -12,6 +13,7 @@ import { RegistryAssetCard } from "./registry-asset-card";
 // prompt-pack 才可一键落地),插件类暂不提供一键安装,先可见可查。卡片排版对齐
 // 角色/技能商城面板(RegistryAssetCard),保持三个商城面板观感统一。
 export function RegistryPluginsPanel() {
+  const { t } = useI18n();
   const [plugins, setPlugins] = useState<RegistryPlugin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function RegistryPluginsPanel() {
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <span className="text-sm font-medium">插件商城 · registry 浏览</span>
+        <span className="text-sm font-medium">{t.store.pluginsPanelTitle}</span>
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="text-xs text-muted-foreground">
             {filtered.length}/{plugins.length}
@@ -55,8 +57,8 @@ export function RegistryPluginsPanel() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索插件"
-            aria-label="搜索插件"
+            placeholder={t.store.searchPluginsPlaceholder}
+            aria-label={t.store.searchPluginsPlaceholder}
             className="h-8 w-44 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
           />
           <Button
@@ -72,9 +74,7 @@ export function RegistryPluginsPanel() {
 
       <div className="flex items-start gap-2 rounded-md border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
         <Info className="mt-0.5 size-3.5 shrink-0" />
-        <span>
-          插件类资产标记为可执行集成(kind=code),为安全暂不支持一键安装，先供浏览了解。
-        </span>
+        <span>{t.store.pluginsSafetyNotice}</span>
       </div>
 
       {error ? (
@@ -96,7 +96,7 @@ export function RegistryPluginsPanel() {
               description={plugin.description}
               category={null}
               categoryLabel={plugin.category ?? undefined}
-              typeLabel="商城"
+              typeLabel={t.store.typeLabelStore}
               actionSlot={
                 <Button
                   size="sm"
@@ -105,7 +105,7 @@ export function RegistryPluginsPanel() {
                   disabled
                 >
                   <LockIcon className="mr-1 h-3 w-3" />
-                  仅浏览
+                  {t.store.browseOnly}
                 </Button>
               }
             />

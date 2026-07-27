@@ -100,7 +100,12 @@ export function SessionSearch({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-background w-full max-w-lg rounded-lg border shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.common.search}
+        className="bg-background w-full max-w-lg rounded-lg border shadow-2xl"
+      >
         {/* Search input */}
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <SearchIcon className="text-muted-foreground size-4 shrink-0" />
@@ -109,6 +114,7 @@ export function SessionSearch({
             value={query}
             onChange={(e) => handleInput(e.target.value)}
             placeholder={t.common.search + "..."}
+            aria-label={t.common.search}
             className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
             autoFocus
           />
@@ -117,6 +123,7 @@ export function SessionSearch({
           )}
           <button
             onClick={onClose}
+            aria-label={t.common.close}
             className="text-muted-foreground hover:text-foreground"
           >
             <XIcon className="size-4" />

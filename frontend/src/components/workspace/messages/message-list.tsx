@@ -136,6 +136,20 @@ export interface MessageTurnSlice {
   key: string;
 }
 
+/** Per-group render inputs derived once per turn instead of per group. */
+interface GroupTurnRenderInfo {
+  /** Deduped message slice of the whole turn (matches turnMessagesForGroup). */
+  turnMessages: Message[];
+  /** True when no later plain "assistant" group exists in the same turn. */
+  isLastAssistantOfTurn: boolean;
+  /** assistantFrameIdentity of this group (null for non-assistant types). */
+  assistantIdentity: string | null;
+  /** Assistant-ish groups (assistant / assistant:processing) before this one. */
+  previousAssistantGroupCount: number;
+  /** Nearest previous assistant-ish group's non-null identity, if any. */
+  previousAssistantIdentity: string | undefined;
+}
+
 /**
  * Split the flat message-group stream into stable user turns.
  *
@@ -1558,32 +1572,88 @@ export function MessageList({
     );
   };
 
-  const assistantFrameIdentity = (
-    group: (typeof groupedMessages)[number],
-  ): string | null => {
-    if (group.type !== "assistant" && group.type !== "assistant:processing") {
-      return null;
+  const assistantFrameIdentity = useCallback(
+    (group: (typeof groupedMessages)[number]): string | null => {
+      if (group.type !== "assistant" && group.type !== "assistant:processing") {
+        return null;
+      }
+      const aiMessage = group.messages.find(
+        (message): message is AIMessage => message.type === "ai",
+      );
+      const identity = resolveAgentIdentity(aiMessage);
+      // Avatar URLs and icons are presentation metadata and can arrive a frame
+      // later than the stable agent id/name. Including them in the speaker key
+      // made one uninterrupted reply grow a second avatar during streaming.
+      // Prefer semantic identity and use visual metadata only as a last resort.
+      const stableId = identityKey(identity.id);
+      if (stableId) return `id:${stableId}`;
+      const stableName = identityKey(identity.name);
+      if (stableName) return `name:${stableName}`;
+      const presentationIdentity = [
+        identityKey(identity.avatar),
+        identityKey(identity.icon),
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join("|");
+      return presentationIdentity || null;
+    },
+    [resolveAgentIdentity],
+  );
+
+  // Budget the turn-wide scans once per groupedMessages change: the render
+  // loop below used to re-derive turn message slices, last-assistant
+  // positions and previous-speaker identities per group (slice + reverse +
+  // map + filter each time), which is O(groups) per group and O(groups^2)
+  // per frame. One walk per turn keeps it O(groups) per frame; the render
+  // loop then does O(1) map lookups.
+  const groupTurnRenderInfo = useMemo(() => {
+    const info = new Map<number, GroupTurnRenderInfo>();
+    for (const turn of messageTurns) {
+      const start = turn.groupIndexes[0]!;
+      const end = turn.groupIndexes[turn.groupIndexes.length - 1]!;
+      // Same span and identity dedupe as turnMessagesForGroup: a turn starts
+      // at its human group (or index 0 for the prelude) and runs to the last
+      // group before the next human one.
+      const seen = new Set<Message>();
+      const turnMessages: Message[] = [];
+      let lastAssistantIndex = -1;
+      for (let index = start; index <= end; index += 1) {
+        const group = groupedMessages[index]!;
+        if (group.type === "assistant") lastAssistantIndex = index;
+        for (const message of group.messages) {
+          if (seen.has(message)) continue;
+          seen.add(message);
+          turnMessages.push(message);
+        }
+      }
+      let previousAssistantGroupCount = 0;
+      let previousAssistantIdentity: string | undefined;
+      for (const index of turn.groupIndexes) {
+        const group = groupedMessages[index]!;
+        const assistantIdentity = assistantFrameIdentity(group);
+        info.set(index, {
+          turnMessages,
+          isLastAssistantOfTurn: index === lastAssistantIndex,
+          assistantIdentity,
+          previousAssistantGroupCount,
+          previousAssistantIdentity,
+        });
+        if (
+          group.type === "assistant" ||
+          group.type === "assistant:processing"
+        ) {
+          previousAssistantGroupCount += 1;
+          if (
+            assistantIdentity !== null &&
+            previousAssistantIdentity === undefined
+          ) {
+            previousAssistantIdentity = assistantIdentity;
+          }
+        }
+      }
     }
-    const aiMessage = group.messages.find(
-      (message): message is AIMessage => message.type === "ai",
-    );
-    const identity = resolveAgentIdentity(aiMessage);
-    // Avatar URLs and icons are presentation metadata and can arrive a frame
-    // later than the stable agent id/name. Including them in the speaker key
-    // made one uninterrupted reply grow a second avatar during streaming.
-    // Prefer semantic identity and use visual metadata only as a last resort.
-    const stableId = identityKey(identity.id);
-    if (stableId) return `id:${stableId}`;
-    const stableName = identityKey(identity.name);
-    if (stableName) return `name:${stableName}`;
-    const presentationIdentity = [
-      identityKey(identity.avatar),
-      identityKey(identity.icon),
-    ]
-      .filter((value): value is string => Boolean(value))
-      .join("|");
-    return presentationIdentity || null;
-  };
+    return info;
+  }, [messageTurns, groupedMessages, assistantFrameIdentity]);
 
   if (thread.isThreadLoading && messages.length === 0) {
     return <MessageListSkeleton />;
@@ -1695,13 +1765,13 @@ export function MessageList({
                   groupKey === auditNoticeGroupKey
                     ? verificationAuditNotice
                     : null;
+                const groupInfo = groupTurnRenderInfo.get(index)!;
                 const groupTurnMessages =
                   group.type === "assistant"
-                    ? turnMessagesForGroup(groupedMessages, group)
+                    ? groupInfo.turnMessages
                     : group.messages;
                 const structuredGroupFailure =
-                  group.type === "assistant" &&
-                  isLastAssistantGroupOfTurn(groupedMessages, group)
+                  group.type === "assistant" && groupInfo.isLastAssistantOfTurn
                     ? structuredFailureFromMessages(groupTurnMessages)
                     : null;
                 const historicalGroupFailure = structuredGroupFailure
@@ -1720,22 +1790,11 @@ export function MessageList({
                     ? failureReceipt
                     : null);
 
-                const turnGroupPosition = turn.groupIndexes.indexOf(index);
-                const assistantIdentity = assistantFrameIdentity(group);
-                const previousAssistantGroups = [...turn.groupIndexes]
-                  .slice(0, turnGroupPosition)
-                  .reverse()
-                  .map((groupIndex) => groupedMessages[groupIndex]!)
-                  .filter(
-                    (candidate) =>
-                      candidate.type === "assistant" ||
-                      candidate.type === "assistant:processing",
-                  );
-                const previousAssistantIdentity = previousAssistantGroups
-                  .map((candidate) => assistantFrameIdentity(candidate))
-                  .find((identity): identity is string => identity !== null);
+                const assistantIdentity = groupInfo.assistantIdentity;
+                const previousAssistantIdentity =
+                  groupInfo.previousAssistantIdentity;
                 const showAssistantAvatar =
-                  previousAssistantGroups.length === 0 ||
+                  groupInfo.previousAssistantGroupCount === 0 ||
                   (assistantIdentity !== null &&
                     previousAssistantIdentity !== undefined &&
                     previousAssistantIdentity !== assistantIdentity);

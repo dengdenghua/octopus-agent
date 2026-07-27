@@ -1,7 +1,6 @@
 /* Implementation note. */
 
 import { swallow } from "@/core/utils/log";
-import { getBackendBaseURL } from "@/core/config";
 import { LockIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -10,6 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+
+import { reflexFetch } from "../api";
 
 type TriggerMode = "exact" | "contains" | "regex";
 type PriorityBand = "low" | "medium" | "high";
@@ -189,9 +190,9 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const r: CardsResp = await fetch(
-        `${getBackendBaseURL()}/api/reflex/rules-cards`,
-      ).then((r) => r.json());
+      const r: CardsResp = await reflexFetch<CardsResp>(
+        "/api/reflex/rules-cards",
+      );
       if (!r.ok || !r.cards) {
         setStatus({ kind: "err", msg: r.error ?? "load failed" });
         return;
@@ -278,8 +279,8 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
     const currentIds = new Set(cards.map((c) => c.id));
     const deletes = Array.from(origIds).filter((id) => !currentIds.has(id));
     try {
-      const r: CardSaveResp = await fetch(
-        `${getBackendBaseURL()}/api/reflex/rules-cards`,
+      const r: CardSaveResp = await reflexFetch<CardSaveResp>(
+        "/api/reflex/rules-cards",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -290,7 +291,7 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
             deletes,
           }),
         },
-      ).then((r) => r.json());
+      );
       if (!r.ok) {
         setStatus({ kind: "err", msg: r.error ?? "save failed" });
         return;

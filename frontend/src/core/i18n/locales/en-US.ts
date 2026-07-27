@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 
 import type { Translations } from "./types";
+import { workspaceComputerEnUS } from "./workspace-computer";
+import { agentOperatorEnUS } from "./agent-operator";
 
 export const enUS: Translations = {
   // Locale meta
@@ -27,6 +29,7 @@ export const enUS: Translations = {
     share: "Share",
     openInNewWindow: "Open in new window",
     close: "Close",
+    back: "Back",
     more: "More",
     search: "Search",
     download: "Download",
@@ -407,6 +410,7 @@ export const enUS: Translations = {
     removeMaterial: "Remove Material",
     startThreadBeforeUpload: "Start or open a thread before uploading files.",
     uploadFailed: "Upload failed",
+    attachmentReadFailed: "Failed to read attachment. Please try again.",
     maxSubagents: "Max Subagents",
     maxSearches: "Max Searches",
     permissionModeLabel: "Permissions",
@@ -1102,6 +1106,9 @@ export const enUS: Translations = {
     },
   },
 
+  workspaceComputer: workspaceComputerEnUS,
+  agentOperator: agentOperatorEnUS,
+
   // Agent Workbench Panel
   agentWorkbench: {
     idle: "Idle",
@@ -1733,6 +1740,7 @@ export const enUS: Translations = {
     settingsTooltip: "Settings",
     // Project + chat list actions
     deleteProjectTooltip: "Delete project",
+    deleteProjectFailed: "Failed to delete project. Please try again.",
     deleteThreadTooltip: "Delete chat",
     actionSort: "Sort",
     actionNewProject: "Choose project folder",
@@ -3979,6 +3987,10 @@ export const enUS: Translations = {
     cancelled: "Cancelled",
     startNewQuest: "Start New Quest",
     quest: "Quest",
+    startFailed: "Failed to start quest",
+    approveFailed: "Failed to approve plan",
+    rejectFailed: "Failed to reject plan",
+    cancelFailed: "Failed to cancel quest",
   },
 
   // Knowledge Graph
@@ -7696,8 +7708,11 @@ Strategy:
     currentAccount: "Current account",
     loginAccount: "Login",
     phoneNumber: "Phone Number",
+    emailLabel: "Email",
+    tabEmail: "Email Login",
     verificationCode: "Verification Code",
     sendCode: "Send Code",
+    devCodeNotice: (code: string) => `Verification code (dev mode): ${code}`,
     sending: "Sending...",
     loggingIn: "Logging in...",
     enterDirectly: "Enter as Guest",
@@ -7739,6 +7754,7 @@ Strategy:
       emailAutoRegister:
         "Unregistered email addresses will be automatically registered",
       agreeTo: "By logging in, you agree to",
+      and: "and",
       userAgreement: "User Agreement",
       privacyPolicy: "Privacy Policy",
     },
@@ -7752,6 +7768,24 @@ Strategy:
       emailCardDescription:
         "Login with an email code, automatically bind to LLMs and credits",
     },
+  },
+
+  // Store panels (registry skills/plugins/roles)
+  store: {
+    skillsPanelTitle: "Skill Store · Install on demand from the registry",
+    pluginsPanelTitle: "Plugin Store · Browse the registry",
+    searchSkillsPlaceholder: "Search skills",
+    searchPluginsPlaceholder: "Search plugins",
+    searchRolesPlaceholder: "Search roles",
+    install: "Install",
+    installing: "Installing",
+    installed: "Installed",
+    browseOnly: "Browse only",
+    pluginsSafetyNotice:
+      "Plugin assets are marked as executable integrations (kind=code). For safety, one-click install is not available yet — they are provided for browsing only.",
+    typeLabelStore: "Store",
+    typeLabelTwinRole: "Store · Digital twin role template",
+    categoryDigitalTwin: "Digital Twin",
   },
 
   // Skill Categories

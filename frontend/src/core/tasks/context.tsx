@@ -8,6 +8,22 @@ import {
 
 import type { Subtask } from "./types";
 
+// Compare the scalar fields that updateSubtask can write. `messages` is
+// handled separately by the caller (identity changes there are explicit), so
+// here we only bail out when every other field is unchanged.
+function subtaskShallowEqual(
+  a: Subtask | undefined,
+  b: Subtask,
+): boolean {
+  if (!a) return false;
+  const keys = Object.keys(b) as (keyof Subtask)[];
+  for (const key of keys) {
+    if (key === "messages") continue;
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
 export interface SubtaskContextValue {
   tasks: Record<string, Subtask>;
   setTasks: (
@@ -53,6 +69,7 @@ export function useUpdateSubtask() {
         const existing = prevTasks[task.id];
         const merged = { ...(existing ?? {}), ...task } as Subtask;
 
+        let messagesChanged = false;
         if (task.latestMessage) {
           const prev = existing?.messages ?? [];
           const isDup = prev.some(
@@ -60,7 +77,16 @@ export function useUpdateSubtask() {
           );
           if (!isDup) {
             merged.messages = [...prev, task.latestMessage];
+            messagesChanged = true;
           }
+        }
+
+        // Streaming replays this reducer on every token. Returning the
+        // previous object identity when nothing actually changed keeps the
+        // SubtaskContext value stable and avoids re-rendering every
+        // SubtaskCard consumer on each streamed chunk.
+        if (!messagesChanged && subtaskShallowEqual(existing, merged)) {
+          return prevTasks;
         }
 
         return { ...prevTasks, [task.id]: merged };

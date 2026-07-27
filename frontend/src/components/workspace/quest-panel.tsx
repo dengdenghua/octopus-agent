@@ -18,6 +18,7 @@ import { getBackendBaseURL } from "@/core/config";
 import { authedEventSource } from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangleIcon,
@@ -901,10 +902,11 @@ export function QuestPanel({
         });
         setQuestId(result.quest_id);
       } catch (err) {
-        console.error("Failed to start quest:", err);
+        swallow(err);
+        toast.error(t.questMode.startFailed);
       }
     },
-    [workspacePath],
+    [workspacePath, t.questMode.startFailed],
   );
 
   const handleApprove = useCallback(async () => {
@@ -912,9 +914,10 @@ export function QuestPanel({
     try {
       await approvePlan(questId);
     } catch (err) {
-      console.error("Failed to approve plan:", err);
+      swallow(err);
+      toast.error(t.questMode.approveFailed);
     }
-  }, [questId]);
+  }, [questId, t.questMode.approveFailed]);
 
   const handleReject = useCallback(async () => {
     if (!questId) return;
@@ -930,9 +933,10 @@ export function QuestPanel({
       await rejectPlan(questId);
       setQuestId(null);
     } catch (err) {
-      console.error("Failed to reject plan:", err);
+      swallow(err);
+      toast.error(t.questMode.rejectFailed);
     }
-  }, [questId, confirm, t.questMode.rejectConfirmTitle, t.questMode.rejectConfirmDescription, t.questMode.reject]);
+  }, [questId, confirm, t.questMode.rejectConfirmTitle, t.questMode.rejectConfirmDescription, t.questMode.reject, t.questMode.rejectFailed]);
 
   const handleCancel = useCallback(async () => {
     if (!questId) return;
@@ -948,9 +952,10 @@ export function QuestPanel({
       await cancelQuest(questId);
       setQuestId(null);
     } catch (err) {
-      console.error("Failed to cancel quest:", err);
+      swallow(err);
+      toast.error(t.questMode.cancelFailed);
     }
-  }, [questId, confirm, t.questMode.cancelConfirmTitle, t.questMode.cancelConfirmDescription, t.questMode.cancelConfirmLabel]);
+  }, [questId, confirm, t.questMode.cancelConfirmTitle, t.questMode.cancelConfirmDescription, t.questMode.cancelConfirmLabel, t.questMode.cancelFailed]);
 
   const handleNewQuest = useCallback(() => {
     setQuestId(null);

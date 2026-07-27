@@ -23,7 +23,6 @@
  */
 
 import { swallow } from "@/core/utils/log";
-import { getBackendBaseURL } from "@/core/config";
 import {
   CheckCircleIcon,
   DownloadIcon,
@@ -44,6 +43,8 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 
+import { reflexFetch } from "./api";
+
 type AppliedResp = {
   applied: boolean;
   path?: string;
@@ -62,6 +63,20 @@ type AddendumEntry = {
   preview: string;
 };
 type AddendumsResp = { addendums: AddendumEntry[] };
+
+type ApplyResp = {
+  ok: boolean;
+  error: string;
+  scope: string;
+  size: number;
+  path: string;
+};
+
+type DeleteAddendumResp = {
+  ok: boolean;
+  error: string;
+  deleted: boolean;
+};
 
 type CanaryEntry = {
   skill_name: string;
@@ -316,9 +331,9 @@ export function GepaPanel() {
 
   const loadApplied = useCallback(async () => {
     try {
-      const r: AppliedResp = await fetch(
-        `${getBackendBaseURL()}/api/evolution/forge/applied`,
-      ).then((r) => r.json());
+      const r: AppliedResp = await reflexFetch<AppliedResp>(
+        "/api/evolution/forge/applied",
+      );
       setApplied(r);
     } catch (e) {
       swallow(e);
@@ -330,9 +345,9 @@ export function GepaPanel() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const r: RunsResp = await fetch(
-        `${getBackendBaseURL()}/api/evolution/forge/runs?limit=20`,
-      ).then((r) => r.json());
+      const r: RunsResp = await reflexFetch<RunsResp>(
+        "/api/evolution/forge/runs?limit=20",
+      );
       setHistory(r.runs ?? []);
     } catch (e) {
       swallow(e);
@@ -343,9 +358,9 @@ export function GepaPanel() {
 
   const loadAddendums = useCallback(async () => {
     try {
-      const r: AddendumsResp = await fetch(
-        `${getBackendBaseURL()}/api/evolution/forge/addendums`,
-      ).then((r) => r.json());
+      const r: AddendumsResp = await reflexFetch<AddendumsResp>(
+        "/api/evolution/forge/addendums",
+      );
       setAddendums(r.addendums ?? []);
     } catch (e) {
       swallow(e);
@@ -354,9 +369,9 @@ export function GepaPanel() {
 
   const loadCanaries = useCallback(async () => {
     try {
-      const r: CanaryResp = await fetch(
-        `${getBackendBaseURL()}/api/evolution/canary?include_all=true&limit=20`,
-      ).then((r) => r.json());
+      const r: CanaryResp = await reflexFetch<CanaryResp>(
+        "/api/evolution/canary?include_all=true&limit=20",
+      );
       setCanaries(r.canaries ?? []);
       setCanarySummary({
         active: r.active_count ?? 0,
@@ -380,10 +395,10 @@ export function GepaPanel() {
     setStatusMsg(t.recipeForge.statusRunInProgress(nIter * 2, nIter * 12));
     setRun(null);
     try {
-      const r: RunResp = await fetch(
+      const r: RunResp = await reflexFetch<RunResp>(
         `/api/evolution/forge/run?n_iter=${nIter}&eval_tasks=${evalTasks}&optimizer_backend=${encodeURIComponent(optimizerBackend)}`,
         { method: "POST" },
-      ).then((r) => r.json());
+      );
       setRun(r);
       if (!r.ok) {
         setStatusMsg(t.recipeForge.statusRunError(r.error ?? "unknown"));
@@ -418,10 +433,10 @@ export function GepaPanel() {
     setAutoRunning(true);
     setStatusMsg(t.recipeForge.statusAutoProposeInProgress(nIter * 12));
     try {
-      const r: AutoProposeResp = await fetch(
+      const r: AutoProposeResp = await reflexFetch<AutoProposeResp>(
         `/api/evolution/forge/auto-propose?n_iter=${nIter}&eval_tasks=${evalTasks}`,
         { method: "POST" },
-      ).then((r) => r.json());
+      );
       if (!r.ok) {
         setStatusMsg(
           t.recipeForge.statusAutoProposeError(r.error ?? "unknown"),
@@ -468,8 +483,8 @@ export function GepaPanel() {
         : t.recipeForge.globalScope;
       setStatusMsg(t.recipeForge.statusApplying(c.candidate_id, where));
       try {
-        const r = await fetch(
-          `${getBackendBaseURL()}/api/evolution/forge/apply`,
+        const r = await reflexFetch<ApplyResp>(
+          "/api/evolution/forge/apply",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -483,7 +498,7 @@ export function GepaPanel() {
               winner_proposal: opts?.winnerProposal ?? undefined,
             }),
           },
-        ).then((r) => r.json());
+        );
         if (!r.ok) {
           setStatusMsg(t.recipeForge.statusApplyFailed(r.error));
           return;
@@ -527,10 +542,10 @@ export function GepaPanel() {
       if (!id) return;
       setStatusMsg(t.recipeForge.statusDeleteAddendum);
       try {
-        const r = await fetch(
+        const r = await reflexFetch<DeleteAddendumResp>(
           `/api/evolution/forge/addendums/${encodeURIComponent(id)}`,
           { method: "DELETE" },
-        ).then((r) => r.json());
+        );
         if (!r.ok) {
           setStatusMsg(t.recipeForge.statusDeleteFailed(r.error));
           return;
@@ -1150,9 +1165,9 @@ function PastRunRow({
     if (detail || detailLoading) return;
     setDetailLoading(true);
     try {
-      const r: ProposalDetailResp = await fetch(
-        `${getBackendBaseURL()}/api/evolution/ledger/${encodeURIComponent(run.winner_proposal_id)}`,
-      ).then((res) => res.json());
+      const r: ProposalDetailResp = await reflexFetch<ProposalDetailResp>(
+        `/api/evolution/ledger/${encodeURIComponent(run.winner_proposal_id)}`,
+      );
       setDetail(r);
       setDetailOpen(true);
     } catch (e) {

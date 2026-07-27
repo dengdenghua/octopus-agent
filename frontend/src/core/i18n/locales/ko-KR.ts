@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 
 import type { Translations } from "./types";
+import { workspaceComputerKoKR } from "./workspace-computer";
+import { agentOperatorKoKR } from "./agent-operator";
 
 export const koKR: Translations = {
   // Locale meta
@@ -27,6 +29,7 @@ export const koKR: Translations = {
     share: "Share",
     openInNewWindow: "Open in new window",
     close: "Close",
+    back: "뒤로",
     more: "More",
     search: "Search",
     download: "Download",
@@ -403,6 +406,7 @@ export const koKR: Translations = {
     removeMaterial: "Remove Material",
     startThreadBeforeUpload: "Start or open a thread before uploading files.",
     uploadFailed: "Upload failed",
+    attachmentReadFailed: "첨부 파일을 읽지 못했습니다. 다시 시도해 주세요.",
     maxSubagents: "Max Subagents",
     maxSearches: "Max Searches",
     permissionModeLabel: "Permissions",
@@ -1089,6 +1093,9 @@ export const koKR: Translations = {
     },
   },
 
+  workspaceComputer: workspaceComputerKoKR,
+  agentOperator: agentOperatorKoKR,
+
   // Agent Workbench Panel
   agentWorkbench: {
     idle: "Idle",
@@ -1722,6 +1729,7 @@ export const koKR: Translations = {
     settingsTooltip: "설정",
     // Project + chat list actions
     deleteProjectTooltip: "프로젝트 삭제",
+    deleteProjectFailed: "프로젝트 삭제에 실패했습니다. 다시 시도해 주세요.",
     deleteThreadTooltip: "채팅 삭제",
     actionSort: "정렬",
     actionNewProject: "프로젝트 폴더 선택",
@@ -3962,6 +3970,10 @@ export const koKR: Translations = {
     cancelled: "Cancelled",
     startNewQuest: "Start New Quest",
     quest: "Quest",
+    startFailed: "퀘스트 시작에 실패했습니다",
+    approveFailed: "계획 승인에 실패했습니다",
+    rejectFailed: "계획 거부에 실패했습니다",
+    cancelFailed: "퀘스트 취소에 실패했습니다",
   },
 
   // Knowledge Graph
@@ -7671,8 +7683,11 @@ Strategy:
     currentAccount: "Current account",
     loginAccount: "Login",
     phoneNumber: "Phone Number",
+    emailLabel: "이메일",
+    tabEmail: "이메일 로그인",
     verificationCode: "Verification Code",
     sendCode: "Send Code",
+    devCodeNotice: (code: string) => `인증 코드(개발 모드): ${code}`,
     sending: "Sending...",
     loggingIn: "Logging in...",
     enterDirectly: "Enter as Guest",
@@ -7714,6 +7729,7 @@ Strategy:
       emailAutoRegister:
         "Unregistered email addresses will be automatically registered",
       agreeTo: "By logging in, you agree to",
+      and: "및",
       userAgreement: "User Agreement",
       privacyPolicy: "Privacy Policy",
     },
@@ -7727,6 +7743,24 @@ Strategy:
       emailCardDescription:
         "Login with an email code, automatically bind to LLMs and credits",
     },
+  },
+
+  // Store panels (registry skills/plugins/roles)
+  store: {
+    skillsPanelTitle: "스킬 스토어 · 레지스트리에서 필요에 따라 설치",
+    pluginsPanelTitle: "플러그인 스토어 · 레지스트리 둘러보기",
+    searchSkillsPlaceholder: "스킬 검색",
+    searchPluginsPlaceholder: "플러그인 검색",
+    searchRolesPlaceholder: "역할 검색",
+    install: "설치",
+    installing: "설치 중",
+    installed: "설치됨",
+    browseOnly: "둘러보기 전용",
+    pluginsSafetyNotice:
+      "플러그인 자산은 실행 가능한 통합(kind=code)으로 표시되어 있어 보안상 원클릭 설치는 아직 지원하지 않으며, 먼저 둘러보기용으로 제공됩니다.",
+    typeLabelStore: "스토어",
+    typeLabelTwinRole: "스토어 · 디지털 트윈 직무 템플릿",
+    categoryDigitalTwin: "디지털 트윈",
   },
 
   // Skill Categories

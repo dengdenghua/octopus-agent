@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 
 import type { Translations } from "./types";
+import { workspaceComputerZhCN } from "./workspace-computer";
+import { agentOperatorZhCN } from "./agent-operator";
 
 export const zhCN: Translations = {
   // Locale meta
@@ -27,6 +29,7 @@ export const zhCN: Translations = {
     share: "分享",
     openInNewWindow: "在新窗口打开",
     close: "关闭",
+    back: "返回",
     more: "更多",
     search: "搜索",
     download: "下载",
@@ -389,6 +392,7 @@ export const zhCN: Translations = {
     removeMaterial: "移除材料",
     startThreadBeforeUpload: "请先开始或打开一个对话再上传文件。",
     uploadFailed: "上传失败",
+    attachmentReadFailed: "附件读取失败，请重试",
     maxSubagents: "最大子代理数",
     maxSearches: "最大搜索数",
     permissionModeLabel: "权限",
@@ -1058,6 +1062,9 @@ export const zhCN: Translations = {
     },
   },
 
+  workspaceComputer: workspaceComputerZhCN,
+  agentOperator: agentOperatorZhCN,
+
   // Agent Workbench Panel
   agentWorkbench: {
     idle: "空闲中",
@@ -1667,6 +1674,7 @@ export const zhCN: Translations = {
     settingsTooltip: "设置",
     // Project + chat list actions
     deleteProjectTooltip: "删除项目",
+    deleteProjectFailed: "删除项目失败，请重试",
     deleteThreadTooltip: "删除对话",
     actionSort: "排序",
     actionNewProject: "选择项目空间",
@@ -3730,6 +3738,10 @@ export const zhCN: Translations = {
     cancelled: "已取消",
     startNewQuest: "开始新任务",
     quest: "Quest",
+    startFailed: "启动任务失败",
+    approveFailed: "批准计划失败",
+    rejectFailed: "拒绝计划失败",
+    cancelFailed: "取消任务失败",
   },
 
   // Knowledge Graph
@@ -7308,8 +7320,11 @@ export const zhCN: Translations = {
     currentAccount: "当前登录账号",
     loginAccount: "登录账号",
     phoneNumber: "手机号",
+    emailLabel: "邮箱",
+    tabEmail: "邮箱登录",
     verificationCode: "验证码",
     sendCode: "获取验证码",
+    devCodeNotice: (code: string) => `验证码(开发模式): ${code}`,
     sending: "发送中...",
     loggingIn: "登录中...",
     enterDirectly: "直接进入",
@@ -7349,6 +7364,7 @@ export const zhCN: Translations = {
       autoRegister: "未注册手机号将自动创建账号",
       emailAutoRegister: "未注册邮箱将自动创建账号",
       agreeTo: "登录即视为同意",
+      and: "和",
       userAgreement: "用户协议",
       privacyPolicy: "隐私政策",
     },
@@ -7360,6 +7376,24 @@ export const zhCN: Translations = {
       cardDescription: "手机号直接登录，自动绑定大模型与积分",
       emailCardDescription: "邮箱验证码登录，自动绑定大模型与积分",
     },
+  },
+
+  // Store panels (registry skills/plugins/roles)
+  store: {
+    skillsPanelTitle: "技能商城 · 从 registry 按需安装",
+    pluginsPanelTitle: "插件商城 · registry 浏览",
+    searchSkillsPlaceholder: "搜索技能",
+    searchPluginsPlaceholder: "搜索插件",
+    searchRolesPlaceholder: "搜索角色",
+    install: "安装",
+    installing: "安装中",
+    installed: "已安装",
+    browseOnly: "仅浏览",
+    pluginsSafetyNotice:
+      "插件类资产标记为可执行集成(kind=code),为安全暂不支持一键安装,先供浏览了解。",
+    typeLabelStore: "商城",
+    typeLabelTwinRole: "商城 · 数字分身岗位模板",
+    categoryDigitalTwin: "数字分身",
   },
 
   // Skill Categories

@@ -20,7 +20,14 @@ import {
   SquareIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   MentionAutocompletePopup,
@@ -290,7 +297,7 @@ function parseComposerUrls(value: string): string[] {
   );
 }
 
-export function ChatInputBox({
+function ChatInputBoxImpl({
   status,
   disabled,
   modelName,
@@ -1748,3 +1755,5 @@ export function ChatInputBox({
     </>
   );
 }
+
+export const ChatInputBox = memo(ChatInputBoxImpl);

@@ -968,8 +968,16 @@ function LogEntry({ log }: { log: CallLog }) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
       className="cursor-pointer rounded border px-2.5 py-1.5 transition-colors hover:bg-accent/30"
       onClick={() => setExpanded(!expanded)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        setExpanded(!expanded);
+      }}
     >
       <div className="flex items-center gap-2">
         <span className={cn("text-xs font-medium", statusColor)}>
@@ -1121,8 +1129,15 @@ function APIListItem({
 }) {
   return (
     <div
+      role="button"
+      tabIndex={0}
       className="hover:bg-accent/30 flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-colors"
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onClick();
+      }}
     >
       <div
         className={cn(

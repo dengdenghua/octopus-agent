@@ -102,6 +102,7 @@ import type {
   PluginPublisherTrustReport,
   PluginSmokeSummary,
 } from "@/core/plugins/types";
+import { useI18n } from "@/core/i18n/hooks";
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 import {
@@ -411,7 +412,27 @@ interface ReplayGateOverridePrompt {
   message: string;
 }
 
+function useOperatorCopy() {
+  const { t } = useI18n();
+  return useCallback(
+    (source: string) => t.agentOperator[source] ?? source,
+    [t.agentOperator],
+  );
+}
+
+function formatOperatorCopy(
+  copy: (source: string) => string,
+  source: string,
+  values: Record<string, string | number>,
+) {
+  return Object.entries(values).reduce(
+    (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
+    copy(source),
+  );
+}
+
 export function AgentOperatorPanel() {
+  const to = useOperatorCopy();
   const [taskRuns, setTaskRuns] = useState<AgentTraceTaskRun[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<AgentTraceProcessTimeline | null>(
@@ -680,7 +701,8 @@ export function AgentOperatorPanel() {
       await decideAgentTraceReviewQueueItem(item.id, {
         action,
         promotedTo: action === "promoted" ? item.target_bucket : undefined,
-        reason: action === "promoted" ? "Accepted from operator panel." : "",
+        reason:
+          action === "promoted" ? to("Accepted from operator panel.") : "",
       });
       await refreshQueue();
       setError(null);
@@ -717,7 +739,7 @@ export function AgentOperatorPanel() {
   const onOverrideApply = async () => {
     const reason = overrideReason.trim();
     if (!reason) {
-      setError("Override reason is required.");
+      setError(to("Override reason is required."));
       return;
     }
     setBusyId("override-apply");
@@ -752,8 +774,12 @@ export function AgentOperatorPanel() {
         evidenceItemIds,
         reason:
           action === "retire"
-            ? "Retired from operator panel using subagent fitness route evidence."
-            : "Placed on watch from operator panel using subagent fitness route evidence.",
+            ? to(
+                "Retired from operator panel using subagent fitness route evidence.",
+              )
+            : to(
+                "Placed on watch from operator panel using subagent fitness route evidence.",
+              ),
       });
       await refreshQueue();
       setError(null);
@@ -791,7 +817,14 @@ export function AgentOperatorPanel() {
           ? await queueLatestBrowserSessionReplayCase()
           : await queueComputerActivityReplayCase();
       setLastApplyResult(
-        `Queued ${result.queue.created + result.queue.updated} ${kind} replay review item(s).`,
+        formatOperatorCopy(
+          to,
+          "Queued {count} {kind} replay review item(s).",
+          {
+            count: result.queue.created + result.queue.updated,
+            kind: to(kind),
+          },
+        ),
       );
       await refreshQueue();
       setError(null);
@@ -810,7 +843,11 @@ export function AgentOperatorPanel() {
     try {
       const result = await queueBrowserDesktopRepairRecipes();
       setLastApplyResult(
-        `Queued ${result.created + result.updated} browser/desktop repair recipe item(s).`,
+        formatOperatorCopy(
+          to,
+          "Queued {count} browser/desktop repair recipe item(s).",
+          { count: result.created + result.updated },
+        ),
       );
       await refreshQueue();
       setError(null);
@@ -828,9 +865,14 @@ export function AgentOperatorPanel() {
     try {
       const result = await rejectStaleBrowserDesktopReplayArtifacts();
       setLastApplyResult(
-        `Rejected ${result.rejected_count} stale replay item(s); archived ${
-          result.archived_recipe_count ?? 0
-        } repair recipe item(s).`,
+        formatOperatorCopy(
+          to,
+          "Rejected {rejected} stale replay item(s); archived {archived} repair recipe item(s).",
+          {
+            rejected: result.rejected_count,
+            archived: result.archived_recipe_count ?? 0,
+          },
+        ),
       );
       await refreshQueue();
       setError(null);
@@ -851,7 +893,15 @@ export function AgentOperatorPanel() {
         actor: "operator_panel",
       });
       setLastApplyResult(
-        `Reran ${result.attempted} browser/desktop repair recipe(s): ${result.passed} passed, ${result.failed} failed. Source cases remain operator-gated.`,
+        formatOperatorCopy(
+          to,
+          "Reran {attempted} browser/desktop repair recipe(s): {passed} passed, {failed} failed. Source cases remain operator-gated.",
+          {
+            attempted: result.attempted,
+            passed: result.passed,
+            failed: result.failed,
+          },
+        ),
       );
       await refreshQueue();
       setError(null);
@@ -869,7 +919,11 @@ export function AgentOperatorPanel() {
     try {
       const result = await queueRepairRoutePromotionCandidates();
       setLastApplyResult(
-        `Queued ${result.created + result.updated} repair-route promotion review item(s).`,
+        formatOperatorCopy(
+          to,
+          "Queued {count} repair-route promotion review item(s).",
+          { count: result.created + result.updated },
+        ),
       );
       await refreshQueue();
       setError(null);
@@ -887,7 +941,9 @@ export function AgentOperatorPanel() {
     try {
       const result = await queueReplayEvidenceHint(errorReplayEvidence);
       setLastApplyResult(
-        `Queued ${result.queue.created + result.queue.updated} replay evidence item(s).`,
+        formatOperatorCopy(to, "Queued {count} replay evidence item(s).", {
+          count: result.queue.created + result.queue.updated,
+        }),
       );
       await refreshQueue();
       setError(null);
@@ -908,7 +964,11 @@ export function AgentOperatorPanel() {
         limit: 10,
       });
       setLastApplyResult(
-        `Queued ${result.total} real scorecard gap review item(s).`,
+        formatOperatorCopy(
+          to,
+          "Queued {count} real scorecard gap review item(s).",
+          { count: result.total },
+        ),
       );
       await refreshQueue();
       setError(null);
@@ -930,7 +990,11 @@ export function AgentOperatorPanel() {
         reason: "operator scorecard drill-down remediation",
       });
       setLastApplyResult(
-        `Queued ${result.total} ${dimensionId} scorecard remediation item(s).`,
+        formatOperatorCopy(
+          to,
+          "Queued {count} {dimension} scorecard remediation item(s).",
+          { count: result.total, dimension: dimensionId },
+        ),
       );
       await refreshQueue();
       setError(null);
@@ -947,7 +1011,15 @@ export function AgentOperatorPanel() {
     try {
       const result = await installAgentTracePolicyReviewRuleDraft(draftId);
       setLastApplyResult(
-        `Installed ${result.rule.effect} rule for ${result.rule.tool} · ${result.policy_rule_count} policy rules`,
+        formatOperatorCopy(
+          to,
+          "Installed {effect} rule for {tool} · {count} policy rules",
+          {
+            effect: result.rule.effect,
+            tool: result.rule.tool,
+            count: result.policy_rule_count,
+          },
+        ),
       );
       await refreshQueue();
       setError(null);
@@ -964,7 +1036,15 @@ export function AgentOperatorPanel() {
     try {
       const result = await installAutomationPolicyRuleDraft(draftId);
       setLastApplyResult(
-        `Installed ${result.rule.effect} automation rule for ${result.rule.tool} · ${result.policy_rule_count} policy rules`,
+        formatOperatorCopy(
+          to,
+          "Installed {effect} automation rule for {tool} · {count} policy rules",
+          {
+            effect: result.rule.effect,
+            tool: result.rule.tool,
+            count: result.policy_rule_count,
+          },
+        ),
       );
       await refreshQueue();
       setError(null);
@@ -980,7 +1060,9 @@ export function AgentOperatorPanel() {
     setBusyId(`takeover-task:${taskId}`);
     try {
       await takeoverTaskRun(taskId);
-      setLastApplyResult(`Took over task ${taskId}.`);
+      setLastApplyResult(
+        formatOperatorCopy(to, "Took over task {task}.", { task: taskId }),
+      );
       await Promise.all([refreshTaskRuns(), refreshQueue()]);
       setError(null);
     } catch (err) {
@@ -996,14 +1078,15 @@ export function AgentOperatorPanel() {
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Operator loop
+            {to("Operator loop")}
           </div>
           <h2 className="mt-1 text-base font-semibold">
-            Agent evolution queue
+            {to("Agent evolution queue")}
           </h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Task runs become review candidates first, then you decide what is
-            promoted into memory, backlog, rules, or archive.
+            {to(
+              "Task runs become review candidates first, then you decide what is promoted into memory, backlog, rules, or archive.",
+            )}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -1018,7 +1101,7 @@ export function AgentOperatorPanel() {
             }
           >
             <CheckCircle2Icon className="mr-1.5 size-3.5" />
-            Apply promoted
+            {to("Apply promoted")}
           </Button>
           <Button
             variant="outline"
@@ -1030,7 +1113,7 @@ export function AgentOperatorPanel() {
             <RefreshCwIcon
               className={cn("mr-1.5 size-3.5", loading && "animate-spin")}
             />
-            Refresh
+            {to("Refresh")}
           </Button>
         </div>
       </div>
@@ -1055,21 +1138,21 @@ export function AgentOperatorPanel() {
 
       <div className="grid gap-3 md:grid-cols-4">
         <Metric
-          label="Pending"
+          label={to("Pending")}
           value={queueSummary.pending_count}
           tone="amber"
         />
         <Metric
-          label="Promoted"
+          label={to("Promoted")}
           value={queueSummary.by_status.promoted ?? 0}
           tone="emerald"
         />
         <Metric
-          label="Rejected"
+          label={to("Rejected")}
           value={queueSummary.by_status.rejected ?? 0}
           tone="rose"
         />
-        <Metric label="Total" value={queueSummary.total} tone="blue" />
+        <Metric label={to("Total")} value={queueSummary.total} tone="blue" />
       </div>
 
       <ReplayGateCard gate={replayGate} />
@@ -1165,12 +1248,12 @@ export function AgentOperatorPanel() {
         <div className="space-y-3">
           <PanelTitle
             icon={<GitBranchIcon className="size-4" />}
-            title="Recent task runs"
-            meta={`${taskRuns.length} loaded`}
+            title={to("Recent task runs")}
+            meta={`${taskRuns.length} ${to("loaded")}`}
           />
           <div className="overflow-hidden rounded-lg border border-border-default">
             {taskRuns.length === 0 ? (
-              <EmptyPanel title="No task runs yet" />
+              <EmptyPanel title={to("No task runs yet")} />
             ) : (
               taskRuns.map((run) => (
                 <button
@@ -1189,16 +1272,18 @@ export function AgentOperatorPanel() {
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-mono">{shortId(run.task_id)}</span>
-                      <span>{run.tool_calls_started ?? 0} tools</span>
+                      <span>
+                        {run.tool_calls_started ?? 0} {to("tools")}
+                      </span>
                       {(run.tool_errors ?? 0) > 0 && (
                         <span className="text-destructive">
-                          {run.tool_errors} errors
+                          {run.tool_errors} {to("errors")}
                         </span>
                       )}
                     </div>
                   </div>
                   <Badge variant="outline" className="text-xs">
-                    {run.status ?? "unknown"}
+                    {run.status ?? to("unknown")}
                   </Badge>
                 </button>
               ))
@@ -1211,7 +1296,7 @@ export function AgentOperatorPanel() {
                 <div className="truncate text-sm font-medium">
                   {selectedTask?.title ||
                     selectedTask?.summary ||
-                    "No task selected"}
+                    to("No task selected")}
                 </div>
                 {selectedTaskId && (
                   <div className="font-mono text-xs text-muted-foreground">
@@ -1228,7 +1313,7 @@ export function AgentOperatorPanel() {
                 onClick={() => void onQueueSelectedReview()}
               >
                 <ListChecksIcon className="mr-1.5 size-3.5" />
-                Queue review
+                {to("Queue review")}
               </Button>
             </div>
             <TimelinePreview timeline={timeline} />
@@ -1238,12 +1323,12 @@ export function AgentOperatorPanel() {
         <div className="space-y-3">
           <PanelTitle
             icon={<ListChecksIcon className="size-4" />}
-            title="Pending review queue"
-            meta={`${queueSummary.pending_count} pending`}
+            title={to("Pending review queue")}
+            meta={`${queueSummary.pending_count} ${to("pending")}`}
           />
           <div className="space-y-2">
             {queueItems.length === 0 ? (
-              <EmptyPanel title="No pending review items" />
+              <EmptyPanel title={to("No pending review items")} />
             ) : (
               queueItems.map((item) => (
                 <ReviewQueueRow
@@ -1276,19 +1361,22 @@ function TimelinePreview({
 }: {
   timeline: AgentTraceProcessTimeline | null;
 }) {
-  if (!timeline) return <EmptyPanel title="No process timeline available" />;
+  const to = useOperatorCopy();
+  if (!timeline) {
+    return <EmptyPanel title={to("No process timeline available")} />;
+  }
   const nodes = timeline.timeline.slice(0, 8);
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
         <Badge variant="outline" className="text-xs">
-          score {formatScore(timeline.overview.score)}
+          {to("score")} {formatScore(timeline.overview.score)}
         </Badge>
         <Badge variant="outline" className="text-xs">
-          approvals {timeline.overview.approval_count ?? 0}
+          {to("approvals")} {timeline.overview.approval_count ?? 0}
         </Badge>
         <Badge variant="outline" className="text-xs">
-          lessons {timeline.overview.experience_record_count ?? 0}
+          {to("lessons")} {timeline.overview.experience_record_count ?? 0}
         </Badge>
       </div>
       <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
@@ -1327,6 +1415,7 @@ function TaskRecoveryQueueCard({
   busyId: string | null;
   onTakeover: (taskId: string) => void;
 }) {
+  const to = useOperatorCopy();
   const actionable = queue.items.filter(
     (item) => item.recommended_action !== "monitor",
   );
@@ -1352,27 +1441,33 @@ function TaskRecoveryQueueCard({
                   : "text-amber-700 dark:text-amber-300",
               )}
             />
-            Task recovery queue
+            {to("Task recovery queue")}
             <Badge variant="outline" className="text-xs">
-              {queue.total} tracked
+              {queue.total} {to("tracked")}
             </Badge>
             <Badge
               variant={healthy ? "outline" : "destructive"}
               className="text-xs"
             >
-              {actionable.length} action
+              {actionable.length} {to("action")}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {topItem
-              ? `${taskRecoveryActionLabel(topItem.recommended_action)} · ${topItem.title || topItem.task_id}`
-              : "No stalled, failed, or approval-blocked task runs."}
+              ? `${to(taskRecoveryActionLabel(topItem.recommended_action))} · ${topItem.title || topItem.task_id}`
+              : to("No stalled, failed, or approval-blocked task runs.")}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs">
-          <GateStat label="shown" value={queue.count} />
-          <GateStat label="takeover" value={countRecovery(queue, "takeover")} />
-          <GateStat label="resume" value={countRecovery(queue, "resume")} />
+          <GateStat label={to("shown")} value={queue.count} />
+          <GateStat
+            label={to("takeover")}
+            value={countRecovery(queue, "takeover")}
+          />
+          <GateStat
+            label={to("resume")}
+            value={countRecovery(queue, "resume")}
+          />
         </div>
       </div>
       {queue.items.length > 0 && (
@@ -1397,10 +1492,12 @@ function TaskRecoveryQueueCard({
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                       <span className="font-mono">{shortId(item.task_id)}</span>
-                      <span>{item.status ?? "unknown"}</span>
+                      <span>{item.status ?? to("unknown")}</span>
                       {item.kind && <span>{item.kind}</span>}
                       {item.lease_health?.state && (
-                        <span>lease {item.lease_health.state}</span>
+                        <span>
+                          {to("lease")} {item.lease_health.state}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -1417,16 +1514,16 @@ function TaskRecoveryQueueCard({
                     }
                     className="text-xs"
                   >
-                    {taskRecoveryActionLabel(item.recommended_action)}
+                    {to(taskRecoveryActionLabel(item.recommended_action))}
                   </Badge>
                   {item.has_checkpoint && (
                     <Badge variant="outline" className="text-xs">
-                      checkpoint {shortId(checkpointId)}
+                      {to("checkpoint")} {shortId(checkpointId)}
                     </Badge>
                   )}
                   {item.thread_id && (
                     <Badge variant="outline" className="text-xs">
-                      thread {shortId(item.thread_id)}
+                      {to("thread")} {shortId(item.thread_id)}
                     </Badge>
                   )}
                 </div>
@@ -1434,10 +1531,10 @@ function TaskRecoveryQueueCard({
                   <div className="min-w-0 text-xs text-muted-foreground">
                     <div>
                       {item.can_resume
-                        ? "Resume-safe state is available"
+                        ? to("Resume-safe state is available")
                         : item.can_takeover
-                          ? "Lease can be reclaimed"
-                          : taskRecoveryHint(item.recommended_action)}
+                          ? to("Lease can be reclaimed")
+                          : to(taskRecoveryHint(item.recommended_action))}
                     </div>
                     {steps.length > 0 && (
                       <div className="mt-0.5 truncate font-mono">
@@ -1455,7 +1552,7 @@ function TaskRecoveryQueueCard({
                       onClick={() => onTakeover(item.task_id)}
                     >
                       <GitBranchIcon className="mr-1 size-3" />
-                      Take over
+                      {to("Take over")}
                     </Button>
                   )}
                 </div>
@@ -1491,6 +1588,7 @@ function CompetitorScorecardCard({
   onQueueGap: (dimensionId: string) => void;
   onApplyPromoted: () => void;
 }) {
+  const to = useOperatorCopy();
   const [selectedGapId, setSelectedGapId] = useState<string | null>(null);
   const octopusScore = report.overall.octopus ?? 0;
   const evidenceAdjustedOctopusScore =
@@ -1549,9 +1647,9 @@ function CompetitorScorecardCard({
                   : "text-amber-700 dark:text-amber-300",
               )}
             />
-            Competitor scorecard
+            {to("Competitor scorecard")}
             <Badge variant="outline" className="text-xs">
-              {error ? "degraded" : report.verdict.replaceAll("_", " ")}
+              {error ? to("degraded") : report.verdict.replaceAll("_", " ")}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
@@ -1563,26 +1661,27 @@ function CompetitorScorecardCard({
                     topGap.octopus_gap_to_target
                   } vs effective target`
                 : behavioralEvidence && !behavioralEvidence.ready
-                  ? "Behavioral head-to-head is not certified"
+                  ? to("Behavioral head-to-head is not certified")
                   : certification?.ready
                     ? `Certification passed ${certification.passed}/${certification.total}`
-                    : "Octopus has no tracked effective scorecard gaps"}
+                    : to("Octopus has no tracked effective scorecard gaps")}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            Architecture is estimated; static certification and same-task
-            behavioral evidence are tracked separately.
+            {to(
+              "Architecture is estimated; static certification and same-task behavioral evidence are tracked separately.",
+            )}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs xl:grid-cols-6">
-            <GateStat label="Architecture" value={octopusScore} />
+            <GateStat label={to("Architecture")} value={octopusScore} />
             <GateStat
-              label="Static evidence"
+              label={to("Static evidence")}
               value={evidenceAdjustedOctopusScore}
             />
             {behavioralEvidence && (
               <GateStat
-                label="Behavior %"
+                label={to("Behavior %")}
                 value={Math.round(behavioralEvidence.octopus_pass_pow_k * 100)}
               />
             )}
@@ -1601,7 +1700,7 @@ function CompetitorScorecardCard({
             <ListChecksIcon
               className={cn("mr-1.5 size-3", queueBusy && "animate-spin")}
             />
-            Queue real gaps
+            {to("Queue real gaps")}
           </Button>
         </div>
       </div>
@@ -1609,7 +1708,7 @@ function CompetitorScorecardCard({
       <div className="mt-2 grid gap-2 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
           <div className="mb-1 text-xs font-medium text-muted-foreground">
-            Real comparison ranking
+            {to("Real comparison ranking")}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {(report.ranking ?? []).map((row, index) => (
@@ -1629,13 +1728,13 @@ function CompetitorScorecardCard({
         </div>
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
           <div className="mb-1 text-xs font-medium text-muted-foreground">
-            Effective focus gaps
+            {to("Effective focus gaps")}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {focusGaps.length === 0 ? (
               <>
                 <Badge variant="outline" className="text-xs">
-                  clear
+                  {to("clear")}
                 </Badge>
                 {certification && (
                   <Badge
@@ -1647,7 +1746,8 @@ function CompetitorScorecardCard({
                         : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
                     )}
                   >
-                    certified {certification.passed}/{certification.total}
+                    {to("certified")} {certification.passed}/
+                    {certification.total}
                   </Badge>
                 )}
               </>
@@ -1675,7 +1775,7 @@ function CompetitorScorecardCard({
           </div>
           {externalGaps.length > 0 && (
             <div className="mt-1 truncate text-xs text-muted-foreground">
-              external leader gaps: {externalGaps.length}
+              {to("external leader gaps")}: {externalGaps.length}
             </div>
           )}
         </div>
@@ -1701,7 +1801,7 @@ function CompetitorScorecardCard({
             variant="outline"
             className="border-emerald-500/25 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-300"
           >
-            leads {dimension.title} {dimension.scores.octopus}
+            {to("leads")} {dimension.title} {dimension.scores.octopus}
           </Badge>
         ))}
         {report.next_focus.slice(0, 2).map((item) => (
@@ -1725,6 +1825,7 @@ function E2ESurpassCertificationCard({
   certification: E2ESurpassCertification;
   error?: string | null;
 }) {
+  const to = useOperatorCopy();
   const summary = certification.summary;
   const failedChecks = certification.checks.filter((check) => !check.passed);
   const passedChecks = certification.checks.length - failedChecks.length;
@@ -1736,10 +1837,12 @@ function E2ESurpassCertificationCard({
   const focusText = error
     ? error
     : ready
-      ? "same-task repeated behavioral runs and static release gates clear the Codex bar"
+      ? to(
+          "same-task repeated behavioral runs and static release gates clear the Codex bar",
+        )
       : failedChecks[0]?.title ||
         certification.next_actions[0] ||
-        "waiting for E2E certification evidence";
+        to("waiting for E2E certification evidence");
   return (
     <div
       className={cn(
@@ -1757,7 +1860,7 @@ function E2ESurpassCertificationCard({
             ) : (
               <XCircleIcon className="size-4 text-amber-700 dark:text-amber-300" />
             )}
-            E2E surpass certification
+            {to("E2E surpass certification")}
             <Badge
               variant="outline"
               className={cn(
@@ -1767,10 +1870,12 @@ function E2ESurpassCertificationCard({
                   : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
               )}
             >
-              {error ? "degraded" : certification.verdict.replaceAll("_", " ")}
+              {error
+                ? to("degraded")
+                : certification.verdict.replaceAll("_", " ")}
             </Badge>
             <Badge variant="outline" className="text-xs">
-              quality {summary.quality_ready}/{summary.quality_total}
+              {to("quality")} {summary.quality_ready}/{summary.quality_total}
             </Badge>
             <Badge
               variant="outline"
@@ -1781,12 +1886,12 @@ function E2ESurpassCertificationCard({
                   : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
               )}
             >
-              behavior{" "}
+              {to("behavior")}{" "}
               {behavioralReady
-                ? "verified"
+                ? to("verified")
                 : behavioralBlocked
-                  ? "provider blocked"
-                  : "missing"}
+                  ? to("provider blocked")
+                  : to("missing")}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
@@ -1794,9 +1899,10 @@ function E2ESurpassCertificationCard({
           </div>
           {!error && (
             <div className="mt-1 truncate text-xs text-muted-foreground">
-              scorecard {summary.scorecard_octopus} vs best external{" "}
-              {summary.scorecard_best_external} · automation{" "}
-              {summary.automation_octopus} vs Codex {summary.automation_codex}
+              {to("scorecard")} {summary.scorecard_octopus}{" "}
+              {to("vs best external")} {summary.scorecard_best_external} ·{" "}
+              {to("automation")} {summary.automation_octopus} {to("vs Codex")}{" "}
+              {summary.automation_codex}
               {behavioralReady && (
                 <>
                   {" "}
@@ -1809,15 +1915,20 @@ function E2ESurpassCertificationCard({
           )}
         </div>
         <div className="grid shrink-0 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-right font-mono text-xs">
-          <GateStat label="Scorecard" value={summary.scorecard_octopus} />
+          <GateStat label={to("Scorecard")} value={summary.scorecard_octopus} />
           <GateStat
-            label="Evidence"
+            label={to("Evidence")}
             value={summary.scorecard_evidence_adjusted_octopus}
           />
-          <GateStat label="Automation" value={summary.automation_octopus} />
-          <GateStat label="Quality" value={summary.quality_ready} />
           <GateStat
-            label={behavioralBlocked ? "Behavior blocked" : "Behavior"}
+            label={to("Automation")}
+            value={summary.automation_octopus}
+          />
+          <GateStat label={to("Quality")} value={summary.quality_ready} />
+          <GateStat
+            label={
+              behavioralBlocked ? to("Behavior blocked") : to("Behavior")
+            }
             value={
               behavioralReady
                 ? Math.round(summary.behavioral_octopus_pass_pow_k * 100)
@@ -1831,7 +1942,7 @@ function E2ESurpassCertificationCard({
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
           <div className="mb-1 flex items-center justify-between gap-2">
             <div className="min-w-0 truncate text-xs font-medium text-muted-foreground">
-              Certification checks
+              {to("Certification checks")}
             </div>
             <Badge variant="outline" className="shrink-0 text-xs">
               {passedChecks}/{certification.checks.length}
@@ -1843,7 +1954,7 @@ function E2ESurpassCertificationCard({
                 variant="outline"
                 className="border-emerald-500/25 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-300"
               >
-                all checks passed
+                {to("all checks passed")}
               </Badge>
             ) : (
               failedChecks.slice(0, 3).map((check) => (
@@ -1860,14 +1971,14 @@ function E2ESurpassCertificationCard({
         </div>
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
           <div className="mb-1 text-xs font-medium text-muted-foreground">
-            Gap counters
+            {to("Gap counters")}
           </div>
           <div className="flex flex-wrap gap-1.5">
             <Badge variant="outline" className="text-xs">
-              scorecard gaps {summary.scorecard_gap_dimensions}
+              {to("scorecard gaps")} {summary.scorecard_gap_dimensions}
             </Badge>
             <Badge variant="outline" className="text-xs">
-              automation gaps {summary.automation_gap_dimensions}
+              {to("automation gaps")} {summary.automation_gap_dimensions}
             </Badge>
             <Badge
               variant="outline"
@@ -1877,8 +1988,10 @@ function E2ESurpassCertificationCard({
                   "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
               )}
             >
-              dimensions{" "}
-              {summary.all_dimensions_surpassed ? "surpassed" : "open"}
+              {to("dimensions")}{" "}
+              {summary.all_dimensions_surpassed
+                ? to("surpassed")
+                : to("open")}
             </Badge>
           </div>
         </div>
@@ -1908,6 +2021,7 @@ function ScorecardGapDrilldown({
   onQueue: () => void;
   onApplyPromoted: () => void;
 }) {
+  const to = useOperatorCopy();
   const realScore = gap.octopus_baseline_score ?? gap.scores.octopus;
   const evidenceScore =
     gap.octopus_evidence_adjusted_score ??
@@ -1920,7 +2034,7 @@ function ScorecardGapDrilldown({
     <div
       id="scorecard-gap-drilldown"
       role="region"
-      aria-label={`Scorecard gap drill-down for ${gap.title}`}
+      aria-label={`${to("Scorecard gap drill-down for")} ${gap.title}`}
       className="mt-2 rounded-md border border-background/70 bg-background/60 px-2 py-1.5"
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -1936,25 +2050,25 @@ function ScorecardGapDrilldown({
               variant="outline"
               className="border-blue-500/25 bg-blue-500/10 text-xs text-blue-700 dark:text-blue-300"
             >
-              queued {queueItem.priority}
+              {to("queued")} {queueItem.priority}
             </Badge>
           ) : null}
           <Badge variant="outline" className="text-xs">
-            real {realScore}
+            {to("real")} {realScore}
           </Badge>
           <Badge variant="outline" className="text-xs">
-            evidence {evidenceScore}
+            {to("evidence")} {evidenceScore}
           </Badge>
           <Badge variant="outline" className="text-xs">
-            effective gap{" "}
+            {to("effective gap")}{" "}
             {gap.octopus_gap_to_effective_target ?? gap.octopus_gap_to_target}
           </Badge>
           <Badge variant="outline" className="text-xs">
-            surpass gap {gap.octopus_gap_to_surpass ?? 0}
+            {to("surpass gap")} {gap.octopus_gap_to_surpass ?? 0}
           </Badge>
           {gap.best_external_competitor && (
             <Badge variant="outline" className="text-xs">
-              best {competitorLabel(gap.best_external_competitor)}{" "}
+              {to("best")} {competitorLabel(gap.best_external_competitor)}{" "}
               {gap.best_external_score ?? 0}
             </Badge>
           )}
@@ -1964,16 +2078,17 @@ function ScorecardGapDrilldown({
       <div className="mt-2 flex flex-col gap-2 rounded-md border border-border-default bg-muted/15 px-2 py-1.5 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="text-xs font-medium text-muted-foreground">
-            Remediation queue
+            {to("Remediation queue")}
           </div>
           <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
             {queueItem
               ? `${queueItem.id} · ${queueItem.status} · x${queueItem.occurrences}`
-              : "not queued"}
+              : to("not queued")}
           </div>
           {queueItem ? (
             <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-              target {queueItem.target_bucket} · audit {auditSummary.total}
+              {to("target")} {queueItem.target_bucket} · {to("audit")}{" "}
+              {auditSummary.total}
             </div>
           ) : null}
         </div>
@@ -1989,7 +2104,7 @@ function ScorecardGapDrilldown({
             <ListChecksIcon
               className={cn("mr-1.5 size-3", queueBusy && "animate-spin")}
             />
-            {queueItem ? "Refresh queue item" : "Queue this gap"}
+            {queueItem ? to("Refresh queue item") : to("Queue this gap")}
           </Button>
           {queueItem ? (
             <Button
@@ -2003,7 +2118,7 @@ function ScorecardGapDrilldown({
               <CheckCircle2Icon
                 className={cn("mr-1.5 size-3", applyBusy && "animate-spin")}
               />
-              Apply gap
+              {to("Apply gap")}
             </Button>
           ) : null}
         </div>
@@ -2028,10 +2143,10 @@ function ScorecardGapDrilldown({
           <div className="mt-2 rounded-md border border-border-default bg-muted/15 px-2 py-1.5">
             <div className="mb-1 flex items-center justify-between gap-2">
               <div className="min-w-0 truncate text-xs font-medium text-muted-foreground">
-                Evidence sources
+                {to("Evidence sources")}
               </div>
               <Badge variant="outline" className="shrink-0 text-xs">
-                {drilldownLinks.length} links
+                {drilldownLinks.length} {to("links")}
               </Badge>
             </div>
             <div className="grid gap-1.5 lg:grid-cols-2">
@@ -2042,7 +2157,7 @@ function ScorecardGapDrilldown({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 truncate text-xs font-medium">
-                      {link.label ?? link.id ?? "Evidence link"}
+                      {link.label ?? link.id ?? to("Evidence link")}
                     </div>
                     {link.method ? (
                       <Badge variant="outline" className="shrink-0 text-xs">
@@ -2065,10 +2180,10 @@ function ScorecardGapDrilldown({
         <div className="mt-2">
           <div className="mb-1 flex items-center justify-between gap-2">
             <div className="min-w-0 truncate text-xs font-medium text-muted-foreground">
-              Evidence checklist
+              {to("Evidence checklist")}
             </div>
             <Badge variant="outline" className="shrink-0 text-xs">
-              {gap.octopus_missing_evidence_count ?? 0} missing
+              {gap.octopus_missing_evidence_count ?? 0} {to("missing")}
             </Badge>
           </div>
           <div className="grid gap-1.5 lg:grid-cols-2">
@@ -2087,11 +2202,11 @@ function ScorecardGapDrilldown({
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                   <span>
-                    impl {item.implementation.present}/
+                    {to("impl")} {item.implementation.present}/
                     {item.implementation.total}
                   </span>
                   <span>
-                    tests {item.tests.present}/{item.tests.total}
+                    {to("tests")} {item.tests.present}/{item.tests.total}
                   </span>
                   {item.implementation.missing_count +
                     item.tests.missing_count >
@@ -2099,7 +2214,7 @@ function ScorecardGapDrilldown({
                     <span className="text-amber-700 dark:text-amber-300">
                       {item.implementation.missing_count +
                         item.tests.missing_count}{" "}
-                      missing
+                      {to("missing")}
                     </span>
                   )}
                 </div>
@@ -2128,6 +2243,7 @@ function AutomationRadarCard({
   busyId: string | null;
   onInstallDraft: (draftId: string) => void;
 }) {
+  const to = useOperatorCopy();
   const octopusScore = radar.overall.octopus ?? 0;
   const codexScore = radar.overall.codex ?? 0;
   const readyDrafts = radar.policy_rule_drafts.ready;
@@ -2139,7 +2255,7 @@ function AutomationRadarCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <ShieldAlertIcon className="size-4 text-blue-700 dark:text-blue-300" />
-            Automation radar
+            {to("Automation radar")}
             <Badge
               variant="outline"
               className={cn(
@@ -2159,20 +2275,21 @@ function AutomationRadarCard({
                   : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
               )}
             >
-              policy drafts {radar.policy_rule_drafts.verified}/
+              {to("policy drafts")} {radar.policy_rule_drafts.verified}/
               {radar.policy_rule_drafts.total}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
-            Browser, desktop, visual replay, and signed automation policy
-            coverage.
+            {to(
+              "Browser, desktop, visual replay, and signed automation policy coverage.",
+            )}
           </div>
         </div>
         <div className="grid shrink-0 grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs">
-          <GateStat label="Octo auto" value={octopusScore} />
+          <GateStat label={to("Octo auto")} value={octopusScore} />
           <GateStat label="Codex" value={codexScore} />
           <GateStat
-            label="Ready"
+            label={to("Ready")}
             value={
               radar.browser_desktop_quality.ready &&
               radar.parity_certification.ready &&
@@ -2187,12 +2304,12 @@ function AutomationRadarCard({
       <div className="mt-2 grid gap-2 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-md border border-border-default bg-muted/15 px-2 py-1.5">
           <div className="mb-1 text-xs font-medium text-muted-foreground">
-            Remaining automation edges
+            {to("Remaining automation edges")}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {topGaps.length === 0 ? (
               <Badge variant="outline" className="text-xs">
-                clear
+                {to("clear")}
               </Badge>
             ) : (
               topGaps.slice(0, 4).map((gap) => (
@@ -2206,7 +2323,7 @@ function AutomationRadarCard({
         <div className="rounded-md border border-border-default bg-muted/15 px-2 py-1.5">
           <div className="mb-1 flex items-center justify-between gap-2">
             <div className="min-w-0 truncate text-xs font-medium text-muted-foreground">
-              Signed automation rule drafts
+              {to("Signed automation rule drafts")}
             </div>
             <Badge variant="outline" className="shrink-0 text-xs">
               {drafts.verified}/{drafts.total}
@@ -2241,12 +2358,12 @@ function AutomationRadarCard({
                       "animate-spin",
                   )}
                 />
-                Install deny rule
+                {to("Install deny rule")}
               </Button>
             </div>
           ) : (
             <div className="text-xs text-muted-foreground">
-              No automation rule drafts available.
+              {to("No automation rule drafts available.")}
             </div>
           )}
         </div>
@@ -2270,48 +2387,55 @@ function ReplayGateOverrideDialog({
   onReasonChange: (value: string) => void;
   onConfirm: () => void;
 }) {
+  const to = useOperatorCopy();
   const gate = prompt?.gate ?? null;
   return (
     <Dialog open={!!prompt} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Replay gate blocked apply</DialogTitle>
+          <DialogTitle>{to("Replay gate blocked apply")}</DialogTitle>
           <DialogDescription>
-            Promotion was stopped because replay gate did not pass. Override
-            only when you have reviewed the failing cases.
+            {to(
+              "Promotion was stopped because replay gate did not pass. Override only when you have reviewed the failing cases.",
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2">
           <div className="text-sm font-medium text-destructive">
-            {prompt?.message ?? "Replay gate did not pass"}
+            {prompt?.message ?? to("Replay gate did not pass")}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            {gate?.reason || "No reason provided"}
+            {gate?.reason || to("No reason provided")}
           </div>
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center font-mono text-xs">
-            <GateStat label="cases" value={gate?.summary.total ?? 0} />
-            <GateStat label="pass" value={gate?.summary.passed ?? 0} />
-            <GateStat label="fail" value={gate?.summary.failed ?? 0} />
-            <GateStat label="low" value={gate?.summary.below_min_score ?? 0} />
+            <GateStat label={to("cases")} value={gate?.summary.total ?? 0} />
+            <GateStat label={to("pass")} value={gate?.summary.passed ?? 0} />
+            <GateStat label={to("fail")} value={gate?.summary.failed ?? 0} />
+            <GateStat
+              label={to("low")}
+              value={gate?.summary.below_min_score ?? 0}
+            />
           </div>
         </div>
         <Textarea
-          aria-label="Override reason"
+          aria-label={to("Override reason")}
           value={reason}
           onChange={(event) => onReasonChange(event.target.value)}
-          placeholder="Record why this replay gate override is acceptable."
+          placeholder={to(
+            "Record why this replay gate override is acceptable.",
+          )}
           className="min-h-24 resize-none text-sm"
         />
         <DialogFooter>
           <Button variant="outline" onClick={onCancel} disabled={busy}>
-            Cancel
+            {to("Cancel")}
           </Button>
           <Button
             variant="destructive"
             onClick={onConfirm}
             disabled={busy || !reason.trim()}
           >
-            Override gate
+            {to("Override gate")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2324,6 +2448,7 @@ function PromotionAuditSummaryCard({
 }: {
   summary: AgentTracePromotionAuditSummary;
 }) {
+  const to = useOperatorCopy();
   const topologyBlocks = summary.topology_policy_block_count ?? 0;
   const integrity = summary.integrity;
   const integrityOk = integrity?.ok ?? true;
@@ -2342,26 +2467,26 @@ function PromotionAuditSummaryCard({
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <div className="text-sm font-medium">Promotion audit</div>
+          <div className="text-sm font-medium">{to("Promotion audit")}</div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {!integrityOk
               ? `Audit chain broken at #${integrity?.broken_at ?? "?"}`
               : topologyBlocks > 0
-                ? "Operator policy blocked team topology attempts"
+                ? to("Operator policy blocked team topology attempts")
                 : risky
-                  ? "Overrides were used after replay gate blocked apply"
-                  : "No blocked gate overrides recorded"}
+                  ? to("Overrides were used after replay gate blocked apply")
+                  : to("No blocked gate overrides recorded")}
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
-            chain {integrityOk ? "ok" : "failed"} ·{" "}
-            {integrity?.entries_checked ?? 0} checked
+            {to("chain")} {integrityOk ? to("ok") : to("failed")} ·{" "}
+            {integrity?.entries_checked ?? 0} {to("checked")}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
-          <GateStat label="audit" value={summary.total} />
-          <GateStat label="over" value={summary.override_count} />
-          <GateStat label="gate" value={summary.gate_failed_count} />
-          <GateStat label="topo" value={topologyBlocks} />
+          <GateStat label={to("audit")} value={summary.total} />
+          <GateStat label={to("over")} value={summary.override_count} />
+          <GateStat label={to("gate")} value={summary.gate_failed_count} />
+          <GateStat label={to("topo")} value={topologyBlocks} />
         </div>
       </div>
     </div>
@@ -2373,6 +2498,7 @@ function MemoryQualityCard({
 }: {
   summary: AgentTraceExperienceQualitySummary;
 }) {
+  const to = useOperatorCopy();
   const risky =
     summary.contradicted_count > 0 ||
     summary.stale_count > 0 ||
@@ -2394,27 +2520,27 @@ function MemoryQualityCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <GitBranchIcon className="size-4 text-primary" />
-            Memory quality
+            {to("Memory quality")}
             <Badge variant="outline" className="text-xs">
-              {reliabilityPercent}% reliable
+              {reliabilityPercent}% {to("reliable")}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {topAction ??
               (summary.total > 0
-                ? "Recall memories are fresh and contradiction-clean"
-                : "No committed experience memories yet")}
+                ? to("Recall memories are fresh and contradiction-clean")
+                : to("No committed experience memories yet"))}
           </div>
           <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
-            active {summary.active_count} · bucket experience{" "}
+            {to("active")} {summary.active_count} · {to("bucket experience")}{" "}
             {summary.by_bucket.experience ?? 0}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
-          <GateStat label="mem" value={summary.total} />
-          <GateStat label="stale" value={summary.stale_count} />
-          <GateStat label="contra" value={summary.contradicted_count} />
-          <GateStat label="low" value={summary.low_reliability_count} />
+          <GateStat label={to("mem")} value={summary.total} />
+          <GateStat label={to("stale")} value={summary.stale_count} />
+          <GateStat label={to("contra")} value={summary.contradicted_count} />
+          <GateStat label={to("low")} value={summary.low_reliability_count} />
         </div>
       </div>
     </div>
@@ -2432,6 +2558,7 @@ function AutoVerifierCard({
   queueBusy: boolean;
   onQueueRepairRoutes: () => void;
 }) {
+  const to = useOperatorCopy();
   const decisions = report.recent_decisions ?? [];
   const latest = decisions.length > 0 ? decisions[decisions.length - 1] : null;
   const candidates = latest?.candidates?.slice(0, 2) ?? [];
@@ -2458,28 +2585,28 @@ function AutoVerifierCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <ListChecksIcon className="size-4 text-primary" />
-            Auto verifier
+            {to("Auto verifier")}
             <Badge variant="outline" className="text-xs">
-              {passPercent}% pass
+              {passPercent}% {to("pass")}
             </Badge>
             <Badge
               variant={repairRoutes.ready ? "outline" : "destructive"}
               className="text-xs"
             >
-              routes {repairScorePercent}%
+              {to("routes")} {repairScorePercent}%
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {alerts[0]?.message ??
               (latest
                 ? latest.selected_command
-                : "No auto-verifier decisions recorded yet")}
+                : to("No auto-verifier decisions recorded yet"))}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
-          <GateStat label="runs" value={report.total} />
-          <GateStat label="pass" value={report.pass_count} />
-          <GateStat label="fail" value={report.fail_count} />
+          <GateStat label={to("runs")} value={report.total} />
+          <GateStat label={to("pass")} value={report.pass_count} />
+          <GateStat label={to("fail")} value={report.fail_count} />
           <GateStat
             label="ms"
             value={Math.round(report.avg_duration_ms ?? 0)}
@@ -2491,7 +2618,7 @@ function AutoVerifierCard({
           <span className="font-medium text-foreground">
             {repairCandidates.length}
           </span>{" "}
-          repair-route promotion candidate(s)
+          {to("repair-route promotion candidate(s)")}
           {repairCandidates[0]?.route
             ? ` · top ${repairCandidates[0].route}`
             : ""}
@@ -2507,7 +2634,7 @@ function AutoVerifierCard({
           disabled={queueBusy || repairCandidates.length === 0}
         >
           <GitBranchIcon className="mr-1.5 size-3" />
-          Queue routes
+          {to("Queue routes")}
         </Button>
       </div>
       {alerts.length > 0 && (
@@ -2518,7 +2645,8 @@ function AutoVerifierCard({
               variant="outline"
               className="border-destructive/30 bg-destructive/10 text-xs text-destructive"
             >
-              {alert.family} drift {Math.round(alert.pass_rate * 100)}%
+              {alert.family} {to("drift")}{" "}
+              {Math.round(alert.pass_rate * 100)}%
             </Badge>
           ))}
         </div>
@@ -2539,8 +2667,12 @@ function AutoVerifierCard({
                 </Badge>
               </div>
               <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span>{Math.round(candidate.pass_rate * 100)}% history</span>
-                <span>{candidate.history_count} samples</span>
+                <span>
+                  {Math.round(candidate.pass_rate * 100)}% {to("history")}
+                </span>
+                <span>
+                  {candidate.history_count} {to("samples")}
+                </span>
                 <span>{Math.round(candidate.avg_duration_ms)}ms</span>
               </div>
               <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
@@ -2561,6 +2693,7 @@ function PluginHealthCard({
   summary: PluginSmokeSummary;
   lifecycle: PluginLifecycleHistory;
 }) {
+  const to = useOperatorCopy();
   const risky =
     summary.failed_count > 0 ||
     summary.warning_count > 0 ||
@@ -2588,9 +2721,9 @@ function PluginHealthCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <ListChecksIcon className="size-4 text-primary" />
-            Plugin health
+            {to("Plugin health")}
             <Badge variant="outline" className="text-xs">
-              {summary.ok_count}/{summary.total} ok
+              {summary.ok_count}/{summary.total} {to("ok")}
             </Badge>
             {compatibility && (
               <Badge
@@ -2604,23 +2737,23 @@ function PluginHealthCard({
                       : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
                 )}
               >
-                compat {compatibility.verdict}
+                {to("compat")} {compatibility.verdict}
               </Badge>
             )}
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {summary.failed_count > 0
-              ? "Some plugins failed local smoke checks"
+              ? to("Some plugins failed local smoke checks")
               : summary.review_required_count > 0
-                ? "Some local plugins need operator review"
-                : "Installed Codex plugins passed local smoke checks"}
+                ? to("Some local plugins need operator review")
+                : to("Installed Codex plugins passed local smoke checks")}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
-          <GateStat label="total" value={summary.total} />
-          <GateStat label="ok" value={summary.ok_count} />
-          <GateStat label="fail" value={summary.failed_count} />
-          <GateStat label="warn" value={summary.warning_count} />
+          <GateStat label={to("total")} value={summary.total} />
+          <GateStat label={to("ok")} value={summary.ok_count} />
+          <GateStat label={to("fail")} value={summary.failed_count} />
+          <GateStat label={to("warn")} value={summary.warning_count} />
           <GateStat
             label="signed"
             value={summary.publisher_verified_count ?? 0}
@@ -2636,14 +2769,14 @@ function PluginHealthCard({
         </div>
       )}
       <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-background/70 bg-background/60 px-2 py-1.5 text-xs">
-        <span className="font-medium">Lifecycle history</span>
+        <span className="font-medium">{to("Lifecycle history")}</span>
         <span className="min-w-0 truncate text-muted-foreground">
           {latestLifecycle
             ? `${latestLifecycle.operation} ${latestLifecycle.plugin_id} · ${latestLifecycle.status}`
-            : "No install, upgrade, or rollback transactions"}
+            : to("No install, upgrade, or rollback transactions")}
         </span>
         <Badge variant="outline" className="shrink-0 text-xs">
-          {lifecycle.total} tx
+          {lifecycle.total} {to("tx")}
         </Badge>
       </div>
       {rows.length > 0 && (
@@ -2677,6 +2810,7 @@ function PublisherTrustCard({
   report: PluginPublisherTrustReport;
   onChanged: (report: PluginPublisherTrustReport) => void;
 }) {
+  const to = useOperatorCopy();
   const [mode, setMode] = useState<"rotate" | "revoke" | null>(null);
   const [publisherId, setPublisherId] = useState("");
   const [previousKeyId, setPreviousKeyId] = useState("");
@@ -2743,25 +2877,27 @@ function PublisherTrustCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <ShieldAlertIcon className="size-4 text-primary" />
-            Publisher trust
+            {to("Publisher trust")}
             <Badge variant="outline" className="text-xs">
-              {report.active_key_count} active
+              {report.active_key_count} {to("active")}
             </Badge>
             {report.rotation_due_count > 0 && (
               <Badge
                 variant="outline"
                 className="border-amber-500/30 text-xs text-amber-700 dark:text-amber-300"
               >
-                {report.rotation_due_count} due
+                {report.rotation_due_count} {to("due")}
               </Badge>
             )}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            Ed25519 publisher keys · atomic rotation · audited revocation
+            {to(
+              "Ed25519 publisher keys · atomic rotation · audited revocation",
+            )}
           </div>
         </div>
         <Button size="sm" variant="outline" onClick={() => openRotate()}>
-          Rotate key
+          {to("Rotate key")}
         </Button>
       </div>
       <div className="mt-2 space-y-1.5">
@@ -2793,7 +2929,7 @@ function PublisherTrustCard({
                         openRotate(publisher.publisher_id, key.key_id)
                       }
                     >
-                      Replace
+                      {to("Replace")}
                     </Button>
                     <Button
                       size="sm"
@@ -2803,7 +2939,7 @@ function PublisherTrustCard({
                         openRevoke(publisher.publisher_id, key.key_id)
                       }
                     >
-                      Revoke
+                      {to("Revoke")}
                     </Button>
                   </>
                 )}
@@ -2813,7 +2949,7 @@ function PublisherTrustCard({
         )}
         {report.publishers.length === 0 && (
           <div className="text-xs text-muted-foreground">
-            {report.next_actions[0] ?? "No publisher keys registered."}
+            {report.next_actions[0] ?? to("No publisher keys registered.")}
           </div>
         )}
       </div>
@@ -2826,49 +2962,57 @@ function PublisherTrustCard({
           <DialogHeader>
             <DialogTitle>
               {mode === "rotate"
-                ? "Rotate publisher key"
-                : "Revoke publisher key"}
+                ? to("Rotate publisher key")
+                : to("Revoke publisher key")}
             </DialogTitle>
             <DialogDescription>
               {mode === "rotate"
-                ? "Register a new Ed25519 public key and retire the previous key atomically."
-                : "Revocation takes effect immediately and is written to the governance audit chain."}
+                ? to(
+                    "Register a new Ed25519 public key and retire the previous key atomically.",
+                  )
+                : to(
+                    "Revocation takes effect immediately and is written to the governance audit chain.",
+                  )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Input
-              aria-label="Publisher ID"
-              placeholder="Publisher ID"
+              aria-label={to("Publisher ID")}
+              placeholder={to("Publisher ID")}
               value={publisherId}
               disabled={mode === "revoke"}
               onChange={(event) => setPublisherId(event.target.value)}
             />
             {mode === "rotate" && (
               <Input
-                aria-label="Previous key ID"
-                placeholder="Previous key ID (optional)"
+                aria-label={to("Previous key ID")}
+                placeholder={to("Previous key ID (optional)")}
                 value={previousKeyId}
                 onChange={(event) => setPreviousKeyId(event.target.value)}
               />
             )}
             <Input
-              aria-label={mode === "rotate" ? "New key ID" : "Key ID"}
-              placeholder={mode === "rotate" ? "New key ID" : "Key ID"}
+              aria-label={
+                mode === "rotate" ? to("New key ID") : to("Key ID")
+              }
+              placeholder={
+                mode === "rotate" ? to("New key ID") : to("Key ID")
+              }
               value={keyId}
               disabled={mode === "revoke"}
               onChange={(event) => setKeyId(event.target.value)}
             />
             {mode === "rotate" && (
               <Textarea
-                aria-label="Ed25519 public key"
-                placeholder="Base64 Ed25519 public key"
+                aria-label={to("Ed25519 public key")}
+                placeholder={to("Base64 Ed25519 public key")}
                 value={publicKey}
                 onChange={(event) => setPublicKey(event.target.value)}
               />
             )}
             <Textarea
-              aria-label="Reason"
-              placeholder="Reason"
+              aria-label={to("Reason")}
+              placeholder={to("Reason")}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
@@ -2882,7 +3026,7 @@ function PublisherTrustCard({
               onClick={() => setMode(null)}
               disabled={busy}
             >
-              Cancel
+              {to("Cancel")}
             </Button>
             <Button
               variant={mode === "revoke" ? "destructive" : "default"}
@@ -2895,7 +3039,11 @@ function PublisherTrustCard({
               }
               onClick={() => void submit()}
             >
-              {busy ? "Applying…" : mode === "rotate" ? "Rotate" : "Revoke"}
+              {busy
+                ? to("Applying…")
+                : mode === "rotate"
+                  ? to("Rotate")
+                  : to("Revoke")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2913,6 +3061,7 @@ function ToolSafetyCard({
   busy: boolean;
   onQueuePolicyReview: () => void;
 }) {
+  const to = useOperatorCopy();
   const recent = summary.recent ?? [];
   const topTool = Object.entries(summary.by_tool ?? {}).sort(
     (lhs, rhs) => rhs[1] - lhs[1],
@@ -2938,22 +3087,25 @@ function ToolSafetyCard({
                   : "text-muted-foreground",
               )}
             />
-            Tool safety
+            {to("Tool safety")}
             <Badge variant="outline" className="text-xs">
-              {summary.total} denied
+              {summary.total} {to("denied")}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {summary.total > 0
               ? `${topTool?.[0] ?? "tool"} has recent policy denials`
-              : "No static tool denials recorded in current trace window"}
+              : to("No static tool denials recorded in current trace window")}
           </div>
         </div>
         <div className="flex shrink-0 items-start gap-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs">
-            <GateStat label="deny" value={summary.by_action.deny ?? 0} />
-            <GateStat label="block" value={summary.by_action.block ?? 0} />
-            <GateStat label="halt" value={summary.by_action.halt ?? 0} />
+            <GateStat label={to("deny")} value={summary.by_action.deny ?? 0} />
+            <GateStat
+              label={to("block")}
+              value={summary.by_action.block ?? 0}
+            />
+            <GateStat label={to("halt")} value={summary.by_action.halt ?? 0} />
           </div>
           <Button
             type="button"
@@ -2964,7 +3116,7 @@ function ToolSafetyCard({
             onClick={onQueuePolicyReview}
           >
             <ListChecksIcon className="mr-1.5 size-3.5" />
-            Queue policy review
+            {to("Queue policy review")}
           </Button>
         </div>
       </div>
@@ -3003,6 +3155,7 @@ function PolicyReviewRuleDraftCard({
   busyId: string | null;
   onInstall: (draftId: string) => void;
 }) {
+  const to = useOperatorCopy();
   const drafts = report.drafts ?? [];
   const hasDrafts = drafts.length > 0;
   return (
@@ -3025,20 +3178,22 @@ function PolicyReviewRuleDraftCard({
                   : "text-muted-foreground",
               )}
             />
-            Policy review rules
+            {to("Policy review rules")}
             <Badge variant="outline" className="text-xs">
-              {report.verified}/{report.total} signed
+              {report.verified}/{report.total} {to("signed")}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {hasDrafts
-              ? "Replay-backed policy reviews produced signed install drafts"
-              : "No signed policy-review rule drafts yet"}
+              ? to(
+                  "Replay-backed policy reviews produced signed install drafts",
+                )
+              : to("No signed policy-review rule drafts yet")}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 text-right font-mono text-xs">
-          <GateStat label="drafts" value={report.total} />
-          <GateStat label="signed" value={report.verified} />
+          <GateStat label={to("drafts")} value={report.total} />
+          <GateStat label={to("signed")} value={report.verified} />
         </div>
       </div>
       {hasDrafts && (
@@ -3062,7 +3217,7 @@ function PolicyReviewRuleDraftCard({
                   </Badge>
                 </div>
                 <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                  {rule.reason || "Replay-backed policy review rule"}
+                  {rule.reason || to("Replay-backed policy review rule")}
                 </div>
                 <div className="mt-2 flex justify-end">
                   <Button
@@ -3074,7 +3229,7 @@ function PolicyReviewRuleDraftCard({
                     onClick={() => onInstall(draft.draft_id)}
                   >
                     <CheckCircle2Icon className="mr-1.5 size-3.5" />
-                    Install signed rule
+                    {to("Install signed rule")}
                   </Button>
                 </div>
               </div>
@@ -3097,6 +3252,7 @@ function SubagentRiskCard({
   onWatch: (role: string, evidenceItemIds: string[]) => void;
   onRetire: (role: string, evidenceItemIds: string[]) => void;
 }) {
+  const to = useOperatorCopy();
   const risks = report.top_risks.slice(0, 3);
   const hasRisks = risks.length > 0;
   return (
@@ -3119,21 +3275,25 @@ function SubagentRiskCard({
                   : "text-muted-foreground",
               )}
             />
-            Subagent risk
+            {to("Subagent risk")}
             <Badge variant="outline" className="text-xs">
-              {report.role_count} roles
+              {report.role_count} {to("roles")}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {hasRisks
-              ? "Route evidence has identified watch or retirement candidates"
-              : "No watch or retirement candidates in current fitness evidence"}
+              ? to(
+                  "Route evidence has identified watch or retirement candidates",
+                )
+              : to(
+                  "No watch or retirement candidates in current fitness evidence",
+                )}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 text-right font-mono text-xs">
-          <GateStat label="risks" value={report.top_risks.length} />
+          <GateStat label={to("risks")} value={report.top_risks.length} />
           <GateStat
-            label="route"
+            label={to("route")}
             value={report.top_risks.reduce(
               (total, item) => total + (item.routing_evidence_count ?? 0),
               0,
@@ -3165,15 +3325,21 @@ function SubagentRiskCard({
                 </Badge>
               </div>
               <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span>score {item.score.toFixed(2)}</span>
-                <span>{item.sample_count} samples</span>
+                <span>
+                  {to("score")} {item.score.toFixed(2)}
+                </span>
+                <span>
+                  {item.sample_count} {to("samples")}
+                </span>
                 {(item.routing_evidence_count ?? 0) > 0 && (
-                  <span>{item.routing_evidence_count} route evidence</span>
+                  <span>
+                    {item.routing_evidence_count} {to("route evidence")}
+                  </span>
                 )}
                 {item.by_evidence_source?.deep_research_route_decision ? (
                   <span>
-                    {item.by_evidence_source.deep_research_route_decision} deep
-                    research
+                    {item.by_evidence_source.deep_research_route_decision}{" "}
+                    {to("deep research")}
                   </span>
                 ) : null}
               </div>
@@ -3189,7 +3355,7 @@ function SubagentRiskCard({
                   disabled={busyId === `subagent-policy:${item.role}:watch`}
                   onClick={() => onWatch(item.role, item.evidence_item_ids)}
                 >
-                  Watch
+                  {to("Watch")}
                 </Button>
                 <Button
                   type="button"
@@ -3199,7 +3365,7 @@ function SubagentRiskCard({
                   disabled={busyId === `subagent-policy:${item.role}:retire`}
                   onClick={() => onRetire(item.role, item.evidence_item_ids)}
                 >
-                  Retire
+                  {to("Retire")}
                 </Button>
               </div>
             </div>
@@ -3215,6 +3381,7 @@ function TopologyPolicyCard({
 }: {
   topologies: OrganizationTopology[];
 }) {
+  const to = useOperatorCopy();
   const impacted = topologies.filter((topology) => {
     const policy = topology.subagent_policy;
     return policy?.blocked || (policy?.watch_count ?? 0) > 0;
@@ -3241,23 +3408,25 @@ function TopologyPolicyCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <GitBranchIcon className="size-4 text-primary" />
-            Topology policy
+            {to("Topology policy")}
             <Badge variant="outline" className="text-xs">
-              {topologies.length} teams
+              {topologies.length} {to("teams")}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {blocked.length > 0
-              ? "Operator-retired subagents are present in active topologies"
+              ? to(
+                  "Operator-retired subagents are present in active topologies",
+                )
               : impacted.length > 0
-                ? "Watched subagents are present in active topologies"
-                : "No active topology is affected by subagent policy"}
+                ? to("Watched subagents are present in active topologies")
+                : to("No active topology is affected by subagent policy")}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-right font-mono text-xs">
-          <GateStat label="blocked" value={blocked.length} />
-          <GateStat label="watch" value={watchCount} />
-          <GateStat label="teams" value={topologies.length} />
+          <GateStat label={to("blocked")} value={blocked.length} />
+          <GateStat label={to("watch")} value={watchCount} />
+          <GateStat label={to("teams")} value={topologies.length} />
         </div>
       </div>
       {impacted.length > 0 && (
@@ -3280,7 +3449,7 @@ function TopologyPolicyCard({
                       : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
                   )}
                 >
-                  {topology.subagent_policy?.status ?? "clear"}
+                  {topology.subagent_policy?.status ?? to("clear")}
                 </Badge>
               </div>
               <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -3312,6 +3481,7 @@ function TopologyPromotionCard({
   proposals: OrganizationTopologyProposalsReport;
   lift: OrganizationTopologyLiftReport;
 }) {
+  const to = useOperatorCopy();
   const subagentProposals = proposals.subagent_promotion_count ?? 0;
   const improved = lift.reports.filter(
     (item) => item.verdict === "improved",
@@ -3338,24 +3508,24 @@ function TopologyPromotionCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <GitBranchIcon className="size-4 text-primary" />
-            Team promotion
+            {to("Team promotion")}
             <Badge variant="outline" className="text-xs">
-              {proposals.count} proposals
+              {proposals.count} {to("proposals")}
             </Badge>
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {subagentProposals > 0
-              ? "Strong subagents are ready for team topology promotion"
+              ? to("Strong subagents are ready for team topology promotion")
               : lift.count > 0
-                ? "Promotion lift is being tracked from team performance"
-                : "No subagent-derived team promotions yet"}
+                ? to("Promotion lift is being tracked from team performance")
+                : to("No subagent-derived team promotions yet")}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right font-mono text-xs">
-          <GateStat label="sub" value={subagentProposals} />
-          <GateStat label="up" value={improved} />
-          <GateStat label="wait" value={pending} />
-          <GateStat label="down" value={regressed} />
+          <GateStat label={to("sub")} value={subagentProposals} />
+          <GateStat label={to("up")} value={improved} />
+          <GateStat label={to("wait")} value={pending} />
+          <GateStat label={to("down")} value={regressed} />
         </div>
       </div>
       {proposals.proposals.length > 0 && (
@@ -3407,6 +3577,7 @@ function ReviewQueueRow({
   onReject: () => void;
   onArchive: () => void;
 }) {
+  const to = useOperatorCopy();
   return (
     <div className="rounded-lg border border-border-default bg-background/65 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -3437,19 +3608,19 @@ function ReviewQueueRow({
         </div>
         <div className="flex shrink-0 gap-1">
           <IconButton
-            label="Promote"
+            label={to("Promote")}
             disabled={busy}
             onClick={onPromote}
             icon={<CheckCircle2Icon className="size-3.5" />}
           />
           <IconButton
-            label="Reject"
+            label={to("Reject")}
             disabled={busy}
             onClick={onReject}
             icon={<XCircleIcon className="size-3.5" />}
           />
           <IconButton
-            label="Archive"
+            label={to("Archive")}
             disabled={busy}
             onClick={onArchive}
             icon={<ArchiveIcon className="size-3.5" />}

@@ -592,12 +592,20 @@ export function MessageGroup({
     const content = (
       <div
         key={item.id}
+        role="button"
+        tabIndex={0}
+        aria-label={publicProcessText(summarizeCurrentStep(item.step, t))}
         data-timeline-item-id={timelineItemLinkageId(item)}
         data-timeline-lane="chat"
         onClick={() =>
           // 双向联动：只追加激活，ToolCall 自身的展开/选择行为不变
           activateTimelineItem(timelineItemLinkageId(item), "chat")
         }
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          event.currentTarget.click();
+        }}
       >
         {renderIterationDivider(prevStep, item.step)}
         <ToolCall {...item.step} isLast={isLast} isLoading={itemIsLoading} />
@@ -1371,6 +1379,9 @@ function ReasoningStepGroup({
   return (
     <div
       key={group.id}
+      role={timelineItemId ? "button" : undefined}
+      tabIndex={timelineItemId ? 0 : undefined}
+      aria-label={timelineItemId ? summary : undefined}
       data-timeline-item-id={timelineItemId}
       data-timeline-lane={timelineItemId ? "chat" : undefined}
       onClick={
@@ -1378,6 +1389,15 @@ function ReasoningStepGroup({
           ? () =>
               // 双向联动：只追加激活，折叠/展开行为不变
               activateTimelineItem(timelineItemId, "chat")
+          : undefined
+      }
+      onKeyDown={
+        timelineItemId
+          ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              event.currentTarget.click();
+            }
           : undefined
       }
     >

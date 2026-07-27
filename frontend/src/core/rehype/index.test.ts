@@ -81,4 +81,44 @@ describe("rehypeSplitWordsIntoSpans", () => {
       children: [{ type: "text", value: "word499" }],
     });
   });
+
+  it("reconstructs the full text when the tail window kicks in", () => {
+    const content = `${"lorem ipsum ".repeat(100)}最后一个词`;
+    const node = transform(paragraph({ type: "text", value: content }));
+
+    const flattened = (node.children ?? [])
+      .map((child) =>
+        child.type === "text"
+          ? child.value
+          : child.type === "element" &&
+              child.children[0] &&
+              child.children[0].type === "text"
+            ? child.children[0].value
+            : "",
+      )
+      .join("");
+    expect(flattened).toBe(content);
+
+    const span = node.children.find((c) => c.type === "element");
+    expect(span).toMatchObject({
+      tagName: "span",
+      properties: { className: "animate-fade-in inline" },
+      children: [{ type: "text", value: "词" }],
+    });
+  });
+
+  it("leaves text nodes beyond the length threshold untouched", () => {
+    const content = "x".repeat(9000);
+    const node = transform(paragraph({ type: "text", value: content }));
+
+    expect(node.children).toEqual([{ type: "text", value: content }]);
+  });
+
+  it("respects a custom maxTextLength option", () => {
+    const tree = paragraph({ type: "text", value: "A long answer" });
+    rehypeSplitWordsIntoSpans({ maxTextLength: 4 })(tree);
+    const node = tree.children[0] as Element;
+
+    expect(node.children).toEqual([{ type: "text", value: "A long answer" }]);
+  });
 });

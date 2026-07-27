@@ -509,6 +509,7 @@ function AgentDetailView({
         <button
           type="button"
           onClick={onBack}
+          aria-label={t.common.back}
           className="text-muted-foreground hover:text-foreground"
         >
           <ChevronRightIcon className="size-4 rotate-180" />

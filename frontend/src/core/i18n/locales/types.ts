@@ -16,6 +16,7 @@ export interface Translations {
     share: string;
     openInNewWindow: string;
     close: string;
+    back: string;
     more: string;
     search: string;
     download: string;
@@ -337,6 +338,7 @@ export interface Translations {
     removeMaterial: string;
     startThreadBeforeUpload: string;
     uploadFailed: string;
+    attachmentReadFailed: string;
     maxSubagents: string;
     maxSearches: string;
     permissionModeLabel: string;
@@ -921,6 +923,10 @@ export interface Translations {
   };
 
   // Agent Workbench Panel (swarm)
+  workspaceComputer: Record<string, string>;
+  agentOperator: Record<string, string>;
+
+  // Agent Workbench Panel (swarm)
   agentWorkbench: {
     idle: string;
     finished: string;
@@ -1501,6 +1507,7 @@ export interface Translations {
     settingsTooltip: string;
     // Project + chat list actions
     deleteProjectTooltip: string;
+    deleteProjectFailed: string;
     deleteThreadTooltip: string;
     actionSort: string;
     actionNewProject: string;
@@ -3285,6 +3292,10 @@ export interface Translations {
     cancelled: string;
     startNewQuest: string;
     quest: string;
+    startFailed: string;
+    approveFailed: string;
+    rejectFailed: string;
+    cancelFailed: string;
   };
 
   // Knowledge Graph
@@ -6589,8 +6600,11 @@ export interface Translations {
     currentAccount: string;
     loginAccount: string;
     phoneNumber: string;
+    emailLabel: string;
+    tabEmail: string;
     verificationCode: string;
     sendCode: string;
+    devCodeNotice: (code: string) => string;
     sending: string;
     loggingIn: string;
     enterDirectly: string;
@@ -6624,6 +6638,7 @@ export interface Translations {
       autoRegister: string;
       emailAutoRegister: string;
       agreeTo: string;
+      and: string;
       userAgreement: string;
       privacyPolicy: string;
     };
@@ -6634,6 +6649,23 @@ export interface Translations {
       cardDescription: string;
       emailCardDescription: string;
     };
+  };
+
+  // Store panels (registry skills/plugins/roles)
+  store: {
+    skillsPanelTitle: string;
+    pluginsPanelTitle: string;
+    searchSkillsPlaceholder: string;
+    searchPluginsPlaceholder: string;
+    searchRolesPlaceholder: string;
+    install: string;
+    installing: string;
+    installed: string;
+    browseOnly: string;
+    pluginsSafetyNotice: string;
+    typeLabelStore: string;
+    typeLabelTwinRole: string;
+    categoryDigitalTwin: string;
   };
 
   // Skill Categories

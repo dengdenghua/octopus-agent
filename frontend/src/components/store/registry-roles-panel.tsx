@@ -15,7 +15,7 @@ import { RegistryAssetCard } from "./registry-asset-card";
 // 角色商城:从公网 registry 浏览 / 安装角色资产(role + twin-role · 数字分身岗位模板)。
 // 安装即在本地 scaffold 一个可用 agent(profile.jsonc + agent-core/SOUL.md),下次刷新
 // 角色库即可见。卡片 + 分类筛选栏对齐本地角色库(agent-world-unified 的 AgentsTab)的
-// 排版,保持商城/本地观感一致。文案暂硬编码(i18n locales 处于活跃 WIP,避开冲突)。
+// 排版,保持商城/本地观感一致。
 
 const CATEGORY_FILTERS = [
   "all",
@@ -28,8 +28,6 @@ const CATEGORY_FILTERS = [
   "financial",
   "digital-twin",
 ] as const;
-
-const DIGITAL_TWIN_LABEL = "数字分身";
 
 export function RegistryRolesPanel() {
   const { t } = useI18n();
@@ -109,7 +107,7 @@ export function RegistryRolesPanel() {
               category === "all"
                 ? t.agentWorld.categories.all
                 : category === "digital-twin"
-                  ? DIGITAL_TWIN_LABEL
+                  ? t.store.categoryDigitalTwin
                   : (t.agentWorld.categories[category] ?? category);
             return (
               <Button
@@ -142,8 +140,8 @@ export function RegistryRolesPanel() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索角色"
-            aria-label="搜索角色"
+            placeholder={t.store.searchRolesPlaceholder}
+            aria-label={t.store.searchRolesPlaceholder}
             className="h-8 w-44 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
           />
           <Button
@@ -180,7 +178,7 @@ export function RegistryRolesPanel() {
                 category={role.category}
                 categoryLabel={
                   role.type === "twin-role"
-                    ? DIGITAL_TWIN_LABEL
+                    ? t.store.categoryDigitalTwin
                     : (t.agentWorld.categories[
                         role.category as keyof typeof t.agentWorld.categories
                       ] ??
@@ -188,7 +186,9 @@ export function RegistryRolesPanel() {
                       undefined)
                 }
                 typeLabel={
-                  role.type === "twin-role" ? "商城 · 数字分身岗位模板" : "商城"
+                  role.type === "twin-role"
+                    ? t.store.typeLabelTwinRole
+                    : t.store.typeLabelStore
                 }
                 actionSlot={
                   <Button
@@ -205,7 +205,11 @@ export function RegistryRolesPanel() {
                     ) : (
                       <Download className="mr-1 h-3 w-3" />
                     )}
-                    {busy ? "安装中" : done ? "已安装" : "安装"}
+                    {busy
+                      ? t.store.installing
+                      : done
+                        ? t.store.installed
+                        : t.store.install}
                   </Button>
                 }
               />

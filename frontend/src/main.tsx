@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 
 import { AppRouter } from "./router";
+import { swallow } from "./core/utils/log";
 import { ThemeProvider } from "./components/theme-provider";
 import { MaterialThemeEffects } from "./components/material-theme-effects";
 import { I18nProvider } from "./core/i18n/context";
@@ -47,7 +48,13 @@ function handleAuthFailure(): void {
   // out / on the login screen) or the deliberate guest sentinel, do nothing —
   // this is what makes the reload loop-safe: after we clear the token below, any
   // further 401 sees no token and returns here.
-  const tok = localStorage.getItem("octopus_auth_token");
+  let tok: string | null = null;
+  try {
+    tok = localStorage.getItem("octopus_auth_token");
+  } catch (e) {
+    swallow(e, "storage");
+    return;
+  }
   if (!tok || tok === "__guest__") return;
   authBounced = true;
   try {

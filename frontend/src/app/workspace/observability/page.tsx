@@ -668,6 +668,10 @@ function JournalPanel() {
   const [events, setEvents] = useState<JournalEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   const handleClear = useCallback(async () => {
     if (events.length === 0) return;
@@ -688,7 +692,7 @@ function JournalPanel() {
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
     es.onmessage = (msg) => {
-      if (paused) return;
+      if (pausedRef.current) return;
       try {
         const p = JSON.parse(msg.data) as JournalEvent;
         setEvents((prev) => {
@@ -700,7 +704,7 @@ function JournalPanel() {
       }
     };
     return () => es.close();
-  }, [paused]);
+  }, []);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};

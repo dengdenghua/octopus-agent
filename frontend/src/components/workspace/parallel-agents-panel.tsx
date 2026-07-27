@@ -547,6 +547,7 @@ function AggregatedResultsView({
         <button
           type="button"
           onClick={onBack}
+          aria-label={t.common.back}
           className="text-muted-foreground hover:text-foreground"
         >
           <ChevronLeftIcon className="size-4" />

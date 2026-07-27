@@ -31,7 +31,10 @@ import type {
   TaskType,
   UnifiedTask,
 } from "@/core/task-board/types";
+import { formatDurationMs } from "@/core/utils/datetime";
 import { cn } from "@/lib/utils";
+
+export { formatDurationMs };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -92,18 +95,6 @@ const STATUS_STYLE: Record<
     icon: <XIcon className="size-3" />,
   },
 };
-
-export function formatDurationMs(ms: number): string {
-  if (ms <= 0) return "--";
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${secs}s`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${hours}h ${mins}m`;
-}
 
 export function formatRelativeTime(
   isoString: string,

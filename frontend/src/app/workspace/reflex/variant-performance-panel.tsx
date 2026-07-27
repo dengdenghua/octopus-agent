@@ -30,7 +30,6 @@
  */
 
 import { swallow } from "@/core/utils/log";
-import { getBackendBaseURL } from "@/core/config";
 import {
   BarChart3Icon,
   CheckCheckIcon,
@@ -48,6 +47,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+
+import { reflexFetch } from "./api";
 
 type RecipeSummary = {
   recipe_id: string;
@@ -133,12 +134,12 @@ export function VariantPerformancePanel() {
   const reload = useCallback(async () => {
     try {
       const [r, s] = await Promise.all([
-        fetch(`${getBackendBaseURL()}/api/evolution/forge/recipes`).then(
-          (r) => r.json() as Promise<{ recipes: RecipeSummary[] }>,
+        reflexFetch<{ recipes: RecipeSummary[] }>(
+          "/api/evolution/forge/recipes",
         ),
-        fetch(`${getBackendBaseURL()}/api/evolution/forge/auto-tick/status`)
-          .then((r) => r.json() as Promise<AutoTickStatus>)
-          .catch(() => null),
+        reflexFetch<AutoTickStatus>(
+          "/api/evolution/forge/auto-tick/status",
+        ).catch(() => null),
       ]);
       setRecipes(r.recipes ?? []);
       setAutoTick(s);
@@ -162,7 +163,7 @@ export function VariantPerformancePanel() {
       const path = autoTick?.enabled
         ? "/api/evolution/forge/auto-tick/disable"
         : "/api/evolution/forge/auto-tick/enable?interval_hours=24";
-      await fetch(path, { method: "POST" });
+      await reflexFetch<unknown>(path, { method: "POST" });
       void reload();
     } finally {
       setAutoBusy(false);
@@ -172,8 +173,8 @@ export function VariantPerformancePanel() {
   const tickNow = useCallback(async () => {
     setAutoBusy(true);
     try {
-      await fetch(
-        `${getBackendBaseURL()}/api/evolution/forge/auto-tick/run-now?apply=true`,
+      await reflexFetch<unknown>(
+        "/api/evolution/forge/auto-tick/run-now?apply=true",
         { method: "POST" },
       );
       void reload();
@@ -258,11 +259,11 @@ function RecipeRow({
   const loadStats = useCallback(async () => {
     setLoading(true);
     try {
-      const r: VariantStatsResp = await fetch(
+      const r: VariantStatsResp = await reflexFetch<VariantStatsResp>(
         `/api/evolution/forge/variants/${encodeURIComponent(
           summary.recipe_id,
         )}/stats`,
-      ).then((r) => r.json());
+      );
       setStats(r);
     } catch (e) {
       swallow(e);
@@ -278,12 +279,12 @@ function RecipeRow({
   const previewPromote = useCallback(async () => {
     setPromoting(true);
     try {
-      const r: PromoteResp = await fetch(
+      const r: PromoteResp = await reflexFetch<PromoteResp>(
         `/api/evolution/forge/variants/${encodeURIComponent(
           summary.recipe_id,
         )}/auto-promote?apply=false`,
         { method: "POST" },
-      ).then((r) => r.json());
+      );
       setPromote(r);
       setConfirmApply(false);
     } catch (e) {
@@ -300,12 +301,12 @@ function RecipeRow({
   const applyPromote = useCallback(async () => {
     setPromoting(true);
     try {
-      const r: PromoteResp = await fetch(
+      const r: PromoteResp = await reflexFetch<PromoteResp>(
         `/api/evolution/forge/variants/${encodeURIComponent(
           summary.recipe_id,
         )}/auto-promote?apply=true`,
         { method: "POST" },
-      ).then((r) => r.json());
+      );
       setPromote(r);
       if (r.applied) {
         void loadStats();

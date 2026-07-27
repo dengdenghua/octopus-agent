@@ -1,12 +1,9 @@
-import { MenuIcon } from "lucide-react";
+import { HistoryIcon } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
-/**
- * Hamburger button rendered at the top-left of the chat page header.
- * Used to open the left-side chats drawer (新建对话 / 历史对话).
- */
+/** Opens the searchable conversation-history drawer from the chat header. */
 export function ChatHeaderMenuButton({
   onClick,
   className,
@@ -19,8 +16,8 @@ export function ChatHeaderMenuButton({
     <button
       type="button"
       onClick={onClick}
-      aria-label={t.common.openSidebarMenu}
-      title={t.common.openSidebarMenu}
+      aria-label={t.codeMode.threadsHistory}
+      title={t.codeMode.threadsHistory}
       className={cn(
         "flex size-[42px] shrink-0 items-center justify-center rounded-lg text-muted-foreground sm:size-8",
         "transition-all duration-200 hover:bg-muted hover:text-foreground active:scale-95",
@@ -28,7 +25,7 @@ export function ChatHeaderMenuButton({
         className,
       )}
     >
-      <MenuIcon className="size-4" strokeWidth={2.2} />
+      <HistoryIcon className="size-4" strokeWidth={2} />
     </button>
   );
 }

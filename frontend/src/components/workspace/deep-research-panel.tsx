@@ -247,6 +247,7 @@ export function DeepResearchPanel({
           <button
             type="button"
             onClick={onClose}
+            aria-label={t.common.close}
             className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
           >
             <XIcon className="size-3.5" />

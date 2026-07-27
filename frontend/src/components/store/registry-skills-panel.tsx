@@ -10,13 +10,14 @@ import {
 } from "@/core/registry/api";
 import { useSkills } from "@/core/skills/hooks";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/core/i18n/hooks";
 
 import { RegistryAssetCard } from "./registry-asset-card";
 
 // 技能商城:从公网 registry 浏览 / 安装 prompt-skill(母体接 registry)。卡片排版
-// 对齐角色/插件商城面板(RegistryAssetCard),保持三个商城面板观感统一。文案暂硬编码
-// (i18n locales 处于活跃 WIP,避开冲突;后续再 i18n 化)。
+// 对齐角色/插件商城面板(RegistryAssetCard),保持三个商城面板观感统一。
 export function RegistrySkillsPanel() {
+  const { t } = useI18n();
   const [skills, setSkills] = useState<RegistrySkill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +76,7 @@ export function RegistrySkillsPanel() {
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <span className="text-sm font-medium">技能商城 · 从 registry 按需安装</span>
+        <span className="text-sm font-medium">{t.store.skillsPanelTitle}</span>
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="text-xs text-muted-foreground">
             {filtered.length}/{skills.length}
@@ -83,8 +84,8 @@ export function RegistrySkillsPanel() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索技能"
-            aria-label="搜索技能"
+            placeholder={t.store.searchSkillsPlaceholder}
+            aria-label={t.store.searchSkillsPlaceholder}
             className="h-8 w-44 rounded-md border border-border-default bg-background px-2 text-sm outline-none focus:border-primary/50"
           />
           <Button
@@ -122,7 +123,7 @@ export function RegistrySkillsPanel() {
                 description={skill.description}
                 category={null}
                 categoryLabel={skill.category ?? undefined}
-                typeLabel="商城"
+                typeLabel={t.store.typeLabelStore}
                 actionSlot={
                   <Button
                     size="sm"
@@ -138,7 +139,11 @@ export function RegistrySkillsPanel() {
                     ) : (
                       <Download className="mr-1 h-3 w-3" />
                     )}
-                    {busy ? "安装中" : done ? "已安装" : "安装"}
+                    {busy
+                      ? t.store.installing
+                      : done
+                        ? t.store.installed
+                        : t.store.install}
                   </Button>
                 }
               />

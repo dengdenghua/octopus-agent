@@ -1338,7 +1338,11 @@ function KnowledgeGraph3DContent() {
                   <span className="flex min-w-0 items-center gap-2">
                     <span
                       className="size-2.5 shrink-0 rounded-full"
-                      style={{ background: disabled ? "#334155" : group.color }}
+                      style={{
+                        background: disabled
+                          ? "var(--muted-foreground)"
+                          : group.color,
+                      }}
                     />
                     <span className="truncate">
                       {entityTypeLabel(entityType)}

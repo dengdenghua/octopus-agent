@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { swallow } from "@/core/utils/log";
 import {
   FolderKanbanIcon,
   type LucideIcon,
@@ -30,12 +31,22 @@ export default function DesktopOrganizerPage() {
     typeof window !== "undefined" && !!window.octopus?.isElectron;
 
   useEffect(() => {
-    setEnabled(localStorage.getItem(DESKTOP_ORGANIZER_ENABLED_KEY) === "true");
+    try {
+      setEnabled(
+        localStorage.getItem(DESKTOP_ORGANIZER_ENABLED_KEY) === "true",
+      );
+    } catch (e) {
+      swallow(e, "storage");
+    }
   }, []);
 
   const updateEnabled = (value: boolean) => {
     setEnabled(value);
-    localStorage.setItem(DESKTOP_ORGANIZER_ENABLED_KEY, String(value));
+    try {
+      localStorage.setItem(DESKTOP_ORGANIZER_ENABLED_KEY, String(value));
+    } catch (e) {
+      swallow(e, "storage");
+    }
   };
 
   const installContextMenu = async () => {

@@ -65,7 +65,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -309,6 +308,20 @@ function excludeActiveThread<T extends ThreadSummary>(
   const activeId = activeWorkspaceThreadIdFromPathname(pathname);
   if (!activeId) return threads;
   return threads.filter((thread) => thread.id !== activeId);
+}
+
+function prioritizeActiveThread<T extends ThreadSummary>(
+  threads: T[],
+  pathname: string,
+): T[] {
+  const activeId = activeWorkspaceThreadIdFromPathname(pathname);
+  if (!activeId) return threads;
+  const activeIndex = threads.findIndex((thread) => thread.id === activeId);
+  if (activeIndex <= 0) return threads;
+  return [
+    threads[activeIndex]!,
+    ...threads.filter((_, index) => index !== activeIndex),
+  ];
 }
 
 function projectThreadsForPreview<T>(
@@ -838,7 +851,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         },
       );
     } catch (error) {
-      console.error("Failed to delete project", error);
+      swallow(error);
+      toast.error(t.sidebar.deleteProjectFailed);
     } finally {
       setDeletingProject(null);
       void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
@@ -895,10 +909,9 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       transientOngoingThreads,
     ],
   );
-  // The active conversation needs a durable home in the sidebar even when a
-  // user has folded Projects or Chat history. This is the context anchor that
-  // makes the navigation follow the conversation instead of acting like a
-  // disconnected archive.
+  // Keep a fallback summary for an older/deep-linked task that was not present
+  // in the bounded history queries. It is inserted into the normal Chat list
+  // below instead of becoming a separate pinned conversation above navigation.
   const activeThreadSummary = useMemo<ThreadSummary | null>(() => {
     const activeId = activeWorkspaceThreadIdFromPathname(sidebarPathname);
     if (!activeId) return null;
@@ -928,17 +941,21 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     sidebarPathname,
     t.sidebar.currentTaskSession,
   ]);
-  const activeThreadRunStatus = activeThreadSummary
-    ? runStatusByHref.get(activeThreadSummary.href)
-    : undefined;
   const backgroundOngoingThreads = useMemo(
     () => excludeActiveThread(ongoingThreads, sidebarPathname),
     [ongoingThreads, sidebarPathname],
   );
-  const backgroundHistoryThreads = useMemo(
-    () => excludeActiveThread(allHistoryThreads, sidebarPathname),
-    [allHistoryThreads, sidebarPathname],
-  );
+  const sidebarHistoryThreads = useMemo(() => {
+    if (!activeThreadSummary) return allHistoryThreads;
+    const activeIsProjectThread = projectThreads.some(
+      (thread) => thread.id === activeThreadSummary.id,
+    );
+    const activeIsInHistory = allHistoryThreads.some(
+      (thread) => thread.id === activeThreadSummary.id,
+    );
+    if (activeIsProjectThread || activeIsInHistory) return allHistoryThreads;
+    return [activeThreadSummary, ...allHistoryThreads];
+  }, [activeThreadSummary, allHistoryThreads, projectThreads]);
 
   return (
     <>
@@ -985,10 +1002,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
               workspacePath={activeTaskWorkspacePath}
             />
           </SidebarGroup>
-          <ActiveConversationSection
-            thread={activeThreadSummary}
-            runStatus={activeThreadRunStatus}
-          />
           <OngoingThreadsSection
             threads={backgroundOngoingThreads}
             pathname={sidebarPathname}
@@ -1024,7 +1037,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 onNewProject={() => void pickProjectFolder()}
               />
               <ChatsSection
-                threads={backgroundHistoryThreads}
+                threads={sidebarHistoryThreads}
                 pathname={sidebarPathname}
                 label={t.sidebar.sectionChats}
                 agentId={activeAgentId}
@@ -1038,7 +1051,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <SidebarFooter className="border-t border-border-subtle p-1.5">
           <AgentFooter />
         </SidebarFooter>
-        <SidebarRail />
       </Sidebar>
       {/* Keep the settings host outside the responsive Sidebar sheet.
           Radix unmounts a closed mobile SheetContent, which previously also
@@ -1446,6 +1458,7 @@ export const __testing = {
   buildChatsSectionActions,
   buildOngoingThreadSummaries,
   excludeActiveThread,
+  prioritizeActiveThread,
   projectThreadsForPreview,
   syncedSidebarPathname,
   activeTeamTaskRoomId,
@@ -1729,6 +1742,7 @@ function ThreadRunStatusLight({
   return (
     <span
       aria-label={label}
+      role="img"
       title={label}
       className={cn(
         "relative inline-flex size-2 shrink-0 items-center justify-center rounded-full",
@@ -1855,7 +1869,10 @@ function OngoingThreadsSection({
                   aria-current={active ? "page" : undefined}
                   title={`${statusLabel} · ${thread.title}`}
                 >
-                  <span className="relative shrink-0">
+                  <span
+                    aria-hidden="true"
+                    className="relative shrink-0"
+                  >
                     <ThreadAvatar
                       agents={thread.agents}
                       className="size-5 shrink-0"
@@ -1887,57 +1904,6 @@ function OngoingThreadsSection({
   );
 }
 
-function ActiveConversationSection({
-  thread,
-  runStatus,
-}: {
-  thread: ThreadSummary | null;
-  runStatus?: ThreadRunStatus;
-}) {
-  const { t } = useI18n();
-  if (!thread) return null;
-  const statusLabel = runStatus ? threadRunStatusLabel(runStatus, t) : null;
-  return (
-    <SidebarGroup className="p-0 px-1 pb-1 group-data-[collapsible=icon]:hidden">
-      <Link
-        to={thread.href}
-        state={{
-          threadOwnerAgentId:
-            thread.agents.length === 1 ? thread.agents[0] : undefined,
-          workspacePath: thread.workspacePath,
-        }}
-        onMouseDown={() => syncThreadAgentSelection(thread.agents)}
-        aria-current="page"
-        className="group/current-task flex min-h-11 min-w-0 items-center gap-2 rounded-lg bg-[color:color-mix(in_oklch,var(--sidebar-accent)_56%,transparent)] px-2 py-1.5 text-foreground transition-colors hover:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_75%,transparent)]"
-      >
-        <span className="relative shrink-0">
-          <ThreadAvatar agents={thread.agents} className="size-5" />
-          <ThreadRunStatusLight
-            status={runStatus}
-            idle="queue"
-            className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar"
-          />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-medium leading-tight">
-            {thread.title}
-          </span>
-          <span className="mt-0.5 flex items-center gap-1 text-[10px] leading-none text-muted-foreground/75">
-            <span>{t.sidebar.currentTaskSession}</span>
-            {statusLabel && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="truncate">{statusLabel}</span>
-              </>
-            )}
-          </span>
-        </span>
-        <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/55 transition-transform group-hover/current-task:translate-x-0.5" />
-      </Link>
-    </SidebarGroup>
-  );
-}
-
 function ProjectGroup({
   project,
   threads,
@@ -1961,7 +1927,7 @@ function ProjectGroup({
   const containsActiveThread = threads.some(
     (thread) => activeWorkspaceThreadIdFromPathname(pathname) === thread.id,
   );
-  const backgroundThreads = excludeActiveThread(threads, pathname);
+  const orderedThreads = prioritizeActiveThread(threads, pathname);
   // Project folders are an archive, not the primary task surface. Start them
   // folded unless they contain the active task; this keeps the sidebar useful
   // during a live conversation instead of filling it with old sessions.
@@ -1975,10 +1941,10 @@ function ProjectGroup({
   }, [open]);
   const hiddenThreadCount = Math.max(
     0,
-    backgroundThreads.length - PROJECT_THREAD_PREVIEW_LIMIT,
+    orderedThreads.length - PROJECT_THREAD_PREVIEW_LIMIT,
   );
   const visibleThreads = projectThreadsForPreview(
-    backgroundThreads,
+    orderedThreads,
     showAllThreads,
   );
   const deleteThread = useDeleteThread();
@@ -2024,7 +1990,7 @@ function ProjectGroup({
               "flex h-9 w-full items-center gap-2 rounded-lg px-1 text-sm",
               deletable ? "pr-8" : "pr-1",
               "text-foreground/85 hover:text-foreground hover:bg-muted/40 transition-colors",
-              "outline-none",
+              "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
             )}
           >
             <ProjectGroupIcon project={project} />
@@ -2084,28 +2050,40 @@ function ProjectGroup({
                     aria-current={active ? "page" : undefined}
                     title={thread.title}
                     className={cn(
-                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-3 pr-3 text-sm text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-12 group-focus-within/thread:pr-12",
+                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-3 pr-3 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-[4.25rem] group-focus-within/thread:pr-[4.25rem]",
                       "hover:bg-muted/40 hover:text-foreground",
+                      "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
                       active &&
-                        "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
+                        "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_42%,transparent)]",
                     )}
                   >
-                    <span className="relative shrink-0">
-                      <ThreadAvatar
-                        agents={thread.agents}
-                        className="size-5 shrink-0"
-                      />
-                      <ThreadRunStatusLight
-                        status={runStatus}
-                        className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar"
-                      />
+                    <span className="relative flex size-5 shrink-0 items-center justify-center">
+                      {active ? (
+                        <>
+                          <span aria-hidden="true">
+                            <ThreadAvatar
+                              agents={thread.agents}
+                              className="size-5 shrink-0"
+                            />
+                          </span>
+                          <ThreadRunStatusLight
+                            status={runStatus}
+                            className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar"
+                          />
+                        </>
+                      ) : (
+                        <ThreadRunStatusLight
+                          idle="queue"
+                          status={runStatus}
+                        />
+                      )}
                     </span>
                     <span className="min-w-0 flex-1 truncate leading-tight">
                       {thread.title}
                     </span>
                     <span
                       className={cn(
-                        "overflow-hidden whitespace-nowrap text-xs text-muted-foreground transition-[width,opacity,color] duration-150 group-hover/thread:text-muted-foreground/90",
+                        "overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground transition-[width,opacity,color] duration-150 group-hover/thread:text-muted-foreground/90",
                         active
                           ? "w-0 opacity-0"
                           : "w-10 opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0",
@@ -2124,11 +2102,8 @@ function ProjectGroup({
                       onOpenFiles(thread, project);
                     }}
                     className={cn(
-                      "absolute right-0.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg border border-transparent bg-background/70 text-muted-foreground/75 shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-[opacity,background-color,border-color,color] duration-150",
-                      "hover:border-border-default hover:bg-background hover:text-foreground",
-                      active
-                        ? "opacity-100"
-                        : "opacity-0 group-hover/thread:opacity-100 focus-visible:opacity-100",
+                      "absolute right-0.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground/65 opacity-0 transition-[opacity,background-color,color] duration-150",
+                      "group-hover/thread:opacity-100 hover:bg-muted/55 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
                     )}
                   >
                     <ListTodoIcon className="size-3.5" />
@@ -2143,7 +2118,7 @@ function ProjectGroup({
                           e.preventDefault();
                           e.stopPropagation();
                         }}
-                        className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity hover:bg-muted/40 hover:text-foreground group-hover/thread:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                        className="absolute right-8 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity hover:bg-muted/40 hover:text-foreground group-hover/thread:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50 data-[state=open]:opacity-100"
                       >
                         <MoreHorizontalIcon className="size-3.5" />
                       </button>
@@ -2453,8 +2428,13 @@ function ProjectsSection({
   // expected the section to behave the same everywhere.
   const [open, setOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
-    const v = window.localStorage.getItem("octopus.sidebar.projects-open");
-    return v === null ? true : v === "1";
+    try {
+      const v = window.localStorage.getItem("octopus.sidebar.projects-open");
+      return v === null ? true : v === "1";
+    } catch (e) {
+      swallow(e, "storage");
+      return true;
+    }
   });
   useEffect(() => {
     try {
@@ -2532,8 +2512,13 @@ function ChatsSection({
   // collapsed it.
   const [open, setOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
-    const v = window.localStorage.getItem("octopus.sidebar.chats-open");
-    return v === null ? true : v === "1";
+    try {
+      const v = window.localStorage.getItem("octopus.sidebar.chats-open");
+      return v === null ? true : v === "1";
+    } catch (e) {
+      swallow(e, "storage");
+      return true;
+    }
   });
   useEffect(() => {
     try {
@@ -2638,10 +2623,11 @@ function ChatsSection({
                       aria-current={active ? "page" : undefined}
                       title={t.title}
                       className={cn(
-                        "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-2 pr-2 text-xs text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-8 group-focus-within/thread:pr-8",
+                        "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-2 pr-2 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-8 group-focus-within/thread:pr-8",
                         "hover:bg-muted/40 hover:text-foreground",
+                        "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
                         active &&
-                          "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
+                          "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_42%,transparent)]",
                       )}
                     >
                       <ThreadRunStatusLight
@@ -2653,7 +2639,7 @@ function ChatsSection({
                       <span className="min-w-0 flex-1 truncate leading-tight">
                         {t.title}
                       </span>
-                      <span className="w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-xs text-muted-foreground transition-[width,opacity,color] group-hover/thread:w-0 group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0">
+                      <span className="w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-[11px] text-muted-foreground transition-[width,opacity,color] group-hover/thread:w-0 group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0">
                         {formatCompactRelativeTimestamp(t.updatedAt)}
                       </span>
                     </Link>
@@ -2667,7 +2653,7 @@ function ChatsSection({
                             e.preventDefault();
                             e.stopPropagation();
                           }}
-                          className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity group-hover/thread:opacity-100 hover:bg-muted/40 hover:text-foreground focus-visible:opacity-100 data-[state=open]:opacity-100"
+                          className="absolute right-0.5 top-1/2 -translate-y-1/2 flex size-8 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-opacity group-hover/thread:opacity-100 hover:bg-muted/40 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50 data-[state=open]:opacity-100"
                         >
                           <MoreHorizontalIcon className="size-3.5" />
                         </button>

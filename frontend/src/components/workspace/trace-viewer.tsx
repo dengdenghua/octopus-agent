@@ -268,6 +268,7 @@ function SpanDetail({
         </span>
         <button
           onClick={onClose}
+          aria-label={t.common.close}
           className="text-muted-foreground hover:text-foreground shrink-0"
         >
           <XIcon className="size-3" />

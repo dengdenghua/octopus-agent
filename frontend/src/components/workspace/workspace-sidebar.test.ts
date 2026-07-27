@@ -219,6 +219,60 @@ describe("workspace sidebar project grouping", () => {
     ]);
   });
 
+  test("orders failed work before waiting, running, and pending work", () => {
+    const threads = [
+      {
+        id: "pending",
+        title: "pending",
+        updatedAt: "2026-07-04T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/pending",
+        agents: ["eve"],
+      },
+      {
+        id: "running",
+        title: "running",
+        updatedAt: "2026-07-03T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/running",
+        agents: ["eve"],
+      },
+      {
+        id: "waiting",
+        title: "waiting",
+        updatedAt: "2026-07-02T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/waiting",
+        agents: ["eve"],
+      },
+      {
+        id: "error",
+        title: "error",
+        updatedAt: "2026-07-01T00:00:00Z",
+        mode: "code",
+        href: "/workspace/realtime/error",
+        agents: ["eve"],
+      },
+    ];
+
+    const ongoing = __testing.buildOngoingThreadSummaries({
+      threads,
+      runStatusByHref: new Map([
+        ["/workspace/realtime/pending", "pending"],
+        ["/workspace/realtime/running", "running"],
+        ["/workspace/realtime/waiting", "waiting"],
+        ["/workspace/realtime/error", "error"],
+      ]),
+    });
+
+    expect(ongoing.map((thread) => thread.runStatus)).toEqual([
+      "error",
+      "waiting",
+      "running",
+      "pending",
+    ]);
+  });
+
   test("keeps the current task out of the background ongoing list", () => {
     const threads = [
       {
@@ -246,6 +300,29 @@ describe("workspace sidebar project grouping", () => {
         .excludeActiveThread(threads, "/workspace/realtime/current")
         .map((thread) => thread.id),
     ).toEqual(["background"]);
+  });
+
+  test("keeps the current task inside its natural project list and moves it to the top", () => {
+    const threads = [
+      {
+        id: "newer",
+        href: "/workspace/realtime/newer",
+      },
+      {
+        id: "current",
+        href: "/workspace/realtime/current",
+      },
+      {
+        id: "older",
+        href: "/workspace/realtime/older",
+      },
+    ] as never;
+
+    expect(
+      __testing
+        .prioritizeActiveThread(threads, "/workspace/realtime/current")
+        .map((thread) => thread.id),
+    ).toEqual(["current", "newer", "older"]);
   });
 
   test("keeps project history compact until the user expands it", () => {
@@ -480,6 +557,31 @@ describe("workspace sidebar thread status lights", () => {
 
     expect(statusByHref.get("/workspace/realtime/room-1")).toBe("running");
     expect(statusByHref.has("/workspace/team/room-1")).toBe(false);
+  });
+
+  test("maps failed team work to an error status", () => {
+    const statusByHref = __testing.buildThreadRunStatusByHref({
+      activeTeamTasks: [
+        {
+          id: "task-failed",
+          room_id: "room-failed",
+          title: "Failed SOP",
+          description: "",
+          sop_template: "",
+          status: "failed",
+          assignees: [],
+          created_at: "2026-06-29T00:00:00Z",
+          updated_at: "2026-06-29T00:00:00Z",
+          produced_artifacts: [],
+          metadata: {},
+        },
+      ],
+      backgroundTasks: undefined,
+      liveThreadRunStatusByHref: new Map(),
+      threadHrefById: new Map(),
+    });
+
+    expect(statusByHref.get("/workspace/realtime/room-failed")).toBe("error");
   });
 
   test("merges live workbench status over active background task status", () => {

@@ -286,6 +286,59 @@ function verificationFromToolMessage(
   };
 }
 
+// Per-message extraction caches. Message objects are immutable and keep
+// reference identity across streaming frames (realtime-adapter), so the
+// expensive parsing (diff splitting, hunk extraction, JSON.parse of tool
+// results) runs once per message instead of once per summarizeOutputs call.
+// The merge/accumulate step stays in summarizeOutputs, keeping ordering and
+// accumulation semantics identical.
+type ToolCallOutputs = {
+  toolCalls: ToolCall[];
+  artifacts: OutputArtifact[];
+  changes: OutputChange[];
+};
+
+const toolCallOutputsCache = new WeakMap<Message, ToolCallOutputs>();
+
+function toolCallOutputsFromMessage(message: Message): ToolCallOutputs {
+  const cached = toolCallOutputsCache.get(message);
+  if (cached) return cached;
+  const extracted: ToolCallOutputs = {
+    toolCalls: [],
+    artifacts: [],
+    changes: [],
+  };
+  if (message.type === "ai") {
+    for (const toolCall of (message as AIMessage).tool_calls ?? []) {
+      extracted.toolCalls.push(toolCall);
+      const artifact = artifactFromToolCall(toolCall);
+      if (artifact) extracted.artifacts.push(artifact);
+      extracted.changes.push(...changesFromToolCall(toolCall));
+    }
+  }
+  toolCallOutputsCache.set(message, extracted);
+  return extracted;
+}
+
+type VerificationCacheEntry = {
+  toolCall: ToolCall | undefined;
+  entry: VerificationEntry | null;
+};
+
+const verificationEntryCache = new WeakMap<Message, VerificationCacheEntry>();
+
+function verificationFromToolMessageCached(
+  toolMessage: ToolMessage,
+  toolCallMap: Map<string, ToolCall>,
+): VerificationEntry | null {
+  const toolCall = toolCallMap.get(toolMessage.tool_call_id);
+  const cached = verificationEntryCache.get(toolMessage);
+  if (cached && cached.toolCall === toolCall) return cached.entry;
+  const entry = verificationFromToolMessage(toolMessage, toolCallMap);
+  verificationEntryCache.set(toolMessage, { toolCall, entry });
+  return entry;
+}
+
 function summarizeOutputs(messages: Message[]): OutputSummary {
   const artifacts = new Map<string, OutputArtifact>();
   const changes = new Map<string, OutputChange>();
@@ -294,35 +347,34 @@ function summarizeOutputs(messages: Message[]): OutputSummary {
 
   // First pass: collect tool calls by id so we can join with ToolMessage results
   for (const message of messages) {
-    if (message.type !== "ai") continue;
-    for (const toolCall of (message as AIMessage).tool_calls ?? []) {
+    const extracted = toolCallOutputsFromMessage(message);
+    for (const toolCall of extracted.toolCalls) {
       if (toolCall.id) toolCallMap.set(toolCall.id, toolCall);
-      const artifact = artifactFromToolCall(toolCall);
-      if (artifact) {
-        artifacts.set(artifact.path, artifact);
-      }
-      for (const change of changesFromToolCall(toolCall)) {
-        const existing = changes.get(change.path);
-        const seen = new Set(change.hunks.map((h) => h.id));
-        const carried = (existing?.hunks ?? []).filter((h) => !seen.has(h.id));
-        changes.set(change.path, {
-          ...change,
-          added: (existing?.added ?? 0) + change.added,
-          created: Boolean(existing?.created || change.created),
-          removed: (existing?.removed ?? 0) + change.removed,
-          diffTruncated: Boolean(
-            existing?.diffTruncated || change.diffTruncated,
-          ),
-          hunks: [...carried, ...change.hunks],
-        });
-      }
+    }
+    for (const artifact of extracted.artifacts) {
+      artifacts.set(artifact.path, artifact);
+    }
+    for (const change of extracted.changes) {
+      const existing = changes.get(change.path);
+      const seen = new Set(change.hunks.map((h) => h.id));
+      const carried = (existing?.hunks ?? []).filter((h) => !seen.has(h.id));
+      changes.set(change.path, {
+        ...change,
+        added: (existing?.added ?? 0) + change.added,
+        created: Boolean(existing?.created || change.created),
+        removed: (existing?.removed ?? 0) + change.removed,
+        diffTruncated: Boolean(
+          existing?.diffTruncated || change.diffTruncated,
+        ),
+        hunks: [...carried, ...change.hunks],
+      });
     }
   }
 
   // Second pass: collect verification results from tool messages
   for (const message of messages) {
     if (message.type !== "tool") continue;
-    const entry = verificationFromToolMessage(
+    const entry = verificationFromToolMessageCached(
       message as ToolMessage,
       toolCallMap,
     );
@@ -899,11 +951,23 @@ function ChangeRow({
   return (
     <li className="text-sm">
       <div
+        role={hasHunks ? "button" : undefined}
+        tabIndex={hasHunks ? 0 : undefined}
+        aria-expanded={hasHunks ? open : undefined}
         className={cn(
           "flex items-center gap-3 px-3 py-2",
           hasHunks && "cursor-pointer hover:bg-muted/30",
         )}
         onClick={hasHunks ? () => setOpen((prev) => !prev) : undefined}
+        onKeyDown={
+          hasHunks
+            ? (event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                setOpen((prev) => !prev);
+              }
+            : undefined
+        }
       >
         {hasHunks && (
           <ChevronDownIcon

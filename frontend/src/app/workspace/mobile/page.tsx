@@ -943,6 +943,7 @@ function DevicePreviewModal({
   activeDevice: ActiveDevice;
   onSelect: (d: ActiveDevice) => void;
 }) {
+  const { t } = useI18n();
   if (!open) return null;
 
   return (
@@ -952,7 +953,7 @@ function DevicePreviewModal({
         onClick={onClose}
         role="button"
         tabIndex={-1}
-        aria-label="关闭"
+        aria-label={t.common.close}
         onKeyDown={(e) => {
           if (e.key === "Escape") onClose();
         }}
@@ -965,6 +966,7 @@ function DevicePreviewModal({
           <h3 className="text-sm font-semibold">选择设备</h3>
           <button
             onClick={onClose}
+            aria-label={t.common.close}
             className="rounded-lg p-1 hover:bg-muted dark:hover:bg-muted-foreground"
           >
             <XIcon className="size-4" />

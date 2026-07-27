@@ -24,7 +24,6 @@
  */
 
 import { swallow } from "@/core/utils/log";
-import { getBackendBaseURL } from "@/core/config";
 import type { Extension } from "@codemirror/state";
 import {
   ArrowLeftIcon,
@@ -36,6 +35,7 @@ import { useTheme } from "next-themes";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { reflexFetch } from "../api";
 import { ReflexCardEditor } from "./card-editor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -117,9 +117,7 @@ export default function ReflexEditorPage() {
   const loadFile = useCallback(async () => {
     setStatus(t.reflexEditor.statusLoading);
     try {
-      const r: LoadResp = await fetch(
-        `${getBackendBaseURL()}/api/reflex/rules-yaml`,
-      ).then((r) => r.json());
+      const r: LoadResp = await reflexFetch<LoadResp>("/api/reflex/rules-yaml");
       if (!r.ok) {
         setStatus(
           t.reflexEditor.statusLoadFailed(
@@ -150,8 +148,8 @@ export default function ReflexEditorPage() {
     async (reload: boolean) => {
       setStatus(t.reflexEditor.statusSaving);
       try {
-        const r: SaveResp = await fetch(
-          `${getBackendBaseURL()}/api/reflex/rules-yaml`,
+        const r: SaveResp = await reflexFetch<SaveResp>(
+          "/api/reflex/rules-yaml",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -161,7 +159,7 @@ export default function ReflexEditorPage() {
               reload,
             }),
           },
-        ).then((r) => r.json());
+        );
         if (!r.ok) {
           setStatus(
             t.reflexEditor.statusSaveFailed(
@@ -195,9 +193,7 @@ export default function ReflexEditorPage() {
   const runTests = useCallback(async () => {
     setStatus(t.reflexEditor.statusRunningTests);
     try {
-      const r: TestResp = await fetch(
-        `${getBackendBaseURL()}/api/reflex/test`,
-      ).then((r) => r.json());
+      const r: TestResp = await reflexFetch<TestResp>("/api/reflex/test");
       setTest(r);
       if (r.error) {
         setStatus(t.reflexEditor.statusTestError(r.error), "err");

@@ -59,7 +59,7 @@ import { RecRecorderOverlay } from "@/components/workspace/rec-recorder-overlay"
 import type { PromptInputFilePart } from "@/core/uploads";
 import { ChatPageLayout } from "@/components/workspace/chat-page-layout";
 import { AgentWelcome } from "@/components/workspace/agent-welcome";
-import { RealtimeApprovalToasts } from "@/components/workspace/realtime-approval-toasts";
+import { RealtimeApprovalPrompt } from "@/components/workspace/realtime-approval-toasts";
 import { DeepResearchHistoryPanel } from "@/components/workspace/deep-research-history-panel";
 import { DeepResearchPanel } from "@/components/workspace/deep-research-panel";
 import {
@@ -112,13 +112,17 @@ import { toHashRouterShellUrl } from "@/core/router/hash-shell-url";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useDeferredRouteCommit } from "@/core/router/use-deferred-route-commit";
 import { useThreadSettings } from "@/core/settings";
-import { useThreadStream } from "@/core/threads/hooks";
+import {
+  useThreadStream,
+  type ThreadStreamOptions,
+} from "@/core/threads/hooks";
 import { buildProgressOutline } from "@/core/threads/progress-outline";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { ReasoningEffort } from "@/core/threads";
 import {
   normalizePermissionMode,
   permissionRuntimeConfig,
+  type PermissionMode,
 } from "@/core/permissions";
 import { startDeepResearch, type ResearchJob } from "@/core/research/api";
 import { getRecordingStatus } from "@/core/teach-repeat/api";
@@ -287,9 +291,23 @@ function latestModelContextTokens(messages: Message[]): number | null {
   return null;
 }
 
+// Text extraction is the expensive part of the estimate and the realtime
+// adapter keeps Message identity stable for unchanged items, so cache the
+// per-message text length by reference: during streaming only the message
+// objects a delta actually rebuilt get re-extracted.
+const messageTextLengthCache = new WeakMap<Message, number>();
+
+function retainedMessageTextLength(message: Message): number {
+  const cached = messageTextLengthCache.get(message);
+  if (cached !== undefined) return cached;
+  const length = extractTextFromMessage(message).length;
+  messageTextLengthCache.set(message, length);
+  return length;
+}
+
 function estimateRetainedContextTokens(messages: Message[]): number {
   const chars = messages.reduce(
-    (total, message) => total + extractTextFromMessage(message).length,
+    (total, message) => total + retainedMessageTextLength(message),
     0,
   );
   return Math.ceil(chars / 4);
@@ -1958,6 +1976,119 @@ function RealtimePageContent({
     [activeAgentId, navigate, qc],
   );
 
+  const streamOptions = useMemo<ThreadStreamOptions>(
+    () => ({
+      threadId,
+      // Spread settings.context FIRST so our agent_name wins. Otherwise any
+      // stale `agent_name` in the shared settings store (shared across
+      // threads) clobbers the current page's pick — which is how turn 2+
+      // started sending the wrong id before this fix.
+      context: {
+        ...settings.context,
+        reasoning_effort: effectiveReasoningEffort,
+        mode: streamMode,
+        workspace_path: isProjectCodeMode ? projectWorkspacePath : undefined,
+        workspace_scope: isProjectCodeMode
+          ? "project"
+          : isCodingWorkspaceMode
+            ? "personal"
+            : undefined,
+        personal_workspace_enabled:
+          !isProjectCodeMode && isCodingWorkspaceMode ? true : undefined,
+        capability_mode: isCodingWorkspaceMode ? "code" : undefined,
+        code_mode: isCodingWorkspaceMode ? "solo" : undefined,
+        agent_mode: isCodingWorkspaceMode ? projectAgentMode : undefined,
+        mode_preset: isCodingWorkspaceMode ? projectModePreset.id : undefined,
+        workflow_preset: isCodingWorkspaceMode
+          ? workflowPresetForMode(projectAgentMode, auditIntensity)
+          : undefined,
+        // Personal-space work mode. Backend keeps this as scope steering while the
+        // same code capability/tool chain remains available in personal workspace.
+        personal_mode: !isProjectCodeMode ? personalMode : undefined,
+        skill_pack_profile: isCodingWorkspaceMode
+          ? projectModePreset.skillPackProfile
+          : undefined,
+        verification_policy: isCodingWorkspaceMode
+          ? projectModePreset.verificationPolicy
+          : undefined,
+        default_skill_packs: isCodingWorkspaceMode
+          ? projectModePreset.defaultSkillPacks
+          : undefined,
+        default_plugins: isCodingWorkspaceMode
+          ? projectModePreset.defaultPlugins
+          : undefined,
+        mode_contract: isCodingWorkspaceMode
+          ? projectModePreset.promptContract
+          : undefined,
+        project_signals: projectSignals,
+        agent_name: effectiveAgentId,
+        // Local CLI partner model override. CLIs with a stable model flag receive
+        // it; others keep their own default. Kept separate from
+        // model_name (octopus's namespace) on purpose.
+        partner_model: partnerId ? partnerModel : undefined,
+        interaction_mode:
+          effectiveMode === "react" ||
+          effectiveMode === "deep" ||
+          effectiveMode === "code"
+            ? "office"
+            : undefined,
+        ...collaborationContext,
+      },
+      onStart: (startedThreadId) => {
+        if (startedThreadId !== threadId) {
+          clearSidebarThreadStatus(threadId);
+        }
+        markSidebarThreadRunning(startedThreadId);
+        localStartedThreadIdRef.current = startedThreadId;
+        setIsNewThread(false);
+        const targetPath = threadRouteFor(startedThreadId);
+        // The live page deliberately stays mounted until the turn settles, so
+        // React Router cannot own this transition yet. Keep sidebar selection
+        // and its thread list in sync with the server-issued id immediately.
+        eventBus.emit("thread:route-sync", {
+          href: targetPath,
+          threadId: startedThreadId,
+        });
+        void qc.invalidateQueries({ queryKey: ["threads", "search"] });
+        // Keep the /new route mounted for the lifetime of the first turn.
+        // Changing the hash here still notifies the desktop HashRouter and
+        // tears down its WebSocket, even when history.replaceState is used.
+        // The sidebar already follows thread:route-sync; commit the actual URL
+        // once onFinish confirms that the server-owned turn is terminal.
+        stageThreadRoute(targetPath);
+      },
+      onFinish: () => {
+        void qc.invalidateQueries({ queryKey: ["threads", "search"] });
+        commitThreadRoute();
+      },
+    }),
+    [
+      auditIntensity,
+      clearSidebarThreadStatus,
+      collaborationContext,
+      commitThreadRoute,
+      effectiveAgentId,
+      effectiveMode,
+      effectiveReasoningEffort,
+      isCodingWorkspaceMode,
+      isProjectCodeMode,
+      markSidebarThreadRunning,
+      partnerId,
+      partnerModel,
+      personalMode,
+      projectAgentMode,
+      projectModePreset,
+      projectSignals,
+      projectWorkspacePath,
+      qc,
+      setIsNewThread,
+      settings.context,
+      stageThreadRoute,
+      streamMode,
+      threadId,
+      threadRouteFor,
+    ],
+  );
   const [
     thread,
     sendMessage,
@@ -1965,91 +2096,7 @@ function RealtimePageContent({
     ,
     lastTurnToolEvents,
     realtimeApprovals,
-  ] = useThreadStream({
-    threadId,
-    // Spread settings.context FIRST so our agent_name wins. Otherwise any
-    // stale `agent_name` in the shared settings store (shared across
-    // threads) clobbers the current page's pick — which is how turn 2+
-    // started sending the wrong id before this fix.
-    context: {
-      ...settings.context,
-      reasoning_effort: effectiveReasoningEffort,
-      mode: streamMode,
-      workspace_path: isProjectCodeMode ? projectWorkspacePath : undefined,
-      workspace_scope: isProjectCodeMode
-        ? "project"
-        : isCodingWorkspaceMode
-          ? "personal"
-          : undefined,
-      personal_workspace_enabled:
-        !isProjectCodeMode && isCodingWorkspaceMode ? true : undefined,
-      capability_mode: isCodingWorkspaceMode ? "code" : undefined,
-      code_mode: isCodingWorkspaceMode ? "solo" : undefined,
-      agent_mode: isCodingWorkspaceMode ? projectAgentMode : undefined,
-      mode_preset: isCodingWorkspaceMode ? projectModePreset.id : undefined,
-      workflow_preset: isCodingWorkspaceMode
-        ? workflowPresetForMode(projectAgentMode, auditIntensity)
-        : undefined,
-      // Personal-space work mode. Backend keeps this as scope steering while the
-      // same code capability/tool chain remains available in personal workspace.
-      personal_mode: !isProjectCodeMode ? personalMode : undefined,
-      skill_pack_profile: isCodingWorkspaceMode
-        ? projectModePreset.skillPackProfile
-        : undefined,
-      verification_policy: isCodingWorkspaceMode
-        ? projectModePreset.verificationPolicy
-        : undefined,
-      default_skill_packs: isCodingWorkspaceMode
-        ? projectModePreset.defaultSkillPacks
-        : undefined,
-      default_plugins: isCodingWorkspaceMode
-        ? projectModePreset.defaultPlugins
-        : undefined,
-      mode_contract: isCodingWorkspaceMode
-        ? projectModePreset.promptContract
-        : undefined,
-      project_signals: projectSignals,
-      agent_name: effectiveAgentId,
-      // Local CLI partner model override. CLIs with a stable model flag receive
-      // it; others keep their own default. Kept separate from
-      // model_name (octopus's namespace) on purpose.
-      partner_model: partnerId ? partnerModel : undefined,
-      interaction_mode:
-        effectiveMode === "react" ||
-        effectiveMode === "deep" ||
-        effectiveMode === "code"
-          ? "office"
-          : undefined,
-      ...collaborationContext,
-    },
-    onStart: (startedThreadId) => {
-      if (startedThreadId !== threadId) {
-        clearSidebarThreadStatus(threadId);
-      }
-      markSidebarThreadRunning(startedThreadId);
-      localStartedThreadIdRef.current = startedThreadId;
-      setIsNewThread(false);
-      const targetPath = threadRouteFor(startedThreadId);
-      // The live page deliberately stays mounted until the turn settles, so
-      // React Router cannot own this transition yet. Keep sidebar selection
-      // and its thread list in sync with the server-issued id immediately.
-      eventBus.emit("thread:route-sync", {
-        href: targetPath,
-        threadId: startedThreadId,
-      });
-      void qc.invalidateQueries({ queryKey: ["threads", "search"] });
-      // Keep the /new route mounted for the lifetime of the first turn.
-      // Changing the hash here still notifies the desktop HashRouter and
-      // tears down its WebSocket, even when history.replaceState is used.
-      // The sidebar already follows thread:route-sync; commit the actual URL
-      // once onFinish confirms that the server-owned turn is terminal.
-      stageThreadRoute(targetPath);
-    },
-    onFinish: () => {
-      void qc.invalidateQueries({ queryKey: ["threads", "search"] });
-      commitThreadRoute();
-    },
-  });
+  ] = useThreadStream(streamOptions);
   const [isCompressingContext, setIsCompressingContext] = useState(false);
   const selectedModel = useMemo(() => {
     const modelName = settings.context.model_name;
@@ -2669,11 +2716,16 @@ function RealtimePageContent({
               reader.readAsDataURL(file);
             }),
         ),
-      ).then((files) => {
-        void sendMessage(threadId, { text: message.text, files });
-      });
+      )
+        .then((files) => {
+          void sendMessage(threadId, { text: message.text, files });
+        })
+        .catch((err) => {
+          swallow(err);
+          toast.error(t.chatInputBox.attachmentReadFailed);
+        });
     },
-    [markSidebarThreadRunning, sendMessage, threadId],
+    [markSidebarThreadRunning, sendMessage, threadId, t.chatInputBox.attachmentReadFailed],
   );
   useEffect(() => {
     const handleQuickReply = (event: Event) => {
@@ -2952,14 +3004,57 @@ function RealtimePageContent({
     },
     [openAgentPlanPanel, openArtifactsPanel, setArtifactsOpen],
   );
+
+  const currentAgent = useMemo(
+    () => ({
+      name: effectiveAgentId,
+      display_name: displayAgent?.display_name || effectiveAgentId,
+      avatar_url:
+        displayAgent?.avatar_url ||
+        (threadOwnerAgentId
+          ? `/api/agents/${encodeURIComponent(threadOwnerAgentId)}/avatar`
+          : null),
+      icon: displayAgent?.icon || null,
+    }),
+    [displayAgent, effectiveAgentId, threadOwnerAgentId],
+  );
+
+  const handleModelChange = useCallback(
+    (modelName: string) => {
+      setSettings("context", {
+        ...settings.context,
+        model_name: modelName,
+      });
+    },
+    [setSettings, settings.context],
+  );
+
+  const handleReasoningEffortChange = useCallback(
+    (reasoningEffort: ReasoningEffort) => {
+      setSettings("context", {
+        ...settings.context,
+        reasoning_effort: normalizeReasoningEffortForUi(reasoningEffort),
+      });
+    },
+    [setSettings, settings.context],
+  );
+
+  const handlePermissionModeChange = useCallback(
+    (permissionMode: PermissionMode) => {
+      const permissionRuntime = permissionRuntimeConfig(permissionMode);
+      setSettings("context", {
+        ...settings.context,
+        permission_mode: permissionRuntime.mode,
+        execution_environment: permissionRuntime.execution_environment,
+      });
+    },
+    [setSettings, settings.context],
+  );
+
   return (
     <SubtasksProvider>
       <ThreadProviders thread={thread} isMock={false}>
         <ToolEffectsProvider enabled={!isNewThread} active={thread.isLoading}>
-          <RealtimeApprovalToasts
-            approvals={realtimeApprovals.pendingApprovals}
-            resolveApproval={realtimeApprovals.resolveApproval}
-          />
           <ChatBox artifactPanelMode="external" threadId={threadId}>
             <ChatPageLayout
               isNewThread={isNewThread}
@@ -3057,17 +3152,7 @@ function RealtimePageContent({
                   liveToolEvents={lastTurnToolEvents}
                   lastTurnToolEvents={lastTurnToolEvents}
                   completedAgentOutput={hasCompletedAgentOutput}
-                  currentAgent={{
-                    name: effectiveAgentId,
-                    display_name:
-                      displayAgent?.display_name || effectiveAgentId,
-                    avatar_url:
-                      displayAgent?.avatar_url ||
-                      (threadOwnerAgentId
-                        ? `/api/agents/${encodeURIComponent(threadOwnerAgentId)}/avatar`
-                        : null),
-                    icon: displayAgent?.icon || null,
-                  }}
+                  currentAgent={currentAgent}
                   agentRoster={
                     visibleCollaborationEnabled
                       ? visibleCollaborationRoster
@@ -3116,6 +3201,11 @@ function RealtimePageContent({
                           onOpenDetails={() => selectAgentWorkbenchTab("agent")}
                         />
                       ) : null}
+                      <RealtimeApprovalPrompt
+                        approvals={realtimeApprovals.pendingApprovals}
+                        resolveApproval={realtimeApprovals.resolveApproval}
+                        className="-mb-1"
+                      />
                       <ChatInputBox
                         key={composerSeed || "empty-composer"}
                         status={
@@ -3152,33 +3242,13 @@ function RealtimePageContent({
                         maxContextTokens={maxContextTokens}
                         isCompressingContext={isCompressingContext}
                         onCompressContext={handleCompressContext}
-                        onModelChange={(modelName) =>
-                          setSettings("context", {
-                            ...settings.context,
-                            model_name: modelName,
-                          })
-                        }
-                        onReasoningEffortChange={(reasoningEffort) =>
-                          setSettings("context", {
-                            ...settings.context,
-                            reasoning_effort:
-                              normalizeReasoningEffortForUi(reasoningEffort),
-                          })
-                        }
+                        onModelChange={handleModelChange}
+                        onReasoningEffortChange={handleReasoningEffortChange}
                         onModeChange={handleModeChange}
                         permissionMode={normalizePermissionMode(
                           settings.context.permission_mode,
                         )}
-                        onPermissionModeChange={(permissionMode) => {
-                          const permissionRuntime =
-                            permissionRuntimeConfig(permissionMode);
-                          setSettings("context", {
-                            ...settings.context,
-                            permission_mode: permissionRuntime.mode,
-                            execution_environment:
-                              permissionRuntime.execution_environment,
-                          });
-                        }}
+                        onPermissionModeChange={handlePermissionModeChange}
                         onSubmit={handleSubmit}
                         onDeepResearch={handleDeepResearch}
                         showInspirationToggle

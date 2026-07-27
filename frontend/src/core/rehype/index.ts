@@ -33,8 +33,28 @@ function splitTextIntoUnits(text: string): string[] {
   return isCJK ? splitCJKText(text) : splitNonCJKText(text);
 }
 
-function animateLastVisibleUnit(text: string): ElementContent[] {
-  const units = splitTextIntoUnits(text);
+export type RehypeSplitWordsOptions = {
+  // Text nodes longer than this are left untouched. Bounds the
+  // per-token cost of the still-growing final block during streaming.
+  maxTextLength?: number;
+  // Only the trailing window is fed to Intl.Segmenter. The animated
+  // unit lives at the very end of the text, and word/grapheme
+  // boundaries near the end never depend on content hundreds of
+  // characters earlier, so the output is identical to segmenting the
+  // full string while the per-token cost stays O(tailWindow).
+  tailWindow?: number;
+};
+
+const DEFAULT_MAX_TEXT_LENGTH = 8000;
+const DEFAULT_TAIL_WINDOW = 200;
+
+function animateLastVisibleUnit(
+  text: string,
+  tailWindow: number,
+): ElementContent[] {
+  const tailStart = Math.max(0, text.length - tailWindow);
+  const head = text.slice(0, tailStart);
+  const units = splitTextIntoUnits(text.slice(tailStart));
   let animatedIndex = units.length - 1;
   while (animatedIndex >= 0 && !units[animatedIndex]?.trim()) {
     animatedIndex -= 1;
@@ -42,7 +62,7 @@ function animateLastVisibleUnit(text: string): ElementContent[] {
   if (animatedIndex < 0) return [{ type: "text", value: text }];
 
   const children: ElementContent[] = [];
-  const prefix = units.slice(0, animatedIndex).join("");
+  const prefix = head + units.slice(0, animatedIndex).join("");
   const animated = units[animatedIndex] ?? "";
   const suffix = units.slice(animatedIndex + 1).join("");
 
@@ -57,7 +77,10 @@ function animateLastVisibleUnit(text: string): ElementContent[] {
   return children;
 }
 
-export function rehypeSplitWordsIntoSpans() {
+export function rehypeSplitWordsIntoSpans({
+  maxTextLength = DEFAULT_MAX_TEXT_LENGTH,
+  tailWindow = DEFAULT_TAIL_WINDOW,
+}: RehypeSplitWordsOptions = {}) {
   return (tree: Root) => {
     visit(tree, "element", ((node: Element) => {
       if (
@@ -86,6 +109,11 @@ export function rehypeSplitWordsIntoSpans() {
             const text = child.value;
             if (!text || text.length === 0) return;
 
+            if (text.length > maxTextLength) {
+              newChildren.push(child);
+              return;
+            }
+
             const isLastTextNode = hasMultipleTextNodes
               ? childIndex === lastTextNodeIndex
               : true;
@@ -98,7 +126,7 @@ export function rehypeSplitWordsIntoSpans() {
             // Only the newest visible unit needs a wrapper. Wrapping every
             // historical word makes a long streaming answer grow thousands
             // of DOM nodes even though those older units no longer animate.
-            newChildren.push(...animateLastVisibleUnit(text));
+            newChildren.push(...animateLastVisibleUnit(text, tailWindow));
           } else {
             newChildren.push(child);
           }

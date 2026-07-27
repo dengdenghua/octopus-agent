@@ -16,7 +16,6 @@
  */
 
 import { swallow } from "@/core/utils/log";
-import { getBackendBaseURL } from "@/core/config";
 import {
   ActivityIcon,
   BarChart3Icon,
@@ -45,6 +44,7 @@ import { cn } from "@/lib/utils";
 // for historical reasons (original branch branding); the file is
 // kept under that filename to avoid a noisy `git mv` in history.
 // The public export name + all user-facing labels say "RecipeForge".
+import { reflexFetch } from "./api";
 import { GepaPanel as RecipeForgePanel } from "./gepa-panel";
 import { VariantPerformancePanel } from "./variant-performance-panel";
 import { GeneLockBadge } from "@/components/workspace/gene-lock-badge";
@@ -110,6 +110,13 @@ type TierInfo = {
   similarity?: number;
 };
 
+type ReloadResp = {
+  ok: boolean;
+  rules_loaded: number;
+  stats_reset: boolean;
+  error: string;
+};
+
 const POLL_INTERVAL_MS = 2000;
 
 export default function ReflexMonitorPage() {
@@ -125,17 +132,12 @@ export default function ReflexMonitorPage() {
   const fetchAll = useCallback(async () => {
     try {
       const [s, r, t, ti] = await Promise.all([
-        fetch(`${getBackendBaseURL()}/api/reflex/stats`).then(
-          (r) => r.json() as Promise<Stats>,
+        reflexFetch<Stats>("/api/reflex/stats"),
+        reflexFetch<{ rules: Rule[] }>("/api/reflex/rules"),
+        reflexFetch<Timeseries>(
+          "/api/reflex/timeseries?window_minutes=60&bucket_seconds=60",
         ),
-        fetch(`${getBackendBaseURL()}/api/reflex/rules`).then(
-          (r) => r.json() as Promise<{ rules: Rule[] }>,
-        ),
-        fetch(
-          `${getBackendBaseURL()}/api/reflex/timeseries?window_minutes=60&bucket_seconds=60`,
-        ).then((r) => r.json() as Promise<Timeseries>),
-        fetch(`${getBackendBaseURL()}/api/reflex/tiers`)
-          .then((r) => r.json() as Promise<{ tiers: TierInfo[] }>)
+        reflexFetch<{ tiers: TierInfo[] }>("/api/reflex/tiers")
           // The /api/reflex/tiers endpoint is opt-in (post-tier-feature
           // backends may not expose it). Treat 404 as "no tiers" rather
           // than a hard error so the page still works on older builds.
@@ -165,10 +167,10 @@ export default function ReflexMonitorPage() {
     async (resetStats: boolean) => {
       setReloadMsg(t.reflexPage.reloadingStatus);
       try {
-        const r = await fetch(
-          `${getBackendBaseURL()}/api/reflex/reload${resetStats ? "?reset_stats=true" : ""}`,
+        const r = await reflexFetch<ReloadResp>(
+          `/api/reflex/reload${resetStats ? "?reset_stats=true" : ""}`,
           { method: "POST" },
-        ).then((r) => r.json());
+        );
         if (r.ok) {
           setReloadMsg(
             t.reflexPage.reloadLoaded(r.rules_loaded, r.stats_reset),

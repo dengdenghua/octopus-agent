@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 
 import type { Translations } from "./types";
+import { workspaceComputerJaJP } from "./workspace-computer";
+import { agentOperatorJaJP } from "./agent-operator";
 
 export const jaJP: Translations = {
   // Locale meta
@@ -27,6 +29,7 @@ export const jaJP: Translations = {
     share: "Share",
     openInNewWindow: "Open in new window",
     close: "Close",
+    back: "戻る",
     more: "More",
     search: "Search",
     download: "Download",
@@ -403,6 +406,7 @@ export const jaJP: Translations = {
     removeMaterial: "Remove Material",
     startThreadBeforeUpload: "Start or open a thread before uploading files.",
     uploadFailed: "Upload failed",
+    attachmentReadFailed: "添付ファイルの読み取りに失敗しました。もう一度お試しください。",
     maxSubagents: "Max Subagents",
     maxSearches: "Max Searches",
     permissionModeLabel: "Permissions",
@@ -1091,6 +1095,9 @@ export const jaJP: Translations = {
     },
   },
 
+  workspaceComputer: workspaceComputerJaJP,
+  agentOperator: agentOperatorJaJP,
+
   // Agent Workbench Panel
   agentWorkbench: {
     idle: "Idle",
@@ -1726,6 +1733,7 @@ export const jaJP: Translations = {
     settingsTooltip: "設定",
     // Project + chat list actions
     deleteProjectTooltip: "プロジェクトを削除",
+    deleteProjectFailed: "プロジェクトの削除に失敗しました。もう一度お試しください。",
     deleteThreadTooltip: "チャットを削除",
     actionSort: "並べ替え",
     actionNewProject: "プロジェクトフォルダを選択",
@@ -3972,6 +3980,10 @@ export const jaJP: Translations = {
     cancelled: "Cancelled",
     startNewQuest: "Start New Quest",
     quest: "Quest",
+    startFailed: "クエストの開始に失敗しました",
+    approveFailed: "プランの承認に失敗しました",
+    rejectFailed: "プランの拒否に失敗しました",
+    cancelFailed: "クエストのキャンセルに失敗しました",
   },
 
   // Knowledge Graph
@@ -7688,8 +7700,11 @@ Strategy:
     currentAccount: "Current account",
     loginAccount: "Login",
     phoneNumber: "Phone Number",
+    emailLabel: "メールアドレス",
+    tabEmail: "メールでログイン",
     verificationCode: "Verification Code",
     sendCode: "Send Code",
+    devCodeNotice: (code: string) => `認証コード(開発モード): ${code}`,
     sending: "Sending...",
     loggingIn: "Logging in...",
     enterDirectly: "Enter as Guest",
@@ -7731,6 +7746,7 @@ Strategy:
       emailAutoRegister:
         "Unregistered email addresses will be automatically registered",
       agreeTo: "By logging in, you agree to",
+      and: "および",
       userAgreement: "User Agreement",
       privacyPolicy: "Privacy Policy",
     },
@@ -7744,6 +7760,24 @@ Strategy:
       emailCardDescription:
         "Login with an email code, automatically bind to LLMs and credits",
     },
+  },
+
+  // Store panels (registry skills/plugins/roles)
+  store: {
+    skillsPanelTitle: "スキルストア · registry から必要に応じてインストール",
+    pluginsPanelTitle: "プラグインストア · registry を閲覧",
+    searchSkillsPlaceholder: "スキルを検索",
+    searchPluginsPlaceholder: "プラグインを検索",
+    searchRolesPlaceholder: "ロールを検索",
+    install: "インストール",
+    installing: "インストール中",
+    installed: "インストール済み",
+    browseOnly: "閲覧のみ",
+    pluginsSafetyNotice:
+      "プラグインアセットは実行可能な統合(kind=code)としてマークされているため、安全のためワンクリックインストールにはまだ対応しておらず、まずは閲覧用として提供しています。",
+    typeLabelStore: "ストア",
+    typeLabelTwinRole: "ストア · デジタルツイン職務テンプレート",
+    categoryDigitalTwin: "デジタルツイン",
   },
 
   // Skill Categories

@@ -126,6 +126,8 @@ export function TerminalPanel({
 
     return () => {
       ro.disconnect();
+      wsRef.current?.close();
+      wsRef.current = null;
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
