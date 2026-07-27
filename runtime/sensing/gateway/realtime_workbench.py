@@ -54,6 +54,7 @@ def _phases_from_todo_preview(
             index=index + 1,
             total=total,
             title=_phase_title(title),
+            phase_kind=_phase_kind(title),
             status=status,  # type: ignore[arg-type]
             active_item_id=active_item_id if status == "running" else None,
         )
@@ -191,6 +192,47 @@ def _phase_title(title: str, _index: int = 0) -> str:
         flags=re.IGNORECASE,
     ).strip()
     return without_machine_prefix or clean or "进行中"
+
+
+# Coarse business-phase mapping mirrors the frontend ``businessAgentPhaseKey``
+# so the workbench outline can show a readable localized label instead of the
+# raw todo wording. Order matters: deploying > testing > implementing >
+# planning > exploring — a title like "test the deploy script" classifies as
+# deploying because deploy takes precedence.
+_PHASE_KIND_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("deploying", re.compile(r"deploy|release|publish|ship|部署|上线|发布")),
+    ("testing", re.compile(r"test|verify|validat|check|qa|lint|build|测试|验证|确认|检查|构建|打包")),
+    (
+        "implementing",
+        re.compile(
+            r"implement|edit|fix|code|refactor|write|add|update|modify|change|create|patch"
+            r"|实现|修改|修复|改|新增|添加|更新|重构|接入|迁移|搭建"
+        ),
+    ),
+    ("planning", re.compile(r"plan|design|scope|spec|todo|规划|计划|设计|方案")),
+    (
+        "exploring",
+        re.compile(
+            r"explore|read|inspect|analy[sz]e|investigat|research|scan|review|understand|study"
+            r"|浏览|阅读|了解|分析|调研|研究|排查|查看|梳理"
+        ),
+    ),
+)
+
+
+def _phase_kind(title: str) -> str:
+    """Map a free-form todo title to a coarse business phase kind.
+
+    Returns one of ``planning``/``exploring``/``implementing``/``testing``/
+    ``deploying``/``other``. Mirrors the frontend ``businessAgentPhaseKey``
+    mapping so the UI can render a localized label; ``"other"`` means no
+    keyword matched and the raw title is shown unchanged.
+    """
+    text = title.lower()
+    for kind, pattern in _PHASE_KIND_PATTERNS:
+        if pattern.search(text):
+            return kind
+    return "other"
 
 
 def _workspace_focus_for_tool(item: CommandExecutionItem) -> WorkspaceFocus:

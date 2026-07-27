@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import logging
 import re
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -51,6 +52,7 @@ from runtime.protocol.text_limits import (
     append_capped_text as _append_capped_text,
 )
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
+from runtime.sensing.gateway.tool_bridge import strip_leaked_protocol_tags
 from runtime.sensing.gateway.realtime_workbench import (
     _phases_from_todo_preview,
     _phases_with_active_item,
@@ -194,6 +196,10 @@ class _ReactBridgeState:
         self.last_timeline_item_id: str | None = None
         self.current_phase_id: str | None = None
         self.reasoning: ReasoningItem | None = None
+        # monotonic start timestamp for the currently-open reasoning item;
+        # used to compute duration_ms on _emit_completed. None when no
+        # reasoning item is open or for legacy streams without this field.
+        self.reasoning_started_monotonic: float | None = None
         self.tools: dict[str, CommandExecutionItem] = {}
         self.tool_public_narrative_started: dict[str, bool] = {}
         self.phases: list[AgentPhaseSnapshot] = []
@@ -297,6 +303,15 @@ class _ReactBridgeState:
     ) -> None:
         if not delta:
             return
+        # Strip structural protocol tags (``<ReasoningBlock>`` etc.) that
+        # leaked into the literal text stream — they belong in structured
+        # reasoning / tool_use fields, not chat prose. Mirrors the
+        # checkpoint path's ``_PUBLIC_CHECKPOINT_PROTOCOL_RE`` detection
+        # so the frontend ``INTERNAL_PROCESS_BLOCK_RE`` fallback stops
+        # being the only line of defense. See ``strip_leaked_protocol_tags``.
+        delta = strip_leaked_protocol_tags(delta)
+        if not delta:
+            return
         if self.commentary_message is not None:
             await self._flush_pending_delta()
             self.commentary_message.status = ItemStatus.COMPLETED
@@ -337,6 +352,7 @@ class _ReactBridgeState:
             self.reasoning = ReasoningItem(content="")
             self._bind_timeline(self.reasoning)
             turn.items.append(self.reasoning)
+            self.reasoning_started_monotonic = time.monotonic()
             await self._emit_started(turn, log, emitter, self.reasoning)
         reasoning = self.reasoning
         assert reasoning is not None
@@ -834,8 +850,17 @@ class _ReactBridgeState:
             self.commentary_message = None
         if self.reasoning is not None:
             self.reasoning.status = status
+            if (
+                self.reasoning_started_monotonic is not None
+                and self.reasoning.duration_ms is None
+            ):
+                self.reasoning.duration_ms = max(
+                    0,
+                    int((time.monotonic() - self.reasoning_started_monotonic) * 1000),
+                )
             await self._emit_completed(turn, log, emitter, self.reasoning)
             self.reasoning = None
+            self.reasoning_started_monotonic = None
 
     async def finalize_workbench(
         self,

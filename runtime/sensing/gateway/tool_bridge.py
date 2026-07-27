@@ -138,13 +138,61 @@ CODE_CHANGE_ROUND_BUDGET = 160
 # underlying task just to produce progress prose.
 PUBLIC_NARRATIVE_SILENCE_S = 0.0
 PUBLIC_NARRATIVE_TIMEOUT_S = 6.0
-_PUBLIC_CHECKPOINT_PROTOCOL_RE = re.compile(
-    r"(?:<[/]?(?:tool|tool_use|tool_call|function|thinking|thought|"
+# Structural protocol tag names that must ride structured fields
+# (reasoning / tool_use / tool_result), never literal text_delta prose.
+# Shared between checkpoint detection (``_PUBLIC_CHECKPOINT_PROTOCOL_RE``)
+# and the streaming text_delta strip (``strip_leaked_protocol_tags``) so
+# the two paths cannot drift — adding a tag name here protects both.
+_LEAKED_PROTOCOL_TAG_NAMES = (
+    r"tool|tool_use|tool_call|function|thinking|thought|"
     r"TextBlock|ReasoningBlock|ToolCallBlock|ToolResultBlock|ExecutionBlock|"
-    r"ThinkingBlock)\b|tool_use_id|```|^\s*[{[]|\b(?:Action|Observation|Thought|"
+    r"ThinkingBlock"
+)
+_PUBLIC_CHECKPOINT_PROTOCOL_RE = re.compile(
+    r"(?:<[/]?(?:" + _LEAKED_PROTOCOL_TAG_NAMES + r")\b"
+    r"|tool_use_id|```|^\s*[{[]|\b(?:Action|Observation|Thought|"
     r"Final Answer)\s*:)",
     re.IGNORECASE | re.MULTILINE,
 )
+# Paired structural blocks leaked as literal text — the tag AND its
+# content belong in a structured field, so the whole span is removed.
+_LEAKED_PROTOCOL_BLOCK_RE = re.compile(
+    r"`?<(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)\b[^<>`]*>"
+    r"[\s\S]*?</(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)>`?",
+    re.IGNORECASE,
+)
+# Individual opening/closing tags that survive the paired-block pass
+# (or arrived split across deltas). Covers the same tag-name set as
+# ``_PUBLIC_CHECKPOINT_PROTOCOL_RE``.
+_LEAKED_PROTOCOL_TAG_RE = re.compile(
+    r"`?</?(?:" + _LEAKED_PROTOCOL_TAG_NAMES + r")\b[^<>`]*>`?",
+    re.IGNORECASE,
+)
+
+
+def strip_leaked_protocol_tags(text: str) -> str:
+    """Remove structural protocol tags that leaked into literal text.
+
+    Models occasionally emit ``<ReasoningBlock>...</ReasoningBlock>`` and
+    friends as literal text instead of routing them through the structured
+    reasoning / tool_use / tool_result fields.  The checkpoint path rejects
+    such payloads wholesale (see ``_PUBLIC_CHECKPOINT_PROTOCOL_RE``); the
+    streaming ``text_delta`` path cannot drop the whole message, so it
+    strips the leaked tags and keeps the surrounding prose.
+
+    Both paired blocks (tag + content) and individual opening/closing
+    tags are removed, using the same tag-name set as the checkpoint
+    detector.  Normal prose is untouched: the regexes anchor on the
+    structural tag names, not on ReAct prefixes, code fences, or
+    JSON-looking prefixes, so legitimate text survives.
+    """
+    if not text:
+        return text
+    value = _LEAKED_PROTOCOL_BLOCK_RE.sub("", text)
+    value = _LEAKED_PROTOCOL_TAG_RE.sub("", value)
+    return value
+
+
 _PUBLIC_CHECKPOINT_TOOL_RE = re.compile(
     r"\b(?:read_file|read_text_file|list_cwd|grep_text|glob_files|exec_shell|"
     r"shell_command|run_command|todo_write|write_todos|apply_patch|"

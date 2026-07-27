@@ -1218,7 +1218,7 @@ def test_continuation_react_turn_prioritizes_live_steering_from_bootstrap() -> N
     assert "LIVE USER FOLLOW-UP — HIGH PRIORITY" in str(messages[user_index - 1].content)
 
 
-def test_missing_public_update_does_not_invent_runtime_commentary() -> None:
+def test_missing_public_update_emits_runtime_fallback_commentary() -> None:
     router = _ScriptedRouter(
         [
             'Thought: inspect source\nAction: echo({"text": "evidence"})',
@@ -1232,8 +1232,12 @@ def test_missing_public_update_does_not_invent_runtime_commentary() -> None:
     events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
 
     assert result is not None and result.final_answer == "evidence verified"
-    commentary = [event["delta"] for event in events if event["type"] == "commentary_delta"]
-    assert commentary == []
+    commentary = [event for event in events if event["type"] == "commentary_delta"]
+    assert len(commentary) == 1
+    assert commentary[0]["progress_source"] == "runtime"
+    assert commentary[0]["public_evidence"] is True
+    assert commentary[0]["delta"]  # non-empty deterministic fallback
+    assert commentary[0]["iteration"] == 1
     assert any(event["type"] == "tool_start" for event in events)
 
 
@@ -2065,8 +2069,16 @@ def test_silent_tool_rounds_do_not_generate_runtime_authored_updates() -> None:
     events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and "调查已经完成" in result.final_answer
-    commentary = [event for event in events if event["type"] == "commentary_delta"]
-    assert commentary == []
+    # The stochastic model-authored repair (`_stream_public_evidence_narrative`)
+    # must not fire without the realtime flag. The deterministic runtime
+    # fallback is allowed — it only keeps a visible beat between tool rows.
+    model_commentary = [
+        event
+        for event in events
+        if event["type"] == "commentary_delta"
+        and event.get("progress_source") == "model"
+    ]
+    assert model_commentary == []
 
 
 def test_explicit_read_only_turn_injects_non_mutation_contract() -> None:

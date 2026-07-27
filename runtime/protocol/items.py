@@ -137,6 +137,10 @@ class ReasoningItem(_ItemBase):
     type: Literal[ItemType.REASONING] = ItemType.REASONING
     summary: list[str] = Field(default_factory=list)
     content: str = ""
+    # Wall-clock thinking time from first reasoning_delta to item completion.
+    # Filled by the realtime bridge on _emit_completed; None for legacy data
+    # and for streams that never received a completion event.
+    duration_ms: int | None = Field(default=None, alias="durationMs")
 
 
 class PlanItem(_ItemBase):
@@ -165,6 +169,10 @@ class AgentPhaseSnapshot(BaseModel):
     detail: str | None = None
     status: Literal["pending", "running", "done", "error", "waiting_approval"]
     active_item_id: str | None = Field(default=None, alias="activeItemId")
+    # Coarse business phase (planning/exploring/implementing/testing/deploying/other)
+    # mapped from the todo title. Lets the frontend render a localized label
+    # instead of the raw technical wording. "other" = no match.
+    phase_kind: str = "other"
 
 
 class WorkspaceFocus(BaseModel):

@@ -277,3 +277,70 @@ async def test_tool_effect_signal_is_persisted_on_completed_realtime_item() -> N
         "reason": "outcome unknown",
         "fencingToken": 7,
     }
+
+
+@pytest.mark.asyncio
+async def test_reasoning_duration_ms_filled_on_complete() -> None:
+    """ReasoningItem.duration_ms is filled from first append_reasoning to flush."""
+    state = _ReactBridgeState()
+    turn = _make_turn()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    await state.append_reasoning(turn, log, emitter, "think")
+    assert state.reasoning_started_monotonic is not None
+    # Elapse a small amount of real time before finalizing.
+    await asyncio.sleep(0.01)
+    await state.flush(turn, log, emitter)
+
+    completed = [p for m, p in emitter.notified if m.endswith("item/completed")]
+    assert completed
+    reasoning_item = completed[-1]["item"]
+    assert reasoning_item["type"] == "reasoning"
+    # duration_ms should be a non-negative int, roughly >= 10ms we slept.
+    assert isinstance(reasoning_item["durationMs"], int)
+    assert reasoning_item["durationMs"] >= 8
+    # After completion, the bridge slot is cleared.
+    assert state.reasoning is None
+    assert state.reasoning_started_monotonic is None
+
+
+@pytest.mark.asyncio
+async def test_reasoning_duration_ms_none_when_no_reasoning_emitted() -> None:
+    """No reasoning item → no duration_ms to fill; bridge stays clean."""
+    state = _ReactBridgeState()
+    turn = _make_turn()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    await state.append_agent_message(turn, log, emitter, "answer only")
+    await state.flush(turn, log, emitter)
+
+    completed = [p for m, p in emitter.notified if m.endswith("item/completed")]
+    assert completed
+    # No reasoning item was ever opened, so the slot is None throughout.
+    assert state.reasoning is None
+    assert state.reasoning_started_monotonic is None
+
+
+def test_reasoning_item_duration_ms_default_is_none() -> None:
+    """Legacy ReasoningItem without duration_ms must deserialize to None."""
+    from runtime.protocol import ReasoningItem
+
+    item = ReasoningItem(content="legacy")
+    assert item.duration_ms is None
+    # Alias round-trip for the wire format.
+    dumped = item.model_dump(by_alias=True)
+    assert dumped["durationMs"] is None
+
+
+def test_reasoning_item_duration_ms_round_trip() -> None:
+    """Explicit duration_ms survives serialization with the wire alias."""
+    from runtime.protocol import ReasoningItem
+
+    item = ReasoningItem(content="done", duration_ms=1234)
+    dumped = item.model_dump(by_alias=True)
+    assert dumped["durationMs"] == 1234
+    # And a round-trip via model_validate on the aliased dict.
+    restored = ReasoningItem.model_validate(dumped)
+    assert restored.duration_ms == 1234

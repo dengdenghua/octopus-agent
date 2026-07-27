@@ -552,6 +552,34 @@ def _observed_read_fallback_update(*, goal: str, step: ReActStep) -> str:
     )
 
 
+def _runtime_fallback_public_update(*, goal: str, step: ReActStep) -> str:
+    """Return a deterministic public update when the model omitted ``Update:``.
+
+    The runtime fallback only names the next action's non-sensitive target so
+    the conversation keeps a visible beat without a stochastic model paraphrase.
+    It never exposes tool/protocol names, private reasoning, or source content.
+    """
+    actions = step.actions or ([step.action] if step.action else [])
+    target = ""
+    for action in actions:
+        parsed = _parse_action(action)
+        if parsed is None:
+            continue
+        _name, args = parsed
+        candidate = _public_tool_target(args if isinstance(args, dict) else {})
+        if candidate:
+            target = candidate
+            break
+    is_cjk = bool(re.search(r"[\u3400-\u9fff]", str(goal or "")))
+    if is_cjk:
+        if target:
+            return f"正在处理 {target}。"
+        return "正在执行下一步操作。"
+    if target:
+        return f"Working on {target}."
+    return "Proceeding with the next step."
+
+
 def _build_public_action_orientation_input(*, goal: str, step: ReActStep) -> str:
     """Build a privacy-safe scope snapshot for a missing public update.
 
@@ -4814,6 +4842,23 @@ def stream_react_loop(
                     re.sub(r"\s+", " ", _repaired_public_update).strip().casefold()
                 )
         _model_supplied_update = bool(step.public_update)
+        # Force runtime fallback when the model omitted ``Update:`` so the
+        # conversation never collapses into tool rows without a public beat.
+        # ``public_evidence=True`` on the emitted delta lets the realtime
+        # gateway pass it through (generic runtime prose is otherwise dropped)
+        # so the bridge can still bind phase_id/progress_sequence/timeline_sequence.
+        if (
+            not _model_supplied_update
+            and tool_action_requested
+            and maybe_final is None
+            and not _prior_result_handoff
+        ):
+            _fallback_update = _runtime_fallback_public_update(
+                goal=intent.normalized_goal,
+                step=step,
+            )
+            if _fallback_update:
+                step.public_update = _fallback_update
         _public_update_key = re.sub(r"\s+", " ", step.public_update).strip().casefold()
         if (
             step.public_update
@@ -4825,6 +4870,8 @@ def stream_react_loop(
                 "type": "commentary_delta",
                 "delta": step.public_update,
                 "progress_source": "model" if _model_supplied_update else "runtime",
+                "public_evidence": not _model_supplied_update,
+                "start_new_segment": True,
                 "iteration": i + 1,
             }
             _last_public_update_key = _public_update_key
