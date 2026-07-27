@@ -1612,7 +1612,7 @@ function ChatInputBoxImpl({
                 <button
                   type="button"
                   onClick={onStop}
-                  className="flex size-[42px] items-center justify-center rounded-lg bg-destructive/90 text-destructive-foreground transition-all duration-200 hover:bg-destructive active:scale-95 sm:size-8"
+                  className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-200 hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
                   title={stopLabel}
                   aria-label={stopLabel}
                 >
@@ -1623,7 +1623,7 @@ function ChatInputBoxImpl({
               <button
                 type="button"
                 onClick={onStop}
-                className="flex size-[42px] items-center justify-center rounded-lg bg-destructive/90 text-destructive-foreground transition-all duration-200 hover:bg-destructive active:scale-95 sm:size-8"
+                className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-200 hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
                 title={stopLabel}
                 aria-label={stopLabel}
               >

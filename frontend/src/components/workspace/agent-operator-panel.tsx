@@ -1656,14 +1656,17 @@ function CompetitorScorecardCard({
             {error
               ? error
               : topGap
-                ? `${topGap.title} gap ${
+                ? `${topGap.title} ${to("gap")} ${
                     topGap.octopus_gap_to_effective_target ??
                     topGap.octopus_gap_to_target
-                  } vs effective target`
+                  } ${to("vs effective target")}`
                 : behavioralEvidence && !behavioralEvidence.ready
                   ? to("Behavioral head-to-head is not certified")
                   : certification?.ready
-                    ? `Certification passed ${certification.passed}/${certification.total}`
+                    ? formatOperatorCopy(to, "Certification passed {passed}/{total}", {
+                        passed: certification.passed,
+                        total: certification.total,
+                      })
                     : to("Octopus has no tracked effective scorecard gaps")}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
@@ -1906,9 +1909,10 @@ function E2ESurpassCertificationCard({
               {behavioralReady && (
                 <>
                   {" "}
-                  · pass^k{" "}
-                  {Math.round(summary.behavioral_octopus_pass_pow_k * 100)}% vs
-                  Codex {Math.round(summary.behavioral_codex_pass_pow_k * 100)}%
+                  · {to("pass^k")}{" "}
+                  {Math.round(summary.behavioral_octopus_pass_pow_k * 100)}%{" "}
+                  {to("vs Codex")}{" "}
+                  {Math.round(summary.behavioral_codex_pass_pow_k * 100)}%
                 </>
               )}
             </div>
@@ -2470,7 +2474,9 @@ function PromotionAuditSummaryCard({
           <div className="text-sm font-medium">{to("Promotion audit")}</div>
           <div className="mt-1 truncate text-xs text-muted-foreground">
             {!integrityOk
-              ? `Audit chain broken at #${integrity?.broken_at ?? "?"}`
+              ? formatOperatorCopy(to, "Audit chain broken at #{at}", {
+                  at: integrity?.broken_at ?? "?",
+                })
               : topologyBlocks > 0
                 ? to("Operator policy blocked team topology attempts")
                 : risky

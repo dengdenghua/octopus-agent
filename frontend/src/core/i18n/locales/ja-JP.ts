@@ -411,13 +411,14 @@ export const jaJP: Translations = {
     maxSearches: "Max Searches",
     permissionModeLabel: "Permissions",
     permissionModeDefault: "Ask first",
-    permissionModeDefaultDesc: "Ask before sensitive actions.",
+    permissionModeDefaultDesc:
+      "Read freely; ask before performing high-risk actions.",
     permissionModeAcceptEdits: "Auto-edit files",
     permissionModeAcceptEditsDesc:
-      "Apply file edits automatically; still ask before risky commands.",
+      "Create and edit files automatically; still ask before commands, deletions, and Git actions.",
     permissionModeBypass: "Full access",
     permissionModeBypassDesc:
-      "Run local tools automatically; use only for fully trusted tasks.",
+      "Skip routine approvals; safety blocks still apply. Use only for fully trusted local tasks.",
     permissionModePlan: "Plan only",
     permissionModePlanDesc: "Suggest steps only; do not call tools yet.",
     seedWorkflow: "Create or run a workflow: ",
@@ -630,6 +631,7 @@ export const jaJP: Translations = {
       browserNavigate: "移動",
       browserAction: "ブラウザー操作",
       updatePlan: "計画を更新",
+      useCapability: "機能を使用",
       delegateTask: "タスクを委任",
       deleteFile: "削除",
       moveFile: "移動/名前変更",
@@ -3038,6 +3040,8 @@ export const jaJP: Translations = {
       "Network disconnected. Task auto-paused — send a message to resume from checkpoint.",
     turnFailed:
       "This turn stopped before finishing. Continue the chat or retry.",
+    workspaceWriteRequired:
+      "This task requires a project file change, but no successful file change was recorded.",
     verificationRequired:
       "Code changes need verification before Octopus can finish this turn. Run tests, lint, typecheck, or build, then continue.",
     streamEndpointUnavailable:

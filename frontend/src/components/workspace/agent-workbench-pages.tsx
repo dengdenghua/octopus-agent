@@ -6,10 +6,8 @@ import {
   ChevronRightIcon,
   CircleIcon,
   BrainCircuitIcon,
-  FileIcon,
   FilePlus2Icon,
   FileTextIcon,
-  PaperclipIcon,
   GitBranchIcon,
   GlobeIcon,
   ListChecksIcon,
@@ -714,7 +712,6 @@ export function AgentSummaryPage({
   blocks,
   focusedProcessEvent,
   progressOutline,
-  userInput,
   onSelectTab,
   onOpenArtifact,
 }: {
@@ -969,73 +966,6 @@ export function AgentSummaryPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
-        {/* 输入（本轮用户请求 + 上传文件/附件） */}
-        {userInput && (
-          <section className="border-b border-border-subtle py-4">
-            <h3 className="text-xs font-medium text-foreground">
-              {t.agentWorkbenchPages.inputs}
-            </h3>
-            {userInput.text && (
-              <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-foreground/90">
-                {userInput.text}
-              </p>
-            )}
-            {userInput.uploadedFiles.length > 0 && (
-              <div className="mt-2">
-                <div className="mb-1 flex items-center gap-1.5">
-                  <FileIcon className="size-3 text-muted-foreground" />
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {t.agentWorkbenchPages.inputsUploadedFiles(
-                      userInput.uploadedFiles.length,
-                    )}
-                  </span>
-                </div>
-                <ul className="space-y-1">
-                  {userInput.uploadedFiles.map((file) => (
-                    <li
-                      key={file.path}
-                      className="flex min-w-0 items-center gap-2"
-                    >
-                      <FileIcon className="size-3 shrink-0 text-muted-foreground" />
-                      <span
-                        className="min-w-0 flex-1 truncate text-xs text-foreground"
-                        title={file.path}
-                      >
-                        {file.filename}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {userInput.attachments.length > 0 && (
-              <div className="mt-2">
-                <div className="mb-1 flex items-center gap-1.5">
-                  <PaperclipIcon className="size-3 text-muted-foreground" />
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {t.agentWorkbenchPages.inputsAttachments(
-                      userInput.attachments.length,
-                    )}
-                  </span>
-                </div>
-                <ul className="space-y-1">
-                  {userInput.attachments.map((att, index) => (
-                    <li
-                      key={`${att.filename}-${index}`}
-                      className="flex min-w-0 items-center gap-2"
-                    >
-                      <PaperclipIcon className="size-3 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate text-xs text-foreground">
-                        {att.filename}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
-        )}
-
         {/* 进展 */}
         {!focusedProcessEvent && (phases.length > 0 || showOutline) && (
           <section className="border-b border-border-subtle py-4">

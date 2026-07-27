@@ -1447,6 +1447,31 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.queryByText(/sk-test/)).not.toBeInTheDocument();
   });
 
+  it("renders capability tools as a localized human action", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-capability-tool",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "capability-1",
+            name: "use_capability",
+            args: { capability: "deep_research" },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup messages={messages} isLoading />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getByText("使用能力")).toBeInTheDocument();
+    expect(screen.getByText("deep_research")).toBeInTheDocument();
+    expect(screen.queryByText("use_capability")).not.toBeInTheDocument();
+  });
+
   it("keeps explicit human descriptions for unknown tools", () => {
     const messages: AIMessage[] = [
       {

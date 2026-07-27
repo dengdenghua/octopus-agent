@@ -46,7 +46,7 @@ describe("<PermissionIndicator />", () => {
 
     expect(
       screen.getByText(
-        "Apply file edits automatically; still ask before risky commands.",
+        "Create and edit files automatically; still ask before commands, deletions, and Git actions.",
       ),
     ).toBeInTheDocument();
 
@@ -73,7 +73,9 @@ describe("<PermissionIndicator />", () => {
     ).not.toBeInTheDocument();
 
     expect(
-      screen.getByText("Ask before sensitive actions."),
+      screen.getByText(
+        "Read freely; ask before performing high-risk actions.",
+      ),
     ).toBeInTheDocument();
   });
 });

@@ -190,7 +190,7 @@ export default function ComputerAutomationPage() {
     }
     setLeaseOwner({
       owner_id: ownerId,
-      owner_label: tc("本地电脑自动化页"),
+      owner_label: tc("Local computer automation"),
     });
   }, [tc]);
 
@@ -266,7 +266,7 @@ export default function ComputerAutomationPage() {
     () => ({
       sessionId: leaseOwner?.owner_id,
       ownerId: leaseOwner?.owner_id,
-      ownerLabel: leaseOwner?.owner_label ?? tc("本地电脑自动化页"),
+      ownerLabel: leaseOwner?.owner_label ?? tc("Local computer automation"),
       surface: "computer",
       targetId: "local-pc",
       getStopped: () => (leaseBlockedRef.current ? "lease_lost" : false),
@@ -319,8 +319,8 @@ export default function ComputerAutomationPage() {
   useEffect(() => {
     if (!previewExpired) return;
     addLog({
-      title: tc("确认队列已过期"),
-      detail: tc("token 已在服务端清除，请重新预演动作"),
+      title: tc("Confirmation expired"),
+      detail: tc("The server cleared the token. Preview the action again."),
       tone: "warn",
     });
     clearPreview();
@@ -353,7 +353,7 @@ export default function ComputerAutomationPage() {
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("状态读取失败"),
+        title: tc("Failed to read status"),
         detail: String(error),
         tone: "error",
       });
@@ -385,9 +385,9 @@ export default function ComputerAutomationPage() {
       setPcScreenStats(data.stats);
       setObservationMode("live");
       addLog({
-        title: tc("实时屏幕已启动"),
+        title: tc("Live screen started"),
         detail: tc(
-          "电脑画面进入工位观察区；点击画面只会选点，不会直接执行。",
+          "The computer view is now live. Clicking the view only selects a point; it does not execute anything.",
         ),
         tone: "ok",
       });
@@ -395,7 +395,7 @@ export default function ComputerAutomationPage() {
       swallow(error);
       setPcScreenError(String(error));
       addLog({
-        title: tc("实时屏幕启动失败"),
+        title: tc("Failed to start live screen"),
         detail: String(error),
         tone: "error",
       });
@@ -410,15 +410,15 @@ export default function ComputerAutomationPage() {
       const data = await stopPcScreenCapture();
       setPcScreenStats(data.last_stats);
       addLog({
-        title: tc("实时屏幕已停止"),
-        detail: tc("保留当前工位布局；需要继续观察时可重新启动实时屏幕。"),
+        title: tc("Live screen stopped"),
+        detail: tc("The current workspace layout is preserved. Restart the live screen when needed."),
         tone: "ok",
       });
     } catch (error) {
       swallow(error);
       setPcScreenError(String(error));
       addLog({
-        title: tc("实时屏幕停止失败"),
+        title: tc("Failed to stop live screen"),
         detail: String(error),
         tone: "error",
       });
@@ -558,14 +558,14 @@ export default function ComputerAutomationPage() {
         },
       });
       addLog({
-        title: data.ok ? tc("已观察当前屏幕") : tc("截图失败"),
+        title: data.ok ? tc("Current screen captured") : tc("Screenshot failed"),
         detail: data.ok ? `${data.size_bytes || 0} bytes` : data.error || "",
         tone: data.ok ? "ok" : "error",
       });
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("截图请求失败"),
+        title: tc("Screenshot request failed"),
         detail: String(error),
         tone: "error",
       });
@@ -616,14 +616,14 @@ export default function ComputerAutomationPage() {
       mergeLease(data.lease);
       applyPreview(data);
       addLog({
-        title: tc("动作已进入确认队列"),
+        title: tc("Action added to confirmation queue"),
         detail: `${data.action.action} · ${data.risk.level}`,
         tone: data.risk.level === "high" ? "warn" : "ok",
       });
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("动作预演失败"),
+        title: tc("Action preview failed"),
         detail: String(error),
         tone: "error",
       });
@@ -658,14 +658,14 @@ export default function ComputerAutomationPage() {
       mergeLease(data.lease);
       applyPreview(data);
       addLog({
-        title: tc("截图坐标已进入确认队列"),
+        title: tc("Screen point added to confirmation queue"),
         detail: `${selectedPoint.x}, ${selectedPoint.y} · ${data.risk.level}`,
         tone: data.risk.level === "high" ? "warn" : "ok",
       });
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("坐标点击预演失败"),
+        title: tc("Point-click preview failed"),
         detail: String(error),
         tone: "error",
       });
@@ -692,17 +692,17 @@ export default function ComputerAutomationPage() {
       if (data.screenshot) setScreenshot(data.screenshot);
       addLog({
         title: data.suggestions.length
-          ? tc("已生成下一步计划")
-          : tc("没有可用计划"),
+          ? tc("Next-step plan generated")
+          : tc("No plan available"),
         detail: data.suggestions.length
-          ? `${data.suggestions.length} ${tc("个候选动作等待确认")}`
-          : tc("请补充更明确的任务目标"),
+          ? `${data.suggestions.length} ${tc("candidate actions awaiting confirmation")}`
+          : tc("Describe the goal more specifically."),
         tone: data.suggestions.length ? "ok" : "warn",
       });
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("计划生成失败"),
+        title: tc("Failed to generate plan"),
         detail: String(error),
         tone: "error",
       });
@@ -723,7 +723,7 @@ export default function ComputerAutomationPage() {
       expires_in_seconds: suggestion.expires_in_seconds,
     });
     addLog({
-      title: tc("候选动作已放入确认队列"),
+      title: tc("Candidate action added to confirmation queue"),
       detail: `${suggestion.action.action} · ${suggestion.risk.level}`,
       tone: suggestion.risk.level === "high" ? "warn" : "ok",
     });
@@ -749,21 +749,21 @@ export default function ComputerAutomationPage() {
       if (first) {
         acceptSuggestion(first);
         addLog({
-          title: tc("Agent 已完成预演"),
-          detail: tc("第一步已进入确认队列，需要你确认后才会执行。"),
+          title: tc("Agent preview complete"),
+          detail: tc("The first step is awaiting your confirmation before it runs."),
           tone: "ok",
         });
       } else {
         addLog({
-          title: tc("Agent 暂无可执行下一步"),
-          detail: tc("没有生成候选动作，请补充更明确的目标。"),
+          title: tc("Agent has no executable next step"),
+          detail: tc("No candidate action was generated. Describe the goal more specifically."),
           tone: "warn",
         });
       }
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("Agent 循环预演失败"),
+        title: tc("Agent loop preview failed"),
         detail: String(error),
         tone: "error",
       });
@@ -790,17 +790,17 @@ export default function ComputerAutomationPage() {
       if (data.screenshot) setScreenshot(data.screenshot);
       addLog({
         title: data.suggestions.length
-          ? tc("视觉输出已校验")
-          : tc("没有解析到动作"),
+          ? tc("Vision output validated")
+          : tc("No action found"),
         detail: data.suggestions.length
-          ? `${data.suggestions.length} ${tc("个动作等待确认")}`
-          : tc("请粘贴标准 JSON 动作"),
+          ? `${data.suggestions.length} ${tc("actions awaiting confirmation")}`
+          : tc("Paste a valid JSON action."),
         tone: data.suggestions.length ? "ok" : "warn",
       });
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("视觉输出解析失败"),
+        title: tc("Failed to parse vision output"),
         detail: String(error),
         tone: "error",
       });
@@ -826,18 +826,18 @@ export default function ComputerAutomationPage() {
       if (data.screenshot) setScreenshot(data.screenshot);
       addLog({
         title: data.ok
-          ? tc("视觉模型已返回动作")
-          : tc("视觉模型未就绪"),
+          ? tc("Vision model returned actions")
+          : tc("Vision model is not ready"),
         detail: data.ok
-          ? `${data.suggestions.length} ${tc("个动作等待确认")}`
+          ? `${data.suggestions.length} ${tc("actions awaiting confirmation")}`
           : (data as unknown as { error?: string }).error ||
-            tc("请配置视觉模型"),
+            tc("Configure a vision model."),
         tone: data.ok ? "ok" : "warn",
       });
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("视觉模型调用失败"),
+        title: tc("Vision model request failed"),
         detail: String(error),
         tone: "error",
       });
@@ -873,7 +873,7 @@ export default function ComputerAutomationPage() {
     setX(String(clampedX));
     setY(String(clampedY));
     addLog({
-      title: tc("已从截图选中坐标"),
+      title: tc("Point selected from screenshot"),
       detail: `${clampedX}, ${clampedY}`,
       tone: "ok",
     });
@@ -906,7 +906,7 @@ export default function ComputerAutomationPage() {
     setX(String(clampedX));
     setY(String(clampedY));
     addLog({
-      title: tc("已从实时屏幕选中坐标"),
+      title: tc("Point selected from live screen"),
       detail: `${clampedX}, ${clampedY}`,
       tone: "ok",
     });
@@ -926,14 +926,14 @@ export default function ComputerAutomationPage() {
       mergeLease(data.lease);
       clearPreview();
       addLog({
-        title: data.ok ? tc("动作已执行") : tc("动作执行失败"),
+        title: data.ok ? tc("Action executed") : tc("Action failed"),
         detail: summarizeResult(data),
         tone: data.ok ? "ok" : "error",
       });
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("执行请求失败"),
+        title: tc("Execution request failed"),
         detail: String(error),
         tone: "error",
       });
@@ -951,14 +951,14 @@ export default function ComputerAutomationPage() {
       });
       mergeLease(data.lease);
       addLog({
-        title: tc("已释放电脑接管"),
-        detail: tc("其他项目现在可以接管这台电脑。"),
+        title: tc("Computer control released"),
+        detail: tc("Other projects can now take control of this computer."),
         tone: "ok",
       });
     } catch (error) {
       swallow(error);
       addLog({
-        title: tc("释放接管失败"),
+        title: tc("Failed to release control"),
         detail: String(error),
         tone: "error",
       });
@@ -984,12 +984,12 @@ export default function ComputerAutomationPage() {
 
   const liveScreenRunning = pcScreenStats?.running === true;
   const liveScreenDetail = pcScreenError
-    ? tc("连接异常")
+    ? tc("Connection error")
     : pcStream.isConnected
-      ? `${pcStream.fps} fps · ${pcStream.frameCount} ${tc("帧")}`
+      ? `${pcStream.fps} fps · ${pcStream.frameCount} ${tc("frames")}`
       : liveScreenRunning
-        ? tc("等待画面")
-        : tc("未启动");
+        ? tc("Waiting for screen")
+        : tc("Not started");
 
   return (
     <WorkspaceContainer>
@@ -1004,11 +1004,11 @@ export default function ComputerAutomationPage() {
                 </div>
                 <div>
                   <h1 className="text-xl font-semibold tracking-tight">
-                    {tc("本机助手")}
+                    {tc("Computer assistant")}
                   </h1>
                   <p className="text-sm text-muted-foreground">
                     {tc(
-                      "让 Agent 看见并操作这台电脑。每一步先预演，再由你确认。",
+                      "Let the Agent see and operate this computer. Every step is previewed before you confirm it.",
                     )}
                   </p>
                 </div>
@@ -1020,11 +1020,11 @@ export default function ComputerAutomationPage() {
                   disabled={busy !== null}
                 >
                   <RefreshCwIcon className="size-4" />
-                  {tc("刷新状态")}
+                  {tc("Refresh status")}
                 </Button>
                 <Button onClick={capture} disabled={computerActionDisabled}>
                   <EyeIcon className="size-4" />
-                  {tc("观察屏幕")}
+                  {tc("Capture screen")}
                 </Button>
               </div>
             </div>
@@ -1049,17 +1049,17 @@ export default function ComputerAutomationPage() {
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
               <StatusTile
-                label={tc("运行健康")}
+                label={tc("Runtime health")}
                 value={getHealthLabel(status?.health, status?.ready, tc)}
               />
               <StatusTile
-                label={tc("确认方式")}
+                label={tc("Confirmation mode")}
                 value={
-                  status?.mode ? tc("先预演再确认") : tc("加载中")
+                  status?.mode ? tc("Preview, then confirm") : tc("Loading")
                 }
               />
               <StatusTile
-                label={tc("屏幕")}
+                label={tc("Screen")}
                 value={
                   status?.screen.width
                     ? `${status.screen.width} × ${status.screen.height}`
@@ -1067,7 +1067,7 @@ export default function ComputerAutomationPage() {
                 }
               />
               <StatusTile
-                label={tc("鼠标位置")}
+                label={tc("Cursor position")}
                 value={
                   status?.screen.cursor_x != null
                     ? `${status.screen.cursor_x}, ${status.screen.cursor_y}`
@@ -1075,20 +1075,20 @@ export default function ComputerAutomationPage() {
                 }
               />
               <StatusTile
-                label={tc("电脑控制")}
+                label={tc("Computer control")}
                 value={
                   status?.pyautogui_available
-                    ? tc("已就绪")
-                    : tc("未就绪")
+                    ? tc("Ready")
+                    : tc("Not ready")
                 }
               />
               <StatusTile
-                label={tc("语义定位")}
+                label={tc("Semantic targeting")}
                 value={
-                  status?.uia_available ? tc("已就绪") : tc("降级可用")
+                  status?.uia_available ? tc("Ready") : tc("Available with limits")
                 }
               />
-              <StatusTile label={tc("接管租约")} value={leaseState.label} />
+              <StatusTile label={tc("Control lease")} value={leaseState.label} />
             </div>
 
             {status && <RuntimeReadinessPanel status={status} />}
@@ -1099,12 +1099,12 @@ export default function ComputerAutomationPage() {
                   <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" />
                   <div>
                     <div className="font-medium">
-                      {tc("本机运行时被阻塞")}
+                      {tc("Local runtime is blocked")}
                     </div>
                     <p className="mt-1">
                       {runtimeState.detail ||
                         tc(
-                          "后端已启动，但关键电脑自动化能力还没有就绪，暂时不能截图、预演或执行鼠标键盘动作。",
+                          "The backend is running, but required automation capabilities are not ready. Screenshots, previews, mouse, and keyboard actions are temporarily unavailable.",
                         )}
                     </p>
                     {runtimeState.actions.length ? (
@@ -1134,7 +1134,7 @@ export default function ComputerAutomationPage() {
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-sm font-semibold">
-                    {tc("屏幕观察")}
+                    {tc("Screen observation")}
                   </h2>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     {observationMode === "snapshot" &&
@@ -1167,7 +1167,7 @@ export default function ComputerAutomationPage() {
                           : "text-muted-foreground hover:bg-muted",
                       )}
                     >
-                      {tc("截图")}
+                      {tc("Snapshot")}
                     </button>
                     <button
                       type="button"
@@ -1179,7 +1179,7 @@ export default function ComputerAutomationPage() {
                           : "text-muted-foreground hover:bg-muted",
                       )}
                     >
-                      {tc("实时")}
+                      {tc("Live")}
                     </button>
                   </div>
                   {observationMode === "live" ? (
@@ -1194,12 +1194,12 @@ export default function ComputerAutomationPage() {
                       {liveScreenRunning ? (
                         <>
                           <SquareIcon className="size-4" />
-                          {tc("停止实时")}
+                          {tc("Stop live")}
                         </>
                       ) : (
                         <>
                           <RadioIcon className="size-4" />
-                          {tc("启动实时")}
+                          {tc("Start live")}
                         </>
                       )}
                     </Button>
@@ -1218,13 +1218,13 @@ export default function ComputerAutomationPage() {
                   <>
                     <p id="live-screen-help" className="sr-only">
                       {tc(
-                        "点击实时屏幕选择坐标；按 Enter 可选择屏幕中心点。",
+                        "Click the live screen to select a point. Press Enter to select the center.",
                       )}
                     </p>
                     <canvas
                       ref={liveCanvasRef}
                       aria-describedby="live-screen-help"
-                      aria-label={tc("实时电脑屏幕")}
+                      aria-label={tc("Live computer screen")}
                       role="button"
                       tabIndex={0}
                       className="max-h-full max-w-full cursor-crosshair bg-black object-contain focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -1241,7 +1241,7 @@ export default function ComputerAutomationPage() {
                         setX(String(cx));
                         setY(String(cy));
                         addLog({
-                          title: tc("已从实时屏幕选中坐标"),
+                          title: tc("Point selected from live screen"),
                           detail: `${cx}, ${cy}`,
                           tone: "ok",
                         });
@@ -1280,20 +1280,20 @@ export default function ComputerAutomationPage() {
                       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/70 text-sm text-muted-foreground">
                         <RadioIcon className="size-7" />
                         {liveScreenRunning
-                          ? tc("等待实时屏幕画面")
-                          : tc("点击“启动实时”打开电脑工位画面")}
+                          ? tc("Waiting for the live screen")
+                          : tc("Select “Start live” to open the computer view.")}
                       </div>
                     ) : null}
                   </>
                 ) : screenshot?.data_url ? (
                   <>
                     <p id="screenshot-help" className="sr-only">
-                      {tc("点击截图选择坐标；按 Enter 可选择屏幕中心点。")}
+                      {tc("Click the screenshot to select a point. Press Enter to select the center.")}
                     </p>
                     <img
                       ref={screenshotImageRef}
                       src={screenshot.data_url}
-                      alt={tc("当前屏幕截图")}
+                      alt={tc("Current screen screenshot")}
                       aria-describedby="screenshot-help"
                       role="button"
                       tabIndex={0}
@@ -1313,7 +1313,7 @@ export default function ComputerAutomationPage() {
                         setX(String(cx));
                         setY(String(cy));
                         addLog({
-                          title: tc("已从截图选中坐标"),
+                          title: tc("Point selected from screenshot"),
                           detail: `${cx}, ${cy}`,
                           tone: "ok",
                         });
@@ -1334,7 +1334,7 @@ export default function ComputerAutomationPage() {
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
                     <EyeIcon className="size-7" />
-                    {tc("点击“观察屏幕”获取当前桌面截图")}
+                    {tc("Select “Capture screen” to take a desktop screenshot.")}
                   </div>
                 )}
               </div>
@@ -1344,14 +1344,14 @@ export default function ComputerAutomationPage() {
               <section className="workspace-panel p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <ListChecksIcon className="size-4 text-primary" />
-                  <h2 className="text-sm font-semibold">{tc("任务计划")}</h2>
+                  <h2 className="text-sm font-semibold">{tc("Task plan")}</h2>
                 </div>
                 <div className="flex flex-col gap-3">
                   <Textarea
                     value={goal}
                     onChange={(e) => setGoal(e.target.value)}
                     placeholder={tc(
-                      "例如：打开 Edge 并访问 https://gemini.google.com",
+                      "For example: open Edge and visit https://gemini.google.com",
                     )}
                     className="min-h-20"
                   />
@@ -1361,7 +1361,7 @@ export default function ComputerAutomationPage() {
                       disabled={computerActionDisabled || !goal.trim()}
                     >
                       <PlayIcon className="size-4" />
-                      {tc("Agent 循环预演")}
+                      {tc("Preview agent loop")}
                     </Button>
                     <Button
                       variant="outline"
@@ -1369,7 +1369,7 @@ export default function ComputerAutomationPage() {
                       disabled={computerActionDisabled}
                     >
                       <ListChecksIcon className="size-4" />
-                      {tc("观察并生成下一步")}
+                      {tc("Observe and plan next step")}
                     </Button>
                   </div>
                   {plan?.suggestions.length ? (
@@ -1399,7 +1399,7 @@ export default function ComputerAutomationPage() {
                               variant="outline"
                               onClick={() => acceptSuggestion(item)}
                             >
-                              {tc("加入确认")}
+                              {tc("Add for confirmation")}
                             </Button>
                           </div>
                           <pre className="mt-2 max-h-24 overflow-auto rounded-lg bg-black/5 p-2 text-xs dark:bg-white/10">
@@ -1421,14 +1421,14 @@ export default function ComputerAutomationPage() {
                         }}
                       >
                         <MousePointerClickIcon className="size-4" />
-                        {tc("填入坐标")}
+                        {tc("Use selected point")}
                       </Button>
                       <Button
                         onClick={previewSelectedPoint}
                         disabled={computerActionDisabled}
                       >
                         <ShieldAlertIcon className="size-4" />
-                        {tc("加入确认")}
+                        {tc("Add for confirmation")}
                       </Button>
                     </div>
                   )}
@@ -1438,7 +1438,7 @@ export default function ComputerAutomationPage() {
               <section className="workspace-panel p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <ScanSearchIcon className="size-4 text-primary" />
-                  <h2 className="text-sm font-semibold">{tc("视觉输出")}</h2>
+                  <h2 className="text-sm font-semibold">{tc("Vision output")}</h2>
                 </div>
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_auto]">
@@ -1448,7 +1448,7 @@ export default function ComputerAutomationPage() {
                         onValueChange={setVisionModelId}
                       >
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder={tc("选择视觉模型")} />
+                          <SelectValue placeholder={tc("Select a vision model")} />
                         </SelectTrigger>
                         <SelectContent>
                           {visionModels.map((model) => (
@@ -1462,7 +1462,7 @@ export default function ComputerAutomationPage() {
                       <Input
                         value={visionModelId}
                         onChange={(e) => setVisionModelId(e.target.value)}
-                        placeholder={tc("视觉模型 ID，例如 glm-vision")}
+                        placeholder={tc("Vision model ID, for example glm-vision")}
                       />
                     )}
                     <Button
@@ -1474,28 +1474,28 @@ export default function ComputerAutomationPage() {
                       }
                     >
                       <ScanSearchIcon className="size-4" />
-                      {tc("调用模型")}
+                      {tc("Run model")}
                     </Button>
                   </div>
                   {visionModels.length > 0 ? (
                     <div className="flex items-center justify-between rounded-lg border border-border bg-background/70 px-3 py-2 text-xs text-muted-foreground">
                       <span>
-                        {tc("当前：")}
+                        {tc("Current: ")}
                         {selectedVisionModel?.display_name ||
                           selectedVisionModel?.name ||
                           visionModelId}
                       </span>
                       <span>
-                        {visionModels.length} {tc("个视觉模型")}
+                        {visionModels.length} {tc("vision models")}
                       </span>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
                       <span>
                         {modelsError
-                          ? tc("模型列表读取失败，可手动输入模型 ID。")
+                          ? tc("Could not load the model list. You can enter a model ID manually.")
                           : tc(
-                              "暂无标记 supports_vision 的模型，可先在设置里给自定义模型开启视觉能力。",
+                              "No model is marked supports_vision. Enable vision for a custom model in Settings.",
                             )}
                       </span>
                       <Button
@@ -1503,13 +1503,13 @@ export default function ComputerAutomationPage() {
                         variant="outline"
                         onClick={openModelSettings}
                       >
-                        {tc("去模型设置")}
+                        {tc("Open model settings")}
                       </Button>
                     </div>
                   )}
                   <p className="text-xs leading-5 text-muted-foreground">
                     {tc(
-                      "调用模型会把当前屏幕截图发送到所选视觉模型；返回动作仍需确认后才执行。",
+                      "The current screenshot is sent to the selected vision model. Returned actions still require confirmation.",
                     )}
                   </p>
                   <Textarea
@@ -1524,7 +1524,7 @@ export default function ComputerAutomationPage() {
                     disabled={computerActionDisabled || !visionOutput.trim()}
                   >
                     <ScanSearchIcon className="size-4" />
-                    {tc("解析并加入候选")}
+                    {tc("Parse and add candidates")}
                   </Button>
                 </div>
               </section>
@@ -1532,7 +1532,7 @@ export default function ComputerAutomationPage() {
               <section className="workspace-panel p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <KeyboardIcon className="size-4 text-primary" />
-                  <h2 className="text-sm font-semibold">{tc("动作预演")}</h2>
+                  <h2 className="text-sm font-semibold">{tc("Action preview")}</h2>
                 </div>
                 <div className="flex flex-col gap-3">
                   <Select
@@ -1545,11 +1545,11 @@ export default function ComputerAutomationPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="click">{tc("点击坐标")}</SelectItem>
-                      <SelectItem value="move">{tc("移动鼠标")}</SelectItem>
-                      <SelectItem value="type">{tc("输入文字")}</SelectItem>
-                      <SelectItem value="key">{tc("快捷键")}</SelectItem>
-                      <SelectItem value="wait">{tc("等待")}</SelectItem>
+                      <SelectItem value="click">{tc("Click point")}</SelectItem>
+                      <SelectItem value="move">{tc("Move cursor")}</SelectItem>
+                      <SelectItem value="type">{tc("Type text")}</SelectItem>
+                      <SelectItem value="key">{tc("Keyboard shortcut")}</SelectItem>
+                      <SelectItem value="wait">{tc("Wait")}</SelectItem>
                     </SelectContent>
                   </Select>
 
@@ -1571,7 +1571,7 @@ export default function ComputerAutomationPage() {
                     <Textarea
                       value={text}
                       onChange={(e) => setText(e.target.value)}
-                      placeholder={tc("要输入到当前焦点的文字")}
+                      placeholder={tc("Text to type into the focused control")}
                       className="min-h-24"
                     />
                   )}
@@ -1579,14 +1579,14 @@ export default function ComputerAutomationPage() {
                     <Input
                       value={keys}
                       onChange={(e) => setKeys(e.target.value)}
-                      placeholder={tc("ctrl+l 或 enter")}
+                      placeholder={tc("ctrl+l or enter")}
                     />
                   )}
                   {actionKind === "wait" && (
                     <Input
                       value={waitMs}
                       onChange={(e) => setWaitMs(e.target.value)}
-                      placeholder={tc("毫秒")}
+                      placeholder={tc("Milliseconds")}
                     />
                   )}
 
@@ -1595,14 +1595,14 @@ export default function ComputerAutomationPage() {
                     disabled={computerActionDisabled}
                   >
                     <ShieldAlertIcon className="size-4" />
-                    {tc("生成确认")}
+                    {tc("Generate confirmation")}
                   </Button>
                 </div>
               </section>
 
               <section className="workspace-panel p-4">
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2 className="text-sm font-semibold">{tc("确认队列")}</h2>
+                  <h2 className="text-sm font-semibold">{tc("Confirmation queue")}</h2>
                   {preview && previewSecondsLeft !== null ? (
                     <CountdownChip secondsLeft={previewSecondsLeft} />
                   ) : null}
@@ -1618,7 +1618,7 @@ export default function ComputerAutomationPage() {
                       )}
                     >
                       <div className="font-semibold">
-                        {tc("风险：")}
+                        {tc("Risk: ")}
                         {preview.risk.level}
                       </div>
                       <p className="mt-1 leading-6">{preview.risk.reason}</p>
@@ -1639,13 +1639,13 @@ export default function ComputerAutomationPage() {
                       }
                     >
                       <PlayIcon className="size-4" />
-                      {tc("确认执行")}
+                      {tc("Confirm and run")}
                     </Button>
                   </div>
                 ) : (
                   <p className="text-sm leading-6 text-muted-foreground">
                     {tc(
-                      "这里会显示待确认的鼠标、键盘动作。确认前不会操作系统。",
+                      "Mouse and keyboard actions awaiting confirmation appear here. Nothing touches the system before confirmation.",
                     )}
                   </p>
                 )}
@@ -1653,7 +1653,7 @@ export default function ComputerAutomationPage() {
 
               <section className="workspace-panel min-h-0 flex-1 p-4">
                 <h2 className="mb-3 text-sm font-semibold">
-                  {tc("操作记录")}
+                  {tc("Activity log")}
                 </h2>
                 <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
                   {logs.length === 0 ? (
@@ -1663,7 +1663,7 @@ export default function ComputerAutomationPage() {
                           <ListChecksIcon />
                         </EmptyMedia>
                         <EmptyTitle className="text-sm">
-                          {tc("还没有记录")}
+                          {tc("No activity yet")}
                         </EmptyTitle>
                       </EmptyHeader>
                     </Empty>
@@ -1741,13 +1741,13 @@ function RuntimeReadinessPanel({ status }: { status: ComputerStatus }) {
             ) : (
               <ShieldAlertIcon className="size-4 shrink-0" />
             )}
-            {tc("运行时")} · {state.label}
+            {tc("Runtime")} · {state.label}
           </div>
           <p className="mt-1 text-xs leading-5 opacity-85">{state.detail}</p>
         </div>
         {evidence?.case_id || evidence?.fingerprint ? (
           <div className="shrink-0 rounded-lg border border-current/20 px-3 py-2 text-xs leading-5">
-            <div className="font-medium">{tc("回放证据")}</div>
+            <div className="font-medium">{tc("Replay evidence")}</div>
             <div className="mt-0.5 font-mono opacity-80">
               {evidence.case_id || evidence.fingerprint}
             </div>
@@ -1838,20 +1838,20 @@ function getLeaseState(
 ): LeaseState {
   if (!lease?.held) {
     return {
-      label: tc("空闲"),
-      detail: tc("当前没有项目接管真实鼠标键盘。"),
+      label: tc("Idle"),
+      detail: tc("No project currently controls the physical mouse or keyboard."),
       tone: "idle",
       canRelease: false,
     };
   }
   const ttl =
     typeof lease.ttl_seconds === "number" ? Math.max(0, lease.ttl_seconds) : 0;
-  const ownerLabel = lease.owner_label || tc("其他项目");
+  const ownerLabel = lease.owner_label || tc("Another project");
   if (owner && lease.owner_id === owner.owner_id) {
     return {
-      label: `${tc("本项目")} · ${ttl}s`,
-      detail: `${tc("本项目正在接管真实鼠标键盘，")}${ttl}s ${tc(
-        "内会阻止其他项目抢占。",
+      label: `${tc("This project")} · ${ttl}s`,
+      detail: `${tc("This project controls the physical input; ")}${ttl}s ${tc(
+        "remaining before another project can take over.",
       )}`,
       tone: "own",
       canRelease: true,
@@ -1859,8 +1859,8 @@ function getLeaseState(
   }
   return {
     label: `${ownerLabel} · ${ttl}s`,
-    detail: `${ownerLabel}${tc("正在接管真实鼠标键盘，")}${ttl}s ${tc(
-      "后自动释放。",
+    detail: `${ownerLabel}${tc(" controls the physical input; ")}${ttl}s ${tc(
+      "remaining before automatic release.",
     )}`,
     tone: "blocked",
     canRelease: false,
@@ -1881,32 +1881,32 @@ function getDeviceState(
   }
   if (!status) {
     return {
-      label: tc("正在检查"),
-      detail: tc("正在确认这台电脑是否可以被 Agent 观察和操作。"),
+      label: tc("Checking"),
+      detail: tc("Checking whether the Agent can observe and operate this computer."),
       tone: "loading",
     };
   }
   if (!status.ok) {
     return {
-      label: tc("不可用"),
+      label: tc("Unavailable"),
       detail:
-        status.screen.error || tc("当前环境还不能读取屏幕或执行电脑动作。"),
+        status.screen.error || tc("This environment cannot read the screen or perform computer actions."),
       tone: "error",
     };
   }
   if (!status.pyautogui_available) {
     return {
-      label: tc("需要补能力"),
-      detail: tc("后端已响应，但电脑控制能力还没有就绪。"),
+      label: tc("Capabilities required"),
+      detail: tc("The backend responded, but computer control capabilities are not ready."),
       tone: "warn",
     };
   }
   const screen = status.screen.width
     ? `${status.screen.width} × ${status.screen.height}`
-    : tc("屏幕已连接");
+    : tc("Screen connected");
   return {
-    label: tc("已连接"),
-    detail: `${tc("可以观察当前屏幕，并在确认后执行操作。")}${screen}`,
+    label: tc("Connected"),
+    detail: `${tc("The screen can be observed and actions can run after confirmation. ")}${screen}`,
     tone: "ok",
   };
 }
@@ -1918,9 +1918,9 @@ function getRuntimeState(
   if (!status) {
     return {
       health: "loading",
-      label: tc("正在检查"),
-      logTitle: tc("正在检查本机助手"),
-      detail: tc("正在确认这台电脑是否可以被 Agent 观察和操作。"),
+      label: tc("Checking"),
+      logTitle: tc("Checking computer assistant"),
+      detail: tc("Checking whether the Agent can observe and operate this computer."),
       tone: "loading",
       blocksActions: true,
       actions: [],
@@ -1933,7 +1933,7 @@ function getRuntimeState(
   const firstIssue = blockers[0] ?? degraded[0] ?? null;
   const fallbackError =
     status.screen.error ||
-    (!status.pyautogui_available ? tc("pyautogui 不可用") : "");
+    (!status.pyautogui_available ? tc("pyautogui is unavailable") : "");
   if (
     health === "blocked" ||
     status.ready === false ||
@@ -1944,11 +1944,11 @@ function getRuntimeState(
       firstIssue?.reason ||
       firstIssue?.recommended_action ||
       fallbackError ||
-      tc("关键电脑自动化能力未通过运行时检查。");
+      tc("Required computer automation capabilities failed runtime checks.");
     return {
       health,
-      label: tc("阻塞"),
-      logTitle: tc("本机助手被阻塞"),
+      label: tc("Blocked"),
+      logTitle: tc("Computer assistant blocked"),
       detail,
       tone: "error",
       blocksActions: true,
@@ -1959,11 +1959,11 @@ function getRuntimeState(
     const names = degraded.map((item) => item.title).join("、");
     return {
       health,
-      label: tc("降级可用"),
-      logTitle: tc("本机助手降级可用"),
+      label: tc("Available with limits"),
+      logTitle: tc("Computer assistant available with limits"),
       detail: names
-        ? `${names}${tc("暂不可用；基础观察、预演和确认执行仍可继续。")}`
-        : tc("部分非关键能力暂不可用；基础观察、预演和确认执行仍可继续。"),
+        ? `${names}${tc(" unavailable; observation, preview, and confirmed execution still work.")}`
+        : tc("Some optional capabilities are unavailable. Observation, preview, and confirmed execution still work."),
       tone: "warn",
       blocksActions: false,
       actions,
@@ -1971,12 +1971,12 @@ function getRuntimeState(
   }
   const screen = status.screen.width
     ? `${status.screen.width} × ${status.screen.height}`
-    : tc("屏幕已连接");
+    : tc("Screen connected");
   return {
     health,
-    label: tc("已就绪"),
-    logTitle: tc("本机助手已就绪"),
-    detail: `${tc("关键能力已通过运行时检查。")}${screen}`,
+    label: tc("Ready"),
+    logTitle: tc("Computer assistant ready"),
+    detail: `${tc("Required capabilities passed runtime checks. ")}${screen}`,
     tone: "ok",
     blocksActions: false,
     actions,
@@ -1992,10 +1992,10 @@ function getHealthLabel(
   ready: boolean | undefined,
   tc: (source: string) => string,
 ) {
-  if (health === "blocked" || ready === false) return tc("阻塞");
-  if (health === "degraded") return tc("降级可用");
-  if (health === "ready" || ready === true) return tc("已就绪");
-  return tc("加载中");
+  if (health === "blocked" || ready === false) return tc("Blocked");
+  if (health === "degraded") return tc("Available with limits");
+  if (health === "ready" || ready === true) return tc("Ready");
+  return tc("Loading");
 }
 
 function getCapabilities(status: ComputerStatus): ComputerCapability[] {
@@ -2035,10 +2035,10 @@ function getActiveAction({
 }, tc: (source: string) => string): ActiveAction {
   if (preview) {
     return {
-      label: tc("等待你确认"),
+      label: tc("Waiting for confirmation"),
       detail: `${formatActionLabel(preview.action, tc)} · ${preview.risk.reason}${
         previewSecondsLeft !== null
-          ? ` · ${previewSecondsLeft}s ${tc("后过期")}`
+          ? ` · ${previewSecondsLeft}s ${tc("until expiry")}`
           : ""
       }`,
       tone: preview.risk.level === "high" ? "warn" : "active",
@@ -2046,41 +2046,41 @@ function getActiveAction({
   }
   if (busy) {
     const labelMap: Record<string, string> = {
-      status: tc("检查连接"),
-      capture: tc("观察屏幕"),
-      ground: tc("解析动作"),
-      vision: tc("请求视觉模型"),
-      plan: tc("生成计划"),
-      preview: tc("生成确认"),
-      execute: tc("执行操作"),
-      release: tc("释放接管"),
-      stream: tc("切换实时屏幕"),
+      status: tc("Check connection"),
+      capture: tc("Capture screen"),
+      ground: tc("Parse actions"),
+      vision: tc("Request vision model"),
+      plan: tc("Generate plan"),
+      preview: tc("Generate confirmation"),
+      execute: tc("Execute action"),
+      release: tc("Release control"),
+      stream: tc("Switch live screen"),
     };
     return {
-      label: labelMap[busy] || tc("正在处理"),
-      detail: tc("当前动作完成前，新的电脑动作会先排队等待。"),
+      label: labelMap[busy] || tc("Working"),
+      detail: tc("New computer actions wait until the current action finishes."),
       tone: "active",
     };
   }
   if (plan?.suggestions.length) {
     return {
-      label: tc("有候选动作"),
+      label: tc("Candidate actions available"),
       detail: `${plan.suggestions.length} ${tc(
-        "个候选动作，选择后会进入确认队列。",
+        "candidate actions. Select one to add it to the confirmation queue.",
       )}`,
       tone: "ok",
     };
   }
   if (screenshot?.data_url) {
     return {
-      label: tc("已观察屏幕"),
-      detail: tc("可以点击截图选坐标，或让视觉模型生成下一步。"),
+      label: tc("Screen observed"),
+      detail: tc("Select a point on the screenshot or ask the vision model for the next step."),
       tone: "idle",
     };
   }
   return {
-    label: tc("等待任务"),
-    detail: tc("先观察屏幕，或描述你希望 Agent 在电脑上完成什么。"),
+    label: tc("Waiting for a task"),
+    detail: tc("Capture the screen or describe what you want the Agent to do."),
     tone: "idle",
   };
 }
@@ -2089,7 +2089,7 @@ function formatActionLabel(
   action: Record<string, unknown>,
   tc: (source: string) => string,
 ) {
-  const kind = String(action.action || tc("动作"));
+  const kind = String(action.action || tc("Action"));
   if (
     (kind === "click" || kind === "move") &&
     action.x != null &&
@@ -2098,13 +2098,13 @@ function formatActionLabel(
     const target = getControlIdentity(getMatchedControl(action));
     const coordinate = `${action.x}, ${action.y}`;
     return target
-      ? `${tc(kind === "click" ? "点击" : "移动")} ${target} · ${coordinate}`
-      : `${tc(kind === "click" ? "点击" : "移动")} ${coordinate}`;
+      ? `${tc(kind === "click" ? "Click" : "Move")} ${target} · ${coordinate}`
+      : `${tc(kind === "click" ? "Click" : "Move")} ${coordinate}`;
   }
-  if (kind === "type") return tc("输入文字");
+  if (kind === "type") return tc("Type text");
   if (kind === "key")
-    return `${tc("快捷键")} ${Array.isArray(action.keys) ? action.keys.join("+") : action.keys || ""}`;
-  if (kind === "wait") return `${tc("等待")} ${action.ms || 0}ms`;
+    return `${tc("Keyboard shortcut")} ${Array.isArray(action.keys) ? action.keys.join("+") : action.keys || ""}`;
+  if (kind === "wait") return `${tc("Wait")} ${action.ms || 0}ms`;
   return kind;
 }
 
@@ -2154,7 +2154,7 @@ function ScreenshotActionOverlay({
         >
           <span className="block size-2.5 rounded-full bg-foreground shadow-[var(--shadow-xs)] ring-2 ring-white dark:bg-white dark:ring-background" />
           <span className="absolute left-3 top-2 whitespace-nowrap rounded-md bg-background/90 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-[var(--shadow-xs)]">
-            {tc("当前鼠标")}
+            {tc("Current cursor")}
           </span>
         </div>
       ) : null}
@@ -2245,7 +2245,7 @@ function getVisualTarget({
   if (selectedPoint) {
     return {
       ...selectedPoint,
-      label: tc("手动选点"),
+      label: tc("Selected point"),
       tone: "selected",
     };
   }
@@ -2311,7 +2311,7 @@ function MatchedControlSummary({
   const control = getMatchedControl(action);
   if (!control) return null;
 
-  const identity = getControlIdentity(control) || tc("未命名控件");
+  const identity = getControlIdentity(control) || tc("Unnamed control");
   const typeText = [control.control_type, control.class_name]
     .filter(Boolean)
     .join(" · ");
@@ -2328,7 +2328,7 @@ function MatchedControlSummary({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold">
             <span className="break-words">
-              {tc("UIA 命中：")}
+              {tc("UIA match: ")}
               {identity}
             </span>
             {scoreText !== null ? (
@@ -2341,12 +2341,12 @@ function MatchedControlSummary({
             {typeText ? <span>{typeText}</span> : null}
             {centerText ? (
               <span>
-                {tc("中心")} {centerText}
+                {tc("Center")} {centerText}
               </span>
             ) : null}
             {control.query ? (
               <span>
-                {tc("查询")} {control.query}
+                {tc("Query")} {control.query}
               </span>
             ) : null}
           </div>
@@ -2407,7 +2407,7 @@ function DeviceStatePanel({ state }: { state: DeviceState }) {
     <div className={cn("rounded-lg border p-4", toneClass)}>
       <div className="flex items-center gap-2 text-sm font-semibold">
         <ActivityIcon className="size-4" />
-        {tc("这台电脑")} · {state.label}
+        {tc("This computer")} · {state.label}
       </div>
       <p className="mt-2 text-xs leading-5 opacity-80">{state.detail}</p>
     </div>
@@ -2433,26 +2433,26 @@ function PermissionGuardPanel({
   const tc = (source: string) => t.workspaceComputer[source] ?? source;
   const rows = [
     {
-      label: tc("观察"),
+      label: tc("Observe"),
       value: hasScreenshot
-        ? tc("已获取屏幕截图")
-        : tc("只在你点击后观察屏幕"),
+        ? tc("Screen screenshot captured")
+        : tc("Only observes the screen when you request it"),
     },
     {
-      label: tc("确认"),
+      label: tc("Confirm"),
       value: hasPreview
-        ? tc("有动作等待确认")
-        : tc("鼠标键盘不会直接执行"),
+        ? tc("An action is awaiting confirmation")
+        : tc("Mouse and keyboard actions never run automatically"),
     },
     {
-      label: tc("过期"),
+      label: tc("Expiry"),
       value:
         previewSecondsLeft !== null
-          ? `${previewSecondsLeft}s ${tc("后自动清除")}`
-          : tc("确认令牌短时有效"),
+          ? `${previewSecondsLeft}s ${tc("until automatic removal")}`
+          : tc("Confirmation tokens are short-lived"),
     },
     {
-      label: tc("接管"),
+      label: tc("Control"),
       value: leaseState.detail,
     },
   ];
@@ -2461,7 +2461,7 @@ function PermissionGuardPanel({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <ShieldCheckIcon className="size-4 text-emerald-600" />
-          {tc("权限护栏")}
+          {tc("Permission guard")}
         </div>
         {leaseState.canRelease ? (
           <Button
@@ -2470,7 +2470,7 @@ function PermissionGuardPanel({
             onClick={onReleaseLease}
             disabled={releaseDisabled}
           >
-            {tc("释放接管")}
+            {tc("Release control")}
           </Button>
         ) : null}
       </div>
@@ -2503,7 +2503,7 @@ function CurrentActionPanel({ action }: { action: ActiveAction }) {
     <div className={cn("rounded-lg border p-4", toneClass)}>
       <div className="flex items-center gap-2 text-sm font-semibold">
         <MousePointerClickIcon className="size-4" />
-        {tc("当前动作")} · {action.label}
+        {tc("Current action")} · {action.label}
       </div>
       <p className="mt-2 text-xs leading-5 opacity-80">{action.detail}</p>
     </div>
@@ -2543,7 +2543,7 @@ function ControlSessionPanel({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <ShieldCheckIcon className="size-4" />
-          {tc("控制会话")} · {formatControlMode(indicator.mode, tc)}
+          {tc("Control session")} · {formatControlMode(indicator.mode, tc)}
         </div>
         <span className="rounded-md border border-current/20 px-1.5 py-0.5 font-mono text-xs">
           {session.surface || "surface"}
@@ -2551,19 +2551,19 @@ function ControlSessionPanel({
       </div>
       <div className="mt-2 grid gap-1 text-xs leading-5 opacity-85">
         <div className="flex justify-between gap-3">
-          <span>{tc("所有者")}</span>
+          <span>{tc("Owner")}</span>
           <span className="truncate font-medium">
-            {session.ownerLabel || tc("本地电脑自动化页")}
+            {session.ownerLabel || tc("Local computer automation")}
           </span>
         </div>
         <div className="flex justify-between gap-3">
-          <span>{tc("目标")}</span>
+          <span>{tc("Target")}</span>
           <span className="truncate font-medium">
             {session.targetId != null ? String(session.targetId) : "local-pc"}
           </span>
         </div>
         <div className="flex justify-between gap-3">
-          <span>{tc("动作")}</span>
+          <span>{tc("Action")}</span>
           <span className="truncate font-medium">{action || "-"}</span>
         </div>
       </div>
@@ -2598,7 +2598,7 @@ function ControlSessionPanel({
         </div>
       ) : (
         <p className="mt-3 text-xs leading-5 opacity-80">
-          {tc("预演、执行、截图会沉淀为控制证据。")}
+          {tc("Previews, executions, and screenshots are retained as control evidence.")}
         </p>
       )}
     </div>
@@ -2609,9 +2609,9 @@ function formatControlMode(
   mode: ControlIndicatorMode,
   tc: (source: string) => string,
 ) {
-  if (mode === "action") return tc("执行中");
-  if (mode === "paused") return tc("暂停");
-  return tc("空闲");
+  if (mode === "action") return tc("Running");
+  if (mode === "paused") return tc("Paused");
+  return tc("Idle");
 }
 
 // Token-TTL countdown chip. Color shifts from neutral → amber as the
@@ -2628,7 +2628,7 @@ function CountdownChip({ secondsLeft }: { secondsLeft: number }) {
       : secondsLeft <= 15
         ? "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"
         : "border-border bg-background text-muted-foreground";
-  const label = secondsLeft === 0 ? tc("已过期") : `${secondsLeft}s`;
+  const label = secondsLeft === 0 ? tc("Expired") : `${secondsLeft}s`;
   return (
     <span
       className={cn(

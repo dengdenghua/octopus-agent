@@ -114,7 +114,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
 
-  test("shows the current turn user input in the summary inputs section", () => {
+  test("does not repeat the current turn user input in the summary", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
@@ -133,12 +133,12 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.getByText("输入")).toBeInTheDocument();
-    expect(screen.getByText("把登录页改成暗色主题")).toBeInTheDocument();
-    expect(screen.getByText("上传文件 1 个")).toBeInTheDocument();
-    expect(screen.getByText("design.md")).toBeInTheDocument();
-    expect(screen.getByText("附件 1 个")).toBeInTheDocument();
-    expect(screen.getByText("screenshot.png")).toBeInTheDocument();
+    expect(screen.queryByText("输入")).not.toBeInTheDocument();
+    expect(screen.queryByText("把登录页改成暗色主题")).not.toBeInTheDocument();
+    expect(screen.queryByText("上传文件 1 个")).not.toBeInTheDocument();
+    expect(screen.queryByText("design.md")).not.toBeInTheDocument();
+    expect(screen.queryByText("附件 1 个")).not.toBeInTheDocument();
+    expect(screen.queryByText("screenshot.png")).not.toBeInTheDocument();
   });
 
   test("omits the inputs section when there is no user input", () => {

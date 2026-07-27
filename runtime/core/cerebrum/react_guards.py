@@ -316,22 +316,15 @@ def _goal_requests_code_mutation(goal: str) -> bool:
         " ",
         lowered,
     )
-    markers = (
-        "implement",
-        "change",
-        "modify",
-        "rename",
-        "update",
-        "create",
-        "add ",
-        "remove",
-        "delete",
-        "write",
-        "patch",
-        "fix",
-        "build",
-        "migrate",
-        "refactor",
+    # Match English actions as whole words. Tool/protocol identifiers are not
+    # natural-language mutation requests: the old substring check treated the
+    # ``write`` part of ``todo_write`` as a request to edit workspace files.
+    english_mutation = re.search(
+        r"\b(?:implement|change|modify|rename|update|create|add|remove|delete|"
+        r"write|rewrite|overwrite|patch|fix|build|migrate|refactor)\b",
+        lowered,
+    )
+    chinese_markers = (
         "实现",
         "修改",
         "改动",
@@ -348,7 +341,9 @@ def _goal_requests_code_mutation(goal: str) -> bool:
         "迁移",
         "重构",
     )
-    return any(marker in lowered for marker in markers)
+    return english_mutation is not None or any(
+        marker in lowered for marker in chinese_markers
+    )
 
 
 def _final_answer_claims_no_tool_access(final_answer: str) -> bool:
@@ -431,6 +426,89 @@ def _has_successful_tool_observation(
             continue
         return True
     return False
+
+
+def _explicitly_requested_tool_names(goal: str) -> set[str]:
+    """Extract concrete tool calls the user explicitly required.
+
+    This is deliberately narrower than general tool intent. It only captures
+    snake_case identifiers attached to an imperative "call/use" verb, and it
+    removes negated requests first so "不要调用 todo_write" never becomes a
+    completion requirement.
+    """
+
+    text = str(goal or "")
+    text = re.sub(
+        r"(?:不要|无需|不需要|禁止|不得|不可|别)\s*(?:调用|使用)\s*"
+        r"[`「『]?([a-z][a-z0-9_]*_[a-z0-9_]+)[`」』]?",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"\b(?:do\s+not|don't|never)\s+(?:call|use|invoke)\s+(?:the\s+)?"
+        r"[`'\"]?([a-z][a-z0-9_]*_[a-z0-9_]+)[`'\"]?",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    names: set[str] = set()
+    patterns = (
+        r"(?:调用|使用)\s*[`「『]?([a-z][a-z0-9_]*_[a-z0-9_]+)[`」』]?",
+        r"\b(?:call|use|invoke)\s+(?:the\s+)?"
+        r"[`'\"]?([a-z][a-z0-9_]*_[a-z0-9_]+)[`'\"]?",
+    )
+    for pattern in patterns:
+        names.update(
+            match.group(1).lower()
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE)
+        )
+    return names
+
+
+def _tool_has_execution_receipt(steps: list[ReActStep], tool_name: str) -> bool:
+    """Whether the requested tool reached the execution layer.
+
+    A rejected/failed receipt still proves that the model obeyed the request to
+    call the tool; the final answer may then accurately report that outcome.
+    """
+
+    expected = tool_name.lower()
+    for step in steps:
+        actions = step.actions or ([step.action] if step.action else [])
+        for index, raw_action in enumerate(actions):
+            parsed = _parse_action(raw_action)
+            if parsed is None or parsed[0].lower() != expected:
+                continue
+            if index < len(step.action_results):
+                return True
+            observation = (step.observation or "").strip()
+            if observation and observation != "N/A" and "未执行观察" not in observation:
+                return True
+    return False
+
+
+def _explicit_tool_request_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    goal: str,
+) -> str | None:
+    """Require execution receipts for concrete tool calls in the user request."""
+
+    del final_answer
+    requested = _explicitly_requested_tool_names(goal)
+    missing = sorted(
+        name for name in requested if not _tool_has_execution_receipt(steps, name)
+    )
+    if not missing:
+        return None
+    return (
+        "The user's explicit tool-call requirement is not complete: no execution "
+        f"receipt exists for {', '.join(missing)}. Call the requested tool now "
+        "with the user's stated arguments, then finish from its actual result. "
+        "Do not replace execution with a plan, checklist, or readiness message."
+    )
 
 
 def _has_successful_code_write(steps: list[ReActStep]) -> bool:
@@ -3743,6 +3821,16 @@ def _invoke_false_tool_result(ctx: GuardContext) -> str | None:
     )
 
 
+def _invoke_explicit_tool_request(ctx: GuardContext) -> str | None:
+    if not ctx.tools_active:
+        return None
+    return _explicit_tool_request_guard(
+        ctx.steps,
+        ctx.final_answer,
+        goal=ctx.goal,
+    )
+
+
 def _invoke_missing_write(ctx: GuardContext) -> str | None:
     if not ctx.is_code_mode or not ctx.tools_active:
         return None
@@ -3892,6 +3980,7 @@ GUARD_REGISTRY: list[GuardSpec] = [
     ),
     GuardSpec("tool-availability guard", "protocol", _invoke_false_no_tool),
     GuardSpec("tool-result guard", "protocol", _invoke_false_tool_result),
+    GuardSpec("explicit-tool-contract guard", "protocol", _invoke_explicit_tool_request),
     GuardSpec("implementation-write guard", "protocol", _invoke_missing_write),
     GuardSpec("todo-protocol guard", "protocol", _invoke_todo_protocol),
     GuardSpec("mixed-mode completion guard", "protocol", _invoke_mixed_mode_completion),

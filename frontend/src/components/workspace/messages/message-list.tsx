@@ -883,18 +883,25 @@ export function MessageList({
   const presentFailure = useCallback(
     (failure: StructuredFailure): FailurePresentation => {
       const kind = failureKind(failure.detail, failure.code);
+      const requiresWorkspaceWrite =
+        /Code mode cannot finish this implementation task yet:\s*no successful file write\/edit execution is recorded/i.test(
+          failure.detail,
+        );
       const message =
         kind === "network"
           ? t.streaming.networkLost
           : kind === "verification"
             ? t.streaming.verificationRequired
-            : t.streaming.turnFailed;
+            : requiresWorkspaceWrite
+              ? t.streaming.workspaceWriteRequired
+              : t.streaming.turnFailed;
       return { ...failure, kind, message };
     },
     [
       t.streaming.networkLost,
       t.streaming.turnFailed,
       t.streaming.verificationRequired,
+      t.streaming.workspaceWriteRequired,
     ],
   );
   const failureReceipt = useMemo<FailurePresentation | null>(() => {

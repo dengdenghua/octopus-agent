@@ -88,6 +88,7 @@ export const agentOperatorZhCN: AgentOperatorCopy = {
     "同任务重复行为运行和静态发布门槛均已超过 Codex",
   "waiting for E2E certification evidence": "等待端到端认证证据",
   Scorecard: "评分卡",
+  scorecard: "评分卡",
   Evidence: "证据",
   Automation: "自动化",
   Quality: "质量",
@@ -292,9 +293,17 @@ export const agentOperatorZhCN: AgentOperatorCopy = {
   "Installed {effect} automation rule for {tool} · {count} policy rules":
     "已为 {tool} 安装 {effect} 自动化规则 · 共 {count} 条策略规则",
   "Took over task {task}.": "已接管任务 {task}。",
+  "Certification passed {passed}/{total}": "认证通过 {passed}/{total}",
+  "Audit chain broken at #{at}": "审计链在第 {at} 位断裂",
+  gap: "差距",
+  "vs effective target": "对比有效目标",
+  "pass^k": "pass^k",
   browser: "浏览器",
   desktop: "桌面",
 };
 
+// Japanese and Korean currently inherit the English source strings (en-US is
+// empty, so the key itself is displayed). This avoids leaking untranslated
+// placeholders while those locale packs are completed.
 export const agentOperatorJaJP = agentOperatorEnUS;
 export const agentOperatorKoKR = agentOperatorEnUS;

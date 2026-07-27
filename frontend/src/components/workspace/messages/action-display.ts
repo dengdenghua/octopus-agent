@@ -64,6 +64,7 @@ export interface ActionDisplay {
     | "browser_navigate"
     | "browser_action"
     | "update_plan"
+    | "use_capability"
     | "delegate_task"
     | "delete_file"
     | "move_file"
@@ -100,6 +101,23 @@ const QUERY_KEYS = [
 ];
 
 const URL_KEYS = ["url", "uri", "link", "webpage", "site", "page_url"];
+const CAPABILITY_KEYS = [
+  "capability",
+  "capability_name",
+  "skill",
+  "skill_name",
+  "name",
+  "id",
+];
+const CAPABILITY_TOOL_NAMES = new Set([
+  "use_capability",
+  "invoke_capability",
+  "call_capability",
+  "query_capability",
+  "use_skill",
+  "query_skill",
+  "read_skill",
+]);
 
 const MAX_OBJECT_LENGTH = 50;
 const MAX_COMMAND_LENGTH = 35;
@@ -173,6 +191,18 @@ function extractUrl(input: Record<string, unknown>): string | null {
   return null;
 }
 
+function extractCapabilityName(
+  input: Record<string, unknown>,
+): string | null {
+  for (const key of CAPABILITY_KEYS) {
+    const value = input[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    const name = truncate(value.trim(), MAX_QUERY_LENGTH);
+    return isHumanSafeObject(name) ? name : null;
+  }
+  return null;
+}
+
 function extractCommandSummary(input: Record<string, unknown>): string | null {
   const cmd = shellCommandFromInput(input);
   if (!cmd) return null;
@@ -216,6 +246,10 @@ function isBrowserToolName(name: string): boolean {
 function isTodoToolName(name: string): boolean {
   const n = name.toLowerCase();
   return n.includes("todo") || n === "task_write" || n === "plan_write";
+}
+
+function isCapabilityToolName(name: string): boolean {
+  return CAPABILITY_TOOL_NAMES.has(name.toLowerCase());
 }
 
 function isTeammateToolName(name: string): boolean {
@@ -382,6 +416,17 @@ export function getActionDisplay(
       iconName: "list-todo",
       workbenchTab: "agent",
       aggregateKind: "todo",
+    };
+  }
+
+  if (isCapabilityToolName(toolName)) {
+    return {
+      labelKey: "use_capability",
+      verb: "使用能力",
+      object: extractCapabilityName(args) ?? "",
+      iconName: "book-open",
+      workbenchTab: "agent",
+      aggregateKind: "other",
     };
   }
 

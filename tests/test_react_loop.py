@@ -461,6 +461,11 @@ def test_code_mode_completion_skips_missing_todo_when_protocol_is_optional() -> 
         "不要读取、查看、修改或创建任何本地文件，只做网页调研。",
         "只读验证两个文件，不修改文件。",
         "Do not read, inspect, modify, or create local project files; only research the web.",
+        (
+            "严格界面测试：请立刻调用 exec_shell，command 参数必须为"
+            "「printf approval-ui-test」。不要调用 todo_write、不要解释，"
+            "调用后等待系统审批。"
+        ),
     ],
 )
 def test_compound_negative_clause_is_not_a_code_mutation_request(goal: str) -> None:

@@ -2496,12 +2496,8 @@ function EditModelForm({
       return;
     }
     const body: Record<string, unknown> = {};
-    // Auto-inject display_name from the entry id — the field used to
-    // be user-editable but UX feedback was that it duplicated the
-    // entry id 99% of the time. Setting it explicitly keeps the
-    // backend contract intact (display_name is required-ish: many
-    // older entries used it as the picker label) without making the
-    // user fill in another field.
+    // Keep a display name on every entry. It is editable independently
+    // of the stable connection id and the upstream model ids.
     body.display_name = displayName || modelName;
     if (apiKey) body.api_key = apiKey;
     if (baseUrl) body.base_url = baseUrl;
@@ -2607,6 +2603,26 @@ function EditModelForm({
         </div>
       ) : (
         <>
+          <div>
+            <label
+              htmlFor="edit-model-display-name"
+              className="text-xs text-muted-foreground"
+            >
+              {t.settings.model.displayName}
+            </label>
+            <Input
+              id="edit-model-display-name"
+              name="octopus-edit-model-display-name"
+              className="mt-1"
+              autoComplete="off"
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-form-type="other"
+              placeholder={t.settings.model.displayNamePlaceholder}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground">

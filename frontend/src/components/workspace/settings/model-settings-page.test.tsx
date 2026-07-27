@@ -219,6 +219,50 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     expect(screen.getByText("默认 · 高性能")).toBeInTheDocument();
   });
 
+  it("allows changing and saving a connection display name", async () => {
+    const user = userEvent.setup();
+    mockModelSettingsFetch({
+      models: [
+        {
+          id: "display-name-entry",
+          name: "display-name-entry",
+          display_name: "Old display name",
+          models: ["upstream-model"],
+          provider: "openai",
+          base_url: "https://api.example.test/v1",
+          has_api_key: true,
+        },
+      ],
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    await screen.findByText("Old display name");
+    await user.click(
+      screen.getByRole("button", { name: "编辑: Old display name" }),
+    );
+
+    const displayName = await screen.findByLabelText("显示名称");
+    await user.clear(displayName);
+    await user.type(displayName, "New display name");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input, init]) => {
+          const url = typeof input === "string" ? input : input.toString();
+          if (
+            !url.includes("/api/config/custom-models/display-name-entry") ||
+            (init as RequestInit | undefined)?.method !== "PUT"
+          ) {
+            return false;
+          }
+          const body = JSON.parse(String((init as RequestInit).body));
+          return body.display_name === "New display name";
+        }),
+      ).toBe(true);
+    });
+  });
+
   it("renders OpenAI-compatible diagnostics for a strict domestic provider", async () => {
     const user = userEvent.setup();
     mockModelSettingsFetch({

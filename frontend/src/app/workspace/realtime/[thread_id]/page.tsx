@@ -2483,7 +2483,9 @@ function RealtimePageContent({
   const showAgentWorkbench =
     canOpenAgentWorkbench &&
     (agentWorkbenchManuallyOpened ||
-      (collaborationEnabled && !agentWorkbenchDismissed) ||
+      (collaborationEnabled &&
+        !agentWorkbenchDismissed &&
+        (!isNewThread || thread.isLoading || hasRenderableAgentWorkbench)) ||
       (hasRenderableAgentWorkbench && (artifactsOpen || showAgentPlan))) &&
     !showResearchHistory &&
     !(showResearch && (!!researchJob || !!researchError));

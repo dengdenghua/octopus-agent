@@ -117,6 +117,17 @@ describe("getActionDisplay", () => {
     expect(d.aggregateKind).toBe("todo");
   });
 
+  it("maps capability tools to a human-readable capability action", () => {
+    const d = getActionDisplay("use_capability", {
+      capability: "deep_research",
+    });
+    expect(d.labelKey).toBe("use_capability");
+    expect(d.object).toBe("deep_research");
+    expect(d.iconName).toBe("book-open");
+    expect(d.workbenchTab).toBe("agent");
+    expect(d.aggregateKind).toBe("other");
+  });
+
   it("maps teammate/subagent tools to delegate_task label", () => {
     const d = getActionDisplay("spawn_agent", { agent_name: "coder" });
     expect(d.labelKey).toBe("delegate_task");

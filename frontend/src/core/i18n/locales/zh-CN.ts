@@ -397,12 +397,13 @@ export const zhCN: Translations = {
     maxSearches: "最大搜索数",
     permissionModeLabel: "权限",
     permissionModeDefault: "默认确认",
-    permissionModeDefaultDesc: "执行敏感操作前先问你确认。",
+    permissionModeDefaultDesc: "读取可直接进行，高风险操作执行前需确认。",
     permissionModeAcceptEdits: "自动改文件",
     permissionModeAcceptEditsDesc:
-      "文件编辑可直接执行，命令等高风险操作仍需确认。",
+      "新建和编辑文件可直接执行；命令、删除和 Git 操作仍需确认。",
     permissionModeBypass: "全权执行",
-    permissionModeBypassDesc: "本地工具自动执行，仅用于完全可信的任务。",
+    permissionModeBypassDesc:
+      "跳过常规审批，但安全拦截仍有效；仅用于完全可信的本地任务。",
     permissionModePlan: "仅规划",
     permissionModePlanDesc: "只给方案和步骤，暂不调用工具。",
     seedWorkflow: "创建或运行一个工作流：",
@@ -609,6 +610,7 @@ export const zhCN: Translations = {
       browserNavigate: "导航到",
       browserAction: "操作浏览器",
       updatePlan: "更新计划",
+      useCapability: "使用能力",
       delegateTask: "委派任务",
       deleteFile: "删除",
       moveFile: "移动/重命名",
@@ -2825,6 +2827,8 @@ export const zhCN: Translations = {
     connectionLost: "本次回复已中断，可继续发送消息或重试。",
     networkLost: "网络连接中断，任务已自动暂停。发送消息即可从断点恢复。",
     turnFailed: "本轮任务未完成。可继续发送消息或重试。",
+    workspaceWriteRequired:
+      "该任务要求修改项目文件，但本轮没有产生有效的文件变更。",
     verificationRequired:
       "代码改动需要先完成验证，Octopus 才会结束本轮。请运行测试、lint、typecheck 或构建后继续。",
     streamEndpointUnavailable:

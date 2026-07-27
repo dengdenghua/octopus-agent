@@ -548,6 +548,7 @@ export interface Translations {
       browserNavigate: string;
       browserAction: string;
       updatePlan: string;
+      useCapability: string;
       delegateTask: string;
       deleteFile: string;
       moveFile: string;
@@ -1062,6 +1063,9 @@ export interface Translations {
     subagentsRunning: (count: number) => string;
     subagentsPending: (count: number) => string;
     failedLanes: (lanes: string) => string;
+    inputs: string;
+    inputsUploadedFiles: (count: number) => string;
+    inputsAttachments: (count: number) => string;
     context: string;
     observableThisRound: string;
     sourceCount: (count: number) => string;
@@ -2422,6 +2426,7 @@ export interface Translations {
     connectionLost: string;
     networkLost: string;
     turnFailed: string;
+    workspaceWriteRequired: string;
     verificationRequired: string;
     streamEndpointUnavailable: string;
     iteration: (count: number) => string;

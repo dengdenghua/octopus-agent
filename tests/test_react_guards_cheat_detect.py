@@ -20,6 +20,7 @@ from runtime.core.cerebrum.react_guards import (
     _commented_out_as_fix_guard,
     _concurrency_semantic_followup_guard,
     _destructive_waiter_result_guard,
+    _explicit_tool_request_guard,
     _false_verification_claim_guard,
     _loader_barrier_deadlock_guard,
     _path_boundary_decode_guard,
@@ -400,12 +401,65 @@ class TestCodeModeMissingWriteGuard:
             "调研市场趋势；无需写入本地文件，最终输出报告。",
             "Inspect the repository but do not modify files.",
             "Analyze the event flow without changing any code.",
+            (
+                "严格界面测试：请立刻调用 exec_shell，command 参数必须为"
+                "「printf approval-ui-test」。不要调用 todo_write、不要解释，"
+                "调用后等待系统审批。"
+            ),
         ],
     )
     def test_explicit_no_write_request_does_not_trigger_write_guard(
         self, goal: str
     ) -> None:
         assert _code_mode_missing_write_guard([], "Report complete.", goal=goal) is None
+
+
+class TestExplicitToolRequestGuard:
+    GOAL = (
+        "严格回归测试：请立刻调用 exec_shell，command 参数必须为"
+        "「printf approval-ui-fixed」。不要调用 todo_write、不要解释，"
+        "调用后直接返回命令结果。"
+    )
+
+    def test_explicit_tool_request_without_receipt_fires(self) -> None:
+        msg = _explicit_tool_request_guard([], "准备执行。", goal=self.GOAL)
+
+        assert msg is not None
+        assert "exec_shell" in msg
+        assert "todo_write" not in msg
+
+    def test_requested_tool_execution_receipt_allows_completion(self) -> None:
+        step = _step(
+            1,
+            action='exec_shell({"command":"printf approval-ui-fixed"})',
+            observation="approval-ui-fixed",
+        )
+        step.action_results = [
+            {
+                "tool_name": "exec_shell",
+                "ok": True,
+                "observation": "approval-ui-fixed",
+            }
+        ]
+
+        assert (
+            _explicit_tool_request_guard(
+                [step],
+                "approval-ui-fixed",
+                goal=self.GOAL,
+            )
+            is None
+        )
+
+    def test_negated_tool_request_does_not_create_requirement(self) -> None:
+        assert (
+            _explicit_tool_request_guard(
+                [],
+                "Done.",
+                goal="不要调用 todo_write，直接回答。",
+            )
+            is None
+        )
 
 
 class TestFalseVerificationClaimGuardOutcomes:

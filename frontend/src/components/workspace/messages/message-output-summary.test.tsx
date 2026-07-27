@@ -502,7 +502,9 @@ describe("MessageList failure visibility", () => {
 
     expect(screen.getByText("任务未完成")).toBeInTheDocument();
     expect(
-      screen.getByText("本轮任务未完成。可继续发送消息或重试。"),
+      screen.getByText(
+        "该任务要求修改项目文件，但本轮没有产生有效的文件变更。",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/implementation task yet/),

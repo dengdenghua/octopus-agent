@@ -2870,6 +2870,8 @@ function localizedActionVerb(
       return labels.browserAction;
     case "update_plan":
       return labels.updatePlan;
+    case "use_capability":
+      return labels.useCapability;
     case "delegate_task":
       return labels.delegateTask;
     case "delete_file":
