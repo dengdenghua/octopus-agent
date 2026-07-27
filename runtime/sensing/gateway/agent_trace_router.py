@@ -148,11 +148,13 @@ def _get_promotion_applier(
 
 def _source_task_ids_from_promotion_plan(plan: dict[str, Any]) -> list[str]:
     out: list[str] = []
-    actions = plan.get("actions") if isinstance(plan.get("actions"), list) else []
+    raw_actions = plan.get("actions")
+    actions = raw_actions if isinstance(raw_actions, list) else []
     for action in actions:
         if not isinstance(action, dict):
             continue
-        item = action.get("item") if isinstance(action.get("item"), dict) else {}
+        raw_item = action.get("item")
+        item = raw_item if isinstance(raw_item, dict) else {}
         source_task_ids = item.get("source_task_ids")
         if not isinstance(source_task_ids, list):
             continue
@@ -164,7 +166,8 @@ def _source_task_ids_from_promotion_plan(plan: dict[str, Any]) -> list[str]:
 
 
 def _promotion_plan_has_target(plan: dict[str, Any], target: str) -> bool:
-    actions = plan.get("actions") if isinstance(plan.get("actions"), list) else []
+    raw_actions = plan.get("actions")
+    actions = raw_actions if isinstance(raw_actions, list) else []
     for action in actions:
         if not isinstance(action, dict):
             continue
@@ -181,8 +184,10 @@ def _queue_repeated_trust_denials(
     review_queue: ReviewQueue,
     min_occurrences: int,
 ) -> dict[str, Any]:
-    by_tool = summary.get("by_tool") if isinstance(summary.get("by_tool"), dict) else {}
-    recent = summary.get("recent") if isinstance(summary.get("recent"), list) else []
+    raw_by_tool = summary.get("by_tool")
+    by_tool = raw_by_tool if isinstance(raw_by_tool, dict) else {}
+    raw_recent = summary.get("recent")
+    recent = raw_recent if isinstance(raw_recent, list) else []
     touched: list[dict[str, Any]] = []
     created = 0
     updated = 0

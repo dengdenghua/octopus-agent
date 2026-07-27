@@ -180,10 +180,10 @@ def _allowed_fs_roots() -> list[Path]:
         if p.is_dir():
             entries.append(p)
     for env_key in ("OCTOPUS_DATA_DIR", "OCTOPUS_HOME"):
-        raw = os.environ.get(env_key)
-        if raw:
+        env_value = os.environ.get(env_key)
+        if env_value:
             try:
-                p = Path(raw).expanduser().resolve()
+                p = Path(env_value).expanduser().resolve()
                 if p.is_dir():
                     entries.append(p)
             except (OSError, RuntimeError):  # noqa: BLE001 — fs entry inaccessible; skip

@@ -73,11 +73,14 @@ from runtime.safety.approval.approval_policy_store import load_policy
 
 def _format_project_os_result(state: dict[str, Any]) -> str:
     """Human-readable Project OS result for the realtime chat surface."""
-    project = state.get("project") if isinstance(state.get("project"), dict) else {}
-    result = state.get("result") if isinstance(state.get("result"), dict) else {}
+    raw_project = state.get("project")
+    project: dict[str, Any] = raw_project if isinstance(raw_project, dict) else {}
+    raw_result = state.get("result")
+    result: dict[str, Any] = raw_result if isinstance(raw_result, dict) else {}
     raw_milestones = state.get("milestones")
     milestones: list[Any] = raw_milestones if isinstance(raw_milestones, list) else []
-    tasks_by_ms = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
+    raw_tasks = state.get("tasks")
+    tasks_by_ms: dict[str, Any] = raw_tasks if isinstance(raw_tasks, dict) else {}
     roster = [str(member) for member in (state.get("roster") or []) if str(member).strip()]
 
     project_name = str(project.get("name") or "当前项目")
@@ -139,10 +142,12 @@ def _format_project_os_result(state: dict[str, Any]) -> str:
 
 def _project_os_todo_item(state: dict[str, Any]) -> TodoListItem | None:
     """Map Project OS milestones to the existing realtime todo-list item."""
-    project = state.get("project") if isinstance(state.get("project"), dict) else {}
+    raw_project = state.get("project")
+    project: dict[str, Any] = raw_project if isinstance(raw_project, dict) else {}
     raw_milestones = state.get("milestones")
     milestones: list[Any] = raw_milestones if isinstance(raw_milestones, list) else []
-    tasks_by_ms = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
+    raw_tasks = state.get("tasks")
+    tasks_by_ms: dict[str, Any] = raw_tasks if isinstance(raw_tasks, dict) else {}
     if not milestones:
         return None
 
@@ -1235,9 +1240,10 @@ class CerebrumRuntime:
                     require_accepting_steering=True,
                 ):
                     raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is not active")
-                turn = next((candidate for candidate in turns if candidate.id == turn_id), None)
-                if turn is None or turn.status != TurnStatus.IN_PROGRESS:
+                found_turn = next((candidate for candidate in turns if candidate.id == turn_id), None)
+                if found_turn is None or found_turn.status != TurnStatus.IN_PROGRESS:
                     raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is not active")
+                turn = found_turn
             if turn.thread_id != thread_id:
                 raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn does not belong to thread")
             if isinstance(item_id, str) and item_id:
@@ -1770,7 +1776,8 @@ class CerebrumRuntime:
                 str(state.get("message") or "Project OS 控制命令无法执行。"),
             )
             return
-        project = state.get("project") if isinstance(state.get("project"), dict) else {}
+        raw_project = state.get("project")
+        project: dict[str, Any] = raw_project if isinstance(raw_project, dict) else {}
         project_id = project.get("id")
         if project_id and isinstance(state.get("trace"), dict):
             state["trace"]["audit_events"] = self._project_store.events_for_project(

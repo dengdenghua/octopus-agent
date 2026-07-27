@@ -198,7 +198,7 @@ def create_team_rooms_router(
     """
     require_fastapi(__name__)
 
-    router = APIRouter(tags=["team-rooms"])
+    router: Any = APIRouter(tags=["team-rooms"])
     path = state_path or (app_paths().data_dir / "team_rooms.json")
     lock = Lock()
     teams: dict[str, TeamRoomWire] = _load_state(path)

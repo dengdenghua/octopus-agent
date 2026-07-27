@@ -837,16 +837,20 @@ def create_computer_router(
         action = item["action"]
         result = _execute(action)
         ok = "error" not in result
-        diagnostic = _execution_failure_diagnostic(action, result) if not ok else None
-        preview_contract = (
-            item.get("preview_contract")
-            if isinstance(item.get("preview_contract"), dict)
-            else _preview_contract(
+        diagnostic = (
+            _execution_failure_diagnostic(action, result) if not ok else {}
+        )
+        raw_preview_contract = item.get("preview_contract")
+        preview_contract: dict[str, Any]
+        if isinstance(raw_preview_contract, dict):
+            preview_contract = raw_preview_contract
+        else:
+            raw_risk = item.get("risk")
+            preview_contract = _preview_contract(
                 action,
                 owner,
-                item.get("risk") if isinstance(item.get("risk"), dict) else {},
+                raw_risk if isinstance(raw_risk, dict) else {},
             )
-        )
         execution_proof = _execution_proof(
             contract=preview_contract,
             action=action,

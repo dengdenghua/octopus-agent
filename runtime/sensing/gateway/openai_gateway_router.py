@@ -43,8 +43,8 @@ try:
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
-    APIRouter = None  # type: ignore[assignment]
-    Request = None  # type: ignore[assignment]
+    APIRouter = None  # type: ignore[assignment,misc]
+    Request = None  # type: ignore[assignment,misc]
 
 from runtime.platform.models import (
     ArmId,
@@ -415,7 +415,8 @@ def create_openai_router(
         explicit_memories = memories_from_messages(conversation_messages)
         stored_memories: list[str] = []
         written_memory_count = 0
-        request_context = body.get("context") if isinstance(body.get("context"), dict) else {}
+        raw_context = body.get("context")
+        request_context: dict[str, Any] = raw_context if isinstance(raw_context, dict) else {}
         page_memory_mode = str(request_context.get("page_agent_memory_mode") or "").strip()
         agent_name_for_memory = str(
             request_context.get("agent")

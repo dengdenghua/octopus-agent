@@ -184,7 +184,7 @@ def create_team_tasks_router(
     """
     require_fastapi(__name__)
 
-    router = APIRouter(tags=["team-tasks"])
+    router: Any = APIRouter(tags=["team-tasks"])
     path = state_path or (app_paths().data_dir / "team_tasks.json")
     lock = Lock()
     tasks: dict[str, TeamTaskWire] = _load_state(path)
@@ -540,16 +540,16 @@ def create_team_tasks_router(
                 }
                 if final_status == "failed":
                     metadata["error"] = "no connected device completed the task"
-                updates = {
+                mobile_updates: dict[str, Any] = {
                     "status": final_status,
                     "completed_at": _now(),
                     "metadata": metadata,
                 }
                 if final_status == "done":
-                    updates["produced_artifacts"] = _mobile_artifacts(records)
+                    mobile_updates["produced_artifacts"] = _mobile_artifacts(records)
                 updated = _build_terminal_task(
                     task.id,
-                    updates,
+                    mobile_updates,
                     status=final_status,
                     error=str(metadata.get("error") or ""),
                 )
@@ -607,17 +607,17 @@ def create_team_tasks_router(
                         or cli_result.get("summary")
                         or "cli_team reported no successful member"
                     )
-                updates = {
+                cli_updates: dict[str, Any] = {
                     "status": final_status,
                     "completed_at": _now(),
                     "metadata": metadata,
                 }
                 cli_artifacts = _cli_team_artifacts(cli_result)
                 if cli_artifacts:
-                    updates["produced_artifacts"] = cli_artifacts
+                    cli_updates["produced_artifacts"] = cli_artifacts
                 updated = _build_terminal_task(
                     task.id,
-                    updates,
+                    cli_updates,
                     status=final_status,
                     error=str(metadata.get("error") or ""),
                 )
@@ -1134,7 +1134,8 @@ def _prepare_team_run(task: TeamTaskWire) -> dict[str, Any]:
 
 
 def _team_task_process_timeline(task: dict[str, Any]) -> dict[str, Any]:
-    metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
+    raw_metadata = task.get("metadata")
+    metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
     process_events = [item for item in metadata.get("process_events", []) if isinstance(item, dict)]
     artifacts = [item for item in task.get("produced_artifacts", []) if isinstance(item, dict)]
     nodes: list[dict[str, Any]] = []

@@ -525,6 +525,7 @@ class LLMPlanner:
         self._kg_attached_count = 0
         self._recipe_assessed_count = 0
         self._plan_usage_local = threading.local()
+        self._last_chosen_variant: str | None = None
 
     @property
     def last_plan_usage(self) -> dict[str, int]:
@@ -787,13 +788,13 @@ class LLMPlanner:
                 #   None → no manifest, single-file path
                 #   ""   → manifest present, control branch picked
                 #   "vA" → variant vA picked
-                self._last_chosen_variant = _variant_id  # type: ignore[attr-defined]
+                self._last_chosen_variant = _variant_id
             else:
                 # No manifest · fall back to single-file addendum.
                 _recipe_section = load_for_recipe(_base_recipe_id)
                 if _recipe_section:
                     base_prompt = base_prompt + "\n\n" + _recipe_section
-                self._last_chosen_variant = None  # type: ignore[attr-defined]
+                self._last_chosen_variant = None
         except (OSError, ImportError, ValueError) as exc:
             _logger.debug("recipe/variant load skipped: %s", exc)
         kg_section = self._render_kg_section()

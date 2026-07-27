@@ -132,8 +132,8 @@ def create_android_router(
         return [
             {
                 "device_id": d.device_id,
-                "model": d.model,
-                "android_version": d.android_version,
+                "model": getattr(d, "model", ""),
+                "android_version": getattr(d, "android_version", ""),
                 "state": d.state.value,
                 "last_heartbeat_ago": round(d.stale_seconds(), 1),
                 "pending_calls": len(d.pending_calls),
@@ -150,8 +150,8 @@ def create_android_router(
             raise HTTPException(404, f"Device {device_id} not found")
         return {
             "device_id": dev.device_id,
-            "model": dev.model,
-            "android_version": dev.android_version,
+            "model": getattr(dev, "model", ""),
+            "android_version": getattr(dev, "android_version", ""),
             "state": dev.state.value,
             "last_heartbeat_ago": round(dev.stale_seconds(), 1),
             "pending_calls": len(dev.pending_calls),

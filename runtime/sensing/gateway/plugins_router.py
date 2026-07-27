@@ -150,11 +150,13 @@ def create_plugins_router(
                     }
                 )
                 continue
-            surfaces = smoke.get("surfaces") if isinstance(smoke.get("surfaces"), dict) else {}
+            raw_surfaces = smoke.get("surfaces")
+            surfaces = raw_surfaces if isinstance(raw_surfaces, dict) else {}
             for surface in surface_totals:
                 if surfaces.get(surface):
                     surface_totals[surface] += 1
-            trust = smoke.get("trust") if isinstance(smoke.get("trust"), dict) else {}
+            raw_trust = smoke.get("trust")
+            trust = raw_trust if isinstance(raw_trust, dict) else {}
             provenance = (
                 smoke.get("publisher_provenance")
                 if isinstance(smoke.get("publisher_provenance"), dict)
@@ -677,7 +679,8 @@ def _plugin_runtime_profile(plugin_dir: Path, manifest: dict[str, Any]) -> dict[
 
 
 def _plugin_capability_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
-    interface = manifest.get("interface") if isinstance(manifest.get("interface"), dict) else {}
+    raw_interface = manifest.get("interface")
+    interface = raw_interface if isinstance(raw_interface, dict) else {}
     raw = interface.get("capabilities")
     if not isinstance(raw, list):
         return []
@@ -772,7 +775,8 @@ def _plugin_mcp_entries(plugin_dir: Path, manifest: dict[str, Any]) -> list[dict
         resolved_cwd = (
             str((plugin_dir / cwd).resolve()) if cwd and not Path(cwd).is_absolute() else cwd
         )
-        env = raw_entry.get("env") if isinstance(raw_entry.get("env"), dict) else {}
+        raw_env = raw_entry.get("env")
+        env = raw_env if isinstance(raw_env, dict) else {}
         entries.append(
             {
                 "name": _string(name, "mcp"),

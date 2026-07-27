@@ -150,11 +150,10 @@ def create_skill_market_router(
                 for tag in entry.get("tags", []):
                     tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
-        categories = sorted(
-            [{"name": k, "count": v} for k, v in tag_counts.items()],
-            key=lambda x: x["count"],
-            reverse=True,
-        )
+        categories = [
+            {"name": k, "count": v}
+            for k, v in sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+        ]
         return {
             "categories": categories,
             "total": len(categories),

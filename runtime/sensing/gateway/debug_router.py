@@ -131,9 +131,10 @@ def create_debug_router(
                 info["write_scope"] = {"error": str(exc)}
 
         import os
+        import sys
 
         info["server_cwd"] = os.getcwd()
-        info["python_executable"] = os.sys.executable
+        info["python_executable"] = sys.executable
 
         return info
 

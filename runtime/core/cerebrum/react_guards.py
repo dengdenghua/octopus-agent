@@ -4024,10 +4024,10 @@ def evaluate_guards(
             continue
         if disabled_labels and spec.label in disabled_labels:
             continue
-        message = spec.invoke(ctx)
-        if message:
+        msg = spec.invoke(ctx)
+        if msg:
             if recorder is not None:
                 with contextlib.suppress(Exception):
                     recorder(spec.label, spec.category)
-            return (spec.label, message)
+            return (spec.label, msg)
     return None

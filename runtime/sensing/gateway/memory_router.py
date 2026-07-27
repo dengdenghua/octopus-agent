@@ -130,7 +130,7 @@ def create_memory_router(
                     fact[key] = str(body.get(key) or "")
             if "confidence" in body:
                 try:
-                    confidence = float(body.get("confidence"))
+                    confidence = float(body.get("confidence") or 0)
                 except Exception:
                     confidence = float(fact.get("confidence", 0.8))
                 fact["confidence"] = max(0.0, min(1.0, confidence))

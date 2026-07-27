@@ -1275,12 +1275,10 @@ def _normalize_api_base_url(value: str | None) -> str:
 
 
 def _scorecard_gap_text(row: dict[str, Any], *, reason: str) -> str:
-    scores = row.get("scores") if isinstance(row.get("scores"), dict) else {}
-    adjusted = (
-        row.get("evidence_adjusted_scores")
-        if isinstance(row.get("evidence_adjusted_scores"), dict)
-        else {}
-    )
+    raw_scores = row.get("scores")
+    scores = raw_scores if isinstance(raw_scores, dict) else {}
+    raw_adjusted = row.get("evidence_adjusted_scores")
+    adjusted = raw_adjusted if isinstance(raw_adjusted, dict) else {}
     actions = [str(action) for action in row.get("octopus_next_actions") or [] if action]
     lines = [
         f"Real baseline gap for `{row.get('title') or row.get('id')}`.",

@@ -189,7 +189,8 @@ def _queue_activity_replay_case(
     reason: str = "",
     priority: str = "",
 ) -> dict[str, Any]:
-    items = replay_case.get("items") if isinstance(replay_case.get("items"), list) else []
+    raw_items = replay_case.get("items")
+    items = raw_items if isinstance(raw_items, list) else []
     last_activity = replay_case.get("last_activity")
     last_activity = last_activity if isinstance(last_activity, dict) else {}
     has_failure = any(isinstance(item, dict) and item.get("ok") is False for item in items)
@@ -243,11 +244,13 @@ def _queue_uia_replay_assertion(
     action: dict[str, Any],
     assertion: dict[str, Any],
 ) -> dict[str, Any]:
+    _assertion_match = assertion.get("matched_control")
+    _action_match = action.get("matched_control")
     matched = (
-        assertion.get("matched_control")
-        if isinstance(assertion.get("matched_control"), dict)
-        else action.get("matched_control")
-        if isinstance(action.get("matched_control"), dict)
+        _assertion_match
+        if isinstance(_assertion_match, dict)
+        else _action_match
+        if isinstance(_action_match, dict)
         else {}
     )
     label = str(matched.get("name") or matched.get("automation_id") or "desktop control")

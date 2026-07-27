@@ -54,8 +54,9 @@ def _node_status_from_events(
                             from datetime import datetime
 
                             s = datetime.fromisoformat(started_at)
-                            e = datetime.fromisoformat(completed_at)
-                            duration_ms = (e - s).total_seconds() * 1000
+                            if completed_at is not None:
+                                e = datetime.fromisoformat(completed_at)
+                                duration_ms = (e - s).total_seconds() * 1000
                         except (ValueError, TypeError):  # noqa: BLE001 — duration computation skipped on bad timestamps
                             pass
                     out = getattr(step, "output", None)

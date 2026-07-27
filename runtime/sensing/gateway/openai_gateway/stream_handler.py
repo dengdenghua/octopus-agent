@@ -6,7 +6,7 @@ import logging
 import queue
 import threading
 import time
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from runtime.platform.models import ArmId, Budget, BudgetLimits, ParsedIntent
@@ -291,7 +291,7 @@ def _stream_direct_llm_fallback(
     # _resolve_custom_model_router needs a concrete name — never
     # the "auto" sentinel (which has no custom_models.json entry).
     router, effective_model = _resolve_custom_model_router(
-        effective_model,
+        cast(str, effective_model),
         router,
     )
     resolved_model = effective_model

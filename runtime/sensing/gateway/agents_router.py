@@ -6,7 +6,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
 
@@ -556,7 +556,7 @@ def create_agents_router(
 
         from runtime.platform.io import atomic_write_text
 
-        profile = {
+        profile: dict[str, Any] = {
             "id": agent_id,
             "templateId": agent_id,
             "templateVersion": "1.0.0",
@@ -962,7 +962,7 @@ When making changes, first read the surrounding code.
             ) from exc
 
         provided_fields = set(
-            getattr(body, "model_fields_set", None) or getattr(body, "__fields_set__", set())
+            getattr(body, "model_fields_set", set()) or getattr(body, "__fields_set__", set())
         )
         display_name = (body.display_name or "").strip()
         if "display_name" in provided_fields:
@@ -999,7 +999,7 @@ When making changes, first read the surrounding code.
             try:
                 if soul_path.is_file():
                     original_soul_text = soul_path.read_text(encoding="utf-8")
-                atomic_write_text(soul_path, body.soul, newline=None)
+                atomic_write_text(soul_path, body.soul or "", newline=None)
             except OSError as exc:
                 _restore_text_file(profile_path, original_profile_text)
                 _restore_text_file(soul_path, original_soul_text)
@@ -1583,17 +1583,20 @@ When making changes, first read the surrounding code.
     async def pause_task(
         request: Request,
         task_id: str,
-        body: PauseTaskBody = None,
+        body: PauseTaskBody | None = None,
     ) -> dict[str, Any]:
         if body is None:
             body = PauseTaskBody()
         _require_task_owner(request, task_id)
-        from runtime.core.cerebrum.pause_control import get_pause_controller
+        from runtime.core.cerebrum.pause_control import (
+            PauseReason,
+            get_pause_controller,
+        )
 
         ctrl = get_pause_controller()
         req = ctrl.request_pause(
             task_id=task_id,
-            reason=body.reason,
+            reason=cast(PauseReason, body.reason),
             requested_by="",
             note=body.note,
         )
@@ -1613,7 +1616,7 @@ When making changes, first read the surrounding code.
     async def resume_task(
         request: Request,
         task_id: str,
-        body: ResumeTaskBody = None,
+        body: ResumeTaskBody | None = None,
     ) -> dict[str, Any]:
         if body is None:
             body = ResumeTaskBody()

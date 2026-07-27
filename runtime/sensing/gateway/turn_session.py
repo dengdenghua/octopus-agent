@@ -17,8 +17,10 @@ def build_turn_metadata(
     ctx = body.get("context") or {}
     if not isinstance(ctx, dict):
         ctx = {}
-    config = body.get("config") if isinstance(body.get("config"), dict) else {}
-    config_meta = config.get("metadata") if isinstance(config.get("metadata"), dict) else {}
+    raw_config = body.get("config")
+    config = raw_config if isinstance(raw_config, dict) else {}
+    raw_meta = config.get("metadata")
+    config_meta = raw_meta if isinstance(raw_meta, dict) else {}
     metadata: dict[str, Any] = {}
 
     if ctx.get("raw_identity") is True:

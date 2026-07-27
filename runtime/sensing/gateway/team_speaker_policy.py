@@ -142,7 +142,7 @@ def _initial_floor_state(team: TeamRoomWire, policy: str) -> dict[str, Any]:
     stateless policy tears the floor down."""
     if policy not in _TURN_POLICIES:
         return {"current_speaker_id": None, "moderator_id": None, "floor_requests": []}
-    base = {
+    base: dict[str, Any] = {
         "moderator_id": getattr(team, "owner_id", None),
         "floor_requests": [],
         "current_speaker_id": None,

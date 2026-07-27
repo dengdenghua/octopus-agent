@@ -39,10 +39,10 @@ try:
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
-    APIRouter = None  # type: ignore[assignment]
-    Response = None  # type: ignore[assignment]
-    PlainTextResponse = None  # type: ignore[assignment]
-    JSONResponse = None  # type: ignore[assignment]
+    APIRouter = None  # type: ignore[assignment, misc]
+    Response = None  # type: ignore[assignment, misc]
+    PlainTextResponse = None  # type: ignore[assignment, misc]
+    JSONResponse = None  # type: ignore[assignment, misc]
 
 from runtime.sensing._fastapi_guard import require_fastapi
 

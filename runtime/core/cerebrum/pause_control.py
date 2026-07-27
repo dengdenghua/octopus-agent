@@ -253,10 +253,13 @@ class PauseController:
     def recover_from_journal(self, journal: object) -> int:
         if journal is None:
             return 0
+        read_by_type = getattr(journal, "read_by_type", None)
+        if read_by_type is None:
+            return 0
         try:
-            ckpts = list(journal.read_by_type("react_checkpoint"))
-            paused_events = list(journal.read_by_type("task_paused"))
-            resumed_events = list(journal.read_by_type("task_resumed"))
+            ckpts = list(read_by_type("react_checkpoint"))
+            paused_events = list(read_by_type("task_paused"))
+            resumed_events = list(read_by_type("task_resumed"))
         except (AttributeError, OSError):
             return 0
 

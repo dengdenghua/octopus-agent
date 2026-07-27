@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from runtime.platform.models.primitives import now_utc
 from runtime.protocol import (
@@ -594,7 +594,7 @@ async def _start_turn(
             elif runtime._should_use_reflection_fast_path(
                 text,
                 validated,
-                conversation_messages=conversation_messages,
+                conversation_messages=cast("list[dict[str, object]] | None", conversation_messages),
             ):
                 turn_driver = "reflection_fast_path"
                 await runtime._drive_reflection_fast_path(
@@ -1074,11 +1074,8 @@ async def _consume_confirmed_resume_intent(
                 confirmation_text=f"确认恢复 checkpoint #{checkpoint_id}",
             )
             if isinstance(confirmed, dict):
-                pending = (
-                    confirmed.get("intent")
-                    if isinstance(confirmed.get("intent"), dict)
-                    else pending
-                )
+                confirmed_intent = confirmed.get("intent")
+                pending = confirmed_intent if isinstance(confirmed_intent, dict) else pending
                 pending_request_id = _safe_int(confirmed.get("id")) or pending_request_id
             if pending_request_id is not None:
                 runtime._trace_store.consume_resume_request(pending_request_id)

@@ -121,7 +121,7 @@ def create_deep_research_router(
             result = []
         if isinstance(result, list):
             evidence = result
-            logs = []
+            logs: list[Any] = []
         else:
             evidence = getattr(result, "evidence", [])
             logs = getattr(result, "logs", [])

@@ -321,7 +321,7 @@ def create_stub_router(
 
     @router.get("/api/account/overview")
     def _overview() -> dict[str, Any]:
-        profile = {
+        profile: dict[str, Any] = {
             "user_id": "anonymous",
             "username": "anonymous",
             "display_name": "Guest",

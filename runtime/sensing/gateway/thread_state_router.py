@@ -62,7 +62,8 @@ def create_thread_state_router(
     def _can_access(thread: dict[str, Any] | None, actor_id: str | None) -> bool:
         if thread is None:
             return False
-        metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else {}
+        raw_metadata = thread.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         owner = metadata.get("owner_actor_id") or metadata.get("actor_id")
         return not isinstance(owner, str) or not owner.strip() or owner.strip() == actor_id
 
@@ -85,11 +86,13 @@ def create_thread_state_router(
         actor_id = _auth(request)
         _require_store()
         payload = body or {}
-        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        raw_metadata = payload.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         metadata = dict(metadata)
         if actor_id is not None:
             metadata.setdefault("owner_actor_id", actor_id)
-        values = payload.get("values") if isinstance(payload.get("values"), dict) else {}
+        raw_values = payload.get("values")
+        values = raw_values if isinstance(raw_values, dict) else {}
         return store.create(metadata=metadata, values=values)
 
     @router.get("/api/threads/search")
@@ -110,7 +113,8 @@ def create_thread_state_router(
                 continue
             values = thread.get("values") or {}
             title = str(values.get("title") or "")
-            messages = values.get("messages") if isinstance(values.get("messages"), list) else []
+            raw_messages = values.get("messages")
+            messages = raw_messages if isinstance(raw_messages, list) else []
             haystack_parts = [title]
             for message in messages:
                 if isinstance(message, dict):

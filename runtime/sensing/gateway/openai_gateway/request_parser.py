@@ -85,7 +85,7 @@ def _resolve_custom_model_router(
         if _provider in ("anthropic", "claude"):
             from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter
 
-            new_router = AnthropicModelRouter(
+            new_router: Any = AnthropicModelRouter(
                 api_key=_api_key,
                 default_model=_upstream_model,
                 base_url=(_base_url or None),

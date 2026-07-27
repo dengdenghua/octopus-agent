@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sized
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from runtime.adapters.instrumentation import trace_stage
 from runtime.memory.journal import Journal
@@ -56,7 +56,7 @@ class StreamingJournal(Journal):
         return self._inner.read_since(ts)
 
     def __len__(self) -> int:
-        return len(self._inner)
+        return len(cast(Sized, self._inner))
 
     def _broadcast(self, event: JournalEvent) -> None:
         with self._lock:

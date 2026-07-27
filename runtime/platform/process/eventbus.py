@@ -170,19 +170,19 @@ class EventBusConfig:
 
 class EventBus:
     _instance: EventBus | None = None
-    _lock: threading.Lock = threading.Lock()
+    _cls_lock: threading.Lock = threading.Lock()
 
     @classmethod
     def get(cls) -> EventBus:
         if cls._instance is None:
-            with cls._lock:
+            with cls._cls_lock:
                 if cls._instance is None:
                     cls._instance = cls()
         return cls._instance
 
     @classmethod
     def reset(cls) -> None:
-        with cls._lock:
+        with cls._cls_lock:
             if cls._instance is not None:
                 cls._instance.clear()
             cls._instance = None

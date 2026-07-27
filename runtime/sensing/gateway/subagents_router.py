@@ -123,7 +123,7 @@ def create_subagents_router(
     def list_subagents(request: Request) -> dict[str, Any]:
         _auth(request)  # AUTH-OK: actor-agnostic — subagent definitions are global
         reg = _registry()
-        items = []
+        items: list[dict[str, Any]] = []
         if reg is not None:
             items.extend(d.to_wire() for d in reg.all())
         from runtime.execution.suckers.ephemeral_agents import BUILTIN_ROLES

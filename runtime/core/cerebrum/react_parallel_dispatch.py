@@ -124,7 +124,7 @@ def _dispatch_parallel_actions(
         from runtime.execution.all_skills import is_known_but_disabled_tool
     except ImportError:  # pragma: no cover — defensive
 
-        def is_known_but_disabled_tool(_n: str) -> tuple[bool, str | None]:
+        def is_known_but_disabled_tool(name: str) -> tuple[bool, str | None]:
             return (False, None)
     for p in parsed_pairs:
         if p is None:

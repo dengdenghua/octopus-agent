@@ -629,18 +629,18 @@ def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
             continue
         if not isinstance(payload, dict):
             continue
-        name = (
+        raw_name = (
             payload.get("command")
             or payload.get("tool")
             or payload.get("name")
             or payload.get("action")
         )
-        if not isinstance(name, str) or not name.strip():
+        if not isinstance(raw_name, str) or not raw_name.strip():
             continue
         args = payload.get("kwargs") or payload.get("args") or {}
         if not isinstance(args, dict):
             args = {}
-        actions.append(_format_action(_normalize_action_name(name.strip()), args))
+        actions.append(_format_action(_normalize_action_name(raw_name.strip()), args))
     return actions
 
 

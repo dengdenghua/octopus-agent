@@ -11,7 +11,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from runtime.execution.tool_engine import (
     normalize_tool_lifecycle_event,
@@ -498,10 +498,10 @@ def _repair_routes_from_failed_verifications(
     routes: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in failed_verifications:
-        diagnosis = item.get("diagnosis") if isinstance(item.get("diagnosis"), dict) else {}
-        route = (
-            diagnosis.get("repair_route") if isinstance(diagnosis.get("repair_route"), dict) else {}
-        )
+        raw_diagnosis = item.get("diagnosis")
+        diagnosis: dict[str, Any] = raw_diagnosis if isinstance(raw_diagnosis, dict) else {}
+        raw_route = diagnosis.get("repair_route")
+        route: dict[str, Any] = raw_route if isinstance(raw_route, dict) else {}
         route_id = str(route.get("route") or "").strip()
         if not route_id or route_id in seen:
             continue
@@ -633,7 +633,7 @@ def _record_task_run_finished(runtime: CerebrumRuntime, turn: Turn) -> None:
             task_id=turn.id,
             thread_id=turn.thread_id,
             turn_id=turn.id,
-            agent_id=_agent_id_from_params(turn.params),
+            agent_id=_agent_id_from_params(cast(TurnParams, turn.params)),
             status=status,
             reason=status_value,
             metadata={
@@ -659,7 +659,9 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
         return
     payload = dict(evt)
     if kind in {"tool_start", "tool_end", "tool_background"}:
-        lifecycle_kind = "tool_start" if kind == "tool_start" else "tool_end"
+        lifecycle_kind: Literal["tool_start", "tool_end"] = (
+            "tool_start" if kind == "tool_start" else "tool_end"
+        )
         normalized = normalize_tool_lifecycle_event(
             lifecycle_kind,
             payload,
@@ -676,7 +678,7 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
             thread_id=turn.thread_id,
             turn_id=turn.id,
             task_id=turn.id,
-            agent_id=_agent_id_from_params(turn.params),
+            agent_id=_agent_id_from_params(cast(TurnParams, turn.params)),
             item_id=str(evt.get("tool_call_id") or evt.get("item_id") or "") or None,
         )
 

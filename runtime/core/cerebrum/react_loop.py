@@ -701,11 +701,14 @@ def _stream_public_evidence_narrative(
             "iteration": iteration,
         }
 
+    def _visible_started(state: dict[str, Any] = visible_state) -> Any:
+        return state["chars"]
+
     for event in _iter_model_stream_with_deadline(
         router,
         request,
         _PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S,
-        lambda state=visible_state: state["chars"],
+        _visible_started,
     ):
         if event is _MODEL_STREAM_DEADLINE:
             return emitted
@@ -1759,7 +1762,8 @@ def _load_trace_resume_checkpoint_snapshot(
         return None
     if str(checkpoint.get("checkpoint_type") or "").lower() != "react":
         return None
-    state = checkpoint.get("state") if isinstance(checkpoint.get("state"), dict) else {}
+    _state_raw = checkpoint.get("state")
+    state: dict[str, Any] = _state_raw if isinstance(_state_raw, dict) else {}
     return {
         "source": "trace_store",
         "iteration_completed": int(
@@ -2946,6 +2950,7 @@ def stream_react_loop(
 
     _file_inspection_tools_visible = False
     if tools_active:
+        assert executor is not None
         if _browser_operation_mode:
             _ensure_browser_operation_skills(executor)
         try:
@@ -3739,11 +3744,14 @@ def stream_react_loop(
                     "chars_per_sec": (chars / _elapsed if _elapsed > 0 else 0.0),
                 }
 
+            def _visible_started(state: dict[str, Any] = _visible_stream_state) -> Any:
+                return state["chars"]
+
             for evt in _iter_model_stream_with_deadline(
                 router,
                 req,
                 _iteration_timeout,
-                lambda state=_visible_stream_state: state["chars"],
+                _visible_started,
             ):
                 if evt is _MODEL_STREAM_DEADLINE:
                     _iteration_soft_timed_out = True
@@ -4823,9 +4831,11 @@ def stream_react_loop(
         if not _parallel_handled and not step.observation:
             will_attempt_tool = tool_action_requested
             if will_attempt_tool:
+                assert executor is not None
                 parsed = _parse_action(step.action)
                 resolved_name = parsed[0] if parsed and executor.registry.has(parsed[0]) else None
                 if resolved_name is not None:
+                    assert parsed is not None
                     call_id = uuid.uuid4().hex[:12]
                     action_args = parsed[1] if isinstance(parsed[1], dict) else {}
                     _input_preview = action_args

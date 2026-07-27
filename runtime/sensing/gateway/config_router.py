@@ -459,7 +459,7 @@ def create_config_router(
                     AnthropicModelRouter,
                 )
 
-                sub_router = AnthropicModelRouter(
+                sub_router: Any = AnthropicModelRouter(
                     api_key=api_key,
                     default_model=primary_model,
                     base_url=(base_url or None),
@@ -1113,17 +1113,19 @@ def create_config_router(
             # OpenAI-compat shape · ``data[].id``
             if isinstance(data, dict) and isinstance(data.get("data"), list):
                 ids = [
-                    m.get("id")
+                    model_id
                     for m in data["data"]
-                    if isinstance(m, dict) and isinstance(m.get("id"), str)
+                    if isinstance(m, dict)
+                    and isinstance(model_id := m.get("id"), str)
                 ]
                 return ids, None
             # Ollama native shape · ``models[].name``
             if isinstance(data, dict) and isinstance(data.get("models"), list):
                 names = [
-                    m.get("name")
+                    model_name
                     for m in data["models"]
-                    if isinstance(m, dict) and isinstance(m.get("name"), str)
+                    if isinstance(m, dict)
+                    and isinstance(model_name := m.get("name"), str)
                 ]
                 return names, None
             return [], "unexpected schema"
@@ -1330,7 +1332,7 @@ def create_config_router(
                     AnthropicModelRouter,
                 )
 
-                router_for_test = AnthropicModelRouter(
+                router_for_test: Any = AnthropicModelRouter(
                     api_key=api_key,
                     default_model=upstream_model,
                     base_url=(base_url or None),

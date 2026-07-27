@@ -815,6 +815,7 @@ def create_observability_router(
         from runtime.safety.recovery import KGUpdater
 
         persistent = True
+        kg: KnowledgeGraph
         try:
             kg = SqliteKnowledgeGraph(_kg_db_path())
         except Exception:  # noqa: BLE001 - observability must degrade gracefully.

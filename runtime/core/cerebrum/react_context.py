@@ -390,7 +390,7 @@ def _format_skill_catalog(
             try:
                 from runtime.execution.all_skills import skill_kind as _classify
             except ImportError:
-                _classify = lambda _name: "domain"  # noqa: E731
+                _classify = lambda skill_id: "domain"  # noqa: E731
 
             def _visible(name: str) -> bool:
                 if allow_all:

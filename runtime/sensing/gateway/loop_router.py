@@ -89,16 +89,15 @@ def create_loop_router(
         except Exception as exc:  # noqa: BLE001
             replay = {"replayable": False, "step_count": 0, "error": str(exc)}
         review = run.last_review if isinstance(run.last_review, dict) else {}
-        resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
-        review_replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
+        raw_resume = review.get("resume")
+        resume = raw_resume if isinstance(raw_resume, dict) else {}
+        raw_review_replay = review.get("replay")
+        review_replay = raw_review_replay if isinstance(raw_review_replay, dict) else {}
         resume_available = run.status in {LoopRunStatus.FAILED, LoopRunStatus.CANCELLED}
         resume_checkpoint_id = checkpoint.get("id")
         if isinstance(resume, dict):
-            latest = (
-                resume.get("latest_checkpoint")
-                if isinstance(resume.get("latest_checkpoint"), dict)
-                else {}
-            )
+            raw_latest = resume.get("latest_checkpoint")
+            latest = raw_latest if isinstance(raw_latest, dict) else {}
             resume_available = bool(resume.get("available")) or resume_available
             resume_checkpoint_id = latest.get("id") or resume_checkpoint_id
         resumed_from_available = bool(run.parent_run_id or run.resume_checkpoint_id)
@@ -318,18 +317,19 @@ def create_loop_router(
         from datetime import UTC, datetime
 
         cancel_at = datetime.now(UTC).isoformat()
-        return store.mutate(
-            run_id,
-            lambda current, cancel_at=cancel_at, reason=reason: current.model_copy(
+
+        def _cancel_run(current: LoopRun, _cancel_at: str = cancel_at, _reason: str = reason) -> LoopRun:
+            return current.model_copy(
                 update={
                     "status": LoopRunStatus.CANCELLED,
-                    "completed_at": current.completed_at or cancel_at,
-                    "cancel_requested_at": current.cancel_requested_at or cancel_at,
-                    "cancel_reason": reason,
-                    "last_error": reason,
+                    "completed_at": current.completed_at or _cancel_at,
+                    "cancel_requested_at": current.cancel_requested_at or _cancel_at,
+                    "cancel_reason": _reason,
+                    "last_error": _reason,
                 }
-            ),
-        )
+            )
+
+        return store.mutate(run_id, _cancel_run)
 
     @router.post(
         "/api/loops/start",

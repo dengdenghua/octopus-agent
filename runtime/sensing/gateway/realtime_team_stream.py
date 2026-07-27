@@ -389,8 +389,9 @@ async def _drive_team_topology(
             return
 
         ok = bool(evt.get("ok", True)) and not evt.get("error")
+        iteration_count: int | None
         try:
-            iteration_count = int(evt.get("iteration_count"))
+            iteration_count = int(evt.get("iteration_count") or 0)
         except (TypeError, ValueError):
             iteration_count = existing.iteration_count
         completed = existing.model_copy(

@@ -143,7 +143,8 @@ def create_projects_router(
             state = full_project_state(project_store, project_id)
             if state is None:
                 return
-            project = state.get("project") if isinstance(state.get("project"), dict) else {}
+            raw_project = state.get("project")
+            project = raw_project if isinstance(raw_project, dict) else {}
             session_id = thread_id or f"project:{project_id}"
             room_id = f"project:{project_id}"
             if thread_id:
@@ -171,10 +172,10 @@ def create_projects_router(
             upsert_project_task = getattr(collaboration_store, "upsert_project_task", None)
             if not callable(upsert_project_task):
                 return
-            milestones = (
-                state.get("milestones") if isinstance(state.get("milestones"), list) else []
-            )
-            tasks_by_ms = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
+            raw_milestones = state.get("milestones")
+            milestones = raw_milestones if isinstance(raw_milestones, list) else []
+            raw_tasks = state.get("tasks")
+            tasks_by_ms = raw_tasks if isinstance(raw_tasks, dict) else {}
             for milestone in milestones:
                 if not isinstance(milestone, dict):
                     continue
@@ -347,7 +348,8 @@ def create_projects_router(
                 run=body.run,
                 max_ticks=body.max_ticks,
             )
-            project = result.get("project") if isinstance(result.get("project"), dict) else {}
+            raw_project = result.get("project")
+            project = raw_project if isinstance(raw_project, dict) else {}
             project_id = str(project.get("id") or "")
             if project_id:
                 _project_to_collaboration(project_id, thread_id=thread_id)

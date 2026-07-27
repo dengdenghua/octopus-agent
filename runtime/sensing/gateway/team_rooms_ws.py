@@ -462,7 +462,8 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 # — no second acquisition (a second lock here deadlocks the
                 # two-socket portal in tests).
                 if current_team is None:
-                    allowed, reason = False, "participant removed"
+                    allowed = False
+                    reason: str | None = "participant removed"
                 else:
                     allowed, reason = _participant_can_speak(current_team, speaker)
                 if not allowed:
@@ -545,11 +546,11 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
             elif msg_type == "floor:grant":
                 # Moderator hands the floor to ``target`` (or, with no
                 # target, re-opens it). roll_call + moderated only.
-                target = str(msg.get("target") or "").strip() or None
+                target_id = str(msg.get("target") or "").strip() or None
                 not_moderator = False
                 with lock:
                     room_now = teams.get(team_id)
-                    floor_team = apply_floor_grant(room_now, active_participant, target)
+                    floor_team = apply_floor_grant(room_now, active_participant, target_id)
                     if floor_team is not None:
                         teams[team_id] = floor_team
                         _save()
