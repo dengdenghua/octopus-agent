@@ -259,7 +259,14 @@ export function MessageGroup({
   const [expandedAggregatedGroups, setExpandedAggregatedGroups] = useState<
     Record<string, boolean>
   >({});
+  // While streaming, phases default to collapsed (only the active phase expands);
+  // `expandedHistoryPhases[phaseId]=true` overrides to expand a collapsed phase.
+  // After streaming ends, phases default to expanded per spec §当前帧聚焦;
+  // `collapsedHistoryPhases[phaseId]=true` overrides to collapse an expanded phase.
   const [expandedHistoryPhases, setExpandedHistoryPhases] = useState<
+    Record<string, boolean>
+  >({});
+  const [collapsedHistoryPhases, setCollapsedHistoryPhases] = useState<
     Record<string, boolean>
   >({});
   const thinkingStartTimeRef = useRef<number | null>(null);
@@ -504,9 +511,9 @@ export function MessageGroup({
     const nested = options?.nested ?? false;
     // A live agent often emits several records for one phase. Leaving every
     // completed record open turns the transcript into a terminal log, so keep
-    // only the active phase in full view. After streaming ends the historical
-    // phases stay collapsed by default; clicking a receipt expands that phase
-    // inline and the choice persists, so nothing is auto-buried again.
+    // only the active phase in full view while streaming. Once streaming ends
+    // (isLiveTimeline=false), all phases auto-expand per spec §当前帧聚焦 —
+    // the user can then freely collapse any phase; collapsed state persists.
     const activeTimelineItem =
       compactTimelineItems[compactTimelineItems.length - 1] ??
       items[items.length - 1];
@@ -518,7 +525,12 @@ export function MessageGroup({
       for (const timelineItem of items) {
         const phaseId = lastTimelineStep(timelineItem).phaseId;
         if (!phaseId || phaseId === activePhaseId) continue;
-        if (expandedHistoryPhases[phaseId]) continue;
+        // While streaming: default collapsed, expandedHistoryPhases overrides.
+        // After streaming: default expanded, collapsedHistoryPhases overrides.
+        const isCollapsed = isLiveTimeline
+          ? !expandedHistoryPhases[phaseId]
+          : collapsedHistoryPhases[phaseId] === true;
+        if (!isCollapsed) continue;
         const group = historicalPhaseItems.get(phaseId) ?? [];
         group.push(timelineItem);
         historicalPhaseItems.set(phaseId, group);
@@ -541,10 +553,21 @@ export function MessageGroup({
             className="flex min-w-0 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] text-muted-foreground/45 transition-colors hover:text-muted-foreground"
             onClick={() => {
               if (!collapsedPhaseId) return;
-              setExpandedHistoryPhases((prev) => ({
-                ...prev,
-                [collapsedPhaseId]: true,
-              }));
+              if (isLiveTimeline) {
+                // Streaming: expand the collapsed phase.
+                setExpandedHistoryPhases((prev) => ({
+                  ...prev,
+                  [collapsedPhaseId]: true,
+                }));
+              } else {
+                // Post-stream: this button only shows for collapsed phases,
+                // so clicking expands (clears the collapsed override).
+                setCollapsedHistoryPhases((prev) => {
+                  const next = { ...prev };
+                  delete next[collapsedPhaseId];
+                  return next;
+                });
+              }
             }}
             data-testid="collapsed-history-phase"
             data-phase-id={collapsedPhaseId}

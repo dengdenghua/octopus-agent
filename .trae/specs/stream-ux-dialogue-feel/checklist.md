@@ -59,8 +59,8 @@
   - 状态：**部分实装**。`message-group.tsx:535` `t.message.completedSteps(phaseItems.length)` 输出"完成了 N 步/N steps"，视觉有 emerald 圆点作"✓"语义。但文案是"N 步"而非"完成了 N 件事"，且按 phaseId 折叠而非按"轮次"折叠
 - [x] 用户手动展开的块不被自动收回
   - 证据：`message-group.tsx:542-548` `setExpandedHistoryPhases` 只把 phase 设为 true，从不自动 reset 回 false；`expandedHistoryPhases` 状态在组件生命周期内持续
-- [ ] 流式结束后所有 phase 自动展开
-  - 状态：**未实装**。`message-group.tsx:516-526` 的 `historicalPhaseItems` 构建逻辑不带 `isLiveTimeline` 守卫，streaming 结束后（isLiveTimeline=false）历史 phase 仍默认折叠，与 spec 相反。需在 `!isLiveTimeline` 分支跳过折叠或自动 setExpandedHistoryPhases(all true)
+- [x] 流式结束后所有 phase 自动展开
+  - 证据：`message-group.tsx:524-538` `historicalPhaseItems` 构建逻辑加 `isLiveTimeline` 守卫——流式进行中默认折叠历史 phase（只展开活跃 phase），流式结束后（isLiveTimeline=false）跳过折叠逻辑，所有 phase 自动展开；引入 `collapsedHistoryPhases` 状态支持用户手动折叠（点击 `collapsed-history-phase` 按钮重新展开）；53 测试全绿
 - [ ] 收敛摘要行包含 phase 名称 + 关键统计（如"查看了 12 个文件"）
   - 状态：**未实装**。`message-group.tsx:535` 仅 `t.message.completedSteps(phaseItems.length)`，输出"完成了 3 步"，**没有 phase 名称**，也**没有"查看了 12 个文件"之类的关键统计**
 
