@@ -33,11 +33,6 @@ import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 import type { OutlineRound } from "@/core/threads/progress-outline";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   type AgentTile,
   type DiffEntry,
   type AgentWorkbenchTabId,
@@ -736,11 +731,6 @@ export function AgentSummaryPage({
   );
   const manuallyToggledSections = useRef(new Set<string>());
   const previousRunActive = useRef(false);
-  // 叙事大纲分组折叠态：仅记录用户手动切换的分组；未切换的分组遵循
-  // 「默认仅展开最近一轮」。
-  const [roundOpenOverrides, setRoundOpenOverrides] = useState<
-    ReadonlyMap<number, boolean>
-  >(() => new Map());
   const [refTab, setRefTab] = useState<ObservedReferenceTabId>("files");
   const artifactDiffEntries = useMemo(
     () => diffEntries.filter((entry) => entry.created),
@@ -813,23 +803,12 @@ export function AgentSummaryPage({
   }, [phases.length, runActive]);
   const showOutline =
     progressOutline !== undefined && progressOutline.length > 0;
-  const latestOutlineIteration = showOutline
-    ? Math.max(...progressOutline.map((round) => round.iteration))
-    : null;
   const outlineExecutionCount = showOutline
     ? progressOutline.reduce((sum, round) => sum + round.executionCount, 0)
     : 0;
   const outlineFactCount = showOutline
     ? progressOutline.reduce((sum, round) => sum + round.facts.length, 0)
     : 0;
-  const toggleRound = (iteration: number, open: boolean) => {
-    setRoundOpenOverrides((prev) => {
-      const next = new Map(prev);
-      next.set(iteration, open);
-      return next;
-    });
-  };
-
   const observedReferenceTabs = useMemo(
     () => buildObservedReferenceTabs(blocks, t),
     [blocks, t],
@@ -1023,97 +1002,45 @@ export function AgentSummaryPage({
               </div>
             )}
             {expandedSections.has("progress") &&
-              (showOutline ? (
-                <div className="mt-3 space-y-1">
-                  {progressOutline.map((round) => {
-                    const isOpen =
-                      roundOpenOverrides.get(round.iteration) ??
-                      round.iteration === latestOutlineIteration;
-                    const title =
-                      round.intentText ??
-                      t.agentWorkbenchPages.roundTitle(round.iteration);
-                    const countText =
-                      t.agentWorkbenchPages.roundActivitySummary(
-                        round.executionCount,
-                        round.facts.length,
-                      );
-                    if (round.facts.length === 0) {
-                      return (
-                        <div
-                          key={round.iteration}
-                          className="flex items-center gap-1.5 py-0.5"
-                        >
-                          <span className="size-3 shrink-0" aria-hidden />
-                          <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground">
-                            {title}
-                          </span>
-                          <span className="shrink-0 text-[11px] text-muted-foreground">
-                            {countText}
-                          </span>
-                        </div>
-                      );
-                    }
-                    return (
-                      <Collapsible
-                        key={round.iteration}
-                        open={isOpen}
-                        onOpenChange={(open) =>
-                          toggleRound(round.iteration, open)
-                        }
+              (phases.length > 0 ? (
+                <ul className="mt-3 space-y-1">
+                  {phases.map((phase, index) => (
+                    <li
+                      key={phase.id}
+                      className="flex min-h-7 items-center gap-2"
+                    >
+                      <StatusGlyph status={phase.status} className="size-3.5" />
+                      <span className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-4 text-muted-foreground">
+                        P{index + 1}
+                      </span>
+                      <span
+                        className="min-w-0 flex-1 truncate text-xs text-foreground"
+                        title={phase.title}
                       >
-                        <CollapsibleTrigger
-                          aria-label={title}
-                          className="flex w-full items-center gap-1.5 py-0.5 text-left transition-colors hover:text-foreground"
-                        >
-                          <ChevronRightIcon
-                            className={cn(
-                              "size-3 shrink-0 text-muted-foreground transition-transform",
-                              isOpen && "rotate-90",
-                            )}
-                          />
-                          <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground">
-                            {title}
-                          </span>
-                          <span className="shrink-0 text-[11px] text-muted-foreground">
-                            {countText}
-                          </span>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <ul className="mt-1.5 space-y-1.5 pl-[18px]">
-                            {round.facts.map((fact, factIndex) => (
-                              <li
-                                key={factIndex}
-                                className="break-words text-[13px] leading-5 text-muted-foreground/90"
-                              >
-                                {fact}
-                              </li>
-                            ))}
-                          </ul>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    );
-                  })}
-                </div>
-              ) : (
-                <ul className="mt-3 space-y-2">
-                  {phases.map((phase) => (
-                    <li key={phase.id} className="flex items-center gap-2">
-                      {phase.status === "done" ? (
-                        <span className="flex size-4 shrink-0 items-center justify-center">
-                          <CheckIcon className="size-2.5 text-muted-foreground" />
-                        </span>
-                      ) : phase.status === "running" ? (
-                        <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
-                      ) : phase.status === "waiting_approval" ? (
-                        <CircleIcon className="size-3.5 shrink-0 text-amber-500" />
-                      ) : (
-                        <CircleIcon className="size-3.5 shrink-0 text-muted-foreground/40" />
-                      )}
-                      <span className="min-w-0 flex-1 truncate text-xs text-foreground">
                         {phase.title}
                       </span>
-                      <span className="shrink-0 text-xs text-muted-foreground">
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
                         {phaseStatusText(phase.status)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <ul className="mt-3 space-y-1">
+                  {(progressOutline ?? []).map((round) => (
+                    <li
+                      key={round.iteration}
+                      className="flex min-h-7 items-center gap-2"
+                    >
+                      <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/45" />
+                      <span className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-4 text-muted-foreground">
+                        T{round.iteration}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                        {t.agentWorkbenchPages.roundActivitySummary(
+                          round.executionCount,
+                          round.facts.length,
+                        )}
                       </span>
                     </li>
                   ))}

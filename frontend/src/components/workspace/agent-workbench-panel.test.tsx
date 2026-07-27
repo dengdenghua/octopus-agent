@@ -169,7 +169,7 @@ describe("<AgentWorkbenchPanel />", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("keeps the current turn outline visible when it has no tool events", () => {
+  test("keeps a compact task marker when a turn has no tool events", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
@@ -191,8 +191,11 @@ describe("<AgentWorkbenchPanel />", () => {
       screen.getByRole("button", { name: "主电脑 · 已完成" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /进展/ })).toBeInTheDocument();
-    expect(screen.getByText("核对本轮上下文")).toBeInTheDocument();
-    expect(screen.getByText("本轮已返回一条具体结论")).toBeInTheDocument();
+    expect(screen.getByText("T1")).toBeInTheDocument();
+    expect(screen.queryByText("核对本轮上下文")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("本轮已返回一条具体结论"),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText("1 条确认")).toHaveLength(2);
     expect(
       screen.queryByText("当前还没有活跃的协作过程。"),
@@ -600,7 +603,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
   });
 
-  test("renders the progress outline grouped by iteration with only the latest round expanded", () => {
+  test("prefers compact phase tasks over a duplicated narrative outline", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         events={[
@@ -636,22 +639,16 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/进展/);
 
-    // 每轮显示意图摘要一行 + 执行计数
-    expect(screen.getByText("先查看项目结构")).toBeInTheDocument();
-    expect(screen.getByText("修复构建错误")).toBeInTheDocument();
-    expect(screen.getByText("运行测试验证")).toBeInTheDocument();
-    expect(screen.getByText("2 次操作 · 1 条确认")).toBeInTheDocument();
-    expect(screen.getByText("3 次操作 · 1 条确认")).toBeInTheDocument();
-
-    // 默认仅展开最近一轮：第三轮事实可见，前两轮事实不在文档中
-    expect(screen.getByText("测试全部通过")).toBeInTheDocument();
+    expect(screen.getByText("P1")).toBeInTheDocument();
+    expect(
+      screen.getByText(/补齐上下文|Read context/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("先查看项目结构")).not.toBeInTheDocument();
+    expect(screen.queryByText("修复构建错误")).not.toBeInTheDocument();
+    expect(screen.queryByText("运行测试验证")).not.toBeInTheDocument();
     expect(screen.queryByText("已确认入口文件位置")).not.toBeInTheDocument();
     expect(screen.queryByText("已确认配置存在")).not.toBeInTheDocument();
-
-    // 点击第一轮标题 → 展开其事实列表；最近一轮保持展开
-    fireEvent.click(screen.getByText("先查看项目结构"));
-    expect(screen.getByText("已确认入口文件位置")).toBeInTheDocument();
-    expect(screen.getByText("测试全部通过")).toBeInTheDocument();
+    expect(screen.queryByText("测试全部通过")).not.toBeInTheDocument();
   });
 
   test("falls back to the phase list when the progress outline is empty", () => {
