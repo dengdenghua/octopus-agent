@@ -191,8 +191,9 @@ def test_with_page_persists_within_agent_session():
         with session_scope(Session(actor="a", thread_id="thr_persist_test")):
             _with_page(None, lambda p: p.set_content("<div id='x'>persisted</div>"))
             # second page-None call inside the SAME session shares the page
-            text = _with_page(None, lambda p: p.inner_text("#x"))
-        assert text == "persisted"
+            res = _with_page(None, lambda p: p.inner_text("#x"))
+        # _with_page wraps non-dict action results under "result"
+        assert res.get("result") == "persisted"
     finally:
         get_browser_session_pool().close_all()
 
@@ -204,8 +205,9 @@ def test_with_page_stateless_without_session():
     # No agent session → original behaviour: a fresh browser per call, so the
     # element from the previous call must NOT be visible (no persistence).
     _with_page(None, lambda p: p.set_content("<div id='x'>gone</div>"))
-    found = _with_page(None, lambda p: p.query_selector("#x") is not None)
-    assert found is False
+    res = _with_page(None, lambda p: p.query_selector("#x") is not None)
+    # _with_page wraps non-dict action results under "result"
+    assert res.get("result") is False
 
 
 def test_public_browser_actions_reuse_current_page_when_url_is_omitted(tmp_path):

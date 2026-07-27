@@ -272,7 +272,7 @@ def _requested_browser_track() -> Any:
 
 
 def _annotate_browser_track_result(
-    payload: dict[str, Any],
+    payload: Any,
     *,
     served_track: Any,
 ) -> dict[str, Any]:
@@ -283,12 +283,17 @@ def _annotate_browser_track_result(
     while the model reported that it acted on the signed-in Chrome tab.  This
     receipt makes the selected track and any fallback explicit to the model,
     UI, trajectory recorder, and final-answer guards.
+
+    ``payload`` is ideally a dict (the common case for browser actions that
+    return structured results). Non-dict payloads (raw strings, bools, None
+    from void actions) are wrapped under a ``"result"`` key so the track
+    metadata can still be attached without losing the original value.
     """
 
     served = str(getattr(served_track, "value", served_track) or "")
     requested_track = _requested_browser_track()
     requested = str(getattr(requested_track, "value", requested_track) or "")
-    result = dict(payload)
+    result = dict(payload) if isinstance(payload, dict) else {"result": payload}
     if served:
         result.setdefault("track", served)
     if not requested:
