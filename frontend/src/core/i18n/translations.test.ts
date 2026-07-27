@@ -43,6 +43,11 @@ const DYNAMIC_RECORD_PATHS = new Set([
   "$.personality.categories",
   "$.personality.templateDescriptions",
   "$.personality.templateNames",
+  // These bundles use English-source-string keys: en-US is intentionally
+  // empty (the key IS the value), other locales map English→translation.
+  // Shape comparison must treat them as opaque records, not expand keys.
+  "$.workspaceComputer",
+  "$.agentOperator",
 ]);
 
 function collectShape(value: unknown, path = "$"): string[] {
