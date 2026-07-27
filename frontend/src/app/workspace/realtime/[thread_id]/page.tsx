@@ -1069,7 +1069,9 @@ function RealtimePageContent({
     useState(false);
   const [agentWorkbenchDismissed, setAgentWorkbenchDismissed] = useState(false);
   const [agentWorkbenchManuallyOpened, setAgentWorkbenchManuallyOpened] =
-    useState(readAgentWorkbenchOpenPreference);
+    useState(() =>
+      isNewThread ? false : readAgentWorkbenchOpenPreference(),
+    );
   const [focusedWorkbenchAgentId, setFocusedWorkbenchAgentId] = useState<
     string | null
   >(null);
@@ -1234,6 +1236,12 @@ function RealtimePageContent({
     setFocusedWorkbenchEventView(null);
     setFocusedWorkbenchEffectKey(null);
   }, [threadId]);
+
+  useEffect(() => {
+    if (!isNewThread) return;
+    setAgentWorkbenchManuallyOpened(false);
+    setAgentWorkbenchTabTouched(false);
+  }, [isNewThread, threadId]);
 
   const navigate = useNavigate();
   const location = useLocation();
