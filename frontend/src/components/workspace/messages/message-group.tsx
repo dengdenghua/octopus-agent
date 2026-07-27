@@ -680,6 +680,33 @@ export function MessageGroup({
                   : coveredItem.steps.length),
             0,
           );
+      // Stored thinking duration from the backend (reasoning_duration_ms).
+      // Only present for completed reasoning items; undefined for legacy
+      // data — in that case hasStoredDuration stays false and the badge
+      // is suppressed on replay so we never fabricate a number.
+      const groupDurationMs = isThinking
+        ? coveredItems.reduce<number>((total, coveredItem) => {
+            if (coveredItem.type !== "reasoningGroup") return total;
+            return (
+              total +
+              coveredItem.steps.reduce<number>(
+                (sum, step) =>
+                  sum +
+                  (typeof step.durationMs === "number" ? step.durationMs : 0),
+                0,
+              )
+            );
+          }, 0)
+        : 0;
+      const hasStoredDuration = isThinking
+        ? coveredItems.some(
+            (coveredItem) =>
+              coveredItem.type === "reasoningGroup" &&
+              coveredItem.steps.some(
+                (step) => typeof step.durationMs === "number",
+              ),
+          )
+        : false;
 
       // Use action-display for human-readable verb + icon
       let actionVerb: string;
@@ -913,6 +940,16 @@ export function MessageGroup({
                     <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/40">
                       {t.messageGrouping.thinkingDuration(
                         formatDuration(thinkingElapsedMs),
+                      )}
+                    </span>
+                  )}
+                {isThinking &&
+                  hasStoredDuration &&
+                  groupDurationMs > 0 &&
+                  !(isLastOverall && isCurrentlyThinking) && (
+                    <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/40">
+                      {t.messageGrouping.thinkingDuration(
+                        formatDuration(groupDurationMs),
                       )}
                     </span>
                   )}
@@ -1203,6 +1240,9 @@ interface GenericCoTStep<T extends string = string> {
 
 interface CoTReasoningStep extends GenericCoTStep<"reasoning"> {
   reasoning: string | null;
+  /** Wall-clock thinking time from the backend (reasoning_duration_ms).
+   * Undefined when the backend didn't provide it (legacy data). */
+  durationMs?: number;
 }
 
 interface CoTActionCallbackStep extends GenericCoTStep<"actionCallback"> {
@@ -2079,6 +2119,11 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
       timelineSequence:
         typeof message.additional_kwargs?.timeline_sequence === "number"
           ? message.additional_kwargs.timeline_sequence
+          : undefined,
+      durationMs:
+        typeof message.additional_kwargs?.reasoning_duration_ms === "number" &&
+        Number.isFinite(message.additional_kwargs.reasoning_duration_ms)
+          ? message.additional_kwargs.reasoning_duration_ms
           : undefined,
       iteration,
     });

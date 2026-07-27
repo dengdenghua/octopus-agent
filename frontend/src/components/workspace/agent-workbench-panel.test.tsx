@@ -114,7 +114,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
 
-  test("does not repeat the current turn user input in the summary", () => {
+  test("surfaces the current turn user input in the summary inputs section", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
@@ -133,12 +133,18 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.queryByText("输入")).not.toBeInTheDocument();
-    expect(screen.queryByText("把登录页改成暗色主题")).not.toBeInTheDocument();
-    expect(screen.queryByText("上传文件 1 个")).not.toBeInTheDocument();
-    expect(screen.queryByText("design.md")).not.toBeInTheDocument();
-    expect(screen.queryByText("附件 1 个")).not.toBeInTheDocument();
-    expect(screen.queryByText("screenshot.png")).not.toBeInTheDocument();
+    // The Inputs section header is always visible alongside the file/attachment
+    // counts so the user can see at a glance what they sent this turn. The
+    // counts are concatenated into a single summary cell, so match by regex.
+    expect(screen.getByText("输入")).toBeInTheDocument();
+    expect(screen.getByText(/上传文件 1 个/)).toBeInTheDocument();
+    expect(screen.getByText(/附件 1 个/)).toBeInTheDocument();
+
+    // Expanding the section reveals the raw text and filenames.
+    expandSummarySection(/输入/);
+    expect(screen.getByText("把登录页改成暗色主题")).toBeInTheDocument();
+    expect(screen.getByText("design.md")).toBeInTheDocument();
+    expect(screen.getByText("screenshot.png")).toBeInTheDocument();
   });
 
   test("omits the inputs section when there is no user input", () => {
@@ -158,7 +164,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("输入")).not.toBeInTheDocument();
   });
 
-  test("keeps free-form todo phase titles without inferred labels", () => {
+  test("maps free-form todo phase titles to readable business labels", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
@@ -177,11 +183,12 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    // Raw todo text stays as the visible title…
-    expect(screen.getByText("阅读鉴权模块源码")).toBeInTheDocument();
-    expect(screen.getByText("修改登录页实现")).toBeInTheDocument();
-    expect(screen.queryByText("了解代码结构")).not.toBeInTheDocument();
-    expect(screen.queryByText("开始修改代码")).not.toBeInTheDocument();
+    // Visible titles are the localized business labels…
+    expect(screen.getByText("了解代码结构")).toBeInTheDocument();
+    expect(screen.getByText("开始修改代码")).toBeInTheDocument();
+    // …while the raw todo text stays available via tooltip.
+    expect(screen.getByTitle("阅读鉴权模块源码")).toBeInTheDocument();
+    expect(screen.getByTitle("修改登录页实现")).toBeInTheDocument();
   });
 
   test("renders the main agent workstation dock placeholder", () => {
@@ -625,8 +632,12 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/进展/);
 
-    expect(screen.getByText(/Read context/)).toBeInTheDocument();
-    expect(screen.getByText(/Run tests/)).toBeInTheDocument();
+    // Phase titles map to business labels ("Read context" → exploring,
+    // "Run tests" → testing); raw titles stay on the tooltip.
+    expect(screen.getByText(/了解代码结构/)).toBeInTheDocument();
+    expect(screen.getByText(/验证修改/)).toBeInTheDocument();
+    expect(screen.getByTitle(/Read context/)).toBeInTheDocument();
+    expect(screen.getByTitle(/Run tests/)).toBeInTheDocument();
 
     expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
   });
@@ -711,7 +722,7 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expect(screen.getByText("P1")).toBeInTheDocument();
     expect(
-      screen.getByText(/补齐上下文|Read context/),
+      screen.getByText(/补齐上下文|了解代码结构/),
     ).toBeInTheDocument();
     expect(screen.queryByText("先查看项目结构")).not.toBeInTheDocument();
     expect(screen.queryByText("修复构建错误")).not.toBeInTheDocument();
@@ -2125,7 +2136,11 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expandSummarySection(/进展/);
-    expect(screen.getAllByText(/write plan\.md/).length).toBeGreaterThan(0);
+    // "write plan.md" matches the ``write`` keyword, which routes to the
+    // implementing bucket before the planning bucket. The raw text remains
+    // available on the tooltip.
+    expect(screen.getAllByText(/开始修改代码/).length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle(/write plan\.md/).length).toBeGreaterThan(0);
 
     rerender(
       <AgentWorkbenchPanel
@@ -2147,7 +2162,11 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.getAllByText(/run research/).length).toBeGreaterThan(0);
+    // "run research" matches the exploring bucket (research keyword), so the
+    // visible label becomes the localized exploring title while the raw text
+    // stays on the tooltip.
+    expect(screen.getAllByText(/了解代码结构/).length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle(/run research/).length).toBeGreaterThan(0);
   });
 });
 

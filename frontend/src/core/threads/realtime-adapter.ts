@@ -267,11 +267,15 @@ function turnToMessages(turn: Turn): Message[] {
     reasoning: string[];
     plan: string | null;
     toolCalls: ToolCall[];
+    // Sum of reasoning item durationMs contributing to this AI message.
+    // Null when no reasoning item carried a duration (legacy data).
+    reasoningDurationMs: number | null;
   };
   const newPending = (): PendingAi => ({
     reasoning: [],
     plan: null,
     toolCalls: [],
+    reasoningDurationMs: null,
   });
   let pending: PendingAi = newPending();
 
@@ -348,6 +352,13 @@ function turnToMessages(turn: Turn): Message[] {
         if (content) pending.reasoning.push(content);
         else if (r.summary.length > 0) {
           pending.reasoning.push(r.summary.join("\n"));
+        }
+        // Accumulate wall-clock thinking time across consecutive reasoning
+        // items. Null durations (legacy data) are skipped; if every item is
+        // null the total stays null so the UI shows nothing on replay.
+        if (typeof r.durationMs === "number" && r.durationMs >= 0) {
+          pending.reasoningDurationMs =
+            (pending.reasoningDurationMs ?? 0) + r.durationMs;
         }
         break;
       }
@@ -853,7 +864,28 @@ function mergeAdditionalKwargs(
     incoming?.reasoning_content,
   );
   if (reasoning) merged.reasoning_content = reasoning;
+  // Sum thinking durations when trailing reasoning is merged into an
+  // already-emitted AI message (e.g. reasoning finishes after the answer).
+  const mergedDuration = mergeReasoningDurationMs(
+    existing?.reasoning_duration_ms,
+    incoming?.reasoning_duration_ms,
+  );
+  if (mergedDuration !== null) {
+    merged.reasoning_duration_ms = mergedDuration;
+  } else {
+    delete merged.reasoning_duration_ms;
+  }
   return merged;
+}
+
+function mergeReasoningDurationMs(
+  a: unknown,
+  b: unknown,
+): number | null {
+  const aNum = typeof a === "number" && Number.isFinite(a) ? a : null;
+  const bNum = typeof b === "number" && Number.isFinite(b) ? b : null;
+  if (aNum === null && bNum === null) return null;
+  return (aNum ?? 0) + (bNum ?? 0);
 }
 
 function mergeTextBlocks(a: unknown, b: unknown): string | undefined {
@@ -923,6 +955,7 @@ function errorToAi(item: ErrorItem): AIMessage {
 function buildAiAdditionalKwargs(pending: {
   reasoning: string[];
   plan: string | null;
+  reasoningDurationMs?: number | null;
 }): Record<string, unknown> {
   const kwargs: Record<string, unknown> = {};
   if (pending.reasoning.length > 0) {
@@ -930,6 +963,9 @@ function buildAiAdditionalKwargs(pending: {
   }
   if (pending.plan !== null) {
     kwargs.thinking_plan = pending.plan;
+  }
+  if (typeof pending.reasoningDurationMs === "number") {
+    kwargs.reasoning_duration_ms = pending.reasoningDurationMs;
   }
   return kwargs;
 }

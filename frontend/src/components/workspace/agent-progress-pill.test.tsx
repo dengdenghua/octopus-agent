@@ -145,7 +145,7 @@ describe("<AgentProgressPill />", () => {
       name: /Current Progress 2\/2/,
     });
     expect(screen.getByText("Current Progress 2/2")).toBeInTheDocument();
-    expect(screen.getByText(/处理线索/)).toBeInTheDocument();
+    expect(screen.getByText(/Working through leads/)).toBeInTheDocument();
 
     fireEvent.click(pill);
     expect(pill).toHaveAttribute("aria-expanded", "true");
@@ -354,8 +354,11 @@ describe("<AgentProgressPill />", () => {
       />,
     );
 
+    // "create board deck - check and fix" contains "check", which routes to
+    // the testing bucket. The visible label becomes the localized testing
+    // title; the raw active-form text stays on the tooltip.
     expect(
-      screen.getByText("create board deck - check and fix"),
+      screen.getByTitle("create board deck - check and fix"),
     ).toBeInTheDocument();
   });
 
@@ -441,7 +444,10 @@ describe("<AgentProgressPill />", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Restore Progress" }));
 
-    expect(screen.getAllByText("run research").length).toBeGreaterThan(0);
+    // "run research" matches the exploring bucket (research keyword), so the
+    // visible label becomes the localized exploring title while the raw text
+    // stays on the tooltip.
+    expect(screen.getAllByTitle("run research").length).toBeGreaterThan(0);
     expect(container.querySelector(".animate-spin")).toBeNull();
     expect(container.querySelector(".text-destructive")).toBeNull();
   });
@@ -464,7 +470,7 @@ describe("<AgentProgressPill />", () => {
     expect(
       screen.getByRole("button", { name: /Current Progress 1\/2/ }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/处理线索/)).toBeInTheDocument();
+    expect(screen.getByText(/Working through leads/)).toBeInTheDocument();
   });
 
   test("does not keep a stale approval running after the run settles", () => {
@@ -488,6 +494,6 @@ describe("<AgentProgressPill />", () => {
     expect(
       screen.getByRole("button", { name: /Current Progress 2\/2/ }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/收拢答案/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Pulling the answer together/).length).toBeGreaterThan(0);
   });
 });

@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   businessAgentPhaseKey,
   deriveAgentPhases,
+  normalizeBusinessPhaseKey,
   progressForPhases,
 } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
@@ -370,6 +371,149 @@ describe("agent phases", () => {
     expect(businessAgentPhaseKey("运行测试验证修改")).toBe("testing");
     expect(businessAgentPhaseKey("部署到预发环境")).toBe("deploying");
     expect(businessAgentPhaseKey("随便聊聊")).toBeNull();
+  });
+
+  test("normalizeBusinessPhaseKey accepts known phase kinds and rejects others", () => {
+    expect(normalizeBusinessPhaseKey("planning")).toBe("planning");
+    expect(normalizeBusinessPhaseKey("exploring")).toBe("exploring");
+    expect(normalizeBusinessPhaseKey("implementing")).toBe("implementing");
+    expect(normalizeBusinessPhaseKey("testing")).toBe("testing");
+    expect(normalizeBusinessPhaseKey("deploying")).toBe("deploying");
+    expect(normalizeBusinessPhaseKey("other")).toBeNull();
+    expect(normalizeBusinessPhaseKey("unknown_value")).toBeNull();
+    expect(normalizeBusinessPhaseKey(null)).toBeNull();
+    expect(normalizeBusinessPhaseKey(undefined)).toBeNull();
+  });
+
+  test("prefers backend phaseKind over local title mapping", () => {
+    const state = deriveAgentPhases([
+      event({
+        id: "todo-1",
+        name: "todo_write",
+        status: "done",
+        input: {
+          items: [
+            {
+              // local mapping would yield "exploring" (analyze)
+              content: "analyze requirements",
+              status: "completed",
+              phaseKind: "implementing",
+            },
+            {
+              // local mapping would yield "implementing" (write)
+              content: "write report",
+              status: "in_progress",
+              phaseKind: "deploying",
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(state.phases.map((phase) => phase.businessKey)).toEqual([
+      "implementing",
+      "deploying",
+    ]);
+  });
+
+  test("falls back to local title mapping when backend phaseKind is absent", () => {
+    const state = deriveAgentPhases([
+      event({
+        id: "todo-1",
+        name: "todo_write",
+        status: "done",
+        input: {
+          items: [
+            { content: "分析需求并给出方案", status: "completed" },
+            { content: "运行测试验证修改", status: "in_progress" },
+          ],
+        },
+      }),
+    ]);
+
+    expect(state.phases.map((phase) => phase.businessKey)).toEqual([
+      "planning",
+      "testing",
+    ]);
+  });
+
+  test("falls back to local title mapping when backend phaseKind is invalid", () => {
+    const state = deriveAgentPhases([
+      event({
+        id: "todo-1",
+        name: "todo_write",
+        status: "done",
+        input: {
+          items: [
+            {
+              content: "分析需求并给出方案",
+              status: "completed",
+              phaseKind: "other",
+            },
+            {
+              content: "运行测试验证修改",
+              status: "in_progress",
+              phaseKind: "unknown_value",
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(state.phases.map((phase) => phase.businessKey)).toEqual([
+      "planning",
+      "testing",
+    ]);
+  });
+
+  test("leaves businessKey undefined when neither backend nor local mapping resolve", () => {
+    const state = deriveAgentPhases([
+      event({
+        id: "todo-1",
+        name: "todo_write",
+        status: "done",
+        input: {
+          items: [
+            { content: "随便聊聊", status: "completed" },
+            { content: "打发时间", status: "in_progress" },
+          ],
+        },
+      }),
+    ]);
+
+    expect(state.phases.map((phase) => phase.businessKey)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  test("tolerates snake_case phase_kind when the adapter does not camelCase", () => {
+    const state = deriveAgentPhases([
+      event({
+        id: "todo-1",
+        name: "todo_write",
+        status: "done",
+        input: {
+          items: [
+            {
+              content: "analyze requirements",
+              status: "completed",
+              phase_kind: "exploring",
+            },
+            {
+              content: "write report",
+              status: "in_progress",
+              phase_kind: "deploying",
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(state.phases.map((phase) => phase.businessKey)).toEqual([
+      "exploring",
+      "deploying",
+    ]);
   });
 
   test("generic phases expose an i18n title key", () => {

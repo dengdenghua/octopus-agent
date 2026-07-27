@@ -83,6 +83,7 @@ const reasoning = (content: string, id = "r1"): ReasoningItem => ({
   createdAt: "2026-05-09T00:00:00Z",
   summary: [],
   content,
+  durationMs: null,
 });
 
 const planItem = (text: string, id = "p1"): PlanItem => ({

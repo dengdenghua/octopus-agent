@@ -67,6 +67,10 @@ export interface ReasoningItem extends ItemBase {
   type: "reasoning";
   summary: string[];
   content: string;
+  // Wall-clock thinking time from first reasoning_delta to item completion.
+  // Filled by the backend on item/completed; null for legacy data and
+  // streams that never received a completion event.
+  durationMs: number | null;
 }
 
 export interface PlanItem extends ItemBase {
