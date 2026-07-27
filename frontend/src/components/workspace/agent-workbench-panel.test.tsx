@@ -158,7 +158,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("输入")).not.toBeInTheDocument();
   });
 
-  test("adds a business phase badge next to free-form todo phase titles", () => {
+  test("keeps free-form todo phase titles without inferred labels", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
@@ -180,9 +180,8 @@ describe("<AgentWorkbenchPanel />", () => {
     // Raw todo text stays as the visible title…
     expect(screen.getByText("阅读鉴权模块源码")).toBeInTheDocument();
     expect(screen.getByText("修改登录页实现")).toBeInTheDocument();
-    // …and the coarse business label appears as a supplementary badge.
-    expect(screen.getByText("了解代码结构")).toBeInTheDocument();
-    expect(screen.getByText("开始修改代码")).toBeInTheDocument();
+    expect(screen.queryByText("了解代码结构")).not.toBeInTheDocument();
+    expect(screen.queryByText("开始修改代码")).not.toBeInTheDocument();
   });
 
   test("renders the main agent workstation dock placeholder", () => {

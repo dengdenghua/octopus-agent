@@ -19,7 +19,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  businessAgentPhaseKey,
   phaseStatusText,
   type AgentPhase,
   type AgentPhaseStatus,
@@ -1026,12 +1025,6 @@ export function AgentSummaryPage({
                       >
                         {phase.titleKey ? t.agentPhases[phase.titleKey] : phase.title}
                       </span>
-                      {!phase.titleKey &&
-                        businessAgentPhaseKey(phase.title) && (
-                          <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary">
-                            {t.agentPhases[businessAgentPhaseKey(phase.title)!]}
-                          </span>
-                        )}
                       <span className="shrink-0 text-[11px] text-muted-foreground">
                         {phaseStatusText(phase.status)}
                       </span>
