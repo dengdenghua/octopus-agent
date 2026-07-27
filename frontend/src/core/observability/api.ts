@@ -1,9 +1,6 @@
 import { getBackendBaseURL } from "@/core/config";
-import {
-  authHeaders,
-  authedEventSource,
-  jsonAuthHeaders,
-} from "@/core/auth/api";
+import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
+import { openSseStream } from "@/core/streaming/sse";
 
 import type {
   ActiveAlert,
@@ -303,22 +300,22 @@ export interface FileOpEvent {
 /* Implementation note. */
 export function subscribeFileOps(
   onEvent: (e: FileOpEvent) => void,
-  onError?: (err: Event) => void,
+  onError?: (err: Error) => void,
 ): () => void {
   // Implementation note.
   // Implementation note.
-  const url = `${getBackendBaseURL()}/api/files/stream`;
-  const es = authedEventSource(url);
-  es.addEventListener("file_op", (raw) => {
-    try {
-      const data = JSON.parse((raw as MessageEvent).data) as FileOpEvent;
-      onEvent(data);
-    } catch (e) {
-      console.error("file_op parse failed", e, raw);
-    }
+  return openSseStream({
+    url: `${getBackendBaseURL()}/api/files/stream`,
+    onEvent: (msg) => {
+      if (msg.event !== "file_op") return;
+      try {
+        onEvent(JSON.parse(msg.data) as FileOpEvent);
+      } catch (e) {
+        console.error("file_op parse failed", e, msg.data);
+      }
+    },
+    onError,
   });
-  if (onError) es.addEventListener("error", onError);
-  return () => es.close();
 }
 
 // ─── Preview refresh events ────────────────────────────────
@@ -334,20 +331,18 @@ export interface PreviewRefreshEvent {
 /* Implementation note. */
 export function subscribePreviewRefresh(
   onEvent: (e: PreviewRefreshEvent) => void,
-  onError?: (err: Event) => void,
+  onError?: (err: Error) => void,
 ): () => void {
-  const url = `${getBackendBaseURL()}/api/preview/stream`;
-  const es = authedEventSource(url);
-  es.addEventListener("preview_refresh", (raw) => {
-    try {
-      const data = JSON.parse(
-        (raw as MessageEvent).data,
-      ) as PreviewRefreshEvent;
-      onEvent(data);
-    } catch (e) {
-      console.error("preview_refresh parse failed", e, raw);
-    }
+  return openSseStream({
+    url: `${getBackendBaseURL()}/api/preview/stream`,
+    onEvent: (msg) => {
+      if (msg.event !== "preview_refresh") return;
+      try {
+        onEvent(JSON.parse(msg.data) as PreviewRefreshEvent);
+      } catch (e) {
+        console.error("preview_refresh parse failed", e, msg.data);
+      }
+    },
+    onError,
   });
-  if (onError) es.addEventListener("error", onError);
-  return () => es.close();
 }

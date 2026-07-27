@@ -59,7 +59,7 @@ describe("process trace events", () => {
     expect(visible.map((item) => item.id)).toEqual(["shell"]);
   });
 
-  test("hides completed auto verification events but keeps active or failed ones", () => {
+  test("keeps completed auto verification events and marks them collapsible instead of filtering", () => {
     const visible = getProcessTraceEvents([
       event({ id: "verification-done", name: "verification", status: "done" }),
       event({
@@ -76,10 +76,14 @@ describe("process trace events", () => {
     ]);
 
     expect(visible.map((item) => item.id)).toEqual([
+      "verification-done",
       "verification-running",
       "verification-error",
       "read",
     ]);
+    expect(
+      visible.filter(isCollapsibleAutoVerificationEvent).map((item) => item.id),
+    ).toEqual(["verification-done"]);
   });
 
   test("public trace labels hide raw tool names, commands, and sensitive targets", () => {

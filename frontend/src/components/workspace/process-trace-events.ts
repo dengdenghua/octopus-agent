@@ -4,9 +4,7 @@ import { toWorkBlocks } from "./work-blocks";
 export function getProcessTraceEvents(
   events: LiveToolEvent[],
 ): LiveToolEvent[] {
-  return toWorkBlocks(events)
-    .map((block) => block.event)
-    .filter((event) => !isCompletedAutoVerificationEvent(event));
+  return toWorkBlocks(events).map((block) => block.event);
 }
 
 export function isAutoVerificationToolName(name: string): boolean {
@@ -19,6 +17,8 @@ export function isAutoVerificationToolName(name: string): boolean {
   );
 }
 
-function isCompletedAutoVerificationEvent(event: LiveToolEvent): boolean {
+export function isCollapsibleAutoVerificationEvent(
+  event: LiveToolEvent,
+): boolean {
   return event.status === "done" && isAutoVerificationToolName(event.name);
 }

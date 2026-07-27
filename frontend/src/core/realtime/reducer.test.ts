@@ -11,7 +11,12 @@
 import { describe, expect, it } from "vitest";
 
 import { emptyConversation, type Conversation, type Turn } from "./items";
-import { reduce, type ConversationEvent } from "./reducer";
+import {
+  itemStreamText,
+  reduce,
+  type ConversationEvent,
+  type ReducerDiagnostic,
+} from "./reducer";
 
 const T0_ISO = "2026-01-01T00:00:00.000Z";
 
@@ -314,6 +319,169 @@ describe("reducer", () => {
     }
   });
 
+  it("buffers streamed deltas and materializes them into the completed snapshot", () => {
+    const turn = blankTurn("trn-1", "th");
+    const state = apply(
+      emptyConversation("th"),
+      { method: "turn/started", params: { threadId: "th", turn } },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          item: {
+            id: "itm-a",
+            type: "agentMessage",
+            status: "inProgress",
+            createdAt: T0_ISO,
+            text: "",
+          },
+        },
+      },
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-a",
+          delta: "chunk-one ",
+        },
+      },
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-a",
+          delta: "chunk-two",
+        },
+      },
+    );
+    // While streaming, deltas live in the append buffer, not the wire
+    // field — reads through the resolver see the accumulated text.
+    const streaming = state.turns[0].items.find((i) => i.id === "itm-a");
+    expect(streaming?.type).toBe("agentMessage");
+    if (streaming?.type === "agentMessage") {
+      expect(streaming.text).toBe("");
+      expect(itemStreamText(streaming)).toBe("chunk-one chunk-two");
+    }
+
+    // A completed snapshot replaces the item; buffered chunks are
+    // materialized INTO the wire field so the settled object is
+    // self-contained (``itemStreamText`` keeps working too).
+    const completed = reduce(state, {
+      method: "item/completed",
+      params: {
+        threadId: "th",
+        turnId: "trn-1",
+        item: {
+          id: "itm-a",
+          type: "agentMessage",
+          status: "completed",
+          createdAt: T0_ISO,
+          text: "",
+        },
+      },
+    }).next;
+    const settled = completed.turns[0].items.find((i) => i.id === "itm-a");
+    if (settled?.type === "agentMessage") {
+      expect(settled.text).toBe("chunk-one chunk-two");
+      expect(itemStreamText(settled)).toBe("chunk-one chunk-two");
+    }
+  });
+
+  it("materializes buffered deltas when the turn closes without an item snapshot", () => {
+    const turn = blankTurn("trn-1", "th");
+    const state = apply(
+      emptyConversation("th"),
+      { method: "turn/started", params: { threadId: "th", turn } },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          item: {
+            id: "itm-r",
+            type: "reasoning",
+            status: "inProgress",
+            createdAt: T0_ISO,
+            summary: [],
+            content: "",
+          },
+        },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-r",
+          delta: "thinking…",
+          contentIndex: 0,
+        },
+      },
+    );
+    const closed = reduce(state, {
+      method: "turn/interrupted",
+      params: { threadId: "th", turnId: "trn-1", completedAt: T0_ISO },
+    }).next;
+    const reasoning = closed.turns[0].items.find((i) => i.id === "itm-r");
+    if (reasoning?.type === "reasoning") {
+      expect(reasoning.status).toBe("interrupted");
+      expect(reasoning.content).toBe("thinking…");
+    }
+  });
+
+  it("reports a diagnostic when a delta lands on a settled item", () => {
+    const turn = blankTurn("trn-1", "th");
+    const state = apply(
+      emptyConversation("th"),
+      { method: "turn/started", params: { threadId: "th", turn } },
+      {
+        method: "item/started",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          item: {
+            id: "itm-a",
+            type: "agentMessage",
+            status: "completed",
+            createdAt: T0_ISO,
+            text: "final",
+          },
+        },
+      },
+    );
+    const diagnostics: ReducerDiagnostic[] = [];
+    const next = reduce(
+      state,
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-a",
+          delta: "late",
+        },
+      },
+      (d) => diagnostics.push(d),
+    ).next;
+    const item = next.turns[0].items.find((i) => i.id === "itm-a");
+    if (item?.type === "agentMessage") {
+      expect(item.text).toBe("final");
+    }
+    expect(diagnostics).toEqual([
+      {
+        type: "lateDeltaDropped",
+        turnId: "trn-1",
+        itemId: "itm-a",
+        kind: "agentMessage",
+        itemStatus: "completed",
+        deltaLength: 4,
+      },
+    ]);
+  });
+
   it("passes first-class control/artifact items through lifecycle updates", () => {
     const artifact = {
       id: "itm-art",
@@ -547,7 +715,7 @@ describe("reducer", () => {
     const answer = state.turns[0]?.items.find((item) => item.id === "answer");
     expect(answer?.timelineSequence).toBe(2);
     if (answer?.type === "agentMessage") {
-      expect(answer.text).toBe("streamed text");
+      expect(itemStreamText(answer)).toBe("streamed text");
     }
   });
 
@@ -720,7 +888,7 @@ describe("reducer", () => {
     );
     const item = state.turns[0].items[0];
     if (item.type === "reasoning") {
-      expect(item.content).toBe("step one. step two.");
+      expect(itemStreamText(item)).toBe("step one. step two.");
     } else {
       expect.fail("expected a reasoning item");
     }
@@ -770,7 +938,7 @@ describe("reducer", () => {
     );
     const item = state.turns[0].items[0];
     if (item.type === "commandExecution") {
-      expect(item.aggregatedOutput).toBe("line1\nline2\n");
+      expect(itemStreamText(item)).toBe("line1\nline2\n");
     } else {
       expect.fail("expected commandExecution");
     }

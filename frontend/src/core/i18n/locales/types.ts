@@ -1563,6 +1563,7 @@ export interface Translations {
     ariaChatWorkspace: string;
     ariaUtilityPanel: string;
     ariaAgentWorkbench: string;
+    ariaToggleWorkbenchDrawer: string;
     // Storage library labels
     libraryApps: string;
     libraryDocs: string;

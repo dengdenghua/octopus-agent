@@ -219,7 +219,7 @@ function MiniSubtaskRow({
   );
 }
 
-function SubtaskHoverPreview({
+export function SubtaskHoverPreview({
   task,
   statusLabel,
   id,

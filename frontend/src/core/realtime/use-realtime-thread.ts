@@ -27,7 +27,11 @@ import {
   emptyConversation,
   type PendingApproval,
 } from "./items";
-import { type ConversationEvent, reduce } from "./reducer";
+import {
+  type ConversationEvent,
+  reduce,
+  type ReducerDiagnostic,
+} from "./reducer";
 import {
   applyVitalNotification,
   emptyVitalsMarks,
@@ -210,6 +214,22 @@ export function useRealtimeThread(
   // transport rejections (reconnect + resume recover the turn state).
   const turnDeliveryWatchesRef = useRef<Set<{ delivered: boolean }>>(new Set());
 
+  // Reducer anomalies feed the per-turn vitals marks so the turn's
+  // telemetry record carries them. Keep the callback stable — it sits
+  // in ``applyEvent``'s dependency list.
+  const onReducerDiagnostic = useCallback(
+    (diagnostic: ReducerDiagnostic): void => {
+      if (diagnostic.type !== "lateDeltaDropped") return;
+      vitalsMarksRef.current.lateDeltaDrops += 1;
+      if (import.meta.env.DEV) {
+        console.warn(
+          `[realtime] late delta dropped for ${diagnostic.kind} item ${diagnostic.itemId} (status=${diagnostic.itemStatus}, +${diagnostic.deltaLength} chars)`,
+        );
+      }
+    },
+    [],
+  );
+
   const persistTurnTelemetry = useCallback(
     (turnId: string, outcome: StreamTurnOutcome, completedAt = Date.now()) => {
       const record = createStreamTurnTelemetry({
@@ -238,11 +258,11 @@ export function useRealtimeThread(
       ) {
         return prev;
       }
-      const { next } = reduce(prev, evt);
+      const { next } = reduce(prev, evt, onReducerDiagnostic);
       stateRef.current = next;
       return next;
     });
-  }, []);
+  }, [onReducerDiagnostic]);
 
   // Build/teardown the client when threadId changes.
   useEffect(() => {

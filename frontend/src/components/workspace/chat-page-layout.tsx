@@ -150,6 +150,13 @@ export function ChatPageLayout({
     readStoredSecondaryWidth,
   );
   const [isNarrowViewport, setIsNarrowViewport] = useState(false);
+  // Narrow-viewport workbench drawer opens in a collapsed "peek" state and
+  // only grows to its full 72vh height after an explicit tap / swipe-up on
+  // the grab handle, so the first open doesn't take over the screen.
+  const [mobileDrawerExpanded, setMobileDrawerExpanded] = useState(false);
+  const [drawerDragDelta, setDrawerDragDelta] = useState(0);
+  const drawerDragRef = useRef<{ startY: number } | null>(null);
+  const drawerSuppressClickRef = useRef(false);
   // Viewport width drives the panel clamps; re-clamped on window resize.
   // SSR renders unclamped (Infinity), the mount effect corrects it.
   const [viewportWidth, setViewportWidth] = useState<number>(() =>
@@ -263,6 +270,62 @@ export function ChatPageLayout({
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
+  }, []);
+
+  // Re-opening the drawer (or leaving the narrow viewport) always starts
+  // from the collapsed peek height.
+  useEffect(() => {
+    if (!secondaryPanel || !isNarrowViewport) {
+      setMobileDrawerExpanded(false);
+      setDrawerDragDelta(0);
+    }
+  }, [secondaryPanel, isNarrowViewport]);
+
+  // Grab-handle gestures: a tap toggles, a swipe up expands, a swipe down
+  // collapses. Pointer capture keeps the gesture on the handle even if the
+  // finger leaves its bounds mid-drag.
+  const handleDrawerGrabStart = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      drawerDragRef.current = { startY: e.clientY };
+    },
+    [],
+  );
+
+  const handleDrawerGrabMove = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!drawerDragRef.current) return;
+      setDrawerDragDelta(e.clientY - drawerDragRef.current.startY);
+    },
+    [],
+  );
+
+  const handleDrawerGrabEnd = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      const drag = drawerDragRef.current;
+      drawerDragRef.current = null;
+      setDrawerDragDelta(0);
+      if (!drag) return;
+      const delta = e.clientY - drag.startY;
+      if (delta < -40) {
+        // A real swipe also fires a click on release; suppress it so the
+        // gesture isn't immediately undone by the toggle.
+        drawerSuppressClickRef.current = true;
+        setMobileDrawerExpanded(true);
+      } else if (delta > 40) {
+        drawerSuppressClickRef.current = true;
+        setMobileDrawerExpanded(false);
+      }
+    },
+    [],
+  );
+
+  const handleDrawerHandleClick = useCallback(() => {
+    if (drawerSuppressClickRef.current) {
+      drawerSuppressClickRef.current = false;
+      return;
+    }
+    setMobileDrawerExpanded((v) => !v);
   }, []);
 
   useEffect(() => {
@@ -493,9 +556,35 @@ export function ChatPageLayout({
             />
             <aside
               aria-label={t.sidebar.ariaAgentWorkbench}
-              style={{ height: "min(72vh, 640px)" }}
-              className="fixed right-0 bottom-0 left-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-border-default bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)] backdrop-blur-[10px]"
+              style={{
+                height: mobileDrawerExpanded
+                  ? "min(72vh, 640px)"
+                  : "min(30vh, 280px)",
+                transform: drawerDragDelta
+                  ? `translateY(${drawerDragDelta}px)`
+                  : undefined,
+                transition: drawerDragDelta ? "none" : undefined,
+              }}
+              className="fixed right-0 bottom-0 left-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-border-default bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)] backdrop-blur-[10px] transition-[height,transform] duration-300 ease-out"
             >
+              <button
+                type="button"
+                aria-expanded={mobileDrawerExpanded}
+                aria-label={t.sidebar.ariaToggleWorkbenchDrawer}
+                onClick={handleDrawerHandleClick}
+                onPointerDown={handleDrawerGrabStart}
+                onPointerMove={handleDrawerGrabMove}
+                onPointerUp={handleDrawerGrabEnd}
+                onPointerCancel={handleDrawerGrabEnd}
+                className="flex h-7 w-full shrink-0 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
+              >
+                <span
+                  className={cn(
+                    "h-1 rounded-full bg-muted-foreground/30 transition-[width] duration-300",
+                    mobileDrawerExpanded ? "w-14" : "w-10",
+                  )}
+                />
+              </button>
               <ErrorBoundary>{secondaryPanel}</ErrorBoundary>
             </aside>
           </>

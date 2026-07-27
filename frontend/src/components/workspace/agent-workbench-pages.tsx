@@ -14,6 +14,7 @@ import {
   Loader2Icon,
   MonitorIcon,
   MoreHorizontalIcon,
+  PaperclipIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -40,7 +41,12 @@ import {
   agentEventGroupId,
   DIFF_TAB_LABEL,
 } from "./agent-workbench-utils";
-import { type AgentWorkbenchProcessEventSnapshot } from "./agent-workbench-events";
+import {
+  type AgentWorkbenchProcessEventSnapshot,
+  emitAgentWorkbenchFocus,
+} from "./agent-workbench-events";
+import { useSubtask } from "@/core/tasks/context";
+import { SubtaskHoverPreview } from "./messages/parallel-subtasks-grid";
 
 // ── Shared UI primitives ──────────────────────────────────────────────
 
@@ -711,6 +717,7 @@ export function AgentSummaryPage({
   blocks,
   focusedProcessEvent,
   progressOutline,
+  userInput,
   onSelectTab,
   onOpenArtifact,
 }: {

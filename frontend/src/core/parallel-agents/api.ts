@@ -7,6 +7,7 @@
 import { swallow } from "@/core/utils/log";
 import { getToken } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
+import { openSseStream } from "@/core/streaming/sse";
 
 // ---------------------------------------------------------------------------
 // Backend shapes
@@ -402,20 +403,12 @@ function streamURL(batchId: string, afterSequence: number): string {
 }
 
 /**
- * Subscribe to real-time SSE events for a batch.
- * Returns a cleanup function that closes the EventSource.
- */
-/**
  * Subscribe to real-time SSE events for a parallel agent batch.
  *
- * Uses `fetch` + `ReadableStream` (not `EventSource`) to support
- * Bearer token authentication via `authedFetch`.
- *
- * Features:
- * - Automatic exponential backoff reconnection (default 3 retries)
- * - `onReconnecting` callback for UI feedback
- * - Proper SSE event parsing (event type + data)
- * - Cleanup via returned function
+ * Built on the shared ``openSseStream`` transport: Bearer token auth
+ * via header (never the URL), jittered exponential backoff reconnect,
+ * and ``after_sequence`` resume on reconnect so no events are missed
+ * or replayed.
  *
  * @param batchId - The batch ID to subscribe to
  * @param callbacks - Event callbacks (onTaskUpdate, onBatchComplete, onError, onReconnecting)
@@ -427,158 +420,40 @@ export function streamBatch(
   callbacks: BatchStreamCallbacks,
   options?: { maxRetries?: number; baseDelay?: number },
 ): () => void {
-  const maxRetries = options?.maxRetries ?? 3;
-  const baseDelay = options?.baseDelay ?? 1000;
-  let aborted = false;
-  let retryCount = 0;
   let lastSequence = 0;
-  let activeController = new AbortController();
-
-  const connect = async () => {
-    while (!aborted && retryCount <= maxRetries) {
+  return openSseStream({
+    url: () => toBackendURL(streamURL(batchId, lastSequence)),
+    maxRetries: options?.maxRetries ?? 3,
+    initialBackoffMs: options?.baseDelay ?? 1000,
+    onReconnecting: (attempt) => callbacks.onReconnecting?.(attempt),
+    onError: (err) => callbacks.onError?.(err),
+    onEvent: (msg) => {
+      let data: BatchStreamEvent;
       try {
-        activeController = new AbortController();
-        const res = await authedFetch(streamURL(batchId, lastSequence), {
-          signal: activeController.signal,
-          headers: { Accept: "text/event-stream" },
-        });
-        if (!res.ok || !res.body) {
-          if (!aborted) {
-            const err = new Error(`SSE HTTP ${res.status}`);
-            if (retryCount < maxRetries) {
-              retryCount++;
-              callbacks.onReconnecting?.(retryCount);
-              await sleep(baseDelay * Math.pow(2, retryCount - 1));
-              continue;
-            }
-            callbacks.onError?.(err);
-          }
-          return;
-        }
-
-        retryCount = 0;
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let eventType = "";
-        let eventDataLines: string[] = [];
-
-        const resetEvent = () => {
-          eventType = "";
-          eventDataLines = [];
-        };
-
-        const dispatchEvent = (): boolean => {
-          if (!eventType || eventDataLines.length === 0) {
-            resetEvent();
-            return false;
-          }
-          try {
-            const eventData = eventDataLines.join("\n");
-            const data = JSON.parse(eventData) as BatchStreamEvent;
-            if (
-              typeof data.sequence === "number" &&
-              data.sequence <= lastSequence
-            ) {
-              resetEvent();
-              return false;
-            }
-            if (typeof data.sequence === "number") {
-              lastSequence = data.sequence;
-            }
-            if (eventType === "stage_change") {
-              callbacks.onStageChange?.(data);
-            } else if (eventType === "task_update") {
-              callbacks.onTaskUpdate?.(data);
-            } else if (eventType === "tool_call") {
-              callbacks.onTaskUpdate?.(data);
-            } else if (eventType === "batch_complete") {
-              callbacks.onBatchComplete?.(data);
-              return true;
-            }
-          } catch (e) {
-            swallow(e);
-          } finally {
-            resetEvent();
-          }
-          return false;
-        };
-
-        const processLine = (rawLine: string): boolean => {
-          const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-          if (line.startsWith(":")) return false;
-          if (line.startsWith("event:")) {
-            eventType = line.slice(6).trim();
-          } else if (line.startsWith("data:")) {
-            const value = line.slice(5);
-            eventDataLines.push(value.startsWith(" ") ? value.slice(1) : value);
-          } else if (line === "") {
-            return dispatchEvent();
-          }
-          return false;
-        };
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done || aborted) {
-            if (!aborted) {
-              buffer += decoder.decode();
-              if (buffer) {
-                const lines = buffer.split("\n");
-                buffer = "";
-                for (const line of lines) {
-                  if (processLine(line)) return;
-                }
-              }
-              if (eventType || eventDataLines.length > 0) {
-                if (dispatchEvent()) return;
-              }
-            }
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            if (processLine(line)) return;
-          }
-        }
-
-        if (!aborted && retryCount < maxRetries) {
-          retryCount++;
-          callbacks.onReconnecting?.(retryCount);
-          await sleep(baseDelay * Math.pow(2, retryCount - 1));
-        }
-      } catch (err) {
-        swallow(err);
-        if (aborted) return;
-        if (retryCount < maxRetries) {
-          retryCount++;
-          callbacks.onReconnecting?.(retryCount);
-          await sleep(baseDelay * Math.pow(2, retryCount - 1));
-        } else {
-          callbacks.onError?.(
-            err instanceof Error ? err : new Error("SSE max retries exceeded"),
-          );
-          return;
-        }
+        data = JSON.parse(msg.data) as BatchStreamEvent;
+      } catch (e) {
+        swallow(e);
+        return;
       }
-    }
-  };
-
-  void connect();
-
-  return () => {
-    aborted = true;
-    activeController.abort();
-  };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+      if (
+        typeof data.sequence === "number" &&
+        data.sequence <= lastSequence
+      ) {
+        return;
+      }
+      if (typeof data.sequence === "number") {
+        lastSequence = data.sequence;
+      }
+      if (msg.event === "stage_change") {
+        callbacks.onStageChange?.(data);
+      } else if (msg.event === "task_update" || msg.event === "tool_call") {
+        callbacks.onTaskUpdate?.(data);
+      } else if (msg.event === "batch_complete") {
+        callbacks.onBatchComplete?.(data);
+        return true;
+      }
+    },
+  });
 }
 
 export interface DispatchTaskInput {

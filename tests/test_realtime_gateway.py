@@ -375,6 +375,24 @@ def test_realtime_accepts_query_token_when_required(
     assert outcome["response"].result["turn"]["status"] == "completed"
 
 
+def test_realtime_accepts_subprotocol_token_when_required(
+    authenticated_gateway_client: Any,
+) -> None:
+    """Browser clients authenticate via Sec-WebSocket-Protocol instead of a
+    query param, so the token stays out of access/proxy logs. The gateway
+    must extract the token AND echo the ``bearer`` marker as the selected
+    subprotocol — RFC 6455 fails the handshake otherwise."""
+    client, _ = authenticated_gateway_client
+    with client.websocket_connect(
+        "/api/realtime",
+        subprotocols=["bearer", "sk-alice"],
+    ) as ws:
+        assert ws.accepted_subprotocol == "bearer"
+        outcome = _drive_turn(ws, thread_id="auth_th_subproto", text="hello auth")
+
+    assert outcome["response"].result["turn"]["status"] == "completed"
+
+
 def test_realtime_thread_resume_rejects_other_actor(
     two_actor_gateway_client: Any,
 ) -> None:

@@ -13,6 +13,7 @@
 // Designed to live behind a React hook (see ``useRealtimeThread``)
 // that exposes ``state``, ``send``, ``startTurn``, ``resolveApproval``.
 
+import { nextBackoffDelay } from "@/core/streaming/backoff";
 import { swallow } from "@/core/utils/log";
 import {
   type Envelope,
@@ -148,10 +149,10 @@ export class RealtimeClient {
     ) {
       return;
     }
-    const url = this.buildUrl();
+    const { url, protocols } = this.buildConnection();
     let ws: WebSocket;
     try {
-      ws = new WebSocket(url);
+      ws = new WebSocket(url, protocols);
     } catch (err) {
       swallow(err);
       this.opts.onError?.(err as Error);
@@ -243,11 +244,25 @@ export class RealtimeClient {
 
   // ── Internal ───────────────────────────────────────────────
 
-  private buildUrl(): string {
+  // RFC 7230 token characters — the only values allowed inside a
+  // Sec-WebSocket-Protocol header. JWTs (base64url + dots) and typical
+  // API keys pass; anything exotic falls back to the query-param
+  // convention the gateway still accepts.
+  private static SUBPROTOCOL_SAFE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+  // Credentials ride the ``Sec-WebSocket-Protocol`` handshake header
+  // (``bearer, <token>``) instead of a ``?token=`` query param. Query
+  // strings end up in access logs, proxy logs and browser history;
+  // headers don't. The gateway parses this convention and echoes the
+  // ``bearer`` marker as the accepted subprotocol.
+  private buildConnection(): { url: string; protocols?: string[] } {
     const token = this.opts.authToken?.() ?? null;
-    if (!token) return this.opts.url;
+    if (!token) return { url: this.opts.url };
+    if (RealtimeClient.SUBPROTOCOL_SAFE.test(token)) {
+      return { url: this.opts.url, protocols: ["bearer", token] };
+    }
     const sep = this.opts.url.includes("?") ? "&" : "?";
-    return `${this.opts.url}${sep}token=${encodeURIComponent(token)}`;
+    return { url: `${this.opts.url}${sep}token=${encodeURIComponent(token)}` };
   }
 
   private send(env: Envelope): void {
@@ -399,11 +414,10 @@ export class RealtimeClient {
   private scheduleReconnect(): void {
     if (this.closed) return;
     if (this.reconnectTimer != null) return;
-    const idx = Math.min(this.reconnectAttempts, 12);
-    const base = Math.min(this.initialBackoff * 2 ** idx, this.maxBackoff);
-    // Full jitter: pick uniformly in [0, base]. Keeps thundering-herd
-    // away when many clients reconnect after a server bounce.
-    const wait = Math.floor(Math.random() * base);
+    const wait = nextBackoffDelay(this.reconnectAttempts, {
+      initialMs: this.initialBackoff,
+      maxMs: this.maxBackoff,
+    });
     this.reconnectAttempts++;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -461,23 +475,46 @@ export function toWebSocketURL(httpBase: string, path: string): string {
 
 function coalesceDeltaNotifications(batch: Notification[]): Notification[] {
   const merged: Notification[] = [];
-  for (const note of batch) {
-    const last = merged[merged.length - 1];
-    if (last && canMergeDeltaNotifications(last, note)) {
-      const previousParams = last.params as Record<string, unknown>;
-      const nextParams = note.params as Record<string, unknown>;
+  // Deltas of an open merge run, joined ONCE when the run closes. The
+  // naive ``merged.delta += next.delta`` recopies the growing prefix on
+  // every merge — quadratic in a busy frame where dozens of deltas for
+  // the same item land between animation frames.
+  let runParts: string[] = [];
+  const closeRun = (): void => {
+    // A lone delta keeps its original envelope — nothing was merged.
+    if (runParts.length <= 1) {
+      runParts = [];
+      return;
+    }
+    const seed = merged[merged.length - 1];
+    if (seed) {
       merged[merged.length - 1] = {
-        ...last,
+        ...seed,
         params: {
-          ...previousParams,
-          delta:
-            String(previousParams.delta ?? "") + String(nextParams.delta ?? ""),
+          ...(seed.params as Record<string, unknown>),
+          delta: runParts.join(""),
         },
       };
+    }
+    runParts = [];
+  };
+  for (const note of batch) {
+    const last = merged[merged.length - 1];
+    if (last && runParts.length > 0 && canMergeDeltaNotifications(last, note)) {
+      runParts.push(
+        String((note.params as Record<string, unknown>).delta ?? ""),
+      );
       continue;
     }
+    closeRun();
     merged.push(note);
+    if (DELTA_METHODS.has(note.method)) {
+      runParts = [
+        String((note.params as Record<string, unknown>).delta ?? ""),
+      ];
+    }
   }
+  closeRun();
   return merged;
 }
 

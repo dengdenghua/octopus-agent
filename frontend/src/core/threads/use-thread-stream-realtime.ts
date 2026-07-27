@@ -16,6 +16,7 @@ import {
 } from "@/core/threads/realtime-adapter";
 import { swallow } from "@/core/utils/log";
 import { useRealtimeThread, type StreamVitals } from "@/core/realtime";
+import { itemStreamText } from "@/core/realtime/reducer";
 import type {
   AgentPhaseSnapshot,
   ApprovalItem,
@@ -202,7 +203,7 @@ function commandItemToLiveEvent(
     startedAt,
     iteration,
     input: commandExecutionInput(item),
-    output: item.aggregatedOutput || undefined,
+    output: itemStreamText(item) || undefined,
     ...finishFields(status, startedAt, turn),
   };
 }

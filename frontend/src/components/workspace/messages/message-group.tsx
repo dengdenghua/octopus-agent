@@ -17,7 +17,13 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import type { BundledLanguage } from "shiki";
 
@@ -56,6 +62,10 @@ import {
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import { activateTimelineItem } from "@/core/threads/timeline-linkage";
+import {
+  getTimelineLinkageState,
+  subscribeTimelineLinkage,
+} from "@/core/threads/timeline-linkage";
 import { extractTitleFromMarkdown } from "@/core/utils/markdown";
 import { cn } from "@/lib/utils";
 
@@ -285,6 +295,9 @@ export function MessageGroup({
     Record<string, boolean>
   >({});
   const [openActionGroups, setOpenActionGroups] = useState<
+    Record<string, boolean>
+  >({});
+  const [expandedHistoryPhases, setExpandedHistoryPhases] = useState<
     Record<string, boolean>
   >({});
   const thinkingStartTimeRef = useRef<number | null>(null);
@@ -750,8 +763,9 @@ export function MessageGroup({
   ) {
     // A live agent often emits several records for one phase. Leaving every
     // completed record open turns the transcript into a terminal log, so keep
-    // only the active phase in full view. The compact receipt still opens the
-    // exact phase in the Workbench; no evidence is thrown away.
+    // only the active phase in full view. After streaming ends the historical
+    // phases stay collapsed by default; clicking a receipt expands that phase
+    // inline and the choice persists, so nothing is auto-buried again.
     const activeTimelineItem =
       compactTimelineItems[compactTimelineItems.length - 1] ??
       items[items.length - 1];
@@ -759,14 +773,13 @@ export function MessageGroup({
       ? lastTimelineStep(activeTimelineItem).phaseId
       : undefined;
     const historicalPhaseItems = new Map<string, TimelineItem[]>();
-    if (isLiveTimeline && isLoading) {
-      for (const timelineItem of items) {
-        const phaseId = lastTimelineStep(timelineItem).phaseId;
-        if (!phaseId || phaseId === activePhaseId) continue;
-        const group = historicalPhaseItems.get(phaseId) ?? [];
-        group.push(timelineItem);
-        historicalPhaseItems.set(phaseId, group);
-      }
+    for (const timelineItem of items) {
+      const phaseId = lastTimelineStep(timelineItem).phaseId;
+      if (!phaseId || phaseId === activePhaseId) continue;
+      if (expandedHistoryPhases[phaseId]) continue;
+      const group = historicalPhaseItems.get(phaseId) ?? [];
+      group.push(timelineItem);
+      historicalPhaseItems.set(phaseId, group);
     }
 
     return items.map((item) => {

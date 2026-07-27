@@ -664,7 +664,7 @@ function buildTraceSections(
       title: t.message.verification,
       summary: t.message.checkCount(verification.length),
       events: verification,
-      openByDefault: false,
+      openByDefault: verification.some((event) => event.status === "error"),
     });
   }
   if (sections.length === 0 && remainder.length > 0) {

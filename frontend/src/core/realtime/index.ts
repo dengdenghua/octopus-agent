@@ -51,8 +51,13 @@ export type {
 } from "./items";
 export { emptyConversation } from "./items";
 
-export type { ConversationEvent, ReducerOutput } from "./reducer";
-export { reduce } from "./reducer";
+export type {
+  ConversationEvent,
+  ReducerDiagnostic,
+  ReducerDiagnosticHandler,
+  ReducerOutput,
+} from "./reducer";
+export { itemStreamText, reduce } from "./reducer";
 
 export type { RealtimeClientOptions } from "./client";
 export { RealtimeClient, createDefaultClient } from "./client";

@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
-import { authedEventSource } from "@/core/auth/api";
+import { openSseStream } from "@/core/streaming/sse";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
@@ -306,19 +306,20 @@ export function RunReviewPanel() {
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-    const es = authedEventSource(`${getBackendBaseURL()}/api/stream`);
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-    es.onmessage = (msg) => {
-      if (paused) return;
-      try {
-        const event = JSON.parse(msg.data) as RunReviewEvent;
-        setEvents((prev) => [...prev, event].slice(-600));
-      } catch (e) {
-        swallow(e);
-      }
-    };
-    return () => es.close();
+    return openSseStream({
+      url: `${getBackendBaseURL()}/api/stream`,
+      onOpen: () => setConnected(true),
+      onReconnecting: () => setConnected(false),
+      onEvent: (msg) => {
+        if (paused) return;
+        try {
+          const event = JSON.parse(msg.data) as RunReviewEvent;
+          setEvents((prev) => [...prev, event].slice(-600));
+        } catch (e) {
+          swallow(e);
+        }
+      },
+    });
   }, [paused]);
 
   const reviews = useMemo(() => deriveRunReviews(events), [events]);

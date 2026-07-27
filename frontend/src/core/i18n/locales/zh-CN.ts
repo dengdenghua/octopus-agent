@@ -1730,6 +1730,7 @@ export const zhCN: Translations = {
     ariaChatWorkspace: "对话工作区",
     ariaUtilityPanel: "产物、计划与研究面板",
     ariaAgentWorkbench: "Agent 工作台",
+    ariaToggleWorkbenchDrawer: "展开或收起 Agent 工作台抽屉",
     // Storage library labels
     libraryApps: "应用",
     libraryDocs: "文档",

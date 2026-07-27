@@ -3314,16 +3314,30 @@
   /* 对话区 ↔ 侧边栏 双向联动高亮：弱显示原则下的一次性提示（≤2s），
      仅 CSS transition，无循环动画。class 由共享 linkage store 的消费
      组件按 2s 生命周期添加/移除；transition 挂在定位属性基座上，保证
-     高亮出现与消退都平滑。 */
+     高亮出现与消退都平滑。视觉聚焦 = 底色 + 左侧强调条 + 描边 + 轻微
+     缩放（transform 不引发布局抖动）。 */
   [data-timeline-item-id] {
     transition:
       background-color var(--motion-duration-slow, 300ms) ease-out,
-      box-shadow var(--motion-duration-slow, 300ms) ease-out;
+      box-shadow var(--motion-duration-slow, 300ms) ease-out,
+      outline-color var(--motion-duration-slow, 300ms) ease-out,
+      transform var(--motion-duration-slow, 300ms) ease-out;
   }
 
   .timeline-item-linkage-highlight {
-    background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+    background-color: color-mix(in oklch, var(--primary) 12%, transparent);
+    border-radius: var(--radius-md, 6px);
+    outline: 1.5px solid color-mix(in oklch, var(--primary) 55%, transparent);
+    outline-offset: 1px;
     box-shadow: inset 2px 0 0
       color-mix(in oklch, var(--primary) 60%, transparent);
+    transform: scale(1.02);
+  }
+
+  /* reduced-motion 下保留边框/底色提示，去掉缩放的位移动感 */
+  @media (prefers-reduced-motion: reduce) {
+    .timeline-item-linkage-highlight {
+      transform: none;
+    }
   }
 }

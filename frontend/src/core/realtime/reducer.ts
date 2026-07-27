@@ -12,6 +12,7 @@ import type {
   FileHunk,
   GroundingSource,
   Item,
+  ItemStatus,
   McpToolProgress,
   Turn,
   WorkbenchSnapshotV2,
@@ -19,6 +20,107 @@ import type {
 } from "./items";
 
 let errorItemSeq = 0;
+
+// ── Streaming append buffer ─────────────────────────────────
+//
+// The naive ``text: it.text + delta`` rebuilds the whole string on
+// EVERY frame — quadratic copying for long outputs (each delta is
+// small, the accumulated text is not). Instead, deltas for a
+// streaming item accumulate in a per-item chunk list (O(1) amortized
+// per delta) and are joined ONCE per animation frame when React reads
+// the state. Reads of settled items never pay anything.
+//
+// The buffer is keyed on the item OBJECT: a fresh object (snapshot
+// upsert, turn close, resume merge) has no buffered chunks, and the
+// wire field itself is always complete — so cleanup is automatic, no
+// eviction bookkeeping, and a weak map lets dead entries be GC'd with
+// their items.
+const streamChunks = new WeakMap<Item, string[]>();
+// Joined text per item object, memoized: N components reading the same
+// item within one frame share a single join.
+const streamJoined = new WeakMap<Item, string>();
+
+// Text-bearing wire fields that stream via deltas. Used by snapshot
+// paths (item/completed, turn close) to materialize buffered chunks
+// INTO the wire field so the item object is self-contained for
+// persistence and for readers that bypass ``itemText``.
+type StreamTextField = "text" | "content" | "aggregatedOutput";
+
+const STREAM_TEXT_FIELDS: Partial<Record<Item["type"], StreamTextField>> = {
+  agentMessage: "text",
+  reasoning: "content",
+  plan: "text",
+  commandExecution: "aggregatedOutput",
+};
+
+function appendStreamText<T extends Item>(item: T, delta: string): T {
+  let chunks = streamChunks.get(item);
+  if (!chunks) {
+    chunks = [delta];
+  } else {
+    chunks.push(delta);
+  }
+  const updated = { ...item } as T;
+  // Move the buffer to the replacement item. The reducer never mutates
+  // Conversation state in place, so the fresh object becomes the sole owner
+  // of the in-flight chunks while the old object can be collected.
+  streamChunks.delete(item);
+  streamJoined.delete(item);
+  streamChunks.set(updated, chunks);
+  return updated;
+}
+
+// Resolve the current streamed text for an item. Settled items (and
+// anything snapshot-loaded) read their wire field directly — zero
+// overhead outside the streaming hot path. Exported for renderers
+// that want the freshest in-flight text.
+export function itemStreamText(item: Item): string {
+  const chunks = streamChunks.get(item);
+  if (!chunks || chunks.length === 0) return streamWireText(item);
+  const cached = streamJoined.get(item);
+  if (cached !== undefined) return cached;
+  const joined = streamWireText(item) + chunks.join("");
+  streamJoined.set(item, joined);
+  return joined;
+}
+
+function streamWireText(item: Item): string {
+  switch (item.type) {
+    case "agentMessage":
+    case "plan":
+      return item.text;
+    case "reasoning":
+      return item.content;
+    case "commandExecution":
+      return item.aggregatedOutput;
+    default:
+      return "";
+  }
+}
+
+// Materialize buffered chunks into the item's own wire field. Called
+// whenever an item leaves the streaming hot path (completed snapshot,
+// turn close) so the settled object is self-contained for persistence
+// and for readers that bypass ``itemStreamText``.
+//
+// ``chunkSource`` overrides where buffered chunks are looked up: a
+// replacement snapshot is a fresh object with no chunks of its own,
+// but the item it REPLACES may still hold undelivered deltas.
+function withMaterializedStreamText(item: Item, chunkSource?: Item): Item {
+  const source = chunkSource ?? item;
+  const chunks = streamChunks.get(source);
+  if (!chunks || chunks.length === 0) return item;
+  const field = STREAM_TEXT_FIELDS[item.type];
+  if (!field) return item;
+  const base =
+    chunkSource && streamChunks.get(item)?.length
+      ? streamWireText(item) + (streamChunks.get(item) ?? []).join("")
+      : streamWireText(item);
+  return {
+    ...item,
+    [field]: base + chunks.join(""),
+  } as Item;
+}
 
 // All events the reducer understands. The set is closed: anything not
 // listed here is a no-op (useful — server adds new methods without
@@ -218,6 +320,7 @@ export interface ReducerOutput {
 export function reduce(
   state: Conversation,
   evt: ConversationEvent,
+  onDiagnostic?: ReducerDiagnosticHandler,
 ): ReducerOutput {
   switch (evt.method) {
     case "thread/started":
@@ -395,6 +498,7 @@ export function reduce(
         evt.params.itemId,
         "agentMessage",
         evt.params.delta,
+        onDiagnostic,
       );
     case "item/reasoning/textDelta":
       return mergeDelta(
@@ -403,6 +507,7 @@ export function reduce(
         evt.params.itemId,
         "reasoning",
         evt.params.delta,
+        onDiagnostic,
       );
     case "item/plan/delta":
       return mergeDelta(
@@ -411,6 +516,7 @@ export function reduce(
         evt.params.itemId,
         "plan",
         evt.params.delta,
+        onDiagnostic,
       );
     case "item/commandExecution/outputDelta":
       return mergeDelta(
@@ -419,6 +525,7 @@ export function reduce(
         evt.params.itemId,
         "commandOutput",
         evt.params.delta,
+        onDiagnostic,
       );
     case "item/fileChange/hunkDelta":
       return applyFileChangeHunkDelta(
@@ -512,13 +619,13 @@ function replaceTurnItem(
 function mergeCompletedTurn(existing: Turn, incoming: Turn): Turn {
   const incomingItems = Array.isArray(incoming.items) ? incoming.items : [];
   const incomingById = new Map(incomingItems.map((item) => [item.id, item]));
-  const terminalStatus = itemTerminalStatus(incoming.status);
   const existingItems = existing.items.map((item) => {
     const replacement = incomingById.get(item.id);
-    if (replacement) return preserveTimelineCoordinates(item, replacement);
-    if (item.status === "inProgress") {
-      return { ...item, status: terminalStatus } as Item;
+    if (replacement) {
+      return preserveCompletedStreamText(item, replacement);
     }
+    // Still-open items (and buffered chunks against them) are closed by
+    // ``closeItemsForTurn`` below.
     return item;
   });
   const existingIds = new Set(existing.items.map((item) => item.id));
@@ -559,7 +666,12 @@ function mergeStartedTurn(existing: Turn, incoming: Turn): Turn {
     ) {
       return item;
     }
-    return { ...item, timelineSequence, parentItemId, phaseId } as Item;
+    return {
+      ...withMaterializedStreamText(item),
+      timelineSequence,
+      parentItemId,
+      phaseId,
+    } as Item;
   });
   const appended = incoming.items.filter((item) => !existingIds.has(item.id));
   if (
@@ -608,6 +720,12 @@ function closeItemsForTurn(
 
   const terminalStatus = itemTerminalStatus(turnStatus);
   return items.map((item) => {
+    // Only streaming-capable items can carry buffered chunks; checking
+    // the type first keeps this loop free of WeakMap lookups for the
+    // common non-text items.
+    if (STREAM_TEXT_FIELDS[item.type]) {
+      item = withMaterializedStreamText(item);
+    }
     const nextStatus =
       item.id === interruptedMessageId
         ? "interrupted"
@@ -648,7 +766,11 @@ function upsertItem(
     if (!existing) return unchanged(state);
     if (phase === "completed" || existing.status === "inProgress") {
       nextItems = orderTimelineItems(
-        replaceAt(turn.items, idx, preserveTimelineCoordinates(existing, item)),
+        replaceAt(
+          turn.items,
+          idx,
+          preserveCompletedStreamText(existing, item),
+        ),
       );
     } else {
       return unchanged(state);
@@ -670,6 +792,17 @@ function preserveTimelineCoordinates(existing: Item, incoming: Item): Item {
     parentItemId: incoming.parentItemId ?? existing.parentItemId ?? null,
     phaseId: incoming.phaseId ?? existing.phaseId ?? null,
   } as Item;
+}
+
+function preserveCompletedStreamText(existing: Item, incoming: Item): Item {
+  const merged = preserveTimelineCoordinates(existing, incoming);
+  const field = STREAM_TEXT_FIELDS[merged.type];
+  if (!field || streamWireText(merged)) return merged;
+  const materialized = withMaterializedStreamText(existing);
+  const bufferedText = streamWireText(materialized);
+  return bufferedText
+    ? ({ ...merged, [field]: bufferedText } as Item)
+    : merged;
 }
 
 /**
@@ -697,12 +830,33 @@ function orderTimelineItems(items: readonly Item[]): Item[] {
 
 type DeltaKind = "agentMessage" | "reasoning" | "plan" | "commandOutput";
 
+// Anomalies the reducer wants to surface without owning a logger.
+// ``lateDeltaDropped``: a delta arrived for an item that already left
+// ``inProgress``. Since the client batches ``item/completed`` together
+// with deltas (preserving arrival order), this should be ~zero — a
+// sustained nonzero count means the wire protocol drifted (e.g.
+// ``item/completed`` stopped carrying full text) and text is being
+// silently lost.
+export interface ReducerDiagnostic {
+  type: "lateDeltaDropped";
+  turnId: string;
+  itemId: string;
+  kind: DeltaKind;
+  itemStatus: ItemStatus;
+  deltaLength: number;
+}
+
+export type ReducerDiagnosticHandler = (
+  diagnostic: ReducerDiagnostic,
+) => void;
+
 function mergeDelta(
   state: Conversation,
   turnId: string,
   itemId: string,
   kind: DeltaKind,
   delta: string,
+  onDiagnostic?: ReducerDiagnosticHandler,
 ): ReducerOutput {
   const turnIdx = state.turns.findIndex((t) => t.id === turnId);
   const turn = state.turns[turnIdx];
@@ -715,23 +869,30 @@ function mergeDelta(
     return unchanged(state);
   }
   // Drop deltas that arrive after the item is already completed.
-  // Without this, the RAF-batched delta queue can flush AFTER an
-  // ``item/completed`` snapshot lands in the reducer (item/* is
-  // dispatched immediately, deltas are deferred to next frame),
-  // and we end up appending those deltas to the already-final
-  // ``text`` — doubling content. Status check is the simplest gate.
+  // Without this, deltas that slip past the client's ordered batch
+  // would append to the already-final ``text`` — doubling content.
+  // Status check is the simplest gate; the diagnostic keeps the drop
+  // observable instead of silent.
   if (it.status !== "inProgress") {
+    onDiagnostic?.({
+      type: "lateDeltaDropped",
+      turnId,
+      itemId,
+      kind,
+      itemStatus: it.status,
+      deltaLength: delta.length,
+    });
     return unchanged(state);
   }
   let updated: Item | null = null;
   if (kind === "agentMessage" && it.type === "agentMessage") {
-    updated = { ...it, text: it.text + delta };
+    updated = appendStreamText(it, delta);
   } else if (kind === "reasoning" && it.type === "reasoning") {
-    updated = { ...it, content: it.content + delta };
+    updated = appendStreamText(it, delta);
   } else if (kind === "plan" && it.type === "plan") {
-    updated = { ...it, text: it.text + delta };
+    updated = appendStreamText(it, delta);
   } else if (kind === "commandOutput" && it.type === "commandExecution") {
-    updated = { ...it, aggregatedOutput: it.aggregatedOutput + delta };
+    updated = appendStreamText(it, delta);
   }
   if (updated === null) {
     return unchanged(state);

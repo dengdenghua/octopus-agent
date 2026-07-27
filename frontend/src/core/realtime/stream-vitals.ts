@@ -57,6 +57,10 @@ export interface VitalsMarks {
   /** Worst gap observed between successive text deltas this turn (ms) —
    * the "streaming interval" metric. */
   maxDeltaGapMs: number;
+  /** Deltas the reducer dropped because the target item had already
+   * settled. Should stay 0 — a growing count means the wire protocol
+   * drifted and text is being silently lost (see reducer diagnostics). */
+  lateDeltaDrops: number;
 }
 
 /** Derived, render-ready liveness snapshot. */
@@ -104,6 +108,7 @@ export function emptyVitalsMarks(): VitalsMarks {
     lastHeartbeatAt: null,
     heartbeatElapsedS: null,
     maxDeltaGapMs: 0,
+    lateDeltaDrops: 0,
   };
 }
 
@@ -152,6 +157,7 @@ export function applyVitalNotification(
     marks.lastHeartbeatAt = null;
     marks.heartbeatElapsedS = null;
     marks.maxDeltaGapMs = 0;
+    marks.lateDeltaDrops = 0;
     return;
   }
 

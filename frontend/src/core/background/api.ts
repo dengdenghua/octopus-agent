@@ -2,7 +2,8 @@
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
-import { authHeaders, authedEventSource, jsonAuthHeaders } from "@/core/auth/api";
+import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
+import { openSseStream } from "@/core/streaming/sse";
 
 import type {
   BackgroundTask,
@@ -141,8 +142,9 @@ export interface OutputStreamCallbacks {
 /**
  * Connect to a background task's SSE output stream.
  *
- * The stream is reconnectable: on disconnect, the browser automatically
- * sends Last-Event-ID so the server can resume from the correct offset.
+ * The stream is reconnectable: the shared SSE transport auto-retries
+ * with backoff and forwards the last seen event id as Last-Event-ID so
+ * the server can resume from the correct offset.
  *
  * Returns an AbortController to close the stream.
  */
@@ -152,52 +154,44 @@ export function connectOutputSSE(
   _lastSeq = -1,
 ): AbortController {
   const controller = new AbortController();
-  const url = `${BASE()}/tasks/${taskId}/output`;
+  let lastEventId: string | null = null;
 
-  const connect = () => {
-    const eventSource = authedEventSource(url);
-
-    eventSource.addEventListener("output", (event: MessageEvent) => {
-      try {
-        const msg = JSON.parse(event.data) as BackgroundTaskOutput;
-        callbacks.onMessage(msg);
-      } catch (e) {
-        swallow(e);
+  openSseStream({
+    url: `${BASE()}/tasks/${taskId}/output`,
+    signal: controller.signal,
+    lastEventId: () => lastEventId,
+    onEvent: (msg) => {
+      if (msg.id != null) lastEventId = msg.id;
+      if (msg.event === "output") {
+        try {
+          callbacks.onMessage(JSON.parse(msg.data) as BackgroundTaskOutput);
+        } catch (e) {
+          swallow(e);
+        }
+        return;
       }
-    });
-
-    eventSource.addEventListener("done", (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data) as {
-          task_id: string;
-          status: string;
-          error: string | null;
-        };
-        callbacks.onDone(data);
-      } catch (e) {
-        swallow(e);
+      if (msg.event === "done") {
+        try {
+          callbacks.onDone(
+            JSON.parse(msg.data) as {
+              task_id: string;
+              status: string;
+              error: string | null;
+            },
+          );
+        } catch (e) {
+          swallow(e);
+        }
+        return true;
       }
-      eventSource.close();
-    });
-
-    eventSource.addEventListener("timeout", () => {
-      eventSource.close();
-    });
-
-    eventSource.onerror = () => {
-      // EventSource auto-reconnects on most errors.
-      // We only call onError for permanent failures.
-      if (eventSource.readyState === EventSource.CLOSED) {
-        callbacks.onError?.(new Error("SSE connection closed permanently"));
+      if (msg.event === "timeout") {
+        return true;
       }
-    };
+    },
+    onError: (err) => {
+      callbacks.onError?.(err);
+    },
+  });
 
-    // Close on abort
-    controller.signal.addEventListener("abort", () => {
-      eventSource.close();
-    });
-  };
-
-  connect();
   return controller;
 }

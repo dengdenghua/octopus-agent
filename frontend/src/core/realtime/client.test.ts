@@ -22,6 +22,7 @@ class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
 
   url: string;
+  protocols: string[];
   readyState: number = FakeWebSocket.CONNECTING;
   sentRaw: string[] = [];
 
@@ -30,8 +31,9 @@ class FakeWebSocket {
   onclose: ((ev: CloseEvent) => void) | null = null;
   onerror: ((ev: Event) => void) | null = null;
 
-  constructor(url: string) {
+  constructor(url: string, protocols: string[] = []) {
     this.url = url;
+    this.protocols = protocols;
     FakeWebSocket.lastInstance = this;
     FakeWebSocket.instances.push(this);
   }
@@ -130,7 +132,7 @@ describe("RealtimeClient", () => {
     client.close();
   });
 
-  it("adds supplied auth tokens to the websocket URL", async () => {
+  it("sends supplied auth tokens through websocket subprotocols", async () => {
     const client = new RealtimeClient({
       url: "ws://test/api/realtime",
       authToken: () => "__guest__",
@@ -140,13 +142,15 @@ describe("RealtimeClient", () => {
 
     client.connect();
 
-    expect(FakeWebSocket.lastInstance!.url).toBe(
-      "ws://test/api/realtime?token=__guest__",
-    );
+    expect(FakeWebSocket.lastInstance!.url).toBe("ws://test/api/realtime");
+    expect(FakeWebSocket.lastInstance!.protocols).toEqual([
+      "bearer",
+      "__guest__",
+    ]);
     client.close();
   });
 
-  it("adds real auth tokens to the websocket URL", async () => {
+  it("sends real auth tokens through websocket subprotocols", async () => {
     const client = new RealtimeClient({
       url: "ws://test/api/realtime",
       authToken: () => "sk-alice",
@@ -156,9 +160,28 @@ describe("RealtimeClient", () => {
 
     client.connect();
 
+    expect(FakeWebSocket.lastInstance!.url).toBe("ws://test/api/realtime");
+    expect(FakeWebSocket.lastInstance!.protocols).toEqual([
+      "bearer",
+      "sk-alice",
+    ]);
+    client.close();
+  });
+
+  it("falls back to an encoded query token when it is not subprotocol-safe", async () => {
+    const client = new RealtimeClient({
+      url: "ws://test/api/realtime",
+      authToken: () => "token with spaces",
+      onIncomingRequest: async () => null,
+      onNotification: () => {},
+    });
+
+    client.connect();
+
     expect(FakeWebSocket.lastInstance!.url).toBe(
-      "ws://test/api/realtime?token=sk-alice",
+      "ws://test/api/realtime?token=token%20with%20spaces",
     );
+    expect(FakeWebSocket.lastInstance!.protocols).toEqual([]);
     client.close();
   });
 

@@ -24,6 +24,11 @@ export interface AgentPhase {
   /** When set, the UI renders the localized label for this key instead of
    * the raw ``title`` (which stays available as the accessible/tooltip text). */
   titleKey?: AgentPhaseTitleKey;
+  /** Coarse business phase (planning/exploring/…). Sourced from the backend
+   * ``phase_kind`` when available, otherwise mapped locally from the title.
+   * The UI renders the localized label for this key when ``titleKey`` is
+   * absent; the raw ``title`` stays available as tooltip text. */
+  businessKey?: BusinessAgentPhaseKey;
   detail?: string;
   status: AgentPhaseStatus;
   blockIds: string[];

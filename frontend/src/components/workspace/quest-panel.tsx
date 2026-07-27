@@ -15,7 +15,7 @@
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
-import { authedEventSource } from "@/core/auth/api";
+import { openSseStream } from "@/core/streaming/sse";
 import { useI18n } from "@/core/i18n/hooks";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
@@ -226,112 +226,120 @@ function useQuestStream(questId: string | null): QuestState {
 
     const base = getBackendBaseURL();
     const url = `${base}/api/quest/${questId}/stream`;
-    const es = authedEventSource(url);
 
-    es.addEventListener("phase", (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setState((s) => ({
-          ...s,
-          phase: data.phase as QuestPhase,
-        }));
-      } catch (e) {
-        swallow(e, "quest.phase");
-      }
-    });
-
-    es.addEventListener("plan_ready", (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setState((s) => ({
-          ...s,
-          phase: "awaiting_approval" as QuestPhase,
-          plan: data.plan as QuestPlan,
-        }));
-      } catch (e) {
-        swallow(e, "quest.plan_ready");
-      }
-    });
-
-    es.addEventListener("step_progress", (e) => {
-      let data: { step_index?: number; result?: unknown };
-      try {
-        data = JSON.parse(e.data);
-      } catch (e) {
-        swallow(e, "quest.step_progress");
-        return;
-      }
-      setState((s) => {
-        const updated = {
-          ...s,
-          currentStepIndex: data.step_index ?? s.currentStepIndex,
-        };
-        if (data.result) {
-          // Avoid duplicates by step_id
-          const existing = s.stepResults.find(
-            (r) => r.step_id === (data.result as QuestStepResult).step_id,
-          );
-          if (!existing) {
-            updated.stepResults = [
-              ...s.stepResults,
-              data.result as QuestStepResult,
-            ];
-          }
+    return openSseStream({
+      url,
+      onEvent: (msg) => {
+        if (msg.event === "complete") {
+          // Quest finished — close cleanly, no reconnect.
+          return true;
         }
-        return updated;
-      });
-    });
-
-    es.addEventListener("verification", (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setState((s) => ({
-          ...s,
-          verification: data.verification as QuestVerification,
-        }));
-      } catch (e) {
-        swallow(e, "quest.verification");
-      }
-    });
-
-    es.addEventListener("report", (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setState((s) => ({
-          ...s,
-          report: data.report as QuestReport,
-        }));
-      } catch (e) {
-        swallow(e, "quest.report");
-      }
-    });
-
-    es.addEventListener("complete", (_e) => {
-      es.close();
-    });
-
-    es.addEventListener("error", (e) => {
-      try {
-        const data = JSON.parse((e as MessageEvent).data);
-        setState((s) => ({
-          ...s,
-          phase: "failed" as QuestPhase,
-          error: data.error ?? "Unknown error",
-        }));
-      } catch (e) {
-        swallow(e);
+        if (msg.event === "phase") {
+          try {
+            const data = JSON.parse(msg.data);
+            setState((s) => ({
+              ...s,
+              phase: data.phase as QuestPhase,
+            }));
+          } catch (e) {
+            swallow(e, "quest.phase");
+          }
+          return;
+        }
+        if (msg.event === "plan_ready") {
+          try {
+            const data = JSON.parse(msg.data);
+            setState((s) => ({
+              ...s,
+              phase: "awaiting_approval" as QuestPhase,
+              plan: data.plan as QuestPlan,
+            }));
+          } catch (e) {
+            swallow(e, "quest.plan_ready");
+          }
+          return;
+        }
+        if (msg.event === "step_progress") {
+          let data: { step_index?: number; result?: unknown };
+          try {
+            data = JSON.parse(msg.data);
+          } catch (e) {
+            swallow(e, "quest.step_progress");
+            return;
+          }
+          setState((s) => {
+            const updated = {
+              ...s,
+              currentStepIndex: data.step_index ?? s.currentStepIndex,
+            };
+            if (data.result) {
+              // Avoid duplicates by step_id
+              const existing = s.stepResults.find(
+                (r) => r.step_id === (data.result as QuestStepResult).step_id,
+              );
+              if (!existing) {
+                updated.stepResults = [
+                  ...s.stepResults,
+                  data.result as QuestStepResult,
+                ];
+              }
+            }
+            return updated;
+          });
+          return;
+        }
+        if (msg.event === "verification") {
+          try {
+            const data = JSON.parse(msg.data);
+            setState((s) => ({
+              ...s,
+              verification: data.verification as QuestVerification,
+            }));
+          } catch (e) {
+            swallow(e, "quest.verification");
+          }
+          return;
+        }
+        if (msg.event === "report") {
+          try {
+            const data = JSON.parse(msg.data);
+            setState((s) => ({
+              ...s,
+              report: data.report as QuestReport,
+            }));
+          } catch (e) {
+            swallow(e, "quest.report");
+          }
+          return;
+        }
+        if (msg.event === "error") {
+          try {
+            const data = JSON.parse(msg.data);
+            setState((s) => ({
+              ...s,
+              phase: "failed" as QuestPhase,
+              error: data.error ?? "Unknown error",
+            }));
+          } catch (e) {
+            swallow(e);
+            setState((s) => ({
+              ...s,
+              phase: "failed" as QuestPhase,
+              error: "Connection lost",
+            }));
+          }
+          // Server reported a terminal quest failure — no reconnect.
+          return true;
+        }
+      },
+      onError: () => {
         setState((s) => ({
           ...s,
           phase: "failed" as QuestPhase,
           error: "Connection lost",
         }));
-      }
-      es.close();
+      },
     });
-
-    return () => {
-      es.close();
-    };
   }, [questId]);
 
   return state;

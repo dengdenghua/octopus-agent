@@ -1790,6 +1790,7 @@ export const jaJP: Translations = {
     ariaChatWorkspace: "会話ワークスペース",
     ariaUtilityPanel: "成果物・プラン・リサーチパネル",
     ariaAgentWorkbench: "エージェントワークベンチ",
+    ariaToggleWorkbenchDrawer: "エージェントワークベンチのドロワーを展開・折りたたむ",
     // Storage library labels
     libraryApps: "アプリ",
     libraryDocs: "ドキュメント",

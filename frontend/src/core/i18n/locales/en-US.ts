@@ -1797,6 +1797,7 @@ export const enUS: Translations = {
     ariaChatWorkspace: "Conversation workspace",
     ariaUtilityPanel: "Artifacts, plan, and research panel",
     ariaAgentWorkbench: "Agent workbench",
+    ariaToggleWorkbenchDrawer: "Expand or collapse the agent workbench drawer",
     // Storage library labels
     libraryApps: "Apps",
     libraryDocs: "Docs",

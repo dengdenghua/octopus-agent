@@ -1786,6 +1786,7 @@ export const koKR: Translations = {
     ariaChatWorkspace: "대화 작업 영역",
     ariaUtilityPanel: "산출물·플랜·리서치 패널",
     ariaAgentWorkbench: "에이전트 워크벤치",
+    ariaToggleWorkbenchDrawer: "에이전트 워크벤치 드로어 펼치기/접기",
     // Storage library labels
     libraryApps: "앱",
     libraryDocs: "문서",

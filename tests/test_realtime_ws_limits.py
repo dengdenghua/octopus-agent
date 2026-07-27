@@ -68,6 +68,24 @@ def test_connection_cap_disabled_when_zero():
     assert gw._turn_rate_limiter is not None  # rate limit independent of cap
 
 
+@pytest.mark.parametrize(
+    ("offered", "expected"),
+    [
+        ("bearer, token-value", "bearer"),
+        ("Bearer, token-value", "bearer"),
+        ("chat, bearer, token-value", "bearer"),
+        ("chat", None),
+        ("", None),
+    ],
+)
+def test_websocket_subprotocol_acceptance(offered: str, expected: str | None):
+    gw = _gateway()
+    ws = types.SimpleNamespace(
+        headers={"sec-websocket-protocol": offered},
+    )
+    assert gw._accept_subprotocol(ws) == expected
+
+
 # ── turn-start rate ───────────────────────────────────────────
 
 

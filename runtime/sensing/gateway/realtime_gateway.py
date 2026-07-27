@@ -643,6 +643,27 @@ class RealtimeGateway:
             raise _RpcError(JsonRpcErrorCode.UNAUTHORIZED, "invalid token")
         return None
 
+    @staticmethod
+    def _accept_subprotocol(ws: WebSocket) -> str | None:
+        """Pick the subprotocol to acknowledge in ``accept()``.
+
+        Browser clients that authenticate via ``Sec-WebSocket-Protocol``
+        offer ``bearer, <token>`` (parsed by ``_resolve_ws_actor``). RFC
+        6455 requires the server to select one of the offered protocols
+        when the client's handshake listed any — answering without a
+        ``Sec-WebSocket-Protocol`` header makes the browser fail the
+        connection outright. Only the ``bearer`` marker is echoed; the
+        token value itself is never a valid selection. Clients that
+        offer nothing (legacy ``?token=`` or header auth) get the old
+        behavior: no subprotocol.
+        """
+        try:
+            offered = ws.headers.get("sec-websocket-protocol") or ""
+        except Exception:  # noqa: BLE001
+            return None
+        parts = [p.strip().lower() for p in offered.split(",") if p.strip()]
+        return "bearer" if "bearer" in parts else None
+
     def _admit_connection(self, actor_id: str | None) -> bool:
         """Reserve a connection slot for ``actor_id`` under the per-actor
         cap. Returns False when the actor is already at the cap. A no-op
@@ -681,7 +702,7 @@ class RealtimeGateway:
             with suppress(Exception):
                 await ws.close(code=4429, reason="too many connections for this actor")
             return
-        await ws.accept()
+        await ws.accept(subprotocol=self._accept_subprotocol(ws))
         conn = RpcConnection(
             ws,
             approval_timeout=self._approval_timeout,

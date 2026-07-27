@@ -17,7 +17,8 @@ import { toast } from "sonner";
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
-import { authHeaders, authedEventSource } from "@/core/auth/api";
+import { authHeaders } from "@/core/auth/api";
+import { openSseStream } from "@/core/streaming/sse";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -286,24 +287,25 @@ function SwarmPanel() {
   // so a start/end pair updates a single row in place.
   useEffect(() => {
     const base = getBackendBaseURL();
-    const es = authedEventSource(`${base}/api/stream`);
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-    es.onmessage = (msg) => {
-      try {
-        const p = JSON.parse(msg.data) as {
-          event_type?: string;
-          ts?: string;
-          task_id?: string;
-          tool_call_id?: string;
-          tool_name?: string;
-          role_id?: string;
-          parent_tool_use_id?: string | null;
-          is_error?: boolean;
-          duration_ms?: number;
-          args_preview?: string;
-          step?: { sucker_id?: string; node_id?: string };
-        };
+    return openSseStream({
+      url: `${base}/api/stream`,
+      onOpen: () => setConnected(true),
+      onReconnecting: () => setConnected(false),
+      onEvent: (msg) => {
+        try {
+          const p = JSON.parse(msg.data) as {
+            event_type?: string;
+            ts?: string;
+            task_id?: string;
+            tool_call_id?: string;
+            tool_name?: string;
+            role_id?: string;
+            parent_tool_use_id?: string | null;
+            is_error?: boolean;
+            duration_ms?: number;
+            args_preview?: string;
+            step?: { sucker_id?: string; node_id?: string };
+          };
 
         // sub_tool_start / sub_tool_end · the new direct-from-journal
         // path (preferred — carries role_id, tool_name, error status).
@@ -378,11 +380,11 @@ function SwarmPanel() {
           ];
           return next.slice(-40);
         });
-      } catch (e) {
-        swallow(e);
-      }
-    };
-    return () => es.close();
+        } catch (e) {
+          swallow(e);
+        }
+      },
+    });
   }, []);
 
   // Group by parent_tool_use_id (== task_id here) so each active
@@ -688,22 +690,23 @@ function JournalPanel() {
 
   useEffect(() => {
     const base = getBackendBaseURL();
-    const es = authedEventSource(`${base}/api/stream`);
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-    es.onmessage = (msg) => {
-      if (pausedRef.current) return;
-      try {
-        const p = JSON.parse(msg.data) as JournalEvent;
-        setEvents((prev) => {
-          const next = [...prev, p];
-          return next.slice(-200);
-        });
-      } catch (e) {
-        swallow(e);
-      }
-    };
-    return () => es.close();
+    return openSseStream({
+      url: `${base}/api/stream`,
+      onOpen: () => setConnected(true),
+      onReconnecting: () => setConnected(false),
+      onEvent: (msg) => {
+        if (pausedRef.current) return;
+        try {
+          const p = JSON.parse(msg.data) as JournalEvent;
+          setEvents((prev) => {
+            const next = [...prev, p];
+            return next.slice(-200);
+          });
+        } catch (e) {
+          swallow(e);
+        }
+      },
+    });
   }, []);
 
   const counts = useMemo(() => {

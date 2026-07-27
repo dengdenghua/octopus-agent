@@ -18,6 +18,7 @@ import type {
 } from "@/core/api/types";
 import type { Todo } from "@/core/todos";
 import { isPrivateAgentGroundingSource } from "@/core/realtime/items";
+import { itemStreamText } from "@/core/realtime/reducer";
 
 import type {
   AgentMessageItem,
@@ -343,14 +344,15 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "reasoning": {
         const r = item as ReasoningItem;
-        if (r.content) pending.reasoning.push(r.content);
+        const content = itemStreamText(r);
+        if (content) pending.reasoning.push(content);
         else if (r.summary.length > 0) {
           pending.reasoning.push(r.summary.join("\n"));
         }
         break;
       }
       case "plan": {
-        pending.plan = (item as PlanItem).text;
+        pending.plan = itemStreamText(item as PlanItem);
         break;
       }
       case "commandExecution": {
@@ -360,7 +362,7 @@ function turnToMessages(turn: Turn): Message[] {
           name: commandExecutionToolName(ce),
           args: {
             ...commandExecutionInput(ce),
-            output: ce.aggregatedOutput,
+            output: itemStreamText(ce),
             exit_code: ce.exitCode,
           },
           type: "tool_call",
@@ -404,7 +406,7 @@ function turnToMessages(turn: Turn): Message[] {
         const am = item as AgentMessageItem;
         const isInterruptedMessage = am.id === interruptedMessageId;
         const isFailedMessage = am.status === "failed";
-        const split = splitReactTrace(am.text || "");
+        const split = splitReactTrace(itemStreamText(am));
         const messageKind =
           am.messageKind ??
           (split.publicUpdate && !split.finalAnswer ? "commentary" : "answer");
@@ -984,9 +986,9 @@ export function conversationLastError(conv: Conversation): Error | undefined {
     if (
       item?.type === "agentMessage" &&
       item.status === "failed" &&
-      (item as AgentMessageItem).text.trim()
+      itemStreamText(item as AgentMessageItem).trim()
     ) {
-      return new Error((item as AgentMessageItem).text.trim());
+      return new Error(itemStreamText(item as AgentMessageItem).trim());
     }
   }
   const verificationMessage = failedVerificationMessage(last);
@@ -1016,7 +1018,7 @@ function isNoOutputPlannerFailure(turn: Turn): boolean {
     if (item.type === "userMessage") continue;
     if (
       item.type === "agentMessage" &&
-      ROLE_NO_OUTPUT_PLACEHOLDER_RE.test(item.text)
+      ROLE_NO_OUTPUT_PLACEHOLDER_RE.test(itemStreamText(item))
     ) {
       sawNoOutputAgentMessage = true;
       continue;

@@ -20,6 +20,10 @@ export interface StreamTurnTelemetry {
   maxDeltaGapMs: number;
   stalledAtEnd: boolean;
   outcome: StreamTurnOutcome;
+  // Deltas dropped by the reducer for already-settled items. Optional
+  // so records persisted by older clients still validate. Anything
+  // above 0 warrants investigation — text may be silently lost.
+  lateDeltaDrops?: number;
 }
 
 export interface StreamTelemetrySummary {
@@ -138,6 +142,7 @@ export function createStreamTurnTelemetry(input: {
     maxDeltaGapMs: input.marks.maxDeltaGapMs,
     stalledAtEnd: sinceActivityMs >= DEFAULT_VITALS_THRESHOLDS.activityStaleMs,
     outcome: input.outcome,
+    lateDeltaDrops: input.marks.lateDeltaDrops ?? 0,
   };
 }
 
