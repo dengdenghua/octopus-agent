@@ -95,3 +95,30 @@ synthesis 整轮解码完才一次性倒出）。
 - 既有失败（与本次无关，HEAD 可复现）：
   `tests/test_evolution_router.py` 3 例；
   `tests/test_realtime_cerebrum.py::test_background_tool_item_completes_after_turn_response`（flake）。
+
+## 实机验收结果（2026-07-28 16:36–16:55，HEAD `87586104c`）
+
+方法：HEAD 代码起独立服务于 8010（不动用户 8000 实例），
+`tmp_acceptance/probe.py` 走真实 WS 协议（`turn/start` + JSON-RPC）
+记录逐事件墙钟时间线；模型 kimi-k3 / ark-code-latest（均为
+openai provider，`supports_tool_use=True` → 默认 native 循环）。
+时间线证据：`tmp_acceptance/*.log`、`timeline_*.json`。
+
+| 项 | 结果 | 关键证据 |
+| --- | --- | --- |
+| #1 ReAct Thought 流式 | ✅ 机制验证（受限） | 强制 `native_tool_loop:false` 后，首个 Thought 于 19.6s 起逐段流入 reasoning 块，先于唯一一次工具执行（127s）。注：本机全部模型均声明 native 能力，生产 ReAct 文本路径只对非 native 模型触发，全序契约由 `tests/test_ttft_event_ordering.py` 固化 |
+| #4 native 工具后文本流式 | ✅ | kimi-k3 调研任务：最后 tool_end(95.8s) → 终答渐进流式 101.2→115.2s（14s 边解码边显示）→ turn/completed；ark-code 任务：tool_end(45.0s) → 终答 49.8→51.2s 渐进。工具间中继叙述以独立散文气泡出现（Kimi 式交错）✓ |
+| #6 原生思考通道 | ✅ | kimi-k3 简单提问：2.8s 首个 reasoning delta，5 段渐进共 946 字符后接 answer；思考块先于每个工具行出现 |
+| #5 chat 快路径节奏删除 | ✅ | answer delta 到达间隔 63ms/89ms/710ms 不等——按 provider 节奏，无 12ms 量化痕迹 |
+| #2 git 并行化 | ✅（上限） | turn/start → thread/started ≈0.1s；简单提问首 token 2.8s（含全部首帧前同步开销），原最坏 6s+ 的 git 串行已不可见 |
+| #3 签名缓存 | ⚪ 不可分辨 | 数十毫秒级收益被模型首 token 延迟（10–23s，火山 plan 端点）淹没；由单测锁定 |
+
+**发现的两个表层问题（非本次修复引入，建议后续跟进）**：
+
+1. native 调研任务的消息历史里出现一条带字面 `Update:` 前缀的消息，
+   且同一内容以「带前缀/不带前缀」重复落库两条（kimi-k3 run，
+   msg4/msg5）——checkpoint 去重/前缀剥离有缝。
+2. 强制 ReAct 路径下，native 调优的 kimi-k3 驱动文本协议质量差
+   （一轮搜索即收、答案未完成）。生产触发面仅限非 native 模型，
+   但 fallback 路径（native 失败降级 ReAct）若命中这类模型会有
+   同样的能力错配。
