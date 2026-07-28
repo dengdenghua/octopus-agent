@@ -1,20 +1,15 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
-const STAGGER_MS = 60;
-
 function SkeletonBar({
   className,
-  style,
   originRight,
 }: {
   className?: string;
-  style?: React.CSSProperties;
   originRight?: boolean;
 }) {
   return (
     <div
-      className={`animate-skeleton-entrance fill-mode-[forwards] overflow-hidden rounded-lg ${originRight ? "origin-[right]" : "origin-[left]"} ${className ?? ""}`}
-      style={{ opacity: 0, ...style }}
+      className={`animate-skeleton-entrance fill-mode-[forwards] overflow-hidden rounded-lg opacity-0 ${originRight ? "origin-[right]" : "origin-[left]"} ${className ?? ""}`}
     >
       <Skeleton className="h-full w-full rounded-lg" />
     </div>
@@ -22,7 +17,6 @@ function SkeletonBar({
 }
 
 export function MessageListSkeleton() {
-  let index = 0;
   return (
     <div className="flex w-full max-w-(--container-width-md) flex-col gap-12 p-8 pt-16">
       <div
@@ -30,49 +24,23 @@ export function MessageListSkeleton() {
         className="flex w-[50%] flex-col items-end gap-2 self-end"
       >
         <SkeletonBar
-          className="h-6 w-full"
+          className="h-6 w-full [animation-delay:0ms]"
           originRight
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
         />
         <SkeletonBar
-          className="h-6 w-[80%]"
+          className="h-6 w-[80%] [animation-delay:60ms]"
           originRight
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
         />
       </div>
       <div role="assistant-message" className="flex flex-col gap-2">
-        <SkeletonBar
-          className="h-6 w-full"
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
-        />
-        <SkeletonBar
-          className="h-6 w-full"
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
-        />
-        <SkeletonBar
-          className="h-6 w-[70%]"
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
-        />
-        <SkeletonBar
-          className="h-6 w-full"
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
-        />
-        <SkeletonBar
-          className="h-6 w-full"
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
-        />
-        <SkeletonBar
-          className="h-6 w-full"
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
-        />
-        <SkeletonBar
-          className="h-6 w-[60%]"
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
-        />
-        <SkeletonBar
-          className="h-6 w-[40%]"
-          style={{ animationDelay: `${index++ * STAGGER_MS}ms` }}
-        />
+        <SkeletonBar className="h-6 w-full [animation-delay:120ms]" />
+        <SkeletonBar className="h-6 w-full [animation-delay:180ms]" />
+        <SkeletonBar className="h-6 w-[70%] [animation-delay:240ms]" />
+        <SkeletonBar className="h-6 w-full [animation-delay:300ms]" />
+        <SkeletonBar className="h-6 w-full [animation-delay:360ms]" />
+        <SkeletonBar className="h-6 w-full [animation-delay:420ms]" />
+        <SkeletonBar className="h-6 w-[60%] [animation-delay:480ms]" />
+        <SkeletonBar className="h-6 w-[40%] [animation-delay:540ms]" />
       </div>
     </div>
   );

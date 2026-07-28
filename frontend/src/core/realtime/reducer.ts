@@ -46,6 +46,15 @@ const streamChunks = new WeakMap<Item, string[]>();
 // item within one frame share a single join.
 const streamJoined = new WeakMap<Item, string>();
 
+// Reasoning deltas carry a ``contentIndex`` so the server can stream
+// multiple reasoning blocks (e.g. interleaved chain-of-thought +
+// encrypted content) into the same item. Deltas are bucketed per
+// contentIndex; the final text is the concatenation of buckets in
+// ascending index order — mirroring the OpenAI Responses API
+// ``reasoning.content[].index`` ordering.
+const streamReasoningBuckets = new WeakMap<Item, Map<number, string[]>>();
+const streamReasoningJoined = new WeakMap<Item, string>();
+
 // Text-bearing wire fields that stream via deltas. Used by snapshot
 // paths (item/completed, turn close) to materialize buffered chunks
 // INTO the wire field so the item object is self-contained for
@@ -76,11 +85,63 @@ function appendStreamText<T extends Item>(item: T, delta: string): T {
   return updated;
 }
 
+// Join reasoning buckets in ascending contentIndex order. Each bucket's
+// chunks are concatenated first, then buckets are concatenated together.
+function joinReasoningBuckets(buckets: Map<number, string[]>): string {
+  const indices = Array.from(buckets.keys()).sort((a, b) => a - b);
+  let result = "";
+  for (const idx of indices) {
+    const chunks = buckets.get(idx);
+    if (chunks) result += chunks.join("");
+  }
+  return result;
+}
+
+// Same buffer-moving semantics as ``appendStreamText``, but buckets the
+// delta by ``contentIndex`` so interleaved multi-block reasoning streams
+// reconstruct in the correct order.
+function appendReasoningStreamText<T extends Item>(
+  item: T,
+  delta: string,
+  contentIndex: number,
+): T {
+  let buckets = streamReasoningBuckets.get(item);
+  if (!buckets) {
+    buckets = new Map<number, string[]>();
+    buckets.set(contentIndex, [delta]);
+  } else {
+    let chunks = buckets.get(contentIndex);
+    if (!chunks) {
+      chunks = [delta];
+      buckets.set(contentIndex, chunks);
+    } else {
+      chunks.push(delta);
+    }
+  }
+  const updated = { ...item } as T;
+  streamReasoningBuckets.delete(item);
+  streamReasoningJoined.delete(item);
+  streamReasoningBuckets.set(updated, buckets);
+  return updated;
+}
+
 // Resolve the current streamed text for an item. Settled items (and
 // anything snapshot-loaded) read their wire field directly — zero
 // overhead outside the streaming hot path. Exported for renderers
 // that want the freshest in-flight text.
 export function itemStreamText(item: Item): string {
+  // Reasoning uses contentIndex buckets — the joined text is the
+  // concatenation of all buckets (in index order) on top of the
+  // wire field.
+  if (item.type === "reasoning") {
+    const buckets = streamReasoningBuckets.get(item);
+    if (!buckets || buckets.size === 0) return streamWireText(item);
+    const cached = streamReasoningJoined.get(item);
+    if (cached !== undefined) return cached;
+    const joined = streamWireText(item) + joinReasoningBuckets(buckets);
+    streamReasoningJoined.set(item, joined);
+    return joined;
+  }
   const chunks = streamChunks.get(item);
   if (!chunks || chunks.length === 0) return streamWireText(item);
   const cached = streamJoined.get(item);
@@ -109,6 +170,19 @@ function streamWireText(item: Item): string {
 // settled object is self-contained for persistence and for readers
 // that bypass ``itemStreamText``.
 function withMaterializedStreamText(item: Item): Item {
+  // Reasoning materializes from contentIndex buckets, not the flat
+  // chunk list used by other streaming text types.
+  if (item.type === "reasoning") {
+    const buckets = streamReasoningBuckets.get(item);
+    if (!buckets || buckets.size === 0) return item;
+    const materialized = {
+      ...item,
+      content: streamWireText(item) + joinReasoningBuckets(buckets),
+    } as Item;
+    streamReasoningBuckets.delete(item);
+    streamReasoningJoined.delete(item);
+    return materialized;
+  }
   const chunks = streamChunks.get(item);
   if (!chunks || chunks.length === 0) return item;
   const field = STREAM_TEXT_FIELDS[item.type];
@@ -641,6 +715,7 @@ export function reduce(
         evt.params.delta,
         onDiagnostic,
         replayMode,
+        evt.params.contentIndex,
       );
     case "item/plan/delta":
       return mergeDelta(
@@ -1004,6 +1079,7 @@ function mergeDelta(
   delta: string,
   onDiagnostic?: ReducerDiagnosticHandler,
   replayMode?: boolean,
+  contentIndex: number = 0,
 ): ReducerOutput {
   const turnIdx = state.turns.findIndex((t) => t.id === turnId);
   const turn = state.turns[turnIdx];
@@ -1048,7 +1124,7 @@ function mergeDelta(
   if (kind === "agentMessage" && it.type === "agentMessage") {
     updated = appendStreamText(it, delta);
   } else if (kind === "reasoning" && it.type === "reasoning") {
-    updated = appendStreamText(it, delta);
+    updated = appendReasoningStreamText(it, delta, contentIndex);
   } else if (kind === "plan" && it.type === "plan") {
     updated = appendStreamText(it, delta);
   } else if (kind === "commandOutput" && it.type === "commandExecution") {

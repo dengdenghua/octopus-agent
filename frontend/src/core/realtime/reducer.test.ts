@@ -894,6 +894,192 @@ describe("reducer", () => {
     }
   });
 
+  it("reasoning deltas bucket by contentIndex and join in index order", () => {
+    // Interleaved deltas across two contentIndex buckets — the server
+    // may stream chain-of-thought (index 0) and encrypted content
+    // (index 1) concurrently. The reducer must bucket them separately
+    // and concatenate in ascending index order on read.
+    const reasoning = {
+      id: "itm-r",
+      type: "reasoning" as const,
+      status: "inProgress" as const,
+      createdAt: T0_ISO,
+      summary: [],
+      content: "",
+    };
+    const state = apply(
+      emptyConversation("th"),
+      {
+        method: "turn/started",
+        params: { threadId: "th", turn: blankTurn("trn-1", "th") },
+      },
+      {
+        method: "item/started",
+        params: { threadId: "th", turnId: "trn-1", item: reasoning },
+      },
+      // Interleave: idx0 chunk, idx1 chunk, idx0 chunk, idx1 chunk
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-r",
+          delta: "A",
+          contentIndex: 0,
+        },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-r",
+          delta: "X",
+          contentIndex: 1,
+        },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-r",
+          delta: "B",
+          contentIndex: 0,
+        },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-r",
+          delta: "Y",
+          contentIndex: 1,
+        },
+      },
+    );
+    const item = state.turns[0].items[0];
+    if (item.type === "reasoning") {
+      // Bucket 0: "AB", Bucket 1: "XY" → "ABXY"
+      expect(itemStreamText(item)).toBe("ABXY");
+      // Wire field stays clean while streaming — chunks are buffered.
+      expect(item.content).toBe("");
+    } else {
+      expect.fail("expected a reasoning item");
+    }
+  });
+
+  it("reasoning contentIndex defaults to 0 (backward compatible)", () => {
+    // Servers that omit contentIndex (or send 0) must behave exactly
+    // like the pre-bucketing single-stream path.
+    const reasoning = {
+      id: "itm-r",
+      type: "reasoning" as const,
+      status: "inProgress" as const,
+      createdAt: T0_ISO,
+      summary: [],
+      content: "",
+    };
+    const state = apply(
+      emptyConversation("th"),
+      {
+        method: "turn/started",
+        params: { threadId: "th", turn: blankTurn("trn-1", "th") },
+      },
+      {
+        method: "item/started",
+        params: { threadId: "th", turnId: "trn-1", item: reasoning },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-r",
+          delta: "only. ",
+          contentIndex: 0,
+        },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-r",
+          delta: "bucket.",
+          contentIndex: 0,
+        },
+      },
+    );
+    const item = state.turns[0].items[0];
+    if (item.type === "reasoning") {
+      expect(itemStreamText(item)).toBe("only. bucket.");
+    }
+  });
+
+  it("materializes reasoning buckets into content on turn close", () => {
+    // When the turn closes, buffered reasoning buckets must land in the
+    // wire ``content`` field so the settled item is self-contained.
+    const reasoning = {
+      id: "itm-r",
+      type: "reasoning" as const,
+      status: "inProgress" as const,
+      createdAt: T0_ISO,
+      summary: [],
+      content: "",
+    };
+    const state = apply(
+      emptyConversation("th"),
+      {
+        method: "turn/started",
+        params: { threadId: "th", turn: blankTurn("trn-1", "th") },
+      },
+      {
+        method: "item/started",
+        params: { threadId: "th", turnId: "trn-1", item: reasoning },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-r",
+          delta: "hello ",
+          contentIndex: 0,
+        },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId: "th",
+          turnId: "trn-1",
+          itemId: "itm-r",
+          delta: "world",
+          contentIndex: 1,
+        },
+      },
+    );
+    const closed = reduce(state, {
+      method: "turn/completed",
+      params: {
+        threadId: "th",
+        turn: {
+          ...blankTurn("trn-1", "th"),
+          status: "completed",
+          completedAt: T0_ISO,
+        },
+      },
+    }).next;
+    const item = closed.turns[0].items[0];
+    if (item.type === "reasoning") {
+      // Buckets materialized: index 0 ("hello ") + index 1 ("world")
+      expect(item.content).toBe("hello world");
+      expect(itemStreamText(item)).toBe("hello world");
+      expect(item.status).toBe("completed");
+    }
+  });
+
   it("commandExecution outputDelta accumulates aggregatedOutput", () => {
     const cmd = {
       id: "itm-c",
