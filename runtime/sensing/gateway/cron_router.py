@@ -164,4 +164,26 @@ def create_cron_router(
         _write_cron_jobs(path, next_jobs)
         return {"ok": True, "deleted": name}
 
+    @router.get("/api/cron/runs")
+    @router.get("/api/cron/runs/")
+    def api_cron_runs(request: Request, limit: int = 50) -> dict[str, Any]:
+        """Run history from the executor ledger (newest first).
+
+        Non-admin actors only see runs of jobs they created — the same
+        scoping rule as ``GET /api/cron``.
+        """
+        actor = _force_auth(request)
+        from runtime.execution.cron_executor import read_run_ledger
+
+        limit = max(1, min(int(limit or 50), 200))
+        ledger = path.parent / "cron_runs.jsonl"
+        runs = read_run_ledger(ledger, limit=limit)
+        if not _actor_is_admin(identity_store, actor):
+            runs = [
+                r
+                for r in runs
+                if r.get("creator_actor") == actor or r.get("creator_actor") in (None, "*")
+            ]
+        return {"ok": True, "runs": runs, "count": len(runs)}
+
     return router

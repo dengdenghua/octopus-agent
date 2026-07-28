@@ -31,6 +31,7 @@ interface CronJob {
   cron_expression?: string;
   last_run?: string;
   last_status?: string;
+  last_output?: string;
 }
 
 export function CronSettingsPage() {
@@ -283,6 +284,11 @@ export function CronSettingsPage() {
                   {job.last_status && (
                     <div className="mt-0.5 pl-6 text-xs text-muted-foreground">
                       {t.cronSettings.last}: {statusLabel(job.last_status)}
+                    </div>
+                  )}
+                  {job.last_output && (
+                    <div className="mt-0.5 line-clamp-3 break-all pl-6 font-mono text-[11px] text-muted-foreground/70">
+                      {job.last_output}
                     </div>
                   )}
                 </div>

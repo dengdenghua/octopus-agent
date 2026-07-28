@@ -42,6 +42,11 @@ def _read_cron_jobs(path: Path) -> list[dict[str, Any]]:
                 "cron_expression": str(item.get("cron_expression") or "0 * * * *"),
                 "last_run": item.get("last_run"),
                 "last_status": item.get("last_status"),
+                # Output excerpt from the last executor run (written by
+                # ``runtime.execution.cron_executor``); surfaced by the
+                # settings UI so a fired job is inspectable without
+                # digging through logs.
+                "last_output": item.get("last_output"),
                 # ``creator_actor`` ties a job back to the identity that
                 # registered it. ``None`` is legacy (pre-auth) data that
                 # only an admin can delete. Anonymous deployments with

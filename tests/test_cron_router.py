@@ -44,7 +44,10 @@ def test_cron_create_persists_to_app_paths(
         (tmp_path / "data" / "cron_jobs.json").read_text(encoding="utf-8"),
     )
     assert stored == [data]
-    assert client.get("/api/cron/").json() == [data]
+    # The list endpoint projects through ``cron_store._read_cron_jobs``,
+    # which adds the executor's ``last_output`` field (None until the
+    # first run) on top of the create response's shape.
+    assert client.get("/api/cron/").json() == [{**data, "last_output": None}]
 
 
 def test_cron_create_replaces_job_with_same_name(client: TestClient) -> None:
@@ -71,6 +74,8 @@ def test_cron_create_replaces_job_with_same_name(client: TestClient) -> None:
             # (test default). Anonymous bucket — admins and anons both
             # see/edit these entries.
             "creator_actor": "*",
+            # Executor write-back field; None until the first run.
+            "last_output": None,
         }
     ]
 
@@ -102,3 +107,43 @@ def test_cron_delete_missing_returns_404(client: TestClient) -> None:
     response = client.delete("/api/cron/missing")
 
     assert response.status_code == 404
+
+
+def test_cron_runs_endpoint_returns_ledger(
+    client: TestClient,
+    tmp_path: Path,
+) -> None:
+    ledger = tmp_path / "data" / "cron_runs.jsonl"
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    records = [
+        {
+            "run_id": "job-a-20260728T120000",
+            "name": "job-a",
+            "kind": "shell",
+            "creator_actor": None,
+            "fired_at": "2026-07-28T12:00:00+08:00",
+            "duration_ms": 42,
+            "status": "ok",
+            "output_excerpt": "done",
+        }
+    ]
+    ledger.write_text(
+        "\n".join(json.dumps(r) for r in records) + "\n",
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/cron/runs")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["count"] == 1
+    assert data["runs"][0]["name"] == "job-a"
+    assert data["runs"][0]["status"] == "ok"
+
+
+def test_cron_runs_endpoint_empty_without_ledger(client: TestClient) -> None:
+    response = client.get("/api/cron/runs")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "runs": [], "count": 0}
