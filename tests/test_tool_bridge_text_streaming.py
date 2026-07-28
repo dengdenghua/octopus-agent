@@ -171,3 +171,86 @@ def test_short_text_under_margin_delivered_at_round_end(tmp_path) -> None:
         )
     )
     assert _texts(events) == [answer]
+
+
+def test_tool_use_before_text_still_skips_duplicate_checkpoint(tmp_path) -> None:
+    # Providers may emit the tool_use event BEFORE the round's text
+    # (observed live with kimi-k3/ark). The boundary dedup then never
+    # sees the streamed prose, and the end-of-round condensation used to
+    # republish it — the visible "streamed text + checkpoint" duplicate.
+    prose = (
+        "归档页正文已经成功取回，确认了报道的记者与发布时间，"
+        "接下来直接打开文章正文页核实其中引用的数据来源与关键数字。"
+    )
+    assert len(prose) > _NATIVE_TEXT_STREAM_TAIL_MARGIN
+    answer = "全部核实完毕，这是最终结论。"
+
+    class Router:
+        def __init__(self):
+            self.calls = 0
+
+        def call_stream(self, _request):
+            self.calls += 1
+            if self.calls == 1:
+                yield ModelStreamEvent(type="tool_use", tool_call=_LIST_CALL)
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            if self.calls == 2:
+                # tool_use FIRST, prose after — the live duplicate pair.
+                yield ModelStreamEvent(
+                    type="tool_use",
+                    tool_call=ToolCall(id="t2", name="list_cwd", input={"path": "subdir"}),
+                )
+                yield ModelStreamEvent(type="text_delta", delta=prose[:30])
+                yield ModelStreamEvent(type="text_delta", delta=prose[30:])
+                yield ModelStreamEvent(type="done", final=ModelResponse(text=""))
+                return
+            yield ModelStreamEvent(type="text_delta", delta=answer)
+            yield ModelStreamEvent(type="done", final=ModelResponse(text=answer))
+
+    events = list(stream_agentic_fallback(_stack(Router()), _intent("看目录", tmp_path), _agent()))
+
+    # Prose streamed live during the round (holdback-safe prefix only;
+    # the tail follows the same pre-existing tool-round semantics as
+    # the text-before-tool_use ordering).
+    kinds = [event[0] for event in events]
+    second_tool_at = kinds.index("tool_start", kinds.index("tool_start") + 1)
+    pre_second_tool_texts = [
+        str(delta)
+        for kind, delta, _final in events[:second_tool_at]
+        if kind == "text"
+    ]
+    assert "".join(pre_second_tool_texts) == prose[
+        : len(prose) - _NATIVE_TEXT_STREAM_TAIL_MARGIN
+    ]
+    # No condensed checkpoint re-publishing the same narration.
+    commentary = [str(e[1]) for e in events if e[0] == "commentary"]
+    assert not any("归档页正文" in c for c in commentary)
+
+
+def test_update_progress_label_stripped_before_streaming(tmp_path) -> None:
+    # Models imitate the ReAct "Update:" nudge; the label must never
+    # reach the visible timeline — streamed slices and the tail flush
+    # both read the normalized chunks.
+    body = "两个来源的证据已经一致，最终结论可以收束如下，逐条展开说明依据。"
+    answer = f"Update: {body}"
+
+    events = list(
+        stream_agentic_fallback(
+            _stack(_router_with_tool_first([answer[:15], answer[15:50], answer[50:]])),
+            _intent("分析项目", tmp_path),
+            _agent(),
+        )
+    )
+
+    assert "".join(_texts(events)) == body
+    # Split-delta arrival decides the label only once it is decidable.
+    answer2 = f"Progress: {body}"
+    events2 = list(
+        stream_agentic_fallback(
+            _stack(_router_with_tool_first([answer2[:4], answer2[4:]])),
+            _intent("分析项目", tmp_path),
+            _agent(),
+        )
+    )
+    assert "".join(_texts(events2)) == body

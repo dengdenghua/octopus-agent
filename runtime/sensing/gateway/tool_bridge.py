@@ -152,6 +152,14 @@ _NATIVE_TEXT_STREAM_SUPPRESS_MARKERS = (
     "<tool_invocation",
     "<function=",
 )
+# Leading progress label models imitate from the ReAct "Update:" nudge
+# ("Update: 已完成…" / "Progress: …"). It is a protocol artifact, not
+# user prose: checkpoints strip it (``_native_public_checkpoint``) and so
+# must the live/buffered round-text path, otherwise the label leaks into
+# the visible timeline raw.
+_NATIVE_ROUND_TEXT_PREFIX_RE = re.compile(
+    r"^\s*(?:Update|Progress)\s*:\s*", re.IGNORECASE
+)
 # Structural protocol tag names that must ride structured fields
 # (reasoning / tool_use / tool_result), never literal text_delta prose.
 # Shared between checkpoint detection (``_PUBLIC_CHECKPOINT_PROTOCOL_RE``)
@@ -419,7 +427,7 @@ def _iter_native_model_stream_with_deadline(
 def _native_public_checkpoint(text: str) -> str:
     """Return a compact tool-round preamble safe for the main timeline."""
     value = " ".join(str(text or "").strip().split())
-    value = re.sub(r"^\s*(?:Update|Progress)\s*:\s*", "", value, flags=re.IGNORECASE)
+    value = _NATIVE_ROUND_TEXT_PREFIX_RE.sub("", value)
     value = _PUBLIC_CHECKPOINT_STAGE_RE.sub("", value).strip()
     value = re.sub(r"^#{1,6}\s+", "", value).strip()
     for marker in ("**", "__"):
@@ -2533,6 +2541,11 @@ def stream_agentic_fallback(
         # the turn, and buffering it made TTFT equal its full decode time.
         _round_text_streamed = 0
         _round_text_stream_suppressed = False
+        # Leading "Update:"/"Progress:" label is stripped at the source
+        # (first decidable delta) so every downstream consumer — live
+        # stream, end-of-round tail flush, checkpoint condensation, the
+        # assistant message appended to model context — sees clean text.
+        _round_prefix_decided = False
 
         _round_stream_event_seen = False
         _round_timeout_s = _native_model_round_timeout_s()
@@ -2563,6 +2576,19 @@ def stream_agentic_fallback(
                 etype = event.type
                 if etype == "text_delta":
                     round_text_chunks.append(event.delta)
+                    if not _round_prefix_decided:
+                        _joined_prefix_probe = "".join(round_text_chunks)
+                        _prefix_match = _NATIVE_ROUND_TEXT_PREFIX_RE.match(
+                            _joined_prefix_probe
+                        )
+                        if _prefix_match:
+                            round_text_chunks[:] = [
+                                _joined_prefix_probe[_prefix_match.end() :]
+                            ]
+                            _round_prefix_decided = True
+                        elif len(_joined_prefix_probe) >= len("Progress: "):
+                            # Past the longest label — the opening is prose.
+                            _round_prefix_decided = True
                     # TTFT: stream the round's text live — but only in
                     # post-tool rounds. First-round preambles keep the
                     # condensed-checkpoint treatment: their prose is the
@@ -2853,7 +2879,21 @@ def stream_agentic_fallback(
             # next scope, so another pre-tool paraphrase would be duplicate UI.
             _round_commentary_emitted = True
         if round_tool_calls and not _round_commentary_emitted:
-            checkpoint = _structured_public_checkpoint or _native_public_checkpoint(round_text)
+            if _round_text_streamed > 0:
+                # The provider sent tool_use ahead of this round's text,
+                # so the tool_use-boundary dedup above never fired — but
+                # the prose did stream live afterwards. Condensing it
+                # again here would republish already-visible text (the
+                # duplicate "Update: …"/checkpoint pair seen in live
+                # acceptance). A structured public_update attached to the
+                # call itself is independent of the round prose and still
+                # goes out.
+                checkpoint = _structured_public_checkpoint
+                if not checkpoint:
+                    _round_commentary_emitted = True
+                    _last_public_checkpoint_at = time.monotonic()
+            else:
+                checkpoint = _structured_public_checkpoint or _native_public_checkpoint(round_text)
             if checkpoint:
                 yield ("commentary", checkpoint, None)
                 _round_commentary_emitted = True
