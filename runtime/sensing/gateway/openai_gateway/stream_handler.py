@@ -17,13 +17,14 @@ from ..openai_formatting import (
 from .context_manager import _build_messages_for_llm, _runtime_soul_for_agent
 from .request_parser import _model_runtime_options, _resolve_custom_model_router
 
-# Pseudo-stream throttling: when a non-streaming call is re-emitted as a
-# stream (or when a real stream's text_delta is chunked for display), we
-# sleep briefly between chunks so the UI feels like streaming.  The length
-# gate avoids throttling on trivially short outputs.
-_PSEUDO_STREAM_MIN_LEN = 40
-_SYNC_CALL_CHUNK_DELAY = 0.004
-_TEXT_DELTA_CHUNK_DELAY = 0.012
+# Pseudo-stream pacing was REMOVED (TTFT work, 2026-07-28): the live path
+# used to split any >40-char delta into 18-char pieces with a 12ms sleep
+# per piece (~660ms of pure sleep for a 1KB batched delta), and the sync
+# pseudo-stream slept 4ms per piece — both purely cosmetic ("feel like
+# streaming"), never backpressure. The frontend buffers chunks per item
+# and joins per animation frame, so bursts render in one frame safely.
+# Deltas now go out as they arrive; a non-streaming model's response
+# (which only exists complete) is yielded in one piece.
 
 
 def _strip_inline_thinking_markup(text: str) -> str:
@@ -322,14 +323,6 @@ def _stream_direct_llm_fallback(
     text_buf: list[str] = []
     thinking_buf: list[str] = []
 
-    def _display_deltas(text: str):
-        if len(text) <= 40:
-            yield text
-            return
-        chunk_size = 18
-        for i in range(0, len(text), chunk_size):
-            yield text[i : i + chunk_size]
-
     def _clean_final_text(text: str) -> str:
         return (
             filter_text(
@@ -358,10 +351,8 @@ def _stream_direct_llm_fallback(
         resp = router.call(req)
         raw_text = getattr(resp, "text", "") or ""
         final_text = _normalize_markdown(_clean_final_text(raw_text))
-        for _piece in _display_deltas(final_text):
-            yield ("text", _piece, None)
-            if len(final_text) > _PSEUDO_STREAM_MIN_LEN:
-                time.sleep(_SYNC_CALL_CHUNK_DELAY)
+        if final_text:
+            yield ("text", final_text, None)
         _usage_dict = {
             "input_tokens": int(getattr(resp, "input_tokens", 0) or 0),
             "output_tokens": int(getattr(resp, "output_tokens", 0) or 0),
@@ -380,10 +371,8 @@ def _stream_direct_llm_fallback(
             if etype == "text_delta":
                 text_buf.append(event.delta)
                 public_delta = _strip_inline_thinking_markup(event.delta)
-                for _piece in _display_deltas(public_delta):
-                    yield ("text", _piece, None)
-                    if len(public_delta) > _PSEUDO_STREAM_MIN_LEN:
-                        time.sleep(_TEXT_DELTA_CHUNK_DELAY)
+                if public_delta:
+                    yield ("text", public_delta, None)
             elif etype == "thinking_delta":
                 thinking_buf.append(event.delta)
                 yield ("reasoning", event.delta, None)
