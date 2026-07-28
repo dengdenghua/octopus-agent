@@ -11,6 +11,13 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from runtime.core.cerebrum.react_action_outcomes import (
+    _action_batch_fingerprint,
+    _deduplicate_actions,
+    _per_action_outcomes,
+    _retry_safe_affinity,
+    _tool_call_succeeded,
+)
 from runtime.core.cerebrum.react_checkpointing import (
     _checkpoint_interval,
     _checkpoint_mirror,
@@ -803,113 +810,6 @@ def _should_accumulate_quiet_evidence(
     """Keep successful read evidence even when it arrived in one parallel batch."""
 
     return succeeded and bool(observation) and bool(_quiet_evidence_targets([step]))
-
-
-def _tool_call_succeeded(observation: str | None, beak_step: Step | None) -> bool:
-    """Whether a single tool call succeeded. A beak step's effective-success
-    verdict wins when present; otherwise sniff the failure-prefixed observation
-    text. PHASE 6d uses this for both the initial call and its auto-retry."""
-    if beak_step is not None:
-        return _beak_step_effective_success(beak_step)
-    return not (
-        observation is not None and observation.startswith(("(工具失败)", "(工具执行异常)"))
-    )
-
-
-def _per_action_outcomes(
-    step: ReActStep,
-    *,
-    default_ok: bool,
-) -> list[tuple[ReActStep, bool]]:
-    """Split a multi-tool model round into ordered evidence outcomes."""
-    actions = step.actions or ([step.action] if step.action else [])
-    if not actions:
-        return []
-    if len(step.action_results) == len(actions):
-        outcomes: list[tuple[ReActStep, bool]] = []
-        for action, result in zip(actions, step.action_results, strict=True):
-            outcomes.append(
-                (
-                    ReActStep(
-                        iteration=step.iteration,
-                        action=action,
-                        observation=str(result.get("observation") or ""),
-                    ),
-                    result.get("ok") is True,
-                )
-            )
-        return outcomes
-    if len(actions) == 1:
-        return [
-            (
-                ReActStep(
-                    iteration=step.iteration,
-                    action=actions[0],
-                    observation=step.observation,
-                ),
-                default_ok,
-            )
-        ]
-    # Legacy providers occasionally return a merged observation without
-    # per-action receipts. Preserve the old one-round semantics rather than
-    # inventing success for individual calls we cannot attribute.
-    return [(step, default_ok)]
-
-
-def _action_fingerprint(action: str) -> str:
-    """Return a stable tool+arguments key for duplicate/retry control."""
-    parsed = _parse_action(action)
-    if parsed is None:
-        return " ".join(str(action or "").split())
-    name, args = parsed
-    try:
-        payload = json.dumps(args, ensure_ascii=False, sort_keys=True, default=str)
-    except (TypeError, ValueError):
-        payload = repr(args)
-    return f"{name}:{payload}"
-
-
-def _deduplicate_actions(actions: list[str]) -> tuple[list[str], int]:
-    """Collapse protocol/provider duplicate calls within one model round."""
-    unique: list[str] = []
-    seen: set[str] = set()
-    duplicates = 0
-    for action in actions:
-        fingerprint = _action_fingerprint(action)
-        if fingerprint in seen:
-            duplicates += 1
-            continue
-        seen.add(fingerprint)
-        unique.append(action)
-    return unique, duplicates
-
-
-def _action_batch_fingerprint(actions: list[str]) -> str:
-    """Stable ordered fingerprint for one or many requested tool calls."""
-    fingerprints = [_action_fingerprint(action) for action in actions]
-    if len(fingerprints) == 1:
-        return fingerprints[0]
-    return "batch:" + json.dumps(fingerprints, ensure_ascii=False, separators=(",", ":"))
-
-
-# Affinity tags that mark a tool as having side effects, so a failed call must
-# NOT be silently auto-retried (a partial write, or a shell command that ran
-# before its result failed to parse, would be doubled). Mirrors the executor's
-# ``_mutates_files`` set plus ``delete`` (file-safety) — the union of every
-# side-effecting tag the runtime recognises.
-_NON_IDEMPOTENT_AFFINITY = frozenset({"write", "edit", "exec", "delete", "dangerous"})
-
-
-def _retry_safe_affinity(affinity: list[str] | None) -> bool:
-    """Whether a failed tool may be auto-retried once.
-
-    Only idempotent tools qualify: the affinity must be KNOWN and carry none of
-    the side-effecting tags. Unknown affinity (``None``) is treated as unsafe
-    (fail-closed) so the loop never re-runs a tool whose first attempt may have
-    already mutated state."""
-    if affinity is None:
-        return False
-    return not (set(affinity) & _NON_IDEMPOTENT_AFFINITY)
 
 
 def _ensure_browser_operation_skills(executor: Any) -> int:
