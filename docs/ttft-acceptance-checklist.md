@@ -131,3 +131,11 @@ openai provider，`supports_tool_use=True` → 默认 native 循环）。
 渐进流式。本轮还途经一次模型超时 stall failover（~46s 静默后切换
 备用模型续跑），恢复路径未产生重复叙述。问题 1 关闭；问题 2
 （fallback 能力错配）留待后续。
+
+## 可重复冒烟（2026-07-28）
+
+`scripts/ttft_smoke.py` 已固化为一键复验脚本：
+`.venv/bin/python -m scripts.ttft_smoke "<任务>" --model kimi-k3 --port 8010 --assert`
+（`--react` 强制 ReAct 文本协议）。断言：思考块先于工具行、长答案渐进
+流式、无 Update:/Progress: 前缀泄漏；失败时非零退出。已在简单提问与
+工具任务上各跑通一次（ASSERT OK）。
