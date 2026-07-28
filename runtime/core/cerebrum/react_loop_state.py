@@ -56,6 +56,18 @@ class _LoopState:
     ordered_result_handoffs: bool = False
     realtime_public_orientation: bool = False
     realtime_public_narrative: bool = False
+    # ── cfg · 6b model-call wiring (assembled once, read-only) ──
+    temperature: float = 0.0
+    max_tokens_per_iter: int = 0
+    wants_thinking: bool = False
+    reasoning_effort: Any = None
+    native_evidence_update_tool_specs: list = field(default_factory=list)
+    native_public_update_tool_specs: list = field(default_factory=list)
+    budget_auto_pause_enabled: bool = False
+    budget_pause_threshold: float = 0.0
+    agent_id_for_pause: str = ""
+    throughput_started_at: float = 0.0
+    throughput_interval_s: float = 0.5
     # ── mode · turn flags (read-only in 6c) ──
     is_code_mode: bool = False
     browser_operation_mode: bool = False
@@ -93,12 +105,19 @@ class _LoopState:
     saw_successful_code_write: bool = False
     clean_verification_rounds_after_write: int = 0
     quiet_evidence_steps: list = field(default_factory=list)
+    throughput_last_emit: float = 0.0
+    consecutive_llm_errors: int = 0
     # ── emit · terminal accumulators (synced in/out) ──
     final_answer: str | None = None
     terminated_reason: str = "max_iter"
     final_answer_emitted: bool = False
     final_delta_emitted_this_iteration: bool = False
-    # ── parse · 6c outputs consumed by 6d–6g (synced out only) ──
+    # ── parse · 6b/6c outputs consumed by later phases (synced out only) ──
+    resp: Any = None
+    raw_text: str = ""
+    request_has_tool_evidence: bool = False
+    iteration_soft_timed_out: bool = False
+    maybe_emit_throughput: Any = None
     step: ReActStep | None = None
     maybe_final: str | None = None
     text: str = ""

@@ -79,7 +79,6 @@ from runtime.core.cerebrum.react_explicit_reads import (
 from runtime.core.cerebrum.react_final_answer_guards import (
     _final_answer_needs_pre_emit_guard,
     _guard_reason_for_user,
-    _looks_like_observation_echo,
     _note_guard_impasse,
     _phase_6e_guards_and_step_emit,
     _record_rejected_step,
@@ -127,14 +126,12 @@ from runtime.core.cerebrum.react_model_deadlines import (
     _model_recovery_timeout_s,
     _stage_update_timeout_fallback,
 )
+from runtime.core.cerebrum.react_model_stream import _phase_6b_model_stream
 from runtime.core.cerebrum.react_parallel_dispatch import (
     _WRITE_TOOLS,
     _dispatch_parallel_actions,
 )
 from runtime.core.cerebrum.react_parsing import (
-    _ACTION_RE,
-    _FINAL_RE,
-    _THOUGHT_RE,
     _escape_md_brackets,
     _extract_final_answer,
     _is_format_violation,
@@ -146,13 +143,11 @@ from runtime.core.cerebrum.react_parsing import (
     _placeholder_observation,
     _safe_for_streamdown,
     _summarize_observation,
-    extract_streamable_thought,
 )
 from runtime.core.cerebrum.react_phase_6c import (
     _phase_6c_parse_and_guard,
 )
 from runtime.core.cerebrum.react_public_updates import (
-    _PUBLIC_EVIDENCE_STREAM_GATE_CHARS,
     _observed_read_fallback_update,
     _runtime_fallback_public_update,
     _safe_public_update,
@@ -179,7 +174,6 @@ from runtime.core.cerebrum.react_types import (
     ReActResult,
     ReActStep,
     _native_tool_calls_missing_required_args,
-    _safe_react_error_message,
 )
 from runtime.core.cerebrum.todo_protocol import (
     _todo_completion_before_write_guard,
@@ -198,7 +192,6 @@ from runtime.safety.validation.prompt_injection import (
     set_injection_gate_handled,
 )
 from runtime.sensing.model_router.rescue_policy import (
-    is_retryable_model_error,
     next_custom_model_fallback,
 )
 
@@ -240,6 +233,7 @@ __all__ = [
     "_execute_action_via_beak",
     "_extract_final_answer",
     "_failed_verification_followup_guard",
+    "_final_answer_needs_pre_emit_guard",
     "_finalize_react_turn",
     "_finish_reason_is_length_limited",
     "_format_background_task_heartbeat",
@@ -251,10 +245,16 @@ __all__ = [
     "_image_blocks_from_attachments",
     "_is_format_violation",
     "_is_scoped_artifact_write",
+    "_iter_model_stream_with_deadline",
     "_long_task_budget_limits",
     "_looks_like_image_attachment",
+    "_looks_like_special_tool_envelope",
     "_looks_like_unfinished_work",
     "_mirror_checkpoint",
+    "_model_evidence_synthesis_timeout_s",
+    "_model_post_tool_timeout_s",
+    "_model_recovery_timeout_s",
+    "_MODEL_STREAM_DEADLINE",
     "_native_tool_calls_missing_required_args",
     "_normalized_tool_call_from_react_action",
     "_note_guard_impasse",
@@ -278,6 +278,7 @@ __all__ = [
     "_ResumeState",
     "_runtime_fallback_public_update",
     "_safe_for_streamdown",
+    "_safe_public_update",
     "_should_auto_checkpoint",
     "_skill_available_in_executor",
     "_stage_update_timeout_fallback",
@@ -354,9 +355,7 @@ def stream_react_loop(
 
     from runtime.platform.models.llm import (
         Message,
-        ModelRequest,
         normalize_reasoning_effort,
-        thinking_budget_for_effort,
     )
 
     _reasoning_effort = normalize_reasoning_effort(reasoning_effort)
@@ -1920,6 +1919,19 @@ def stream_react_loop(
         quiet_evidence_steps=_quiet_evidence_steps,
         native_mode=_native_mode,
         throughput_chars=_throughput_chars,
+        temperature=temperature,
+        max_tokens_per_iter=_max_tokens_per_iter,
+        wants_thinking=_wants_thinking,
+        reasoning_effort=_reasoning_effort,
+        native_evidence_update_tool_specs=_native_evidence_update_tool_specs,
+        native_public_update_tool_specs=_native_public_update_tool_specs,
+        budget_auto_pause_enabled=_budget_auto_pause_enabled,
+        budget_pause_threshold=_budget_pause_threshold,
+        agent_id_for_pause=_agent_id_for_pause,
+        throughput_started_at=_throughput_started_at,
+        throughput_interval_s=_throughput_interval_s,
+        throughput_last_emit=_throughput_last_emit,
+        consecutive_llm_errors=consecutive_llm_errors,
         terminated_reason=terminated_reason,
         final_answer=final_answer,
         final_answer_emitted=final_answer_emitted,
@@ -1945,537 +1957,60 @@ def stream_react_loop(
             break
 
         # ── PHASE 6b · LLM call + Final-Answer anchor stream ───────────
-        try:
-            _iteration_recovery_mode = _force_convergence_next
-            _force_convergence_next = False
-            _request_has_tool_evidence = bool(
-                executed_beak_steps
-                or any(
-                    prior_step.action_results or (prior_step.action and prior_step.observation)
-                    for prior_step in steps
-                )
-            )
-            req = ModelRequest(
-                model=effective_model,
-                messages=list(messages),
-                max_tokens=(
-                    min(_max_tokens_per_iter, 4000)
-                    if _iteration_recovery_mode
-                    else _max_tokens_per_iter
-                ),
-                temperature=temperature,
-                enable_thinking=_wants_thinking and not _iteration_recovery_mode,
-                reasoning_effort=("low" if _iteration_recovery_mode else _reasoning_effort),
-                thinking_budget=(
-                    1024
-                    if _iteration_recovery_mode
-                    else thinking_budget_for_effort(
-                        _reasoning_effort,
-                        _max_tokens_per_iter,
-                    )
-                ),
-                tools=(
-                    (
-                        _native_evidence_update_tool_specs
-                        if _request_has_tool_evidence
-                        else _native_public_update_tool_specs
-                    )
-                    if _native_mode and _evidence_convergence_active is None
-                    else []
-                ),
-            )
-            text_parts: list[str] = []
-            thinking_parts: list[str] = []
-            resp = None
-            # Once we detect the ``Final Answer:`` anchor in the streaming
-            # text we switch to live token streaming so short tasks see
-            # first-byte latency closer to the LLM's TTFT instead of full
-            # response time. Pre-anchor chunks must stay buffered because
-            # they may contain Thought:/Action: prose that must not leak.
-            _final_stream_started = False
-            _visible_stream_state = {"chars": 0}
-            _streamed_final_chars = 0
-            _final_stream_guarded = False
-            _final_delta_emitted_this_iteration = False
-            # Incremental Thought-streaming state: while the Final Answer
-            # is still buffered, the Thought prose already decodes token
-            # by token — surface it into the thinking block so tool-heavy
-            # turns show signs of life long before the terminal answer.
-            _thought_stream_cursor = 0
-            _thought_stream_open = False
-            # Native tool models keep private thinking in a separate channel,
-            # so ordinary text before the first tool call is safe public prose.
-            # Stream that model-authored orientation from the main call itself:
-            # an extra narrator request added seconds of latency and frequently
-            # timed out on the same provider before showing anything.
-            _native_orientation_candidate = bool(
-                _native_mode
-                and _realtime_public_orientation
-                and i == 0
-                and not steps
-                and str(intent.normalized_goal or "").strip()
-            )
-            _native_orientation_emitted = ""
-            _native_orientation_disabled = False
-            _iteration_soft_timed_out = False
-            _base_iteration_timeout = _model_iteration_timeout_s()
-            _has_tool_evidence = _request_has_tool_evidence
-            if _iteration_recovery_mode and _evidence_convergence_active is not None:
-                _iteration_timeout = _model_evidence_synthesis_timeout_s(_base_iteration_timeout)
-            elif _iteration_recovery_mode:
-                _iteration_timeout = _model_recovery_timeout_s(_base_iteration_timeout)
-            elif _has_tool_evidence:
-                _iteration_timeout = _model_post_tool_timeout_s(_base_iteration_timeout)
-            else:
-                _iteration_timeout = _base_iteration_timeout
+        state.native_mode = _native_mode
+        state.evidence_convergence_active = _evidence_convergence_active
+        state.effective_model = effective_model
+        state.force_convergence_next = _force_convergence_next
+        state.last_public_update_key = _last_public_update_key
+        state.throughput_chars = _throughput_chars
+        state.throughput_last_emit = _throughput_last_emit
+        # final_stream_started / streamed_final_chars /
+        # final_delta_emitted_this_iteration are reset unconditionally
+        # inside the phase each iteration — write-only, no sync-in.
+        state.terminated_reason = terminated_reason
+        state.consecutive_llm_errors = consecutive_llm_errors
+        state.model_failovers = _model_failovers
 
-            def _maybe_emit_throughput(chars: int) -> dict[str, Any] | None:
-                nonlocal _throughput_last_emit
-                _now = time.monotonic()
-                if _now - _throughput_last_emit < _throughput_interval_s:
-                    return None
-                _elapsed = _now - _throughput_started_at
-                _throughput_last_emit = _now
-                return {
-                    "type": "throughput",
-                    "chars": chars,
-                    "elapsed_ms": int(_elapsed * 1000),
-                    "chars_per_sec": (chars / _elapsed if _elapsed > 0 else 0.0),
-                }
+        def _try_failover_for_6b(reason: str) -> str | None:
+            # Same closure bridge as _try_failover_for_6c: the loop's
+            # failover closure reads ``_native_mode`` and bumps
+            # ``_model_failovers`` via nonlocal; mirror both through
+            # state so the phase observes the same values the inline
+            # code used to see. ``next_custom_model_fallback`` keeps
+            # resolving through the react_loop module global.
+            nonlocal _native_mode
+            _native_mode = state.native_mode
+            _fallback = _try_react_model_failover(reason)
+            state.model_failovers = _model_failovers  # noqa: B023 — called immediately, same iteration
+            return _fallback
 
-            def _visible_started(state: dict[str, Any] = _visible_stream_state) -> Any:
-                return state["chars"]
-
-            for evt in _iter_model_stream_with_deadline(
-                router,
-                req,
-                _iteration_timeout,
-                _visible_started,
-            ):
-                if evt is _MODEL_STREAM_DEADLINE:
-                    _iteration_soft_timed_out = True
-                    _logger.warning(
-                        "react_loop iter %d model stream exceeded %.1fs before "
-                        "a visible final answer; switching to convergence mode",
-                        i + 1,
-                        _iteration_timeout,
-                    )
-                    break
-                # Check cancellation between SSE chunks so the
-                # interrupt button can break us out of a slow /
-                # hung upstream without waiting for the read timeout.
-                # ``current_cancellation_token`` is a contextvar set
-                # by the gateway's interrupt watcher when the user
-                # clicks 停止.
-                _ct_inner = None
-                try:
-                    from runtime.safety.approval.cancellation import (
-                        current_cancellation_token,
-                    )
-
-                    _ct_inner = current_cancellation_token()
-                except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001 — cancellation subsystem unavailable; mid-stream cancel check skipped
-                    pass
-                if _ct_inner is not None and _ct_inner.is_cancelled:
-                    break
-                if evt.type == "text_delta":
-                    text_parts.append(evt.delta)
-                    joined = "".join(text_parts)
-                    if _native_orientation_candidate and not _native_orientation_disabled:
-                        folded = joined.lstrip().casefold()
-                        if (
-                            _FINAL_RE.search(joined)
-                            or _THOUGHT_RE.search(joined)
-                            or _ACTION_RE.search(joined)
-                            or _looks_like_observation_echo(joined)
-                            or "<tool_call" in folded
-                            or "<tool_invocation" in folded
-                            or "<function=" in folded
-                            or _looks_like_special_tool_envelope(joined)
-                        ):
-                            _native_orientation_disabled = True
-                        else:
-                            _orientation = _safe_public_update(joined)[:420].rstrip()
-                            if _orientation and not _native_orientation_emitted:
-                                _orientation_key = (
-                                    re.sub(r"\s+", " ", _orientation).strip().casefold()
-                                )
-                                _orientation_ready = len(
-                                    _orientation
-                                ) >= _PUBLIC_EVIDENCE_STREAM_GATE_CHARS or bool(
-                                    re.search(r"[。.!！?？；;]\s*$", _orientation)
-                                )
-                                if (
-                                    _orientation_ready
-                                    and _orientation_key != _last_public_update_key
-                                ):
-                                    yield {
-                                        "type": "commentary_delta",
-                                        "delta": _orientation,
-                                        "progress_source": "model",
-                                        "start_new_segment": True,
-                                        "iteration": i + 1,
-                                    }
-                                    _native_orientation_emitted = _orientation
-                                    _last_public_update_key = _orientation_key
-                            elif _orientation.startswith(_native_orientation_emitted) and len(
-                                _orientation
-                            ) > len(_native_orientation_emitted):
-                                _orientation_suffix = _orientation[
-                                    len(_native_orientation_emitted) :
-                                ]
-                                yield {
-                                    "type": "commentary_delta",
-                                    "delta": _orientation_suffix,
-                                    "progress_source": "model",
-                                    "start_new_segment": False,
-                                    "iteration": i + 1,
-                                }
-                                _native_orientation_emitted = _orientation
-                                _last_public_update_key = (
-                                    re.sub(r"\s+", " ", _orientation).strip().casefold()
-                                )
-                    if _final_stream_started:
-                        # Already past the anchor — every subsequent
-                        # token is part of the user-visible answer.
-                        if evt.delta:
-                            joined = "".join(text_parts)
-                            if not _final_stream_guarded and _final_answer_needs_pre_emit_guard(
-                                joined,
-                                is_code_mode=_is_code_mode,
-                                browser_operation_mode=_browser_operation_mode,
-                            ):
-                                _final_stream_started = False
-                                continue
-                            yield {
-                                "type": "text_delta",
-                                "delta": evt.delta,
-                                "iteration": i + 1,
-                            }
-                            _final_delta_emitted_this_iteration = True
-                            _streamed_final_chars += len(evt.delta)
-                            _visible_stream_state["chars"] += len(evt.delta)
-                            _throughput_chars += len(evt.delta)
-                            _tp = _maybe_emit_throughput(_throughput_chars)
-                            if _tp is not None:
-                                yield _tp
-                    else:
-                        # Look for the Final Answer anchor in the joined
-                        # buffer. Once it appears we can flush the
-                        # post-anchor portion and switch to live mode for
-                        # the rest of the stream — this is what makes
-                        # short tasks feel responsive instead of
-                        # blocking on full response decode.
-                        joined = "".join(text_parts)
-                        m = _FINAL_RE.search(joined)
-                        # TTFT: while the answer is still anchored out,
-                        # stream the Thought prose into the thinking
-                        # block. Extraction spans only Thought→terminator
-                        # inside the PRE-ANCHOR region (a "Thought:" quoted
-                        # inside the answer body must not echo into the
-                        # reasoning surface); skipped when the provider
-                        # already streams native thinking (the two would
-                        # duplicate in the reasoning surface).
-                        if not thinking_parts:
-                            _xml_final_at = joined.lower().find("<final_answer")
-                            _thought_region_end = m.start() if m else len(joined)
-                            if _xml_final_at != -1:
-                                _thought_region_end = min(_thought_region_end, _xml_final_at)
-                            (
-                                _thought_delta,
-                                _thought_stream_cursor,
-                                _thought_stream_open,
-                            ) = extract_streamable_thought(
-                                joined[:_thought_region_end],
-                                _thought_stream_cursor,
-                                _thought_stream_open,
-                            )
-                            if _thought_delta:
-                                yield {
-                                    "type": "thinking_delta",
-                                    "delta": _thought_delta,
-                                    "iteration": i + 1,
-                                }
-                                _throughput_chars += len(_thought_delta)
-                                _tp = _maybe_emit_throughput(_throughput_chars)
-                                if _tp is not None:
-                                    yield _tp
-                        if m and m.group(1).strip():
-                            answer_so_far = m.group(1)
-                            # Don't pre-stream when the answer body
-                            # contains tool-call leaders. The parser will
-                            # later reclassify these as Actions and
-                            # suppress them from the visible answer; if
-                            # we leak them now the user sees raw XML/JSON
-                            # before the real tool fires.
-                            if (
-                                "<tool_call>" in answer_so_far
-                                or "<tool_invocation" in answer_so_far
-                                or "<function=" in answer_so_far
-                                or _looks_like_special_tool_envelope(answer_so_far)
-                                or "```" in answer_so_far
-                            ):
-                                # Keep buffering; the post-loop emitter
-                                # will decide what (if anything) is
-                                # safe to surface.
-                                pass
-                            elif answer_so_far:
-                                if (
-                                    _evidence_convergence_active is not None
-                                    or (_todo_protocol_required and _todo_protocol_visible)
-                                    or _final_answer_needs_pre_emit_guard(
-                                        answer_so_far,
-                                        is_code_mode=_is_code_mode,
-                                        browser_operation_mode=_browser_operation_mode,
-                                    )
-                                ):
-                                    _final_stream_guarded = True
-                                    continue
-                                yield {
-                                    "type": "text_delta",
-                                    "delta": answer_so_far,
-                                    "iteration": i + 1,
-                                }
-                                _final_delta_emitted_this_iteration = True
-                                _streamed_final_chars = len(answer_so_far)
-                                _throughput_chars += len(answer_so_far)
-                                _tp = _maybe_emit_throughput(_throughput_chars)
-                                if _tp is not None:
-                                    yield _tp
-                                _final_stream_started = True
-                                _visible_stream_state["chars"] = len(answer_so_far)
-                        elif (
-                            len(joined) >= 120
-                            and not _native_orientation_emitted
-                            and not _THOUGHT_RE.search(joined)
-                            and not _ACTION_RE.search(joined)
-                            and not _looks_like_observation_echo(joined)
-                            and "<tool_call>" not in joined
-                            and "<tool_invocation" not in joined
-                            and "<function=" not in joined
-                            and not _looks_like_special_tool_envelope(joined)
-                            and "<final_answer" not in joined.lower()
-                        ):
-                            # Zero-anchor chat-style answer: model is
-                            # writing plain markdown (no Thought/Action/
-                            # Final Answer markers). Without this branch
-                            # the salvage path at end of iteration emits
-                            # all 700+ chars at once after a wasted
-                            # second LLM round (zero-anchor needs 2
-                            # consecutive rounds to bail). With it, the
-                            # user sees text streaming the moment it's
-                            # clear ReAct format isn't coming.
-                            if (
-                                _evidence_convergence_active is not None
-                                or (_todo_protocol_required and _todo_protocol_visible)
-                                or _final_answer_needs_pre_emit_guard(
-                                    joined,
-                                    is_code_mode=_is_code_mode,
-                                    browser_operation_mode=_browser_operation_mode,
-                                )
-                            ):
-                                _final_stream_guarded = True
-                                continue
-                            yield {
-                                "type": "text_delta",
-                                "delta": joined,
-                                "iteration": i + 1,
-                            }
-                            _final_delta_emitted_this_iteration = True
-                            _streamed_final_chars = len(joined)
-                            _throughput_chars += len(joined)
-                            _tp = _maybe_emit_throughput(_throughput_chars)
-                            if _tp is not None:
-                                yield _tp
-                            _final_stream_started = True
-                            _visible_stream_state["chars"] = len(joined)
-                elif evt.type == "thinking_delta":
-                    thinking_parts.append(evt.delta)
-                    yield {
-                        "type": "thinking_delta",
-                        "delta": evt.delta,
-                        "iteration": i + 1,
-                    }
-                    _throughput_chars += len(evt.delta or "")
-                    _tp = _maybe_emit_throughput(_throughput_chars)
-                    if _tp is not None:
-                        yield _tp
-                elif evt.type == "done":
-                    resp = evt.final
-            if resp is None:
-                from runtime.platform.models.llm import ModelResponse
-
-                resp = ModelResponse(
-                    text="".join(text_parts),
-                    thinking="".join(thinking_parts),
-                    model=effective_model,
-                )
-        except Exception as exc:
-            _logger.warning(
-                "react_loop iter %d LLM 调用失败 (%s): %s",
-                i,
-                type(exc).__name__,
-                _safe_react_error_message(exc),
-            )
-            _error_text_was_exposed = bool(
-                locals().get("_final_stream_started", False)
-                or locals().get("_streamed_final_chars", 0)
-            )
-            if not _error_text_was_exposed and is_retryable_model_error(exc):
-                _fallback_model = _try_react_model_failover(type(exc).__name__)
-                if _fallback_model:
-                    messages.append(
-                        Message(
-                            role="user",
-                            content=(
-                                "[SYSTEM CHECK - model failover]\n"
-                                "The previous provider failed before exposing an answer. "
-                                "Every prior tool result and message remains authoritative. "
-                                "Continue from the exact unfinished point without repeating "
-                                "successful reads, writes, or verification."
-                            ),
-                        )
-                    )
-                    yield {
-                        "type": "commentary_delta",
-                        "delta": "当前模型响应异常，已保留上下文并切换备用模型继续。",
-                        "progress_source": "runtime",
-                        "iteration": i + 1,
-                    }
-                    yield {
-                        "type": "react_retry",
-                        "kind": "model_failover",
-                        "model": _fallback_model,
-                        "iteration": i + 1,
-                        "attempt": _model_failovers,
-                    }
-                    _force_convergence_next = bool(steps)
-                    continue
-            if not steps:
-                _err_msg = _safe_react_error_message(exc)
-                _err_kind = (
-                    "auth" if "current_actor" in _err_msg or "登录" in _err_msg else "router"
-                )
-                yield {
-                    "type": "react_error",
-                    "kind": _err_kind,
-                    "message": _err_msg,
-                    "iteration": i,
-                    "task_id": str(react_task_id) if react_task_id else None,
-                }
-                _pause.unregister_active(str(react_task_id))
-                return None
-            _error_message = str(exc).lower()
-            _auth_failure = any(
-                marker in _error_message
-                for marker in (
-                    "unauthorized",
-                    "authentication",
-                    "invalid api key",
-                    "current_actor",
-                    "登录",
-                )
-            )
-            if not _error_text_was_exposed and not _auth_failure and consecutive_llm_errors < 2:
-                consecutive_llm_errors += 1
-                messages.append(
-                    Message(
-                        role="user",
-                        content=(
-                            "[SYSTEM CHECK - transient model-call recovery]\n"
-                            "The previous model call failed before producing a "
-                            f"user-visible answer ({type(exc).__name__}). Keep every "
-                            "successful tool result already recorded, inspect current "
-                            "workspace state when needed, and continue from the next "
-                            "unfinished todo. Do not repeat successful writes or claim "
-                            "the task is complete."
-                        ),
-                    )
-                )
-                yield {
-                    "type": "react_retry",
-                    "kind": "model_call",
-                    "iteration": i + 1,
-                    "attempt": consecutive_llm_errors,
-                }
-                continue
-            terminated_reason = "error"
+        _loop_ctrl = yield from _phase_6b_model_stream(
+            state,
+            i=i,
+            model_iteration_timeout_s=_model_iteration_timeout_s,
+            try_react_model_failover=_try_failover_for_6b,
+        )
+        _force_convergence_next = state.force_convergence_next
+        _last_public_update_key = state.last_public_update_key
+        _throughput_chars = state.throughput_chars
+        _throughput_last_emit = state.throughput_last_emit
+        _final_stream_started = state.final_stream_started
+        _streamed_final_chars = state.streamed_final_chars
+        _final_delta_emitted_this_iteration = state.final_delta_emitted_this_iteration
+        terminated_reason = state.terminated_reason
+        consecutive_llm_errors = state.consecutive_llm_errors
+        _model_failovers = state.model_failovers
+        resp = state.resp
+        raw_text = state.raw_text
+        _request_has_tool_evidence = state.request_has_tool_evidence
+        _iteration_soft_timed_out = state.iteration_soft_timed_out
+        _maybe_emit_throughput = state.maybe_emit_throughput
+        if _loop_ctrl is _LoopControl.RETURN_NONE:
+            return None
+        if _loop_ctrl is _LoopControl.BREAK:
             break
-
-        consecutive_llm_errors = 0
-        raw_text = "".join(text_parts)
-        try:
-            _in_tok = int(getattr(resp, "input_tokens", 0) or 0)
-            _out_tok = int(getattr(resp, "output_tokens", 0) or 0)
-            _tok = _in_tok + _out_tok
-            _cost_obj = getattr(resp, "cost", None)
-            _cost = float(getattr(_cost_obj, "usd", 0) or 0) if _cost_obj else 0.0
-            _journal = getattr(stack, "journal", None)
-            if _journal is not None and hasattr(_journal, "write_token_usage"):
-                with contextlib.suppress(Exception):
-                    _journal.write_token_usage(
-                        task_id=str(react_task_id),
-                        iteration=i + 1,
-                        input_tokens=_in_tok,
-                        output_tokens=_out_tok,
-                        cost_usd=_cost,
-                        model=str(getattr(resp, "model", "") or ""),
-                    )
-            # Feed the process-level cost ledger so OCTOPUS_MAX_COST_USD can
-            # gate further subagent spawns in bridge.py.
-            if _in_tok or _out_tok:
-                with contextlib.suppress(Exception):
-                    from runtime.platform.budget import UsagePricing
-
-                    UsagePricing.get().record(
-                        str(getattr(resp, "model", "") or "unknown"),
-                        _in_tok,
-                        _out_tok,
-                    )
-            _updated = _pause.update_active_usage(
-                str(react_task_id),
-                tokens_delta=_tok,
-                cost_delta=_cost,
-            )
-            if (
-                _budget_auto_pause_enabled
-                and _updated is not None
-                and react_task_id is not None
-                and not _pause.is_pause_requested(str(react_task_id))
-            ):
-                _token_pct = (
-                    _updated.tokens_spent / _updated.max_tokens if _updated.max_tokens > 0 else 0
-                )
-                _usd_pct = _updated.cost_usd / _updated.max_usd if _updated.max_usd > 0 else 0
-                if _token_pct >= _budget_pause_threshold or _usd_pct >= _budget_pause_threshold:
-                    _logger.info(
-                        "react_loop budget auto-pause · task %s · "
-                        "tokens %d/%d (%.0f%%) · usd %.3f/%.3f (%.0f%%)",
-                        react_task_id,
-                        _updated.tokens_spent,
-                        _updated.max_tokens,
-                        _token_pct * 100,
-                        _updated.cost_usd,
-                        _updated.max_usd,
-                        _usd_pct * 100,
-                    )
-                    _pause.request_pause(
-                        task_id=str(react_task_id),
-                        reason="budget_near_limit",
-                        requested_by="system",
-                        note=(
-                            f"自动暂停 · tokens {_updated.tokens_spent:,}/"
-                            f"{_updated.max_tokens:,} "
-                            f"({int(_token_pct * 100)}%) · "
-                            f"${_updated.cost_usd:.3f}/"
-                            f"${_updated.max_usd:.3f} "
-                            f"({int(_usd_pct * 100)}%) · 加预算继续"
-                        ),
-                        thread_id=thread_id or "",
-                        agent_id=_agent_id_for_pause,
-                    )
-        except (AttributeError, TypeError):
-            _logger.debug("budget check failed", exc_info=True)
+        if _loop_ctrl is _LoopControl.NEXT_ITERATION:
+            continue
 
         # ── PHASE 6c · parse step / format-violation check ─────────────
         # Sync per-iteration scalars into state; the phase pulls/pushes
@@ -2503,7 +2038,7 @@ def stream_react_loop(
             nonlocal _native_mode
             _native_mode = state.native_mode
             _fallback = _try_react_model_failover(reason)
-            state.model_failovers = _model_failovers
+            state.model_failovers = _model_failovers  # noqa: B023 — called immediately, same iteration
             return _fallback
 
         _loop_ctrl = yield from _phase_6c_parse_and_guard(
