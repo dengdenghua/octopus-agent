@@ -122,3 +122,12 @@ openai provider，`supports_tool_use=True` → 默认 native 循环）。
    （一轮搜索即收、答案未完成）。生产触发面仅限非 native 模型，
    但 fallback 路径（native 失败降级 ReAct）若命中这类模型会有
    同样的能力错配。
+
+## 复验（2026-07-28 17:1x，HEAD `fa571cf59`）
+
+针对上文表层问题 1 的修复复跑同一 kimi-k3 调研任务
+（`tmp_acceptance/fix_verify_run.log`）：落库 5 条消息无
+`Update:`/`Progress:` 前缀泄漏、无同内容重复对；终答 156.8→159.5s
+渐进流式。本轮还途经一次模型超时 stall failover（~46s 静默后切换
+备用模型续跑），恢复路径未产生重复叙述。问题 1 关闭；问题 2
+（fallback 能力错配）留待后续。
