@@ -280,6 +280,7 @@ _FRAME_BYTE_LIMIT = 12 * 1024 * 1024
 # guaranteed under the byte limit and can skip the encode-and-measure path.
 _FRAME_CHAR_FASTPASS = _FRAME_BYTE_LIMIT // 4
 _FRAME_TRUNC_MARK = "…(字段过大已截断以保住连接)"
+_FRAME_TRUNCATED_KEY = "_frameTruncated"
 
 
 def _iter_string_leaves(obj: Any) -> list[tuple[Any, Any, int]]:
@@ -305,6 +306,12 @@ def _iter_string_leaves(obj: Any) -> list[tuple[Any, Any, int]]:
     return out
 
 
+def _inject_trunc_metadata(params: dict[str, Any]) -> None:
+    """Mark the frame as truncated at the params level so the truncation
+    notice lives in metadata, not inside user-visible content strings."""
+    params[_FRAME_TRUNCATED_KEY] = True
+
+
 def _bound_oversized_frame(
     message: JsonRpcRequest | JsonRpcResponse | Notification,
 ) -> JsonRpcRequest | JsonRpcResponse | Notification:
@@ -317,6 +324,7 @@ def _bound_oversized_frame(
     import copy
 
     params = copy.deepcopy(params)
+    truncated = False
     for _ in range(80):  # bounded; each pass halves the biggest string
         leaves = _iter_string_leaves(params)
         if not leaves:
@@ -326,8 +334,12 @@ def _bound_oversized_frame(
             break  # nothing left big enough to help
         s = container[key]
         container[key] = s[: max(1024, len(s) // 2)] + _FRAME_TRUNC_MARK
+        truncated = True
         trimmed = message.model_copy(update={"params": params})
         if len(encode_message(trimmed).encode("utf-8")) <= _FRAME_BYTE_LIMIT:
+            if truncated:
+                _inject_trunc_metadata(params)
+                trimmed = message.model_copy(update={"params": params})
             _logger.warning(
                 "realtime: frame for %s exceeded %d bytes — truncated its "
                 "largest field to protect the connection",
@@ -335,6 +347,8 @@ def _bound_oversized_frame(
                 _FRAME_BYTE_LIMIT,
             )
             return trimmed
+    if truncated:
+        _inject_trunc_metadata(params)
     return message.model_copy(update={"params": params})
 
 

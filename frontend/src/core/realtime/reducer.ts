@@ -21,6 +21,11 @@ import type {
 
 let errorItemSeq = 0;
 
+// Tracks when each turn was locally interrupted so late-arriving deltas
+// within a grace window are still accepted rather than silently dropped.
+const interruptTimestamps = new Map<string, number>();
+const INTERRUPT_GRACE_MS = 5_000;
+
 // ── Streaming append buffer ─────────────────────────────────
 //
 // The naive ``text: it.text + delta`` rebuilds the whole string on
@@ -385,6 +390,7 @@ export function reduce(
       };
     }
     case "turn/interrupted": {
+      interruptTimestamps.set(evt.params.turnId, Date.now());
       const changedItemIds: string[] = [];
       const completedAt = evt.params.completedAt ?? new Date().toISOString();
       const turns = state.turns.map((t) => {
@@ -796,7 +802,14 @@ function preserveCompletedStreamText(existing: Item, incoming: Item): Item {
   const existingText = streamWireText(withMaterializedStreamText(existing));
   if (!existingText) return merged;
   const snapshotText = streamWireText(merged);
+  // Three prefix relationships — handle each correctly:
+  //   snapshot ⊇ existing → snapshot is authoritative, use it
+  //   existing ⊇ snapshot → snapshot lagged, keep existing (longer) text
+  //   otherwise           → unrelated, keep existing text + snapshot tail
   if (snapshotText.startsWith(existingText)) return merged;
+  if (existingText.startsWith(snapshotText)) {
+    return { ...merged, [field]: existingText } as Item;
+  }
   return { ...merged, [field]: existingText + snapshotText } as Item;
 }
 
@@ -868,16 +881,26 @@ function mergeDelta(
   // would append to the already-final ``text`` — doubling content.
   // Status check is the simplest gate; the diagnostic keeps the drop
   // observable instead of silent.
+  // Exception: deltas arriving within the interrupt grace window are
+  // still accepted so the last few chunks before interruption are not lost.
+  // Only applies when the turn itself was interrupted — a completed item
+  // in a non-interrupted turn should still reject late deltas.
   if (it.status !== "inProgress") {
-    onDiagnostic?.({
-      type: "lateDeltaDropped",
-      turnId,
-      itemId,
-      kind,
-      itemStatus: it.status,
-      deltaLength: delta.length,
-    });
-    return unchanged(state);
+    const interruptedAt = interruptTimestamps.get(turnId);
+    const withinGrace =
+      interruptedAt !== undefined &&
+      Date.now() - interruptedAt < INTERRUPT_GRACE_MS;
+    if (!withinGrace || turn.status !== "interrupted") {
+      onDiagnostic?.({
+        type: "lateDeltaDropped",
+        turnId,
+        itemId,
+        kind,
+        itemStatus: it.status,
+        deltaLength: delta.length,
+      });
+      return unchanged(state);
+    }
   }
   let updated: Item | null = null;
   if (kind === "agentMessage" && it.type === "agentMessage") {

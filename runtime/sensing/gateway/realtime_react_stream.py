@@ -533,8 +533,9 @@ async def _drive_react(
             # RuntimeError: loop closed.
             # TimeoutError: consumer stuck — drop this event rather
             # than block the worker indefinitely.
-            _logger.debug(
-                "react bridge enqueue failed/timed out (event=%s)",
+            _logger.warning(
+                "react bridge enqueue failed/timed out (event=%s) — "
+                "text/tool events may be lost, frontend may show incomplete output",
                 event.get("type") if isinstance(event, dict) else event,
             )
 
@@ -559,7 +560,10 @@ async def _drive_react(
                 loop,
             ).result(timeout=2.0)
         except (RuntimeError, TimeoutError):
-            _logger.debug("tool_output_delta drop (consumer slow)")
+            _logger.warning(
+                "tool_output_delta drop (consumer slow) — "
+                "command output may be truncated in the UI"
+            )
 
     def producer() -> None:
         # ``asyncio.to_thread`` copies ContextVars from the calling

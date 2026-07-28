@@ -861,6 +861,12 @@ class _ReactBridgeState:
             await self._emit_completed(turn, log, emitter, self.reasoning)
             self.reasoning = None
             self.reasoning_started_monotonic = None
+        # Close any still-open tool items so the terminal snapshot never
+        # carries a spurious inProgress spinner.
+        for item_id, tool in list(self.tools.items()):
+            tool.status = status
+            await self._emit_completed(turn, log, emitter, tool)
+            del self.tools[item_id]
 
     async def finalize_workbench(
         self,

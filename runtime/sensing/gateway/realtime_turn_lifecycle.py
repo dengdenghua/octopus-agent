@@ -967,6 +967,14 @@ async def _start_turn(
         # must not mask the cancellation.
         with contextlib.suppress(Exception):
             await emitter.notify(
+                ServerMethod.TURN_INTERRUPTED,
+                {
+                    "threadId": thread_id,
+                    "turnId": turn.id,
+                },
+            )
+        with contextlib.suppress(Exception):
+            await emitter.notify(
                 ServerMethod.TURN_COMPLETED,
                 {
                     "threadId": thread_id,
