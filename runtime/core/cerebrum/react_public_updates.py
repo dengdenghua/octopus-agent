@@ -180,42 +180,6 @@ def _public_narrative_language_instruction(goal: str) -> str:
     return ""
 
 
-def _initial_public_fallback_update(goal: str) -> str:
-    """Return a task-specific first beat when the bounded narrator is silent."""
-
-    text = str(goal or "").strip()
-    source_labels: list[str] = []
-    for path in _explicit_source_paths(text):
-        label = os.path.basename(path.replace("\\", "/").rstrip("/"))
-        if label and label not in source_labels:
-            source_labels.append(label)
-        if len(source_labels) >= 2:
-            break
-
-    if re.search(r"[\uac00-\ud7af]", text):
-        if source_labels:
-            scope = " 및 ".join(source_labels)
-            return f"먼저 {scope}의 실제 내용을 확인하고, 확인되는 첫 결과부터 바로 공유하겠습니다."
-        return "작업을 시작했습니다. 첫 번째로 확인되는 결과부터 바로 공유하겠습니다."
-    if re.search(r"[\u3040-\u30ff]", text):
-        if source_labels:
-            scope = " と ".join(source_labels)
-            return f"まず {scope} の実内容を確認し、最初に確かめられた結果からすぐ共有します。"
-        return "作業を始めました。最初に確かめられた結果からすぐ共有します。"
-    if re.search(r"[\u3400-\u9fff]", text):
-        if source_labels:
-            scope = " 与 ".join(source_labels)
-            return f"我先核对 {scope} 的实际内容，第一条可确认结果出来后就直接同步。"
-        return "我已经开始处理，第一条可确认结果出来后就直接同步。"
-    if source_labels:
-        scope = " and ".join(source_labels)
-        return (
-            f"I’ll first verify the actual contents of {scope}, then share the first "
-            "confirmed result as soon as it is available."
-        )
-    return "I’ve started working on this and will share the first confirmed result directly."
-
-
 def _observed_read_fallback_update(*, goal: str, step: ReActStep) -> str:
     """Return a truthful conversational handoff when narration times out.
 
@@ -275,42 +239,6 @@ def _observed_read_fallback_update(*, goal: str, step: ReActStep) -> str:
         if next_label
         else f"{fact}; the requested evidence is complete, so I’m wrapping up the conclusion."
     )
-
-
-def _runtime_fallback_public_update(*, goal: str, step: ReActStep) -> str:
-    """Return a deterministic public update when the model omitted ``Update:``.
-
-    The runtime fallback only names the next action's non-sensitive target so
-    the conversation keeps a visible beat without a stochastic model paraphrase.
-    It never exposes tool/protocol names, private reasoning, or source content.
-    """
-    actions = step.actions or ([step.action] if step.action else [])
-    target = ""
-    tool_name = ""
-    for action in actions:
-        parsed = _parse_action(action)
-        if parsed is None:
-            continue
-        name, args = parsed
-        candidate = _public_tool_target(args if isinstance(args, dict) else {})
-        if candidate:
-            target = candidate
-            tool_name = str(name or "").strip().lower()
-            break
-    is_cjk = bool(re.search(r"[\u3400-\u9fff]", str(goal or "")))
-    if target in {".", "./"} and tool_name in {
-        "list_cwd",
-        "list_dir",
-        "list_directory",
-    }:
-        return "正在查看当前目录。" if is_cjk else "Checking the current directory."
-    if is_cjk:
-        if target:
-            return f"正在处理 {target}。"
-        return "正在执行下一步操作。"
-    if target:
-        return f"Working on {target}."
-    return "Proceeding with the next step."
 
 
 def _build_public_action_orientation_input(*, goal: str, step: ReActStep) -> str:

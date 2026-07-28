@@ -47,7 +47,6 @@ from runtime.core.cerebrum.react_parsing import (
 )
 from runtime.core.cerebrum.react_public_updates import (
     _observed_read_fallback_update,
-    _runtime_fallback_public_update,
     _safe_public_update,
     _stream_public_evidence_narrative,
 )
@@ -1350,23 +1349,6 @@ def _phase_6d_dispatch_and_observe(
                     re.sub(r"\s+", " ", _repaired_public_update).strip().casefold()
                 )
         _model_supplied_update = bool(step.public_update)
-        # Force runtime fallback when the model omitted ``Update:`` so the
-        # conversation never collapses into tool rows without a public beat.
-        # ``public_evidence=True`` on the emitted delta lets the realtime
-        # gateway pass it through (generic runtime prose is otherwise dropped)
-        # so the bridge can still bind phase_id/progress_sequence/timeline_sequence.
-        if (
-            not _model_supplied_update
-            and tool_action_requested
-            and maybe_final is None
-            and not _prior_result_handoff
-        ):
-            _fallback_update = _runtime_fallback_public_update(
-                goal=intent.normalized_goal,
-                step=step,
-            )
-            if _fallback_update:
-                step.public_update = _fallback_update
         _public_update_key = re.sub(r"\s+", " ", step.public_update).strip().casefold()
         if (
             step.public_update
@@ -1377,8 +1359,7 @@ def _phase_6d_dispatch_and_observe(
             yield {
                 "type": "commentary_delta",
                 "delta": step.public_update,
-                "progress_source": "model" if _model_supplied_update else "runtime",
-                "public_evidence": not _model_supplied_update,
+                "progress_source": "model",
                 "start_new_segment": True,
                 "iteration": i + 1,
             }

@@ -70,7 +70,6 @@ from runtime.core.cerebrum.react_loop import (
     run_react_loop,
     stream_react_loop,
 )
-from runtime.core.cerebrum.react_public_updates import _runtime_fallback_public_update
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import JSONLJournal
@@ -1219,7 +1218,7 @@ def test_continuation_react_turn_prioritizes_live_steering_from_bootstrap() -> N
     assert "LIVE USER FOLLOW-UP — HIGH PRIORITY" in str(messages[user_index - 1].content)
 
 
-def test_missing_public_update_emits_runtime_fallback_commentary() -> None:
+def test_missing_public_update_does_not_manufacture_commentary() -> None:
     router = _ScriptedRouter(
         [
             'Thought: inspect source\nAction: echo({"text": "evidence"})',
@@ -1234,29 +1233,8 @@ def test_missing_public_update_emits_runtime_fallback_commentary() -> None:
 
     assert result is not None and result.final_answer == "evidence verified"
     commentary = [event for event in events if event["type"] == "commentary_delta"]
-    assert len(commentary) == 1
-    assert commentary[0]["progress_source"] == "runtime"
-    assert commentary[0]["public_evidence"] is True
-    assert commentary[0]["delta"]  # non-empty deterministic fallback
-    assert commentary[0]["iteration"] == 1
+    assert commentary == []
     assert any(event["type"] == "tool_start" for event in events)
-
-
-def test_runtime_fallback_describes_current_directory_without_dot_artifact() -> None:
-    step = ReActStep(
-        iteration=1,
-        action='list_cwd({"path": "."})',
-        actions=['list_cwd({"path": "."})'],
-    )
-
-    assert (
-        _runtime_fallback_public_update(goal="检查当前项目", step=step)
-        == "正在查看当前目录。"
-    )
-    assert (
-        _runtime_fallback_public_update(goal="Inspect the current project", step=step)
-        == "Checking the current directory."
-    )
 
 
 def test_realtime_missing_public_update_gets_model_authored_orientation() -> None:
@@ -1344,7 +1322,7 @@ def test_realtime_preface_arrives_before_a_slow_working_round() -> None:
     assert preface_request.reasoning_effort == "low"
 
 
-def test_realtime_preface_has_a_specific_fallback_when_narrator_is_silent() -> None:
+def test_realtime_preface_stays_silent_when_narrator_is_silent() -> None:
     router = _CapturingRouter(
         [
             "",
@@ -1376,14 +1354,8 @@ def test_realtime_preface_has_a_specific_fallback_when_narrator_is_silent() -> N
             break
     stream.close()
 
-    fallback = next(event for event in events if event.get("public_status") is True)
-    assert fallback["iteration"] == 0
-    assert fallback["progress_source"] == "runtime"
-    assert "react_public_updates.py" in fallback["delta"]
-    assert "react_model_deadlines.py" in fallback["delta"]
-    assert events.index(fallback) < next(
-        index for index, event in enumerate(events) if event["type"] == "tool_start"
-    )
+    assert not any(event["type"] == "commentary_delta" for event in events)
+    assert any(event["type"] == "tool_start" for event in events)
 
 
 def test_realtime_quiet_tool_result_gets_model_authored_evidence_checkpoint() -> None:

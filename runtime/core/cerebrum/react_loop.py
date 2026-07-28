@@ -143,9 +143,7 @@ from runtime.core.cerebrum.react_prompt_assembly import (
     _resolve_turn_bootstrap,
 )
 from runtime.core.cerebrum.react_public_updates import (
-    _initial_public_fallback_update,
     _observed_read_fallback_update,
-    _runtime_fallback_public_update,
     _safe_public_update,
     _stream_public_evidence_narrative,
 )
@@ -269,7 +267,6 @@ __all__ = [
     "_reset_kg_throttle_for_tests",
     "_reset_react_variants_for_tests",
     "_ResumeState",
-    "_runtime_fallback_public_update",
     "_safe_for_streamdown",
     "_safe_public_update",
     "_should_auto_checkpoint",
@@ -629,17 +626,6 @@ def stream_react_loop(
         except Exception as exc:  # noqa: BLE001 — optional first-public-beat repair
             _logger.warning("initial public orientation failed: %s", exc)
             _initial_public_update = ""
-        if not _initial_public_update:
-            _initial_public_update = _initial_public_fallback_update(intent.normalized_goal)
-            if _initial_public_update:
-                yield {
-                    "type": "commentary_delta",
-                    "delta": _initial_public_update,
-                    "progress_source": "runtime",
-                    "public_status": True,
-                    "start_new_segment": True,
-                    "iteration": 0,
-                }
         if _initial_public_update:
             _last_public_update_key = re.sub(r"\s+", " ", _initial_public_update).strip().casefold()
 
