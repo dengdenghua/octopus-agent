@@ -15,6 +15,7 @@ import type {
   ItemStatus,
   McpToolProgress,
   Turn,
+  TurnStatus,
   WorkbenchSnapshotV2,
   WorkspaceFocus,
 } from "./items";
@@ -118,6 +119,33 @@ function withMaterializedStreamText(item: Item): Item {
   } as Item;
 }
 
+/**
+ * Materialize every in-flight stream buffer across the whole conversation.
+ *
+ * Replay (``replay.ts``) folds deltas through the same chunk buffer the
+ * live path uses; before the rebuilt Conversation is handed to persistence
+ * or non-streaming readers, the trailing buffered chunks (typically an
+ * unfinished final turn) must land in the items' wire fields. Identity is
+ * preserved for untouched items/turns so downstream memoization survives.
+ */
+export function materializeStreamedItems(
+  conversation: Conversation,
+): Conversation {
+  let changed = false;
+  const turns = conversation.turns.map((turn) => {
+    let turnChanged = false;
+    const items = turn.items.map((item) => {
+      const materialized = withMaterializedStreamText(item);
+      if (materialized !== item) turnChanged = true;
+      return materialized;
+    });
+    if (!turnChanged) return turn;
+    changed = true;
+    return { ...turn, items };
+  });
+  return changed ? { ...conversation, turns } : conversation;
+}
+
 // All events the reducer understands. The set is closed: anything not
 // listed here is a no-op (useful — server adds new methods without
 // breaking older clients), but the type unions a developer should
@@ -142,6 +170,33 @@ export type ConversationEvent =
       params: { threadId: string; turn: Turn };
     }
   | {
+      // Replay-only terminal patch. ``turn/completed`` carries a whole Turn
+      // snapshot (live path), but the persisted event log records only
+      // ``status/completedAt/error`` — mirroring the Python replay semantics
+      // in ``runtime/memory/threads/event_log.py::_apply_event``. Synthesizing
+      // a full Turn would clobber ``startedAt`` and other live fields via the
+      // ``{...existing, ...incoming}`` merge, so replay emits this instead.
+      method: "turn/finalized";
+      params: {
+        threadId: string;
+        turnId: string;
+        status: TurnStatus;
+        completedAt: string | null;
+        error?: Record<string, unknown> | null;
+      };
+    }
+  | {
+      // Compaction replaces a contiguous range of prior turns with a single
+      // summary turn. Semantics mirror the Python replay exactly: the summary
+      // slots into the position of the oldest superseded turn.
+      method: "turn/compacted";
+      params: {
+        threadId: string;
+        supersededTurnIds: string[];
+        summaryTurn: Turn;
+      };
+    }
+  | {
       method: "turn/interrupted";
       params: { threadId: string; turnId: string; completedAt?: string };
     }
@@ -154,7 +209,10 @@ export type ConversationEvent =
       params: {
         threadId: string;
         turnId: string;
-        phases: AgentPhaseSnapshot[];
+        // Optional: live senders always include phases, but replayed
+        // ``turn_updated`` log events may carry only workspaceFocus /
+        // workbenchSnapshot. Absent phases leave ``turn.phases`` untouched.
+        phases?: AgentPhaseSnapshot[];
         workspaceFocus?: WorkspaceFocus | null;
         workbenchSnapshot?: WorkbenchSnapshotV2 | null;
       };
@@ -313,11 +371,23 @@ export interface ReducerOutput {
   changedItemIds: string[];
 }
 
+// Behaviour switches for the two event sources that feed the reducer.
+// ``live`` (default) keeps every realtime safeguard — interrupt grace
+// windows, late-delta drops. ``replay`` trusts the persisted event log as
+// authoritative: deltas apply regardless of item status (mirroring the
+// Python ``_merge_delta``), and no wall-clock heuristics are consulted, so
+// replaying the same log twice yields identical state.
+export interface ReduceOptions {
+  mode?: "live" | "replay";
+}
+
 export function reduce(
   state: Conversation,
   evt: ConversationEvent,
   onDiagnostic?: ReducerDiagnosticHandler,
+  options?: ReduceOptions,
 ): ReducerOutput {
+  const replayMode = options?.mode === "replay";
   switch (evt.method) {
     case "thread/started":
       return {
@@ -389,6 +459,69 @@ export function reduce(
         changedItemIds,
       };
     }
+    case "turn/finalized": {
+      // Persisted-log terminal patch (see the event-type comment). The turn
+      // must already exist — replay started it via ``turn_started``. Python
+      // replay only patches status/completedAt/error; the client additionally
+      // closes still-open items and materializes their buffered stream text,
+      // the same repair ``closeItemsForTurn`` performs on live completion.
+      const { turnId, status, completedAt, error } = evt.params;
+      const turnIdx = state.turns.findIndex((t) => t.id === turnId);
+      const turn = state.turns[turnIdx];
+      if (!turn) return unchanged(state);
+      const items = closeItemsForTurn(turn.items, status);
+      const changedItemIds: string[] = [];
+      for (let index = 0; index < items.length; index += 1) {
+        if (items[index] !== turn.items[index]) {
+          changedItemIds.push(items[index]!.id);
+        }
+      }
+      const nextTurn: Turn = {
+        ...turn,
+        status,
+        completedAt: completedAt ?? turn.completedAt,
+        ...(error !== undefined ? { error } : {}),
+        items,
+      };
+      return {
+        next: { ...state, turns: replaceAt(state.turns, turnIdx, nextTurn) },
+        changedTurnIds: [turnId],
+        changedItemIds,
+      };
+    }
+    case "turn/compacted": {
+      // Mirrors ``_apply_event(turn_compacted)`` in event_log.py: drop the
+      // superseded turns and insert the summary where the oldest superseded
+      // turn sat (append when no superseded turn is found). The summary is
+      // additionally de-duplicated by id so a repeated compaction event
+      // replaces rather than duplicates — replay is idempotent by log
+      // construction, live delivery is at-least-once.
+      const { supersededTurnIds, summaryTurn } = evt.params;
+      const superseded = new Set(supersededTurnIds);
+      const firstIdx = state.turns.findIndex((t) => superseded.has(t.id));
+      const removed = (t: Turn) => superseded.has(t.id) || t.id === summaryTurn.id;
+      const keep = state.turns.filter((t) => !removed(t));
+      let insertAt: number;
+      if (firstIdx === -1) {
+        insertAt = keep.length;
+      } else {
+        // Entries removed BEFORE firstIdx shift the insertion point left.
+        const removedBefore = state.turns
+          .slice(0, firstIdx)
+          .filter((t) => removed(t)).length;
+        insertAt = Math.min(firstIdx - removedBefore, keep.length);
+      }
+      const turns = [
+        ...keep.slice(0, insertAt),
+        summaryTurn,
+        ...keep.slice(insertAt),
+      ];
+      return {
+        next: { ...state, turns },
+        changedTurnIds: [...supersededTurnIds, summaryTurn.id],
+        changedItemIds: [],
+      };
+    }
     case "turn/interrupted": {
       interruptTimestamps.set(evt.params.turnId, Date.now());
       const changedItemIds: string[] = [];
@@ -421,6 +554,7 @@ export function reduce(
         state,
         evt.params.turnId,
         evt.params.phases,
+        "phases" in evt.params,
         evt.params.workspaceFocus,
         "workspaceFocus" in evt.params,
         evt.params.workbenchSnapshot,
@@ -496,6 +630,7 @@ export function reduce(
         "agentMessage",
         evt.params.delta,
         onDiagnostic,
+        replayMode,
       );
     case "item/reasoning/textDelta":
       return mergeDelta(
@@ -505,6 +640,7 @@ export function reduce(
         "reasoning",
         evt.params.delta,
         onDiagnostic,
+        replayMode,
       );
     case "item/plan/delta":
       return mergeDelta(
@@ -514,6 +650,7 @@ export function reduce(
         "plan",
         evt.params.delta,
         onDiagnostic,
+        replayMode,
       );
     case "item/commandExecution/outputDelta":
       return mergeDelta(
@@ -523,6 +660,7 @@ export function reduce(
         "commandOutput",
         evt.params.delta,
         onDiagnostic,
+        replayMode,
       );
     case "item/fileChange/hunkDelta":
       return applyFileChangeHunkDelta(
@@ -865,6 +1003,7 @@ function mergeDelta(
   kind: DeltaKind,
   delta: string,
   onDiagnostic?: ReducerDiagnosticHandler,
+  replayMode?: boolean,
 ): ReducerOutput {
   const turnIdx = state.turns.findIndex((t) => t.id === turnId);
   const turn = state.turns[turnIdx];
@@ -885,7 +1024,10 @@ function mergeDelta(
   // still accepted so the last few chunks before interruption are not lost.
   // Only applies when the turn itself was interrupted — a completed item
   // in a non-interrupted turn should still reject late deltas.
-  if (it.status !== "inProgress") {
+  // Replay mode bypasses the gate entirely: the persisted log is
+  // authoritative and the Python replay applies deltas unconditionally,
+  // so gating here would make the two replays diverge.
+  if (it.status !== "inProgress" && !replayMode) {
     const interruptedAt = interruptTimestamps.get(turnId);
     const withinGrace =
       interruptedAt !== undefined &&
@@ -925,7 +1067,8 @@ function mergeDelta(
 function applyPlanUpdate(
   state: Conversation,
   turnId: string,
-  phases: AgentPhaseSnapshot[],
+  phases: AgentPhaseSnapshot[] | undefined,
+  hasPhases: boolean,
   workspaceFocus: WorkspaceFocus | null | undefined,
   hasWorkspaceFocus: boolean,
   workbenchSnapshot: WorkbenchSnapshotV2 | null | undefined,
@@ -937,7 +1080,7 @@ function applyPlanUpdate(
     touched = true;
     return {
       ...turn,
-      phases,
+      ...(hasPhases ? { phases } : {}),
       ...(hasWorkspaceFocus ? { workspaceFocus: workspaceFocus ?? null } : {}),
       ...(hasWorkbenchSnapshot
         ? { workbenchSnapshot: workbenchSnapshot ?? null }
