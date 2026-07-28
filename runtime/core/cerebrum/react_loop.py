@@ -171,6 +171,9 @@ from runtime.core.cerebrum.react_resume import (
     _compute_resume_state,
     _ResumeState,
 )
+from runtime.core.cerebrum.react_terminal import (
+    _finalize_react_turn,
+)
 from runtime.core.cerebrum.react_types import (
     REACT_NO_TOOLS_NOTE,
     REACT_OBSERVATION_FOLLOWUP,
@@ -239,6 +242,7 @@ __all__ = [
     "_checkpoint_mirror",
     "_code_mode_completion_guard",
     "_code_task_iteration_limit",
+    "_collect_model_stream_text_with_deadline",
     "_CONTEXT_PRESSURE_NUDGE",
     "_disabled_guard_labels",
     "_disabled_guards_from_yaml",
@@ -246,9 +250,13 @@ __all__ = [
     "_escape_md_brackets",
     "_estimate_context_fullness",
     "_execute_action_via_beak",
+    "_extract_final_answer",
+    "_finalize_react_turn",
     "_format_background_task_heartbeat",
     "_format_skill_catalog",
     "_guard_hit_recorder",
+    "_guard_reason_for_user",
+    "_has_unrecovered_beak_failure",
     "_image_blocks_from_attachments",
     "_is_scoped_artifact_write",
     "_long_task_budget_limits",
@@ -1821,6 +1829,38 @@ def stream_react_loop(
             )
         _pause.clear(str(resume_task_id))
 
+    # Realtime reasoning providers may stream private thinking for minutes
+    # before producing ordinary text or a tool call. The UI must not depend on
+    # that hidden stream for its first conversational beat. Generate one
+    # task-specific, model-authored sentence through the bounded,
+    # thinking-disabled narrator before starting the expensive working call.
+    # This is deliberately gateway-gated so batch/API callers keep their
+    # existing request count and latency.
+    if (
+        bool((intent.user_context or {}).get("realtime_public_preface"))
+        and _realtime_public_orientation
+        and tools_active
+        and not _no_tool_turn
+        and resume_from_iter == 0
+        and not steps
+    ):
+        try:
+            _initial_public_update = yield from _stream_public_evidence_narrative(
+                router,
+                model=effective_model,
+                goal=intent.normalized_goal,
+                step=ReActStep(iteration=0),
+                convergence=None,
+                iteration=0,
+                previous_key=_last_public_update_key,
+                pending_action=True,
+            )
+        except Exception as exc:  # noqa: BLE001 — optional first-public-beat repair
+            _logger.warning("initial public orientation failed: %s", exc)
+            _initial_public_update = ""
+        if _initial_public_update:
+            _last_public_update_key = re.sub(r"\s+", " ", _initial_public_update).strip().casefold()
+
     for i in range(resume_from_iter, max_iterations):
         # ── PHASE 6a · cancel / pause guard ────────────────────────────
         _guard_terminated_reason = yield from _cancel_pause_guard(
@@ -2490,6 +2530,10 @@ def stream_react_loop(
                 "type": "commentary_delta",
                 "delta": recovery_update,
                 "progress_source": "runtime",
+                # This is an operational truth, not generic stage narration.
+                # Keep it visible so a slow-provider failover never looks like
+                # an unexplained frozen conversation.
+                "public_status": True,
                 "iteration": i + 1,
             }
             if _fallback_model:
@@ -4104,234 +4148,33 @@ def stream_react_loop(
             _pause.update_active_iteration(str(react_task_id), i + 1)
 
     # ── PHASE 7 · post-loop terminal handling ──────────────────────────
-    # (paused / cancelled / forced max-iter convergence)
-    if terminated_reason == "paused":
-        final_answer = (
-            "当前进度已暂停并保存，等待继续。你可以补充信息，或点击继续从 checkpoint 接着执行。"
+    # ── PHASE 8 · finalization + react_completed yield ─────────────────
+    return (
+        yield from _finalize_react_turn(
+            terminated_reason=terminated_reason,
+            final_answer=final_answer,
+            i=locals().get("i", 0),
+            react_task_id=react_task_id,
+            pause_controller=_pause,
+            messages=messages,
+            is_code_mode=_is_code_mode,
+            is_research_mode=_is_research_mode,
+            is_swarm_mode=_is_swarm_mode,
+            effective_model=effective_model,
+            router=router,
+            steps=steps,
+            executed_beak_steps=executed_beak_steps,
+            stack=stack,
+            todo_protocol_required=_todo_protocol_required,
+            todo_protocol_visible=_todo_protocol_visible,
+            file_inspection_tools_visible=_file_inspection_tools_visible,
+            tools_active=tools_active,
+            goal=intent.normalized_goal,
+            browser_operation_mode=_browser_operation_mode,
+            final_guard_grounded_source_paths=_final_guard_grounded_source_paths,
+            final_answer_emitted=final_answer_emitted,
+            model_iteration_timeout_s=_model_iteration_timeout_s,
         )
-
-    if terminated_reason == "cancelled":
-        # User pressed Stop. Emit a terminal event so the consumer can
-        # finalize the turn promptly, then exit without asking the LLM
-        # for one more "final answer" round — that would both waste
-        # budget and defeat the whole point of cancellation.
-        yield {"type": "react_cancelled", "iteration": i + 1}
-        with contextlib.suppress(Exception):
-            _pause.unregister_active(str(react_task_id))
-        return None
-
-    if final_answer is None:
-        try:
-            messages.append(
-                Message(
-                    role="user",
-                    content=(
-                        "已达最大迭代次数。当前是 code 模式: 如果仍有未完成 todo、未验证代码改动、"
-                        "或存在权限/登录/信息缺失阻塞, 不要宣称完成; "
-                        "请明确请求用户协助并列出被阻塞的 todo。"
-                        "只有所有 todo completed 且验证通过, 才给 Final Answer。"
-                        if _is_code_mode
-                        else "已达最大迭代次数,请基于以上推理直接给出 Final Answer。"
-                    ),
-                )
-            )
-            if _is_research_mode and not _is_code_mode:
-                messages.append(
-                    Message(
-                        role="user",
-                        content=(
-                            "研究报告收敛要求：不要继续输出过程模板或「正在整理」。"
-                            "请基于已有搜索、浏览和材料证据，直接输出完整 Final Answer。"
-                            "Final Answer 必须是一份可阅读报告，至少包含：执行摘要、关键结论、"
-                            "分维度分析、对比/推荐、风险与不确定性、下一步建议、来源说明。"
-                        ),
-                    )
-                )
-            if _is_swarm_mode and not _is_code_mode:
-                messages.append(
-                    Message(
-                        role="user",
-                        content=(
-                            "SWARM convergence requirement: stop generating "
-                            "process-only updates. Based on completed todos, "
-                            "skill outputs, subagent results, and blackboard "
-                            "findings, produce the integrated Final Answer now. "
-                            "Include a concise stage summary, final conclusions, "
-                            "quality-review notes, and any created file paths. "
-                            "If the work is blocked, name the exact blocker and "
-                            "the incomplete todo instead of claiming completion."
-                        ),
-                    )
-                )
-            convergence_request = ModelRequest(
-                model=effective_model,
-                messages=messages,
-                max_tokens=5000 if (_is_research_mode or _is_swarm_mode) else 400,
-                temperature=0.2,
-            )
-            convergence_result = _collect_model_stream_text_with_deadline(
-                router,
-                convergence_request,
-                _model_iteration_timeout_s(),
-            )
-            if convergence_result is _MODEL_STREAM_DEADLINE:
-                final_answer = _stage_update_timeout_fallback(steps)
-                terminated_reason = "model_stall"
-                _logger.warning(
-                    "react_loop forced convergence stream exceeded deadline; "
-                    "preserving public stage conclusions",
-                )
-            else:
-                assert isinstance(convergence_result, tuple)
-                text, _convergence_response = convergence_result
-            text = "" if final_answer is not None else text.strip()
-            convergence_final = _extract_final_answer(text)
-            if final_answer is not None:
-                pass
-            elif convergence_final:
-                final_answer = convergence_final
-            elif (
-                text
-                and not _ACTION_RE.search(text)
-                and not _looks_like_observation_echo(text)
-                and not _looks_like_special_tool_envelope(text)
-                and "<tool_call>" not in text
-                and "<tool_invocation" not in text
-                and "<function=" not in text
-            ):
-                # Forced convergence is a direct, tools-disabled synthesis
-                # call. Several compatible providers obey the content request
-                # but omit the literal ``Final Answer:`` label. Treat that
-                # plain report exactly like the main loop's zero-anchor chat
-                # recovery instead of silently dropping a complete answer.
-                final_answer = text
-                _logger.info(
-                    "react_loop forced convergence salvaged plain final · chars=%d",
-                    len(text),
-                )
-            else:
-                _logger.warning(
-                    "react_loop 强制收敛未得安全 Final Answer · raw head=%r",
-                    text[:200],
-                )
-                _persist_react_trajectory(
-                    stack,
-                    react_task_id=react_task_id,
-                    beak_steps=executed_beak_steps,
-                    success=False,
-                )
-                _pause.unregister_active(str(react_task_id))
-                return None
-
-            if final_answer and terminated_reason != "model_stall":
-                _forced_step = ReActStep(
-                    iteration=(steps[-1].iteration + 1) if steps else 1,
-                    action="none",
-                )
-                _guard_hit = _evaluate_final_answer_guards(
-                    steps=steps,
-                    step=_forced_step,
-                    final_answer=final_answer,
-                    is_code_mode=_is_code_mode,
-                    todo_protocol_required=_todo_protocol_required,
-                    todo_protocol_visible=_todo_protocol_visible,
-                    file_inspection_tools_visible=_file_inspection_tools_visible,
-                    tools_active=tools_active,
-                    goal=intent.normalized_goal,
-                    browser_operation_mode=_browser_operation_mode,
-                    grounded_source_paths=_final_guard_grounded_source_paths,
-                )
-                if _guard_hit is not None:
-                    _guard_label, _guard_message = _guard_hit
-                    _user_guard_message = _guard_reason_for_user(_guard_label, _guard_message)
-                    final_answer = (
-                        "我还不能把这个任务标记为完成。\n\n"
-                        f"[{_guard_label}]\n{_user_guard_message}\n\n"
-                        "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
-                    )
-        except (AttributeError, TypeError, ValueError) as exc:
-            _logger.warning(
-                "react_loop 强制收敛失败 (%s): %s",
-                type(exc).__name__,
-                _safe_react_error_message(exc),
-            )
-            _persist_react_trajectory(
-                stack,
-                react_task_id=react_task_id,
-                beak_steps=executed_beak_steps,
-                success=False,
-            )
-            _pause.unregister_active(str(react_task_id))
-            # This is the final model attempt after the ordinary recovery
-            # retries have been exhausted.  Surface its real, redacted cause
-            # so the gateway and evaluation harness can distinguish provider
-            # infrastructure failures from missing agent output.
-            yield {
-                "type": "react_error",
-                "kind": type(exc).__name__,
-                "message": _safe_react_error_message(exc),
-                "iteration": (steps[-1].iteration + 1) if steps else 1,
-                "task_id": str(react_task_id) if react_task_id else None,
-                "terminal_stage": "forced_convergence",
-            }
-            return None
-
-    if final_answer and not final_answer_emitted:
-        # ── PHASE 8 · finalization + react_completed yield ─────────────
-        yield {
-            "type": "text_delta",
-            "delta": final_answer,
-            "iteration": (steps[-1].iteration + 1) if steps else 1,
-        }
-        final_answer_emitted = True
-
-    unresolved_tool_failure = _has_unrecovered_beak_failure(executed_beak_steps)
-    effective_success = not unresolved_tool_failure and terminated_reason != "model_stall"
-    final_success = effective_success and terminated_reason not in {
-        "paused",
-        "cancelled",
-        "error",
-        "guard_impasse",
-        "model_stall",
-    }
-    _persist_react_trajectory(
-        stack,
-        react_task_id=react_task_id,
-        beak_steps=executed_beak_steps,
-        success=effective_success,
-    )
-    try:
-        from runtime.safety.experiments.scheduler import (
-            get_camouflage_scheduler,
-        )
-
-        get_camouflage_scheduler().record_outcome(
-            str(react_task_id),
-            success=final_success,
-        )
-    except ImportError:
-        _logger.debug("camouflage scheduler not available for recording outcome", exc_info=True)
-    _pause.unregister_active(str(react_task_id))
-    completion_receipt = _react_completion_receipt(
-        final_answer=final_answer,
-        terminated_reason=terminated_reason,
-        effective_success=effective_success,
-        executed_beak_steps=executed_beak_steps,
-    )
-    yield {
-        "type": "react_completed",
-        "iteration": steps[-1].iteration if steps else 0,
-        "terminated_reason": terminated_reason,
-        "has_final_answer": bool(final_answer),
-        "success": final_success,
-        "completion_receipt": completion_receipt,
-    }
-    return ReActResult(
-        final_answer=final_answer,
-        steps=steps,
-        terminated_reason=terminated_reason,
-        success=final_success,
-        completion_receipt=completion_receipt,
     )
 
 
