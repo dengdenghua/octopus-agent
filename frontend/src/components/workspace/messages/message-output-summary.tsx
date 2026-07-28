@@ -664,14 +664,16 @@ export function MessageOutputSummary({
             </span>
           </div>
         )}
-        <button
-          type="button"
-          onClick={openProcess}
-          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
-        >
-          <PlayCircleIcon className="size-3" />
-          {t.message.viewProcess}
-        </button>
+        {!isFailure && (
+          <button
+            type="button"
+            onClick={openProcess}
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
+          >
+            <PlayCircleIcon className="size-3" />
+            {t.message.viewProcess}
+          </button>
+        )}
         {resultUrl && (
           <a
             href={resultUrl}

@@ -5,7 +5,6 @@ import {
   AlertTriangleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  PlayCircleIcon,
   XCircleIcon,
 } from "lucide-react";
 import {
@@ -1953,36 +1952,6 @@ export function MessageList({
                 </div>
                 {!isNetworkError && (
                   <div className="text-sm opacity-80">{errorBannerText}</div>
-                )}
-                {!isNetworkError && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!failureReceipt) {
-                          emitOpenAgentWorkbench({ tab: "agent" });
-                          return;
-                        }
-                        emitOpenAgentWorkbench({
-                          tab: "agent",
-                          eventId: failureReceipt.eventId,
-                          eventKind: "execution",
-                          view: "trace",
-                          processEvent: {
-                            kind: "execution",
-                            summary: failureReceipt.message,
-                            detail: failureReceipt.detail,
-                            status: "error",
-                            count: 1,
-                          },
-                        });
-                      }}
-                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border-default bg-background/60 px-2.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-background/90"
-                    >
-                      <PlayCircleIcon className="size-3" />
-                      {t.message.viewProcess}
-                    </button>
-                  </div>
                 )}
               </div>
             </div>

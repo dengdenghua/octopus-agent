@@ -564,16 +564,12 @@ describe("MessageList failure visibility", () => {
     expect(
       screen.queryByText(/implementation task yet/),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "查看过程" }));
-    expect(opened.at(-1)?.detail).toMatchObject({
-      eventId: "failed-1",
-      eventKind: "execution",
-      view: "trace",
-      processEvent: {
-        status: "error",
-        detail: rawDetail,
-      },
-    });
+    // The "查看过程" button is intentionally not shown on failure — it was
+    // borrowed from Kimi's share-case flow but adds no value here. The full
+    // detail remains available in the Agent Workbench trace directly.
+    expect(
+      screen.queryByRole("button", { name: "查看过程" }),
+    ).not.toBeInTheDocument();
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, onOpen);
   });
 
