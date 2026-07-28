@@ -126,9 +126,12 @@ def _input_schema_from_handler(handler: Any) -> tuple[dict[str, Any], ...]:
             ann_str = str(annotation)
             origin = getattr(annotation, "__origin__", None)
 
-            if origin is list:
+            # Handle both real types (list, dict) and their string
+            # forms ("list", "dict") — the latter appear when the
+            # module uses ``from __future__ import annotations``.
+            if origin is list or ann_str in ("list", "List"):
                 prop["type"] = "array"
-            elif origin is dict:
+            elif origin is dict or ann_str in ("dict", "Dict"):
                 prop["type"] = "object"
             else:
                 matched = False
@@ -138,6 +141,9 @@ def _input_schema_from_handler(handler: Any) -> tuple[dict[str, Any], ...]:
                         matched = True
                         break
                 if not matched:
+                    # ``typing.Any`` (or any unrecognized annotation)
+                    # falls back to string — handlers that need array
+                    # semantics should annotate with ``list``.
                     prop["type"] = "string"
 
         if param.default is inspect.Parameter.empty:

@@ -852,7 +852,13 @@ def _latest_todo_items(steps: list[ReActStep]) -> list[dict[str, Any]]:
             name, args = parsed
             if name != "todo_write":
                 continue
-            raw_items = args.get("items") or args.get("todos") or []
+            # The todo_write tool accepts three input aliases (items /
+            # todos / tasks — see agent_meta_skills._todo_write).  All
+            # three must be checked here, otherwise a model that emits
+            # ``todo_write({"tasks": [...]})`` (a valid call that
+            # executes successfully) is invisible to the completion
+            # guard, which then rejects with "no checklist recorded".
+            raw_items = args.get("items") or args.get("todos") or args.get("tasks") or []
             items = _coerce_todo_action_items(raw_items)
             if items:
                 return [item for item in items if isinstance(item, dict)]
@@ -868,7 +874,9 @@ def _coerce_todo_action_items(value: Any) -> list[Any]:
         except json.JSONDecodeError:
             return []
     if isinstance(value, dict):
-        return _coerce_todo_action_items(value.get("items") or value.get("todos"))
+        return _coerce_todo_action_items(
+            value.get("items") or value.get("todos") or value.get("tasks")
+        )
     return []
 
 

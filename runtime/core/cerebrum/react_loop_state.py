@@ -101,6 +101,13 @@ class _LoopState:
     public_progress_summary: str = ""
     consecutive_same_failed_actions: int = 0
     last_failed_action_fingerprint: str = ""
+    # Safety net for "silent no-op" tools — the call returns ok=True but
+    # produces no real effect (e.g. todo_write with a wrong key, search
+    # with an empty query).  Without this the model can loop on the same
+    # wrong shape indefinitely because the existing failed-action guard
+    # only counts ok=False results.
+    consecutive_same_noop_actions: int = 0
+    last_noop_action_fingerprint: str = ""
     green_verification_convergence_active: bool = False
     green_convergence_todo_used: bool = False
     result_handoff_ready: bool = False

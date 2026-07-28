@@ -164,6 +164,62 @@ def test_todo_write_allows_only_one_in_progress_item() -> None:
     assert "Only one todo can be in_progress" in result["warnings"][0]
 
 
+def test_todo_write_rejects_list_under_unrecognized_key() -> None:
+    # Regression for thread tJnjK3LevqUdg97iD0KaSJ: the model called
+    # todo_write(list=[...]) 9 times.  The tool silently returned
+    # ok=True / count=0 each time, so the model kept retrying the same
+    # wrong shape until the turn three-struck into an interrupt.  The
+    # tool must now return ok=False with the accepted key names so the
+    # model can self-correct on the next round.
+    result = _todo_write(
+        list=[
+            {"title": "市场调研", "status": "completed"},
+            {"title": "领域选择", "status": "in_progress"},
+        ]
+    )
+
+    assert result["ok"] is False
+    assert result["count"] == 0
+    assert "list" in result["error"]
+    assert "items" in result["error"]
+
+
+def test_todo_write_rejects_serialized_params_string() -> None:
+    # Second regression for the same thread: the model wrapped the
+    # entire payload as a JSON string under ``params``.  The P1 fix
+    # only checked for list-typed extras, so this string slipped
+    # through and the tool returned ok=True / count=0 again.
+    import json as _json
+
+    params_str = _json.dumps(
+        {"todo_list": [{"id": 1, "content": "市场调研", "status": "completed"}]}
+    )
+    result = _todo_write(params=params_str)
+
+    assert result["ok"] is False
+    assert "params" in result["error"]
+    assert "items" in result["error"]
+
+
+def test_todo_write_rejects_dict_under_unrecognized_key() -> None:
+    # The model may also pass a dict under a wrong key (e.g.
+    # ``params={"todo_list": [...]}``).  This must be caught too.
+    result = _todo_write(
+        params={"todo_list": [{"content": "test", "status": "pending"}]}
+    )
+
+    assert result["ok"] is False
+    assert "params" in result["error"]
+
+
+def test_todo_write_allows_explicit_empty_list_to_clear_plan() -> None:
+    # An explicit empty list under a RECOGNIZED key is a valid call
+    # (clears the plan).  The unrecognized-key guard must not fire.
+    result = _todo_write(items=[])
+    assert result["ok"] is True
+    assert result["count"] == 0
+
+
 def test_query_skill_returns_full_registered_skill_details() -> None:
     registry = SkillRegistry()
     registry.register(
@@ -579,3 +635,111 @@ def test_use_capability_blocks_credential_file_write() -> None:
     assert result["ok"] is False
     assert "file_safety" in result.get("error", "")
     assert ran["wrote"] is False, "credential write handler must NOT have run"
+
+
+# ══════════════════════════════════════════════════════════════════
+# P0/P1 regression — schema quality + unrecognized-key rejection.
+# These prevent the "silent no-op loop" failure mode where a tool
+# returns ok=True with an empty result because the model passed
+# arguments under a wrong key (e.g. ``list`` instead of ``items``).
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_todo_write_schema_declares_items_as_array() -> None:
+    # P0: the auto-derived JSON Schema must declare ``items`` as
+    # ``"type": "array"`` (not "string") so the model knows to send a
+    # list.  Previously the ``Any`` annotation made the schema fall
+    # back to "string", which confused the model into inventing other
+    # key names like ``list``.
+    from runtime.execution.tool_spec_builder import _input_schema_from_handler
+
+    schema = _input_schema_from_handler(_todo_write)[0]
+    assert schema["properties"]["items"]["type"] == "array"
+    assert schema["properties"]["todos"]["type"] == "array"
+    assert schema["properties"]["tasks"]["type"] == "array"
+
+
+def test_search_skills_rejects_query_under_wrong_key() -> None:
+    # P1: search_skills(q="foo") must return ok=False instead of
+    # silently returning every skill with ok=True.
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="demo_tool",
+            summary="demo",
+            description="demo",
+            affinity=[],
+            trusted_source="skill://public/demo",
+            handler=lambda **kw: {"ok": True},
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    result = registry.get("search_skills").handler(q="demo")
+    assert result["ok"] is False
+    assert "query" in result["error"]
+
+
+def test_search_capabilities_rejects_query_under_wrong_key() -> None:
+    # P1: search_capabilities(search="demo") must return ok=False.
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="demo_plugin.list_items",
+            summary="List demo items.",
+            description="List demo items.",
+            affinity=["demo"],
+            trusted_source="plugin://demo-plugin/list_items",
+            handler=lambda **kw: {"ok": True},
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    result = registry.get("search_capabilities").handler(search="demo")
+    assert result["ok"] is False
+    assert "query" in result["error"]
+
+
+def test_use_capability_rejects_args_under_wrong_key() -> None:
+    # P1: use_capability(input={...}) must return ok=False instead of
+    # silently calling the inner skill with empty args.
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="demo_plugin.list_items",
+            summary="List demo items.",
+            description="List demo items.",
+            affinity=["demo"],
+            trusted_source="plugin://demo-plugin/list_items",
+            handler=lambda **kw: {"ok": True},
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    result = registry.get("use_capability").handler(
+        capability_id="demo-plugin",
+        action="list_items",
+        input={"kind": "task"},
+    )
+    assert result["ok"] is False
+    assert "args" in result["error"]
+
+
+# ══════════════════════════════════════════════════════════════════
+# P2 regression — silent no-op observation detector.
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_observation_is_noop_detects_empty_count() -> None:
+    from runtime.core.cerebrum.react_action_outcomes import _observation_is_noop
+
+    assert _observation_is_noop('{"ok": true, "count": 0, "todos": []}')
+    assert _observation_is_noop('{"ok": true, "count": 0, "results": []}')
+
+
+def test_observation_is_noop_ignores_non_empty_results() -> None:
+    from runtime.core.cerebrum.react_action_outcomes import _observation_is_noop
+
+    assert not _observation_is_noop('{"ok": true, "count": 2, "todos": [{"x": 1}]}')
+    assert not _observation_is_noop("file contents here")
+    assert not _observation_is_noop("")

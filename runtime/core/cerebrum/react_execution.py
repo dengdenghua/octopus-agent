@@ -1039,6 +1039,7 @@ def _phase_6d_dispatch_and_observe(
     per_action_outcomes: Callable[..., Any],
     retry_safe_affinity: Callable[..., bool],
     tool_call_succeeded: Callable[..., bool],
+    observation_is_noop: Callable[[str], bool],
 ) -> Generator[dict[str, Any], None, _LoopControl]:
     """Dispatch the step's action(s), run approval/retry/cancel, observe.
 
@@ -1062,6 +1063,7 @@ def _phase_6d_dispatch_and_observe(
     _per_action_outcomes = per_action_outcomes
     _retry_safe_affinity = retry_safe_affinity
     _tool_call_succeeded = tool_call_succeeded
+    _observation_is_noop = observation_is_noop
     # Reference-typed aliases — mutations propagate to the main loop.
     step = state.step
     steps = state.steps
@@ -1098,6 +1100,8 @@ def _phase_6d_dispatch_and_observe(
     _force_convergence_next = state.force_convergence_next
     _consecutive_same_failed_actions = state.consecutive_same_failed_actions
     _last_failed_action_fingerprint = state.last_failed_action_fingerprint
+    _consecutive_same_noop_actions = state.consecutive_same_noop_actions
+    _last_noop_action_fingerprint = state.last_noop_action_fingerprint
     _green_verification_convergence_active = state.green_verification_convergence_active
     _green_convergence_todo_used = state.green_convergence_todo_used
     _result_handoff_ready = state.result_handoff_ready
@@ -1167,6 +1171,26 @@ def _phase_6d_dispatch_and_observe(
                 tool_action_requested = False
                 maybe_final = None
                 _repeated_failure_skipped = True
+        _repeated_noop_skipped = False
+        if (
+            tool_action_requested
+            and not _repeated_failure_skipped
+            and _consecutive_same_noop_actions >= 2
+            and _current_action_fingerprint == _last_noop_action_fingerprint
+        ):
+                observation = (
+                    "[repeated-noop-tool-skipped] The same tool call with identical "
+                    "arguments already ran twice but produced no effect (ok=True but "
+                    "empty/zero-count result). The runtime did not execute it a third "
+                    "time. The arguments are likely under a wrong key — re-read the "
+                    "tool description and re-issue with the correct parameter names."
+                )
+                step.observation = observation
+                step.action = ""
+                step.actions = []
+                tool_action_requested = False
+                maybe_final = None
+                _repeated_noop_skipped = True
         if _evidence_convergence_active is not None and tool_action_requested:
             observation = (
                 "The read-only evidence requested by the user is already complete, so "
@@ -1782,9 +1806,24 @@ def _phase_6d_dispatch_and_observe(
             else:
                 _last_failed_action_fingerprint = _current_action_fingerprint
                 _consecutive_same_failed_actions = 1
-        elif not _repeated_failure_skipped and tool_action_requested:
+            # Silent no-op detection: the tool returned ok=True but the
+            # observation shows an empty/zero-count result.  This catches
+            # the "wrong key" failure mode where the handler swallows the
+            # unknown argument and returns a valid-but-empty payload.
+            _is_noop = tool_ok and _observation_is_noop(step.observation or "")
+            if _is_noop and _current_action_fingerprint == _last_noop_action_fingerprint:
+                _consecutive_same_noop_actions += 1
+            elif _is_noop:
+                _last_noop_action_fingerprint = _current_action_fingerprint
+                _consecutive_same_noop_actions = 1
+            else:
+                _last_noop_action_fingerprint = ""
+                _consecutive_same_noop_actions = 0
+        elif not _repeated_failure_skipped and not _repeated_noop_skipped and tool_action_requested:
             _last_failed_action_fingerprint = ""
             _consecutive_same_failed_actions = 0
+            _last_noop_action_fingerprint = ""
+            _consecutive_same_noop_actions = 0
 
         # Common single/parallel tool outlet. Keep terminal evidence here so
         # a model round that launches lint + tests together is counted exactly
@@ -2009,6 +2048,8 @@ def _phase_6d_dispatch_and_observe(
         state.force_convergence_next = _force_convergence_next
         state.consecutive_same_failed_actions = _consecutive_same_failed_actions
         state.last_failed_action_fingerprint = _last_failed_action_fingerprint
+        state.consecutive_same_noop_actions = _consecutive_same_noop_actions
+        state.last_noop_action_fingerprint = _last_noop_action_fingerprint
         state.green_verification_convergence_active = _green_verification_convergence_active
         state.green_convergence_todo_used = _green_convergence_todo_used
         state.result_handoff_ready = _result_handoff_ready

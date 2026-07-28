@@ -164,6 +164,50 @@ def _is_narrow_read_only_command(text: str) -> bool:
     )
 
 
+_ANALYSIS_ONLY_RE = re.compile(
+    r"(?:分析|解释|说明|总结|概述|评估|审查|检查|看看|不足|缺点|问题|风险|建议|"
+    r"看法|评一下|讲一下|说一下|聊聊|讨论)"
+    r"|\b(?:analy[sz]e|explain|summari[sz]e|review|assess|evaluat|"
+    r"discuss|opinion|thoughts?|insights?)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_read_only_analysis_goal(text: str) -> bool:
+    """Return whether a turn is a short read-only analysis/inquiry follow-up.
+
+    Code mode is also the default home for read-only follow-up questions
+    ("不足点呢", "解释一下这段代码").  Forcing a checklist for these short
+    follow-ups trains the model to manufacture fake todos, which the
+    completion guard then has to reject.  Exempt them here so the root
+    cause is fixed at the trigger layer instead of patched at the guard
+    layer.
+
+    Deliberately narrow: broad read-only audits ("只读审计...形成完整报告")
+    and long analysis/report tasks still require a checklist because they
+    are multi-step — only short follow-up inquiries with an explicit
+    analysis/inquiry cue and no write intent are exempted.  Requiring the
+    cue prevents short work directives like "继续优化深度研究" or
+    "把登录页改成暗色主题" from being mistaken for read-only analysis.
+    """
+    # Lazy import to avoid circular dependency: react_goal_analysis imports
+    # from todo_protocol at module level.
+    from runtime.core.cerebrum.react_goal_analysis import _goal_requests_code_mutation
+
+    # If the goal requests workspace mutation, it is not read-only analysis.
+    if _goal_requests_code_mutation(text):
+        return False
+    # Short follow-up questions (effective length < 80) carrying an explicit
+    # analysis/inquiry cue and no follow-up execution intent are read-only:
+    # "不足点呢", "解释一下这段代码", "还有什么问题".  The cue requirement is
+    # what separates an inquiry from a short work directive.
+    return bool(
+        _effective_length(text) < 80
+        and _ANALYSIS_ONLY_RE.search(text)
+        and not _FOLLOWUP_EXECUTION_RE.search(text)
+    )
+
+
 def context_mode(user_context: dict[str, Any] | None) -> str:
     """Return the best-effort runtime mode from a thread context."""
 
@@ -230,6 +274,14 @@ def should_require_todo_protocol(
     if _is_narrow_single_source_lookup(text):
         return False
     if _is_narrow_read_only_command(text):
+        return False
+    # Short read-only analysis follow-ups ("不足点呢", "解释一下这段代码")
+    # in code/research modes should not be forced into checklist ceremony.
+    # Broad read-only audits and long report tasks still require a checklist
+    # — only short inquiry follow-ups with an analysis cue are exempted here.
+    # The completion guard (change ②) provides a safety net for any
+    # read-only turn that slips past this trigger-layer exemption.
+    if _is_read_only_analysis_goal(text):
         return False
     if mode in {"code", "deep", "deep_research", "research"}:
         return True
@@ -319,7 +371,9 @@ def _todo_completion_before_write_guard(
     for name, args in parsed:
         if name != "todo_write":
             continue
-        raw_items = args.get("items") or args.get("todos") or []
+        # Match the three input aliases the todo_write tool accepts
+        # (items / todos / tasks — see agent_meta_skills._todo_write).
+        raw_items = args.get("items") or args.get("todos") or args.get("tasks") or []
         items = raw_items if isinstance(raw_items, list) else []
         statuses = {
             str(item.get("status") or "").strip().lower()

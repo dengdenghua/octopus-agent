@@ -382,8 +382,26 @@ def _search_capabilities_for_registry(registry: SkillRegistry):
         query: str = "",
         kind: str = "",
         limit: int = 10,
-        **_: Any,
+        **extra: Any,
     ) -> dict[str, Any]:
+        # Reject queries passed under an unrecognized key (e.g. ``q``,
+        # ``search``, ``keyword``) — without this the empty ``query``
+        # silently returns every capability, the model thinks the search
+        # succeeded, and it can loop on the same wrong shape.
+        if not query and extra:
+            misplaced = sorted(
+                k for k, v in extra.items()
+                if isinstance(v, str) and v.strip()
+            )
+            if misplaced:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"search_capabilities received a query under "
+                        f"unrecognized key(s) {misplaced}, but 'query' is "
+                        f"empty. Re-issue as search_capabilities(query=\"...\")."
+                    ),
+                }
         q = _as_text(query).strip()
         kind_filter = _as_text(kind).strip().lower()
         try:
@@ -484,8 +502,27 @@ def _use_capability_for_registry(registry: SkillRegistry):
         action: str = "",
         args: Any = None,
         request: str = "",
-        **_: Any,
+        **extra: Any,
     ) -> dict[str, Any]:
+        # Reject args passed under an unrecognized key (e.g. ``input``,
+        # ``params``, ``arguments``) — without this ``args=None``
+        # silently coerces to {} and the inner skill is called with
+        # empty arguments, the model thinks the call succeeded, and it
+        # can loop on the same wrong shape.
+        if args is None and extra:
+            misplaced = sorted(
+                k for k, v in extra.items()
+                if isinstance(v, (dict, list, str)) and v
+            )
+            if misplaced:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"use_capability received arguments under "
+                        f"unrecognized key(s) {misplaced}, but 'args' is "
+                        f"empty. Re-issue as use_capability(args={{...}})."
+                    ),
+                }
         cap_id = _as_text(capability_id or id).strip()
         if not cap_id:
             return {"ok": False, "error": "capability_id is required"}

@@ -23,7 +23,9 @@ _LATEST_SCOPE = "__latest__"
 def _todo_item_id(content: str, occurrence: int) -> str:
     """Return a compact deterministic identity for a checklist item."""
 
-    digest = hashlib.sha1(f"{content.casefold()}\0{occurrence}".encode()).hexdigest()[:12]
+    digest = hashlib.sha1(  # nosec B324 — non-security checklist item ID, only needs determinism
+        f"{content.casefold()}\0{occurrence}".encode(), usedforsecurity=False
+    ).hexdigest()[:12]
     return f"task-{digest}"
 
 
@@ -56,10 +58,10 @@ def _coerce_todo_items(value: Any) -> list[Any]:
 
 
 def _todo_write(
-    items: Any = None,
-    todos: Any = None,
-    tasks: Any = None,
-    **_: Any,
+    items: list = None,  # type: ignore[assignment]  # None default = optional in schema, but array when present
+    todos: list = None,  # type: ignore[assignment]  # alias
+    tasks: list = None,  # type: ignore[assignment]  # alias
+    **extra: Any,
 ) -> dict[str, Any]:
     """Validate and normalize the agent's task list.
 
@@ -83,8 +85,8 @@ def _todo_write(
         ``{"ok": True, "count": <n>, "todos": [...]}`` · the
         normalized list. The UI watches for ``tool_use`` events
         with ``name="todo_write"`` and extracts ``input.items``
-        directly, but we also echo the cleaned list in the
-        result so the model gets confirmation of what was
+        directly, but we also echo the cleaned list in the result
+        so the model gets confirmation of what was
         accepted.
 
     Design choices:
@@ -104,6 +106,53 @@ def _todo_write(
         raw = _coerce_todo_items(todos)
     if not raw:
         raw = _coerce_todo_items(tasks)
+    # Surface a hard error when the model passed the checklist under an
+    # unrecognized key (e.g. ``list``, ``todo_list``, ``plan``, or
+    # serialized as a string under ``params``).  Without this the tool
+    # silently returns count=0 / ok=True, the model thinks the call
+    # succeeded, retries the same wrong shape, and the turn three-
+    # strikes into an interrupt.  Returning ok=False with the accepted
+    # key names lets the model self-correct on the next round.
+    #
+    # The check covers three value shapes the model has been observed
+    # producing:
+    #   1. a bare list under a wrong key (``list=[...]``)
+    #   2. a dict under a wrong key (``params={...}``)
+    #   3. a JSON-serialized string under a wrong key
+    #      (``params='{"todo_list": [...]}'``) — the model wraps the
+    #      entire payload as a string, so we parse it to see whether
+    #      it carries a todo-shaped list.
+    if not raw and extra:
+        def _looks_like_todos(v: Any) -> bool:
+            if isinstance(v, list) and v:
+                return True
+            if isinstance(v, dict) and v:
+                # dict carrying a list under any key (e.g. {"todo_list": [...]})
+                return any(isinstance(iv, list) and iv for iv in v.values())
+            if isinstance(v, str) and v.strip():
+                # serialized JSON: try to parse and look for a list inside
+                try:
+                    parsed = json.loads(v)
+                except json.JSONDecodeError:
+                    return True  # non-empty string that isn't JSON — still suspicious
+                return _looks_like_todos(parsed)
+            return False
+
+        misplaced = sorted(k for k, v in extra.items() if _looks_like_todos(v))
+        if misplaced:
+            return {
+                "ok": False,
+                "count": 0,
+                "todos": [],
+                "normalized": False,
+                "warnings": [],
+                "error": (
+                    f"todo_write received a checklist under unrecognized "
+                    f"key(s) {misplaced}, but none under the accepted keys "
+                    f"'items' / 'todos' / 'tasks'. Re-issue the call as "
+                    f"todo_write(items=[...]) so the checklist is recorded."
+                ),
+            }
     scope = _todo_scope()
     with _TODO_LOCK:
         previous = [dict(item) for item in _TODO_BY_SCOPE.get(scope, [])]
@@ -229,8 +278,26 @@ def _search_skills_for_registry(registry: SkillRegistry):
         query: str = "",
         limit: int = 10,
         include_disabled: bool = False,
-        **_: Any,
+        **extra: Any,
     ) -> dict[str, Any]:
+        # Reject queries passed under an unrecognized key (e.g. ``q``,
+        # ``search``, ``keyword``) — without this the empty ``query``
+        # silently returns every skill, the model thinks the search
+        # succeeded, and it can loop on the same wrong shape.
+        if not query and extra:
+            misplaced = sorted(
+                k for k, v in extra.items()
+                if isinstance(v, str) and v.strip()
+            )
+            if misplaced:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"search_skills received a query under unrecognized "
+                        f"key(s) {misplaced}, but 'query' is empty. "
+                        f"Re-issue as search_skills(query=\"...\")."
+                    ),
+                }
         q = str(query or "").strip().lower()
         tokens = [t for t in q.replace("_", " ").replace("-", " ").split() if t]
         try:

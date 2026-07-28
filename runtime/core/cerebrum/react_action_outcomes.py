@@ -9,6 +9,7 @@ fingerprint/deduplicate requested actions for retry control.
 from __future__ import annotations
 
 import json
+import re
 
 from runtime.core.cerebrum.react_execution import _beak_step_effective_success
 from runtime.core.cerebrum.react_parsing import _parse_action
@@ -101,6 +102,37 @@ def _action_batch_fingerprint(actions: list[str]) -> str:
     if len(fingerprints) == 1:
         return fingerprints[0]
     return "batch:" + json.dumps(fingerprints, ensure_ascii=False, separators=(",", ":"))
+
+
+# Markers that indicate a tool returned ok=True but produced no real
+# effect — an empty list, zero count, or an empty payload.  Used by the
+# silent no-op detector in react_execution to catch "wrong key" loops
+# where the handler swallows unknown arguments and returns a valid-but-
+# empty result.
+_NOOP_OBSERVATION_RE = re.compile(
+    r'"count"\s*:\s*0'           # {"count": 0, ...}
+    r'|\\?"count\\?"\s*:\s*0'    # escaped form in a serialized string
+    r'|\btodos\\?"\s*:\s*\[\s*\]'  # "todos": []
+    r'|\bresults\\?"\s*:\s*\[\s*\]'  # "results": []
+    r'|No files found'
+    r'|无匹配'
+    r'|未找到',
+    re.IGNORECASE,
+)
+
+
+def _observation_is_noop(observation: str) -> bool:
+    """Whether a successful tool call produced no real effect.
+
+    Intentionally narrow: only matches obvious empty-result markers in
+    the serialized observation.  Read tools that legitimately return
+    empty (e.g. ``list_cwd`` on an empty dir) are not penalised because
+    the detector requires the SAME fingerprint to repeat — a genuine
+    empty-dir listing won't be repeated with identical args.
+    """
+    if not observation:
+        return False
+    return bool(_NOOP_OBSERVATION_RE.search(observation))
 
 
 # Affinity tags that mark a tool as having side effects, so a failed call must

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from runtime.core.cerebrum.react_action_outcomes import (
     _action_batch_fingerprint,
     _deduplicate_actions,
+    _observation_is_noop,
     _per_action_outcomes,
     _retry_safe_affinity,
     _tool_call_succeeded,
@@ -876,6 +877,7 @@ def stream_react_loop(
             per_action_outcomes=_per_action_outcomes,
             retry_safe_affinity=_retry_safe_affinity,
             tool_call_succeeded=_tool_call_succeeded,
+            observation_is_noop=_observation_is_noop,
         )
         maybe_final = state.maybe_final
         terminated_reason = state.terminated_reason
