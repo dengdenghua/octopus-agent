@@ -65,7 +65,7 @@ _WEB_LOOKUP_RE = re.compile(
 _FOLLOWUP_EXECUTION_RE = re.compile(
     r"(?:\u7136\u540e|\u63a5\u7740|\u968f\u540e|\u5e76(?:\u4e14)?|\u540c\u65f6)\s*"
     r"(?:\u4fee\u6539|\u5b9e\u73b0|\u4fee\u590d|\u66f4\u65b0|\u521b\u5efa|\u65b0\u589e|\u91cd\u6784|\u6267\u884c|\u8fd0\u884c)|"
-    r"\b(?:then|and then|also)\s+"
+    r"\b(?:then|and then|also|and)\s+"
     r"(?:implement|fix|modify|edit|update|create|refactor|run|execute)\b",
     re.IGNORECASE,
 )
@@ -171,6 +171,16 @@ _ANALYSIS_ONLY_RE = re.compile(
     r"discuss|opinion|thoughts?|insights?)\b",
     re.IGNORECASE,
 )
+# Broad-scope targets signal a project-level audit, not a short follow-up.
+# "inspect the project and summarize it" looks read-only but is a multi-step
+# audit that still warrants a checklist.  Short follow-ups like "解释一下这段代码"
+# reference a specific narrow object, not the whole project/codebase.
+_BROAD_SCOPE_RE = re.compile(
+    r"(?:项目|代码库|架构|整体|全面|系统)"
+    r"|\b(?:project|codebase|architecture|workspace|repository|repo|"
+    r"system|overall|comprehensive)\b",
+    re.IGNORECASE,
+)
 
 
 def _is_read_only_analysis_goal(text: str) -> bool:
@@ -205,6 +215,7 @@ def _is_read_only_analysis_goal(text: str) -> bool:
         _effective_length(text) < 80
         and _ANALYSIS_ONLY_RE.search(text)
         and not _FOLLOWUP_EXECUTION_RE.search(text)
+        and not _BROAD_SCOPE_RE.search(text)
     )
 
 
