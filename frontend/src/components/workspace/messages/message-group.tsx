@@ -276,6 +276,10 @@ export function MessageGroup({
   const [collapsedHistoryPhases, setCollapsedHistoryPhases] = useState<
     Record<string, boolean>
   >({});
+  // Inline expansion for thinking rows: default collapsed (summary only).
+  const [expandedThinkingRows, setExpandedThinkingRows] = useState<
+    Record<string, boolean>
+  >({});
   const thinkingStartTimeRef = useRef<number | null>(null);
   const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
   const steps = useMemo(() => convertToSteps(messages), [messages]);
@@ -912,29 +916,41 @@ export function MessageGroup({
             <button
               type="button"
               onClick={() => {
-                // 双向联动：只追加激活，不改变既有点击行为
-                activateTimelineItem(timelineItemLinkageId(item), "chat");
-                emitOpenAgentWorkbench({
-                  tab: actionWorkbenchTab,
-                  eventId: workbenchEventId,
-                  eventKind: isThinking ? "thinking" : "execution",
-                  view: isThinking ? "summary" : "trace",
-                  processEvent: {
-                    kind: isThinking ? "thinking" : "execution",
-                    summary: processEventSummary,
-                    detail: processEventDetail || processEventSummary,
-                    status: state,
-                    count,
-                    phaseId: step.phaseId,
-                    parentItemId: step.parentItemId,
-                    timelineSequence: step.timelineSequence,
-                  },
-                  effectKey: needsEffectReview
-                    ? "effect_key" in effectReceipt
-                      ? effectReceipt.effect_key
-                      : effectReceipt.effectKey
-                    : undefined,
-                });
+                const hasThinkingDetail =
+                  isThinking &&
+                  processEventDetail &&
+                  processEventDetail.trim() !==
+                    (processEventSummary || summary).trim();
+                if (hasThinkingDetail) {
+                  setExpandedThinkingRows((current) => ({
+                    ...current,
+                    [item.id]: !current[item.id],
+                  }));
+                } else {
+                  // 双向联动：只追加激活，不改变既有点击行为
+                  activateTimelineItem(timelineItemLinkageId(item), "chat");
+                  emitOpenAgentWorkbench({
+                    tab: actionWorkbenchTab,
+                    eventId: workbenchEventId,
+                    eventKind: isThinking ? "thinking" : "execution",
+                    view: isThinking ? "summary" : "trace",
+                    processEvent: {
+                      kind: isThinking ? "thinking" : "execution",
+                      summary: processEventSummary,
+                      detail: processEventDetail || processEventSummary,
+                      status: state,
+                      count,
+                      phaseId: step.phaseId,
+                      parentItemId: step.parentItemId,
+                      timelineSequence: step.timelineSequence,
+                    },
+                    effectKey: needsEffectReview
+                      ? "effect_key" in effectReceipt
+                        ? effectReceipt.effect_key
+                        : effectReceipt.effectKey
+                      : undefined,
+                  });
+                }
               }}
               className={cn(
                 "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] transition-colors",
@@ -1056,6 +1072,40 @@ export function MessageGroup({
                 <span className="sr-only" data-testid="live-process-strip" />
               )}
             </button>
+            {isThinking &&
+              processEventDetail &&
+              processEventDetail.trim() !==
+                (processEventSummary || summary).trim() && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setExpandedThinkingRows((current) => ({
+                      ...current,
+                      [item.id]: !current[item.id],
+                    }));
+                  }}
+                  className="p-0.5 opacity-0 transition-opacity group-hover/process-row:opacity-100 hover:text-muted-foreground"
+                  aria-label={
+                    expandedThinkingRows[item.id]
+                      ? t.agentWorkbenchPages.collapse
+                      : t.agentWorkbenchPages.expandDetails
+                  }
+                  title={
+                    expandedThinkingRows[item.id]
+                      ? t.agentWorkbenchPages.collapse
+                      : t.agentWorkbenchPages.expandDetails
+                  }
+                  data-testid="thinking-row-toggle"
+                >
+                  <ChevronDownIcon
+                    className={cn(
+                      "size-3 transition-transform",
+                      expandedThinkingRows[item.id] ? "rotate-180" : "",
+                    )}
+                  />
+                </button>
+              )}
             {isAggregatedGroup && (
               <button
                 type="button"
@@ -1065,7 +1115,7 @@ export function MessageGroup({
                     [item.id]: !aggregatedExpanded,
                   }))
                 }
-                className="p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
+                className="p-0.5 opacity-0 transition-opacity group-hover/process-row:opacity-100 hover:text-muted-foreground"
                 aria-label={
                   aggregatedExpanded
                     ? t.agentWorkbenchPages.collapse
@@ -1090,7 +1140,7 @@ export function MessageGroup({
               <button
                 type="button"
                 onClick={openProcessDetails}
-                className="p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
+                className="p-0.5 opacity-0 transition-opacity group-hover/process-row:opacity-100 hover:text-muted-foreground"
                 aria-label={t.message.processDetails}
                 title={t.message.processDetails}
                 data-testid="process-details-trigger"
@@ -1109,6 +1159,19 @@ export function MessageGroup({
               </span>
             )}
           </div>
+          {isThinking &&
+            processEventDetail &&
+            processEventDetail.trim() !==
+              (processEventSummary || summary).trim() && (
+              <Collapsible open={expandedThinkingRows[item.id] ?? false}>
+                <CollapsibleContent
+                  className="pb-1 pl-5 text-xs leading-5 text-muted-foreground/70 data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
+                  data-testid="thinking-row-content"
+                >
+                  {processEventDetail}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
           {factSummaryText && (
             <div className="truncate pb-0.5 pl-3 text-xs leading-[18px] text-muted-foreground/60">
               {factSummaryText}
