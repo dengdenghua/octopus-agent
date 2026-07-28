@@ -2504,9 +2504,7 @@ function RealtimePageContent({
       (collaborationEnabled &&
         !agentWorkbenchDismissed &&
         (!isNewThread || thread.isLoading || hasRenderableAgentWorkbench)) ||
-      (!agentWorkbenchDismissed &&
-        hasRenderableAgentWorkbench &&
-        (artifactsOpen || showAgentPlan))) &&
+      (!agentWorkbenchDismissed && hasRenderableAgentWorkbench && showAgentPlan)) &&
     !showResearchHistory &&
     !(showResearch && (!!researchJob || !!researchError));
   const artifactCount = artifacts?.length ?? 0;
@@ -2936,15 +2934,15 @@ function RealtimePageContent({
   }, [setArtifactsOpen]);
 
   const openArtifactsPanel = useCallback(() => {
-    setArtifactsOpen(false);
+    setArtifactsOpen(true);
     setShowAgentPlan(false);
-    setAgentWorkbenchDismissed(false);
-    setAgentWorkbenchManuallyOpened(true);
+    setAgentWorkbenchDismissed(true);
+    setAgentWorkbenchManuallyOpened(false);
     setShowResearchHistory(false);
     setShowResearch(false);
     setShowPreview(false);
-    setAgentWorkbenchTab("artifacts");
-    setAgentWorkbenchTabTouched(true);
+    setAgentWorkbenchTab("agent");
+    setAgentWorkbenchTabTouched(false);
   }, [setArtifactsOpen]);
 
   const openWorkbenchArtifact = useCallback(
@@ -2955,15 +2953,14 @@ function RealtimePageContent({
         }
         selectArtifact(path, true);
       }
-      setArtifactsOpen(false);
+      setArtifactsOpen(true);
       setShowAgentPlan(false);
-      setAgentWorkbenchDismissed(false);
-      setAgentWorkbenchManuallyOpened(true);
+      setAgentWorkbenchDismissed(true);
+      setAgentWorkbenchManuallyOpened(false);
       setShowResearchHistory(false);
       setShowResearch(false);
       setShowPreview(false);
-      setAgentWorkbenchTab("artifacts");
-      setAgentWorkbenchTabTouched(true);
+      setAgentWorkbenchTabTouched(false);
     },
     [artifacts, selectArtifact, setArtifactsOpen, setArtifacts],
   );
@@ -2976,15 +2973,14 @@ function RealtimePageContent({
       }
       selectArtifact(firstEntry.path, true);
     }
-    setArtifactsOpen(false);
+    setArtifactsOpen(true);
     setShowAgentPlan(false);
-    setAgentWorkbenchDismissed(false);
-    setAgentWorkbenchManuallyOpened(true);
+    setAgentWorkbenchDismissed(true);
+    setAgentWorkbenchManuallyOpened(false);
     setShowResearchHistory(false);
     setShowResearch(false);
     setShowPreview(false);
-    setAgentWorkbenchTab("artifacts");
-    setAgentWorkbenchTabTouched(true);
+    setAgentWorkbenchTabTouched(false);
   }, [finalArtifactEntries, artifacts, selectArtifact, setArtifactsOpen, setArtifacts]);
 
   const openAgentPlanPanel = useCallback(() => {
@@ -3030,11 +3026,9 @@ function RealtimePageContent({
   }, [setArtifactsOpen]);
 
   const closeAgentWorkbenchPanel = useCallback(() => {
-    setArtifactsOpen(false);
-    setShowAgentPlan(false);
     setAgentWorkbenchManuallyOpened(false);
     setAgentWorkbenchDismissed(true);
-  }, [setArtifactsOpen]);
+  }, []);
 
   const closeRightPanel = useCallback(() => {
     setArtifactsOpen(false);
@@ -3432,6 +3426,7 @@ function RealtimePageContent({
               }
               onSecondaryClose={closeAgentWorkbenchPanel}
               showSidebar={
+                artifactsOpen ||
                 showAgentPlan ||
                 showResearchHistory ||
                 (showResearch && (!!researchJob || !!researchError))

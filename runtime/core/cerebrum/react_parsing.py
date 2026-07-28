@@ -750,18 +750,26 @@ def _parse_action(action_text: str) -> tuple[str, dict[str, Any]] | None:
 
 
 def _latest_todo_items(steps: list[ReActStep]) -> list[dict[str, Any]]:
-    """Return the most recent todo_write payload from the trajectory."""
+    """Return the most recent todo_write payload from the trajectory.
+
+    Inspects every individual action in ``step.actions`` so that native
+    tool-use rounds (which join parallel calls into ``step.action`` with
+    ``; ``) are still introspected call-by-call. Falls back to
+    ``step.action`` for legacy text-protocol steps.
+    """
     for step in reversed(steps):
-        parsed = _parse_action(step.action)
-        if parsed is None:
-            continue
-        name, args = parsed
-        if name != "todo_write":
-            continue
-        raw_items = args.get("items") or args.get("todos") or []
-        items = _coerce_todo_action_items(raw_items)
-        if items:
-            return [item for item in items if isinstance(item, dict)]
+        actions = step.actions or ([step.action] if step.action else [])
+        for action in reversed(actions):
+            parsed = _parse_action(action)
+            if parsed is None:
+                continue
+            name, args = parsed
+            if name != "todo_write":
+                continue
+            raw_items = args.get("items") or args.get("todos") or []
+            items = _coerce_todo_action_items(raw_items)
+            if items:
+                return [item for item in items if isinstance(item, dict)]
     return []
 
 

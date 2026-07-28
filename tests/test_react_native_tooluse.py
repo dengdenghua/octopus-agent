@@ -23,6 +23,7 @@ from runtime.core.cerebrum.react_native import (
     step_from_tool_calls,
     trim_text_protocol_for_native,
 )
+from runtime.core.cerebrum.react_parsing import _latest_todo_items, _parse_action
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.platform.models import ParsedIntent
 from runtime.platform.models.llm import ToolCall, ToolSpec
@@ -321,6 +322,49 @@ def test_step_from_tool_calls_skips_nameless() -> None:
         iteration=1,
     )
     assert step.actions == []
+
+
+def test_step_from_tool_calls_todo_write_is_introspectable() -> None:
+    step = step_from_tool_calls(
+        [
+            ToolCall(
+                id="a",
+                name="todo_write",
+                input={"items": [{"content": "Fix bug", "status": "completed"}]},
+            )
+        ],
+        iteration=1,
+    )
+    items = _latest_todo_items([step])
+    assert len(items) == 1
+    assert items[0]["content"] == "Fix bug"
+    assert items[0]["status"] == "completed"
+
+
+def test_latest_todo_items_finds_todo_write_in_parallel_native_calls() -> None:
+    step = step_from_tool_calls(
+        [
+            ToolCall(id="a", name="read_file", input={"path": "x.py"}),
+            ToolCall(
+                id="b",
+                name="todo_write",
+                input={
+                    "items": [
+                        {"content": "Read x.py", "status": "completed"},
+                        {"content": "Update y.py", "status": "in_progress"},
+                    ]
+                },
+            ),
+        ],
+        iteration=1,
+    )
+    # Joined action is not parseable as a single action, but individual
+    # actions in step.actions must still be introspected.
+    assert _parse_action(step.action) is None
+    items = _latest_todo_items([step])
+    assert len(items) == 2
+    assert items[0]["content"] == "Read x.py"
+    assert items[1]["content"] == "Update y.py"
 
 
 # ── unit: Phase-1 prompt trim ────────────────────────────────────────
