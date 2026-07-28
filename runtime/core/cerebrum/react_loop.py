@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import re
 import time
-import uuid
 from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any
 
@@ -63,7 +62,6 @@ from runtime.core.cerebrum.react_execution import (
 )
 from runtime.core.cerebrum.react_explicit_reads import (
     _explicit_no_tool_goal,
-    _explicit_observed_read_sequence,
     _explicit_read_only_goal,
     _recover_explicit_read_actions,
 )
@@ -138,7 +136,11 @@ from runtime.core.cerebrum.react_parsing import (
 from runtime.core.cerebrum.react_phase_6c import (
     _phase_6c_parse_and_guard,
 )
-from runtime.core.cerebrum.react_prompt_assembly import _assemble_prompt_and_messages
+from runtime.core.cerebrum.react_prompt_assembly import (
+    _assemble_prompt_and_messages,
+    _emit_turn_start_events,
+    _resolve_turn_bootstrap,
+)
 from runtime.core.cerebrum.react_public_updates import (
     _initial_public_fallback_update,
     _observed_read_fallback_update,
@@ -155,6 +157,7 @@ from runtime.core.cerebrum.react_quiet_evidence import (
 from runtime.core.cerebrum.react_resume import (
     _build_resume_context_prompt,
     _compute_resume_state,
+    _resume_or_register_turn,
     _ResumeState,
 )
 from runtime.core.cerebrum.react_terminal import (
@@ -172,11 +175,6 @@ from runtime.core.cerebrum.todo_protocol import (
 from runtime.platform.config.builder import StackProtocol
 from runtime.platform.models import ParsedIntent, Step, TaskId
 from runtime.safety.approval.approval_gate import ApprovalProvider
-from runtime.safety.validation.prompt_injection import (
-    mark_injection_taint,
-    reset_injection_taint,
-    set_injection_gate_handled,
-)
 from runtime.sensing.model_router.rescue_policy import (
     next_custom_model_fallback,
 )
@@ -196,6 +194,12 @@ _logger = logging.getLogger(__name__)
 # imports as "unused".
 __all__ = [
     "_background_task_info_from_observation",
+    "_browser_operation_requested",
+    "_compute_resume_state",
+    "_ensure_browser_operation_skills",
+    "_explicit_no_tool_goal",
+    "_explicit_read_only_goal",
+    "_explicit_source_paths",
     "_beak_step_effective_success",
     "_build_code_agent_mode_prompt",
     "_build_code_context_prelude",
@@ -335,144 +339,34 @@ def stream_react_loop(
     # ║ above; what remains is the coupled core, kept intact on purpose. ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
-    # ── PHASE 1 · entry guards / router resolution ─────────────────────
-    router = getattr(getattr(stack, "planner", None), "router", None)
-    if router is None:
-        _logger.warning("react_loop: stack.planner.router 不可用,无法进入 ReAct")
+    # ── PHASE 1–2 · turn bootstrap (react_prompt_assembly) ─────────────
+    # Router resolution, tool/native-mode gating, and task-id assignment
+    # moved verbatim to react_prompt_assembly._resolve_turn_bootstrap.
+    _boot = _resolve_turn_bootstrap(
+        stack,
+        intent,
+        agent,
+        model=model,
+        enable_tools=enable_tools,
+        reasoning_effort=reasoning_effort,
+        approval_provider=approval_provider,
+        resume_task_id=resume_task_id,
+    )
+    if _boot is None:
         return None
-
-    from runtime.platform.models.llm import (
-        Message,
-        normalize_reasoning_effort,
-    )
-
-    _reasoning_effort = normalize_reasoning_effort(reasoning_effort)
-
-    # Planning mode used to disable tool execution outright (the
-    # model produced a plan, the user approved, then a follow-up turn
-    # re-ran with ``planning_mode=false``). That hard-stop confused
-    # users — the UI shows nothing happening and ``Action: web_search``
-    # falls through to the "(未执行观察) 本次 ReAct 未启用工具执行"
-    # placeholder. Updated semantics (2026-05-31): planning_mode keeps
-    # tool execution ON; the system prompt simply nudges the model to
-    # write/update plan.md first before substantial tool work. The
-    # ``exit_plan_mode`` skill flow is still available for explicit
-    # human-in-the-loop approval, but auto-detection no longer strands
-    # the turn in plan-only territory.
-    _no_tool_turn = _explicit_no_tool_goal(
-        str(getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or "")
-    )
-    executor = getattr(stack, "executor", None) if enable_tools and not _no_tool_turn else None
-    tools_active = executor is not None
-    # Explicit Browser turns must register their dependency-gated local tools
-    # before native ToolSpecs are frozen below.  Registering later only changes
-    # the text catalog; function-calling models would still be unable to call
-    # the browser tools and tend to fall back to desktop automation.
-    if tools_active and _browser_operation_requested(intent.user_context):
-        _ensure_browser_operation_skills(executor)
-
-    # Resolve the model up-front (was computed later) so the native
-    # tool-use gate can be decided before the system prompt is built.
-    effective_model = (
-        model
-        if model and model not in ("octopus-agent", "")
-        else getattr(stack.planner, "planner_model", None) or "auto"
-    )
-
-    # ── Native tool-use gate (Phase 0) ─────────────────────────────────
-    # For tool-use-capable models, drive the loop via native ``tool_calls``
-    # instead of the text ``Action: name({...})`` protocol — eliminating the
-    # single biggest brittleness source (regex-parsing the action out of free
-    # text). Gated by ``OCTOPUS_NATIVE_TOOLUSE`` (default off) AND the model's
-    # advertised capability; otherwise the text protocol + its regex fallback
-    # run byte-identically to before. Specs are built once per turn.
-    from runtime.core.cerebrum.react_native import (
-        build_loop_tool_specs,
-        native_tool_use_active,
-        require_public_update_on_tool_specs,
-    )
-
-    _native_mode = bool(tools_active) and native_tool_use_active(router, effective_model)
-    _native_goal = getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or ""
-    _strict_explicit_reads = bool(
-        _explicit_read_only_goal(_native_goal)
-        and _explicit_source_paths(_native_goal)
-        and not _browser_operation_requested(intent.user_context)
-    )
-    _ordered_result_handoffs = bool(
-        len(_explicit_source_paths(_native_goal)) > 1
-        and _explicit_observed_read_sequence(_native_goal)
-    )
-    _native_observed_read_sequence = bool(_strict_explicit_reads and _ordered_result_handoffs)
-    _native_tool_specs = (
-        build_loop_tool_specs(
-            executor,
-            agent=agent,
-            goal=_native_goal,
-            user_context=intent.user_context,
-            strict_explicit_reads=_strict_explicit_reads,
-        )
-        if _native_mode
-        else []
-    )
-    if _native_mode and not _native_tool_specs:
-        # Spec build came back empty — nothing to call natively, so stay on
-        # the proven text protocol rather than passing an empty tools list.
-        _native_mode = False
-    _native_public_update_tool_specs = (
-        require_public_update_on_tool_specs(_native_tool_specs)
-        if (
-            _native_mode
-            and bool(
-                (intent.user_context or {}).get("realtime_public_orientation")
-                or (intent.user_context or {}).get("realtime_public_narrative")
-                or _native_observed_read_sequence
-            )
-        )
-        else _native_tool_specs
-    )
-    _native_evidence_update_tool_specs = (
-        require_public_update_on_tool_specs(
-            _native_tool_specs,
-            evidence_round=True,
-        )
-        if _native_public_update_tool_specs is not _native_tool_specs
-        else _native_tool_specs
-    )
-
-    # Expose the live approval provider through the session so the
-    # ``exit_plan_mode`` skill can issue an interactive approval
-    # request without re-plumbing the param through every layer.
-    try:
-        from runtime.platform.process.session import current_session as _cs_for_provider
-
-        _session_for_provider = _cs_for_provider()
-        if (
-            _session_for_provider is not None
-            and _session_for_provider.metadata is not None
-            and approval_provider is not None
-        ):
-            _session_for_provider.metadata["_approval_provider"] = approval_provider
-    except (ImportError, AttributeError):  # noqa: BLE001 — session layer optional in tests
-        pass
-
-    # ── PHASE 2 · mode + budget detection ──────────────────────────────
-    from runtime.platform.models import TaskId as _TaskId
-
-    react_task_id: TaskId = resume_task_id if resume_task_id is not None else _TaskId(uuid.uuid4())
-
-    _camouflage_variant_name = "baseline"
-    _camouflage_suffix = ""
-    try:
-        from runtime.safety.experiments.scheduler import (
-            get_camouflage_scheduler,
-        )
-
-        _camouflage_variant_name, _camouflage_suffix = (
-            get_camouflage_scheduler().assign_variant_suffix(str(react_task_id))
-        )
-    except ImportError:
-        _logger.debug("camouflage scheduler not available", exc_info=True)
+    router = _boot.router
+    _reasoning_effort = _boot.reasoning_effort
+    _no_tool_turn = _boot.no_tool_turn
+    executor = _boot.executor
+    tools_active = _boot.tools_active
+    effective_model = _boot.effective_model
+    _native_mode = _boot.native_mode
+    _strict_explicit_reads = _boot.strict_explicit_reads
+    _ordered_result_handoffs = _boot.ordered_result_handoffs
+    _native_public_update_tool_specs = _boot.native_public_update_tool_specs
+    _native_evidence_update_tool_specs = _boot.native_evidence_update_tool_specs
+    react_task_id = _boot.react_task_id
+    _camouflage_suffix = _boot.camouflage_suffix
 
     # ── PHASE 3 · system + volatile prompt assembly ────────────────────
     _assembly = _assemble_prompt_and_messages(
@@ -515,171 +409,52 @@ def stream_react_loop(
     _active_max_tokens_budget = _assembly.active_max_tokens_budget
     _active_max_usd_budget = _assembly.active_max_usd_budget
 
-    # ── PHASE 4 · message bootstrap done; emit react_started ───────────
-    yield {
-        "type": "react_started",
-        "task_id": str(react_task_id),
-        "thread_id": thread_id or None,
-        "max_iterations": max_iterations,
-    }
-
-    # Surface the codebase docs/chunks we actually grounded this turn on, so
-    # the UI can show a plain-language "consulted N project docs" chip. Faithful
-    # by construction: these are the exact sources folded into the prompt above.
-    if _grounding_sources:
-        yield {
-            "type": "codebase_grounding",
-            "sources": _grounding_sources,
-        }
-
-    # ── PHASE 4.5 · agent auto-delegation short-circuit ────────────────
-    # When the user prompt has a single, unambiguous @agent: pin AND no
-    # competing routing signals, we can save one full LLM round trip by
-    # delegating directly. The plan only fires when ALL of these hold:
-    #   - tools_active (delegation is a tool path)
-    #   - not planning_mode (plan mode wants the model to think first)
-    #   - the prompt passes plan_auto_delegation's heuristics
-    #   - the executor's registry has the call_agent skill
-    # On success, we inject the subagent's output as an Observation-style
-    # user message so the next LLM turn synthesizes the final answer
-    # against real evidence rather than re-planning the delegation.
-    _auto_delegated = False
-    if tools_active and not planning_mode:
-        try:
-            from runtime.core.cerebrum.agent_auto_delegate import (
-                plan_auto_delegation,
-            )
-
-            _delegation_plan = plan_auto_delegation(
-                intent.normalized_goal,
-                registry=getattr(executor, "agent_registry", None)
-                or getattr(stack, "agent_registry", None)
-                or getattr(executor, "registry", None),
-            )
-        except (ImportError, AttributeError, TypeError):
-            _delegation_plan = None
-        if (
-            _delegation_plan is not None
-            and _delegation_plan.should_delegate
-            and _skill_available_in_executor(executor, "call_agent")
-        ):
-            try:
-                from runtime.execution.subagents.bridge import call_subagent
-
-                _logger.info(
-                    "react_loop auto-delegating to agent=%s reason=%s",
-                    _delegation_plan.target_agent,
-                    _delegation_plan.reason,
-                )
-                yield {
-                    "type": "auto_delegation_started",
-                    "target_agent": _delegation_plan.target_agent,
-                    "reason": _delegation_plan.reason,
-                }
-                _delegate_result = call_subagent(
-                    agent_id=_delegation_plan.target_agent or "",
-                    prompt=_delegation_plan.cleaned_prompt,
-                    context={
-                        "thread_id": thread_id or "",
-                        "source": "auto_delegation",
-                        "parent_task_id": str(react_task_id),
-                    },
-                    timeout_s=120,
-                )
-                _delegate_output = str(
-                    _delegate_result.get("output", "") or "",
-                ).strip()
-                _delegate_ok = bool(_delegate_result.get("success", False))
-                if _delegate_ok and _delegate_output:
-                    # Inject as a synthetic Observation so the model's
-                    # next turn writes the Final Answer directly.
-                    obs_block = (
-                        "<auto-delegation-observation>\n"
-                        f"Auto-delegated to @agent:{_delegation_plan.target_agent}.\n"
-                        f"Reason: {_delegation_plan.reason}.\n"
-                        f"Subagent output:\n\n{_delegate_output}\n"
-                        "</auto-delegation-observation>\n\n"
-                        "Use this as the primary evidence for your Final "
-                        "Answer. Add your own synthesis or follow-up only "
-                        "if the user's request demands more than the "
-                        "subagent's output already covers."
-                    )
-                    messages.append(Message(role="user", content=obs_block))
-                    _auto_delegated = True
-                    yield {
-                        "type": "auto_delegation_completed",
-                        "target_agent": _delegation_plan.target_agent,
-                        "output_length": len(_delegate_output),
-                    }
-                else:
-                    err = str(_delegate_result.get("error", "") or "")
-                    _logger.info(
-                        "auto-delegation produced no usable output "
-                        "(success=%s, error=%s) — falling back to model",
-                        _delegate_ok,
-                        err,
-                    )
-                    yield {
-                        "type": "auto_delegation_skipped",
-                        "target_agent": _delegation_plan.target_agent,
-                        "reason": err or "no output",
-                    }
-            except (ImportError, AttributeError, TypeError, ValueError) as exc:
-                _logger.debug(
-                    "auto-delegation failed; falling back to model: %s",
-                    exc,
-                    exc_info=True,
-                )
-                yield {
-                    "type": "auto_delegation_skipped",
-                    "target_agent": getattr(
-                        _delegation_plan,
-                        "target_agent",
-                        None,
-                    ),
-                    "reason": f"{type(exc).__name__}: {exc}",
-                }
-
-    # ── PHASE 5 · pre-loop state init + checkpoint resume ──────────────
-    from runtime.core.cerebrum.pause_control import get_pause_controller
-
-    _pause = get_pause_controller()
-    _agent_id_for_pause = str(getattr(agent, "agent_id", "") or "")
-    _pause.register_active(
-        str(react_task_id),
-        thread_id=thread_id or "",
-        agent_id=_agent_id_for_pause,
+    # ── PHASE 4/4.5 · start events + auto-delegation ───────────────────
+    # Moved verbatim to react_prompt_assembly._emit_turn_start_events.
+    yield from _emit_turn_start_events(
+        react_task_id=react_task_id,
+        thread_id=thread_id,
         max_iterations=max_iterations,
-        max_tokens=_active_max_tokens_budget,
-        max_usd=_active_max_usd_budget,
+        grounding_sources=_grounding_sources,
+        tools_active=tools_active,
+        planning_mode=planning_mode,
+        intent=intent,
+        executor=executor,
+        stack=stack,
+        messages=messages,
     )
 
-    steps: list[ReActStep] = []
+    # ── PHASE 5 · pre-loop state init + checkpoint resume ──────────────
+    # Pause registration, taint reset, checkpoint resume, and resume
+    # grants moved verbatim to react_resume._resume_or_register_turn.
+    _rboot = _resume_or_register_turn(
+        stack,
+        intent,
+        agent,
+        resume_task_id=resume_task_id,
+        react_task_id=react_task_id,
+        thread_id=thread_id,
+        max_iterations=max_iterations,
+        active_max_tokens_budget=_active_max_tokens_budget,
+        active_max_usd_budget=_active_max_usd_budget,
+        messages=messages,
+    )
+    _pause = _rboot.pause_controller
+    _agent_id_for_pause = _rboot.agent_id_for_pause
+    steps: list[ReActStep] = _rboot.steps
+    messages = _rboot.messages
+    _working_set: dict[str, dict[str, Any]] = _rboot.working_set
+    _progress_summary = _rboot.progress_summary
+    _current_phase = _rboot.current_phase
+    final_answer: str | None = _rboot.final_answer
+    terminated_reason = _rboot.terminated_reason
+    react_task_id = _rboot.react_task_id
+    resume_from_iter = _rboot.resume_from_iter
+    _resume_event: dict[str, Any] | None = _rboot.resume_event
+    max_iterations = _rboot.max_iterations
     executed_beak_steps: list[Step] = []
-    # Clear any prompt-injection taint from a prior turn in this context,
-    # then INHERIT the spawning parent's taint when this loop is a subagent
-    # spun up in a fresh thread/context (the taint contextvar doesn't cross
-    # the thread-pool boundary, so the parent passes it explicitly via the
-    # intent). Without this, delegating a risky action to a subagent would
-    # wash the taint clean.
-    reset_injection_taint()
-    # Also clear the gate-handled flag. It is a per-thread contextvar that the
-    # single-action approval gate sets True around execute() to tell the
-    # executor chokepoint "this call was already reviewed". When a subagent is
-    # spawned INLINE in the parent's thread (call_subagent with the default
-    # timeout_seconds=None), it would otherwise inherit the parent's True and
-    # the subagent's OWN risky tools (e.g. via its parallel path) would skip
-    # the chokepoint without any approval round. A fresh loop has reviewed
-    # nothing yet, so reset it like the taint.
-    set_injection_gate_handled(False)
-    _inherited_taint = intent.user_context.get("_inherited_injection_taint")
-    if isinstance(_inherited_taint, str) and _inherited_taint not in ("", "none"):
-        mark_injection_taint(_inherited_taint)
-    final_answer: str | None = None
     final_answer_segments: list[str] = []
     final_answer_emitted = False
-    terminated_reason = "max_iter"
-    resume_from_iter = 0
 
     # Throughput sampler — chars/sec across all delta yields. We emit a
     # ``throughput`` event every ~500ms so the UI can show a live
@@ -691,37 +466,7 @@ def stream_react_loop(
     _throughput_last_emit = _throughput_started_at
     _throughput_interval_s = 0.5
 
-    _working_set: dict[str, dict[str, Any]] = {}
-    _progress_summary = ""
-    _current_phase = "understand"
     _known_background_tasks: dict[str, dict[str, Any]] = {}
-    _resume_event: dict[str, Any] | None = None
-
-    if resume_task_id is not None:
-        try:
-            _rs = _compute_resume_state(
-                stack,
-                intent,
-                resume_task_id,
-                base_messages=messages,
-                base_working_set=_working_set,
-                base_progress_summary=_progress_summary,
-                base_current_phase=_current_phase,
-                max_iterations=max_iterations,
-            )
-            if _rs is not None:
-                resume_from_iter = _rs.resume_from_iter
-                messages = _rs.messages
-                steps = _rs.steps
-                _working_set = _rs.working_set
-                _progress_summary = _rs.progress_summary
-                _current_phase = _rs.current_phase
-                final_answer = _rs.final_answer
-                terminated_reason = _rs.terminated_reason
-                react_task_id = resume_task_id
-                _resume_event = _rs.resume_event
-        except (AttributeError, KeyError, TypeError, ValueError):
-            _logger.debug("resume checkpoint loading failed", exc_info=True)
 
     if _resume_event is not None:
         yield _resume_event
@@ -841,19 +586,6 @@ def stream_react_loop(
             reason,
         )
         return next_model
-
-    if resume_task_id is not None:
-        _grant = _pause.consume_grant(str(resume_task_id))
-        _extra_iters = int(_grant.get("extra_iterations") or 0)
-        if _extra_iters > 0:
-            max_iterations = max_iterations + _extra_iters
-            _logger.info(
-                "react_loop resume grant: +%d iterations for task %s (new max=%d)",
-                _extra_iters,
-                resume_task_id,
-                max_iterations,
-            )
-        _pause.clear(str(resume_task_id))
 
     # Realtime reasoning providers may stream private thinking for minutes
     # before producing ordinary text or a tool call. The UI must not depend on

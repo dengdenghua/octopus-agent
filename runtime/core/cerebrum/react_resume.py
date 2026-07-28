@@ -19,6 +19,11 @@ from runtime.core.cerebrum.react_context import _restore_messages_from_checkpoin
 from runtime.core.cerebrum.react_types import ReActStep
 from runtime.platform.config.builder import StackProtocol
 from runtime.platform.models import ParsedIntent, TaskId
+from runtime.safety.validation.prompt_injection import (
+    mark_injection_taint,
+    reset_injection_taint,
+    set_injection_gate_handled,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -298,4 +303,138 @@ def _compute_resume_state(
         final_answer=final_answer,
         terminated_reason=terminated_reason,
         resume_event=resume_event,
+    )
+
+
+@dataclass
+class _ResumedTurn:
+    """Products of the PHASE 5 pre-loop registration + resume step."""
+
+    pause_controller: Any
+    agent_id_for_pause: str
+    steps: list
+    messages: list
+    working_set: dict
+    progress_summary: str
+    current_phase: str
+    final_answer: str | None
+    terminated_reason: str
+    react_task_id: Any
+    resume_from_iter: int
+    resume_event: dict | None
+    max_iterations: int
+
+
+def _resume_or_register_turn(
+    stack: Any,
+    intent: Any,
+    agent: Any,
+    *,
+    resume_task_id: Any,
+    react_task_id: Any,
+    thread_id: str,
+    max_iterations: int,
+    active_max_tokens_budget: Any,
+    active_max_usd_budget: Any,
+    messages: list,
+) -> _ResumedTurn:
+    """Pause registration, taint reset, checkpoint resume, resume grant.
+
+    Moved verbatim from ``react_loop.stream_react_loop`` (PHASE 5).
+    ``messages`` is the freshly assembled prompt/message list; a
+    successful checkpoint resume replaces it (and the other base
+    containers) with the rehydrated snapshots.
+    """
+    from runtime.core.cerebrum.pause_control import get_pause_controller
+
+    _pause = get_pause_controller()
+    _agent_id_for_pause = str(getattr(agent, "agent_id", "") or "")
+    _pause.register_active(
+        str(react_task_id),
+        thread_id=thread_id or "",
+        agent_id=_agent_id_for_pause,
+        max_iterations=max_iterations,
+        max_tokens=active_max_tokens_budget,
+        max_usd=active_max_usd_budget,
+    )
+    steps: list[ReActStep] = []
+    # Clear any prompt-injection taint from a prior turn in this context,
+    # then INHERIT the spawning parent's taint when this loop is a subagent
+    # spun up in a fresh thread/context (the taint contextvar doesn't cross
+    # the thread-pool boundary, so the parent passes it explicitly via the
+    # intent). Without this, delegating a risky action to a subagent would
+    # wash the taint clean.
+    reset_injection_taint()
+    # Also clear the gate-handled flag. It is a per-thread contextvar that the
+    # single-action approval gate sets True around execute() to tell the
+    # executor chokepoint "this call was already reviewed". When a subagent is
+    # spawned INLINE in the parent's thread (call_subagent with the default
+    # timeout_seconds=None), it would otherwise inherit the parent's True and
+    # the subagent's OWN risky tools (e.g. via its parallel path) would skip
+    # the chokepoint without any approval round. A fresh loop has reviewed
+    # nothing yet, so reset it like the taint.
+    set_injection_gate_handled(False)
+    _inherited_taint = intent.user_context.get("_inherited_injection_taint")
+    if isinstance(_inherited_taint, str) and _inherited_taint not in ("", "none"):
+        mark_injection_taint(_inherited_taint)
+    final_answer: str | None = None
+    terminated_reason = "max_iter"
+    resume_from_iter = 0
+    _working_set: dict[str, dict[str, Any]] = {}
+    _progress_summary = ""
+    _current_phase = "understand"
+    _resume_event: dict[str, Any] | None = None
+
+    if resume_task_id is not None:
+        try:
+            _rs = _compute_resume_state(
+                stack,
+                intent,
+                resume_task_id,
+                base_messages=messages,
+                base_working_set=_working_set,
+                base_progress_summary=_progress_summary,
+                base_current_phase=_current_phase,
+                max_iterations=max_iterations,
+            )
+            if _rs is not None:
+                resume_from_iter = _rs.resume_from_iter
+                messages = _rs.messages
+                steps = _rs.steps
+                _working_set = _rs.working_set
+                _progress_summary = _rs.progress_summary
+                _current_phase = _rs.current_phase
+                final_answer = _rs.final_answer
+                terminated_reason = _rs.terminated_reason
+                react_task_id = resume_task_id
+                _resume_event = _rs.resume_event
+        except (AttributeError, KeyError, TypeError, ValueError):
+            _logger.debug("resume checkpoint loading failed", exc_info=True)
+
+    if resume_task_id is not None:
+        _grant = _pause.consume_grant(str(resume_task_id))
+        _extra_iters = int(_grant.get("extra_iterations") or 0)
+        if _extra_iters > 0:
+            max_iterations = max_iterations + _extra_iters
+            _logger.info(
+                "react_loop resume grant: +%d iterations for task %s (new max=%d)",
+                _extra_iters,
+                resume_task_id,
+                max_iterations,
+            )
+        _pause.clear(str(resume_task_id))
+    return _ResumedTurn(
+        pause_controller=_pause,
+        agent_id_for_pause=_agent_id_for_pause,
+        steps=steps,
+        messages=messages,
+        working_set=_working_set,
+        progress_summary=_progress_summary,
+        current_phase=_current_phase,
+        final_answer=final_answer,
+        terminated_reason=terminated_reason,
+        react_task_id=react_task_id,
+        resume_from_iter=resume_from_iter,
+        resume_event=_resume_event,
+        max_iterations=max_iterations,
     )
