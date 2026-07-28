@@ -49,7 +49,6 @@ from runtime.core.cerebrum.react_context import (
 )
 from runtime.core.cerebrum.react_convergence import (
     EvidenceConvergence,
-    evidence_answer_conflicts_with_goal,
     ordered_explicit_read_groups,
 )
 from runtime.core.cerebrum.react_execution import (
@@ -78,12 +77,11 @@ from runtime.core.cerebrum.react_explicit_reads import (
     _recover_explicit_read_actions,
 )
 from runtime.core.cerebrum.react_final_answer_guards import (
-    _evaluate_final_answer_guards,
     _final_answer_needs_pre_emit_guard,
-    _guard_impasse_final_answer,
     _guard_reason_for_user,
     _looks_like_observation_echo,
     _note_guard_impasse,
+    _phase_6e_guards_and_step_emit,
     _record_rejected_step,
     _unfinished_implementation_recovery_needed,
 )
@@ -259,6 +257,7 @@ __all__ = [
     "_mirror_checkpoint",
     "_native_tool_calls_missing_required_args",
     "_normalized_tool_call_from_react_action",
+    "_note_guard_impasse",
     "_observed_read_fallback_update",
     "_parse_action",
     "_parse_reasoning_action_fallback",
@@ -2587,7 +2586,7 @@ def stream_react_loop(
         if _loop_ctrl is _LoopControl.NEXT_ITERATION:
             continue
 
-        # ── PHASE 6e · in-flight nudges + guards + step yield ──────────
+        # ── PHASE 6e · in-flight nudges ────────────────────────────────
         (
             _context_pressure_signaled,
             _green_verification_convergence_active,
@@ -2607,124 +2606,38 @@ def stream_react_loop(
             force_convergence_next=_force_convergence_next,
         )
 
-        if (
-            maybe_final
-            and _evidence_convergence_active is not None
-            and evidence_answer_conflicts_with_goal(
-                goal=intent.normalized_goal,
-                answer=maybe_final,
-            )
-        ):
-            # Bounded evidence exists, so an idle/greeting answer claiming
-            # there was no task is objectively contradictory. Keep it out of
-            # the answer stream and retry with the original request attached.
-            step.observation = (
-                (((step.observation or "") + "\n\n") if step.observation else "")
-                + "[evidence-answer-conflict]\n"
-                + "The proposed answer falsely denied the active user request or the "
-                + "completed evidence. Discard it and answer the original request "
-                + "directly from the bounded evidence already supplied."
-            )
-            maybe_final = None
-            _force_convergence_next = True
-
-        # Close the race where a follow-up arrives while the model is composing
-        # what would otherwise be the terminal answer. Keep that answer as
-        # conversation history, then give the latest user message the next
-        # model round instead of finalizing over it.
-        if maybe_final and _append_pending_live_steering():
-            maybe_final = None
-            _logger.info(
-                "react_loop deferred finalization for a priority user follow-up",
-            )
-
-        if maybe_final:
-            _deferred_final_emit = not _final_stream_started and (
-                _evidence_convergence_active is not None
-                or (_todo_protocol_required and _todo_protocol_visible)
-                or _final_answer_needs_pre_emit_guard(
-                    maybe_final,
-                    is_code_mode=_is_code_mode,
-                    browser_operation_mode=_browser_operation_mode,
-                )
-            )
-            _guard_hit = _evaluate_final_answer_guards(
-                steps=steps,
-                step=step,
-                final_answer=maybe_final,
-                is_code_mode=_is_code_mode,
-                todo_protocol_required=_todo_protocol_required,
-                todo_protocol_visible=_todo_protocol_visible,
-                file_inspection_tools_visible=_file_inspection_tools_visible,
-                tools_active=tools_active,
-                goal=intent.normalized_goal,
-                browser_operation_mode=_browser_operation_mode,
-                grounded_source_paths=_final_guard_grounded_source_paths,
-            )
-            if _guard_hit is not None:
-                _guard_label, _guard_message = _guard_hit
-                if _note_guard_impasse(_guard_impasse_state, _guard_label, steps):
-                    # Same guard, three rejections, zero new action-bearing
-                    # steps in between: pushing back again only burns the
-                    # remaining budget and ends in the auto-pause path's
-                    # misleading "paused" report. Terminate with the truth.
-                    _logger.warning(
-                        "react_loop guard impasse · %s rejected the final answer "
-                        "3x with no intervening tool execution — terminating "
-                        "explicitly instead of burning the iteration budget",
-                        _guard_label,
-                    )
-                    final_answer = _guard_impasse_final_answer(_guard_label, _guard_message)
-                    terminated_reason = "guard_impasse"
-                    steps.append(step)
-                    break
-                maybe_final = None
-                # A completion guard may discover a semantic defect even
-                # after two superficially green verifier rounds. Re-open the
-                # tool path so the model can perform the demanded repair;
-                # otherwise the convergence gate would suppress every fix
-                # and turn a useful guard into an impasse. The todo protocol
-                # is different: terminal evidence is still valid and the
-                # convergence state already allows exactly one checklist
-                # update. Clearing it here caused green agents to resume an
-                # unbounded test/lint cycle after that update.
-                if _guard_label != "todo-protocol guard":
-                    _green_verification_convergence_active = False
-                    _green_convergence_todo_used = False
-                    _clean_verification_rounds_after_write = 0
-                    _force_convergence_next = False
-                step.observation = (
-                    (((step.observation or "") + "\n\n") if step.observation else "")
-                    + f"[{_guard_label}]\n"
-                    + _guard_message
-                )
-            elif _deferred_final_emit:
-                _delta = (
-                    maybe_final[_streamed_final_chars:] if _streamed_final_chars else maybe_final
-                )
-                yield {
-                    "type": "text_delta",
-                    "delta": _delta,
-                    "iteration": i + 1,
-                }
-                _final_delta_emitted_this_iteration = True
-
-        _public_progress_summary = (
-            _progress_summary if _is_code_mode else _build_research_progress_summary(steps + [step])
+        # ── PHASE 6e · guards + step yield ────────────────────────────
+        state.maybe_final = maybe_final
+        state.final_stream_started = _final_stream_started
+        state.force_convergence_next = _force_convergence_next
+        state.final_delta_emitted_this_iteration = _final_delta_emitted_this_iteration
+        state.green_verification_convergence_active = _green_verification_convergence_active
+        state.green_convergence_todo_used = _green_convergence_todo_used
+        state.clean_verification_rounds_after_write = _clean_verification_rounds_after_write
+        state.final_answer = final_answer
+        state.terminated_reason = terminated_reason
+        state.evidence_convergence_active = _evidence_convergence_active
+        state.tools_active = tools_active
+        state.current_phase = _current_phase
+        state.streamed_final_chars = _streamed_final_chars
+        state.progress_summary = _progress_summary
+        _loop_ctrl = yield from _phase_6e_guards_and_step_emit(
+            state,
+            i=i,
+            append_pending_live_steering=_append_pending_live_steering,
+            build_research_progress_summary=_build_research_progress_summary,
         )
-
-        yield {
-            "type": "react_step_complete",
-            "iteration": step.iteration,
-            "thought": step.thought,
-            "public_update": step.public_update,
-            "action": step.action,
-            "observation": step.observation,
-            "task_id": str(react_task_id),
-            "current_phase": _current_phase if _is_code_mode else None,
-            "working_set": list(_working_set.values()) if _is_code_mode else None,
-            "progress_summary": _public_progress_summary,
-        }
+        maybe_final = state.maybe_final
+        _force_convergence_next = state.force_convergence_next
+        _green_verification_convergence_active = state.green_verification_convergence_active
+        _green_convergence_todo_used = state.green_convergence_todo_used
+        _clean_verification_rounds_after_write = state.clean_verification_rounds_after_write
+        final_answer = state.final_answer
+        terminated_reason = state.terminated_reason
+        _final_delta_emitted_this_iteration = state.final_delta_emitted_this_iteration
+        _public_progress_summary = state.public_progress_summary
+        if _loop_ctrl is _LoopControl.BREAK:
+            break
 
         # ── PHASE 6f · auto-checkpoint + step evaluator ────────────────
         yield from _auto_checkpoint_and_evaluate_step(

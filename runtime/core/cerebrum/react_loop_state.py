@@ -81,6 +81,9 @@ class _LoopState:
     throughput_chars: int = 0
     final_stream_started: bool = False
     force_convergence_next: bool = False
+    streamed_final_chars: int = 0
+    progress_summary: str = ""
+    public_progress_summary: str = ""
     consecutive_same_failed_actions: int = 0
     last_failed_action_fingerprint: str = ""
     green_verification_convergence_active: bool = False

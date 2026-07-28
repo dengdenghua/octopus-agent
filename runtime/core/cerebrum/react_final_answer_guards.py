@@ -8,9 +8,12 @@ produces the terminal wording when the loop deadlocks against a guard.
 
 from __future__ import annotations
 
+import logging
 import re
+from collections.abc import Callable, Generator
 from typing import Any
 
+from runtime.core.cerebrum.react_convergence import evidence_answer_conflicts_with_goal
 from runtime.core.cerebrum.react_explicit_reads import _explicit_read_only_goal
 from runtime.core.cerebrum.react_guards import (
     _goal_requests_code_mutation,
@@ -20,6 +23,7 @@ from runtime.core.cerebrum.react_loop_controls import (
     _disabled_guard_labels,
     _guard_hit_recorder,
 )
+from runtime.core.cerebrum.react_loop_state import _LoopControl, _LoopState
 from runtime.core.cerebrum.react_parsing import (
     _detect_destructive_calls_in_payload,
     _detect_dynamic_exec_in_payload,
@@ -29,6 +33,8 @@ from runtime.core.cerebrum.react_parsing import (
     _looks_like_unfinished_work,
 )
 from runtime.core.cerebrum.react_types import REACT_OBSERVATION_FOLLOWUP, ReActStep
+
+_logger = logging.getLogger(__name__)
 
 
 def _unfinished_implementation_recovery_needed(
@@ -250,3 +256,187 @@ def _guard_reason_for_user(label: str, message: str) -> str:
     }:
         return "安全检查拒绝了候选答复；具体片段已隐藏，避免再次暴露。"
     return message
+
+
+def _phase_6e_guards_and_step_emit(
+    state: _LoopState,
+    *,
+    i: int,
+    append_pending_live_steering: Callable[[], int],
+    build_research_progress_summary: Callable[[list[ReActStep]], str],
+) -> Generator[dict, None, _LoopControl]:
+    """PHASE 6e guard state machine + step completion emit.
+
+    Moved verbatim from ``react_loop.py`` (PHASE 6e, second half): the
+    evidence-answer conflict repair, the live-steering finalization
+    deferral, final-answer guard evaluation with the three-strike
+    impasse breaker, the deferred ``text_delta`` emit, and the
+    ``react_step_complete`` event. Returns ``BREAK`` when a guard hits
+    the impasse limit (``state`` then carries ``final_answer`` /
+    ``terminated_reason``); ``CONTINUE`` otherwise.
+    ``_append_pending_live_steering`` is a react_loop closure and
+    ``_build_research_progress_summary`` lives in react_execution (which
+    imports this module), so both are injected.
+    """
+    # Injected callables under their original names.
+    _append_pending_live_steering = append_pending_live_steering
+    _build_research_progress_summary = build_research_progress_summary
+    # Reference-typed aliases — mutations propagate to the main loop.
+    intent = state.intent
+    steps = state.steps
+    step = state.step
+    react_task_id = state.react_task_id
+    _working_set = state.working_set
+    _guard_impasse_state = state.guard_impasse_state
+    _final_guard_grounded_source_paths = state.final_guard_grounded_source_paths
+    # Scalar mailbox — pulled in, pushed back in the finally below.
+    maybe_final = state.maybe_final
+    final_answer = state.final_answer
+    terminated_reason = state.terminated_reason
+    _evidence_convergence_active = state.evidence_convergence_active
+    _force_convergence_next = state.force_convergence_next
+    _final_stream_started = state.final_stream_started
+    _final_delta_emitted_this_iteration = state.final_delta_emitted_this_iteration
+    _todo_protocol_required = state.todo_protocol_required
+    _todo_protocol_visible = state.todo_protocol_visible
+    _is_code_mode = state.is_code_mode
+    _browser_operation_mode = state.browser_operation_mode
+    _file_inspection_tools_visible = state.file_inspection_tools_visible
+    tools_active = state.tools_active
+    _green_verification_convergence_active = state.green_verification_convergence_active
+    _green_convergence_todo_used = state.green_convergence_todo_used
+    _clean_verification_rounds_after_write = state.clean_verification_rounds_after_write
+    _streamed_final_chars = state.streamed_final_chars
+    _current_phase = state.current_phase
+    _progress_summary = state.progress_summary
+    _public_progress_summary = state.public_progress_summary
+    try:
+        if (
+            maybe_final
+            and _evidence_convergence_active is not None
+            and evidence_answer_conflicts_with_goal(
+                goal=intent.normalized_goal,
+                answer=maybe_final,
+            )
+        ):
+            # Bounded evidence exists, so an idle/greeting answer claiming
+            # there was no task is objectively contradictory. Keep it out of
+            # the answer stream and retry with the original request attached.
+            step.observation = (
+                (((step.observation or "") + "\n\n") if step.observation else "")
+                + "[evidence-answer-conflict]\n"
+                + "The proposed answer falsely denied the active user request or the "
+                + "completed evidence. Discard it and answer the original request "
+                + "directly from the bounded evidence already supplied."
+            )
+            maybe_final = None
+            _force_convergence_next = True
+
+        # Close the race where a follow-up arrives while the model is composing
+        # what would otherwise be the terminal answer. Keep that answer as
+        # conversation history, then give the latest user message the next
+        # model round instead of finalizing over it.
+        if maybe_final and _append_pending_live_steering():
+            maybe_final = None
+            _logger.info(
+                "react_loop deferred finalization for a priority user follow-up",
+            )
+
+        if maybe_final:
+            _deferred_final_emit = not _final_stream_started and (
+                _evidence_convergence_active is not None
+                or (_todo_protocol_required and _todo_protocol_visible)
+                or _final_answer_needs_pre_emit_guard(
+                    maybe_final,
+                    is_code_mode=_is_code_mode,
+                    browser_operation_mode=_browser_operation_mode,
+                )
+            )
+            _guard_hit = _evaluate_final_answer_guards(
+                steps=steps,
+                step=step,
+                final_answer=maybe_final,
+                is_code_mode=_is_code_mode,
+                todo_protocol_required=_todo_protocol_required,
+                todo_protocol_visible=_todo_protocol_visible,
+                file_inspection_tools_visible=_file_inspection_tools_visible,
+                tools_active=tools_active,
+                goal=intent.normalized_goal,
+                browser_operation_mode=_browser_operation_mode,
+                grounded_source_paths=_final_guard_grounded_source_paths,
+            )
+            if _guard_hit is not None:
+                _guard_label, _guard_message = _guard_hit
+                if _note_guard_impasse(_guard_impasse_state, _guard_label, steps):
+                    # Same guard, three rejections, zero new action-bearing
+                    # steps in between: pushing back again only burns the
+                    # remaining budget and ends in the auto-pause path's
+                    # misleading "paused" report. Terminate with the truth.
+                    _logger.warning(
+                        "react_loop guard impasse · %s rejected the final answer "
+                        "3x with no intervening tool execution — terminating "
+                        "explicitly instead of burning the iteration budget",
+                        _guard_label,
+                    )
+                    final_answer = _guard_impasse_final_answer(_guard_label, _guard_message)
+                    terminated_reason = "guard_impasse"
+                    steps.append(step)
+                    return _LoopControl.BREAK
+                maybe_final = None
+                # A completion guard may discover a semantic defect even
+                # after two superficially green verifier rounds. Re-open the
+                # tool path so the model can perform the demanded repair;
+                # otherwise the convergence gate would suppress every fix
+                # and turn a useful guard into an impasse. The todo protocol
+                # is different: terminal evidence is still valid and the
+                # convergence state already allows exactly one checklist
+                # update. Clearing it here caused green agents to resume an
+                # unbounded test/lint cycle after that update.
+                if _guard_label != "todo-protocol guard":
+                    _green_verification_convergence_active = False
+                    _green_convergence_todo_used = False
+                    _clean_verification_rounds_after_write = 0
+                    _force_convergence_next = False
+                step.observation = (
+                    (((step.observation or "") + "\n\n") if step.observation else "")
+                    + f"[{_guard_label}]\n"
+                    + _guard_message
+                )
+            elif _deferred_final_emit:
+                _delta = (
+                    maybe_final[_streamed_final_chars:] if _streamed_final_chars else maybe_final
+                )
+                yield {
+                    "type": "text_delta",
+                    "delta": _delta,
+                    "iteration": i + 1,
+                }
+                _final_delta_emitted_this_iteration = True
+
+        _public_progress_summary = (
+            _progress_summary if _is_code_mode else _build_research_progress_summary(steps + [step])
+        )
+
+        yield {
+            "type": "react_step_complete",
+            "iteration": step.iteration,
+            "thought": step.thought,
+            "public_update": step.public_update,
+            "action": step.action,
+            "observation": step.observation,
+            "task_id": str(react_task_id),
+            "current_phase": _current_phase if _is_code_mode else None,
+            "working_set": list(_working_set.values()) if _is_code_mode else None,
+            "progress_summary": _public_progress_summary,
+        }
+        return _LoopControl.CONTINUE
+    finally:
+        state.maybe_final = maybe_final
+        state.force_convergence_next = _force_convergence_next
+        state.green_verification_convergence_active = _green_verification_convergence_active
+        state.green_convergence_todo_used = _green_convergence_todo_used
+        state.clean_verification_rounds_after_write = _clean_verification_rounds_after_write
+        state.final_answer = final_answer
+        state.terminated_reason = terminated_reason
+        state.final_delta_emitted_this_iteration = _final_delta_emitted_this_iteration
+        state.public_progress_summary = _public_progress_summary
