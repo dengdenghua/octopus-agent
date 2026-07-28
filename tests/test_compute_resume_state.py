@@ -10,7 +10,7 @@ checkpoint is unsafe.
 
 import pytest
 
-from runtime.core.cerebrum import checkpoint_integrity, react_loop
+from runtime.core.cerebrum import checkpoint_integrity, react_resume
 from runtime.core.cerebrum.react_loop import _compute_resume_state, _ResumeState
 
 
@@ -53,13 +53,13 @@ def _call(**overrides):
 
 
 def test_returns_none_when_no_snapshot(monkeypatch):
-    monkeypatch.setattr(react_loop, "_load_resume_checkpoint_snapshot", lambda *a, **k: None)
+    monkeypatch.setattr(react_resume, "_load_resume_checkpoint_snapshot", lambda *a, **k: None)
     assert _call() is None
 
 
 def test_rebuilds_state_from_snapshot(monkeypatch):
     monkeypatch.setattr(
-        react_loop,
+        react_resume,
         "_load_resume_checkpoint_snapshot",
         lambda *a, **k: _snapshot(
             iteration_completed=3,
@@ -76,7 +76,7 @@ def test_rebuilds_state_from_snapshot(monkeypatch):
     )
     # Keep the message rehydration a no-op — it has its own tests and needs
     # real Message objects we don't want to fabricate here.
-    monkeypatch.setattr(react_loop, "_rehydrate_messages_from_steps", lambda m, s: m)
+    monkeypatch.setattr(react_resume, "_rehydrate_messages_from_steps", lambda m, s: m)
 
     out = _call(base_messages=["system"])
 
@@ -95,7 +95,7 @@ def test_rebuilds_state_from_snapshot(monkeypatch):
 
 def test_final_answer_checkpoint_short_circuits_loop(monkeypatch):
     monkeypatch.setattr(
-        react_loop,
+        react_resume,
         "_load_resume_checkpoint_snapshot",
         lambda *a, **k: _snapshot(
             iteration_completed=5, has_final_answer=True, final_answer="done"
@@ -115,7 +115,9 @@ def test_final_answer_checkpoint_short_circuits_loop(monkeypatch):
 
 
 def test_unsafe_checkpoint_raises(monkeypatch):
-    monkeypatch.setattr(react_loop, "_load_resume_checkpoint_snapshot", lambda *a, **k: _snapshot())
+    monkeypatch.setattr(
+        react_resume, "_load_resume_checkpoint_snapshot", lambda *a, **k: _snapshot()
+    )
     monkeypatch.setattr(
         checkpoint_integrity, "validate_checkpoint_state", lambda *a, **k: _BadIntegrity()
     )
