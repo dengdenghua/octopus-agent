@@ -2116,7 +2116,7 @@ function RealtimePageContent({
       threadRouteFor,
     ],
   );
-  const [thread, sendMessage, , , lastTurnToolEvents, realtimeApprovals] =
+  const [thread, sendMessage, isUploading, , lastTurnToolEvents, realtimeApprovals] =
     useThreadStream(streamOptions);
   const [isCompressingContext, setIsCompressingContext] = useState(false);
   const selectedModel = useMemo(() => {
@@ -3357,6 +3357,7 @@ function RealtimePageContent({
                         showInspirationToggle
                         allowAgentModes
                         onStop={handleStop}
+                        isUploading={isUploading}
                         autoFocus={isNewThread}
                         defaultValue={composerSeed}
                         placeholder={

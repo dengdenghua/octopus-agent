@@ -107,6 +107,10 @@ export interface ChatInputBoxProps {
     files?: File[];
   }) => void;
   onStop?: () => void;
+  /** True while attachments are being uploaded to the backend. Surfaces
+   * a progress hint on the composer so the user knows the send is not
+   * finished yet. */
+  isUploading?: boolean;
   className?: string;
 }
 

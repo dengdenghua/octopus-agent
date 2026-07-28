@@ -114,6 +114,7 @@ export function ChatComposer({
   onDeepResearch,
   onSubmit,
   onStop,
+  isUploading = false,
   className,
 }: ChatInputBoxProps) {
   const { t } = useI18n();
@@ -193,7 +194,7 @@ export function ChatComposer({
   const canUseDeepResearch =
     allowAgentModes && mode === "deep" && !!onDeepResearch;
   const isDeepResearchMode = canUseDeepResearch && researchConfigOpen;
-  const isBusy = disabled || uploadingMaterials;
+  const isBusy = disabled || uploadingMaterials || isUploading;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
   const permissionLabel =
@@ -854,6 +855,12 @@ export function ChatComposer({
         onRemoveImage={removePendingImage}
         t={t}
       />
+      {isUploading && (
+        <div className="flex items-center gap-1.5 px-3 pb-1 pt-0.5 text-xs text-muted-foreground">
+          <Loader2Icon className="size-3 animate-spin" />
+          {t.chatInputBox.uploadingFiles}
+        </div>
+      )}
       <textarea
         data-testid="chat-composer-input"
         ref={textareaRef}
