@@ -12,7 +12,6 @@ vi.mock("@/providers/AuthProvider", () => ({
     logout: vi.fn(),
     authStatus: null,
     isLoading: false,
-    isGuest: true,
   }),
 }));
 

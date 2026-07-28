@@ -148,7 +148,7 @@ tier: "standard"
 
 ## Who imports this
 
-**8** file(s) reference this package:
+**9** file(s) reference this package:
 
 - **`runtime/cli.py/`** · 1 file(s)
   - `runtime/cli.py`
@@ -162,4 +162,6 @@ tier: "standard"
   - `runtime/platform/ui/searxng_router.py`
   - `runtime/platform/ui/state.py`
   - `runtime/platform/ui/thread_routes.py`
+- **`runtime/tests/`** · 1 file(s)
+  - `runtime/tests/test_realtime_workbench.py`
 

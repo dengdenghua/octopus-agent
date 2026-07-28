@@ -18,6 +18,8 @@ import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   normalizeEventsForSettledDisplay,
   pickCurrentWorkBlock,
+  workBlockLabelsFromShape,
+  workBlockTitle,
 } from "./work-blocks";
 import { useI18n } from "@/core/i18n/hooks";
 import type { StreamVitals } from "@/core/realtime";
@@ -184,6 +186,7 @@ export function AgentProgressPill({
     ? phases.findIndex((phase) => phase.id === displayPhase.id)
     : -1;
   const currentBlock = useMemo(() => pickCurrentWorkBlock(blocks), [blocks]);
+  const workBlockLabels = workBlockLabelsFromShape(t.workBlocks);
   // Detect tools that failed because their group is config-disabled (e.g.
   // web_search under enable_web_skills=false). We surface a one-click
   // "enable" prompt so the user doesn't have to find the config file.
@@ -412,10 +415,7 @@ export function AgentProgressPill({
                   )}
                 >
                   <StatusIcon status={phase.status} />
-                  <span
-                    className="min-w-0 flex-1 truncate"
-                    title={phase.title}
-                  >
+                  <span className="min-w-0 flex-1 truncate" title={phase.title}>
                     {agentPhaseDisplayTitle(phase, t.agentPhases)}
                   </span>
                   {active ? (
@@ -442,7 +442,7 @@ export function AgentProgressPill({
                 )}
               />
               <span className="min-w-0 flex-1 truncate text-foreground/85">
-                {currentBlock.title}
+                {workBlockTitle(currentBlock, workBlockLabels)}
               </span>
               <span
                 className={cn(
@@ -513,7 +513,7 @@ export function AgentProgressPill({
                   )}
                 />
                 <span className="min-w-0 flex-1 truncate">
-                  {currentBlock.title}
+                  {workBlockTitle(currentBlock, workBlockLabels)}
                 </span>
               </div>
             ) : null}

@@ -6,6 +6,10 @@ import {
   progressForWorkBlocks,
   statusText,
   toWorkBlocks,
+  workBlockActionLabel,
+  workBlockLabelsFromShape,
+  workBlockTarget,
+  workBlockTitle,
 } from "./work-blocks";
 
 function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
@@ -50,11 +54,37 @@ describe("work blocks", () => {
     expect(blocks.map((block) => block.id)).toEqual(["read"]);
     expect(blocks[0]).toMatchObject({
       kind: "read",
-      actionLabel: "阅读",
+      actionKey: "read",
       target: "app.tsx",
-      title: "阅读 app.tsx",
+      title: { key: "actionTarget", target: "app.tsx" },
       subtitle: "app.tsx",
     });
+    expect(workBlockActionLabel(blocks[0])).toBe("Read");
+    expect(workBlockTitle(blocks[0])).toBe("Read app.tsx");
+  });
+
+  test("renders localized titles from a locale label shape", () => {
+    const labels = workBlockLabelsFromShape({
+      actions: { read: "阅读", parallelDispatch: "并行分派" },
+      actionTarget: "{action} {target}",
+      parallelDispatch: "并行分派子任务",
+      parallelDispatchWithCount: "并行分派 {count} 个子任务",
+      parallelTarget: "子任务",
+      parallelTargetWithCount: "{count} 个子任务",
+    });
+    const blocks = toWorkBlocks([
+      event({ id: "read", name: "read_file", input: { path: "src/app.tsx" } }),
+      event({
+        id: "swarm",
+        name: "call_agent_parallel",
+        input: { specs: [{ agent_id: "a" }, { agent_id: "b" }] },
+      }),
+    ]);
+
+    expect(workBlockTitle(blocks[0], labels)).toBe("阅读 app.tsx");
+    expect(workBlockActionLabel(blocks[0], labels)).toBe("阅读");
+    expect(workBlockTitle(blocks[1], labels)).toBe("并行分派 2 个子任务");
+    expect(workBlockTarget(blocks[1], labels)).toBe("2 个子任务");
   });
 
   test("coalesces restored start and result records for one tool call", () => {
@@ -106,17 +136,19 @@ describe("work blocks", () => {
     ]);
 
     expect(blocks[0]).toMatchObject({
-      actionLabel: "编写待办清单",
-      title: "编写待办清单",
+      actionKey: "writeTodoList",
+      title: { key: "action" },
       subtitle: "implement renderer",
     });
+    expect(workBlockTitle(blocks[0])).toBe("Write to-do list");
     expect(blocks[1]).toMatchObject({
-      actionLabel: "运行终端",
+      actionKey: "runTerminal",
       target: "",
-      title: "运行终端",
+      title: { key: "action" },
       subtitle: "正在执行",
     });
-    expect(blocks[1].title).not.toContain("npm run typecheck");
+    expect(workBlockTitle(blocks[1])).toBe("Run terminal");
+    expect(workBlockTitle(blocks[1])).not.toContain("npm run typecheck");
     expect(blocks[1].subtitle).not.toContain("npm run typecheck");
     const current = pickCurrentWorkBlock(blocks);
     expect(current?.id).toBe("shell");
@@ -147,9 +179,10 @@ describe("work blocks", () => {
 
     expect(blocks[0]).toMatchObject({
       id: "mcp-progress",
-      title: "Reading workbook",
+      title: { key: "raw", text: "Reading workbook" },
       subtitle: "42%",
     });
+    expect(workBlockTitle(blocks[0])).toBe("Reading workbook");
   });
 
   test("treats manual verification-required audit as waiting, not a hard failure", () => {
@@ -168,10 +201,11 @@ describe("work blocks", () => {
 
     expect(blocks[0]).toMatchObject({
       id: "verify-required",
-      title: "等待验证",
+      title: { key: "awaitVerification" },
       status: "waiting_approval",
       subtitle: "等待确认",
     });
+    expect(workBlockTitle(blocks[0])).toBe("Awaiting verification");
   });
 
   test("keeps real read failures red", () => {
@@ -189,8 +223,9 @@ describe("work blocks", () => {
       id: "read-error",
       kind: "read",
       status: "error",
-      title: "阅读 missing.ts",
+      title: { key: "actionTarget", target: "missing.ts" },
     });
+    expect(workBlockTitle(blocks[0])).toBe("Read missing.ts");
   });
 
   test("uses explicit terminal failure wording for command errors", () => {
@@ -206,12 +241,14 @@ describe("work blocks", () => {
 
     expect(blocks[0]).toMatchObject({
       id: "shell-error",
-      actionLabel: "终端运行失败",
+      actionKey: "terminalFailed",
       target: "",
-      title: "终端运行失败",
+      title: { key: "action" },
       subtitle: "执行失败",
     });
-    expect(blocks[0].title).not.toContain("npm run build");
+    expect(workBlockActionLabel(blocks[0])).toBe("Terminal run failed");
+    expect(workBlockTitle(blocks[0])).toBe("Terminal run failed");
+    expect(workBlockTitle(blocks[0])).not.toContain("npm run build");
     expect(blocks[0].subtitle).not.toContain("npm run build");
   });
 
@@ -230,10 +267,11 @@ describe("work blocks", () => {
 
     expect(blocks[0]).toMatchObject({
       id: "shell-cwd",
-      title: "运行终端",
+      title: { key: "action" },
       subtitle: "octopus-agent",
     });
-    expect(blocks[0].title).not.toContain("cat ~/.ssh");
+    expect(workBlockTitle(blocks[0])).toBe("Run terminal");
+    expect(workBlockTitle(blocks[0])).not.toContain("cat ~/.ssh");
     expect(blocks[0].subtitle).not.toContain("/Users/");
   });
 
@@ -258,7 +296,9 @@ describe("work blocks", () => {
     ]);
 
     expect(blocks.map((block) => block.kind)).toEqual(["swarm", "skill"]);
-    expect(blocks[0].title).toContain("3");
-    expect(blocks[1].title).toContain("DOCX");
+    expect(blocks[0].title).toEqual({ key: "parallelDispatch", count: 3 });
+    expect(workBlockTitle(blocks[0])).toContain("3");
+    expect(blocks[1].title).toEqual({ key: "skillDocx" });
+    expect(workBlockTitle(blocks[1])).toContain("DOCX");
   });
 });

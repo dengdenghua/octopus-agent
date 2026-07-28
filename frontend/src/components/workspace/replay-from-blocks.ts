@@ -22,7 +22,11 @@ import {
   textFromUnknown,
 } from "./agent-workbench-utils";
 import { normalizeAgentPhaseTitle } from "./agent-phases";
-import type { WorkBlock } from "./work-blocks";
+import {
+  workBlockTitle,
+  type WorkBlock,
+  type WorkBlockLabels,
+} from "./work-blocks";
 
 const MAX_BODY = 1200;
 /** Cap an inlined image's base64 length (~1.5 MB binary) so the HTML stays portable. */
@@ -145,6 +149,7 @@ export interface ReplayMeta {
 export function buildReplayFromBlocks(
   blocks: WorkBlock[],
   meta: ReplayMeta,
+  labels?: WorkBlockLabels,
 ): ReplayData {
   const steps: ReplayStep[] = blocks
     .filter((block) => !isLifecycleBlock(block))
@@ -153,7 +158,7 @@ export function buildReplayFromBlocks(
       const image = imageForBlock(block);
       return {
         kind: block.kind,
-        title: sanitizeReplayText(block.title, {
+        title: sanitizeReplayText(workBlockTitle(block, labels), {
           max: 180,
           normalizeTitle: true,
         }),

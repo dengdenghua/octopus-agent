@@ -21,6 +21,8 @@ pytestmark = pytest.mark.skipif(
 # below therefore conflict with current safety policy. Marked xfail
 # until either the demo is rewritten to use a non-dangerous trail or
 # the danger gate gains an explicit-allowlist for trusted bugfix flows.
+# 2026-07-28: 阻塞原因确认为 forge promotion 被 danger gate 拦截;
+# 待 danger gate 策略(allowlist / demo 改写)明确后清理本 xfail。
 _FORGE_PROMOTION_BLOCKED_BY_DANGER_GATE = pytest.mark.xfail(
     reason=(
         "bugfix demo trail includes exec_shell; SkillForge danger "

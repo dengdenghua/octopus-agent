@@ -73,16 +73,19 @@ function pluginImageUrl(plugin: PluginInfo | HubPluginInfo): string | null {
   return `${getBackendBaseURL()}${raw}`;
 }
 
-function pluginSurfaceBadges(entry: PluginEntry): string[] {
+function pluginSurfaceBadges(
+  entry: PluginEntry,
+  t: ReturnType<typeof useI18n>["t"],
+): string[] {
   if (entry.source === "hub") {
     const labels = entry.plugin.capabilities
       .map((capability) => capability.type)
       .filter(Boolean)
       .map((type) => {
-        if (type === "skill") return "技能";
-        if (type === "channel") return "通道";
+        if (type === "skill") return t.plugins.badgeSkill;
+        if (type === "channel") return t.plugins.badgeChannel;
         if (type === "api") return "API";
-        if (type === "config_ui") return "配置";
+        if (type === "config_ui") return t.plugins.badgeConfig;
         return type;
       });
     return Array.from(new Set(labels)).slice(0, 4);
@@ -91,9 +94,10 @@ function pluginSurfaceBadges(entry: PluginEntry): string[] {
   const badges: string[] = [];
   if (surfaces?.mcp) badges.push("MCP");
   if (surfaces?.apps) badges.push("App");
-  if (surfaces?.skills) badges.push("技能");
-  if (surfaces?.commands) badges.push("命令");
-  if (surfaces?.capabilities && !badges.includes("API")) badges.push("能力");
+  if (surfaces?.skills) badges.push(t.plugins.badgeSkill);
+  if (surfaces?.commands) badges.push(t.plugins.badgeCommand);
+  if (surfaces?.capabilities && !badges.includes("API"))
+    badges.push(t.plugins.badgeCapability);
   return badges.slice(0, 5);
 }
 
@@ -108,6 +112,7 @@ function HubPluginConfigDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useI18n();
   const [config, setConfig] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
 
@@ -150,9 +155,9 @@ function HubPluginConfigDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{plugin.name} 配置</DialogTitle>
+          <DialogTitle>{t.plugins.configureTitle(plugin.name)}</DialogTitle>
           <DialogDescription>
-            配置 {plugin.name} 插件的运行参数
+            {t.plugins.configureDescription(plugin.name)}
           </DialogDescription>
         </DialogHeader>
 
@@ -189,16 +194,18 @@ function HubPluginConfigDialog({
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">此插件无需配置</p>
+            <p className="text-sm text-muted-foreground">
+              {t.plugins.configureNoConfig}
+            </p>
           )}
         </div>
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">取消</Button>
+            <Button variant="outline">{t.plugins.configureCancel}</Button>
           </DialogClose>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? "保存中..." : "保存"}
+            {saving ? t.plugins.configureSaving : t.plugins.configureSave}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -217,6 +224,7 @@ function PluginListItem({
   entry: PluginEntry;
   onConfigure: (plugin: HubPluginInfo) => void;
 }) {
+  const { t } = useI18n();
   const { plugin } = entry;
   const hubPlugin = entry.source === "hub" ? entry.plugin : null;
   const imageUrl = pluginImageUrl(plugin);
@@ -226,9 +234,9 @@ function PluginListItem({
   const statusTitle = plugin.error
     ? plugin.error
     : plugin.enabled
-      ? "已启用"
-      : "未启用";
-  const surfaceBadges = pluginSurfaceBadges(entry);
+      ? t.plugins.statusEnabledTooltip
+      : t.plugins.statusDisabledTooltip;
+  const surfaceBadges = pluginSurfaceBadges(entry, t);
   const visibleBadges = surfaceBadges.slice(0, 2);
   const hiddenBadgeCount = Math.max(
     0,
@@ -275,7 +283,11 @@ function PluginListItem({
                   : "border-border-default bg-muted/35 text-muted-foreground",
             )}
           >
-            {plugin.enabled ? "已启用" : plugin.error ? "异常" : "未启用"}
+            {plugin.enabled
+              ? t.plugins.statusEnabledTooltip
+              : plugin.error
+                ? t.plugins.statusError
+                : t.plugins.statusDisabledTooltip}
           </span>
         </div>
         <p className="mt-0.5 line-clamp-1 text-sm leading-5 text-muted-foreground">
@@ -309,12 +321,12 @@ function PluginListItem({
             type="button"
             variant="outline"
             size="sm"
-            aria-label={`配置 ${plugin.name}`}
+            aria-label={t.plugins.configureAria(plugin.name)}
             className="h-8 rounded-md px-2.5 text-xs"
             onClick={() => onConfigure(hubPlugin)}
           >
             <Settings2 className="mr-1.5 size-3.5" />
-            配置
+            {t.plugins.configure}
           </Button>
         )}
       </div>
@@ -397,7 +409,10 @@ export default function PluginsPage() {
       try {
         const result = await installPluginFromRegistry(pluginId);
         setRegistryMessage(
-          `${result.plugin_id} ${result.version} 已通过签名/摘要、权限与迁移门禁安装。`,
+          t.plugins.registryInstalledMessage(
+            result.plugin_id,
+            result.version,
+          ),
         );
         await loadData();
       } catch (error) {
@@ -490,7 +505,7 @@ export default function PluginsPage() {
           >
             <Link to="/workspace">
               <ChevronLeft className="size-4" />
-              返回工作区
+              {t.plugins.backToWorkspace}
             </Link>
           </Button>
           <TabsList variant="line">
@@ -524,18 +539,25 @@ export default function PluginsPage() {
       <TabsContent value="plugins" className="mt-0">
         <section className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           {registryUpdates && registryUpdates.plugins.length > 0 ? (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <div
+              role="region"
+              aria-label="Install verified registry plugin"
+              className="rounded-lg border border-primary/20 bg-primary/5 p-4"
+            >
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold">可信插件更新</h2>
+                  <h2 className="text-sm font-semibold">
+                    {t.plugins.registryTitle}
+                  </h2>
                   <p className="text-xs text-muted-foreground">
-                    registry fixture 已校验内容摘要、发布者策略与 App/MCP
-                    能力面。
+                    {t.plugins.registryDescription}
                   </p>
                 </div>
                 <Badge variant="outline">
-                  {registryUpdates.update_count + registryUpdates.install_count}{" "}
-                  可安装
+                  {t.plugins.registryInstallable(
+                    registryUpdates.update_count +
+                      registryUpdates.install_count,
+                  )}
                 </Badge>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -549,7 +571,8 @@ export default function PluginsPage() {
                         {entry.id} · {entry.version}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {entry.surfaces.join(" / ") || "plugin"}
+                        {entry.surfaces.join(" / ") ||
+                          t.plugins.surfaceFallback}
                       </p>
                     </div>
                     <Button
@@ -558,17 +581,17 @@ export default function PluginsPage() {
                       disabled={
                         !entry.one_click_install || registryBusy !== null
                       }
-                      aria-label={`Install verified registry plugin ${entry.id}`}
+                      aria-label={t.plugins.registryInstallAria(entry.id)}
                       onClick={() => void installRegistryEntry(entry.id)}
                     >
                       <Download className="mr-1.5 size-3.5" />
                       {registryBusy === entry.id
-                        ? "安装中"
+                        ? t.plugins.registryInstalling
                         : entry.status === "update_available"
-                          ? "升级"
+                          ? t.plugins.registryUpgrade
                           : entry.status === "current"
-                            ? "已是最新"
-                            : "安装"}
+                            ? t.plugins.registryUpToDate
+                            : t.common.install}
                     </Button>
                   </div>
                 ))}
@@ -599,15 +622,17 @@ export default function PluginsPage() {
                 <SelectTrigger className="h-11 w-auto gap-2 rounded-lg bg-background shadow-none">
                   <SelectValue>
                     {pluginAuthorFilter === "all"
-                      ? "全部作者"
-                      : `Built by ${pluginAuthorFilter}`}
+                      ? t.plugins.filterAllAuthors
+                      : t.plugins.filterByAuthor(pluginAuthorFilter)}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">全部作者</SelectItem>
+                  <SelectItem value="all">
+                    {t.plugins.filterAllAuthors}
+                  </SelectItem>
                   {pluginAuthors.map((author) => (
                     <SelectItem key={author} value={author}>
-                      Built by {author}
+                      {t.plugins.filterByAuthor(author)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -620,15 +645,21 @@ export default function PluginsPage() {
               >
                 <SelectTrigger className="h-11 w-auto gap-2 rounded-lg bg-background shadow-none">
                   <SelectValue>
-                    {pluginStatusFilter === "all" && "全部"}
-                    {pluginStatusFilter === "enabled" && "已启用"}
-                    {pluginStatusFilter === "disabled" && "未启用"}
+                    {pluginStatusFilter === "all" && t.plugins.statusAll}
+                    {pluginStatusFilter === "enabled" &&
+                      t.plugins.statusEnabledFilter}
+                    {pluginStatusFilter === "disabled" &&
+                      t.plugins.statusDisabledFilter}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">全部</SelectItem>
-                  <SelectItem value="enabled">已启用</SelectItem>
-                  <SelectItem value="disabled">未启用</SelectItem>
+                  <SelectItem value="all">{t.plugins.statusAll}</SelectItem>
+                  <SelectItem value="enabled">
+                    {t.plugins.statusEnabledFilter}
+                  </SelectItem>
+                  <SelectItem value="disabled">
+                    {t.plugins.statusDisabledFilter}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -650,12 +681,12 @@ export default function PluginsPage() {
               <p className="text-sm text-muted-foreground">
                 {allPlugins.length === 0
                   ? t.plugins.emptyTitle
-                  : "没有匹配的插件"}
+                  : t.plugins.noMatches}
               </p>
               <p className="mt-1 text-xs text-muted-foreground/60">
                 {allPlugins.length === 0
                   ? t.plugins.emptyHint
-                  : "换个关键词或筛选条件试试"}
+                  : t.plugins.tryDifferentQuery}
               </p>
             </div>
           )}

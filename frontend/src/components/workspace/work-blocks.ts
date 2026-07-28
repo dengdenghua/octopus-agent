@@ -12,13 +12,45 @@ export type WorkBlockKind =
   | "terminal"
   | "todo";
 
+export type WorkBlockActionKey =
+  | "awaitVerification"
+  | "spawnAgent"
+  | "finishAgent"
+  | "writeTodoList"
+  | "parallelDispatch"
+  | "loadSkill"
+  | "terminalFailed"
+  | "terminalRecovered"
+  | "runTerminal"
+  | "read"
+  | "createFile"
+  | "deleteFile"
+  | "editFile"
+  | "browse"
+  | "search"
+  | "execute";
+
+export type WorkBlockTitle =
+  | { key: "awaitVerification" }
+  | { key: "spawnAgent"; name: string }
+  | { key: "finishAgent"; name: string }
+  | { key: "action" }
+  | { key: "actionTarget"; target: string }
+  | { key: "parallelDispatch"; count: number }
+  | { key: "skill"; skill: string }
+  | { key: "skillDeepResearch" }
+  | { key: "skillReportWriting" }
+  | { key: "skillDocx" }
+  | { key: "connectModel" }
+  | { key: "raw"; text: string };
+
 export interface WorkBlock {
   id: string;
   event: LiveToolEvent;
   kind: WorkBlockKind;
-  actionLabel: string;
+  actionKey: WorkBlockActionKey;
   target: string;
-  title: string;
+  title: WorkBlockTitle;
   subtitle: string;
   status: WorkBlockStatus;
   startedAt: number;
@@ -31,6 +63,194 @@ export type WorkBlockStatus = LiveToolEvent["status"] | "warning";
 export type WorkBlockStatusLabels = Partial<
   Record<WorkBlockStatus, string>
 >;
+
+export interface WorkBlockLabels {
+  actions: Record<WorkBlockActionKey, string>;
+  actionTarget: (action: string, target: string) => string;
+  spawnAgent: (name: string) => string;
+  finishAgent: (name: string) => string;
+  parallelDispatch: (count: number) => string;
+  parallelTarget: (count: number) => string;
+  skillNamed: (skill: string) => string;
+  skillDeepResearch: string;
+  skillReportWriting: string;
+  skillDocx: string;
+  connectModel: string;
+  subagentFallback: string;
+}
+
+export interface WorkBlockLabelsShape {
+  actions: Partial<Record<WorkBlockActionKey, string>>;
+  actionTarget?: string;
+  spawnAgent?: string;
+  finishAgent?: string;
+  parallelDispatch?: string;
+  parallelDispatchWithCount?: string;
+  parallelTarget?: string;
+  parallelTargetWithCount?: string;
+  skillNamed?: string;
+  skillDeepResearch?: string;
+  skillReportWriting?: string;
+  skillDocx?: string;
+  connectModel?: string;
+  subagentFallback?: string;
+}
+
+const DEFAULT_WORK_BLOCK_LABELS: WorkBlockLabels = {
+  actions: {
+    awaitVerification: "Awaiting verification",
+    spawnAgent: "Create agent",
+    finishAgent: "Agent finished",
+    writeTodoList: "Write to-do list",
+    parallelDispatch: "Dispatch in parallel",
+    loadSkill: "Load skill",
+    terminalFailed: "Terminal run failed",
+    terminalRecovered: "Terminal recovered",
+    runTerminal: "Run terminal",
+    read: "Read",
+    createFile: "Create file",
+    deleteFile: "Delete file",
+    editFile: "Edit",
+    browse: "Browse",
+    search: "Search",
+    execute: "Execute",
+  },
+  actionTarget: (action, target) => `${action} ${target}`,
+  spawnAgent: (name) => `Create agent ${name}`,
+  finishAgent: (name) => `Agent ${name} finished`,
+  parallelDispatch: (count) =>
+    count > 0
+      ? `Dispatch ${count} subtasks in parallel`
+      : "Dispatch subtasks in parallel",
+  parallelTarget: (count) => (count > 0 ? `${count} subtasks` : "Subtasks"),
+  skillNamed: (skill) => `Load skill ${skill}`,
+  skillDeepResearch: "Load deep research swarm skill",
+  skillReportWriting: "Load report writing skill",
+  skillDocx: "Assemble DOCX deliverable",
+  connectModel: "Connect model",
+  subagentFallback: "Subagent",
+};
+
+function fillTemplate(
+  template: string,
+  vars: Record<string, string | number>,
+): string {
+  return template.replace(/\{(\w+)\}/g, (match, key: string) => {
+    const value = vars[key];
+    return value === undefined ? match : String(value);
+  });
+}
+
+export function workBlockLabelsFromShape(
+  raw: unknown,
+): WorkBlockLabels | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const shape = raw as WorkBlockLabelsShape;
+  if (!shape.actions || typeof shape.actions !== "object") return undefined;
+  const fallback = DEFAULT_WORK_BLOCK_LABELS;
+  const actions = { ...fallback.actions, ...shape.actions };
+  const spawnAgentTemplate = shape.spawnAgent;
+  const finishAgentTemplate = shape.finishAgent;
+  const parallelTemplate = shape.parallelDispatch;
+  const parallelWithCountTemplate = shape.parallelDispatchWithCount;
+  const parallelTargetTemplate = shape.parallelTarget;
+  const parallelTargetWithCountTemplate = shape.parallelTargetWithCount;
+  const skillNamedTemplate = shape.skillNamed;
+  return {
+    actions,
+    actionTarget: shape.actionTarget
+      ? (action, target) =>
+          fillTemplate(shape.actionTarget as string, { action, target })
+      : fallback.actionTarget,
+    spawnAgent: spawnAgentTemplate
+      ? (name) => fillTemplate(spawnAgentTemplate, { name })
+      : fallback.spawnAgent,
+    finishAgent: finishAgentTemplate
+      ? (name) => fillTemplate(finishAgentTemplate, { name })
+      : fallback.finishAgent,
+    parallelDispatch: (count) => {
+      if (count > 0 && parallelWithCountTemplate) {
+        return fillTemplate(parallelWithCountTemplate, { count });
+      }
+      if (count > 0) return fallback.parallelDispatch(count);
+      return parallelTemplate ?? fallback.parallelDispatch(0);
+    },
+    parallelTarget: (count) => {
+      if (count > 0 && parallelTargetWithCountTemplate) {
+        return fillTemplate(parallelTargetWithCountTemplate, { count });
+      }
+      if (count > 0) return fallback.parallelTarget(count);
+      return parallelTargetTemplate ?? fallback.parallelTarget(0);
+    },
+    skillNamed: skillNamedTemplate
+      ? (skill) => fillTemplate(skillNamedTemplate, { skill })
+      : fallback.skillNamed,
+    skillDeepResearch: shape.skillDeepResearch ?? fallback.skillDeepResearch,
+    skillReportWriting: shape.skillReportWriting ?? fallback.skillReportWriting,
+    skillDocx: shape.skillDocx ?? fallback.skillDocx,
+    connectModel: shape.connectModel ?? fallback.connectModel,
+    subagentFallback: shape.subagentFallback ?? fallback.subagentFallback,
+  };
+}
+
+export function workBlockActionLabel(
+  block: WorkBlock,
+  labels?: WorkBlockLabels,
+): string {
+  return (labels ?? DEFAULT_WORK_BLOCK_LABELS).actions[block.actionKey];
+}
+
+export function workBlockTitle(
+  block: WorkBlock,
+  labels?: WorkBlockLabels,
+): string {
+  const resolved = labels ?? DEFAULT_WORK_BLOCK_LABELS;
+  const title = block.title;
+  switch (title.key) {
+    case "awaitVerification":
+      return resolved.actions.awaitVerification;
+    case "spawnAgent":
+      return resolved.spawnAgent(title.name || resolved.subagentFallback);
+    case "finishAgent":
+      return resolved.finishAgent(title.name || resolved.subagentFallback);
+    case "action":
+      return resolved.actions[block.actionKey];
+    case "actionTarget":
+      return resolved.actionTarget(
+        resolved.actions[block.actionKey],
+        title.target,
+      );
+    case "parallelDispatch":
+      return resolved.parallelDispatch(title.count);
+    case "skill":
+      return resolved.skillNamed(title.skill);
+    case "skillDeepResearch":
+      return resolved.skillDeepResearch;
+    case "skillReportWriting":
+      return resolved.skillReportWriting;
+    case "skillDocx":
+      return resolved.skillDocx;
+    case "connectModel":
+      return resolved.connectModel;
+    case "raw":
+      return title.text;
+  }
+}
+
+export function workBlockTarget(
+  block: WorkBlock,
+  labels?: WorkBlockLabels,
+): string {
+  const resolved = labels ?? DEFAULT_WORK_BLOCK_LABELS;
+  const title = block.title;
+  if (title.key === "parallelDispatch") {
+    return resolved.parallelTarget(title.count);
+  }
+  if (title.key === "spawnAgent" || title.key === "finishAgent") {
+    return title.name || resolved.subagentFallback;
+  }
+  return block.target;
+}
 
 export interface SettledRunDisplayOptions {
   hasAnswer?: boolean;
@@ -155,15 +375,15 @@ export function statusText(
 function toWorkBlock(event: LiveToolEvent): WorkBlock {
   const kind = workKind(event.name);
   const status = workBlockStatus(event);
-  const actionLabel = workActionLabel(event, kind, status);
+  const actionKey = workActionKey(event, kind, status);
   const target = workTarget(event, kind);
-  const title = workTitle(event, kind, actionLabel, target);
+  const title = workTitle(event, kind, target);
   const subtitle = workSubtitle(event, target);
   return {
     id: event.id,
     event,
     kind,
-    actionLabel,
+    actionKey,
     target,
     title,
     subtitle,
@@ -218,35 +438,33 @@ function workKind(name: string): WorkBlockKind {
 function workTitle(
   event: LiveToolEvent,
   kind: WorkBlockKind,
-  actionLabel: string,
   target: string,
-): string {
+): WorkBlockTitle {
   if (isManualVerificationRequiredEvent(event)) {
-    return "等待验证";
+    return { key: "awaitVerification" };
   }
   if (event.lifecycle === "spawned" || /subagent_spawned/i.test(event.name)) {
-    return `创建助手 ${agentDisplayName(event)}`;
+    return { key: "spawnAgent", name: agentDisplayName(event) };
   }
   if (event.lifecycle === "finished" || /subagent_finished/i.test(event.name)) {
-    return `助手完成 ${agentDisplayName(event)}`;
+    return { key: "finishAgent", name: agentDisplayName(event) };
   }
   if (event.name === "todo_write") {
-    return actionLabel;
+    return { key: "action" };
   }
   if (event.name === "call_agent_parallel") {
-    const count = specCount(event.input);
-    return count > 0 ? `并行分派 ${count} 个子任务` : "并行分派子任务";
+    return { key: "parallelDispatch", count: specCount(event.input) };
   }
   if (kind === "skill") {
     return skillTitle(event);
   }
   const progressLabel = progressLabelText(event);
   if (event.name.startsWith("mcp:") && progressLabel) {
-    return compact(progressLabel, 64);
+    return { key: "raw", text: compact(progressLabel, 64) };
   }
-  if (target) return `${actionLabel} ${compact(target, 48)}`;
-  if (event.name === "model_gateway") return "连接模型";
-  return actionLabel || event.name.replace(/[_-]+/g, " ");
+  if (target) return { key: "actionTarget", target: compact(target, 48) };
+  if (event.name === "model_gateway") return { key: "connectModel" };
+  return { key: "action" };
 }
 
 function workSubtitle(event: LiveToolEvent, fallbackTarget: string): string {
@@ -273,41 +491,41 @@ function workSubtitle(event: LiveToolEvent, fallbackTarget: string): string {
   return statusText(workBlockStatus(event));
 }
 
-function workActionLabel(
+function workActionKey(
   event: LiveToolEvent,
   kind: WorkBlockKind,
   status: WorkBlockStatus,
-): string {
-  if (isManualVerificationRequiredEvent(event)) return "等待验证";
+): WorkBlockActionKey {
+  if (isManualVerificationRequiredEvent(event)) return "awaitVerification";
   if (event.lifecycle === "spawned" || /subagent_spawned/i.test(event.name)) {
-    return "创建助手";
+    return "spawnAgent";
   }
   if (event.lifecycle === "finished" || /subagent_finished/i.test(event.name)) {
-    return "助手完成";
+    return "finishAgent";
   }
-  if (event.name === "todo_write") return "编写待办清单";
-  if (event.name === "call_agent_parallel") return "并行分派";
-  if (kind === "skill") return "加载技能";
+  if (event.name === "todo_write") return "writeTodoList";
+  if (event.name === "call_agent_parallel") return "parallelDispatch";
+  if (kind === "skill") return "loadSkill";
   if (kind === "terminal") {
-    if (status === "error") return "终端运行失败";
-    if (status === "warning") return "终端已恢复";
-    return "运行终端";
+    if (status === "error") return "terminalFailed";
+    if (status === "warning") return "terminalRecovered";
+    return "runTerminal";
   }
-  if (kind === "read") return "阅读";
-  if (kind === "file") return fileActionLabel(event);
-  if (kind === "browser") return "浏览";
-  if (kind === "search") return "搜索";
-  if (kind === "swarm") return "并行分派";
-  return "执行";
+  if (kind === "read") return "read";
+  if (kind === "file") return fileActionKey(event);
+  if (kind === "browser") return "browse";
+  if (kind === "search") return "search";
+  if (kind === "swarm") return "parallelDispatch";
+  return "execute";
 }
 
-function fileActionLabel(event: LiveToolEvent): string {
+function fileActionKey(event: LiveToolEvent): WorkBlockActionKey {
   const op =
     firstString(event.input, ["op", "operation", "action"]) ||
     firstChangeString(event.input, ["op", "operation", "action"]);
-  if (/add|create|new|generate|write/i.test(op)) return "创建文件";
-  if (/delete|remove/i.test(op)) return "删除文件";
-  return "编辑";
+  if (/add|create|new|generate|write/i.test(op)) return "createFile";
+  if (/delete|remove/i.test(op)) return "deleteFile";
+  return "editFile";
 }
 
 function workTarget(event: LiveToolEvent, kind: WorkBlockKind): string {
@@ -318,10 +536,7 @@ function workTarget(event: LiveToolEvent, kind: WorkBlockKind): string {
     return agentDisplayName(event);
   }
   if (event.name === "todo_write") return "";
-  if (event.name === "call_agent_parallel") {
-    const count = specCount(event.input);
-    return count > 0 ? `${count} 个子任务` : "子任务";
-  }
+  if (event.name === "call_agent_parallel") return "";
   if (kind === "skill") {
     return firstString(event.input, ["skill", "skill_name", "name"]);
   }
@@ -382,7 +597,7 @@ function agentDisplayName(event: LiveToolEvent): string {
     event.agentName ||
     event.subAgentRole ||
     event.agentId ||
-    "子智能体"
+    ""
   );
 }
 
@@ -430,19 +645,19 @@ function specCount(input: Record<string, unknown> | undefined): number {
   return Array.isArray(specs) ? specs.length : 0;
 }
 
-function skillTitle(event: LiveToolEvent): string {
+function skillTitle(event: LiveToolEvent): WorkBlockTitle {
   const skill =
     firstString(event.input, ["skill", "skill_name", "name"]) || event.name;
   if (skill === "deep-research-swarm" || event.name === "deep-research-swarm") {
-    return "加载深度调研集群技能";
+    return { key: "skillDeepResearch" };
   }
   if (skill === "report-writing" || event.name === "report-writing") {
-    return "加载报告写作技能";
+    return { key: "skillReportWriting" };
   }
   if (skill === "docx" || event.name === "docx") {
-    return "组装 DOCX 交付物";
+    return { key: "skillDocx" };
   }
-  return `加载技能 ${compact(skill, 48)}`;
+  return { key: "skill", skill: compact(skill, 48) };
 }
 
 function todoTitle(input: Record<string, unknown> | undefined) {

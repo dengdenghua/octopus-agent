@@ -27,6 +27,8 @@ import {
 } from "./agent-phases";
 import {
   pickCurrentWorkBlock,
+  workBlockLabelsFromShape,
+  workBlockTitle,
   type WorkBlock,
   type WorkBlockStatus,
 } from "./work-blocks";
@@ -275,8 +277,12 @@ function referenceItemsForBlock(
 ): ObservedReferenceItem[] {
   if (block.kind === "todo") return [];
 
+  const blockTitle = workBlockTitle(
+    block,
+    workBlockLabelsFromShape(t.workBlocks),
+  );
   if (block.kind === "file" || block.kind === "read") {
-    const fileItems = fileReferenceItems(block);
+    const fileItems = fileReferenceItems(block, blockTitle);
     if (fileItems.length > 0) return fileItems;
   }
   if (block.kind === "search" || block.kind === "browser") {
@@ -285,11 +291,11 @@ function referenceItemsForBlock(
   }
 
   const target = referenceTarget(block);
-  const title = target || block.title || block.event.name;
+  const title = target || blockTitle || block.event.name;
   if (!title) return [];
   const detail =
-    target && block.title && block.title !== target
-      ? block.title
+    target && blockTitle !== target
+      ? blockTitle
       : block.subtitle || compactReference(block.outputText, 96);
   return [
     {
@@ -301,7 +307,10 @@ function referenceItemsForBlock(
   ];
 }
 
-function fileReferenceItems(block: WorkBlock): ObservedReferenceItem[] {
+function fileReferenceItems(
+  block: WorkBlock,
+  blockTitle: string,
+): ObservedReferenceItem[] {
   return uniqueStrings([
     ...changePaths(block.event.input),
     ...stringArrayFromInput(block.event.input, [
@@ -321,7 +330,7 @@ function fileReferenceItems(block: WorkBlock): ObservedReferenceItem[] {
     return {
       id: `${block.id}:file:${index}:${path}`,
       title: compactReference(name || path, 120),
-      subtitle: path !== name ? compactReference(path, 140) : block.title,
+      subtitle: path !== name ? compactReference(path, 140) : blockTitle,
       tag: fileKindLabel(path),
     };
   });
@@ -658,8 +667,9 @@ function uniqueStrings(values: string[]): string[] {
   return result;
 }
 
-function compactReference(value: string, max: number): string {
-  const clean = value.replace(/\s+/g, " ").trim();
+function compactReference(value: unknown, max: number): string {
+  const text = typeof value === "string" ? value : "";
+  const clean = text.replace(/\s+/g, " ").trim();
   return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
 }
 
@@ -713,7 +723,8 @@ function ReferenceIcon({
 function SummaryAgentRow({ tile }: { tile: AgentTile }) {
   const { t } = useI18n();
   const subtask = useSubtask(tile.id);
-  const displayLabel = tile.taskLabel ?? tile.codename ?? tile.name ?? tile.label;
+  const displayLabel =
+    tile.taskLabel ?? tile.codename ?? tile.name ?? tile.label;
   const previewId = `subtask-preview-${tile.id}`;
   const statusLabel = subtask
     ? (() => {
@@ -822,7 +833,7 @@ export function AgentSummaryPage({
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    () => new Set(["progress", "inputs", "artifacts"]),
+    () => new Set(["progress", "artifacts"]),
   );
   const manuallyToggledSections = useRef(new Set<string>());
   const previousRunActive = useRef(false);
@@ -898,13 +909,6 @@ export function AgentSummaryPage({
   }, [phases.length, runActive]);
   const showOutline =
     progressOutline !== undefined && progressOutline.length > 0;
-  const inputText = userInput?.text.trim() ?? "";
-  const inputUploadedFiles = userInput?.uploadedFiles ?? [];
-  const inputAttachments = userInput?.attachments ?? [];
-  const showInputs =
-    inputText.length > 0 ||
-    inputUploadedFiles.length > 0 ||
-    inputAttachments.length > 0;
   const outlineExecutionCount = showOutline
     ? progressOutline.reduce((sum, round) => sum + round.executionCount, 0)
     : 0;
@@ -1148,87 +1152,6 @@ export function AgentSummaryPage({
                   ))}
                 </ul>
               ))}
-          </section>
-        )}
-
-        {/* 输入 */}
-        {showInputs && (
-          <section className="border-b border-border-subtle py-4">
-            <button
-              type="button"
-              aria-expanded={expandedSections.has("inputs")}
-              onClick={() => toggleSection("inputs")}
-              className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
-            >
-              <h3 className="text-xs font-medium text-foreground">
-                {t.agentWorkbenchPages.inputs}
-              </h3>
-              <span className="ml-auto truncate text-xs text-muted-foreground">
-                {inputUploadedFiles.length > 0
-                  ? t.agentWorkbenchPages.inputsUploadedFiles(
-                      inputUploadedFiles.length,
-                    )
-                  : ""}
-                {inputUploadedFiles.length > 0 && inputAttachments.length > 0
-                  ? " · "
-                  : ""}
-                {inputAttachments.length > 0
-                  ? t.agentWorkbenchPages.inputsAttachments(
-                      inputAttachments.length,
-                    )
-                  : ""}
-              </span>
-              {expandedSections.has("inputs") ? (
-                <ChevronDownIcon className="size-3.5 text-muted-foreground" />
-              ) : (
-                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
-              )}
-            </button>
-            {expandedSections.has("inputs") && (
-              <div className="mt-3 space-y-3">
-                {inputText.length > 0 && (
-                  <p className="whitespace-pre-wrap text-xs leading-5 text-foreground">
-                    {inputText}
-                  </p>
-                )}
-                {inputUploadedFiles.length > 0 && (
-                  <ul className="space-y-1">
-                    {inputUploadedFiles.map((file) => (
-                      <li
-                        key={file.path}
-                        className="flex min-h-6 items-center gap-2"
-                      >
-                        <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span
-                          className="min-w-0 flex-1 truncate text-xs text-foreground"
-                          title={file.path}
-                        >
-                          {file.filename}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {inputAttachments.length > 0 && (
-                  <ul className="space-y-1">
-                    {inputAttachments.map((attachment, index) => (
-                      <li
-                        key={`${attachment.filename}-${index}`}
-                        className="flex min-h-6 items-center gap-2"
-                      >
-                        <PaperclipIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span
-                          className="min-w-0 flex-1 truncate text-xs text-foreground"
-                          title={attachment.filename}
-                        >
-                          {attachment.filename}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
           </section>
         )}
 

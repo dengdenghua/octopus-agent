@@ -84,7 +84,10 @@ import {
   serveMeshForMode,
   type TeamMode,
 } from "@/components/workspace/team-mode-picker";
-import { toWorkBlocks } from "@/components/workspace/work-blocks";
+import {
+  toWorkBlocks,
+  workBlockLabelsFromShape,
+} from "@/components/workspace/work-blocks";
 import { screenBlocksForAgent } from "@/components/workspace/agent-workbench-snapshot";
 import { buildReplayFromBlocks } from "@/components/workspace/replay-from-blocks";
 import { buildReplayHtml } from "@/core/sharing/replay-html";
@@ -1053,6 +1056,7 @@ function RealtimePageContent({
     open: artifactsOpen,
     select: selectArtifact,
     setOpen: setArtifactsOpen,
+    setArtifacts,
   } = useArtifacts();
   const [settings, setSettings] = useThreadSettings(threadId);
   const [mounted, setMounted] = useState(false);
@@ -2306,11 +2310,17 @@ function RealtimePageContent({
     const title =
       thread?.values?.title || initialPrompt || t.realtime.replay.titleDefault;
     const html = buildReplayHtml(
-      buildReplayFromBlocks(replayBlocks, {
-        title,
-        brand: "Octopus Agent",
-        footer: `${new Date().toLocaleDateString()} · ${t.realtime.replay.footer}`,
-      }),
+      buildReplayFromBlocks(
+        replayBlocks,
+        {
+          title,
+          brand: "Octopus Agent",
+          footer: `${new Date().toLocaleDateString()} · ${t.realtime.replay.footer}`,
+        },
+        workBlockLabelsFromShape(
+          (t as unknown as { workBlocks?: unknown }).workBlocks,
+        ),
+      ),
     );
     downloadTextFile(html, `octopus-replay-${shareSlug(title)}.html`);
   }, [replayBlocks, thread, initialPrompt, t]);
@@ -2494,7 +2504,9 @@ function RealtimePageContent({
       (collaborationEnabled &&
         !agentWorkbenchDismissed &&
         (!isNewThread || thread.isLoading || hasRenderableAgentWorkbench)) ||
-      (hasRenderableAgentWorkbench && (artifactsOpen || showAgentPlan))) &&
+      (!agentWorkbenchDismissed &&
+        hasRenderableAgentWorkbench &&
+        (artifactsOpen || showAgentPlan))) &&
     !showResearchHistory &&
     !(showResearch && (!!researchJob || !!researchError));
   const artifactCount = artifacts?.length ?? 0;
@@ -2581,6 +2593,7 @@ function RealtimePageContent({
   useEffect(() => {
     if (thread.isLoading) {
       setAgentWorkbenchTabTouched(false);
+      setAgentWorkbenchDismissed(false);
     }
   }, [thread.isLoading]);
 
@@ -2923,10 +2936,10 @@ function RealtimePageContent({
   }, [setArtifactsOpen]);
 
   const openArtifactsPanel = useCallback(() => {
-    setArtifactsOpen(true);
+    setArtifactsOpen(false);
     setShowAgentPlan(false);
     setAgentWorkbenchDismissed(false);
-    setAgentWorkbenchManuallyOpened(false);
+    setAgentWorkbenchManuallyOpened(true);
     setShowResearchHistory(false);
     setShowResearch(false);
     setShowPreview(false);
@@ -2936,25 +2949,33 @@ function RealtimePageContent({
 
   const openWorkbenchArtifact = useCallback(
     (path: string) => {
-      // Same guard as the workspace-focus auto-follow effect: only select
-      // paths the artifacts context actually knows about.
-      if (path && artifacts.includes(path)) {
+      if (path) {
+        if (!artifacts.includes(path)) {
+          setArtifacts((prev) => [...prev, path]);
+        }
         selectArtifact(path, true);
       }
-      // Open the artifacts side panel without retargeting the workbench
-      // tab: "artifacts" has no embedded workbench page, so switching
-      // would strand an open workbench on the legacy fallback view.
-      setArtifactsOpen(true);
+      setArtifactsOpen(false);
       setShowAgentPlan(false);
+      setAgentWorkbenchDismissed(false);
+      setAgentWorkbenchManuallyOpened(true);
       setShowResearchHistory(false);
       setShowResearch(false);
       setShowPreview(false);
+      setAgentWorkbenchTab("artifacts");
       setAgentWorkbenchTabTouched(true);
     },
-    [artifacts, selectArtifact, setArtifactsOpen],
+    [artifacts, selectArtifact, setArtifactsOpen, setArtifacts],
   );
 
   const openFinalArtifactPanel = useCallback(() => {
+    const firstEntry = finalArtifactEntries[0];
+    if (firstEntry?.path) {
+      if (!artifacts.includes(firstEntry.path)) {
+        setArtifacts((prev) => [...prev, firstEntry.path!]);
+      }
+      selectArtifact(firstEntry.path, true);
+    }
     setArtifactsOpen(false);
     setShowAgentPlan(false);
     setAgentWorkbenchDismissed(false);
@@ -2962,9 +2983,9 @@ function RealtimePageContent({
     setShowResearchHistory(false);
     setShowResearch(false);
     setShowPreview(false);
-    setAgentWorkbenchTab("agent");
+    setAgentWorkbenchTab("artifacts");
     setAgentWorkbenchTabTouched(true);
-  }, [setArtifactsOpen]);
+  }, [finalArtifactEntries, artifacts, selectArtifact, setArtifactsOpen, setArtifacts]);
 
   const openAgentPlanPanel = useCallback(() => {
     setArtifactsOpen(false);
@@ -3411,7 +3432,6 @@ function RealtimePageContent({
               }
               onSecondaryClose={closeAgentWorkbenchPanel}
               showSidebar={
-                artifactsOpen ||
                 showAgentPlan ||
                 showResearchHistory ||
                 (showResearch && (!!researchJob || !!researchError))

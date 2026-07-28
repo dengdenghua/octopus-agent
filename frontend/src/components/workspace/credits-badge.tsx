@@ -1,7 +1,6 @@
 import { Coins } from "lucide-react";
 
 import { useOctLink } from "@/core/oct/hooks";
-import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 
@@ -15,12 +14,11 @@ function formatCredits(n: number | undefined | null): string | null {
 
 export function CreditsBadge({ className }: { className?: string }) {
   const { t } = useI18n();
-  const { isGuest } = useAuth();
   const { data } = useOctLink();
   const remaining = data?.credits?.surplusCredits;
   const formatted = formatCredits(remaining);
 
-  if (isGuest || formatted === null) return null;
+  if (formatted === null) return null;
 
   return (
     <button

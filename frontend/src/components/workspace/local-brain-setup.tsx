@@ -63,11 +63,11 @@ export default function LocalBrainSetup() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setStatus((await res.json()) as BrainStatus);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "请求失败");
+      setError(e instanceof Error ? e.message : t.localBrain.requestFailed);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void refresh();
@@ -88,7 +88,9 @@ export default function LocalBrainSetup() {
           onClick={() => setExpanded((v) => !v)}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <span className="shrink-0 text-xs font-medium">本地大脑</span>
+          <span className="shrink-0 text-xs font-medium">
+            {t.localBrain.title}
+          </span>
           {status && (
             <span
               className={cn(
@@ -98,11 +100,11 @@ export default function LocalBrainSetup() {
                   : "bg-amber-50 text-amber-700",
               )}
             >
-              {ready ? "已就绪" : `待配置 ${pending} 项`}
+              {ready ? t.localBrain.ready : t.localBrain.pending(pending)}
             </span>
           )}
           <span className="truncate text-xs text-muted-foreground">
-            {status?.summary ?? (loading ? "检测中…" : "")}
+            {status?.summary ?? (loading ? t.localBrain.checking : "")}
           </span>
           {expanded ? (
             <ChevronDownIcon className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
@@ -146,7 +148,7 @@ export default function LocalBrainSetup() {
         <div className="space-y-1.5 border-t border-border-subtle px-3 py-2">
           {error && (
             <p className="text-xs text-red-600">
-              检测失败:{error}(后端没起?)
+              {t.localBrain.checkFailed(error)}
             </p>
           )}
           {status?.items.map((it, i) => (
@@ -166,11 +168,11 @@ export default function LocalBrainSetup() {
                   · {it.what}
                 </span>
                 <div className="text-xs text-foreground/60">
-                  现状:{it.detail}
+                  {t.localBrain.currentState(it.detail)}
                 </div>
                 {!it.ok && it.action && (
                   <div className="text-xs leading-snug text-blue-700">
-                    下一步:{it.action}
+                    {t.localBrain.nextStep(it.action)}
                   </div>
                 )}
               </div>

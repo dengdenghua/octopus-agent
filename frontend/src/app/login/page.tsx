@@ -118,7 +118,7 @@ function EmailLoginForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="email">邮箱</Label>
+        <Label htmlFor="email">{t.auth.emailLabel}</Label>
         <div className="relative">
           <MailIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
           <Input
@@ -176,7 +176,9 @@ function EmailLoginForm() {
         >
           {t.auth.terms.userAgreement}
         </Link>
-        {" 和 "}
+        {" "}
+        {t.auth.terms.and}
+        {" "}
         <Link
           to="/privacy"
           className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
@@ -412,7 +414,7 @@ export default function LoginPage() {
               ) : hasOct && localProvider ? (
                 <Tabs defaultValue="email" className="w-full">
                   <TabsList className="mb-5 grid w-full grid-cols-2">
-                    <TabsTrigger value="email">邮箱登录</TabsTrigger>
+                    <TabsTrigger value="email">{t.auth.tabEmail}</TabsTrigger>
                     <TabsTrigger value="local">
                       {localProvider.label ?? t.registerPage.usernameLabel}
                     </TabsTrigger>

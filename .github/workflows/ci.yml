@@ -227,9 +227,10 @@ jobs:
       - name: ESLint
         working-directory: frontend
         # No `|| true`: the gate must fail on real errors. The tree is
-        # error-clean today (179 pre-existing warnings don't gate —
-        # eslint exits 0 on warnings-only). Add `--max-warnings N` later
-        # to ratchet the warning debt down.
+        # error-clean today (5 pre-existing warnings as of 2026-07-28,
+        # measured via `pnpm exec eslint . --ext .ts,.tsx` — they don't
+        # gate because eslint exits 0 on warnings-only). Add
+        # `--max-warnings N` later to ratchet the warning debt down.
         run: pnpm exec eslint . --ext .ts,.tsx
       - name: Typecheck
         working-directory: frontend

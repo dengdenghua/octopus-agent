@@ -26,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useI18n } from "@/core/i18n/hooks";
+import type { Translations } from "@/core/i18n";
 import { cn } from "@/lib/utils";
 
 import {
@@ -44,15 +45,15 @@ function initials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: Translations["annotations"]): string {
   const seconds = Math.floor(Date.now() / 1000 - ts);
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return t.justNow;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t.minutesAgo(minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t.hoursAgo(hours);
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t.daysAgo(days);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +124,7 @@ export function AnnotationThread({
               {annotation.author?.display_name ?? t.annotations.anonymous}
             </span>
             <span className="text-xs text-muted-foreground">
-              {timeAgo(annotation.created_at)}
+              {timeAgo(annotation.created_at, t.annotations)}
             </span>
           </div>
         </div>
@@ -140,7 +141,7 @@ export function AnnotationThread({
                   onClick={() =>
                     void unresolveAnnotation(annotation.annotation_id)
                   }
-                  aria-label="Mark as unresolved"
+                  aria-label={t.annotations.unresolve}
                 >
                   <Undo2 size={12} />
                 </Button>
@@ -157,7 +158,7 @@ export function AnnotationThread({
                   onClick={() =>
                     void resolveAnnotation(annotation.annotation_id)
                   }
-                  aria-label="Resolve comment"
+                  aria-label={t.annotations.resolve}
                 >
                   <CheckCircle2 size={12} />
                 </Button>
@@ -172,7 +173,7 @@ export function AnnotationThread({
                 size="icon"
                 className="size-6 text-destructive hover:text-destructive"
                 onClick={() => void deleteAnnotation(annotation.annotation_id)}
-                aria-label="Delete comment"
+                aria-label={t.annotations.delete}
               >
                 <Trash2 size={12} />
               </Button>
@@ -223,7 +224,7 @@ export function AnnotationThread({
             className="size-6"
             disabled={!replyText.trim() || replying}
             onClick={() => void handleReply()}
-            aria-label="Send reply"
+            aria-label={t.annotations.sendReply}
           >
             <Send size={12} />
           </Button>
@@ -255,7 +256,7 @@ function ReplyBubble({ reply }: { reply: AnnotationReply }) {
             {reply.author?.display_name ?? t.annotations.anonymous}
           </span>
           <span className="text-xs text-muted-foreground">
-            {timeAgo(reply.created_at)}
+            {timeAgo(reply.created_at, t.annotations)}
           </span>
         </div>
         <p className="text-xs leading-relaxed">{reply.body}</p>

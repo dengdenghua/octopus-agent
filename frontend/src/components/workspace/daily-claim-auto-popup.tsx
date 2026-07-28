@@ -46,7 +46,7 @@ function markDismissedToday() {
 }
 
 export function DailyClaimAutoPopup() {
-  const { user, isGuest } = useAuth();
+  const { user } = useAuth();
   const link = useOctLink();
   const linked = Boolean(link.data);
 
@@ -56,16 +56,16 @@ export function DailyClaimAutoPopup() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!user || isGuest || !linked) return;
+    if (!user || !linked) return;
     if (info.isLoading || !info.data) return;
     const data = info.data.data;
     const claimed = Boolean(data?.claimedToday ?? false);
     if (claimed) return;
     if (wasDismissedToday()) return;
     setOpen(true);
-  }, [user, isGuest, linked, info.isLoading, info.data]);
+  }, [user, linked, info.isLoading, info.data]);
 
-  if (!user || isGuest || !linked) return null;
+  if (!user || !linked) return null;
 
   return (
     <DailyClaimDialog

@@ -31,6 +31,7 @@ function ComingSoonTab({
   icon: LucideIcon;
   title: string;
 }) {
+  const { t } = useI18n();
   return (
     <Empty className="min-h-64">
       <EmptyHeader>
@@ -38,7 +39,7 @@ function ComingSoonTab({
           <Icon />
         </EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>即将上线</EmptyDescription>
+        <EmptyDescription>{t.knowledge.comingSoon}</EmptyDescription>
       </EmptyHeader>
     </Empty>
   );
@@ -69,7 +70,7 @@ export default function KnowledgePage() {
               </TabsTrigger>
               <TabsTrigger value="files" className="h-8 gap-1.5 px-3 text-xs">
                 <DatabaseIcon className="size-3.5" />
-                Files
+                {t.knowledge.tabFiles}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -77,13 +78,22 @@ export default function KnowledgePage() {
           <div className="workspace-panel ui-density-panel">
             {activeTab === "graph" && <KnowledgeGraphPanel />}
             {activeTab === "memory" && (
-              <ComingSoonTab icon={BrainIcon} title="记忆管理" />
+              <ComingSoonTab
+                icon={BrainIcon}
+                title={t.knowledge.memoryManagement}
+              />
             )}
             {activeTab === "wiki" && (
-              <ComingSoonTab icon={FileTextIcon} title="Wiki 文档" />
+              <ComingSoonTab
+                icon={FileTextIcon}
+                title={t.knowledge.wikiDocs}
+              />
             )}
             {activeTab === "files" && (
-              <ComingSoonTab icon={DatabaseIcon} title="文件管理" />
+              <ComingSoonTab
+                icon={DatabaseIcon}
+                title={t.knowledge.fileManagement}
+              />
             )}
           </div>
         </div>

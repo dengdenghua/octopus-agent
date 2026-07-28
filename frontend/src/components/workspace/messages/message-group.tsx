@@ -79,7 +79,6 @@ import {
 import {
   aggregateSimilarToolCalls,
   isAggregatedToolGroup,
-  type TimelineItemLike,
 } from "./activity-aggregator";
 import { projectToolNarrative } from "./narrative-block";
 
@@ -372,10 +371,7 @@ export function MessageGroup({
       }
     }
     // Apply activity aggregation: group consecutive similar tool calls
-    const aggregated = aggregateSimilarToolCalls(
-      selected as unknown as readonly TimelineItemLike[],
-    );
-    // Adapt to local TimelineItem type
+    const aggregated = aggregateSimilarToolCalls(selected);
     return aggregated.map((item): TimelineItem => {
       if (isAggregatedToolGroup(item)) {
         const mappedItems: ToolCallTimelineItem[] = [];
@@ -390,7 +386,9 @@ export function MessageGroup({
           }
           // Aggregation preserves the original object. Falling back by tool
           // name maps repeated anonymous calls to the wrong evidence row.
-          mappedItems.push(toolLike as unknown as ToolCallTimelineItem);
+          if (isToolCallTimelineItem(toolLike)) {
+            mappedItems.push(toolLike);
+          }
         }
         return {
           id: item.id,
@@ -401,12 +399,18 @@ export function MessageGroup({
           items:
             mappedItems.length > 0
               ? mappedItems
-              : (item.items as unknown as ToolCallTimelineItem[]),
+              : item.items.filter(isToolCallTimelineItem),
           role: item.role as TimelineRole | undefined,
           inferred: item.inferred,
         };
       }
-      return item as unknown as TimelineItem;
+      if (isTimelineItem(item)) return item;
+      // The aggregator passes non-aggregated items through by reference, so
+      // every item here originates from the TimelineItem[] above. Reaching
+      // this branch means the input was corrupted upstream.
+      throw new TypeError(
+        "aggregateSimilarToolCalls returned an unknown timeline item",
+      );
     });
   }, [timelineItems, receiptsByCallId]);
   const compactExecutionCoverage = useMemo(
@@ -1460,6 +1464,29 @@ export type TimelineItem =
   | CommentaryTimelineItem
   | ToolCallTimelineItem
   | AggregatedToolGroupTimelineItem;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+// activity-aggregator describes timeline items with structural (duck) types
+// to avoid a circular import; the aggregator preserves input objects by
+// reference, so these guards can safely narrow its output back to the local
+// TimelineItem types at the boundary.
+function isToolCallTimelineItem(value: unknown): value is ToolCallTimelineItem {
+  if (!isRecord(value) || value.type !== "toolCall") return false;
+  if (typeof value.id !== "string" || !isRecord(value.step)) return false;
+  return typeof value.step.name === "string" && isRecord(value.step.args);
+}
+
+function isTimelineItem(value: unknown): value is TimelineItem {
+  if (isToolCallTimelineItem(value)) return true;
+  if (!isRecord(value)) return false;
+  if (value.type === "reasoningGroup" || value.type === "actionCallbackGroup") {
+    return Array.isArray(value.steps);
+  }
+  return value.type === "commentary" && isRecord(value.step);
+}
 
 export function hasVisibleMessageGroupContent(
   messages: Message[],

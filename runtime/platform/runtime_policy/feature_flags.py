@@ -406,12 +406,20 @@ _BUILTIN: list[FlagSpec] = [
         ),
         experimental=True,
     ),
+    # EXPERIMENTAL: remote workspace collaboration is delivered but OFF by
+    # default. While this flag is off, every /api/workspaces endpoint
+    # returns 403 and frontend entry points (e.g. WorkspaceSwitcher) are
+    # unavailable. Do NOT enable in production without a staged (灰度)
+    # rollout and validation first.
     FlagSpec(
         name="ui.remote_workspace",
         default=False,
         description=(
-            "Expose the Workspace HTTP API (mount + membership + "
-            "file lease endpoints under /api/workspaces)."
+            "EXPERIMENTAL (default off, requires staged rollout before "
+            "enabling): expose the Workspace HTTP API (mount + membership "
+            "+ file lease endpoints under /api/workspaces). While off, "
+            "all /api/workspaces endpoints return 403 and frontend "
+            "workspace entry points such as WorkspaceSwitcher are hidden."
         ),
         experimental=True,
     ),

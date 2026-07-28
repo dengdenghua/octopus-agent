@@ -16,7 +16,6 @@ type AuthShape = {
   authStatus: { enabled: boolean } | null;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
-  isGuest: boolean;
 };
 
 const mockAuth = { current: null as AuthShape | null };
@@ -95,7 +94,6 @@ describe("UserMenu · auth state transitions", () => {
       authStatus: { enabled: true },
       logout: async () => {},
       isAuthenticated: false,
-      isGuest: true,
     };
     const { container } = renderMenu();
     expect(container.textContent).toBe("");
@@ -109,7 +107,6 @@ describe("UserMenu · auth state transitions", () => {
       authStatus: { enabled: true },
       logout: async () => {},
       isAuthenticated: false,
-      isGuest: true,
     };
     renderMenu();
     expect(screen.getByText("登录")).toBeInTheDocument();
@@ -123,7 +120,6 @@ describe("UserMenu · auth state transitions", () => {
       authStatus: { enabled: true },
       logout: async () => {},
       isAuthenticated: true,
-      isGuest: false,
     };
     renderMenu();
     // Username chip is inside a DropdownMenu trigger · either the
@@ -143,7 +139,6 @@ describe("UserMenu · auth state transitions", () => {
       authStatus: { enabled: true },
       logout: async () => {},
       isAuthenticated: false,
-      isGuest: true,
     };
     const { rerender } = renderMenu();
 
@@ -155,7 +150,6 @@ describe("UserMenu · auth state transitions", () => {
       authStatus: { enabled: true },
       logout: async () => {},
       isAuthenticated: true,
-      isGuest: false,
     };
     rerender(
       <MemoryRouter>

@@ -100,7 +100,7 @@ export function UnifiedStore({
               className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-none"
             >
               <Cloud className="size-4" />
-              商城
+              {t.unifiedStore.tabs.registry}
             </TabsTrigger>
           </TabsList>
         </div>

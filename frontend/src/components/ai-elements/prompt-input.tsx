@@ -875,9 +875,10 @@ export type PromptInputTextareaProps = ComponentProps<
 export const PromptInputTextarea = ({
   onChange,
   className,
-  placeholder = "What would you like to know?",
+  placeholder,
   ...props
 }: PromptInputTextareaProps) => {
+  const { t } = useI18n();
   const controller = useOptionalPromptInputController();
   const attachments = usePromptInputAttachments();
   const sanitizeIncomingFiles = usePromptInputValidation();
@@ -969,7 +970,7 @@ export const PromptInputTextarea = ({
       onCompositionStart={() => setIsComposing(true)}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
-      placeholder={placeholder}
+      placeholder={placeholder ?? t.inputBox.placeholder}
       {...props}
       {...controlledProps}
     />

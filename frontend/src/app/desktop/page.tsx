@@ -98,12 +98,6 @@ const PACKAGE_EXTENSIONS = new Set([
   "dmg",
   "pkg",
 ]);
-const ARCHIVE_FOLDER_MAP: Record<string, string> = {
-  image: "图片",
-  document: "文档",
-  package: "安装包",
-  other: "其他",
-};
 const DESKTOP_ORGANIZER_ENABLED_KEY = "octopus:desktop-organizer-enabled";
 
 function getDesktopItemCategory(
@@ -515,7 +509,7 @@ export default function DesktopShellPage() {
       try {
         const listResult = await window.octopus.desktop.listItems();
         const desktopPath = listResult.ok ? listResult.desktopPath || "" : "";
-        const folderName = ARCHIVE_FOLDER_MAP[category];
+        const folderName = t.desktop.categories[category];
         if (!folderName || !desktopPath) return;
         const destDir = desktopPath + "\\" + folderName;
         const result = await window.octopus.desktop.moveItem(
@@ -913,7 +907,8 @@ export default function DesktopShellPage() {
                           const desktopPath = await window.octopus.desktop
                             .listItems()
                             .then((r) => r.desktopPath || "");
-                          const folderName = ARCHIVE_FOLDER_MAP[category.key];
+                          const folderName =
+                            t.desktop.categories[category.key];
                           if (!folderName) return;
                           const destDir = desktopPath + "\\" + folderName;
                           const result = await window.octopus.desktop.moveItem(

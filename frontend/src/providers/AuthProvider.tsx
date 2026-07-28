@@ -119,7 +119,6 @@ interface AuthContextType {
   authStatus: AuthStatus | null;
   user: User | null;
   isAuthenticated: boolean;
-  isGuest: boolean;
   login: (request: LoginRequest) => Promise<void>;
   emailLogin: (email: string, code: string) => Promise<void>;
   /** Deprecated: guest mode is disabled when auth is enabled. */
@@ -131,10 +130,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function _clearGuestState(): void {
-  _clearTokens();
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const [isLoading, setIsLoading] = useState(true);
@@ -144,7 +139,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated =
     !!user && !isPlaceholderUserId(user.user_id) && !user.is_guest;
-  const isGuest = false;
 
   const initAuth = useCallback(async () => {
     const token = getToken();
@@ -153,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const localUser = storedUser || tokenUser;
     try {
       if (token === GUEST_USER_ID || storedUser?.is_guest) {
-        _clearGuestState();
+        _clearTokens();
         setUser(null);
       } else if (token && localUser && !localUser.is_guest) {
         setUser(normalizeUserIdentity(localUser as User, tokenUser));
@@ -175,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           swallow(err);
           const msg = err instanceof Error ? err.message : "";
           if (/401|Unauthorized/i.test(msg)) {
-            _clearGuestState();
+            _clearTokens();
             setUser(null);
           }
         }
@@ -217,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const guestLogin = useCallback(async () => {
-    _clearGuestState();
+    _clearTokens();
     setUser(null);
     throw new Error(t.auth.notLoggedIn);
   }, [t.auth.notLoggedIn]);
@@ -229,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await logoutApi();
-    _clearGuestState();
+    _clearTokens();
     setUser(null);
   }, []);
 
@@ -251,7 +245,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authStatus,
       user,
       isAuthenticated,
-      isGuest,
       login,
       emailLogin,
       guestLogin,
@@ -264,7 +257,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authStatus,
       user,
       isAuthenticated,
-      isGuest,
       login,
       emailLogin,
       guestLogin,

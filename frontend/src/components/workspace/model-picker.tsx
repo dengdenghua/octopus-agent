@@ -1,9 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, PlusIcon, SparklesIcon } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
 
 import {
@@ -239,11 +238,6 @@ export function ModelPicker({
   onOpenChange,
 }: ModelPickerProps) {
   const navigate = useNavigate();
-  // Guest mode keeps official models visible but disabled.
-  // Custom models remain fully selectable before login. The custom tab
-  // stays visible and fully functional so guests can BYOK against
-  // OpenAI / Kimi / any OpenAI-compat endpoint.
-  const { isGuest } = useAuth();
   const { t } = useI18n();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
@@ -328,26 +322,10 @@ export function ModelPicker({
     return [official, custom];
   }, [models, officialMetas]);
 
-  const selectedForDisplay = useMemo(() => {
-    if (!isGuest || isAutoMode || !selectedMeta) return selected;
-    return customEntries[0];
-  }, [customEntries, isAutoMode, isGuest, selected, selectedMeta]);
-
-  const selectedMetaForDisplay =
-    selectedForDisplay === selected ? selectedMeta : null;
-
   const handleSelect = (name: string) => {
     onChange(name);
     setOpen(false);
   };
-
-  useEffect(() => {
-    if (!isGuest || !selected || customEntries.length === 0) return;
-    if (selectedMeta) {
-      const fallback = customEntries[0];
-      if (fallback) onChange(fallback.name);
-    }
-  }, [customEntries, isGuest, onChange, selected, selectedMeta]);
 
   const octLink = useOctLink();
   const queryClient = useQueryClient();
@@ -435,9 +413,9 @@ export function ModelPicker({
       <span className="truncate max-w-[140px]">
         {isAutoMode
           ? t.modelPicker.autoModelLabel
-          : cleanModelName(selectedMetaForDisplay?.displayName) ||
-            cleanModelName(selectedForDisplay?.display_name) ||
-            cleanModelName(selectedForDisplay?.name) ||
+          : cleanModelName(selectedMeta?.displayName) ||
+            cleanModelName(selected?.display_name) ||
+            cleanModelName(selected?.name) ||
             t.modelPicker.selectModel}
       </span>
       <ChevronDownIcon className="size-3 opacity-60" />
@@ -457,24 +435,21 @@ export function ModelPicker({
   // signed-in user landed on Official even while a custom model was selected,
   // making the highlighted current row invisible until an extra tab switch.
   const selectedIsCustom = customEntries.some(
-    (entry) => entry.name === selectedForDisplay?.name,
+    (entry) => entry.name === selected?.name,
   );
-  const defaultTab =
-    isGuest && customEntries.length > 0
+  const defaultTab = selectedMeta
+    ? "official"
+    : selectedIsCustom
       ? "custom"
-      : selectedMetaForDisplay
+      : officialEntries.length > 0
         ? "official"
-        : selectedIsCustom
-          ? "custom"
-          : officialEntries.length > 0
-            ? "official"
-            : "custom";
+        : "custom";
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       {renderTrigger ? (
         <DropdownMenuTrigger asChild>
-          {renderTrigger(selectedForDisplay)}
+          {renderTrigger(selected)}
         </DropdownMenuTrigger>
       ) : (
         defaultTriggerContainer
@@ -519,8 +494,6 @@ export function ModelPicker({
 
         <Tabs defaultValue={defaultTab} className="gap-0">
           <TabsList className="mx-1 mt-1 h-6 w-auto bg-transparent p-0 flex gap-1">
-            {/* Official tab. Guests can see it, but rows are
-                disabled until they sign in. */}
             <TabsTrigger
               data-testid="model-picker-tab-official"
               value="official"
@@ -540,9 +513,7 @@ export function ModelPicker({
               data-testid="model-picker-tab-custom"
               value="custom"
               disabled={
-                customEntries.length === 0 &&
-                !isGuest &&
-                officialEntries.length > 0
+                customEntries.length === 0 && officialEntries.length > 0
               }
               className={cn(
                 "flex-1 rounded-md text-xs font-medium uppercase tracking-wider transition-[opacity,color]",
@@ -576,11 +547,7 @@ export function ModelPicker({
                         </span>
                       }
                       right={
-                        isGuest ? (
-                          <span className="text-xs text-muted-foreground/70">
-                            {t.modelPicker.loginRequired}
-                          </span>
-                        ) : isEnabling ? (
+                        isEnabling ? (
                           <span className="text-xs text-muted-foreground">
                             {t.modelPicker.enabling}
                           </span>
@@ -593,23 +560,18 @@ export function ModelPicker({
                         )
                       }
                       badge={
-                        !isGuest && meta.recommended ? (
+                        meta.recommended ? (
                           <span
                             title={t.modelPicker.recommended}
                             className="inline-block size-1 shrink-0 rounded-full bg-primary/70"
                           />
                         ) : undefined
                       }
-                      selected={
-                        model.name === value && !unconfigured && !isGuest
-                      }
-                      disabled={isGuest}
+                      selected={model.name === value && !unconfigured}
                       onSelect={() =>
-                        isGuest
-                          ? undefined
-                          : unconfigured
-                            ? handleSelectUnconfigured(meta, model.name)
-                            : handleSelect(model.name)
+                        unconfigured
+                          ? handleSelectUnconfigured(meta, model.name)
+                          : handleSelect(model.name)
                       }
                     />
                   );

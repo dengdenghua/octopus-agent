@@ -24,18 +24,6 @@ import ModelSettingsPage, {
   customModelPreferredSelection,
 } from "./model-settings-page";
 
-// The settings page calls ``useAuth`` for the guest-aware branching
-// in the official-models section. We don't want a real AuthProvider
-// hitting the network, so stub it with a guest-shaped object.
-vi.mock("@/providers/AuthProvider", () => ({
-  useAuth: () => ({
-    isLoading: false,
-    isAuthenticated: false,
-    isGuest: true,
-    user: null,
-  }),
-}));
-
 // ModelCookbook fetches /api/cookbook/snapshot on mount — unrelated to the
 // custom-model list under test here, and its fetch would consume the
 // order-dependent mockResolvedValueOnce below. Stub it out so the page's

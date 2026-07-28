@@ -603,6 +603,8 @@ export default function ComputerAutomationPage() {
     [models, visionModelId],
   );
 
+  // Agent 循环预演 · preview-confirm-execute loop:
+  // 生成候选动作 → 人工确认 → 执行 (control_session_id + preview_token)
   const previewAction = async () => {
     setBusy("preview");
     clearPreview();

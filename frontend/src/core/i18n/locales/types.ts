@@ -67,23 +67,6 @@ export interface Translations {
     blog: string;
   };
 
-  // Landing page
-  landing: {
-    tagline: string;
-    subtitle: string;
-    getStarted: string;
-    clickToEnter: string;
-    capabilitiesPanel: string;
-    features: {
-      deepResearch: string;
-      multiAgent: string;
-      skillsTools: string;
-      sandbox: string;
-      memory: string;
-      multiChannel: string;
-    };
-  };
-
   // Welcome
   welcome: {
     greeting: string;
@@ -1397,6 +1380,24 @@ export interface Translations {
     statusEnabledTooltip: string;
     statusDisabledTooltip: string;
     statusErrorTooltip: string;
+    badgeSkill: string;
+    badgeChannel: string;
+    badgeConfig: string;
+    badgeCommand: string;
+    badgeCapability: string;
+    statusError: string;
+    configure: string;
+    configureAria: (name: string) => string;
+    backToWorkspace: string;
+    registryTitle: string;
+    registryDescription: string;
+    registryInstallable: (count: number) => string;
+    registryInstallAria: (id: string) => string;
+    registryInstalling: string;
+    registryUpgrade: string;
+    registryUpToDate: string;
+    registryInstalledMessage: (id: string, version: string) => string;
+    surfaceFallback: string;
   };
 
   // Live Preview
@@ -1590,6 +1591,14 @@ export interface Translations {
   localBrain: {
     refresh: string;
     dismiss: string;
+    title: string;
+    ready: string;
+    pending: (count: number) => string;
+    checking: string;
+    requestFailed: string;
+    checkFailed: (error: string) => string;
+    currentState: (detail: string) => string;
+    nextStep: (action: string) => string;
   };
 
   // Team tasks panel
@@ -3407,6 +3416,7 @@ export interface Translations {
       apps: string;
       plugins: string;
       skills: string;
+      registry: string;
     };
     browserPlugins: {
       title: string;
@@ -5387,6 +5397,11 @@ export interface Translations {
     showResolved: (count: number) => string;
     hideResolved: (count: number) => string;
     anonymous: string;
+    sendReply: string;
+    justNow: string;
+    minutesAgo: (count: number) => string;
+    hoursAgo: (count: number) => string;
+    daysAgo: (count: number) => string;
   };
 
   // Mention Autocomplete
@@ -7660,5 +7675,343 @@ export interface Translations {
     backToWorkspace: string;
     confirmRemoveTitle: string;
     confirmRemoveDescription: string;
+  };
+
+  // Replay page
+  replay: {
+    pageDescription: string;
+    applyPromotions: string;
+    refresh: string;
+    rerunResult: (attempted: number, passed: number, failed: number) => string;
+    applyResult: (applied: number, skipped: number, failed: number) => string;
+    tabCases: (count: number) => string;
+    tabEvaluations: (count: number) => string;
+    loadingCases: string;
+    emptyCases: string;
+    loadingEvaluations: string;
+    emptyEvaluations: string;
+  };
+
+  // Workflows page (editor under maintenance)
+  workflows: {
+    maintenanceBadge: string;
+    title: string;
+    description: string;
+    newRealtimeTask: string;
+    viewSkills: string;
+    altRealtimeTitle: string;
+    altRealtimeDesc: string;
+    altRealtimeLabel: string;
+    altSkillsTitle: string;
+    altSkillsDesc: string;
+    altSkillsLabel: string;
+    altAutomationTitle: string;
+    altAutomationDesc: string;
+    altAutomationLabel: string;
+    altReflexTitle: string;
+    altReflexDesc: string;
+    altReflexLabel: string;
+    cardTransitionLabel: string;
+    cardTransitionTitle: string;
+    cardTransitionDesc: string;
+    cardAssetsLabel: string;
+    cardAssetsTitle: string;
+    cardAssetsDesc: string;
+    cardLaterLabel: string;
+    cardLaterTitle: string;
+    cardLaterDesc: string;
+  };
+
+  // Knowledge page
+  knowledge: {
+    comingSoon: string;
+    tabFiles: string;
+    memoryManagement: string;
+    wikiDocs: string;
+    fileManagement: string;
+  };
+
+  // Work block labels (template strings with {var} placeholders)
+  workBlocks: {
+    actions: {
+      awaitVerification: string;
+      spawnAgent: string;
+      finishAgent: string;
+      writeTodoList: string;
+      parallelDispatch: string;
+      loadSkill: string;
+      terminalFailed: string;
+      terminalRecovered: string;
+      runTerminal: string;
+      read: string;
+      createFile: string;
+      deleteFile: string;
+      editFile: string;
+      browse: string;
+      search: string;
+      execute: string;
+    };
+    actionTarget: string;
+    spawnAgent: string;
+    finishAgent: string;
+    parallelDispatch: string;
+    parallelDispatchWithCount: string;
+    parallelTarget: string;
+    parallelTargetWithCount: string;
+    skillNamed: string;
+    skillDeepResearch: string;
+    skillReportWriting: string;
+    skillDocx: string;
+    connectModel: string;
+    subagentFallback: string;
+  };
+
+  // Storage (local knowledge base) page
+  storage: {
+    defaultQuery: string;
+    libraries: {
+      overviewLabel: string;
+      overviewDetail: string;
+      appsLabel: string;
+      appsDetail: string;
+      docsLabel: string;
+      docsDetail: string;
+      imagesLabel: string;
+      imagesDetail: string;
+      computerLabel: string;
+      computerDetail: string;
+      sourcesLabel: string;
+      sourcesDetail: string;
+    };
+    service: {
+      credentialsExpired: string;
+      notFound: string;
+      startFailed: string;
+      notConnected: string;
+    };
+    toolbar: {
+      authorize: string;
+      scan: string;
+      privacy: string;
+      efficiency: string;
+      online: string;
+      offline: string;
+      reconnecting: string;
+      reconnect: string;
+      searchPlaceholder: string;
+      searchAria: string;
+      searchIn: string;
+      scopeFilterAria: string;
+      gridViewAria: string;
+      listViewAria: string;
+      filterAria: string;
+      sortAria: string;
+    };
+    overview: {
+      tabAll: string;
+      tabDocs: string;
+      tabImages: string;
+      tabRecent: string;
+      indexingTitle: string;
+      indexingDesc: string;
+      aggregateDesc: string;
+      localDatabaseBadge: string;
+      previewTitle: string;
+      previewSubtitle: string;
+      itemsWithStatus: string;
+    };
+    docs: {
+      title: string;
+      subtitle: string;
+      searchLabel: string;
+      allDocs: string;
+      indexNote: string;
+      badgeRecent: string;
+      badgeLocalDocs: string;
+      colName: string;
+      colLocation: string;
+      colSize: string;
+      colModified: string;
+      colActions: string;
+      footerNote: string;
+    };
+    images: {
+      title: string;
+      subtitle: string;
+      searchLabel: string;
+      badgeAllImages: string;
+      filterAll: string;
+      filterOcr: string;
+      filterLocalLibrary: string;
+      ocrBadge: string;
+    };
+    apps: {
+      title: string;
+      subtitle: string;
+      searchLabel: string;
+      registeredTitle: string;
+      registeredSubtitle: string;
+      badgeList: string;
+      colName: string;
+      colType: string;
+      colStatus: string;
+      colActions: string;
+      open: string;
+      actions: string;
+      typeSystemApp: string;
+      typeImagePdf: string;
+      typeDocsSheets: string;
+      typeWebResources: string;
+      typeSystemTool: string;
+      typeDownloadManager: string;
+      statusRegistered: string;
+      statusPendingScan: string;
+      statusCallable: string;
+      statusFolder: string;
+    };
+    computer: {
+      searchLabel: string;
+      currentDirBadge: string;
+      itemsCount: string;
+      stayNote: string;
+      colName: string;
+      colType: string;
+      colItems: string;
+      footerOnline: string;
+      footerOffline: string;
+      folderType: string;
+    };
+    sources: {
+      title: string;
+      subtitle: string;
+      add: string;
+      scanQueueAria: string;
+      privacyPolicyAria: string;
+      metricSources: string;
+      metricFiles: string;
+      metricChunks: string;
+      reconnectTitle: string;
+      notConnected: string;
+      badgeLocalIndex: string;
+      badgeNoUpload: string;
+      colDirectory: string;
+      colFiles: string;
+      colChunks: string;
+      colStatus: string;
+      emptyTitleOnline: string;
+      emptyTitleOffline: string;
+      emptyDescOnline: string;
+      emptyDescOffline: string;
+      addFolder: string;
+      viewPrivacyPolicy: string;
+      footerPrivacy: string;
+      footerQueue: string;
+      filesCount: string;
+      chunksCount: string;
+      statusReady: string;
+      statusPending: string;
+      removeTitle: string;
+      removeDesc: string;
+      removeConfirm: string;
+      remove: string;
+    };
+    search: {
+      backTo: string;
+      resultsTitle: string;
+      statusTitle: string;
+      hitsSummary: string;
+      noHitsSummary: string;
+      continueLabel: string;
+      quoteSelected: string;
+      engineNotAttached: string;
+      noMatch: string;
+      noMatchHint: string;
+      viewSources: string;
+      switchPrivacyMode: string;
+    };
+    preview: {
+      sourceLocation: string;
+      typeLabel: string;
+      updatedLabel: string;
+      sizeLabel: string;
+      snippetTitle: string;
+      snippetDesc: string;
+      quoteInChat: string;
+      openLocation: string;
+      actionPreview: string;
+      actionQuote: string;
+      actionLocate: string;
+    };
+    topics: {
+      docsAllTitle: string;
+      docsAllSubtitle: string;
+      docsAllStatus: string;
+      docsSourcesTitle: string;
+      docsSourcesSubtitle: string;
+      docsSourcesStatus: string;
+      docsTopicsTitle: string;
+      docsTopicsSubtitle: string;
+      docsTopicsStatus: string;
+      docsRecentTitle: string;
+      docsRecentSubtitle: string;
+      docsRecentStatus: string;
+      imagesAllTitle: string;
+      imagesAllSubtitle: string;
+      imagesAllStatus: string;
+      imagesTopicsTitle: string;
+      imagesTopicsSubtitle: string;
+      imagesTopicsStatus: string;
+      imagesSourcesTitle: string;
+      imagesSourcesSubtitle: string;
+      imagesSourcesStatus: string;
+      imagesOcrTitle: string;
+      imagesOcrSubtitle: string;
+      imagesOcrStatus: string;
+      coverWork: string;
+      coverProject: string;
+      coverDownloads: string;
+      coverContract: string;
+      coverTech: string;
+      coverResearch: string;
+      coverToday: string;
+      cover7Days: string;
+      cover30Days: string;
+      coverPeople: string;
+      coverPlaces: string;
+      coverTheme: string;
+      coverDesktop: string;
+      coverWechat: string;
+      coverWhiteboard: string;
+      coverInterface: string;
+      coverSpreadsheet: string;
+    };
+    demoFiles: {
+      doc1Name: string;
+      doc1Kind: string;
+      doc1Updated: string;
+      doc2Name: string;
+      doc2Kind: string;
+      doc2Updated: string;
+      doc3Name: string;
+      doc3Kind: string;
+      doc3Updated: string;
+      doc4Name: string;
+      doc4Kind: string;
+      doc4Updated: string;
+      doc5Name: string;
+      doc5Kind: string;
+      doc5Updated: string;
+      image1Kind: string;
+      image1Updated: string;
+      image2Name: string;
+      image2Kind: string;
+      image2Updated: string;
+      image3Name: string;
+      image3Kind: string;
+      image3Updated: string;
+      image4Name: string;
+      image4Kind: string;
+      image4Updated: string;
+    };
   };
 }

@@ -389,7 +389,7 @@ describe("<AgentProgressPill />", () => {
       />,
     );
 
-    expect(screen.getByText("运行终端")).toBeInTheDocument();
+    expect(screen.getByText("Run terminal")).toBeInTheDocument();
     expect(screen.queryByText(/pnpm test/)).not.toBeInTheDocument();
   });
 

@@ -1,6 +1,6 @@
 ---
 name: agnes-image-generate
-description: "使用 Agnes AI 网关从文字描述生成图像。支持 agnes-image-2.1-flash（text→image）和 agnes-image-2.0-flash（image→image）。当用户需要生成图片、插画或封面时调用此技能。"
+description: "使用 Agnes AI 网关从文字描述生成图像。agnes-image-2.1-flash 同时支持文生图和图生图。当用户需要生成图片、插画或封面时调用此技能。"
 enabled: true
 aliases: [agnes_image, generate_image_agnes]
 ---
@@ -14,8 +14,8 @@ aliases: [agnes_image, generate_image_agnes]
 
 | ID | 用途 |
 |----|----|
-| `agnes-image-2.1-flash` | text→image（默认，最新） |
-| `agnes-image-2.0-flash` | image→image（参考图重绘） |
+| `agnes-image-2.1-flash` | text→image + image→image（默认，最新） |
+| `agnes-image-2.0-flash` | image→image（旧版，可选） |
 
 ## Configuration
 
@@ -62,7 +62,6 @@ result = generate_image(
 result = generate_image(
     prompt="same cat but in oil painting style",
     image="https://example.com/cat.png",
-    model="agnes-image-2.0-flash",
 )
 ```
 

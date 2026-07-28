@@ -56,6 +56,8 @@ def test_known_backlog_is_still_present() -> None:
     )
 
 
+# 2026-07-28: 对 _KNOWN_BACKLOG 中每个已知重复技能对参数化生成一条 xfail,
+# 让待合并清单在测试输出中可见;随 aliases: 合并推进逐条移除,清空后本测试自然消失。
 @pytest.mark.parametrize("pair", sorted([" ↔ ".join(sorted(p)) for p in _KNOWN_BACKLOG]))
 def test_each_backlog_pair_xfail(pair: str) -> None:
     """One xfail per known backlog pair — gives contributors a visible

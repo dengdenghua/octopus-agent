@@ -237,7 +237,11 @@ export default function ReplayPage() {
         actor: "replay_workspace",
       });
       setLastApplyResult(
-        `重跑 ${result.attempted} 个修复配方：${result.passed} 个通过，${result.failed} 个失败；源案例仍需人工审核。`,
+        t.replay.rerunResult(
+          result.attempted,
+          result.passed,
+          result.failed,
+        ),
       );
       await refresh();
     } catch (err: unknown) {
@@ -246,7 +250,7 @@ export default function ReplayPage() {
     } finally {
       setRerunBusy(false);
     }
-  }, [refresh]);
+  }, [refresh, t]);
 
   const handleQueueEvidence = useCallback(async () => {
     if (!replayEvidence) return;
@@ -276,7 +280,11 @@ export default function ReplayPage() {
         limit: 20,
       });
       setLastApplyResult(
-        `applied ${result.applied}, skipped ${result.skipped}, failed ${result.failed}`,
+        t.replay.applyResult(
+          result.applied,
+          result.skipped,
+          result.failed,
+        ),
       );
       await refresh();
     } catch (err: unknown) {
@@ -285,7 +293,7 @@ export default function ReplayPage() {
     } finally {
       setBusy(false);
     }
-  }, [refresh]);
+  }, [refresh, t]);
 
   return (
     <WorkspaceContainer>
@@ -303,8 +311,7 @@ export default function ReplayPage() {
                     {t.sidebar.navReplay}
                   </h1>
                   <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                    回放门禁、浏览器/桌面回放评审与 task-run
-                    回放用例的集中视图。
+                    {t.replay.pageDescription}
                   </p>
                 </div>
               </div>
@@ -317,7 +324,7 @@ export default function ReplayPage() {
                   onClick={() => void handleApplyPromotions()}
                 >
                   <ClipboardCheckIcon className="mr-2 size-4" />
-                  应用提升
+                  {t.replay.applyPromotions}
                 </Button>
                 <Button
                   variant="outline"
@@ -329,7 +336,7 @@ export default function ReplayPage() {
                   <RefreshCwIcon
                     className={cn("mr-2 size-4", loading && "animate-spin")}
                   />
-                  刷新
+                  {t.replay.refresh}
                 </Button>
               </div>
             </div>
@@ -378,14 +385,14 @@ export default function ReplayPage() {
               <TabsList className="h-9 w-fit rounded-lg">
                 <TabsTrigger value="cases" className="h-8 gap-1.5 px-3 text-xs">
                   <PlayCircleIcon className="size-3.5" />
-                  回放用例 ({replayCases.length})
+                  {t.replay.tabCases(replayCases.length)}
                 </TabsTrigger>
                 <TabsTrigger
                   value="evaluations"
                   className="h-8 gap-1.5 px-3 text-xs"
                 >
                   <ClipboardCheckIcon className="size-3.5" />
-                  回放评估 ({replayEvaluations.length})
+                  {t.replay.tabEvaluations(replayEvaluations.length)}
                 </TabsTrigger>
               </TabsList>
 
@@ -414,17 +421,18 @@ function ReplayCasesTable({
   cases: AgentTraceReplayCase[];
   loading: boolean;
 }) {
+  const { t } = useI18n();
   if (loading && cases.length === 0) {
     return (
       <div className="rounded-md border border-border-default bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
-        正在加载回放用例…
+        {t.replay.loadingCases}
       </div>
     );
   }
   if (cases.length === 0) {
     return (
       <div className="rounded-md border border-border-default bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
-        暂无回放用例。完成 task-run 后会自动生成对应的回放用例。
+        {t.replay.emptyCases}
       </div>
     );
   }
@@ -506,17 +514,18 @@ function ReplayEvaluationsTable({
   evaluations: AgentTraceReplayEvaluation[];
   loading: boolean;
 }) {
+  const { t } = useI18n();
   if (loading && evaluations.length === 0) {
     return (
       <div className="rounded-md border border-border-default bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
-        正在加载回放评估…
+        {t.replay.loadingEvaluations}
       </div>
     );
   }
   if (evaluations.length === 0) {
     return (
       <div className="rounded-md border border-border-default bg-muted/15 px-3 py-4 text-xs text-muted-foreground">
-        暂无回放评估。回放评估会在回放用例生成后自动计算。
+        {t.replay.emptyEvaluations}
       </div>
     );
   }

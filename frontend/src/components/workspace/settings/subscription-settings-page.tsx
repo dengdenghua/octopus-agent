@@ -243,7 +243,7 @@ interface PayState {
 
 function OfficialPricingSection() {
   const { t } = useI18n();
-  const { user, isGuest } = useAuth();
+  const { user } = useAuth();
   const link = useOctLink();
   const linked = Boolean(link.data);
   const goodsQuery = useOctGoods(linked);
@@ -253,7 +253,6 @@ function OfficialPricingSection() {
     profileName: profile?.display_name || profile?.username,
     userName: user?.username,
     userEmail: user?.email,
-    isGuest,
     fallback: t.auth.currentAccount,
   });
   const isLoggedIn = Boolean(accountLabel);

@@ -47,11 +47,12 @@ export function ArtifactFileList({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border-default bg-background/80",
+        "flex min-h-0 flex-col overflow-hidden rounded-lg border border-border-default bg-background/80",
         className,
       )}
     >
-      {files.map((file, index) => (
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {files.map((file, index) => (
         <button
           key={file}
           type="button"
@@ -112,6 +113,7 @@ export function ArtifactFileList({
           </div>
         </button>
       ))}
+      </div>
     </div>
   );
 }

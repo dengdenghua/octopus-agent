@@ -200,6 +200,34 @@ class _FakeCanarySkill:
 # ── Fixtures ───────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _reset_global_state() -> Iterator[None]:
+    """Reset process-wide state that other tests may pollute.
+
+    Full-suite runs revealed cross-test contamination:
+    - ``feature_flags`` snapshot (other tests call ``configure()`` with
+      custom file paths and never restore, leaving a stale override)
+    - ``_FakeForgeAutoTick`` class variables (``last_apply`` persists
+      across tests, and if the real ``forge_auto_tick`` module runs the
+      fake's class vars stay stale)
+    - ``RegenerationScheduler`` singleton (defensive; ``isolated_scheduler``
+      also resets, but an autouse reset covers tests that don't use it)
+    """
+    from runtime.platform.runtime_policy import feature_flags as _ff
+
+    _ff.configure(None)
+    _ff.reload()
+    _FakeForgeAutoTick.last_apply = None
+    _FakeForgeAutoTick.bound_stack = None
+    RegenerationScheduler.reset()
+    yield
+    _ff.configure(None)
+    _ff.reload()
+    _FakeForgeAutoTick.last_apply = None
+    _FakeForgeAutoTick.bound_stack = None
+    RegenerationScheduler.reset()
+
+
 @pytest.fixture
 def isolated_scheduler(tmp_path: Path) -> Iterator[RegenerationScheduler]:
     """A RegenerationScheduler with no prior singleton state.
@@ -268,6 +296,12 @@ def patched_stages(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     fake_fat.bind_stack = _FakeForgeAutoTick.bind_stack  # type: ignore[attr-defined]
     fake_fat.run_tick = _FakeForgeAutoTick.run_tick  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "runtime.safety.recovery.forge_auto_tick", fake_fat)
+    # `from runtime.safety.recovery import forge_auto_tick` resolves via the
+    # package object's attribute first, bypassing sys.modules once any prior
+    # test imported the real submodule. Patch the attribute too so the fake
+    # wins regardless of import order in full-suite runs.
+    import runtime.safety.recovery as _recovery_pkg
+    monkeypatch.setattr(_recovery_pkg, "forge_auto_tick", fake_fat, raising=False)
 
     # SkillForge — leave registry in place so the stage runs the happy path
     fake_sf = types.ModuleType("runtime.safety.recovery.skill_forge")

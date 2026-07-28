@@ -34,7 +34,6 @@ vi.mock("@/providers/AuthProvider", () => ({
     authStatus: { enabled: true, allow_registration: allowRegistrationMock() },
     isLoading: false,
     isAuthenticated: false,
-    isGuest: false,
     login: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),

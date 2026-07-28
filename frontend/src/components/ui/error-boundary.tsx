@@ -15,6 +15,12 @@ import type { Translations } from "@/core/i18n/locales";
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: ReactNode;
+  // Error reporting integration point: callers (or a future diagnostics /
+  // telemetry channel) can inject onError to receive render errors. The
+  // existing stream-telemetry channel only covers streaming turn metrics,
+  // not render errors, so an injectable callback is the minimal hook;
+  // defaults to console.error when not provided.
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface ErrorBoundaryState {
@@ -44,7 +50,11 @@ export class ErrorBoundary extends Component<
       setTimeout(() => this.setState({ hasError: false, error: null }), 0);
       return;
     }
-    console.error("[ErrorBoundary] Uncaught error:", error, errorInfo);
+    if (this.props.onError) {
+      this.props.onError(error, errorInfo);
+    } else {
+      console.error("[ErrorBoundary] Uncaught error:", error, errorInfo);
+    }
     if (this.isChunkLoadError(error)) {
       const key = "octopus:chunk-reload-once";
       if (window.sessionStorage.getItem(key) !== "1") {
@@ -137,31 +147,4 @@ export class ErrorBoundary extends Component<
 
     return this.props.children;
   }
-}
-
-/**
- * HOC that wraps a component with an ErrorBoundary.
- * Useful for isolating individual route pages or panels
- * so one crash does not take down the entire workspace.
- *
- * @example
- * const SafePage = withErrorBoundary(MyPage, {
- *   fallback: <PanelErrorFallback />,
- * });
- */
-export function withErrorBoundary<P extends object>(
-  WrappedComponent: React.ComponentType<P>,
-  options?: Omit<ErrorBoundaryProps, "children">,
-) {
-  function WithErrorBoundaryWrapper(props: P) {
-    return (
-      <ErrorBoundary {...options}>
-        <WrappedComponent {...props} />
-      </ErrorBoundary>
-    );
-  }
-  WithErrorBoundaryWrapper.displayName = `withErrorBoundary(${
-    WrappedComponent.displayName || WrappedComponent.name || "Component"
-  })`;
-  return WithErrorBoundaryWrapper;
 }

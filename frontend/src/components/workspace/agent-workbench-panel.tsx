@@ -42,6 +42,10 @@ import {
   pickCurrentWorkBlock,
   progressForWorkBlocks,
   statusText,
+  workBlockActionLabel,
+  workBlockLabelsFromShape,
+  workBlockTarget,
+  workBlockTitle,
 } from "./work-blocks";
 import { cn } from "@/lib/utils";
 import { DotProgress } from "@/components/workspace/swarm/dot-progress";
@@ -671,13 +675,8 @@ export function AgentWorkbenchPanel({
   );
   const requestedActiveTab: AgentWorkbenchTabId =
     activeTab ?? (focusedAgentId ? "agent" : focusedTab) ?? "agent";
-  // page.tsx still emits "subagents" / "artifacts" / "plan" intents
-  // (openArtifactsPanel / openAgentPlanPanel); the workbench renders all of
-  // them on the agent page, so every tab id maps onto a real embedded page.
   const effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" =
-    requestedActiveTab === "subagents" ||
-    requestedActiveTab === "artifacts" ||
-    requestedActiveTab === "plan"
+    requestedActiveTab === "subagents" || requestedActiveTab === "plan" || requestedActiveTab === "artifacts"
       ? "agent"
       : requestedActiveTab;
   const workbenchTabs: Array<{
@@ -1819,6 +1818,12 @@ function evidenceTabForWorkBlock(block: WorkBlock): AgentWorkbenchTabId {
   return "agent";
 }
 
+function workBlockLabelsFromI18n(t: unknown) {
+  return workBlockLabelsFromShape(
+    (t as { workBlocks?: unknown } | null)?.workBlocks,
+  );
+}
+
 function ActivityTraceView({
   blocks,
   currentBlockId,
@@ -1835,6 +1840,7 @@ function ActivityTraceView({
   title: string;
 }) {
   const { t } = useI18n();
+  const workBlockLabels = workBlockLabelsFromI18n(t);
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
@@ -1862,9 +1868,11 @@ function ActivityTraceView({
             {blocks.map((block, index) => {
               const Icon = blockIcon(block.kind);
               const active = currentBlockId === block.id;
+              const actionLabel = workBlockActionLabel(block, workBlockLabels);
+              const titleText = workBlockTitle(block, workBlockLabels);
               const target =
-                block.target ||
-                (block.title !== block.actionLabel ? block.title : "");
+                workBlockTarget(block, workBlockLabels) ||
+                (titleText !== actionLabel ? titleText : "");
               const detail =
                 block.subtitle && block.subtitle !== target
                   ? block.subtitle
@@ -1902,7 +1910,7 @@ function ActivityTraceView({
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
                       <span className="shrink-0 text-xs text-muted-foreground">
-                        {block.actionLabel}
+                        {actionLabel}
                       </span>
                       {target ? (
                         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
@@ -1951,6 +1959,7 @@ function SubagentProcessView({
   onSelectBlock: (blockId: string) => void;
 }) {
   const { t } = useI18n();
+  const workBlockLabels = workBlockLabelsFromI18n(t);
   const label = repairMojibakeText(agent.codename ?? agent.name ?? agent.label);
   const progress = agentProgressPercent(agent.status) / 100;
   const hue = agentRunHue(agent.status);
@@ -2064,7 +2073,7 @@ function SubagentProcessView({
                   block.outputText ||
                   block.inputText ||
                   block.subtitle ||
-                  block.title;
+                  workBlockTitle(block, workBlockLabels);
                 return (
                   <button
                     key={block.id}
@@ -2088,7 +2097,7 @@ function SubagentProcessView({
                         />
                         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
                         <span className="truncate text-xs font-semibold text-foreground">
-                          {block.title}
+                          {workBlockTitle(block, workBlockLabels)}
                         </span>
                         {block.subtitle && (
                           <span className="max-w-[38%] shrink-0 truncate text-xs text-muted-foreground">

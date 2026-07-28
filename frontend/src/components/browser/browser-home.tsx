@@ -44,6 +44,7 @@ import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { usePromptDialog } from "@/components/ui/prompt-dialog";
 
 import { liquidGlassClass } from "./liquid-glass";
 import { useBrowserStore, type BrowserTab } from "./browser-store";
@@ -1209,6 +1210,7 @@ export function BrowserHome({
   }, []);
 
   const { confirm, confirmDialog } = useConfirmDialog();
+  const { prompt, promptDialog } = usePromptDialog();
 
   const resetDesktopLayout = async () => {
     if (
@@ -1258,7 +1260,7 @@ export function BrowserHome({
   );
 
   const handleEdit = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const widget = widgets.find((w) => w.id === id);
       if (widget) {
         setEditWidgetState({
@@ -1272,9 +1274,15 @@ export function BrowserHome({
       }
       const link = quickLinks.find((item) => item.id === id);
       if (link) {
-        const name = prompt(wt.promptSiteName, link.name);
+        const name = await prompt({
+          title: wt.promptSiteName,
+          defaultValue: link.name,
+        });
         if (!name) return;
-        const url = prompt(wt.promptSiteUrl, link.url);
+        const url = await prompt({
+          title: wt.promptSiteUrl,
+          defaultValue: link.url,
+        });
         if (!url) return;
         setQuickLinks((prev) =>
           prev.map((item) =>
@@ -1291,7 +1299,10 @@ export function BrowserHome({
       }
       const folder = folders.find((item) => item.id === id);
       if (folder) {
-        const name = prompt(wt.promptFolderName, folder.name);
+        const name = await prompt({
+          title: wt.promptFolderName,
+          defaultValue: folder.name,
+        });
         if (!name) return;
         setFolders((prev) =>
           prev.map((item) => (item.id === id ? { ...item, name } : item)),
@@ -1300,6 +1311,7 @@ export function BrowserHome({
     },
     [
       folders,
+      prompt,
       quickLinks,
       widgets,
       wt.promptFolderName,
@@ -1357,10 +1369,10 @@ export function BrowserHome({
     [wt.newWidget],
   );
 
-  const handleAddIcon = useCallback(() => {
-    const name = prompt(wt.promptSiteName);
+  const handleAddIcon = useCallback(async () => {
+    const name = await prompt({ title: wt.promptSiteName });
     if (!name) return;
-    const url = prompt(wt.promptSiteUrl);
+    const url = await prompt({ title: wt.promptSiteUrl });
     if (!url) return;
     const newLink: QuickLink = {
       id: Date.now().toString(),
@@ -1370,10 +1382,10 @@ export function BrowserHome({
       category: "tool",
     };
     setQuickLinks((prev) => [...prev, newLink]);
-  }, [wt.promptSiteName, wt.promptSiteUrl]);
+  }, [prompt, wt.promptSiteName, wt.promptSiteUrl]);
 
-  const handleCreateFolder = useCallback(() => {
-    const name = prompt(wt.promptFolderName);
+  const handleCreateFolder = useCallback(async () => {
+    const name = await prompt({ title: wt.promptFolderName });
     if (!name) return;
     const newFolder: UserFolder = {
       id: `folder-${Date.now()}`,
@@ -1381,7 +1393,7 @@ export function BrowserHome({
       linkIds: [],
     };
     setFolders((prev) => [...prev, newFolder]);
-  }, [wt.promptFolderName]);
+  }, [prompt, wt.promptFolderName]);
 
   const handleWidgetDragStart = useCallback((id: string) => {
     setDragState({
@@ -2367,6 +2379,7 @@ export function BrowserHome({
       />
 
       {confirmDialog}
+      {promptDialog}
 
       {editWidgetState.visible && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">

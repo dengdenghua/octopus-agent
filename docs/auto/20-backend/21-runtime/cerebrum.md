@@ -29,6 +29,7 @@ tier: "core"
 | `completion_receipt.py` | — |
 | `input_mentions.py` | Parse @plugin/@skill/@agent and runtime surface mentions from prompts. |
 | `leader.py` | Leader Process · single-owner supervisor for long-running tasks. |
+| `live_steering.py` | Shared prompt contract for user messages received during an active turn. |
 | `llm_planner.py` | — |
 | `output_styles.py` | Per-turn output style overlays for the ReAct system prompt. |
 | `pause_control.py` | — |
@@ -63,7 +64,7 @@ tier: "core"
 
 ## Who imports this
 
-**36** file(s) reference this package:
+**37** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -107,6 +108,8 @@ tier: "core"
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/mobile/cerebrum_adapter.py`
+- **`runtime/tests/`** · 1 file(s)
+  - `runtime/tests/test_react_loop_commentary.py`
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

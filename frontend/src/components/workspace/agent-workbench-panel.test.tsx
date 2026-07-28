@@ -114,56 +114,6 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
 
-  test("surfaces the current turn user input in the summary inputs section", () => {
-    renderWorkbench(
-      <AgentWorkbenchPanel
-        activeTab="agent"
-        events={[
-          event({
-            id: "read-1",
-            name: "read_file",
-            input: { path: "src/app.tsx" },
-          }),
-        ]}
-        userInput={{
-          text: "把登录页改成暗色主题",
-          uploadedFiles: [{ filename: "design.md", path: "/tmp/design.md" }],
-          attachments: [{ filename: "screenshot.png" }],
-        }}
-      />,
-    );
-
-    // The Inputs section header is always visible alongside the file/attachment
-    // counts so the user can see at a glance what they sent this turn. The
-    // counts are concatenated into a single summary cell, so match by regex.
-    expect(screen.getByText("输入")).toBeInTheDocument();
-    expect(screen.getByText(/上传文件 1 个/)).toBeInTheDocument();
-    expect(screen.getByText(/附件 1 个/)).toBeInTheDocument();
-
-    // Expanding the section reveals the raw text and filenames.
-    expandSummarySection(/输入/);
-    expect(screen.getByText("把登录页改成暗色主题")).toBeInTheDocument();
-    expect(screen.getByText("design.md")).toBeInTheDocument();
-    expect(screen.getByText("screenshot.png")).toBeInTheDocument();
-  });
-
-  test("omits the inputs section when there is no user input", () => {
-    renderWorkbench(
-      <AgentWorkbenchPanel
-        activeTab="agent"
-        events={[
-          event({
-            id: "read-1",
-            name: "read_file",
-            input: { path: "src/app.tsx" },
-          }),
-        ]}
-      />,
-    );
-
-    expect(screen.queryByText("输入")).not.toBeInTheDocument();
-  });
-
   test("maps free-form todo phase titles to readable business labels", () => {
     renderWorkbench(
       <AgentWorkbenchPanel

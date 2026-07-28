@@ -178,7 +178,7 @@ function buildGenericPhases(
       titleKey: "genericDeliver",
       blocks: blocks.filter((block) =>
         /todo|write|report|artifact|verification/i.test(
-          `${block.event.name} ${block.kind} ${block.title}`,
+          `${block.event.name} ${block.kind} ${block.actionKey} ${block.title.key}`,
         ),
       ),
     },

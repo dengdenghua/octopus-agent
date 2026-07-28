@@ -29,7 +29,7 @@ _LOG = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://apihub.agnes-ai.com/v1"
 DEFAULT_MODEL = "agnes-image-2.1-flash"
-TIMEOUT_SECONDS = 120
+TIMEOUT_SECONDS = 300
 
 
 @dataclass(frozen=True)
@@ -70,8 +70,8 @@ def generate_image(
     prompt
         Text description of the desired image. Required.
     model
-        Agnes image model id. Default ``agnes-image-2.1-flash`` (text→image).
-        Use ``agnes-image-2.0-flash`` for image-to-image refinement.
+        Agnes image model id. Default ``agnes-image-2.1-flash``
+        (supports both text→image and image→image).
     size
         Optional WxH string like ``"1024x1024"``. When omitted the gateway
         picks a sensible default for the model.

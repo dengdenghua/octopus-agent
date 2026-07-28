@@ -32,7 +32,6 @@ import { swallow } from "@/core/utils/log";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
-import { useAuth } from "@/providers/AuthProvider";
 import {
   clearThreadModelReferences,
   getLocalSettings,
@@ -1036,7 +1035,7 @@ export default function ModelSettingsPage() {
       void fetchCompatDiagnostics();
       void fetchCompatProfileCatalog();
     } catch (error) {
-      console.error(error);
+      console.error("[model-settings] load models failed:", error);
       setModelsLoadError(true);
       setGatewayStatus("disconnected");
       toast.error(t.settings.model.loadFailed);
@@ -1231,8 +1230,6 @@ export default function ModelSettingsPage() {
     scrollToSection("model-settings-local");
     window.dispatchEvent(new Event(LOCAL_MODEL_SCAN_EVENT));
   }, [scrollToSection]);
-
-  const { isGuest } = useAuth();
 
   // Implementation note.
   const defaultModelName = getLocalSettings().context.model_name;
@@ -1645,7 +1642,7 @@ export default function ModelSettingsPage() {
       </div>
 
       {/* Official models */}
-      {!isGuest && <OfficialModelsSection />}
+      <OfficialModelsSection />
 
       <details className="group rounded-lg border border-border bg-card/40 p-4">
         <summary

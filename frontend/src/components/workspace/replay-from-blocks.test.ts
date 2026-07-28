@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { buildReplayFromBlocks, redactSecrets } from "./replay-from-blocks";
-import type { WorkBlock, WorkBlockKind } from "./work-blocks";
+import type { WorkBlock, WorkBlockKind, WorkBlockTitle } from "./work-blocks";
 
 function block(
-  over: Partial<Omit<WorkBlock, "kind" | "event">> & {
+  over: Partial<Omit<WorkBlock, "kind" | "event" | "title">> & {
     kind: WorkBlockKind;
     event?: Partial<LiveToolEvent>;
+    title?: string | WorkBlockTitle;
   },
 ): WorkBlock {
   const event: LiveToolEvent = {
@@ -18,11 +19,17 @@ function block(
     iteration: 0,
     ...over.event,
   };
+  const title: WorkBlockTitle =
+    typeof over.title === "string"
+      ? { key: "raw", text: over.title }
+      : (over.title ?? { key: "raw", text: "title" });
   return {
     id: over.id ?? "b1",
     event,
     kind: over.kind,
-    title: over.title ?? "title",
+    actionKey: over.actionKey ?? "execute",
+    target: over.target ?? "",
+    title,
     subtitle: over.subtitle ?? "",
     status: over.status ?? "done",
     startedAt: 0,

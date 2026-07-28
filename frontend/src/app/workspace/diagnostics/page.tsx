@@ -26,23 +26,10 @@ import { RemoteBackendsPanel } from "@/components/workspace/remote-backends-pane
 import { RuntimeSelfCheckPanel } from "@/components/workspace/runtime-self-check-panel";
 import { StreamTelemetryPanel } from "@/components/workspace/stream-telemetry-panel";
 import { useI18n } from "@/core/i18n/hooks";
-import {
-  WorkspaceBody,
-  WorkspaceContainer,
-  WorkspaceHeader,
-} from "@/components/workspace/workspace-container";
 
-export default function DiagnosticsPage() {
-  return (
-    <WorkspaceContainer>
-      <WorkspaceHeader />
-      <WorkspaceBody className="px-4 pb-4">
-        <DiagnosticsContent />
-      </WorkspaceBody>
-    </WorkspaceContainer>
-  );
-}
-
+// The /workspace/diagnostics route renders ObservabilityPage (which embeds
+// DiagnosticsContent in its system tab), so this module intentionally has
+// no standalone page export.
 export function DiagnosticsContent() {
   const { t } = useI18n();
   const [project, setProject] = useState<string>("");

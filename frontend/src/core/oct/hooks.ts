@@ -48,13 +48,13 @@ function normalize(link: OctLink): OctLink {
  * 让调用方渲染空态而非报错。登录态变化时失效缓存。
  */
 export function useOctLink() {
-  const { user, isGuest } = useAuth();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const userId = user?.user_id ?? user?.actor_id ?? null;
 
   useEffect(() => {
     void qc.invalidateQueries({ queryKey: octKey });
-  }, [userId, isGuest, qc]);
+  }, [userId, qc]);
 
   return useQuery<OctLink | null>({
     queryKey: octLinkKey(userId),
@@ -80,7 +80,6 @@ export function useOctLink() {
         throw err;
       }
     },
-    enabled: !isGuest,
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,

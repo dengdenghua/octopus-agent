@@ -68,9 +68,9 @@
   - [x] SubTask 8.3: 手动 grep 确认 9 个文件中无 `text-[Npx]` 残留
   - [x] SubTask 8.4: 手动 grep 确认 9 个文件中无裸 `text-red-500/text-blue-500/text-green-500` 残留
 
-- [ ] Task 9: 提交 commit
-  - [ ] SubTask 9.1: `git add` 受影响文件
-  - [ ] SubTask 9.2: commit message 遵循 `style(workspace): ...` 风格
+- [x] Task 9: 提交 commit
+  - [x] SubTask 9.1: `git add` 受影响文件 — commit `e35013add` 已提交全部 spec 范围内文件
+  - [x] SubTask 9.2: commit message 遵循 `style(workspace): ...` 风格 — commit message 为 `style(workspace): i18n + consistency pass for secondary workbench`
 
 # Task Dependencies
 - Task 2 依赖 Task 1（同属硬编码抽取，先做 deep-research 熟悉流程）

@@ -40,6 +40,8 @@ import {
   WorkspaceBody,
   WorkspaceContainer,
 } from "@/components/workspace/workspace-container";
+import { useI18n } from "@/core/i18n/hooks";
+import type { Translations } from "@/core/i18n/locales";
 import {
   createNASIndexJob,
   createNASSource,
@@ -107,38 +109,75 @@ interface FileItem {
   tone: string;
 }
 
-const DEFAULT_QUERY = "找我上周写的嵌入式技术笔记";
+type StorageCopy = Translations["storage"];
 
-const LIBRARIES: Array<{
+interface LibraryMeta {
   key: LibraryKey;
   label: string;
   detail: string;
   icon: LucideIcon;
-}> = [
-  { key: "overview", label: "全部", detail: "本地数据库", icon: DatabaseIcon },
-  { key: "apps", label: "应用", detail: "软件与动作", icon: AppWindowIcon },
-  {
-    key: "docs",
-    label: "文档",
-    detail: "主题 / 来源 / 最近",
-    icon: FileTextIcon,
-  },
-  {
-    key: "images",
-    label: "图片",
-    detail: "图库 / 主题 / 来源",
-    icon: FileImageIcon,
-  },
-  { key: "computer", label: "本机", detail: "本地磁盘", icon: HardDriveIcon },
-  {
-    key: "sources",
-    label: "授权目录",
-    detail: "扫描范围",
-    icon: FolderPlusIcon,
-  },
-];
+}
 
-const LIBRARY_KEYS = new Set<LibraryKey>(LIBRARIES.map((item) => item.key));
+function buildLibraries(copy: StorageCopy): LibraryMeta[] {
+  return [
+    {
+      key: "overview",
+      label: copy.libraries.overviewLabel,
+      detail: copy.libraries.overviewDetail,
+      icon: DatabaseIcon,
+    },
+    {
+      key: "apps",
+      label: copy.libraries.appsLabel,
+      detail: copy.libraries.appsDetail,
+      icon: AppWindowIcon,
+    },
+    {
+      key: "docs",
+      label: copy.libraries.docsLabel,
+      detail: copy.libraries.docsDetail,
+      icon: FileTextIcon,
+    },
+    {
+      key: "images",
+      label: copy.libraries.imagesLabel,
+      detail: copy.libraries.imagesDetail,
+      icon: FileImageIcon,
+    },
+    {
+      key: "computer",
+      label: copy.libraries.computerLabel,
+      detail: copy.libraries.computerDetail,
+      icon: HardDriveIcon,
+    },
+    {
+      key: "sources",
+      label: copy.libraries.sourcesLabel,
+      detail: copy.libraries.sourcesDetail,
+      icon: FolderPlusIcon,
+    },
+  ];
+}
+
+const LIBRARY_KEYS = new Set<LibraryKey>([
+  "overview",
+  "apps",
+  "docs",
+  "images",
+  "computer",
+  "sources",
+]);
+
+function fill(
+  template: string,
+  vars: Record<string, string | number>,
+): string {
+  return Object.entries(vars).reduce(
+    (result, [key, value]) =>
+      result.replaceAll(`{${key}}`, String(value)),
+    template,
+  );
+}
 
 function isLibraryKey(value: string | null): value is LibraryKey {
   return value !== null && LIBRARY_KEYS.has(value as LibraryKey);
@@ -156,214 +195,255 @@ const DEFAULT_POLICY: NASPolicy = {
 const delay = (ms: number) =>
   new Promise((resolve) => window.setTimeout(resolve, ms));
 
-const DOC_TOPICS: TopicItem[] = [
-  topic(
-    "全部文档",
-    "PDF、Word、PPT、表格、Markdown 与代码",
-    "1,284",
-    "索引持续构建中",
-    FileTextIcon,
-    "blue",
-    ["PDF", "DOC", "MD"],
-  ),
-  topic(
-    "文档来源",
-    "按授权目录和项目来源归类",
-    "32",
-    "已同步",
-    FolderOpenIcon,
-    "green",
-    ["工作", "项目", "下载"],
-  ),
-  topic(
-    "文档主题",
-    "自动聚类合同、技术笔记、调研资料",
-    "18",
-    "主题 AI 构建中",
-    BrainIcon,
-    "violet",
-    ["合同", "技术", "调研"],
-  ),
-  topic(
-    "最近文件",
-    "近期打开、修改、搜索命中的文档",
-    "96",
-    "最近更新",
-    FileSearchIcon,
-    "zinc",
-    ["今天", "7天", "30天"],
-  ),
-];
+function buildDocTopics(copy: StorageCopy): TopicItem[] {
+  return [
+    topic(
+      copy.topics.docsAllTitle,
+      copy.topics.docsAllSubtitle,
+      "1,284",
+      copy.topics.docsAllStatus,
+      FileTextIcon,
+      "blue",
+      ["PDF", "DOC", "MD"],
+    ),
+    topic(
+      copy.topics.docsSourcesTitle,
+      copy.topics.docsSourcesSubtitle,
+      "32",
+      copy.topics.docsSourcesStatus,
+      FolderOpenIcon,
+      "green",
+      [
+        copy.topics.coverWork,
+        copy.topics.coverProject,
+        copy.topics.coverDownloads,
+      ],
+    ),
+    topic(
+      copy.topics.docsTopicsTitle,
+      copy.topics.docsTopicsSubtitle,
+      "18",
+      copy.topics.docsTopicsStatus,
+      BrainIcon,
+      "violet",
+      [
+        copy.topics.coverContract,
+        copy.topics.coverTech,
+        copy.topics.coverResearch,
+      ],
+    ),
+    topic(
+      copy.topics.docsRecentTitle,
+      copy.topics.docsRecentSubtitle,
+      "96",
+      copy.topics.docsRecentStatus,
+      FileSearchIcon,
+      "zinc",
+      [
+        copy.topics.coverToday,
+        copy.topics.cover7Days,
+        copy.topics.cover30Days,
+      ],
+    ),
+  ];
+}
 
-const IMAGE_TOPICS: TopicItem[] = [
-  topic(
-    "全部图片",
-    "照片、截图、设计物料与图片内文字",
-    "8,426",
-    "图片智能搜索",
-    FileImageIcon,
-    "green",
-    ["JPG", "PNG", "WEBP"],
-  ),
-  topic(
-    "图片主题",
-    "人物、地点、节日、票据、屏幕截图",
-    "41",
-    "持续构建中",
-    SparklesIcon,
-    "violet",
-    ["人物", "地点", "主题"],
-  ),
-  topic(
-    "图片来源",
-    "按目录、应用、项目来源自动归档",
-    "24",
-    "已同步",
-    FolderOpenIcon,
-    "blue",
-    ["桌面", "下载", "微信"],
-  ),
-  topic(
-    "截图 OCR",
-    "截图里的文字和界面内容可被搜索",
-    "1,230",
-    "OCR 队列",
-    ImageIcon,
-    "amber",
-    ["白板", "界面", "表格"],
-  ),
-];
+function buildImageTopics(copy: StorageCopy): TopicItem[] {
+  return [
+    topic(
+      copy.topics.imagesAllTitle,
+      copy.topics.imagesAllSubtitle,
+      "8,426",
+      copy.topics.imagesAllStatus,
+      FileImageIcon,
+      "green",
+      ["JPG", "PNG", "WEBP"],
+    ),
+    topic(
+      copy.topics.imagesTopicsTitle,
+      copy.topics.imagesTopicsSubtitle,
+      "41",
+      copy.topics.imagesTopicsStatus,
+      SparklesIcon,
+      "violet",
+      [
+        copy.topics.coverPeople,
+        copy.topics.coverPlaces,
+        copy.topics.coverTheme,
+      ],
+    ),
+    topic(
+      copy.topics.imagesSourcesTitle,
+      copy.topics.imagesSourcesSubtitle,
+      "24",
+      copy.topics.imagesSourcesStatus,
+      FolderOpenIcon,
+      "blue",
+      [
+        copy.topics.coverDesktop,
+        copy.topics.coverDownloads,
+        copy.topics.coverWechat,
+      ],
+    ),
+    topic(
+      copy.topics.imagesOcrTitle,
+      copy.topics.imagesOcrSubtitle,
+      "1,230",
+      copy.topics.imagesOcrStatus,
+      ImageIcon,
+      "amber",
+      [
+        copy.topics.coverWhiteboard,
+        copy.topics.coverInterface,
+        copy.topics.coverSpreadsheet,
+      ],
+    ),
+  ];
+}
 
-const APP_ITEMS: AppItem[] = [
-  app(
-    "Finder",
-    "系统应用",
-    "/System/Applications/Finder.app",
-    "已注册",
-    FolderOpenIcon,
-    "blue",
-  ),
-  app(
-    "Preview",
-    "图片 / PDF",
-    "/System/Applications/Preview.app",
-    "已注册",
-    ImageIcon,
-    "green",
-  ),
-  app(
-    "Office",
-    "文档表格",
-    "/Applications",
-    "待扫描",
-    FileArchiveIcon,
-    "amber",
-  ),
-  app(
-    "Browser",
-    "网页资料",
-    "/Applications",
-    "已注册",
-    AppWindowIcon,
-    "violet",
-  ),
-  app(
-    "Terminal",
-    "系统工具",
-    "/System/Applications/Utilities",
-    "可调用",
-    ServerIcon,
-    "zinc",
-  ),
-  app("Downloads", "下载管理", "~/Downloads", "文件夹", ArchiveIcon, "blue"),
-];
+function buildAppItems(copy: StorageCopy): AppItem[] {
+  return [
+    app(
+      "Finder",
+      copy.apps.typeSystemApp,
+      "/System/Applications/Finder.app",
+      copy.apps.statusRegistered,
+      FolderOpenIcon,
+      "blue",
+    ),
+    app(
+      "Preview",
+      copy.apps.typeImagePdf,
+      "/System/Applications/Preview.app",
+      copy.apps.statusRegistered,
+      ImageIcon,
+      "green",
+    ),
+    app(
+      "Office",
+      copy.apps.typeDocsSheets,
+      "/Applications",
+      copy.apps.statusPendingScan,
+      FileArchiveIcon,
+      "amber",
+    ),
+    app(
+      "Browser",
+      copy.apps.typeWebResources,
+      "/Applications",
+      copy.apps.statusRegistered,
+      AppWindowIcon,
+      "violet",
+    ),
+    app(
+      "Terminal",
+      copy.apps.typeSystemTool,
+      "/System/Applications/Utilities",
+      copy.apps.statusCallable,
+      ServerIcon,
+      "zinc",
+    ),
+    app(
+      "Downloads",
+      copy.apps.typeDownloadManager,
+      "~/Downloads",
+      copy.apps.statusFolder,
+      ArchiveIcon,
+      "blue",
+    ),
+  ];
+}
 
-const DOC_FILES: FileItem[] = [
-  file(
-    "AI 眼镜市场调研.md",
-    "~/Documents/Research/AI Glasses.md",
-    "Markdown",
-    "今天 14:21",
-    "128 KB",
-    FileTextIcon,
-    "blue",
-  ),
-  file(
-    "2026 产品路线图.pptx",
-    "~/Documents/Product/Roadmap.pptx",
-    "演示文稿",
-    "昨天 18:09",
-    "18.4 MB",
-    TablePropertiesIcon,
-    "amber",
-  ),
-  file(
-    "供应商合同扫描件.pdf",
-    "~/Documents/Contracts/Vendor.pdf",
-    "PDF",
-    "6月12日",
-    "3.2 MB",
-    FileArchiveIcon,
-    "rose",
-  ),
-  file(
-    "本地小模型部署笔记.md",
-    "~/Public/octopus/local-models.md",
-    "Markdown",
-    "6月10日",
-    "42 KB",
-    BrainIcon,
-    "violet",
-  ),
-  file(
-    "NAS 权限清单.xlsx",
-    "~/Documents/NAS/Permissions.xlsx",
-    "表格",
-    "6月08日",
-    "812 KB",
-    FileSearchIcon,
-    "green",
-  ),
-];
+function buildDocFiles(copy: StorageCopy): FileItem[] {
+  return [
+    file(
+      copy.demoFiles.doc1Name,
+      "~/Documents/Research/AI Glasses.md",
+      copy.demoFiles.doc1Kind,
+      copy.demoFiles.doc1Updated,
+      "128 KB",
+      FileTextIcon,
+      "blue",
+    ),
+    file(
+      copy.demoFiles.doc2Name,
+      "~/Documents/Product/Roadmap.pptx",
+      copy.demoFiles.doc2Kind,
+      copy.demoFiles.doc2Updated,
+      "18.4 MB",
+      TablePropertiesIcon,
+      "amber",
+    ),
+    file(
+      copy.demoFiles.doc3Name,
+      "~/Documents/Contracts/Vendor.pdf",
+      copy.demoFiles.doc3Kind,
+      copy.demoFiles.doc3Updated,
+      "3.2 MB",
+      FileArchiveIcon,
+      "rose",
+    ),
+    file(
+      copy.demoFiles.doc4Name,
+      "~/Public/octopus/local-models.md",
+      copy.demoFiles.doc4Kind,
+      copy.demoFiles.doc4Updated,
+      "42 KB",
+      BrainIcon,
+      "violet",
+    ),
+    file(
+      copy.demoFiles.doc5Name,
+      "~/Documents/NAS/Permissions.xlsx",
+      copy.demoFiles.doc5Kind,
+      copy.demoFiles.doc5Updated,
+      "812 KB",
+      FileSearchIcon,
+      "green",
+    ),
+  ];
+}
 
-const IMAGE_FILES: FileItem[] = [
-  file(
-    "aoi-front-transparent.png",
-    "~/Pictures/Agents/aoi-front.png",
-    "人物立绘",
-    "今天 11:42",
-    "4.8 MB",
-    FileImageIcon,
-    "green",
-  ),
-  file(
-    "会议白板 OCR.jpg",
-    "~/Pictures/Whiteboard/meeting.jpg",
-    "照片 / OCR",
-    "昨天 16:18",
-    "2.1 MB",
-    ImageIcon,
-    "blue",
-  ),
-  file(
-    "产品截图-工作台.webp",
-    "~/Pictures/Screenshots/workspace.webp",
-    "界面截图",
-    "6月12日",
-    "980 KB",
-    FileImageIcon,
-    "violet",
-  ),
-  file(
-    "票据-差旅.png",
-    "~/Pictures/Receipts/travel.png",
-    "票据",
-    "6月09日",
-    "1.4 MB",
-    FileSearchIcon,
-    "amber",
-  ),
-];
+function buildImageFiles(copy: StorageCopy): FileItem[] {
+  return [
+    file(
+      "aoi-front-transparent.png",
+      "~/Pictures/Agents/aoi-front.png",
+      copy.demoFiles.image1Kind,
+      copy.demoFiles.image1Updated,
+      "4.8 MB",
+      FileImageIcon,
+      "green",
+    ),
+    file(
+      copy.demoFiles.image2Name,
+      "~/Pictures/Whiteboard/meeting.jpg",
+      copy.demoFiles.image2Kind,
+      copy.demoFiles.image2Updated,
+      "2.1 MB",
+      ImageIcon,
+      "blue",
+    ),
+    file(
+      copy.demoFiles.image3Name,
+      "~/Pictures/Screenshots/workspace.webp",
+      copy.demoFiles.image3Kind,
+      copy.demoFiles.image3Updated,
+      "980 KB",
+      FileImageIcon,
+      "violet",
+    ),
+    file(
+      copy.demoFiles.image4Name,
+      "~/Pictures/Receipts/travel.png",
+      copy.demoFiles.image4Kind,
+      copy.demoFiles.image4Updated,
+      "1.4 MB",
+      FileSearchIcon,
+      "amber",
+    ),
+  ];
+}
 
 function topic(
   title: string,
@@ -412,11 +492,13 @@ function file(
 }
 
 export default function StoragePage() {
+  const { t } = useI18n();
+  const copy = t.storage;
   const [searchParams] = useSearchParams();
   const [manifest, setManifest] = useState<NASManifest | null>(null);
   const [policy, setPolicy] = useState<NASPolicy>(DEFAULT_POLICY);
   const [sources, setSources] = useState<NASSource[]>([]);
-  const [query, setQuery] = useState(DEFAULT_QUERY);
+  const [query, setQuery] = useState(() => copy.defaultQuery);
   const [hits, setHits] = useState<NASSearchHit[]>([]);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
@@ -429,7 +511,8 @@ export default function StoragePage() {
 
   const libraryParam = searchParams.get("library");
   const activeLibrary = isLibraryKey(libraryParam) ? libraryParam : "computer";
-  const activeMeta = LIBRARIES.find((item) => item.key === activeLibrary)!;
+  const libraries = useMemo(() => buildLibraries(copy), [copy]);
+  const activeMeta = libraries.find((item) => item.key === activeLibrary)!;
 
   const stats = useMemo(() => {
     const files = sources.reduce((sum, source) => sum + source.file_count, 0);
@@ -454,14 +537,14 @@ export default function StoragePage() {
       setSources([]);
       setServiceError(
         isNASAuthenticationError(error)
-          ? "本地知识库已启动，但连接凭据已失效。正在重新连接…"
+          ? copy.service.credentialsExpired
           : error instanceof Error
             ? error.message
             : String(error),
       );
       return false;
     }
-  }, []);
+  }, [copy]);
 
   const ensureNASService = useCallback(async () => {
     const startResult = await startNASService();
@@ -470,18 +553,18 @@ export default function StoragePage() {
       await delay(500);
     }
     if (startResult.status === "not_found") {
-      setServiceError(
-        "未找到 octopus-storage，请安装本地知识库服务，或设置 OCTOPUS_STORAGE_CMD 后重试。",
-      );
+      setServiceError(copy.service.notFound);
       return false;
     }
     if (startResult.status === "error") {
-      setServiceError("本地知识库服务启动失败，请检查后端日志后重试。");
+      setServiceError(copy.service.startFailed);
       return false;
     }
-    setServiceError(`本地知识库服务仍未连接：${getNASBaseURL()}`);
+    setServiceError(
+      fill(copy.service.notConnected, { url: getNASBaseURL() }),
+    );
     return false;
-  }, [refreshNAS]);
+  }, [copy, refreshNAS]);
 
   useEffect(() => {
     const init = async () => {
@@ -611,7 +694,9 @@ export default function StoragePage() {
                         isReconnecting && "animate-spin",
                       )}
                     />
-                    {isReconnecting ? "连接中" : "重新连接"}
+                    {isReconnecting
+                      ? copy.toolbar.reconnecting
+                      : copy.toolbar.reconnect}
                   </Button>
                 </div>
               )}
@@ -626,7 +711,7 @@ export default function StoragePage() {
                     disabled={isPickingFolder}
                   >
                     <FolderPlusIcon className="size-3.5" />
-                    授权
+                    {copy.toolbar.authorize}
                   </Button>
                   <Button
                     size="sm"
@@ -638,7 +723,7 @@ export default function StoragePage() {
                     <RefreshCwIcon
                       className={cn("size-3.5", isIndexing && "animate-spin")}
                     />
-                    扫描
+                    {copy.toolbar.scan}
                   </Button>
                   <Button
                     size="sm"
@@ -651,7 +736,9 @@ export default function StoragePage() {
                     ) : (
                       <ServerIcon className="size-3.5" />
                     )}
-                    {policy.mode === "privacy" ? "隐私" : "效率"}
+                    {policy.mode === "privacy"
+                      ? copy.toolbar.privacy
+                      : copy.toolbar.efficiency}
                   </Button>
                   <span className="ml-1 flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
                     <span
@@ -660,7 +747,9 @@ export default function StoragePage() {
                         manifest ? "bg-emerald-500" : "bg-amber-500",
                       )}
                     />
-                    <span>{manifest ? "在线" : "离线"}</span>
+                    <span>
+                      {manifest ? copy.toolbar.online : copy.toolbar.offline}
+                    </span>
                   </span>
                 </div>
               )}
@@ -740,6 +829,8 @@ function ToolbarSearch({
   isSearching: boolean;
   manifest: NASManifest | null;
 }) {
+  const { t } = useI18n();
+  const copy = t.storage;
   return (
     <div className="flex min-w-0 max-w-full flex-1 items-center gap-1 rounded-md border border-black/10 bg-white px-2 shadow-[var(--shadow-xs)] sm:min-w-[300px]">
       <div className="flex min-w-0 flex-1 items-center">
@@ -753,7 +844,7 @@ function ToolbarSearch({
           onKeyDown={(event) => {
             if (event.key === "Enter") runSearch();
           }}
-          placeholder="文件名、正文、OCR、路径或应用"
+          placeholder={copy.toolbar.searchPlaceholder}
           className="h-8 min-w-36 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
         />
       </div>
@@ -761,7 +852,7 @@ function ToolbarSearch({
         type="button"
         size="sm"
         variant="ghost"
-        aria-label="搜索"
+        aria-label={copy.toolbar.searchAria}
         className="h-7 shrink-0 rounded-md px-2"
         onClick={runSearch}
         disabled={isSearching || !manifest}
@@ -787,7 +878,7 @@ function TopicCenterView({
   searchMessage,
 }: {
   activeLibrary: LibraryKey;
-  activeMeta: (typeof LIBRARIES)[number];
+  activeMeta: LibraryMeta;
   query: string;
   setQuery: (value: string) => void;
   runSearch: () => void;
@@ -795,6 +886,8 @@ function TopicCenterView({
   manifest: NASManifest | null;
   searchMessage: string | null;
 }) {
+  const { t } = useI18n();
+  const copy = t.storage;
   if (activeLibrary === "docs") {
     return (
       <DocumentLibraryView
@@ -820,9 +913,18 @@ function TopicCenterView({
     );
   }
 
-  const topics = [...DOC_TOPICS.slice(0, 2), ...IMAGE_TOPICS.slice(0, 2)];
-  const tabs = ["全部本地", "文档", "图片", "最近"];
-  const recentItems = [...DOC_FILES.slice(0, 3), ...IMAGE_FILES.slice(0, 2)];
+  const docTopics = buildDocTopics(copy);
+  const imageTopics = buildImageTopics(copy);
+  const docFiles = buildDocFiles(copy);
+  const imageFiles = buildImageFiles(copy);
+  const topics = [...docTopics.slice(0, 2), ...imageTopics.slice(0, 2)];
+  const tabs = [
+    copy.overview.tabAll,
+    copy.overview.tabDocs,
+    copy.overview.tabImages,
+    copy.overview.tabRecent,
+  ];
+  const recentItems = [...docFiles.slice(0, 3), ...imageFiles.slice(0, 2)];
 
   return (
     <>
@@ -845,7 +947,7 @@ function TopicCenterView({
         </div>
         <div className="flex items-center gap-2">
           <ToolbarSearch
-            label={`在 ${activeMeta.label} 中搜索：`}
+            label={fill(copy.toolbar.searchIn, { label: activeMeta.label })}
             query={query}
             setQuery={setQuery}
             runSearch={runSearch}
@@ -855,7 +957,7 @@ function TopicCenterView({
           <Button
             size="sm"
             variant="ghost"
-            aria-label="搜索范围筛选"
+            aria-label={copy.toolbar.scopeFilterAria}
             className="rounded-full"
           >
             <ListFilterIcon className="size-4" />
@@ -863,7 +965,7 @@ function TopicCenterView({
           <Button
             size="sm"
             variant="ghost"
-            aria-label="网格视图"
+            aria-label={copy.toolbar.gridViewAria}
             className="rounded-full"
           >
             <Grid3X3Icon className="size-4" />
@@ -874,9 +976,11 @@ function TopicCenterView({
       <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(420px,1fr)_320px] overflow-hidden">
         <aside className="min-h-0 overflow-y-auto border-r border-border bg-muted/50 p-3">
           <div className="mb-3 rounded-lg bg-white p-3 shadow-[var(--shadow-xs)] ring-1 ring-border">
-            <div className="text-sm font-semibold">索引持续构建中</div>
+            <div className="text-sm font-semibold">
+              {copy.overview.indexingTitle}
+            </div>
             <div className="mt-1 text-xs leading-5 text-muted-foreground">
-              新增文件会自动进入主题、来源和全文搜索。
+              {copy.overview.indexingDesc}
             </div>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
               <div className="h-full w-2/3 rounded-full bg-foreground" />
@@ -898,15 +1002,14 @@ function TopicCenterView({
             <div>
               <div className="text-sm font-semibold">{tabs[0]}</div>
               <div className="mt-0.5 text-xs text-muted-foreground">
-                {searchMessage ||
-                  "聚合文档、图片、应用和本机目录，本地索引优先。"}
+                {searchMessage || copy.overview.aggregateDesc}
               </div>
             </div>
             <Badge
               variant="outline"
               className="rounded-full border-black/10 bg-white"
             >
-              本地数据库
+              {copy.overview.localDatabaseBadge}
             </Badge>
           </div>
           <div className="grid gap-3 2xl:grid-cols-2">
@@ -918,9 +1021,9 @@ function TopicCenterView({
 
         <aside className="min-h-0 overflow-y-auto border-l border-border bg-muted/30 p-4">
           <PreviewPanel
-            title="本地小脑索引"
-            subtitle="文件解析、OCR、向量化在本机执行；问答可按隐私策略切换。"
-            item={DOC_FILES[0]!}
+            title={copy.overview.previewTitle}
+            subtitle={copy.overview.previewSubtitle}
+            item={docFiles[0]!}
           />
         </aside>
       </div>
@@ -943,18 +1046,21 @@ function DocumentLibraryView({
   manifest: NASManifest | null;
   searchMessage: string | null;
 }) {
+  const { t } = useI18n();
+  const copy = t.storage;
+  const docFiles = buildDocFiles(copy);
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">文档</div>
+          <div className="truncate text-sm font-semibold">{copy.docs.title}</div>
           <div className="truncate text-xs text-muted-foreground">
-            {DOC_FILES.length} 项 · 全文、表格、OCR 与来源路径检索
+            {fill(copy.docs.subtitle, { count: docFiles.length })}
           </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <ToolbarSearch
-            label="搜索文档："
+            label={copy.docs.searchLabel}
             query={query}
             setQuery={setQuery}
             runSearch={runSearch}
@@ -964,7 +1070,7 @@ function DocumentLibraryView({
           <Button
             size="sm"
             variant="ghost"
-            aria-label="筛选"
+            aria-label={copy.toolbar.filterAria}
             className="size-8 rounded-md"
           >
             <ListFilterIcon className="size-4" />
@@ -972,7 +1078,7 @@ function DocumentLibraryView({
           <Button
             size="sm"
             variant="ghost"
-            aria-label="列表视图"
+            aria-label={copy.toolbar.listViewAria}
             className="size-8 rounded-md"
           >
             <LayoutListIcon className="size-4" />
@@ -983,9 +1089,11 @@ function DocumentLibraryView({
       <main className="min-h-0 flex-1 overflow-hidden bg-white">
         <div className="flex h-12 items-center justify-between border-b border-border px-3">
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">全部文档</div>
+            <div className="truncate text-sm font-semibold">
+              {copy.docs.allDocs}
+            </div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              {searchMessage || "2026年6月 · 本机索引优先"}
+              {searchMessage || copy.docs.indexNote}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -993,30 +1101,30 @@ function DocumentLibraryView({
               variant="outline"
               className="rounded-md border-black/10 bg-white"
             >
-              最近
+              {copy.docs.badgeRecent}
             </Badge>
             <Badge
               variant="outline"
               className="rounded-md border-black/10 bg-white"
             >
-              本机文档
+              {copy.docs.badgeLocalDocs}
             </Badge>
           </div>
         </div>
         <div className="grid grid-cols-[minmax(240px,1fr)_minmax(180px,280px)_92px_120px_104px] items-center gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
-          <span>名称</span>
-          <span>位置</span>
-          <span>大小</span>
-          <span className="text-right">修改日期</span>
-          <span className="text-right">动作</span>
+          <span>{copy.docs.colName}</span>
+          <span>{copy.docs.colLocation}</span>
+          <span>{copy.docs.colSize}</span>
+          <span className="text-right">{copy.docs.colModified}</span>
+          <span className="text-right">{copy.docs.colActions}</span>
         </div>
         <div className="min-h-0 overflow-y-auto">
-          {DOC_FILES.map((item) => (
+          {docFiles.map((item) => (
             <FileManagerRow key={item.path} item={item} />
           ))}
         </div>
         <div className="border-t border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          文档只进入本机索引；引用到任务前不会自动进入上下文。
+          {copy.docs.footerNote}
         </div>
       </main>
     </>
@@ -1036,18 +1144,23 @@ function ImageLibraryView({
   isSearching: boolean;
   manifest: NASManifest | null;
 }) {
+  const { t } = useI18n();
+  const copy = t.storage;
+  const imageFiles = buildImageFiles(copy);
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">图片</div>
+          <div className="truncate text-sm font-semibold">
+            {copy.images.title}
+          </div>
           <div className="truncate text-xs text-muted-foreground">
-            {IMAGE_FILES.length} 项 · OCR、地点、人物与截图统一检索
+            {fill(copy.images.subtitle, { count: imageFiles.length })}
           </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <ToolbarSearch
-            label="搜索图片："
+            label={copy.images.searchLabel}
             query={query}
             setQuery={setQuery}
             runSearch={runSearch}
@@ -1057,7 +1170,7 @@ function ImageLibraryView({
           <Button
             size="sm"
             variant="ghost"
-            aria-label="筛选"
+            aria-label={copy.toolbar.filterAria}
             className="size-8 rounded-md"
           >
             <ListFilterIcon className="size-4" />
@@ -1066,12 +1179,12 @@ function ImageLibraryView({
             variant="outline"
             className="h-8 rounded-md border-black/10 bg-white px-2.5 text-xs"
           >
-            所有图片
+            {copy.images.badgeAllImages}
           </Badge>
           <Button
             size="sm"
             variant="ghost"
-            aria-label="网格视图"
+            aria-label={copy.toolbar.gridViewAria}
             className="size-8 rounded-md"
           >
             <Grid3X3Icon className="size-4" />
@@ -1085,23 +1198,23 @@ function ImageLibraryView({
             variant="outline"
             className="rounded-md border-black/10 bg-white"
           >
-            全部 {IMAGE_FILES.length}
+            {fill(copy.images.filterAll, { count: imageFiles.length })}
           </Badge>
           <Badge
             variant="outline"
             className="rounded-md border-black/10 bg-white"
           >
-            已 OCR
+            {copy.images.filterOcr}
           </Badge>
           <Badge
             variant="outline"
             className="rounded-md border-black/10 bg-white"
           >
-            本机图库
+            {copy.images.filterLocalLibrary}
           </Badge>
         </div>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-          {IMAGE_FILES.map((item) => (
+          {imageFiles.map((item) => (
             <ImageAssetTile key={item.path} item={item} />
           ))}
         </div>
@@ -1117,6 +1230,7 @@ function TopicNavRow({
   topic: TopicItem;
   active: boolean;
 }) {
+  const { t } = useI18n();
   const Icon = item.icon;
   return (
     <button
@@ -1139,7 +1253,10 @@ function TopicNavRow({
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{item.title}</span>
         <span className="block truncate text-xs text-muted-foreground">
-          {item.count} 项 · {item.status}
+          {fill(t.storage.overview.itemsWithStatus, {
+            count: item.count,
+            status: item.status,
+          })}
         </span>
       </span>
       <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -1206,6 +1323,7 @@ function FileManagerRow({ item }: { item: FileItem }) {
 }
 
 function ImageAssetTile({ item }: { item: FileItem }) {
+  const { t } = useI18n();
   const Icon = item.icon;
   return (
     <div className="group min-w-0 overflow-hidden rounded-lg border border-border bg-white text-left shadow-[var(--shadow-xs)] transition-colors hover:border-black/10 hover:bg-muted/30">
@@ -1227,7 +1345,7 @@ function ImageAssetTile({ item }: { item: FileItem }) {
       </span>
       <div className="mt-3 flex items-center justify-between gap-2 px-3 pb-3">
         <span className="rounded-md bg-black/[0.04] px-2 py-1 text-xs text-muted-foreground">
-          已 OCR
+          {t.storage.images.ocrBadge}
         </span>
         <QuickFileActions compact />
       </div>
@@ -1236,10 +1354,12 @@ function ImageAssetTile({ item }: { item: FileItem }) {
 }
 
 function QuickFileActions({ compact = false }: { compact?: boolean }) {
+  const { t } = useI18n();
+  const copy = t.storage;
   const buttons = [
-    { label: "预览", icon: EyeIcon },
-    { label: "引用到任务", icon: MessageSquarePlusIcon },
-    { label: "所在位置", icon: ExternalLinkIcon },
+    { label: copy.preview.actionPreview, icon: EyeIcon },
+    { label: copy.preview.actionQuote, icon: MessageSquarePlusIcon },
+    { label: copy.preview.actionLocate, icon: ExternalLinkIcon },
   ];
   return (
     <span
@@ -1278,6 +1398,8 @@ function PreviewPanel({
   subtitle: string;
   item: FileItem;
 }) {
+  const { t } = useI18n();
+  const copy = t.storage;
   const Icon = item.icon;
   return (
     <div className="flex min-h-full flex-col">
@@ -1305,27 +1427,27 @@ function PreviewPanel({
       </div>
 
       <div className="mt-3 rounded-lg bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
-        <div className="text-sm font-semibold">来源定位</div>
+        <div className="text-sm font-semibold">{copy.preview.sourceLocation}</div>
         <div className="mt-3 space-y-2 text-xs text-muted-foreground">
           <div className="flex justify-between gap-3">
-            <span>类型</span>
+            <span>{copy.preview.typeLabel}</span>
             <span className="text-foreground">{item.kind}</span>
           </div>
           <div className="flex justify-between gap-3">
-            <span>更新时间</span>
+            <span>{copy.preview.updatedLabel}</span>
             <span className="text-foreground">{item.updated}</span>
           </div>
           <div className="flex justify-between gap-3">
-            <span>大小</span>
+            <span>{copy.preview.sizeLabel}</span>
             <span className="text-foreground">{item.size}</span>
           </div>
         </div>
       </div>
 
       <div className="mt-3 rounded-lg bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
-        <div className="text-sm font-semibold">可带入任务的片段</div>
+        <div className="text-sm font-semibold">{copy.preview.snippetTitle}</div>
         <p className="mt-2 rounded-lg bg-muted/50 p-3 text-xs leading-5 text-muted-foreground">
-          本地命中摘要会先停留在预览区。点击引用后，仅当前片段、文件名和来源定位进入任务上下文。
+          {copy.preview.snippetDesc}
         </p>
       </div>
 
@@ -1335,14 +1457,14 @@ function PreviewPanel({
           className="justify-start rounded-lg bg-white shadow-[var(--shadow-xs)]"
         >
           <FileSearchIcon className="size-4" />
-          在对话中引用
+          {copy.preview.quoteInChat}
         </Button>
         <Button
           variant="secondary"
           className="justify-start rounded-lg bg-white shadow-[var(--shadow-xs)]"
         >
           <FolderOpenIcon className="size-4" />
-          打开所在位置
+          {copy.preview.openLocation}
         </Button>
       </div>
     </div>
@@ -1362,18 +1484,21 @@ function AppsView({
   isSearching: boolean;
   manifest: NASManifest | null;
 }) {
+  const { t } = useI18n();
+  const copy = t.storage;
+  const appItems = buildAppItems(copy);
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">应用</div>
+          <div className="truncate text-sm font-semibold">{copy.apps.title}</div>
           <div className="truncate text-xs text-muted-foreground">
-            {APP_ITEMS.length} 项 · 本机应用注册表
+            {fill(copy.apps.subtitle, { count: appItems.length })}
           </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <ToolbarSearch
-            label="搜索应用："
+            label={copy.apps.searchLabel}
             query={query}
             setQuery={setQuery}
             runSearch={runSearch}
@@ -1383,7 +1508,7 @@ function AppsView({
           <Button
             size="sm"
             variant="ghost"
-            aria-label="排序"
+            aria-label={copy.toolbar.sortAria}
             className="size-8 rounded-md"
           >
             <SlidersHorizontalIcon className="size-4" />
@@ -1391,7 +1516,7 @@ function AppsView({
           <Button
             size="sm"
             variant="ghost"
-            aria-label="列表视图"
+            aria-label={copy.toolbar.listViewAria}
             className="size-8 rounded-md"
           >
             <LayoutListIcon className="size-4" />
@@ -1401,26 +1526,28 @@ function AppsView({
       <main className="min-h-0 flex-1 overflow-hidden bg-white">
         <div className="flex h-12 items-center justify-between border-b border-border px-3">
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">已收录应用</div>
+            <div className="truncate text-sm font-semibold">
+              {copy.apps.registeredTitle}
+            </div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              按启动器、系统组件与工具分类统一检索
+              {copy.apps.registeredSubtitle}
             </div>
           </div>
           <Badge
             variant="outline"
             className="rounded-md border-black/10 bg-white"
           >
-            列表
+            {copy.apps.badgeList}
           </Badge>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_140px_130px_120px] gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
-          <span>名称</span>
-          <span>类型</span>
-          <span>状态</span>
-          <span className="text-right">动作</span>
+          <span>{copy.apps.colName}</span>
+          <span>{copy.apps.colType}</span>
+          <span>{copy.apps.colStatus}</span>
+          <span className="text-right">{copy.apps.colActions}</span>
         </div>
         <div className="min-h-0 overflow-y-auto">
-          {APP_ITEMS.map((item) => (
+          {appItems.map((item) => (
             <AppListRow key={item.name} item={item} />
           ))}
         </div>

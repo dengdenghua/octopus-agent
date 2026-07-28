@@ -4,46 +4,19 @@
  * Focus: classification (official vs custom) + selection plumbing.
  * We don't re-test Radix Tabs / DropdownMenu internals.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AllProviders } from "@/test/harness";
 
 import { ModelPicker, type PickerModel } from "./model-picker";
 
-const authState = vi.hoisted(() => ({
-  isGuest: false,
-  isAuthenticated: true,
-}));
-
 // Stub useOctLink — picker reads `link.oct_user_id` to auto-enable
 // unconfigured models.
-vi.mock("@/core/oct", () => ({
+vi.mock("@/core/oct/hooks", () => ({
   useOctLink: () => ({ data: null }),
 }));
-
-// Picker's `useAuth()` is for read-only identity · stub with a
-// minimal guest identity so the hook doesn't throw.
-vi.mock("@/providers/AuthProvider", () => ({
-  useAuth: () => ({
-    isLoading: false,
-    authStatus: { enabled: false, allow_registration: false },
-    user: null,
-    isAuthenticated: authState.isAuthenticated,
-    isGuest: authState.isGuest,
-    login: vi.fn(),
-    guestLogin: vi.fn(),
-    register: vi.fn(),
-    logout: vi.fn(),
-    refresh: vi.fn(),
-  }),
-}));
-
-beforeEach(() => {
-  authState.isGuest = false;
-  authState.isAuthenticated = true;
-});
 
 function withProviders(node: React.ReactNode) {
   // Test assertions reference zh-CN copy, so prime the I18nProvider to zh-CN.
@@ -242,56 +215,6 @@ describe("<ModelPicker />", () => {
       within(menu).getByText("Claude Opus 4.6 (mirror)").closest("button")!,
     );
     expect(onChange).toHaveBeenCalledWith("claude-opus-4-6-mirror");
-  });
-
-  it("guest users see disabled official models and can only select custom models", async () => {
-    authState.isGuest = true;
-    authState.isAuthenticated = false;
-    const user = userEvent.setup();
-    const { onChange } = setup("claude-opus-4-6-mirror");
-
-    await user.click(screen.getByRole("button", { name: "选择模型" }));
-
-    const customTab = await screen.findByTestId("model-picker-tab-custom");
-    expect(customTab).toHaveAttribute("data-state", "active");
-    expect(screen.getByTestId("model-picker-tab-official")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: "官方模型" }));
-    const menu = await screen.findByRole("menu");
-    const root = menu.parentElement ?? menu;
-    const mixBtn = Array.from(root.querySelectorAll("button")).find((b) =>
-      (b.textContent ?? "").includes("Octopus Mix"),
-    );
-    expect(mixBtn).toBeTruthy();
-    expect(mixBtn).toBeDisabled();
-    expect(root.textContent ?? "").toContain("登录后可用");
-    await user.click(mixBtn!);
-    expect(onChange).not.toHaveBeenCalledWith("octopus-mix");
-
-    await user.click(screen.getByRole("tab", { name: "自定义" }));
-    const customBtn = Array.from(root.querySelectorAll("button")).find(
-      (b) =>
-        (b.textContent ?? "").includes("Claude Opus 4.6 (mirror)") &&
-        !(b.textContent ?? "").includes("Mix"),
-    );
-    expect(customBtn).toBeTruthy();
-    await user.click(customBtn!);
-    expect(onChange).toHaveBeenCalledWith("claude-opus-4-6-mirror");
-  });
-
-  it("guest users do not see a disabled official model as the current trigger label", async () => {
-    authState.isGuest = true;
-    authState.isAuthenticated = false;
-    // octopus-mix is an official model → guest fallback must swap it for the first custom model
-    const { onChange } = setup("octopus-mix");
-
-    const trigger = screen.getByRole("button", { name: "选择模型" });
-    expect(await screen.findByText("Kimi K2.5")).toBeInTheDocument();
-    expect(trigger).toHaveTextContent("Kimi K2.5");
-    expect(trigger).not.toHaveTextContent("Octopus Mix");
-    await waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith("kimi-k2.5");
-    });
   });
 
   it("trigger shows Octopus Mix label when that model is selected", () => {

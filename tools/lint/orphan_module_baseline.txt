@@ -3,23 +3,6 @@
 # Wired one up or deleted it? Remove its line to lock the win.
 # A line for a module used only via importlib/registry documents
 # that dynamic dependency — keep it, it's not a bug.
-#
-# Audit 2026-07-19: static-import orphans are split into experimental,
-# compatibility, and optional-integration modules. Do not delete blindly:
-# ``runtime.platform`` and ``runtime.execution.loops`` expose several through
-# lazy exports, while product adapters are intentionally opt-in. The baseline
-# is a ratchet for static analysis, not proof that every file has zero value.
-#
-#   gill_pump            — experimental async context preprocessor; tested but opt-in
-#   loops/dispatcher     — dynamically exported by loops.__init__ and wired by the UI app
-#   echo_skills          — optional ECHO sibling-service integration
-#   enterprise_skills    — optional Enterprise sibling-service integration
-#   lifecycle/demo       — legacy `runtime.platform.demo` compatibility export
-#   lifecycle/data_migration — one-shot upgrade utility via lazy export
-#   plugins/plugin_compat — legacy plugin ABI compatibility shim
-#   process/event_bridge — legacy event-source bridge; idempotent but not auto-installed
-#   process/turn_model   — canonical resolver consumed by turn-session assembly
-#   mobile/capabilities  — canonical mobile capability catalog, consumed by device.py
 
 runtime/execution/loops/dispatcher.py
 runtime/execution/suckers/echo_skills.py
@@ -27,3 +10,6 @@ runtime/execution/suckers/enterprise_skills.py
 runtime/platform/lifecycle/data_migration.py
 runtime/platform/lifecycle/demo.py
 runtime/platform/plugins/plugin_compat.py
+runtime/tests/conftest.py
+runtime/tests/test_react_loop_commentary.py
+runtime/tests/test_realtime_workbench.py

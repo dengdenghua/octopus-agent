@@ -106,7 +106,7 @@ export function McpSettingsPage() {
       setTrustEntries(entries || []);
       setTrustLoadState("ready");
     } catch (error) {
-      console.error(error);
+      console.error("[mcp-settings] load trust entries failed:", error);
       setTrustEntries([]);
       setTrustLoadState("error");
     }

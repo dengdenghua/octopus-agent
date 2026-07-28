@@ -14,36 +14,38 @@ import {
   WorkspaceContainer,
   WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
+import { useI18n } from "@/core/i18n/hooks";
 
 export default function WorkflowsPage() {
+  const { t } = useI18n();
   const alternatives = [
     {
-      title: "实时任务",
-      desc: "把流程直接描述给 Agent，边执行边沉淀步骤和结果。",
+      title: t.workflows.altRealtimeTitle,
+      desc: t.workflows.altRealtimeDesc,
       href: "/workspace/realtime/new",
       icon: ClipboardListIcon,
-      label: "开始",
+      label: t.workflows.altRealtimeLabel,
     },
     {
-      title: "技能库",
-      desc: "把稳定动作整理成可复用技能，后续在任务中直接调用。",
+      title: t.workflows.altSkillsTitle,
+      desc: t.workflows.altSkillsDesc,
       href: "/workspace/skills",
       icon: BrainCircuitIcon,
-      label: "查看技能",
+      label: t.workflows.altSkillsLabel,
     },
     {
-      title: "自动化",
-      desc: "用订阅和定时任务承接周期性流程，先跑起来再固化。",
+      title: t.workflows.altAutomationTitle,
+      desc: t.workflows.altAutomationDesc,
       href: "/workspace/intelligence",
       icon: CalendarClockIcon,
-      label: "去自动化",
+      label: t.workflows.altAutomationLabel,
     },
     {
-      title: "Reflex",
-      desc: "维护触发规则、回复策略和轻量流程分派。",
+      title: t.workflows.altReflexTitle,
+      desc: t.workflows.altReflexDesc,
       href: "/workspace/reflex",
       icon: WorkflowIcon,
-      label: "打开规则",
+      label: t.workflows.altReflexLabel,
     },
   ];
 
@@ -60,24 +62,25 @@ export default function WorkflowsPage() {
                 </div>
                 <div className="mt-5 inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
                   <WrenchIcon className="size-3.5" />
-                  编辑器维护中
+                  {t.workflows.maintenanceBadge}
                 </div>
                 <h1 className="mt-3 text-2xl font-semibold tracking-tight">
-                  工作流编辑器暂不可用
+                  {t.workflows.title}
                 </h1>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-                  当前后端没有提供 workflow-editor 接口。为了避免保存、
-                  运行或导入时失败，这里暂时关闭编辑器入口。
+                  {t.workflows.description}
                 </p>
                 <div className="mt-6 flex flex-wrap gap-2">
                   <Button asChild>
                     <Link to="/workspace/realtime/new">
-                      新建实时任务
+                      {t.workflows.newRealtimeTask}
                       <ArrowRightIcon className="size-4" />
                     </Link>
                   </Button>
                   <Button asChild variant="outline">
-                    <Link to="/workspace/skills">查看技能</Link>
+                    <Link to="/workspace/skills">
+                      {t.workflows.viewSkills}
+                    </Link>
                   </Button>
                 </div>
               </div>
@@ -115,35 +118,35 @@ export default function WorkflowsPage() {
           <section className="mt-4 grid gap-3 md:grid-cols-3">
             <div className="rounded-lg border border-border-default bg-card/65 p-4">
               <div className="text-xs font-medium text-muted-foreground">
-                推荐过渡方案
+                {t.workflows.cardTransitionLabel}
               </div>
               <div className="mt-2 text-sm font-semibold">
-                先用实时任务跑流程
+                {t.workflows.cardTransitionTitle}
               </div>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                成功路径会在消息、工具轨迹和技能里逐步沉淀。
+                {t.workflows.cardTransitionDesc}
               </p>
             </div>
             <div className="rounded-lg border border-border-default bg-card/65 p-4">
               <div className="text-xs font-medium text-muted-foreground">
-                可复用资产
+                {t.workflows.cardAssetsLabel}
               </div>
               <div className="mt-2 text-sm font-semibold">
-                稳定动作进入技能库
+                {t.workflows.cardAssetsTitle}
               </div>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                比编辑器更轻，适合现在的插件和技能生态。
+                {t.workflows.cardAssetsDesc}
               </p>
             </div>
             <div className="rounded-lg border border-border-default bg-card/65 p-4">
               <div className="text-xs font-medium text-muted-foreground">
-                后续恢复
+                {t.workflows.cardLaterLabel}
               </div>
               <div className="mt-2 text-sm font-semibold">
-                接口可用后再开放编辑
+                {t.workflows.cardLaterTitle}
               </div>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                避免用户进入半成品编辑器后保存失败。
+                {t.workflows.cardLaterDesc}
               </p>
             </div>
           </section>

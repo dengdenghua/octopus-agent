@@ -16,7 +16,6 @@ const subscriptionMocks = vi.hoisted(() => ({
 vi.mock("@/providers/AuthProvider", () => ({
   useAuth: () => ({
     user: { user_id: "123", username: "123" },
-    isGuest: false,
   }),
 }));
 

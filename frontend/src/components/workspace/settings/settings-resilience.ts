@@ -2,16 +2,13 @@ export function resolvePricingAccountLabel({
   profileName,
   userName,
   userEmail,
-  isGuest,
   fallback,
 }: {
   profileName?: string | null;
   userName?: string | null;
   userEmail?: string | null;
-  isGuest: boolean;
   fallback: string;
 }): string | null {
-  if (isGuest) return null;
   return (
     profileName?.trim() || userName?.trim() || userEmail?.trim() || fallback
   );

@@ -135,18 +135,9 @@ describe("settings identity and input guards", () => {
         profileName: null,
         userName: "codex-ui-check",
         userEmail: "user@example.test",
-        isGuest: false,
         fallback: "当前账号",
       }),
     ).toBe("codex-ui-check");
-    expect(
-      resolvePricingAccountLabel({
-        profileName: "Profile name",
-        userName: "auth-name",
-        isGuest: true,
-        fallback: "Current account",
-      }),
-    ).toBeNull();
   });
 
   it("accepts only HTTP(S) MCP endpoints", () => {

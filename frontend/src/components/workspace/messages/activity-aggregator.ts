@@ -29,12 +29,10 @@ interface ToolCallLike {
   id?: string;
   role?: string;
   inferred?: boolean;
-  [key: string]: unknown;
 }
 
 interface NonToolCallLike {
   type: string;
-  [key: string]: unknown;
 }
 
 type TimelineItemLike = ToolCallLike | NonToolCallLike;

@@ -17,6 +17,7 @@ import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   normalizeEventsForSettledDisplay,
   toWorkBlocks,
+  workBlockTitle,
   type WorkBlock,
   type WorkBlockStatus,
 } from "./work-blocks";
@@ -693,7 +694,7 @@ export function diffEntriesFromBlocks(blocks: WorkBlock[]): DiffEntry[] {
               id: `${block.id}:${path || index}`,
               op,
               path,
-              title: path || block.title,
+              title: path || workBlockTitle(block),
               text,
               status: block.status,
             };
@@ -779,6 +780,6 @@ export function commandForBlock(block: WorkBlock): string {
   return (
     stringFromKeys(block.event.input, ["command", "cmd", "script"]) ||
     block.subtitle ||
-    block.title
+    workBlockTitle(block)
   );
 }

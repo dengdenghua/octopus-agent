@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AIMessage, Message } from "@/core/api/types";
@@ -2288,5 +2288,131 @@ describe("MessageGroup 收敛摘要行", () => {
     fireEvent.click(collapsed);
     // 展开后收敛行消失，phase 内容可见
     expect(screen.queryByTestId("collapsed-history-phase")).toBeNull();
+  });
+});
+
+describe("reasoning duration replay", () => {
+  it("回放时显示后端持久化的思考耗时", () => {
+    const message = {
+      id: "ai-1",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        public_reasoning_summary: "分析需求",
+        reasoning_duration_ms: 3500,
+      },
+    } as AIMessage;
+
+    renderWithProviders(<MessageGroup messages={[message]} />, {
+      locale: "zh-CN",
+    });
+
+    const thinkingRow = screen.getByTestId("process-timeline-event-thinking");
+    expect(thinkingRow).toHaveTextContent("思考了 3.5s");
+  });
+
+  it("reasoning_duration_ms 为 0 时不显示耗时", () => {
+    const message = {
+      id: "ai-1",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        public_reasoning_summary: "分析需求",
+        reasoning_duration_ms: 0,
+      },
+    } as AIMessage;
+
+    renderWithProviders(<MessageGroup messages={[message]} />, {
+      locale: "zh-CN",
+    });
+
+    const thinkingRow = screen.getByTestId("process-timeline-event-thinking");
+    expect(thinkingRow).not.toHaveTextContent(/思考了/);
+  });
+
+  it("缺少 reasoning_duration_ms 时不显示耗时", () => {
+    const message = {
+      id: "ai-1",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        public_reasoning_summary: "分析需求",
+      },
+    } as AIMessage;
+
+    renderWithProviders(<MessageGroup messages={[message]} />, {
+      locale: "zh-CN",
+    });
+
+    const thinkingRow = screen.getByTestId("process-timeline-event-thinking");
+    expect(thinkingRow).not.toHaveTextContent(/思考了/);
+  });
+});
+
+describe("reasoning live timer from backend timestamp", () => {
+  it("starts the live timer from reasoning_started_at", () => {
+    vi.useFakeTimers();
+    try {
+      // 用 public_reasoning_summary 让最后一条 compact timeline item 是
+      // reasoningGroup，从而 isCurrentlyThinking=true。reasoning_started_at
+      // 指向 3.5 秒前；推进 1.5 秒后首个 interval tick 落在 +1s 处，
+      // elapsed = (T0+1s) - (T0-3.5s) = 4.5s，越过 200ms 阈值，应渲染
+      // `t.messageGrouping.thinkingDuration` 即「思考了 ...」。
+      const message = {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary: "正在分析需求",
+          reasoning_started_at: new Date(Date.now() - 3500).toISOString(),
+        },
+      } as AIMessage;
+
+      renderWithProviders(<MessageGroup messages={[message]} isLoading />, {
+        locale: "zh-CN",
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+
+      const thinking = screen.getByTestId(
+        "process-timeline-event-thinking",
+      );
+      expect(thinking).toBeInTheDocument();
+      expect(thinking).toHaveTextContent("思考了");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to Date.now() when reasoning_started_at is missing", () => {
+    vi.useFakeTimers();
+    try {
+      // 旧数据没有 reasoning_started_at，计时器回退到 Date.now()；
+      // 推进时间后不崩溃，thinking 行仍可定位。
+      const message = {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          public_reasoning_summary: "正在分析",
+        },
+      } as AIMessage;
+
+      renderWithProviders(<MessageGroup messages={[message]} isLoading />, {
+        locale: "zh-CN",
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+
+      expect(
+        screen.getByTestId("process-timeline-event-thinking"),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

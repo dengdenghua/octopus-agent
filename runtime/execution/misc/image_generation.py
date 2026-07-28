@@ -141,10 +141,12 @@ def _generate_with_agnes(
     clean_reference_images = [
         image.strip() for image in (reference_images or []) if image and image.strip()
     ][:3]
+    # agnes-image-2.1-flash supports both text→image and image→image,
+    # so we use the same model regardless of whether reference images are present.
+    # AGNES_IMAGE_REFERENCE_MODEL remains as an escape hatch for explicit overrides.
     model = (
-        os.getenv("AGNES_IMAGE_REFERENCE_MODEL", "").strip() or "agnes-image-2.0-flash"
-        if clean_reference_images
-        else agnes_config["model"]
+        os.getenv("AGNES_IMAGE_REFERENCE_MODEL", "").strip()
+        or agnes_config["model"]
     )
     size = os.getenv("AGNES_IMAGE_SIZE", "").strip() or "1024x1536"
     avatar_size = os.getenv("AGNES_AVATAR_IMAGE_SIZE", "").strip() or "512x512"

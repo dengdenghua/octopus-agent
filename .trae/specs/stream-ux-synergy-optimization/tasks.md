@@ -40,10 +40,10 @@
   - [x] SubTask 7.1: `frontend/src/components/workspace/messages/message-group.tsx:505-526` 注释明确"streaming 结束后历史 phase 默认折叠"，`expandedHistoryPhases[phaseId]` 持久化用户展开选择
   - [x] SubTask 7.2: 单测覆盖：结束后历史 phase 折叠，用户展开后不收回
 
-- [ ] Task 8: businessAgentPhaseKey UI 消费
-  - [ ] SubTask 8.1: `frontend/src/components/workspace/agent-phases.ts` 的 phase 标题渲染逻辑：优先用后端 `phase_kind`，fallback 到 `businessAgentPhaseKey`
-  - [ ] SubTask 8.2: 单测覆盖：后端给了 phase_kind 时用后端，没给时用本地映射
-  - **核查状态**：半完成。`agent-phases.ts:125,300` 前端已在用 `businessAgentPhaseKey`，但因后端 Task 2 未实装，前端只有 fallback 路径，无后端优先路径
+- [x] Task 8: businessAgentPhaseKey UI 消费
+  - [x] SubTask 8.1: `frontend/src/components/workspace/agent-phases.ts:124-125` 的 phase 标题渲染逻辑：`normalizeBusinessPhaseKey(record.phaseKind ?? record.phase_kind) ?? businessAgentPhaseKey(displayTitle)` — 优先用后端 `phase_kind`，fallback 到 `businessAgentPhaseKey`
+  - [x] SubTask 8.2: 单测覆盖：`frontend/src/components/workspace/agent-phases.test.ts:490-506` `tolerates snake_case phase_kind when the adapter does not camelCase` 验证后端给了 phase_kind 时用后端；`:368-385` 验证没给时用本地映射
+  - **核查修正**：2026-07-27 核查误判为"半完成"（认为后端 Task 2 未实装）。实际 Task 2 后端已实装（`runtime/protocol/items.py:172-175` + `realtime_workbench.py:200-235`），前端联动路径完整
 
 - [x] Task 9: aggregatedToolGroup 加 FlipDisplay
   - [x] SubTask 9.1: `frontend/src/components/workspace/messages/message-group.tsx:42` import FlipDisplay，`:900-904` 在 aggregatedToolGroup 渲染中使用 `<FlipDisplay uniqueKey={item.id}>`
@@ -68,15 +68,14 @@
 
 ## 联动与验证（2 项）
 
-- [ ] Task 14: 后端 phase_kind 与前端 businessAgentPhaseKey 联动
-  - [ ] SubTask 14.1: 后端给了 phase_kind 时前端优先用后端，businessAgentPhaseKey 降级为 fallback
-  - [ ] SubTask 14.2: 单测覆盖：联动优先级正确
-  - **核查状态**：阻塞。依赖 Task 2 实装后才能联调
+- [x] Task 14: 后端 phase_kind 与前端 businessAgentPhaseKey 联动
+  - [x] SubTask 14.1: `agent-phases.ts:124` `normalizeBusinessPhaseKey(record.phaseKind ?? record.phase_kind)` 优先用后端，`?? businessAgentPhaseKey(displayTitle)` 降级为 fallback
+  - [x] SubTask 14.2: 单测覆盖：`agent-phases.test.ts:490-506` 验证 snake_case phase_kind 联动优先级正确
+  - **核查修正**：2026-07-27 标记为"阻塞依赖 Task 2"，实际 Task 2 已实装，联动代码 + 单测均完整
 
-- [ ] Task 15: 思考耗时持久化展示
-  - [ ] SubTask 15.1: 流式中 live 显示（前端计时），结束后从 `ReasoningItem.duration_ms` 读取回放显示
-  - [ ] SubTask 15.2: 单测覆盖：live + 回放两种路径
-  - **核查状态**：阻塞。依赖 Task 1 实装后才能联调
+- [x] Task 15: 思考耗时持久化展示
+  - [x] SubTask 15.1: `message-group.tsx:736-748` 完成态从 `additional_kwargs.reasoning_duration_ms` 读取；`:497-516` 进行中态从 `reasoning_started_at`（`ReasoningItem.createdAt` 经 `realtime-adapter.ts:370-376` 传播）启动 live 计时
+  - [x] SubTask 15.2: `message-group.test.tsx` `reasoning duration replay` (3 用例) + `reasoning live timer from backend timestamp` (2 用例) 覆盖回放 + live 路径，60 passed
 
 # Task Dependencies
 
@@ -85,9 +84,8 @@
 - Task 15 依赖 Task 1（后端 duration_ms）
 - Task 4（text_delta strip）不阻塞前端，但完成后前端 INTERNAL_PROCESS_BLOCK_RE 可降级为 fallback
 
-# 当前状态总结（2026-07-27 核查）
+# 当前状态总结（2026-07-28 更新）
 
-- 已完成：Task 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13（13 项）
-- 已解锁：Task 14（phase_kind 联动，后端已就绪）、Task 15（duration_ms 回放，后端已就绪）
+- 已完成：Task 1-15（全部 15 项，含 Task 8/14/15，checklist.md 全绿佐证）
 - **核查失误记录**：Task 2/3/4 首次核查均误判为未实装，根因是 grep 关键词过窄（要求多个关键词同行匹配）。实际代码均已完整实装且有测试覆盖
-- **下一步**：所有后端协议 + 前端体验项已完成，剩余 Task 14/15 为前端联调工作
+- **下一步**：全部任务已完成，无剩余工作

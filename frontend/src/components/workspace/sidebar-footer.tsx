@@ -161,7 +161,7 @@ export function AgentFooter() {
     isError: cliPartnersFailed,
     refresh: refreshAllCliPartners,
   } = useLocalCliPartnerAgents();
-  const { user, isGuest, logout } = useAuth();
+  const { user, logout } = useAuth();
   const _navigate = useNavigate();
   const { pathname, search } = useLocation();
   const octLink = useOctLink();
@@ -482,34 +482,30 @@ export function AgentFooter() {
               <DropdownMenuSeparator />
             </>
           ) : null}
-          {isGuest ? null : (
-            <>
-              <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-muted-foreground">
-                <UserCircleIcon className="size-4 shrink-0 opacity-70" />
-                <span className="min-w-0 flex-1 truncate">{accountName}</span>
-              </div>
-              <DropdownMenuItem
-                onSelect={() => emitOpenSettings("account")}
-                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
-              >
-                <CoinsIcon className="size-4 shrink-0 opacity-70" />
-                <span className="min-w-0 flex-1 truncate">
-                  {t.sidebar.remainingCredits}
-                </span>
-                <span className="shrink-0 text-xs font-mono text-foreground/80">
-                  {typeof credits === "number" ? credits.toLocaleString() : "—"}
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => void logout()}
-                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
-              >
-                <LogOutIcon className="size-4 shrink-0 opacity-70" />
-                <span>{t.sidebar.logout}</span>
-              </DropdownMenuItem>
-            </>
-          )}
+          <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-muted-foreground">
+            <UserCircleIcon className="size-4 shrink-0 opacity-70" />
+            <span className="min-w-0 flex-1 truncate">{accountName}</span>
+          </div>
+          <DropdownMenuItem
+            onSelect={() => emitOpenSettings("account")}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
+          >
+            <CoinsIcon className="size-4 shrink-0 opacity-70" />
+            <span className="min-w-0 flex-1 truncate">
+              {t.sidebar.remainingCredits}
+            </span>
+            <span className="shrink-0 text-xs font-mono text-foreground/80">
+              {typeof credits === "number" ? credits.toLocaleString() : "—"}
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => void logout()}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
+          >
+            <LogOutIcon className="size-4 shrink-0 opacity-70" />
+            <span>{t.sidebar.logout}</span>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <button

@@ -179,7 +179,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
   const { t, locale } = useI18n();
   const settingsUxCopy = getSettingsUxCopy(locale);
   const navigate = useNavigate();
-  const { user, logout, authStatus, isLoading, isGuest } = useAuth();
+  const { user, logout, authStatus, isLoading } = useAuth();
   const accountName = getAccountDisplayName(user);
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] =
@@ -297,9 +297,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
   };
 
   const sections = useMemo(() => {
-    // Stable order across login states · account/subscription
-    // are greyed out for guests instead of being reordered, so
-    // users don't lose muscle memory of where each tab lives.
     type Section = {
       id: SettingsSection;
       label: string;
@@ -321,8 +318,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
           "profile",
           ...t.settings.dialog.sectionKeywords.account,
         ],
-        disabled: isGuest,
-        disabledReason: t.auth.guestMode.title,
       },
       {
         id: "subscription",
@@ -335,8 +330,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
           "usage",
           ...t.settings.dialog.sectionKeywords.subscription,
         ],
-        disabled: isGuest,
-        disabledReason: t.auth.guestMode.title,
       },
       {
         id: "appearance",
@@ -443,8 +436,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
 
     return all;
   }, [
-    isGuest,
-    t.auth.guestMode.title,
     t.settings.sections.account,
     t.settings.sections.subscription,
     t.settings.sections.appearance,
@@ -520,7 +511,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {t.settings.description}
             </p>
           </div>
-          {!isLoading && (user || isGuest || authStatus?.enabled) ? (
+          {!isLoading && (user || authStatus?.enabled) ? (
             <div className="mt-2 flex items-center justify-between rounded-lg border bg-muted/30 px-2.5 py-1.5">
               <div className="flex min-w-0 items-center gap-2.5">
                 <div className="relative flex size-7 items-center justify-center border border-border-default bg-background text-muted-foreground shadow-[var(--shadow-xs)]">
@@ -532,15 +523,13 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     {accountName ?? t.auth.notLoggedIn}
                   </p>
                   <p className="text-muted-foreground truncate text-xs">
-                    {isGuest
-                      ? t.auth.guestMode.title
-                      : user?.email && user.email !== accountName
-                        ? user.email
-                        : t.auth.currentAccount}
+                    {user?.email && user.email !== accountName
+                      ? user.email
+                      : t.auth.currentAccount}
                   </p>
                 </div>
               </div>
-              {user && !isGuest ? (
+              {user ? (
                 <Button
                   type="button"
                   variant="outline"
