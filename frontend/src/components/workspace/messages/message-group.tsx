@@ -100,9 +100,11 @@ const INTERNAL_PROCESS_BLOCK_RE =
 const PROCESS_TEXT_SECRET_RE =
   /\b(?:sk|pk|rk|ghp|gho|ghs|ghu|xox[baprs])[-_][A-Za-z0-9]{8,}\b|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}|\b(?:Bearer|Authorization:?)\s+[A-Za-z0-9._-]{10,}|(["']?(?:api[_-]?key|secret|password|passwd|token)["']?\s*[:=]\s*)["']?[^\s"',}]{4,}/gi;
 const PROCESS_TEXT_RAW_TOOL_RE =
-  /\b(?:read_file|glob_files|find_files|exec_shell|shell_command|run_command|todo_write|apply_patch|write_file|edit_file|str_replace)\b/gi;
+  /\b(?:read_file|glob_files|find_files|exec_shell|shell_command|run_command|todo_write|apply_patch|write_file|edit_file|str_replace|web_search|fetch_url|web_fetch)\b/gi;
 const PROCESS_TEXT_PROTOCOL_PREFIX_RE =
   /\b(?:Thought|Action|Observation|Final Answer|Tool|Tool Result)\s*:\s*/gi;
+const RAW_PUBLIC_TOOL_CALLBACK_RE =
+  /^(web_search|fetch_url|web_fetch|read_file|glob_files|find_files|exec_shell|shell_command|run_command|todo_write|apply_patch|write_file|edit_file|str_replace)(?:\s*\([^)]*\))?$/i;
 
 function isHiddenTimelineToolName(name: string): boolean {
   const normalized = name.toLowerCase();
@@ -272,11 +274,6 @@ export function MessageGroup({
     Record<string, boolean>
   >({});
   const [collapsedHistoryPhases, setCollapsedHistoryPhases] = useState<
-    Record<string, boolean>
-  >({});
-  // Inline expansion for thinking rows: default collapsed (summary only),
-  // click row toggles full content inline per spec §思考块显示耗时.
-  const [expandedThinkingRows, setExpandedThinkingRows] = useState<
     Record<string, boolean>
   >({});
   const thinkingStartTimeRef = useRef<number | null>(null);
@@ -1059,39 +1056,6 @@ export function MessageGroup({
                 <span className="sr-only" data-testid="live-process-strip" />
               )}
             </button>
-            {isThinking &&
-              processEventDetail &&
-              processEventDetail.trim() !==
-                (processEventSummary || summary).trim() && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedThinkingRows((current) => ({
-                      ...current,
-                      [item.id]: !current[item.id],
-                    }))
-                  }
-                  className="p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
-                  aria-label={
-                    expandedThinkingRows[item.id]
-                      ? t.agentWorkbenchPages.collapse
-                      : t.agentWorkbenchPages.expandDetails
-                  }
-                  title={
-                    expandedThinkingRows[item.id]
-                      ? t.agentWorkbenchPages.collapse
-                      : t.agentWorkbenchPages.expandDetails
-                  }
-                  data-testid="thinking-row-toggle"
-                >
-                  <ChevronDownIcon
-                    className={cn(
-                      "size-3 transition-transform",
-                      expandedThinkingRows[item.id] ? "rotate-180" : "",
-                    )}
-                  />
-                </button>
-              )}
             {isAggregatedGroup && (
               <button
                 type="button"
@@ -1145,19 +1109,6 @@ export function MessageGroup({
               </span>
             )}
           </div>
-          {isThinking &&
-            processEventDetail &&
-            processEventDetail.trim() !==
-              (processEventSummary || summary).trim() && (
-              <Collapsible open={expandedThinkingRows[item.id] ?? false}>
-                <CollapsibleContent
-                  className="pb-1 pl-5 text-xs leading-5 text-muted-foreground/70 data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
-                  data-testid="thinking-row-content"
-                >
-                  {processEventDetail}
-                </CollapsibleContent>
-              </Collapsible>
-            )}
           {factSummaryText && (
             <div className="truncate pb-0.5 pl-3 text-xs leading-[18px] text-muted-foreground/60">
               {factSummaryText}
@@ -2207,7 +2158,17 @@ function summarizeActionGroup(
     .reverse()
     .map((step) => step.actionText)
     .find((value) => value.trim());
-  return compactReasoningSummary(stripTraceLabelPrefixes(text), 96, t);
+  const normalized = stripTraceLabelPrefixes(text).trim();
+  const rawToolName = normalized.match(RAW_PUBLIC_TOOL_CALLBACK_RE)?.[1];
+  if (rawToolName) {
+    const publicAction = publicActionTextFromTraceTool(
+      rawToolName,
+      undefined,
+      t,
+    );
+    if (publicAction) return publicAction;
+  }
+  return compactReasoningSummary(normalized, 96, t);
 }
 
 function compactReasoningSummary(
