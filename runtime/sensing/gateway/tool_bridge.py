@@ -138,6 +138,20 @@ CODE_CHANGE_ROUND_BUDGET = 160
 # underlying task just to produce progress prose.
 PUBLIC_NARRATIVE_SILENCE_S = 0.0
 PUBLIC_NARRATIVE_TIMEOUT_S = 6.0
+# Live text streaming in the native loop holds back this many chars of the
+# unterminated round text so a tool-call envelope split across chunks can
+# never half-leak (must exceed the longest guarded marker).
+_NATIVE_TEXT_STREAM_TAIL_MARGIN = 48
+# Markers that mean "this round's text is (or contains) a serialized tool
+# call, not user-visible answer prose" — detected case-insensitively.
+# Aligned with what ``_recover_named_xml_tool_calls`` / the ReAct-side
+# pre-stream guards treat as envelopes. Streaming for the round falls
+# back to buffered mode the moment one appears.
+_NATIVE_TEXT_STREAM_SUPPRESS_MARKERS = (
+    "<tool_call",
+    "<tool_invocation",
+    "<function=",
+)
 # Structural protocol tag names that must ride structured fields
 # (reasoning / tool_use / tool_result), never literal text_delta prose.
 # Shared between checkpoint detection (``_PUBLIC_CHECKPOINT_PROTOCOL_RE``)
@@ -2513,6 +2527,12 @@ def stream_agentic_fallback(
         _round_commentary_emitted = False
         _round_timed_out = False
         _round_redirected = False
+        # Live text streaming state: round text streams as it decodes
+        # (holdback + envelope guards below) instead of dumping at round
+        # end — the final synthesis round is usually the longest text of
+        # the turn, and buffering it made TTFT equal its full decode time.
+        _round_text_streamed = 0
+        _round_text_stream_suppressed = False
 
         _round_stream_event_seen = False
         _round_timeout_s = _native_model_round_timeout_s()
@@ -2543,6 +2563,48 @@ def stream_agentic_fallback(
                 etype = event.type
                 if etype == "text_delta":
                     round_text_chunks.append(event.delta)
+                    # TTFT: stream the round's text live — but only in
+                    # post-tool rounds. First-round preambles keep the
+                    # condensed-checkpoint treatment: their prose is the
+                    # most likely place for protocol echoes, and the
+                    # checkpoint filters/condenses it deliberately. After
+                    # at least one tool completed, round text is progress
+                    # narration or the final synthesis (usually the
+                    # longest text of the turn) and streams live with:
+                    # (a) a tail margin keeping split tool envelopes
+                    # atomic; (b) envelope markers reverting the round to
+                    # buffered mode; (c) the bridge stripping leaked
+                    # protocol tags on every text delta. Content of a
+                    # final-answer round is unchanged — only timing moves.
+                    # Known rare seam: a post-tool round that times out /
+                    # redirects after streaming leaves its visible prefix
+                    # in place, and the recovery answer repeats that
+                    # content (the recovery prompt deliberately does not
+                    # assume the user saw it).
+                    if (
+                        _completed_tool_count > 0
+                        and not _round_text_stream_suppressed
+                        and event.delta
+                    ):
+                        _joined_round = "".join(round_text_chunks)
+                        _lowered_round = _joined_round.lower()
+                        if any(
+                            marker in _lowered_round
+                            for marker in _NATIVE_TEXT_STREAM_SUPPRESS_MARKERS
+                        ):
+                            _round_text_stream_suppressed = True
+                        else:
+                            _safe_upto = max(
+                                _round_text_streamed,
+                                len(_joined_round) - _NATIVE_TEXT_STREAM_TAIL_MARGIN,
+                            )
+                            if _safe_upto > _round_text_streamed:
+                                yield (
+                                    "text",
+                                    _joined_round[_round_text_streamed : _safe_upto],
+                                    None,
+                                )
+                                _round_text_streamed = _safe_upto
                 elif etype == "thinking_delta":
                     # Thinking shouldn't fire here (tools+thinking
                     # are incompatible) but if a provider somehow
@@ -2552,6 +2614,14 @@ def stream_agentic_fallback(
                 elif etype == "tool_use":
                     if event.tool_call is not None:
                         round_tool_calls.append(event.tool_call)
+                        if _round_text_streamed > 0 and not _round_commentary_emitted:
+                            # The pre-tool prose already streamed live as
+                            # visible text (Kimi-style interleaved
+                            # prose → tools → answer timeline); emitting
+                            # the condensed checkpoint on top would
+                            # duplicate it.
+                            _round_commentary_emitted = True
+                            _last_public_checkpoint_at = time.monotonic()
                         if not _round_commentary_emitted:
                             checkpoint = _native_public_checkpoint(
                                 "".join(round_text_chunks),
@@ -3017,8 +3087,11 @@ def stream_agentic_fallback(
                     None,
                 )
             accumulated_text += round_text
-            for chunk in round_text_chunks:
-                yield ("text", chunk, None)
+            # Chunks up to ``_round_text_streamed`` already went out live
+            # during the round — deliver only the held-back tail. Content
+            # is identical to the old full dump; only timing changed.
+            if _round_text_streamed < len(round_text):
+                yield ("text", round_text[_round_text_streamed :], None)
             _final_duration = int((time.monotonic() - _started_at) * 1000)
             yield (
                 "stats",
