@@ -73,6 +73,13 @@ export interface ReplayOptions {
   /** Start from an existing conversation (incremental replay after a
    * cursor). Defaults to an empty conversation. */
   base?: Conversation;
+  /** Batch fold (client-replay-design.md §2.6): consecutive deltas to the
+   * same item are concatenated and consecutive MCP progress events collapse
+   * to the latest BEFORE hitting ``reduce()``, cutting reduce calls from
+   * O(events) to ~O(items). Semantically transparent — the golden test runs
+   * both settings and asserts deep equality. Defaults to true; pass false
+   * to get the literal event-by-event path. */
+  batch?: boolean;
   onDiagnostic?: ReducerDiagnosticHandler;
 }
 
@@ -85,6 +92,10 @@ export interface ReplayResult {
   /** Persisted events skipped as no-ops (unknown kinds, unknown delta
    * kinds) — forward compatibility, not an error. */
   skipped: number;
+  /** Actual ``reduce()`` invocations. With ``batch`` on (default) this is
+   * far below ``replayed`` on delta-heavy logs; with batching off it equals
+   * the total number of normalized reducer events. */
+  reduceCalls: number;
 }
 
 // ── Field decoders ────────────────────────────────────────────
@@ -299,6 +310,35 @@ export function normalizeEvent(evt: LoggedEvent): ConversationEvent[] {
 
 // ── Replay ────────────────────────────────────────────────────
 
+/** Delta methods whose consecutive events to the same item can be merged
+ * into a single ``reduce()`` call without changing the folded state:
+ * text kinds concatenate (``appendStreamText`` joins chunks verbatim, and
+ * replay mode skips the late-delta gate + fires no diagnostics), MCP
+ * progress collapses to the latest (``applyMcpToolProgress`` replaces the
+ * ``progress`` field wholesale). Hunk deltas are structured and never
+ * merge. */
+const MERGEABLE_DELTA_METHODS = new Set([
+  "item/agentMessage/delta",
+  "item/reasoning/textDelta",
+  "item/plan/delta",
+  "item/commandExecution/outputDelta",
+  "item/mcpToolCall/progress",
+]);
+
+/** Identity of the merge target — two consecutive reducer events merge
+ * only when every addressing field matches. Returns null for events that
+ * can never merge. */
+function deltaMergeKey(evt: ConversationEvent): string | null {
+  if (!MERGEABLE_DELTA_METHODS.has(evt.method)) return null;
+  const p = evt.params as {
+    threadId: string;
+    turnId: string;
+    itemId: string;
+    contentIndex?: number;
+  };
+  return `${evt.method}${p.threadId}${p.turnId}${p.itemId}${p.contentIndex ?? -1}`;
+}
+
 /**
  * Fold a persisted event log into client Conversation state.
  *
@@ -312,10 +352,12 @@ export function normalizeEvent(evt: LoggedEvent): ConversationEvent[] {
  * self-contained: safe to persist, serialize, or read without
  * ``itemStreamText``.
  *
- * Performance note: this folds event-by-event (O(events) intermediate
- * states). A batched draft-based fold is a planned optimization
- * (client-replay-design.md §2.6); the conformance test pins the
- * event-by-event semantics any batching must reproduce.
+ * Performance (client-replay-design.md §2.6): with ``batch`` on (default),
+ * consecutive mergeable deltas share one ``reduce()`` call, so a delta-
+ * heavy log costs ~O(items + structural events) reducer invocations — and
+ * their intermediate Conversation allocations — instead of O(events). The
+ * merge only rewrites the event stream; all state construction still goes
+ * through ``reduce()``, so the two settings can never diverge in logic.
  */
 export function replayEvents(
   events: readonly (LoggedEvent | SequencedLoggedEvent)[],
@@ -324,9 +366,26 @@ export function replayEvents(
   let state =
     options?.base ??
     emptyConversation(options?.threadId ?? events[0]?.threadId ?? "");
+  const batch = options?.batch !== false;
   let cursor = 0;
   let replayed = 0;
   let skipped = 0;
+  let reduceCalls = 0;
+
+  // One-event lookahead: a normalized event whose merge key matches the
+  // pending one is folded INTO it (owned by us — normalizeEvent just
+  // created it) instead of being reduced on its own.
+  let pending: ConversationEvent | null = null;
+  let pendingKey: string | null = null;
+  const flushPending = () => {
+    if (pending === null) return;
+    state = reduce(state, pending, options?.onDiagnostic, {
+      mode: "replay",
+    }).next;
+    reduceCalls += 1;
+    pending = null;
+    pendingKey = null;
+  };
 
   for (const evt of events) {
     const sequence = (evt as SequencedLoggedEvent).sequence;
@@ -340,15 +399,28 @@ export function replayEvents(
     }
     replayed += 1;
     for (const reducerEvent of normalized) {
-      state = reduce(state, reducerEvent, options?.onDiagnostic, {
-        mode: "replay",
-      }).next;
+      const key = batch ? deltaMergeKey(reducerEvent) : null;
+      if (key !== null && key === pendingKey && pending !== null) {
+        if (reducerEvent.method === "item/mcpToolCall/progress") {
+          // Progress replaces wholesale — keep only the latest.
+          pending = reducerEvent;
+        } else {
+          const pendingParams = pending.params as { delta: string };
+          const incomingParams = reducerEvent.params as { delta: string };
+          pendingParams.delta += incomingParams.delta;
+        }
+        continue;
+      }
+      flushPending();
+      pending = reducerEvent;
+      pendingKey = key;
     }
   }
+  flushPending();
 
   state = materializeStreamedItems(state);
   if (state.resumeState !== "resumed") {
     state = { ...state, resumeState: "resumed" };
   }
-  return { conversation: state, cursor, replayed, skipped };
+  return { conversation: state, cursor, replayed, skipped, reduceCalls };
 }

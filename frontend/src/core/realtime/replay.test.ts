@@ -476,3 +476,134 @@ describe("replayEvents", () => {
     expect(conversation.turns[0]!.items).toHaveLength(1);
   });
 });
+
+describe("replayEvents batch fold (§2.6)", () => {
+  it("batched and event-by-event paths are deep-equal on the golden log", () => {
+    const events = loadGoldenEvents();
+    const batched = replayEvents(events);
+    const literal = replayEvents(events, { batch: false });
+    // Full-state equality, not just the projection: batching must be
+    // semantically transparent everywhere.
+    expect(batched.conversation).toEqual(literal.conversation);
+    expect(batched.cursor).toBe(literal.cursor);
+    expect(batched.replayed).toBe(literal.replayed);
+    expect(batched.skipped).toBe(literal.skipped);
+    // The batch path must actually engage on this delta-heavy fixture.
+    expect(batched.reduceCalls).toBeLessThan(literal.reduceCalls);
+    // And both paths still conform to the Python replay.
+    expect(project(batched.conversation)).toEqual(loadGoldenExpected());
+  });
+
+  it("collapses consecutive deltas into one reduce call per run", () => {
+    const events: LoggedEvent[] = [
+      { event: "thread_started", threadId: "thr" },
+      { event: "turn_started", threadId: "thr", turnId: "t1", ts: "t" },
+      {
+        event: "item_started",
+        threadId: "thr",
+        turnId: "t1",
+        payload: {
+          item: { id: "a1", type: "agentMessage", status: "inProgress", createdAt: "t", text: "" },
+        },
+      },
+      // 50 consecutive deltas to the same item → 1 reduce call.
+      ...Array.from({ length: 50 }, (_, i) => ({
+        event: "item_delta",
+        threadId: "thr",
+        turnId: "t1",
+        payload: { itemId: "a1", kind: "agentMessage", delta: `c${i}:` },
+      })),
+      {
+        event: "item_completed",
+        threadId: "thr",
+        turnId: "t1",
+        payload: {
+          item: {
+            id: "a1",
+            type: "agentMessage",
+            status: "completed",
+            createdAt: "t",
+            text: Array.from({ length: 50 }, (_, i) => `c${i}:`).join(""),
+          },
+        },
+      },
+    ];
+    const batched = replayEvents(events);
+    const literal = replayEvents(events, { batch: false });
+    expect(batched.conversation).toEqual(literal.conversation);
+    // thread/started + turn/started + item/started + 1 merged delta run
+    // + item/completed = 5 vs 54 literal.
+    expect(batched.reduceCalls).toBe(5);
+    expect(literal.reduceCalls).toBe(54);
+  });
+
+  it("does not merge deltas across items or across interrupting events", () => {
+    const events: LoggedEvent[] = [
+      { event: "turn_started", threadId: "thr", turnId: "t1", ts: "t" },
+      {
+        event: "item_started",
+        threadId: "thr",
+        turnId: "t1",
+        payload: {
+          item: { id: "a1", type: "agentMessage", status: "inProgress", createdAt: "t", text: "" },
+        },
+      },
+      {
+        event: "item_started",
+        threadId: "thr",
+        turnId: "t1",
+        payload: {
+          item: { id: "r1", type: "reasoning", status: "inProgress", createdAt: "t", content: "" },
+        },
+      },
+      // Interleaved items: no merge possible even with batching on.
+      { event: "item_delta", threadId: "thr", turnId: "t1",
+        payload: { itemId: "a1", kind: "agentMessage", delta: "A" } },
+      { event: "item_delta", threadId: "thr", turnId: "t1",
+        payload: { itemId: "r1", kind: "reasoning", delta: "R" } },
+      { event: "item_delta", threadId: "thr", turnId: "t1",
+        payload: { itemId: "a1", kind: "agentMessage", delta: "B" } },
+    ];
+    const batched = replayEvents(events);
+    const literal = replayEvents(events, { batch: false });
+    expect(batched.conversation).toEqual(literal.conversation);
+    expect(batched.reduceCalls).toBe(literal.reduceCalls);
+    const turn = batched.conversation.turns[0]!;
+    const msg = turn.items.find((i) => i.id === "a1")!;
+    const reasoning = turn.items.find((i) => i.id === "r1")!;
+    expect(itemStreamText(msg)).toBe("AB");
+    expect(itemStreamText(reasoning)).toBe("R");
+  });
+
+  it("collapses consecutive MCP progress events to the latest", () => {
+    const events: LoggedEvent[] = [
+      { event: "turn_started", threadId: "thr", turnId: "t1", ts: "t" },
+      {
+        event: "item_started",
+        threadId: "thr",
+        turnId: "t1",
+        payload: {
+          item: { id: "m1", type: "mcpToolCall", status: "inProgress", createdAt: "t" },
+        },
+      },
+      ...[1, 2, 3].map((step) => ({
+        event: "item_delta",
+        threadId: "thr",
+        turnId: "t1",
+        payload: {
+          itemId: "m1",
+          kind: "mcpToolProgress",
+          delta: { message: `step ${step}`, progress: step / 3 },
+        },
+      })),
+    ];
+    const batched = replayEvents(events);
+    const literal = replayEvents(events, { batch: false });
+    expect(batched.conversation).toEqual(literal.conversation);
+    // turn/started + item/started + 1 collapsed progress = 3 vs 5.
+    expect(batched.reduceCalls).toBe(3);
+    const item = batched.conversation.turns[0]!.items[0]!;
+    if (item.type !== "mcpToolCall") throw new Error("wrong item");
+    expect(item.progress).toEqual({ message: "step 3", progress: 1 });
+  });
+});

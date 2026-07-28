@@ -2,7 +2,7 @@
 
 > 从事件日志在前端重建 `Conversation`，使 reducer 成为唯一事实合成器。
 >
-> 状态：**P1、P2、P3 + coalesce 已落地**（2026-07-28）· 设计稿 2026-07-28
+> 状态：**P1、P2、P3 + coalesce + 批量折叠已落地**（2026-07-28）· 设计稿 2026-07-28
 > P1 实现：`frontend/src/core/realtime/replay.ts`、reducer 的 `turn/finalized` +
 > `turn/compacted` + replay mode、golden 对拍（TS replay ≡ Python `EventLog.replay()`）。
 > P2 实现：服务端 `thread/events` 只读端点（同前缀不变量 + requiresReset + 分页 +
@@ -19,9 +19,12 @@
 > 最后一条**原始**事件的 sequence（合并丢弃尾部时不回退）；客户端缓存回填启用该模式，
 > 增量恢复保持 raw（去重台账非空时禁用 coalesce——合并事件与首个 delta 共享 eventId）。
 > 等价性由 `test_event_coalesce.py` 锁定：`replay(coalesced slice) ≡ replay(raw slice)`。
-> 测试：前端 279（realtime/threads 全套）+ 服务端 128 全绿；`tsc --noEmit` 干净。
-> 与设计的偏差：批量折叠（§2.6）未实现，当前为逐事件折叠，语义已被对拍锁定，
-> 批量优化作为后续纯性能项跟进。
+> 批量折叠实现（§2.6）：`replayEvents` 默认开启 `batch`——连续同 item 的文本 delta
+> 先拼接、`mcpToolProgress` 只留最新，再进 `reduce()`，reduce 调用从 O(事件数) 降到
+> ~O(item 数+结构事件)。与原方案「可变草稿」不同，实现选择只重写事件流、不复制
+> reducer 逻辑（reducer 仍是唯一合成器，零分叉风险）；`batch: false` 保留逐事件路径，
+> golden 测试双路径断言 `toEqual` 深度相等。
+> 测试：前端 283（realtime/threads 全套）+ 服务端 128 全绿；`tsc --noEmit` 干净。
 > 涉及模块：`frontend/src/core/realtime/`、`runtime/memory/threads/event_log.py`、`runtime/sensing/gateway/realtime_cerebrum.py`
 
 ---
@@ -120,6 +123,11 @@ replay 是权威日志回放，以下实时-only 行为要显式旁路：
 实现方式：`reduce(state, event, { mode: "replay" | "live" })` 增加一个可选 mode 参数，默认 `"live"`，行为差异只在这三处。
 
 ### 2.6 性能：批量折叠
+
+> **已实现**（2026-07-28），实现方式与本节原案不同：不做可变草稿，只在
+> `replayEvents` 里对**连续**可合并事件做单事件前瞻合并（文本 delta 拼接、
+> `mcpToolProgress` 留最新），再统一进 `reduce()`。渐近效果相同，且 reducer 逻辑
+> 零复制。`batch: false` 保留逐事件路径，golden 测试双路径 `toEqual` 对拍。
 
 逐事件走 `reduce()` 会产生 O(事件数) 个中间 `Conversation` 对象。大日志（数万 delta）下不可接受。方案：
 
