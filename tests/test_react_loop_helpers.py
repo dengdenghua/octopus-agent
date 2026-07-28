@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from runtime.core.cerebrum import react_loop
+from runtime.core.cerebrum import react_action_outcomes
 from runtime.core.cerebrum.react_loop import (
     _explicit_no_tool_goal,
     _finish_reason_is_length_limited,
@@ -79,10 +79,10 @@ def test_tool_failure_prefixed_observation(obs):
 
 def test_beak_step_verdict_overrides_observation(monkeypatch):
     # A successful beak step wins even over a failure-prefixed observation.
-    monkeypatch.setattr(react_loop, "_beak_step_effective_success", lambda s: True)
+    monkeypatch.setattr(react_action_outcomes, "_beak_step_effective_success", lambda s: True)
     assert _tool_call_succeeded("(工具失败) boom", object()) is True
     # A failed beak step overrides a clean-looking observation.
-    monkeypatch.setattr(react_loop, "_beak_step_effective_success", lambda s: False)
+    monkeypatch.setattr(react_action_outcomes, "_beak_step_effective_success", lambda s: False)
     assert _tool_call_succeeded("looks fine", object()) is False
 
 
