@@ -34,6 +34,7 @@ import {
   hasContent,
   hasPresentFiles,
   hasReasoning,
+  isSettledAssistantAnswer,
   type MessageGroup as CoreMessageGroup,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
@@ -911,16 +912,9 @@ export function MessageList({
   );
   const latestTurnHasSettledAnswer = useMemo(
     () =>
-      latestTurnMessages(messages).some((message) => {
-        if (message.type !== "ai") return false;
-        if (!extractContentFromMessage(message).trim()) return false;
-        if (message.additional_kwargs?.public_progress === true) return false;
-        const responseState = message.additional_kwargs?.response_state;
-        if (responseState === "failed" || responseState === "interrupted") {
-          return false;
-        }
-        return !(message as AIMessage).tool_calls?.length;
-      }),
+      latestTurnMessages(messages).some((message) =>
+        isSettledAssistantAnswer(message),
+      ),
     [messages],
   );
   const presentFailure = useCallback(
@@ -2064,10 +2058,7 @@ function TurnLocatorRail({
         />
         {visibleMarkers.map((marker) => {
           const active = marker.key === activeKey;
-          const label = t.message.turnNumberLabel(
-            marker.number,
-            marker.label,
-          );
+          const label = t.message.turnNumberLabel(marker.number, marker.label);
           return (
             <button
               key={marker.key}

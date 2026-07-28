@@ -173,6 +173,8 @@ import { ToolEffectsProvider } from "@/core/observability/tool-effects-context";
 import {
   extractContentFromMessage,
   extractTextFromMessage,
+  isSettledAssistantAnswer,
+  latestAssistantTerminalState,
 } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
 import { resolveModelContextWindow } from "@/core/models/context-window";
@@ -1073,9 +1075,7 @@ function RealtimePageContent({
     useState(false);
   const [agentWorkbenchDismissed, setAgentWorkbenchDismissed] = useState(false);
   const [agentWorkbenchManuallyOpened, setAgentWorkbenchManuallyOpened] =
-    useState(() =>
-      isNewThread ? false : readAgentWorkbenchOpenPreference(),
-    );
+    useState(() => (isNewThread ? false : readAgentWorkbenchOpenPreference()));
   const [focusedWorkbenchAgentId, setFocusedWorkbenchAgentId] = useState<
     string | null
   >(null);
@@ -2105,14 +2105,8 @@ function RealtimePageContent({
       threadRouteFor,
     ],
   );
-  const [
-    thread,
-    sendMessage,
-    ,
-    ,
-    lastTurnToolEvents,
-    realtimeApprovals,
-  ] = useThreadStream(streamOptions);
+  const [thread, sendMessage, , , lastTurnToolEvents, realtimeApprovals] =
+    useThreadStream(streamOptions);
   const [isCompressingContext, setIsCompressingContext] = useState(false);
   const selectedModel = useMemo(() => {
     const modelName = settings.context.model_name;
@@ -2374,31 +2368,34 @@ function RealtimePageContent({
   );
   const hasReportArtifact = useMemo(
     () =>
-      thread.messages.some(
+      lastTurnMessages.some(
         (message) =>
-          isAIMessage(message) &&
+          isSettledAssistantAnswer(message, { allowToolCalls: true }) &&
           FINAL_DELIVERABLE_PATTERN.test(
             extractTextFromMessage(message) ||
               extractContentFromMessage(message),
           ),
       ),
-    [thread.messages],
+    [lastTurnMessages],
   );
   const finalArtifactEntries = useMemo(
     () => finalOutputArtifactEntries(agentDisplayEvents),
     [agentDisplayEvents],
   );
   const hasFinalArtifact = finalArtifactEntries.length > 0;
+  const lastTurnTerminalState = useMemo(
+    () => latestAssistantTerminalState(lastTurnMessages),
+    [lastTurnMessages],
+  );
+  const agentRunInterrupted = lastTurnTerminalState === "interrupted";
   const hasAgentAnswer = useMemo(
     () =>
-      thread.messages.some((message) => {
-        if (hasFinalArtifact) return true;
-        if (!isAIMessage(message)) return false;
-        const text =
-          extractTextFromMessage(message) || extractContentFromMessage(message);
-        return text.trim().length >= 80;
-      }),
-    [hasFinalArtifact, thread.messages],
+      lastTurnTerminalState === null &&
+      (hasFinalArtifact ||
+        lastTurnMessages.some((message) =>
+          isSettledAssistantAnswer(message, { minTextLength: 80 }),
+        )),
+    [hasFinalArtifact, lastTurnMessages, lastTurnTerminalState],
   );
   const canSettleStaleLiveEvents =
     !thread.isLoading &&
@@ -2407,21 +2404,26 @@ function RealtimePageContent({
     (!requiresReportDeliverable || hasReportArtifact || hasFinalArtifact);
   const agentRunSettled =
     !thread.isLoading &&
-    (!hasRunningAgentEvents || canSettleStaleLiveEvents) &&
+    (!hasRunningAgentEvents ||
+      canSettleStaleLiveEvents ||
+      lastTurnTerminalState !== null) &&
     !hasActiveBackgroundTask &&
     !hasPausedOrPendingBackgroundTask;
   const hasCompletedAgentOutput =
+    lastTurnTerminalState === null &&
     (!thread.error || hasFinalArtifact) &&
     agentRunSettled &&
     (!requiresReportDeliverable || hasReportArtifact || hasFinalArtifact);
   const agentRunFailed =
     agentRunSettled &&
+    !agentRunInterrupted &&
     !hasCompletedAgentOutput &&
     !hasPausedOrPendingBackgroundTask;
   const sidebarRunState = useMemo<
     "running" | "waiting" | "error" | null
   >(() => {
     if (hasPausedOrPendingBackgroundTask) return "waiting";
+    if (agentRunInterrupted) return null;
     if (agentRunFailed || (thread.error && !thread.isLoading)) return "error";
     if (agentRunSettled) return null;
     if (agentDisplayEvents.some((event) => event.status === "error")) {
@@ -2443,6 +2445,7 @@ function RealtimePageContent({
     return null;
   }, [
     agentDisplayEvents,
+    agentRunInterrupted,
     agentRunFailed,
     agentRunSettled,
     hasActiveBackgroundTask,
@@ -2504,7 +2507,9 @@ function RealtimePageContent({
       (collaborationEnabled &&
         !agentWorkbenchDismissed &&
         (!isNewThread || thread.isLoading || hasRenderableAgentWorkbench)) ||
-      (!agentWorkbenchDismissed && hasRenderableAgentWorkbench && showAgentPlan)) &&
+      (!agentWorkbenchDismissed &&
+        hasRenderableAgentWorkbench &&
+        showAgentPlan)) &&
     !showResearchHistory &&
     !(showResearch && (!!researchJob || !!researchError));
   const artifactCount = artifacts?.length ?? 0;
@@ -2778,7 +2783,12 @@ function RealtimePageContent({
           toast.error(t.chatInputBox.attachmentReadFailed);
         });
     },
-    [markSidebarThreadRunning, sendMessage, threadId, t.chatInputBox.attachmentReadFailed],
+    [
+      markSidebarThreadRunning,
+      sendMessage,
+      threadId,
+      t.chatInputBox.attachmentReadFailed,
+    ],
   );
   useEffect(() => {
     const handleQuickReply = (event: Event) => {
@@ -2981,7 +2991,13 @@ function RealtimePageContent({
     setShowResearch(false);
     setShowPreview(false);
     setAgentWorkbenchTabTouched(false);
-  }, [finalArtifactEntries, artifacts, selectArtifact, setArtifactsOpen, setArtifacts]);
+  }, [
+    finalArtifactEntries,
+    artifacts,
+    selectArtifact,
+    setArtifactsOpen,
+    setArtifacts,
+  ]);
 
   const openAgentPlanPanel = useCallback(() => {
     setArtifactsOpen(false);
@@ -3428,6 +3444,7 @@ function RealtimePageContent({
                     isLoading={thread.isLoading}
                     runSettled={agentRunSettled}
                     runFailed={agentRunFailed}
+                    runInterrupted={agentRunInterrupted}
                     paused={hasPausedOrPendingBackgroundTask}
                     threadId={threadId}
                     workDir={workDir}

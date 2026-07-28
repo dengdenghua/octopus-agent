@@ -170,7 +170,7 @@ export function useAgentWorkbenchI18n() {
   function workbenchStatus(
     blocks: WorkBlock[],
     phases: AgentPhase[],
-    options?: { settled?: boolean; failed?: boolean },
+    options?: { settled?: boolean; failed?: boolean; interrupted?: boolean },
   ) {
     // The server can leave a stale pending phase in a replayed snapshot even
     // after the turn has emitted its final answer. Once the host tells us the
@@ -181,6 +181,13 @@ export function useAgentWorkbenchI18n() {
         label: t.agentWorkbench.statusError,
         className: agentRunBadgeClass("error"),
         dotClassName: agentRunDotClass("error"),
+      };
+    }
+    if (options?.interrupted) {
+      return {
+        label: t.backgroundTasks.interrupted,
+        className: agentRunBadgeClass("waiting"),
+        dotClassName: agentRunDotClass("waiting"),
       };
     }
     if (options?.settled) {

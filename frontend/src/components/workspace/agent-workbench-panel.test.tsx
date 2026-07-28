@@ -180,6 +180,38 @@ describe("<AgentWorkbenchPanel />", () => {
     ).toBeInTheDocument();
   });
 
+  test("shows an interrupted turn honestly instead of claiming completion", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "todo-interrupted",
+            name: "todo_write",
+            input: {
+              items: [
+                { content: "读取相关文件", status: "completed" },
+                { content: "核对中断状态", status: "completed" },
+              ],
+            },
+          }),
+        ]}
+        runSettled
+        runInterrupted
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "主电脑 · 已中断" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /进展.*已中断/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "主电脑 · 已完成" }),
+    ).not.toBeInTheDocument();
+  });
+
   test("empty shell admits the turn is live before the first tool event", () => {
     // The panel is event-driven, so a turn that has started but not yet run
     // a tool leaves it with zero blocks. It must not claim nothing is
@@ -670,9 +702,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expandSummarySection(/进展/);
 
     expect(screen.getByText("P1")).toBeInTheDocument();
-    expect(
-      screen.getByText(/补齐上下文|了解代码结构/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/补齐上下文|了解代码结构/)).toBeInTheDocument();
     expect(screen.queryByText("先查看项目结构")).not.toBeInTheDocument();
     expect(screen.queryByText("修复构建错误")).not.toBeInTheDocument();
     expect(screen.queryByText("运行测试验证")).not.toBeInTheDocument();

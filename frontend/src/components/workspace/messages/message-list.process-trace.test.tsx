@@ -275,9 +275,7 @@ describe("MessageList process trace lifecycle", () => {
     );
 
     expect(
-      screen.getByText(
-        "调研完成：建议优先进入校园心理健康基础设施赛道。",
-      ),
+      screen.getByText("调研完成：建议优先进入校园心理健康基础设施赛道。"),
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("conversation-activity-pulse"),
@@ -1004,7 +1002,7 @@ describe("MessageList process trace lifecycle", () => {
     expect(screen.getAllByAltText("Eve")).toHaveLength(1);
   });
 
-  test("keeps a conversational activity pulse visible before the first answer token", () => {
+  test("keeps the current action visible before the first answer token", () => {
     const activeThread = mockThread({
       messages: [message("user-1", "human", "帮我检查项目")],
       isLoading: true,
@@ -1022,8 +1020,8 @@ describe("MessageList process trace lifecycle", () => {
     });
 
     const pulse = screen.getByTestId("conversation-activity-pulse");
-    expect(pulse).toHaveTextContent("Thinking...");
     expect(pulse).toHaveTextContent("Read file: app.ts");
+    expect(pulse).not.toHaveTextContent("Thinking...");
 
     rerender(
       messageListTree({
@@ -1046,7 +1044,7 @@ describe("MessageList process trace lifecycle", () => {
     );
 
     expect(screen.getByTestId("conversation-activity-pulse")).toHaveTextContent(
-      "Thinking...",
+      "Read file: app.ts",
     );
 
     rerender(

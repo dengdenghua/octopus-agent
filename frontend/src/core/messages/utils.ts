@@ -489,6 +489,45 @@ export function extractContentFromMessage(message: Message) {
   return "";
 }
 
+export function isSettledAssistantAnswer(
+  message: Message,
+  {
+    allowToolCalls = false,
+    minTextLength = 1,
+  }: {
+    allowToolCalls?: boolean;
+    minTextLength?: number;
+  } = {},
+): boolean {
+  if (message.type !== "ai") return false;
+  const metadata = message.additional_kwargs;
+  if (
+    metadata?.message_kind === "commentary" ||
+    metadata?.public_progress === true ||
+    metadata?.response_state === "interrupted" ||
+    metadata?.response_state === "failed" ||
+    metadata?.run_status === "streaming"
+  ) {
+    return false;
+  }
+  if (!allowToolCalls && hasToolCalls(message)) return false;
+  return extractContentFromMessage(message).trim().length >= minTextLength;
+}
+
+export type AssistantTerminalState = "interrupted" | "failed";
+
+export function latestAssistantTerminalState(
+  messages: Message[],
+): AssistantTerminalState | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.type !== "ai") continue;
+    const state = message.additional_kwargs?.response_state;
+    if (state === "interrupted" || state === "failed") return state;
+  }
+  return null;
+}
+
 export function extractReasoningContentFromMessage(message: Message) {
   if (message.type !== "ai") {
     return null;

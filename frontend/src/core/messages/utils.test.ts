@@ -14,16 +14,90 @@ import {
   hasToolCalls,
   isClarificationToolMessage,
   isLikelyFinalAnswerContent,
+  isSettledAssistantAnswer,
+  latestAssistantTerminalState,
   parseUploadedFiles,
   stripInternalToolProtocol,
   stripUploadedFilesTag,
 } from "./utils";
 
+describe("settled assistant answer detection", () => {
+  const ai = (
+    content: string,
+    additional_kwargs: Record<string, unknown> = {},
+  ): Message => ({
+    id: "ai-answer",
+    type: "ai",
+    content,
+    additional_kwargs,
+  });
+
+  it("accepts only ordinary settled answer prose", () => {
+    expect(isSettledAssistantAnswer(ai("Final answer"))).toBe(true);
+    expect(isSettledAssistantAnswer(ai("short"), { minTextLength: 6 })).toBe(
+      false,
+    );
+  });
+
+  it("rejects progress, commentary, interrupted, failed and streaming prose", () => {
+    expect(
+      isSettledAssistantAnswer(ai("progress", { public_progress: true })),
+    ).toBe(false);
+    expect(
+      isSettledAssistantAnswer(
+        ai("commentary", { message_kind: "commentary" }),
+      ),
+    ).toBe(false);
+    expect(
+      isSettledAssistantAnswer(
+        ai("partial draft", { response_state: "interrupted" }),
+      ),
+    ).toBe(false);
+    expect(
+      isSettledAssistantAnswer(
+        ai("failed draft", { response_state: "failed" }),
+      ),
+    ).toBe(false);
+    expect(
+      isSettledAssistantAnswer(
+        ai("still arriving", { run_status: "streaming" }),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not treat a tool-call checkpoint as the final answer by default", () => {
+    const toolMessage: Message = {
+      id: "ai-tool",
+      type: "ai",
+      content: "I will inspect the file.",
+      tool_calls: [{ id: "call-1", name: "read_file", args: {} }],
+    };
+
+    expect(isSettledAssistantAnswer(toolMessage)).toBe(false);
+    expect(
+      isSettledAssistantAnswer(toolMessage, { allowToolCalls: true }),
+    ).toBe(true);
+  });
+
+  it("reports the latest explicit terminal state for the current turn", () => {
+    expect(
+      latestAssistantTerminalState([
+        ai("older failure", { response_state: "failed" }),
+        ai("progress", { public_progress: true }),
+        ai("partial", { response_state: "interrupted" }),
+      ]),
+    ).toBe("interrupted");
+    expect(latestAssistantTerminalState([ai("complete")])).toBeNull();
+  });
+});
+
 describe("public assistant text sanitization", () => {
   it("removes internal context-recovery handoffs from the visible answer", () => {
     const text =
       "Resume state: inspected items.py and reducer.ts; continue from the next file.\n\nThe public conclusion follows.";
-    expect(stripInternalToolProtocol(text)).toBe("The public conclusion follows.");
+    expect(stripInternalToolProtocol(text)).toBe(
+      "The public conclusion follows.",
+    );
   });
 
   it("does not expose a recovery handoff when it is the entire answer", () => {

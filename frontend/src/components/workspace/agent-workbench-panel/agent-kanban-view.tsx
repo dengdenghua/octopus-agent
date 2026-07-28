@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils";
 import type { OutlineRound } from "@/core/threads/progress-outline";
 import type { WorkBlock } from "../work-blocks";
 import { pickCurrentWorkBlock } from "../work-blocks";
-import type { AgentTile, AgentWorkbenchTabId, DiffEntry } from "../agent-workbench-utils";
+import type {
+  AgentTile,
+  AgentWorkbenchTabId,
+  DiffEntry,
+} from "../agent-workbench-utils";
 import { repairMojibakeText } from "../agent-workbench-utils";
 import type { AgentPhase } from "../agent-phases";
 import type { AgentRunState } from "../agent-run-status";
@@ -53,6 +57,7 @@ export function AgentKanbanView({
   screenProgress,
   mainAgentName,
   currentPhaseTitle: currentPhaseTitleText,
+  terminalState,
   setActivityView,
   onSelectTab,
   onOpenArtifact,
@@ -83,6 +88,7 @@ export function AgentKanbanView({
   screenProgress: { current: number; total: number };
   mainAgentName: string | null | undefined;
   currentPhaseTitle: string;
+  terminalState: "interrupted" | "failed" | null;
   setActivityView: (view: "summary" | "trace" | "screen") => void;
   onSelectTab: ((tab: AgentWorkbenchTabId) => void) | undefined;
   onOpenArtifact: ((path: string) => void) | undefined;
@@ -163,6 +169,7 @@ export function AgentKanbanView({
             focusedEventId={focusedEventId}
             progressOutline={progressOutline}
             userInput={userInput}
+            terminalState={terminalState}
             onSelectTab={onSelectTab}
             onOpenArtifact={onOpenArtifact}
           />

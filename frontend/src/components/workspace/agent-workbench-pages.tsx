@@ -811,6 +811,7 @@ export function AgentSummaryPage({
   focusedProcessEvent,
   progressOutline,
   userInput,
+  terminalState,
   onSelectTab,
   onOpenArtifact,
 }: {
@@ -828,6 +829,7 @@ export function AgentSummaryPage({
     uploadedFiles: Array<{ filename: string; path: string }>;
     attachments: Array<{ filename: string }>;
   } | null;
+  terminalState?: "interrupted" | "failed" | null;
   onSelectTab?: (tabId: AgentWorkbenchTabId) => void;
   onOpenArtifact?: (path: string) => void;
 }) {
@@ -1078,12 +1080,16 @@ export function AgentSummaryPage({
                 {t.agentWorkbenchPages.progress}
               </h3>
               <span className="ml-auto truncate text-xs text-muted-foreground">
-                {phases.length > 0
-                  ? `${donePhaseCount}/${phases.length} ${phaseStatusText("done")}`
-                  : t.agentWorkbenchPages.roundActivitySummary(
-                      outlineExecutionCount,
-                      outlineFactCount,
-                    )}
+                {terminalState === "interrupted"
+                  ? t.backgroundTasks.interrupted
+                  : terminalState === "failed"
+                    ? t.agentWorkbench.statusError
+                    : phases.length > 0
+                      ? `${donePhaseCount}/${phases.length} ${phaseStatusText("done")}`
+                      : t.agentWorkbenchPages.roundActivitySummary(
+                          outlineExecutionCount,
+                          outlineFactCount,
+                        )}
                 {phases.length > 0 && errorPhaseCount > 0
                   ? ` · ${errorPhaseCount} ${phaseStatusText("error")}`
                   : ""}
@@ -1100,7 +1106,14 @@ export function AgentSummaryPage({
             {phases.length > 0 && (
               <div className="mt-2 h-px overflow-hidden bg-border/35">
                 <div
-                  className="h-full bg-muted-foreground/35 transition-all"
+                  className={cn(
+                    "h-full transition-all",
+                    terminalState === "interrupted"
+                      ? "bg-amber-500/45"
+                      : terminalState === "failed"
+                        ? "bg-destructive/45"
+                        : "bg-muted-foreground/35",
+                  )}
                   style={{
                     width: `${Math.max(6, Math.round((donePhaseCount / phases.length) * 100))}%`,
                   }}

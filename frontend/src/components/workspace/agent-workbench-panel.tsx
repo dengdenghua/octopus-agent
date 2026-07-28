@@ -1,13 +1,5 @@
-import {
-  ChevronRightIcon,
-  GlobeIcon,
-  TerminalIcon,
-} from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { ChevronRightIcon, GlobeIcon, TerminalIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import type { OutlineRound } from "@/core/threads/progress-outline";
@@ -27,10 +19,7 @@ import type { AgentWorkbenchTabId } from "./agent-workbench-utils";
 import { useAgentWorkbenchI18n } from "./use-agent-workbench-i18n";
 import { AgentDiffPage } from "./agent-workbench-pages";
 import { useAgentWorkbenchSnapshot } from "./agent-workbench-snapshot";
-import {
-  type AgentRunState,
-  workbenchRunState,
-} from "./agent-run-status";
+import { type AgentRunState, workbenchRunState } from "./agent-run-status";
 import { MachineScopeRail } from "./agent-workbench-panel/machine-scope-rail";
 import { EmptyShellView } from "./agent-workbench-panel/empty-shell-view";
 import {
@@ -69,6 +58,7 @@ export function AgentWorkbenchPanel({
   onOpenArtifact,
   runSettled,
   runFailed,
+  runInterrupted,
   paused,
   className,
   threadId,
@@ -117,6 +107,7 @@ export function AgentWorkbenchPanel({
   onOpenArtifact?: (path: string) => void;
   runSettled?: boolean;
   runFailed?: boolean;
+  runInterrupted?: boolean;
   threadId?: string | null;
   workDir?: string;
   paused?: boolean;
@@ -131,10 +122,7 @@ export function AgentWorkbenchPanel({
   rosterSeats?: WorkbenchRosterSeat[];
 }) {
   const { t } = useI18n();
-  const {
-    deriveAgentTiles,
-    workbenchStatus,
-  } = useAgentWorkbenchI18n();
+  const { deriveAgentTiles, workbenchStatus } = useAgentWorkbenchI18n();
 
   const workbenchSnapshot = useAgentWorkbenchSnapshot(events, {
     deriveAgentTiles,
@@ -243,18 +231,21 @@ export function AgentWorkbenchPanel({
   const mainRunStatus = workbenchStatus(mainBlocks, mainPhases, {
     settled: runSettled,
     failed: runFailed,
+    interrupted: runInterrupted,
   });
   const mainRunState: AgentRunState = runFailed
     ? "error"
-    : isLoading
-      ? "running"
-      : runSettled
-        ? "done"
-        : workbenchRunState({
-            blocks: mainBlocks,
-            phases: mainPhases,
-            paused,
-          });
+    : runInterrupted
+      ? "waiting"
+      : isLoading
+        ? "running"
+        : runSettled
+          ? "done"
+          : workbenchRunState({
+              blocks: mainBlocks,
+              phases: mainPhases,
+              paused,
+            });
   const machineRail = (
     <MachineScopeRail
       agents={agentTiles}
@@ -270,12 +261,22 @@ export function AgentWorkbenchPanel({
   const requestedActiveTab: AgentWorkbenchTabId =
     activeTab ?? (focusedAgentId ? "agent" : focusedTab) ?? "agent";
   const effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" =
-    requestedActiveTab === "subagents" || requestedActiveTab === "plan" || requestedActiveTab === "artifacts"
+    requestedActiveTab === "subagents" ||
+    requestedActiveTab === "plan" ||
+    requestedActiveTab === "artifacts"
       ? "agent"
       : requestedActiveTab;
   const workbenchTabs: WorkbenchTab[] = [
-    { id: "diff", label: t.agentWorkbenchPages.diffTab, Icon: ChevronRightIcon },
-    { id: "terminal", label: t.agentWorkbenchPages.terminalTab, Icon: TerminalIcon },
+    {
+      id: "diff",
+      label: t.agentWorkbenchPages.diffTab,
+      Icon: ChevronRightIcon,
+    },
+    {
+      id: "terminal",
+      label: t.agentWorkbenchPages.terminalTab,
+      Icon: TerminalIcon,
+    },
     { id: "browser", label: t.agentWorkbenchPages.browserTab, Icon: GlobeIcon },
   ];
 
@@ -431,6 +432,9 @@ export function AgentWorkbenchPanel({
       screenProgress={screenProgress}
       mainAgentName={mainAgentName}
       currentPhaseTitle={currentPhase?.title ?? t.agentWorkbench.activityTrace}
+      terminalState={
+        runInterrupted ? "interrupted" : runFailed ? "failed" : null
+      }
       setActivityView={setActivityView}
       onSelectTab={onSelectTab}
       onOpenArtifact={onOpenArtifact}
