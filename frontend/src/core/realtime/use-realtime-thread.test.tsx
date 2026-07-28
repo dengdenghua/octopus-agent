@@ -182,7 +182,7 @@ describe("useRealtimeThread reconnect reconciliation", () => {
   it("keeps live state until incremental server truth arrives", async () => {
     const handles: FakeClientHandles[] = [];
     let resumeCount = 0;
-    const resumeParams: Record<string, unknown>[] = [];
+    const eventsParams: Record<string, unknown>[] = [];
     const factory = (deps: {
       onIncomingRequest: IncomingRequestFn;
       onNotification: (n: {
@@ -202,19 +202,39 @@ describe("useRealtimeThread reconnect reconciliation", () => {
         close: () => {},
         notify: () => {},
         request: (method: string, params?: Record<string, unknown>) => {
+          // Incremental reconnects go through thread/events (event mode).
+          if (method === "thread/events") {
+            eventsParams.push(params ?? {});
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: [
+                {
+                  sequence: 11,
+                  event: "turn_completed",
+                  eventId: "evt_done",
+                  threadId: "th",
+                  turnId: "t-live",
+                  ts: "2026-01-01T00:00:05.000Z",
+                  payload: { status: "completed", error: null },
+                },
+              ],
+              cursor: 11,
+              streamId: "stream-a",
+              requiresReset: false,
+              hasMore: false,
+              turnCount: 1,
+              lastTurnId: "t-live",
+              lastTurnStatus: "completed",
+            });
+          }
           if (method !== "thread/resume") return Promise.resolve({});
           resumeCount += 1;
-          resumeParams.push(params ?? {});
           return Promise.resolve({
             thread: { id: "th" },
-            turns: [
-              resumeCount === 1
-                ? turn("t-live", "inProgress")
-                : turn("t-live", "completed"),
-            ],
+            turns: [turn("t-live", "inProgress")],
             hasMore: false,
-            incremental: resumeCount > 1,
-            nextEventSequence: resumeCount === 1 ? 10 : 14,
+            incremental: false,
+            nextEventSequence: 10,
             eventStreamId: "stream-a",
           });
         },
@@ -242,8 +262,10 @@ describe("useRealtimeThread reconnect reconciliation", () => {
     await waitFor(() =>
       expect(rendered.result.current.state.turns[0]?.status).toBe("completed"),
     );
-    expect(resumeCount).toBe(2);
-    expect(resumeParams[1]).toMatchObject({
+    expect(resumeCount).toBe(1);
+    // thread/events sees the background backfill (afterSequence 0) AND the
+    // incremental reconnect fetch — assert on the incremental one.
+    expect(eventsParams[eventsParams.length - 1]).toMatchObject({
       afterSequence: 10,
       eventStreamId: "stream-a",
     });
@@ -252,6 +274,7 @@ describe("useRealtimeThread reconnect reconciliation", () => {
   it("replaces the timeline when the server resets the event stream", async () => {
     const handles: FakeClientHandles[] = [];
     const resumeParams: Record<string, unknown>[] = [];
+    const eventsParams: Record<string, unknown>[] = [];
     let resumeCount = 0;
     const factory = (deps: {
       onIncomingRequest: IncomingRequestFn;
@@ -272,6 +295,22 @@ describe("useRealtimeThread reconnect reconciliation", () => {
         close: () => {},
         notify: () => {},
         request: (method: string, params?: Record<string, unknown>) => {
+          // The server reports a foreign stream: event mode defers to the
+          // snapshot path, which replaces the whole timeline.
+          if (method === "thread/events") {
+            eventsParams.push(params ?? {});
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: [],
+              cursor: 3,
+              streamId: "stream-new",
+              requiresReset: true,
+              hasMore: false,
+              turnCount: 1,
+              lastTurnId: "t-new",
+              lastTurnStatus: "completed",
+            });
+          }
           if (method !== "thread/resume") return Promise.resolve({});
           resumeCount += 1;
           resumeParams.push(params ?? {});
@@ -314,13 +353,200 @@ describe("useRealtimeThread reconnect reconciliation", () => {
       expect(rendered.result.current.state.turns[0]?.id).toBe("t-new"),
     );
     expect(rendered.result.current.state.turns).toHaveLength(1);
-    expect(resumeParams[1]).toMatchObject({
-      afterSequence: 3,
-      eventStreamId: "stream-old",
-    });
+    // Event mode was attempted against the old stream (among background
+    // backfill calls, which use afterSequence 0)...
+    expect(eventsParams).toContainEqual(
+      expect.objectContaining({
+        afterSequence: 3,
+        eventStreamId: "stream-old",
+      }),
+    );
+    // ...then the snapshot fallback ran WITHOUT the stale cursor.
+    expect(resumeCount).toBe(2);
+    expect(resumeParams[1]).not.toHaveProperty("afterSequence");
   });
 
   it("preserves the timeline when an incremental resume has no changes", async () => {
+    const handles: FakeClientHandles[] = [];
+    const eventsParams: Record<string, unknown>[] = [];
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string, params?: Record<string, unknown>) => {
+          if (method === "thread/events") {
+            eventsParams.push(params ?? {});
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: [],
+              cursor: 20,
+              streamId: "stream-b",
+              requiresReset: false,
+              hasMore: false,
+              turnCount: 1,
+              lastTurnId: "t-stable",
+              lastTurnStatus: "completed",
+            });
+          }
+          if (method !== "thread/resume") return Promise.resolve({});
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [turn("t-stable", "completed")],
+            hasMore: true,
+            incremental: false,
+            nextEventSequence: 20,
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t-stable"),
+    );
+
+    act(() => {
+      handles[0]!.emitClose(1006, "network lost");
+      handles[0]!.emitOpen();
+    });
+
+    // The incremental reconnect fetch uses the durable cursor (the other
+    // thread/events call with afterSequence 0 is the background backfill).
+    await waitFor(() =>
+      expect(eventsParams).toContainEqual(
+        expect.objectContaining({ afterSequence: 20 }),
+      ),
+    );
+    expect(rendered.result.current.state.turns[0]?.id).toBe("t-stable");
+    expect(rendered.result.current.state.hasMoreTurns).toBe(true);
+  });
+
+  it("does not double-apply an event delivered live before the log fold", async () => {
+    const handles: FakeClientHandles[] = [];
+    let emitNotification:
+      | ((n: { method: string; params: Record<string, unknown> }) => void)
+      | undefined;
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitNotification = deps.onNotification;
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method === "thread/events") {
+            // The log slice CONTAINS the delta the client already applied
+            // live — the shared eventId must make the fold a no-op.
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: [
+                {
+                  sequence: 11,
+                  event: "item_delta",
+                  eventId: "evt_dup",
+                  threadId: "th",
+                  turnId: "t-live",
+                  ts: "2026-01-01T00:00:01.000Z",
+                  payload: { itemId: "i1", kind: "agentMessage", delta: "abc" },
+                },
+              ],
+              cursor: 11,
+              streamId: "stream-a",
+              requiresReset: false,
+              hasMore: false,
+              turnCount: 1,
+              lastTurnId: "t-live",
+              lastTurnStatus: "inProgress",
+            });
+          }
+          if (method !== "thread/resume") return Promise.resolve({});
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [
+              {
+                ...turn("t-live", "inProgress"),
+                items: [
+                  {
+                    id: "i1",
+                    type: "agentMessage",
+                    status: "inProgress",
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    text: "",
+                  },
+                ],
+              },
+            ],
+            hasMore: false,
+            incremental: false,
+            nextEventSequence: 10,
+            eventStreamId: "stream-a",
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t-live"),
+    );
+
+    // Live delivery of the delta, stamped with its persisted eventId.
+    act(() => {
+      emitNotification?.({
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "th",
+          turnId: "t-live",
+          itemId: "i1",
+          delta: "abc",
+          eventId: "evt_dup",
+        },
+      });
+    });
+
+    act(() => {
+      handles[0]!.emitClose(1006, "network lost");
+      handles[0]!.emitOpen();
+    });
+
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+    const item = rendered.result.current.state.turns[0]?.items[0];
+    expect(item?.type === "agentMessage" && item.text).toBe("abc");
+  });
+
+  it("falls back to a snapshot resume when the event fold diverges", async () => {
     const handles: FakeClientHandles[] = [];
     let resumeCount = 0;
     const factory = (deps: {
@@ -342,22 +568,40 @@ describe("useRealtimeThread reconnect reconciliation", () => {
         close: () => {},
         notify: () => {},
         request: (method: string) => {
+          if (method === "thread/events") {
+            // Authoritative tail disagrees with the folded state — the
+            // client must distrust the event path entirely.
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: [],
+              cursor: 5,
+              streamId: "stream-a",
+              requiresReset: false,
+              hasMore: false,
+              turnCount: 7,
+              lastTurnId: "t-elsewhere",
+              lastTurnStatus: "completed",
+            });
+          }
           if (method !== "thread/resume") return Promise.resolve({});
           resumeCount += 1;
           return Promise.resolve(
             resumeCount === 1
               ? {
                   thread: { id: "th" },
-                  turns: [turn("t-stable", "completed")],
-                  hasMore: true,
+                  turns: [turn("t-x", "completed")],
+                  hasMore: false,
                   incremental: false,
-                  nextEventSequence: 20,
+                  nextEventSequence: 5,
+                  eventStreamId: "stream-a",
                 }
               : {
                   thread: { id: "th" },
-                  turns: [],
-                  incremental: true,
-                  nextEventSequence: 20,
+                  turns: [turn("t-fixed", "completed")],
+                  hasMore: false,
+                  incremental: false,
+                  nextEventSequence: 42,
+                  eventStreamId: "stream-a",
                 },
           );
         },
@@ -368,7 +612,7 @@ describe("useRealtimeThread reconnect reconciliation", () => {
       useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
     );
     await waitFor(() =>
-      expect(rendered.result.current.state.turns[0]?.id).toBe("t-stable"),
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t-x"),
     );
 
     act(() => {
@@ -376,9 +620,10 @@ describe("useRealtimeThread reconnect reconciliation", () => {
       handles[0]!.emitOpen();
     });
 
-    await waitFor(() => expect(resumeCount).toBe(2));
-    expect(rendered.result.current.state.turns[0]?.id).toBe("t-stable");
-    expect(rendered.result.current.state.hasMoreTurns).toBe(true);
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t-fixed"),
+    );
+    expect(resumeCount).toBe(2);
   });
 
   it("resumes on first socket open after the startup resume request failed", async () => {
@@ -421,8 +666,10 @@ describe("useRealtimeThread reconnect reconciliation", () => {
       useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
     );
 
-    await waitFor(() => expect(resumeCount).toBe(1));
-    expect(rendered.result.current.state.resumeState).toBe("needsResume");
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("needsResume"),
+    );
+    expect(resumeCount).toBe(1);
 
     act(() => {
       handles[0]!.emitOpen();
@@ -815,5 +1062,230 @@ describe("useRealtimeThread backwards pagination", () => {
       await rendered.result.current.loadOlderTurns();
     });
     expect(requests.length).toBe(callCount);
+  });
+});
+
+describe("useRealtimeThread cold-start replay cache", () => {
+  const TS = "2026-07-28T00:00:00.000Z";
+
+  function cachedLog() {
+    return [
+      {
+        sequence: 1,
+        event: "thread_started",
+        eventId: "e1",
+        threadId: "th",
+        ts: TS,
+        turnId: null,
+        payload: {},
+      },
+      {
+        sequence: 2,
+        event: "turn_started",
+        eventId: "e2",
+        threadId: "th",
+        ts: TS,
+        turnId: "t-cached",
+        payload: {},
+      },
+      {
+        sequence: 3,
+        event: "item_started",
+        eventId: "e3",
+        threadId: "th",
+        ts: TS,
+        turnId: "t-cached",
+        payload: {
+          item: {
+            id: "u1",
+            type: "userMessage",
+            status: "completed",
+            createdAt: TS,
+            text: "cached question",
+          },
+        },
+      },
+      {
+        sequence: 4,
+        event: "turn_completed",
+        eventId: "e4",
+        threadId: "th",
+        ts: TS,
+        turnId: "t-cached",
+        payload: { status: "completed", error: null },
+      },
+    ];
+  }
+
+  it("hydrates from the cache and resumes in event mode", async () => {
+    const { createMemoryReplayCache } = await import("./replay-cache");
+    const cache = createMemoryReplayCache();
+    await cache.append("th", cachedLog(), { streamId: "s-cache", cursor: 4 });
+
+    const handles: FakeClientHandles[] = [];
+    const requests: { method: string; params?: Record<string, unknown> }[] =
+      [];
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string, params?: Record<string, unknown>) => {
+          requests.push({ method, params });
+          if (method === "thread/events") {
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: [
+                {
+                  sequence: 5,
+                  event: "turn_started",
+                  eventId: "e5",
+                  threadId: "th",
+                  ts: TS,
+                  turnId: "t-new",
+                  payload: {},
+                },
+                {
+                  sequence: 6,
+                  event: "turn_completed",
+                  eventId: "e6",
+                  threadId: "th",
+                  ts: TS,
+                  turnId: "t-new",
+                  payload: { status: "completed", error: null },
+                },
+              ],
+              cursor: 6,
+              streamId: "s-cache",
+              requiresReset: false,
+              hasMore: false,
+              turnCount: 2,
+              lastTurnId: "t-new",
+              lastTurnStatus: "completed",
+            });
+          }
+          return Promise.resolve({});
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: cache,
+      }),
+    );
+
+    // Cached content renders from the local log...
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t-cached"),
+    );
+    // ...then the incremental fold appends what changed since the cursor.
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[1]?.id).toBe("t-new"),
+    );
+
+    // Event mode only: the snapshot RPC was never needed.
+    const methods = requests.map((r) => r.method);
+    expect(methods).not.toContain("thread/resume");
+    expect(requests[0]).toMatchObject({
+      method: "thread/events",
+      params: { afterSequence: 4, eventStreamId: "s-cache" },
+    });
+
+    // The fetched slice was written back for the next cold start.
+    const cached = await cache.load("th");
+    expect(cached?.events.map((e) => e.sequence)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(cached?.cursor).toBe(6);
+  });
+
+  it("starts with a snapshot resume when the cache is empty", async () => {
+    const { createMemoryReplayCache } = await import("./replay-cache");
+    const cache = createMemoryReplayCache();
+    const requests: string[] = [];
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (method: string, params?: Record<string, unknown>) => {
+        requests.push(method);
+        if (method === "thread/resume") {
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [
+              {
+                id: "t1",
+                threadId: "th",
+                status: "completed",
+                items: [],
+                startedAt: TS,
+                completedAt: TS,
+              },
+            ],
+            hasMore: false,
+            incremental: false,
+            nextEventSequence: 9,
+            eventStreamId: "s1",
+          });
+        }
+        if (method === "thread/events") {
+          // Background backfill after the snapshot lands.
+          return Promise.resolve({
+            thread: { id: "th" },
+            events: cachedLog(),
+            cursor: 4,
+            streamId: "s1",
+            requiresReset: false,
+            hasMore: false,
+            turnCount: 1,
+            lastTurnId: "t1",
+            lastTurnStatus: "completed",
+          });
+        }
+        void params;
+        return Promise.resolve({});
+      },
+    });
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: cache,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t1"),
+    );
+    expect(requests[0]).toBe("thread/resume");
+
+    // Backfill populated the cache for the next open.
+    await waitFor(async () => {
+      const cached = await cache.load("th");
+      expect(cached?.events.length).toBeGreaterThan(0);
+    });
   });
 });

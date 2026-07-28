@@ -32,6 +32,11 @@ import {
   reduce,
   type ReducerDiagnostic,
 } from "./reducer";
+import { replayEvents, type SequencedLoggedEvent } from "./replay";
+import {
+  createDefaultReplayCache,
+  type ReplayCacheStore,
+} from "./replay-cache";
 import {
   applyVitalNotification,
   emptyVitalsMarks,
@@ -58,6 +63,10 @@ const WORK_ITEM_TYPES = new Set<string>([
 
 export interface UseRealtimeThreadArgs {
   threadId: string;
+  /** Local replay cache (IndexedDB in the app, in-memory in tests).
+   * Enables instant cold-start rendering from the persisted event log;
+   * omit to disable the cache entirely. */
+  replayCache?: ReplayCacheStore;
   // Inject for tests. Defaults to a real client backed by getBackendBaseURL().
   clientFactory?: (deps: {
     onIncomingRequest: (req: JsonRpcRequest) => Promise<unknown>;
@@ -150,6 +159,51 @@ interface ResumeResponse {
   eventStreamId?: string | null;
 }
 
+/** thread/events response — raw sequenced log slice for client-side
+ * replay. Drift-check metadata describes the same authoritative snapshot
+ * the events were cut from (meaningful on the final page). */
+interface ThreadEventsResponse {
+  thread?: { id: string; path?: string };
+  events?: SequencedLoggedEvent[];
+  cursor?: number;
+  streamId?: string | null;
+  requiresReset?: boolean;
+  hasMore?: boolean;
+  turnCount?: number;
+  lastTurnId?: string | null;
+  lastTurnStatus?: string | null;
+}
+
+// Events fetched per thread/events page. Paging keeps a single response
+// bounded for threads with huge logs; the client loops until hasMore.
+const EVENTS_PAGE_LIMIT = 5000;
+
+// Live notifications and log-folded events both carry the persisted
+// ``eventId``. Either path can deliver an event first (live push vs.
+// incremental thread/events fetch), so each id is applied exactly once —
+// this set is the dedupe ledger. Bounded FIFO: the window only needs to
+// cover events since the last resume cursor, never the whole thread.
+const SEEN_EVENT_ID_LIMIT = 10_000;
+
+function markSeenEventId(seen: Set<string>, eventId: string): void {
+  if (seen.has(eventId)) {
+    // Refresh recency so hot ids survive the FIFO trim.
+    seen.delete(eventId);
+    seen.add(eventId);
+    return;
+  }
+  seen.add(eventId);
+  if (seen.size > SEEN_EVENT_ID_LIMIT) {
+    const excess = seen.size - SEEN_EVENT_ID_LIMIT + 1_000;
+    let removed = 0;
+    for (const oldest of seen) {
+      seen.delete(oldest);
+      removed += 1;
+      if (removed >= excess) break;
+    }
+  }
+}
+
 /** Replace changed turn snapshots without disturbing the surrounding
  * timeline. The server returns whole snapshots for affected turns, so
  * reconnect recovery never has to replay individual deltas in the UI. */
@@ -205,6 +259,19 @@ export function useRealtimeThread(
   // If a log is replaced or restored, the server returns a full snapshot
   // instead of interpreting the old cursor inside unrelated history.
   const resumeStreamIdRef = useRef<string | null>(null);
+  // Dedupe ledger for eventId-stamped deliveries (live push and log fold
+  // can both deliver the same event; see ``markSeenEventId``). Lives at
+  // component scope so it survives reconnects; ids are random per thread,
+  // so cross-thread reuse is safe.
+  const seenEventIdsRef = useRef<Set<string>>(new Set());
+  // Lazily created default replay cache (IndexedDB where available).
+  // Explicit ``args.replayCache`` wins; ``null`` here means "not yet
+  // created", so tests injecting their own store never pay for one.
+  const defaultReplayCacheRef = useRef<ReplayCacheStore | null>(null);
+  if (!defaultReplayCacheRef.current) {
+    defaultReplayCacheRef.current = createDefaultReplayCache();
+  }
+  const replayCache = args.replayCache ?? defaultReplayCacheRef.current;
   // Delivery watches for in-flight turn/start requests. The server holds
   // the turn/start RPC response until the whole turn has run to
   // completion, so ANY mid-turn socket drop rejects the pending request
@@ -337,14 +404,26 @@ export function useRealtimeThread(
     ): void => {
       const seq = ++resumeSeq;
       resumeInFlight = true;
+      setState((prev) => {
+        if (prev.resumeState === "resuming") return prev;
+        const next: Conversation = { ...prev, resumeState: "resuming" };
+        stateRef.current = next;
+        return next;
+      });
       const afterSequence = resumeCursorRef.current;
       const eventStreamId = resumeStreamIdRef.current;
+      // Incremental reconnect: fold only the events we missed via
+      // thread/events instead of re-pulling whole turn snapshots. The
+      // snapshot path below remains the authoritative fallback (first
+      // resume, stream replacement, drift).
+      if (afterSequence !== null) {
+        runEventResume(client, seq, afterSequence, eventStreamId);
+        return;
+      }
       void client
         .request<ResumeResponse>("thread/resume", {
           threadId: args.threadId,
           limit: RESUME_TURN_LIMIT,
-          ...(afterSequence !== null ? { afterSequence } : {}),
-          ...(afterSequence !== null && eventStreamId ? { eventStreamId } : {}),
         })
         .then((result) => {
           if (cancelled || seq !== resumeSeq) return;
@@ -358,6 +437,18 @@ export function useRealtimeThread(
           }
           if (typeof result.eventStreamId === "string") {
             resumeStreamIdRef.current = result.eventStreamId;
+          }
+          // A full snapshot means the cache is either empty (first open)
+          // or was just cleared (reset) — refill it in the background so
+          // the NEXT open takes the instant event-mode path. Read-only
+          // RPC, fire-and-forget, never blocks the live flow.
+          if (result.incremental !== true) {
+            void backfillReplayCache(
+              client,
+              typeof result.eventStreamId === "string"
+                ? result.eventStreamId
+                : null,
+            );
           }
           setState((prev) => {
             const serverTurns = result.turns ?? [];
@@ -401,11 +492,221 @@ export function useRealtimeThread(
         });
     };
 
+    /**
+     * Incremental resume in event mode: fetch only the persisted events
+     * after our durable cursor and fold them through ``replayEvents``.
+     *
+     * Correctness pillars:
+     *  - ``eventId`` dedupe — events already applied via live push are
+     *    skipped on fold (and vice versa), so the two delivery paths
+     *    compose without double-appending deltas;
+     *  - drift probe — the fold is recomputed purely against the server's
+     *    authoritative tail metadata (same snapshot the events were cut
+     *    from); any mismatch discards the event path and falls back to the
+     *    snapshot resume below;
+     *  - ``requiresReset`` (stream replacement, compaction inside the
+     *    window) likewise defers to the snapshot path.
+     */
+    const runEventResume = (
+      client: RealtimeClient,
+      seq: number,
+      afterSequence: number,
+      eventStreamId: string | null,
+    ): void => {
+      const fallbackToSnapshot = (): void => {
+        resumeCursorRef.current = null;
+        resumeStreamIdRef.current = null;
+        resumeInFlight = false;
+        // The stream was replaced or the window is unsafe — the cached
+        // prefix is no longer interpretable either. Refilled by the
+        // backfill after the snapshot resume lands.
+        void replayCache.clear(args.threadId).catch(() => {});
+        requestResume(client, "replace");
+      };
+      const fetchPage = (after: number): Promise<ThreadEventsResponse> =>
+        client.request<ThreadEventsResponse>("thread/events", {
+          threadId: args.threadId,
+          afterSequence: after,
+          ...(eventStreamId ? { eventStreamId } : {}),
+          limit: EVENTS_PAGE_LIMIT,
+        });
+      void (async () => {
+        let page = await fetchPage(afterSequence);
+        if (page.requiresReset === true) return { reset: true as const };
+        const events = [...(page.events ?? [])];
+        while (page.hasMore === true && events.length > 0) {
+          const lastSequence = events[events.length - 1]!.sequence;
+          page = await fetchPage(lastSequence);
+          if (page.requiresReset === true) return { reset: true as const };
+          events.push(...(page.events ?? []));
+        }
+        return { reset: false as const, events, finalPage: page };
+      })()
+        .then((outcome) => {
+          if (cancelled || seq !== resumeSeq) return;
+          if (outcome.reset) {
+            fallbackToSnapshot();
+            return;
+          }
+          const { events, finalPage } = outcome;
+          const seen = seenEventIdsRef.current;
+          const fresh = events.filter(
+            (e) => typeof e.eventId !== "string" || !seen.has(e.eventId),
+          );
+          // Drift probe: fold onto the latest reduced state (pure — the
+          // real fold below re-runs inside the setState updater) and check
+          // the rebuilt tail against the server's metadata.
+          const probe = replayEvents(fresh, {
+            base: stateRef.current,
+          }).conversation;
+          const lastTurn = probe.turns[probe.turns.length - 1];
+          const tailDrift =
+            typeof finalPage.lastTurnId === "string" &&
+            (!lastTurn ||
+              lastTurn.id !== finalPage.lastTurnId ||
+              lastTurn.status !== finalPage.lastTurnStatus);
+          const countDrift =
+            typeof finalPage.turnCount === "number" &&
+            stateRef.current.hasMoreTurns === false &&
+            probe.turns.length !== finalPage.turnCount;
+          if (tailDrift || countDrift) {
+            if (import.meta.env.DEV) {
+              console.warn(
+                "[realtime] event-mode resume diverged from authoritative tail; falling back to snapshot resume",
+              );
+            }
+            fallbackToSnapshot();
+            return;
+          }
+          if (
+            typeof finalPage.cursor === "number" &&
+            Number.isFinite(finalPage.cursor) &&
+            finalPage.cursor >= 0
+          ) {
+            resumeCursorRef.current = finalPage.cursor;
+          }
+          if (typeof finalPage.streamId === "string") {
+            resumeStreamIdRef.current = finalPage.streamId;
+          }
+          resumeInFlight = false;
+          // Cache the authoritative slice for the next cold start. ALL
+          // fetched events go in (not just ``fresh``) — events the client
+          // already applied live were never written to the cache (they
+          // carry no sequence on the wire), and this slice re-supplies
+          // them with their log coordinates.
+          void replayCache
+            .append(args.threadId, events, {
+              streamId: resumeStreamIdRef.current,
+              cursor: resumeCursorRef.current ?? 0,
+            })
+            .catch(() => {});
+          // Ledger before the fold: a live duplicate of a folded event
+          // arriving while the state update is queued is dropped by
+          // onNotification's dedupe.
+          for (const event of fresh) {
+            if (typeof event.eventId === "string") {
+              markSeenEventId(seen, event.eventId);
+            }
+          }
+          setState((prev) => {
+            const folded = replayEvents(fresh, { base: prev }).conversation;
+            const next: Conversation = { ...folded, resumeState: "resumed" };
+            const resumedActive = [...next.turns]
+              .reverse()
+              .find((turn) => turn.status === "inProgress");
+            seedVitalsFromResumedTurn(
+              vitalsMarksRef.current,
+              resumedActive ?? null,
+              Date.now(),
+            );
+            stateRef.current = next;
+            return next;
+          });
+        })
+        .catch(() => {
+          if (cancelled || seq !== resumeSeq) return;
+          resumeInFlight = false;
+          setState((prev) => {
+            const next: Conversation = { ...prev, resumeState: "needsResume" };
+            stateRef.current = next;
+            return next;
+          });
+        });
+    };
+
+    /**
+     * Refill the replay cache in the background after a full snapshot
+     * resume. Pages the whole log from sequence 0 (bounded), appending
+     * each authoritative slice; a mid-fill stream reset clears and stops.
+     * Never interacts with React state — the cache only pays off on the
+     * NEXT cold start.
+     */
+    const backfillReplayCache = async (
+      client: RealtimeClient,
+      streamId: string | null,
+    ): Promise<void> => {
+      try {
+        const existing = await replayCache.load(args.threadId);
+        if (existing && existing.events.length > 0) return;
+        let after = 0;
+        let knownStreamId = streamId;
+        // Safety bound: 20 pages × EVENTS_PAGE_LIMIT events.
+        for (let page = 0; page < 20; page += 1) {
+          if (cancelled) return;
+          // Backfill starts from an empty dedupe ledger and an empty cache,
+          // so server-side `coalesce` is safe here (unlike incremental
+          // event-mode resume) and cuts the payload dramatically.
+          const result = await client.request<ThreadEventsResponse>(
+            "thread/events",
+            {
+              threadId: args.threadId,
+              afterSequence: after,
+              ...(knownStreamId ? { eventStreamId: knownStreamId } : {}),
+              limit: EVENTS_PAGE_LIMIT,
+              mode: "coalesce",
+            },
+          );
+          if (cancelled) return;
+          if (result.requiresReset === true) {
+            await replayCache.clear(args.threadId).catch(() => {});
+            return;
+          }
+          const events = result.events ?? [];
+          if (typeof result.streamId === "string") {
+            knownStreamId = result.streamId;
+          }
+          await replayCache
+            .append(args.threadId, events, {
+              streamId: knownStreamId,
+              cursor: result.cursor ?? after,
+            })
+            .catch(() => {});
+          if (result.hasMore !== true || events.length === 0) return;
+          // Page by the server's RAW cursor, not the last returned event:
+          // coalescing may drop the raw tail events of a slice (their item
+          // completed earlier in the same slice), so the last returned
+          // sequence can lag behind what was actually consumed.
+          after = result.cursor ?? events[events.length - 1]!.sequence;
+        }
+      } catch {
+        // Backfill is best-effort; a failure costs the next open one
+        // snapshot resume, nothing more.
+      }
+    };
+
     const onNotification = (note: {
       method: string;
       params: Record<string, unknown>;
     }): void => {
       if (cancelled) return;
+      // Dedupe against the eventId ledger: this notification may be a live
+      // duplicate of an event an incremental thread/events fold already
+      // applied (or vice versa, delivered live first and folded later).
+      const eventId = note.params?.eventId;
+      if (typeof eventId === "string") {
+        if (seenEventIdsRef.current.has(eventId)) return;
+        markSeenEventId(seenEventIdsRef.current, eventId);
+      }
       const belongsToThread = note.params?.threadId === args.threadId;
       // Record liveness telemetry before the reducer runs. Cheap, pure,
       // ref-mutating — never triggers a render on its own.
@@ -537,8 +838,39 @@ export function useRealtimeThread(
       onClose,
     });
     clientRef.current = client;
-    requestResume(client, "preserve-live");
-    client.connect();
+    // Cold start: hydrate from the local replay cache BEFORE the first
+    // resume goes out. A hydrated cursor routes the initial resume into
+    // event mode (fetch only what changed since the cache was written);
+    // a stale stream id falls back to the snapshot path automatically.
+    // Cache failures must never block or break the thread flow.
+    let started = false;
+    const start = (): void => {
+      if (started || cancelled) return;
+      started = true;
+      requestResume(client, "preserve-live");
+      client.connect();
+    };
+    void replayCache
+      .load(args.threadId)
+      .then((cached) => {
+        if (cancelled || !cached || cached.events.length === 0) return;
+        const replayed = replayEvents(cached.events, {
+          threadId: args.threadId,
+        }).conversation;
+        resumeCursorRef.current = cached.cursor;
+        resumeStreamIdRef.current = cached.streamId;
+        const hydrated: Conversation = {
+          ...replayed,
+          resumeState: "resumed",
+          // A trimmed cache holds only the recent window; older turns
+          // page in through the snapshot path as usual.
+          hasMoreTurns: cached.partialFrom > 1,
+        };
+        stateRef.current = hydrated;
+        setState(() => hydrated);
+      })
+      .catch(() => {})
+      .finally(start);
     // Note: do NOT setConnected(true) here. The previous optimistic
     // flag has been replaced — onOpen drives it now (see comment on
     // ``onOpen`` above).
@@ -554,7 +886,13 @@ export function useRealtimeThread(
       timers.clear();
       setConnected(false);
     };
-  }, [args.threadId, args.clientFactory, applyEvent, persistTurnTelemetry]);
+  }, [
+    args.threadId,
+    args.clientFactory,
+    args.replayCache,
+    applyEvent,
+    persistTurnTelemetry,
+  ]);
 
   const startTurn = useCallback<UseRealtimeThreadValue["startTurn"]>(
     async (input) => {
