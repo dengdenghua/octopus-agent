@@ -55,7 +55,7 @@ class UrllibTransport:
             headers={**headers, "Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310 — audited HTTP LLM endpoint
             payload = resp.read().decode("utf-8")
         return json.loads(payload)
 

@@ -55,12 +55,12 @@ _UNTRUSTED_NAME_PREFIXES: tuple[str, ...] = ("mcp_", "mcp__")
 # boundary — it catches the common download-then-read pivot without tainting
 # ordinary repo/cwd reads (which would taint nearly every turn). macOS system
 # temp lives under /var/folders.
-_UNTRUSTED_READ_ROOTS: tuple[str, ...] = (
-    "/tmp/",
-    "/var/tmp/",
+_UNTRUSTED_READ_ROOTS: tuple[str, ...] = (  # nosec B108 — security allowlist of untrusted read roots
+    "/tmp/",  # nosec B108 — security allowlist entry, not a temp file operation
+    "/var/tmp/",  # nosec B108 — security allowlist entry, not a temp file operation
     "/private/tmp/",
     "/private/var/tmp/",
-    "/dev/shm/",
+    "/dev/shm/",  # nosec B108 — security allowlist entry, not a temp file operation
     "/var/folders/",
 )
 # Read-type tool NAMES whose path argument we vet against the roots above.

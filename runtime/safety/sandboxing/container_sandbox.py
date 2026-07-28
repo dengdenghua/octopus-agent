@@ -94,7 +94,7 @@ class ContainerSandbox:
         ]
         if self.config.read_only_root:
             cmd.append("--read-only")
-            cmd.extend(["--tmpfs", "/tmp:rw,noexec,nosuid,size=64m"])
+            cmd.extend(["--tmpfs", "/tmp:rw,noexec,nosuid,size=64m"])  # nosec B108 — docker tmpfs mount spec, not a temp file
 
         cmd.extend([self.config.image, "sleep", "infinity"])
 

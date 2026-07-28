@@ -144,12 +144,12 @@ class SchemaExtractor:
                 }
             )
 
-        cur = self.conn.execute(f"SELECT COUNT(*) AS cnt FROM {qid}")
+        cur = self.conn.execute(f"SELECT COUNT(*) AS cnt FROM {qid}")  # nosec B608 — identifier quoted via _quote_id; values use ?
         row_count = cur.fetchone()["cnt"]
 
         samples: list[dict] = []
         if sample_rows > 0:
-            cur = self.conn.execute(f"SELECT * FROM {qid} LIMIT ?", (sample_rows,))
+            cur = self.conn.execute(f"SELECT * FROM {qid} LIMIT ?", (sample_rows,))  # nosec B608 — identifier quoted; sample_rows is parameterized
             samples = [dict(r) for r in cur]
 
         return {

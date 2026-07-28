@@ -233,7 +233,7 @@ def _serve_mcp(args: argparse.Namespace) -> int:
     import logging
 
     stdio = getattr(args, "stdio", False)
-    host = getattr(args, "host", "0.0.0.0")
+    host = getattr(args, "host", "0.0.0.0")  # nosec B104 — CLI default; operator overrides via --host
     port = getattr(args, "port", 8766)
 
     # 配置日志（stdio 模式下日志写 stderr，避免干扰 JSON-RPC）

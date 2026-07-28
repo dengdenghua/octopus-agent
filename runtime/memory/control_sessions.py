@@ -244,7 +244,7 @@ class ControlSessionStore:
         with self._lock, self._connect() as conn:
             self._expire_all_locked(conn)
             rows = conn.execute(
-                "SELECT session_id, owner_id, owner_label, surface, target_id, status, paused, "
+                "SELECT session_id, owner_id, owner_label, surface, target_id, status, paused, "  # nosec B608 — WHERE built from ? placeholders; values parameterized
                 "takeover_count, metadata_json, created_at, updated_at, expires_at, creator_actor "
                 f"FROM control_sessions {where} ORDER BY updated_at DESC LIMIT ?",
                 (*params, limit),
@@ -730,7 +730,7 @@ class ControlSessionStore:
             where += " AND session_id=?"
             params.append(session_id)
         rows = conn.execute(
-            "SELECT action_id, session_id, surface, target_id, action_type, status, "
+            "SELECT action_id, session_id, surface, target_id, action_type, status, "  # nosec B608 — WHERE built from ? placeholders; values parameterized
             "descriptor_json, result_json, error, queued_at, started_at, completed_at, expires_at "
             f"FROM control_actions WHERE {where}",
             tuple(params),

@@ -1204,7 +1204,7 @@ def create_app(
             _tentacle_engine = CerebrumDecisionAdapter(_tentacle_planner).decide
 
             _tentacle_coordinator = TentacleCoordinator(
-                host="0.0.0.0",
+                host="0.0.0.0",  # nosec B104 — tentacle WS server, intentional LAN bind
                 port=_tentacle_ws_port,
                 dashboard_port=None,
                 decision_engine=_tentacle_engine,

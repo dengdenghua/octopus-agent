@@ -713,7 +713,7 @@ class AgentTraceStore:
             clauses.append("checkpoint_type = ?")
             params.append(checkpoint_type)
         sql = (
-            "SELECT * FROM agent_checkpoints WHERE "
+            "SELECT * FROM agent_checkpoints WHERE "  # nosec B608 — WHERE built from ? placeholders; values parameterized
             + " AND ".join(clauses)
             + " ORDER BY iteration DESC, id DESC LIMIT 1"
         )
@@ -1033,7 +1033,7 @@ class AgentTraceStore:
                 }
             )
             token_row = self._conn.execute(
-                "SELECT "
+                "SELECT "  # nosec B608 — WHERE built from ? placeholders; values parameterized
                 "COALESCE(SUM(input_tokens), 0) AS input_tokens, "
                 "COALESCE(SUM(output_tokens), 0) AS output_tokens, "
                 "COALESCE(SUM(thinking_tokens), 0) AS thinking_tokens, "
@@ -1073,14 +1073,14 @@ class AgentTraceStore:
         offset: int,
     ) -> list[sqlite3.Row]:
         where, params = self._where_params(filters)
-        sql = f"SELECT * FROM {table}{where} ORDER BY id ASC LIMIT ? OFFSET ?"
+        sql = f"SELECT * FROM {table}{where} ORDER BY id ASC LIMIT ? OFFSET ?"  # nosec B608 — table is internal literal; values parameterized
         params.extend([max(0, int(limit or 0)), max(0, int(offset or 0))])
         with self._lock:
             return list(self._conn.execute(sql, params).fetchall())
 
     def _count_locked(self, table: str, filters: dict[str, str | None] | None = None) -> int:
         where, params = self._where_params(filters or {})
-        row = self._conn.execute(f"SELECT COUNT(*) AS c FROM {table}{where}", params).fetchone()
+        row = self._conn.execute(f"SELECT COUNT(*) AS c FROM {table}{where}", params).fetchone()  # nosec B608 — table is internal literal; values parameterized
         return int(row["c"]) if row else 0
 
     def _task_run_ids(
@@ -1105,11 +1105,11 @@ class AgentTraceStore:
                     clauses.append(f"{key} = ?")
                     params.append(value)
             parts.append(
-                f"SELECT task_id, MAX(ts) AS updated_at FROM {table} "
+                f"SELECT task_id, MAX(ts) AS updated_at FROM {table} "  # nosec B608 — table is internal literal; WHERE uses ? placeholders
                 f"WHERE {' AND '.join(clauses)} GROUP BY task_id"
             )
         sql = (
-            "SELECT task_id, MAX(updated_at) AS updated_at FROM ("
+            "SELECT task_id, MAX(updated_at) AS updated_at FROM ("  # nosec B608 — parts built from ? placeholders; values parameterized
             + " UNION ALL ".join(parts)
             + ") GROUP BY task_id ORDER BY updated_at DESC, task_id ASC"
         )

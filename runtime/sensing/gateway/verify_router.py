@@ -238,7 +238,7 @@ def _is_local_preview_host(host: str) -> bool:
         return True
     if normalized.startswith("127."):
         return True
-    return normalized in {"0.0.0.0"}
+    return normalized in {"0.0.0.0"}  # nosec B104 — string comparison, not a bind
 
 
 def _exercise_page_with_visible_cursor(page: Any) -> None:

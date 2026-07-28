@@ -162,7 +162,7 @@ def safe_urlopen(
     # browser probe). When someone needs real TLS-SNI safety, swap to
     # httpx + a custom transport (see _safe_httpx_transport below).
     req = urllib.request.Request(pinned_url, headers={"Host": host})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — audited pinned-IP probe
         data = resp.read(read_cap_bytes + 1)
         headers = {k: v for k, v in resp.headers.items()}
     if len(data) > read_cap_bytes:

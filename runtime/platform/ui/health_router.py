@@ -1404,7 +1404,7 @@ def _canonical_backend_host(host: str) -> str:
     cleaned = _clean_host(host)
     if cleaned in {"localhost", "::1", "0:0:0:0:0:0:0:1"}:
         return "127.0.0.1"
-    if cleaned == "0.0.0.0":
+    if cleaned == "0.0.0.0":  # nosec B104 — string comparison, not a bind
         return "127.0.0.1"
     return cleaned
 
@@ -1492,7 +1492,7 @@ def _request_frontend_origin(request: Request | None) -> str:
 
 def _frontend_canonical_host(host: str) -> str:
     cleaned = _clean_host(host)
-    if cleaned in {"0.0.0.0", "::", ""}:
+    if cleaned in {"0.0.0.0", "::", ""}:  # nosec B104 — string comparison, not a bind
         return "localhost"
     if cleaned in {"::1", "0:0:0:0:0:0:0:1"}:
         return "localhost"

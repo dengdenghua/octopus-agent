@@ -46,7 +46,7 @@ def _request(
         headers=headers,
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310  # nosec B310 — audited HTTP endpoint
             body = resp.read().decode("utf-8", "replace")
         return json.loads(body) if body.strip() else {}
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):

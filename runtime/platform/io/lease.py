@@ -167,7 +167,7 @@ class LeaseStore:
         with self._lock, self._connect() as conn:
             if kind == "exclusive":
                 row = conn.execute(
-                    f"SELECT {_LEASE_COLUMNS} FROM file_leases "
+                    f"SELECT {_LEASE_COLUMNS} FROM file_leases "  # nosec B608 — _LEASE_COLUMNS is a constant; values use ?
                     "WHERE workspace_id = ? AND file_path = ? AND kind = 'exclusive' "
                     "AND expires_at > ? "
                     "ORDER BY acquired_at LIMIT 1",
@@ -230,7 +230,7 @@ class LeaseStore:
         expires_at = now + ttl_seconds
         with self._lock, self._connect() as conn:
             row = conn.execute(
-                f"SELECT {_LEASE_COLUMNS} FROM file_leases WHERE lease_id = ?",
+                f"SELECT {_LEASE_COLUMNS} FROM file_leases WHERE lease_id = ?",  # nosec B608 — _LEASE_COLUMNS is a constant; values use ?
                 (lease_id,),
             ).fetchone()
             if row is None:
@@ -276,7 +276,7 @@ class LeaseStore:
         now = time.time()
         with self._lock, self._connect() as conn:
             row = conn.execute(
-                f"SELECT {_LEASE_COLUMNS} FROM file_leases "
+                f"SELECT {_LEASE_COLUMNS} FROM file_leases "  # nosec B608 — _LEASE_COLUMNS is a constant; values use ?
                 "WHERE workspace_id = ? AND file_path = ? AND expires_at > ? "
                 "ORDER BY acquired_at LIMIT 1",
                 (workspace_id, file_path, now),
@@ -288,7 +288,7 @@ class LeaseStore:
         now = time.time()
         with self._lock, self._connect() as conn:
             rows = conn.execute(
-                f"SELECT {_LEASE_COLUMNS} FROM file_leases "
+                f"SELECT {_LEASE_COLUMNS} FROM file_leases "  # nosec B608 — _LEASE_COLUMNS is a constant; values use ?
                 "WHERE holder_id = ? AND expires_at > ? "
                 "ORDER BY acquired_at",
                 (holder_id, now),
@@ -301,13 +301,13 @@ class LeaseStore:
         with self._lock, self._connect() as conn:
             if workspace_id is None:
                 rows = conn.execute(
-                    f"SELECT {_LEASE_COLUMNS} FROM file_leases "
+                    f"SELECT {_LEASE_COLUMNS} FROM file_leases "  # nosec B608 — _LEASE_COLUMNS is a constant; values use ?
                     "WHERE expires_at > ? ORDER BY acquired_at",
                     (now,),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    f"SELECT {_LEASE_COLUMNS} FROM file_leases "
+                    f"SELECT {_LEASE_COLUMNS} FROM file_leases "  # nosec B608 — _LEASE_COLUMNS is a constant; values use ?
                     "WHERE workspace_id = ? AND expires_at > ? "
                     "ORDER BY acquired_at",
                     (workspace_id, now),

@@ -58,7 +58,7 @@ def run_cpu_profile(script_path, script_args, sort_key="cumulative", top_n=20, t
 
     try:
         profiler.enable()
-        exec(code, script_globals)
+        exec(code, script_globals)  # nosec B102 — perf profiler intentionally execs user script
         profiler.disable()
     except SystemExit:
         profiler.disable()
@@ -132,7 +132,7 @@ def run_memory_profile(script_path, script_args, top_n=20):
     snapshot_start = tracemalloc.take_snapshot()
 
     try:
-        exec(code, script_globals)
+        exec(code, script_globals)  # nosec B102 — perf profiler intentionally execs user script
     except SystemExit:
         pass
     finally:
@@ -195,7 +195,7 @@ def run_combined_profile(script_path, script_args, sort_key="cumulative", top_n=
 
     try:
         profiler.enable()
-        exec(code, script_globals)
+        exec(code, script_globals)  # nosec B102 — perf profiler intentionally execs user script
         profiler.disable()
     except SystemExit:
         profiler.disable()
@@ -314,7 +314,7 @@ def run_line_profile(script_path, script_args, functions=None, top_n=20):
     sys.path.insert(0, str(script_path.parent))
 
     try:
-        exec(code, script_globals)
+        exec(code, script_globals)  # nosec B102 — perf profiler intentionally execs user script
     except SystemExit:
         pass
     finally:

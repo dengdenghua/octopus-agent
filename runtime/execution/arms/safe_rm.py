@@ -106,8 +106,8 @@ _DEFAULT_DENY_PATHS = [
 _DEFAULT_ALLOW_PATHS = [
     "./",
     "../",
-    "/tmp",
-    "/var/tmp",
+    "/tmp",  # nosec B108 — default allow-path entry, not a temp file operation
+    "/var/tmp",  # nosec B108 — default allow-path entry, not a temp file operation
     "$TMPDIR",
     "$TMP",
     "$TEMP",

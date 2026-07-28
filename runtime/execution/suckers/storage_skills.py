@@ -80,7 +80,7 @@ def _request(
         headers=headers,
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — local http to a user-configured service
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — local http to a user-configured service  # nosec B310 — audited HTTP endpoint
             body = resp.read().decode("utf-8", "replace")
         return json.loads(body) if body.strip() else {}
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
@@ -102,7 +102,7 @@ def storage_alive(*, timeout: float = 1.5) -> bool:
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req, timeout=timeout):  # noqa: S310 — local http
+        with urllib.request.urlopen(req, timeout=timeout):  # noqa: S310 — local http  # nosec B310 — audited HTTP endpoint
             return True
     except urllib.error.HTTPError:
         return True  # got an HTTP response → the server is up (even if 4xx)

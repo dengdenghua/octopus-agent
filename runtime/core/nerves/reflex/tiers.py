@@ -275,7 +275,7 @@ class SLMTier(ReplyTier):
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:  # nosec B310 — audited HTTP LLM endpoint
                 data = json.loads(resp.read())
             text = (
                 ((data.get("choices") or [{}])[0].get("message") or {}).get("content", "")

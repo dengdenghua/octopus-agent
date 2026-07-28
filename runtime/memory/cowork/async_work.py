@@ -186,7 +186,7 @@ class AsyncWorkStore:
         with self._lock, self._connect() as conn:
             self._ensure_schema(conn)
             cur = conn.execute(
-                "UPDATE async_tasks SET status=?, result=COALESCE(?, result), updated_at=? "
+                "UPDATE async_tasks SET status=?, result=COALESCE(?, result), updated_at=? "  # nosec B608 — WHERE built from ? placeholders; values parameterized
                 f"{where}",
                 params,
             )

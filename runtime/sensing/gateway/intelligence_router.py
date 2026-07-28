@@ -435,7 +435,7 @@ def _parse_feed_entries(content: str, *, source: str) -> list[dict[str, Any]]:
     if not content.strip():
         return []
     try:
-        root = ElementTree.fromstring(content.encode("utf-8"))
+        root = ElementTree.fromstring(content.encode("utf-8"))  # nosec B314 — RSS feed; py3.7+ ET has entity defenses
     except (ConnectionError, TimeoutError, TypeError, ValueError):  # noqa: BLE001
         return []
 

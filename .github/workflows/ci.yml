@@ -197,14 +197,11 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install bandit pip-audit
-      - name: Bandit SAST (zero HIGH-severity findings)
-        # HIGH severity is enforced at zero (all 22 were fixed or given
-        # justified inline nosec markers). MEDIUM-severity debt
-        # (~84: B310 urlopen schemes, B608 SQL strings, B108 tmp paths,
-        # B104 bind-all) is real but untriaged — tighten back to -ll
-        # as it gets burned down; -ll today would just repaint the gate
-        # permanently red, which is how it silently rotted before.
-        run: bandit -r runtime/ -lll -ii
+      - name: Bandit SAST (zero MEDIUM+ severity findings)
+        # MEDIUM and HIGH severity are enforced at zero. All findings
+        # were either fixed at the source or given justified inline
+        # nosec markers with a reason comment.
+        run: bandit -r runtime/ -ll -ii
       - name: pip-audit
         run: pip install -e ".[dev,web,serve]" && pip-audit
 

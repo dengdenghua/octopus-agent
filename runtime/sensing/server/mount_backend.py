@@ -717,7 +717,7 @@ class WebdavMountBackend(MountBackend):
 
     def _parse_propfind(self, body: bytes, requested_path: str, max_depth: int) -> list[DirEntry]:
         try:
-            root = ET.fromstring(body)
+            root = ET.fromstring(body)  # nosec B314 — webdav PROPFIND from configured backend
         except ET.ParseError as exc:
             raise BackendError(f"webdav PROPFIND returned malformed XML: {exc}") from exc
         # The first <response> is the collection itself; skip it.
@@ -767,7 +767,7 @@ class WebdavMountBackend(MountBackend):
                 f"webdav PROPFIND {url} → {response.status_code}: {response.text[:200]}",
             )
         try:
-            root = ET.fromstring(response.content)
+            root = ET.fromstring(response.content)  # nosec B314 — webdav PROPFIND from configured backend
         except ET.ParseError as exc:
             raise BackendError(f"webdav PROPFIND returned malformed XML: {exc}") from exc
         responses = _find_local(root, "response")

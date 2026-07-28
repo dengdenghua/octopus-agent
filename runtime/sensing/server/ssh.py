@@ -288,7 +288,7 @@ class SshSandbox(Sandbox):
         env_dict: dict[str, str] | None = dict(m.env) if m.env else None
 
         try:
-            stdin, stdout, stderr = client.exec_command(
+            stdin, stdout, stderr = client.exec_command(  # nosec B601 — args quoted via _sh_quote before joining
                 cmd,
                 timeout=timeout,
                 environment=env_dict,

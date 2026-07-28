@@ -72,7 +72,7 @@ def _embed_remote(texts: list[str]) -> list[list[float]] | None:
         headers=headers,
     )
     try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:  # noqa: S310 — local/configured endpoint
+        with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:  # noqa: S310 — local/configured endpoint  # nosec B310 — audited HTTP embedding endpoint
             body = json.loads(resp.read().decode("utf-8", "replace"))
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
         return None

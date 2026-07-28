@@ -87,7 +87,7 @@ class SQLiteExplorer:
     def list_tables(self):
         tables = self._tables()
         for t in tables:
-            cur = self.conn.execute(f"SELECT COUNT(*) AS cnt FROM {_quote_id(t['name'])}")
+            cur = self.conn.execute(f"SELECT COUNT(*) AS cnt FROM {_quote_id(t['name'])}")  # nosec B608 — identifier quoted via _quote_id; values use ?
             t["row_count"] = cur.fetchone()["cnt"]
         return tables
 
@@ -133,7 +133,7 @@ class SQLiteExplorer:
                 }
             )
 
-        cur = self.conn.execute(f"SELECT COUNT(*) AS cnt FROM {qid}")
+        cur = self.conn.execute(f"SELECT COUNT(*) AS cnt FROM {qid}")  # nosec B608 — identifier quoted via _quote_id; values use ?
         row_count = cur.fetchone()["cnt"]
 
         return {
@@ -146,7 +146,7 @@ class SQLiteExplorer:
 
     def preview(self, table: str, limit: int = 20):
         self._check_table(table)
-        cur = self.conn.execute(f"SELECT * FROM {_quote_id(table)} LIMIT ?", (limit,))
+        cur = self.conn.execute(f"SELECT * FROM {_quote_id(table)} LIMIT ?", (limit,))  # nosec B608 — identifier quoted; limit is parameterized
         cols = [d[0] for d in cur.description]
         rows = [dict(r) for r in cur]
         return {"table": table, "columns": cols, "rows": rows, "count": len(rows)}

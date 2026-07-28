@@ -998,7 +998,7 @@ def _default_api_get(api_base_url: str, path: str) -> dict[str, Any]:
         raise ValueError("api check path must start with /api/")
     url = urljoin(api_base_url.rstrip("/") + "/", path.lstrip("/"))
     request = Request(url, headers={"Accept": "application/json"})
-    with urlopen(request, timeout=8) as response:  # noqa: S310 - localhost API check
+    with urlopen(request, timeout=8) as response:  # noqa: S310 - localhost API check  # nosec B310 — audited localhost API endpoint
         raw = response.read(2_000_000)
     data = json.loads(raw.decode("utf-8"))
     return data if isinstance(data, dict) else {"value": data}
@@ -1023,7 +1023,7 @@ def _default_api_request(
             "Content-Type": "application/json",
         },
     )
-    with urlopen(request, timeout=12) as response:  # noqa: S310 - localhost API producer
+    with urlopen(request, timeout=12) as response:  # noqa: S310 - localhost API producer  # nosec B310 — audited localhost API endpoint
         raw = response.read(2_000_000)
     parsed = json.loads(raw.decode("utf-8"))
     return parsed if isinstance(parsed, dict) else {"value": parsed}

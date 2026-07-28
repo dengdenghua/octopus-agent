@@ -19,7 +19,7 @@ from runtime.tentacle.coordinator import TentacleCoordinator
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Octopus Tentacle Server")
-    parser.add_argument("--host", default="0.0.0.0", help="WebSocket 监听地址")
+    parser.add_argument("--host", default="0.0.0.0", help="WebSocket 监听地址")  # nosec B104 — CLI default; operator overrides via --host
     parser.add_argument("--port", type=int, default=8765, help="WebSocket 监听端口")
     parser.add_argument("--dashboard-port", type=int, default=8766, help="Dashboard HTTP 端口")
     parser.add_argument("--log-level", default="INFO", help="日志级别")

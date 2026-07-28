@@ -87,7 +87,7 @@ def _call(method: str, path: str, body: dict[str, Any] | None = None) -> dict[st
     headers = {"Content-Type": "application/json"}
     req = urllib_request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib_request.urlopen(req, timeout=_TIMEOUT_SECONDS) as resp:
+        with urllib_request.urlopen(req, timeout=_TIMEOUT_SECONDS) as resp:  # nosec B310 — audited HTTP computer API endpoint
             raw = resp.read()
             data = json.loads(raw.decode("utf-8"))
             if isinstance(data, dict):

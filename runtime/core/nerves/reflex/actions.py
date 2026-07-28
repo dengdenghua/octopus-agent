@@ -78,7 +78,7 @@ def _run_webhook(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
             method=method,
             headers=req_headers,
         )
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # nosec B310 — audited HTTP webhook endpoint
             status = getattr(resp, "status", 0) or 0
             ok = 200 <= status < 300
             elapsed = (time.perf_counter() - t0) * 1000

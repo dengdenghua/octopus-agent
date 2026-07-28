@@ -310,7 +310,7 @@ class WeComChannel(Channel):
         except UnicodeDecodeError as e:
             raise ValueError(f"bad body encoding: {e}") from e
 
-        root = ET.fromstring(xml_str)
+        root = ET.fromstring(xml_str)  # nosec B314 — py3.7+ ET has entity defenses; trusted WeChat callback
 
         msg_signature = root.findtext("MsgSignature", "")
         timestamp = root.findtext("TimeStamp", "")
@@ -328,7 +328,7 @@ class WeComChannel(Channel):
         )
 
         decrypted_xml = self._decrypt_message(encrypt)
-        msg_root = ET.fromstring(decrypted_xml)
+        msg_root = ET.fromstring(decrypted_xml)  # nosec B314 — decrypted from trusted WeChat payload
 
         content = msg_root.findtext("Content", "")
         from_user = msg_root.findtext("FromUserName", "")

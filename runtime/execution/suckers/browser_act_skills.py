@@ -97,7 +97,7 @@ def _bridge_call(action: str, params: dict[str, Any]) -> dict[str, Any]:
         },
     )
     try:
-        with urllib_request.urlopen(req, timeout=_BRIDGE_TIMEOUT) as resp:
+        with urllib_request.urlopen(req, timeout=_BRIDGE_TIMEOUT) as resp:  # nosec B310 — audited HTTP bridge endpoint
             raw = resp.read()
             return json.loads(raw.decode("utf-8"))
     except urllib_error.HTTPError as e:

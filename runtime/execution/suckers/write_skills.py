@@ -1494,7 +1494,7 @@ def register_write_skills(registry: SkillRegistry) -> int:
                 SkillTestCase(
                     name="missing_find_error",
                     tier="golden",
-                    args={"path": "/tmp/x", "find": ""},
+                    args={"path": "/tmp/x", "find": ""},  # nosec B108 — test fixture path, not a temp file operation
                     expect=SkillExpect(schema_keys=["error"]),
                 ),
             ],
@@ -1518,7 +1518,7 @@ def register_write_skills(registry: SkillRegistry) -> int:
                 SkillTestCase(
                     name="missing_old_string_error",
                     tier="golden",
-                    args={"path": "/tmp/x", "old_string": ""},
+                    args={"path": "/tmp/x", "old_string": ""},  # nosec B108 — test fixture path, not a temp file operation
                     expect=SkillExpect(schema_keys=["error"]),
                 ),
             ],
@@ -1542,7 +1542,7 @@ def register_write_skills(registry: SkillRegistry) -> int:
                 SkillTestCase(
                     name="missing_edits_error",
                     tier="golden",
-                    args={"path": "/tmp/x", "edits": []},
+                    args={"path": "/tmp/x", "edits": []},  # nosec B108 — test fixture path, not a temp file operation
                     expect=SkillExpect(schema_keys=["error"]),
                 ),
             ],
@@ -1618,7 +1618,7 @@ def register_git_skills(registry: SkillRegistry) -> int:
                 SkillTestCase(
                     name="missing_paths_error",
                     tier="golden",
-                    args={"repo_dir": "/tmp", "paths": []},
+                    args={"repo_dir": "/tmp", "paths": []},  # nosec B108 — test fixture path, not a temp file operation
                     expect=SkillExpect(schema_keys=["error"]),
                 ),
             ],
@@ -1636,7 +1636,7 @@ def register_git_skills(registry: SkillRegistry) -> int:
                 SkillTestCase(
                     name="empty_message_error",
                     tier="golden",
-                    args={"repo_dir": "/tmp", "message": ""},
+                    args={"repo_dir": "/tmp", "message": ""},  # nosec B108 — test fixture path, not a temp file operation
                     expect=SkillExpect(schema_keys=["error"]),
                 ),
             ],

@@ -38,7 +38,7 @@ class OAuthEndpoints:
 def _get_json(url: str, timeout: float = 15.0) -> dict[str, Any] | None:
     try:
         req = urllib_request.Request(url, headers={"Accept": "application/json"})
-        with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — metadata fetch
+        with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — metadata fetch  # nosec B310 — audited HTTPS discovery endpoint
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:  # noqa: BLE001 — discovery is best-effort
         return None
@@ -116,7 +116,7 @@ def register_client(
             method="POST",
             headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
-        with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — DCR endpoint
+        with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — DCR endpoint  # nosec B310 — audited HTTPS DCR endpoint
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:  # noqa: BLE001 — DCR is best-effort
         return None

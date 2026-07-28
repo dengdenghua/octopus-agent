@@ -68,7 +68,7 @@ class TentacleCoordinator:
 
     def __init__(
         self,
-        host: str = "0.0.0.0",
+        host: str = "0.0.0.0",  # nosec B104 — tentacle server, intentional LAN bind
         port: int = 8765,
         *,
         decision_engine: DecisionEngine | None = None,
@@ -137,7 +137,7 @@ class TentacleCoordinator:
                 app.include_router(create_tentacle_router(self))
                 config = uvicorn.Config(
                     app,
-                    host="0.0.0.0",
+                    host="0.0.0.0",  # nosec B104 — dashboard server, intentional LAN bind
                     port=self._dashboard_port,
                     log_level="warning",
                 )
@@ -349,7 +349,7 @@ class TentacleCoordinator:
     @classmethod
     def with_cerebrum(
         cls,
-        host: str = "0.0.0.0",
+        host: str = "0.0.0.0",  # nosec B104 — tentacle server, intentional LAN bind
         port: int = 8765,
         *,
         rules: list | None = None,
@@ -400,7 +400,7 @@ class TentacleCoordinator:
     def with_vlm(
         cls,
         vlm_config: VlmConfig,
-        host: str = "0.0.0.0",
+        host: str = "0.0.0.0",  # nosec B104 — tentacle server, intentional LAN bind
         port: int = 8765,
         *,
         dashboard_port: int | None = 8766,

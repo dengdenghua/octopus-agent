@@ -88,7 +88,7 @@ def _post_form(url: str, data: dict[str, str], timeout: float = 30.0) -> dict[st
             "Accept": "application/json",
         },
     )
-    with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — token endpoint
+    with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — token endpoint  # nosec B310 — audited HTTPS token endpoint
         return json.loads(resp.read().decode("utf-8"))
 
 

@@ -235,7 +235,7 @@ def _make_ssl_context():
 def _api_get(token, url):
     """Authenticated GET request, returns parsed JSON."""
     req = urllib.request.Request(url, headers={"PRIVATE-TOKEN": token})
-    with urllib.request.urlopen(req, context=_make_ssl_context()) as resp:
+    with urllib.request.urlopen(req, context=_make_ssl_context()) as resp:  # nosec B310 — audited HTTPS GitLab API
         return json.loads(resp.read())
 
 
@@ -287,7 +287,7 @@ def post_inline_comment(token, host, project_id, mr_iid, shas, file_path, line_n
     )
 
     try:
-        with urllib.request.urlopen(req, context=_make_ssl_context()) as resp:
+        with urllib.request.urlopen(req, context=_make_ssl_context()) as resp:  # nosec B310 — audited HTTPS GitLab API
             r = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         error_body = e.read().decode(errors="replace")

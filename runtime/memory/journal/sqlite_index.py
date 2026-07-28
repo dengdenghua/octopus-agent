@@ -274,7 +274,7 @@ class JournalIndex:
             params.append(session_id)
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        sql = "SELECT payload FROM events" + where + " ORDER BY id ASC LIMIT ? OFFSET ?"
+        sql = "SELECT payload FROM events" + where + " ORDER BY id ASC LIMIT ? OFFSET ?"  # nosec B608 — WHERE built from ? placeholders; values parameterized
         params.append(int(limit))
         params.append(int(offset))
 

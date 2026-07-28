@@ -38,7 +38,7 @@ def ollama_url() -> str:
 def probe_ollama() -> dict[str, Any] | None:
     """List local Ollama models via ``/api/tags``; ``None`` when not running."""
     try:
-        with urllib.request.urlopen(ollama_url() + "/api/tags", timeout=3.0) as resp:  # noqa: S310 — local model server
+        with urllib.request.urlopen(ollama_url() + "/api/tags", timeout=3.0) as resp:  # noqa: S310 — local model server  # nosec B310 — audited local Ollama endpoint
             return json.loads(resp.read().decode("utf-8", "replace"))
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
         return None

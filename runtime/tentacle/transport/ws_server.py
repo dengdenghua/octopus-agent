@@ -172,7 +172,7 @@ class TentacleWebSocketServer:
 
     def __init__(
         self,
-        host: str = "0.0.0.0",
+        host: str = "0.0.0.0",  # nosec B104 — tentacle WS server, intentional LAN bind
         port: int = 8765,
         *,
         on_device_hello: Callable[[DeviceHello, WebSocketConnection], Awaitable[None]]

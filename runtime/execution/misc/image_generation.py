@@ -354,7 +354,7 @@ def _post_agnes_image_generation(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — audited HTTPS image API
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
@@ -384,7 +384,7 @@ def _write_agnes_image_result(data: dict[str, Any], output: Path, *, timeout: in
         raise RuntimeError(f"agnes API returned no image URL: {first!r}")
     req = urllib.request.Request(url, headers={"Accept": "image/*"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — audited HTTPS image download
             output.write_bytes(resp.read())
     except OSError as exc:
         raise RuntimeError(f"agnes image download failed: {type(exc).__name__}: {exc}") from exc

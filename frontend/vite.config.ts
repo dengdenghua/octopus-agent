@@ -261,5 +261,17 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     exclude: ["node_modules/**", "dist/**", "e2e/**"],
+    coverage: {
+      provider: "v8",
+      // Ratchet thresholds — set slightly below current levels to prevent
+      // regression while allowing incremental improvement over time.
+      // Goal: ratchet up until we reach 80/75/80/80.
+      thresholds: {
+        lines: 48,
+        branches: 46,
+        functions: 36,
+        statements: 47,
+      },
+    },
   },
 });

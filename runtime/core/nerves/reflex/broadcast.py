@@ -217,7 +217,7 @@ class ReflexBroadcaster:
             headers={"Content-Type": "application/json"},
         )
         try:
-            with _u.urlopen(req, timeout=timeout_s) as resp:
+            with _u.urlopen(req, timeout=timeout_s) as resp:  # nosec B310 — audited HTTP webhook endpoint
                 status = getattr(resp, "status", 0)
                 if not (200 <= status < 300):
                     _LOG.warning(

@@ -305,7 +305,7 @@ class BubblewrapBackend:
             wrapped.extend(["--dev", "/dev"])
         if Path("/proc").exists():
             wrapped.extend(["--proc", "/proc"])
-        wrapped.extend(["--tmpfs", "/tmp"])
+        wrapped.extend(["--tmpfs", "/tmp"])  # nosec B108 — bwrap tmpfs mount arg, not a temp file
 
         parents = list(workspace.parents)
         parents.reverse()
@@ -356,10 +356,10 @@ class SeatbeltBackend:
         write_subpaths = [
             workspace,
             Path("/dev/null"),
-            Path("/tmp"),
-            Path("/private/tmp"),
-            Path("/var/tmp"),
-            Path(os.environ.get("TMPDIR", "/tmp")).expanduser().resolve(strict=False),
+            Path("/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
+            Path("/private/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
+            Path("/var/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
+            Path(os.environ.get("TMPDIR", "/tmp")).expanduser().resolve(strict=False),  # nosec B108 — sandbox write-allow rule target
         ]
         write_rules = "\n".join(
             f'  (subpath "{_sbpl_escape(str(path))}")' for path in _unique_paths(write_subpaths)

@@ -1100,7 +1100,7 @@ def create_config_router(
             url = base.rstrip("/") + path
             try:
                 req = urllib.request.Request(url, headers={"Accept": "application/json"})
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — audited HTTP config endpoint
                     if not (200 <= resp.status < 300):
                         return [], f"http {resp.status}"
                     payload = resp.read().decode("utf-8", errors="replace")

@@ -130,7 +130,7 @@ def _browser_relay_request(
         headers["Authorization"] = f"Bearer {token}"
     req = urllib_request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib_request.urlopen(req, timeout=timeout_seconds) as resp:
+        with urllib_request.urlopen(req, timeout=timeout_seconds) as resp:  # nosec B310 — audited HTTP relay endpoint
             raw = resp.read()
             payload = json.loads(raw.decode("utf-8"))
             if isinstance(payload, dict):

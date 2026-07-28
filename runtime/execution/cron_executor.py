@@ -63,7 +63,7 @@ def default_shell_runner(command: str, job: dict[str, Any]) -> RunResult:
     command is operator-intended; we inherit the server environment.
     """
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # nosec B602 — operator-authored shell job, auth-gated at router
             command,
             shell=True,  # noqa: S602 — the job *is* a shell command by design
             capture_output=True,

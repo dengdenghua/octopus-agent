@@ -1722,7 +1722,7 @@ def mount_reflex_admin_routes(
             yaml = YAML(typ="rt")
             yaml.preserve_quotes = True
             with path.open("r", encoding="utf-8") as fh:
-                doc = yaml.load(fh)
+                doc = yaml.load(fh)  # nosec B506 — ruamel rt loader is safe; trusted rules file
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": f"YAML parse failed: {exc}"}
 
@@ -1876,7 +1876,7 @@ def mount_reflex_admin_routes(
             yaml.width = 120
             yaml.indent(mapping=2, sequence=4, offset=2)
             with path.open("r", encoding="utf-8") as fh:
-                doc = yaml.load(fh)
+                doc = yaml.load(fh)  # nosec B506 — ruamel rt loader is safe; trusted rules file
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": f"YAML load failed: {exc}"}
 
