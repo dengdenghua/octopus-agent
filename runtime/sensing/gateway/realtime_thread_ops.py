@@ -97,11 +97,20 @@ async def _maybe_compact_locked(
     if result is None:
         return
     try:
-        log.turn_compacted(thread_id, result.summary_turn, result.superseded_ids)
+        logged = log.turn_compacted(thread_id, result.summary_turn, result.superseded_ids)
     except (OSError, ValueError, TypeError):
         _logger.exception("compaction: failed to persist turn_compacted")
         return
     try:
+        await emitter.notify(
+            ServerMethod.TURN_COMPACTED,
+            {
+                "threadId": thread_id,
+                "supersededTurnIds": list(result.superseded_ids),
+                "summaryTurn": result.summary_turn.model_dump(by_alias=True, mode="json"),
+                "eventId": logged.event_id,
+            },
+        )
         await emitter.notify(
             ServerMethod.THREAD_STATUS_CHANGED,
             {
@@ -171,9 +180,19 @@ async def compact_thread(
         if result is None:
             return {"threadId": thread_id, "compacted": False, "reason": "no_stale_turns"}
 
-        log.turn_compacted(thread_id, result.summary_turn, result.superseded_ids)
+        logged = log.turn_compacted(thread_id, result.summary_turn, result.superseded_ids)
 
     if emitter is not None:
+        with contextlib.suppress(Exception):
+            await emitter.notify(
+                ServerMethod.TURN_COMPACTED,
+                {
+                    "threadId": thread_id,
+                    "supersededTurnIds": list(result.superseded_ids),
+                    "summaryTurn": result.summary_turn.model_dump(by_alias=True, mode="json"),
+                    "eventId": logged.event_id,
+                },
+            )
         with contextlib.suppress(Exception):
             await emitter.notify(
                 ServerMethod.THREAD_STATUS_CHANGED,

@@ -99,10 +99,14 @@ class EchoRuntime:
                 return log
             existed = log.path.exists() and log.path.stat().st_size > 0
             if not existed:
-                log.thread_started(thread_id)
+                evt = log.thread_started(thread_id)
                 await emitter.notify(
                     ServerMethod.THREAD_STARTED,
-                    {"thread": {"id": thread_id}},
+                    {
+                        "thread": {"id": thread_id},
+                        "threadId": thread_id,
+                        "eventId": evt.event_id,
+                    },
                 )
             self._known_threads.add(thread_id)
         return log
@@ -128,12 +132,13 @@ class EchoRuntime:
         # yield still lands on this turn's flag.
         emitter.register_turn(turn.id)
         try:
-            log.turn_started(thread_id, turn)
+            evt = log.turn_started(thread_id, turn)
             await emitter.notify(
                 ServerMethod.TURN_STARTED,
                 {
                     "threadId": thread_id,
                     "turn": turn.model_dump(by_alias=True, mode="json"),
+                    "eventId": evt.event_id,
                 },
             )
 
@@ -374,7 +379,7 @@ class EchoRuntime:
             if await self._interrupt_item(turn, log, emitter, item):
                 return
             item.content += chunk
-            log.item_delta(turn.thread_id, turn.id, item.id, "reasoning", chunk)
+            logged = log.item_delta(turn.thread_id, turn.id, item.id, "reasoning", chunk)
             await emitter.notify(
                 ServerMethod.ITEM_REASONING_TEXT_DELTA,
                 {
@@ -383,6 +388,7 @@ class EchoRuntime:
                     "itemId": item.id,
                     "delta": chunk,
                     "contentIndex": 0,
+                    "eventId": logged.event_id,
                 },
             )
             await asyncio.sleep(0)  # yield to other tasks
@@ -482,7 +488,7 @@ class EchoRuntime:
             if await self._interrupt_item(turn, log, emitter, item):
                 return
             item.text += chunk
-            log.item_delta(turn.thread_id, turn.id, item.id, "agentMessage", chunk)
+            logged = log.item_delta(turn.thread_id, turn.id, item.id, "agentMessage", chunk)
             await emitter.notify(
                 ServerMethod.ITEM_AGENT_MESSAGE_DELTA,
                 {
@@ -490,6 +496,7 @@ class EchoRuntime:
                     "turnId": turn.id,
                     "itemId": item.id,
                     "delta": chunk,
+                    "eventId": logged.event_id,
                 },
             )
             await asyncio.sleep(0)

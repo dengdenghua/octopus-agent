@@ -468,7 +468,7 @@ class _ReactBridgeState:
             turn, log, emitter = self._delta_ctx
             if kind == "agentMessage" and self.agent_message is not None:
                 item_id = self.agent_message.id
-                log.item_delta(turn.thread_id, turn.id, item_id, "agentMessage", combined)
+                logged = log.item_delta(turn.thread_id, turn.id, item_id, "agentMessage", combined)
                 await emitter.notify(
                     ServerMethod.ITEM_AGENT_MESSAGE_DELTA,
                     {
@@ -476,11 +476,12 @@ class _ReactBridgeState:
                         "turnId": turn.id,
                         "itemId": item_id,
                         "delta": combined,
+                        "eventId": logged.event_id,
                     },
                 )
             elif kind == "commentary" and self.commentary_message is not None:
                 item_id = self.commentary_message.id
-                log.item_delta(turn.thread_id, turn.id, item_id, "agentMessage", combined)
+                logged = log.item_delta(turn.thread_id, turn.id, item_id, "agentMessage", combined)
                 await emitter.notify(
                     ServerMethod.ITEM_AGENT_MESSAGE_DELTA,
                     {
@@ -488,11 +489,12 @@ class _ReactBridgeState:
                         "turnId": turn.id,
                         "itemId": item_id,
                         "delta": combined,
+                        "eventId": logged.event_id,
                     },
                 )
             elif kind == "reasoning" and self.reasoning is not None:
                 item_id = self.reasoning.id
-                log.item_delta(turn.thread_id, turn.id, item_id, "reasoning", combined)
+                logged = log.item_delta(turn.thread_id, turn.id, item_id, "reasoning", combined)
                 await emitter.notify(
                     ServerMethod.ITEM_REASONING_TEXT_DELTA,
                     {
@@ -501,6 +503,7 @@ class _ReactBridgeState:
                         "itemId": item_id,
                         "delta": combined,
                         "contentIndex": 0,
+                        "eventId": logged.event_id,
                     },
                 )
             # else: the item was already finalized — drop the tail; the
@@ -580,7 +583,7 @@ class _ReactBridgeState:
         if item is None or not isinstance(delta, str) or not delta:
             return
         item.aggregated_output = _append_capped_output(item.aggregated_output or "", delta)
-        log.item_delta(turn.thread_id, turn.id, item.id, "commandOutput", delta)
+        logged = log.item_delta(turn.thread_id, turn.id, item.id, "commandOutput", delta)
         await emitter.notify(
             ServerMethod.ITEM_COMMAND_OUTPUT_DELTA,
             {
@@ -588,6 +591,7 @@ class _ReactBridgeState:
                 "turnId": turn.id,
                 "itemId": item.id,
                 "delta": delta,
+                "eventId": logged.event_id,
             },
         )
 
@@ -934,7 +938,7 @@ class _ReactBridgeState:
             else None
         )
         snapshot_payload = snapshot.model_dump(by_alias=True, mode="json")
-        log.turn_updated(
+        logged_update = log.turn_updated(
             turn.thread_id,
             turn.id,
             phases=phases_payload,
@@ -955,6 +959,7 @@ class _ReactBridgeState:
                 "phases": phases_payload,
                 **({"workspaceFocus": focus_payload} if focus_payload is not None else {}),
                 "workbenchSnapshot": snapshot_payload,
+                **({"eventId": logged_update.event_id} if logged_update is not None else {}),
             },
         )
         await emitter.notify(
@@ -988,7 +993,7 @@ class _ReactBridgeState:
                     "op": change.op,
                     "hunk": hunk_payload,
                 }
-                log.item_delta(
+                logged = log.item_delta(
                     turn.thread_id,
                     turn.id,
                     item.id,
@@ -1005,6 +1010,7 @@ class _ReactBridgeState:
                         "op": change.op,
                         "hunk": hunk_payload,
                         **({"workspaceFocus": focus_payload} if focus_payload is not None else {}),
+                        "eventId": logged.event_id,
                     },
                 )
 

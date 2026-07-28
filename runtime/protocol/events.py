@@ -55,6 +55,12 @@ class ServerMethod(StrEnum):
     THREAD_STARTED = "thread/started"
     THREAD_STATUS_CHANGED = "thread/status/changed"
     THREAD_TOKEN_USAGE_UPDATED = "thread/tokenUsage/updated"
+    # Compaction rewrote the visible turn set: ``supersededTurnIds`` were
+    # summarised into ``summaryTurn``. Emitted alongside the legacy
+    # ``thread/status/changed`` compaction marker so reducer-capable
+    # clients can apply the rewrite live instead of waiting for the next
+    # resume. Mirrors the persisted ``turn_compacted`` log event.
+    TURN_COMPACTED = "turn/compacted"
 
     # Turn lifecycle
     TURN_STARTED = "turn/started"

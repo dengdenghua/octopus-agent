@@ -918,7 +918,7 @@ async def _apply_react_event(
             sources_payload = [
                 source.model_dump(mode="json") for source in validated_sources
             ]
-            log.turn_updated(
+            logged_update = log.turn_updated(
                 turn.thread_id,
                 turn.id,
                 grounding=sources_payload,
@@ -929,6 +929,7 @@ async def _apply_react_event(
                     "threadId": turn.thread_id,
                     "turnId": turn.id,
                     "sources": sources_payload,
+                    **({"eventId": logged_update.event_id} if logged_update is not None else {}),
                 },
             )
         return

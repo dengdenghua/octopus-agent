@@ -719,6 +719,7 @@ class CerebrumRuntime:
         }
         temporary = path.with_suffix(f".{self._instance_id}.tmp")
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
             temporary.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
             os.replace(temporary, path)
         except OSError:
@@ -1163,10 +1164,14 @@ class CerebrumRuntime:
                 return log
             existed = log.path.exists() and log.path.stat().st_size > 0
             if not existed:
-                log.thread_started(thread_id)
+                evt = log.thread_started(thread_id)
                 await emitter.notify(
                     ServerMethod.THREAD_STARTED,
-                    {"thread": {"id": thread_id}},
+                    {
+                        "thread": {"id": thread_id},
+                        "threadId": thread_id,
+                        "eventId": evt.event_id,
+                    },
                 )
             self._known_threads.add(thread_id)
         return log
@@ -1370,6 +1375,97 @@ class CerebrumRuntime:
                 "nextEventSequence": next_sequence,
                 "eventStreamId": snapshot.stream_id,
             }
+        if method == "thread/events":
+            # Raw sequenced log slice for client-side replay (P2 of
+            # docs/client-replay-design.md). Unlike thread/resume's
+            # materialized turn snapshots, this ships the persisted events
+            # themselves so a reconnecting client folds only what it missed.
+            thread_id = self._require_thread_id(params.get("threadId"))
+            log = self._log_for(thread_id)
+            preflight_snapshot = log.snapshot()
+            preflight_turns = log.replay(preflight_snapshot)
+            self._require_thread_owner(
+                log,
+                getattr(emitter, "actor_id", None),
+                turns=preflight_turns,
+            )
+            summary = log.summary(preflight_snapshot)
+            if summary is not None and summary.archived:
+                raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
+            # Close stale turns BEFORE capturing the immutable prefix, same
+            # discipline as thread/resume: events and cursor below describe
+            # the exact same file prefix, so a concurrent append is either
+            # wholly included or wholly deferred to the next call.
+            self._resume_turns(log, turns=preflight_turns)
+            snapshot = log.snapshot()
+            requested_stream_id = params.get("eventStreamId")
+            raw_after = params.get("afterSequence")
+            after = (
+                raw_after
+                if isinstance(raw_after, int)
+                and not isinstance(raw_after, bool)
+                and raw_after >= 0
+                else 0
+            )
+            # Stream-id mismatch or an unsafe incremental window (compaction
+            # inside it, or a cursor beyond the current file) means the
+            # client must rebuild from scratch — serve the full log instead
+            # of an interpretable slice.
+            requires_reset = False
+            if isinstance(requested_stream_id, str) and requested_stream_id != snapshot.stream_id:
+                requires_reset = True
+            elif after > 0:
+                _, requires_reset = snapshot.cursor_delta(after)
+            if requires_reset:
+                after = 0
+            raw_limit = params.get("limit")
+            limit = (
+                raw_limit
+                if isinstance(raw_limit, int)
+                and not isinstance(raw_limit, bool)
+                and raw_limit > 0
+                else None
+            )
+            coalesce = params.get("mode") == "coalesce"
+            # Slice RAW events first; the limit counts raw entries so paging
+            # covers the log at a steady rate regardless of coalescing.
+            raw_slice = [(seq, event) for seq, event in snapshot.events if seq > after]
+            has_more = False
+            consumed_through = snapshot.cursor
+            if limit is not None and len(raw_slice) > limit:
+                raw_slice = raw_slice[:limit]
+                has_more = True
+                consumed_through = raw_slice[-1][0]
+            # mode=coalesce shrinks full-log fetches (cold start / cache
+            # backfill) without changing the state the slice rebuilds.
+            # Replay-equivalence lives in coalesce_events' docstring — note
+            # its eventId caveat: NEVER serve coalesced slices to a client
+            # whose dedupe ledger may hold live-delivered ids.
+            if coalesce:
+                from runtime.memory.threads.event_log import coalesce_events
+
+                raw_slice = coalesce_events(raw_slice)
+            events = [
+                {"sequence": sequence, **event.model_dump(by_alias=True, mode="json")}
+                for sequence, event in raw_slice
+            ]
+            # Drift-check metadata: computed from the SAME snapshot, so the
+            # client can verify its folded state against the authoritative
+            # replay without a second round trip. Only meaningful on the
+            # final page (has_more=False).
+            turns = log.replay(snapshot)
+            last_turn = turns[-1] if turns else None
+            return {
+                "thread": {"id": thread_id, "path": str(log.path)},
+                "events": events,
+                "cursor": consumed_through,
+                "streamId": snapshot.stream_id,
+                "requiresReset": requires_reset,
+                "hasMore": has_more,
+                "turnCount": len(turns),
+                "lastTurnId": last_turn.id if last_turn is not None else None,
+                "lastTurnStatus": last_turn.status.value if last_turn is not None else None,
+            }
         if method == "thread/compact":
             thread_id = self._require_thread_id(params.get("threadId"))
             self._require_thread_owner(self._log_for(thread_id), getattr(emitter, "actor_id", None))
@@ -1546,13 +1642,14 @@ class CerebrumRuntime:
         emitter: EventEmitter,
         item: Any,
     ) -> None:
-        log.item_started(turn.thread_id, turn.id, item)
+        evt = log.item_started(turn.thread_id, turn.id, item)
         await emitter.notify(
             ServerMethod.ITEM_STARTED,
             {
                 "threadId": turn.thread_id,
                 "turnId": turn.id,
                 "item": item.model_dump(by_alias=True, mode="json"),
+                "eventId": evt.event_id,
             },
         )
 
@@ -1563,13 +1660,14 @@ class CerebrumRuntime:
         emitter: EventEmitter,
         item: Any,
     ) -> None:
-        log.item_completed(turn.thread_id, turn.id, item)
+        evt = log.item_completed(turn.thread_id, turn.id, item)
         await emitter.notify(
             ServerMethod.ITEM_COMPLETED,
             {
                 "threadId": turn.thread_id,
                 "turnId": turn.id,
                 "item": item.model_dump(by_alias=True, mode="json"),
+                "eventId": evt.event_id,
             },
         )
 

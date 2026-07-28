@@ -244,7 +244,13 @@ class EventLog:
 
     # ── Writer side ──────────────────────────────────────────
 
-    def append(self, event: LoggedEvent) -> None:
+    def append(self, event: LoggedEvent) -> LoggedEvent:
+        """Append one event and return the stored copy (with its ``eventId``).
+
+        Callers that fan the event out to live subscribers stamp the returned
+        id onto the notification so clients can deduplicate live delivery
+        against a later log replay (at-least-once on both paths).
+        """
         if not event.event_id:
             event = event.model_copy(update={"event_id": f"evt_{new_id().hex}"})
         line = event.model_dump_json(by_alias=True) + "\n"
@@ -256,6 +262,7 @@ class EventLog:
             stream.seek(0, 2)
             stream.write(line)
             stream.flush()
+        return event
 
     def reserve_timeline_sequence(self, turn_id: str) -> int:
         """Atomically reserve the next 1-based item slot for one turn.
@@ -303,8 +310,8 @@ class EventLog:
             stream.flush()
             return reserved
 
-    def thread_started(self, thread_id: str) -> None:
-        self.append(
+    def thread_started(self, thread_id: str) -> LoggedEvent:
+        return self.append(
             LoggedEvent(
                 event="thread_started",
                 threadId=thread_id,
@@ -312,8 +319,8 @@ class EventLog:
             )
         )
 
-    def turn_started(self, thread_id: str, turn: Turn) -> None:
-        self.append(
+    def turn_started(self, thread_id: str, turn: Turn) -> LoggedEvent:
+        return self.append(
             LoggedEvent(
                 event="turn_started",
                 threadId=thread_id,
@@ -331,8 +338,8 @@ class EventLog:
         turn_id: str,
         status: TurnStatus,
         error: dict[str, Any] | None = None,
-    ) -> None:
-        self.append(
+    ) -> LoggedEvent:
+        return self.append(
             LoggedEvent(
                 event="turn_completed",
                 threadId=thread_id,
@@ -350,7 +357,7 @@ class EventLog:
         workspace_focus: dict[str, Any] | None = None,
         workbench_snapshot: dict[str, Any] | None = None,
         grounding: list[dict[str, str]] | None = None,
-    ) -> None:
+    ) -> LoggedEvent | None:
         payload: dict[str, Any] = {}
         if phases is not None:
             payload["phases"] = phases
@@ -361,8 +368,8 @@ class EventLog:
         if grounding is not None:
             payload["grounding"] = grounding
         if not payload:
-            return
-        self.append(
+            return None
+        return self.append(
             LoggedEvent(
                 event="turn_updated",
                 threadId=thread_id,
@@ -376,7 +383,7 @@ class EventLog:
         thread_id: str,
         summary_turn: Turn,
         superseded_turn_ids: list[str],
-    ) -> None:
+    ) -> LoggedEvent:
         """Record that ``superseded_turn_ids`` have been summarised into
         ``summary_turn``. Subsequent ``replay()`` calls will surface the
         summary in place of the old turns, keeping context bounded.
@@ -385,7 +392,7 @@ class EventLog:
         audits can reconstruct the original sequence by ignoring
         ``turn_compacted`` events. Replay is the only reader affected.
         """
-        self.append(
+        return self.append(
             LoggedEvent(
                 event="turn_compacted",
                 threadId=thread_id,
@@ -397,8 +404,8 @@ class EventLog:
             )
         )
 
-    def item_started(self, thread_id: str, turn_id: str, item: Item) -> None:
-        self.append(
+    def item_started(self, thread_id: str, turn_id: str, item: Item) -> LoggedEvent:
+        return self.append(
             LoggedEvent(
                 event="item_started",
                 threadId=thread_id,
@@ -414,8 +421,8 @@ class EventLog:
         item_id: str,
         kind: str,
         delta: Any,
-    ) -> None:
-        self.append(
+    ) -> LoggedEvent:
+        return self.append(
             LoggedEvent(
                 event="item_delta",
                 threadId=thread_id,
@@ -424,8 +431,8 @@ class EventLog:
             )
         )
 
-    def item_completed(self, thread_id: str, turn_id: str, item: Item) -> None:
-        self.append(
+    def item_completed(self, thread_id: str, turn_id: str, item: Item) -> LoggedEvent:
+        return self.append(
             LoggedEvent(
                 event="item_completed",
                 threadId=thread_id,
@@ -674,6 +681,141 @@ class ThreadSummary(BaseModel):
     turn_count: int = Field(alias="turnCount")
     last_turn_status: TurnStatus | None = Field(default=None, alias="lastTurnStatus")
     archived: bool = False
+
+
+# Delta kinds whose payload is an append-only text string.
+_COALESCE_TEXT_KINDS = frozenset({"agentMessage", "reasoning", "plan", "commandOutput"})
+
+
+def coalesce_events(
+    events: list[tuple[int, "LoggedEvent"]],
+) -> list[tuple[int, "LoggedEvent"]]:
+    """Shrink a raw event slice without changing the state it rebuilds.
+
+    Intended for full-log fetches (cold start / cache backfill), where
+    shipping every delta of a long-finished item wastes the wire. The
+    transform is replay-equivalent — ``EventLogSnapshot(events=coalesced)``
+    replays to the same turns as the raw slice:
+
+    - An item COMPLETED inside this slice carries its full snapshot in the
+      ``item_completed`` event, so its earlier ``item_started`` and all
+      earlier deltas are dropped. Deltas landing AFTER the completion
+      (rare, but legal) are kept verbatim.
+    - Surviving text deltas for one (turn, item, kind) merge into a single
+      concatenated delta at the position of the first — folding N appends
+      equals folding one concatenated append.
+    - ``mcpToolProgress`` deltas are absolute patches; only the latest per
+      item survives.
+    - ``turn_updated`` payloads are per-field absolute patches; they merge
+      per turn with later fields winning.
+    - Everything else (turn lifecycle, compaction, hunks, completions)
+      passes through untouched.
+
+    Sequence semantics: each output event keeps the sequence and eventId
+    of its FIRST contributor. Gaps are fine — consumers order by
+    sequence and page by the response cursor, never by contiguity.
+
+    IMPORTANT: merged events share an eventId with their first delta, so
+    a client that applies live notifications MUST NOT use this mode when
+    its dedupe ledger may already hold ids from the slice (a merged event
+    re-delivers the text of deltas it already saw). Coalesce is for empty
+    states and cache backfill only.
+    """
+    if not events:
+        return []
+
+    # Completion boundary per item: anything before it is redundant.
+    completion_seq: dict[str, int] = {}
+    for sequence, event in events:
+        if event.event != "item_completed":
+            continue
+        item = event.payload.get("item")
+        if isinstance(item, dict) and isinstance(item.get("id"), str):
+            completion_seq[item["id"]] = sequence
+
+    out: list[tuple[int, LoggedEvent]] = []
+    text_group_index: dict[tuple[str | None, str, str], int] = {}
+    progress_index: dict[str, int] = {}
+    turn_update_index: dict[str, int] = {}
+
+    for sequence, event in events:
+        kind = event.event
+        payload = event.payload
+
+        if kind == "item_started":
+            item = payload.get("item")
+            item_id = item.get("id") if isinstance(item, dict) else None
+            boundary = completion_seq.get(item_id) if isinstance(item_id, str) else None
+            if boundary is not None and sequence < boundary:
+                continue  # the completed snapshot supersedes this start
+            out.append((sequence, event))
+            continue
+
+        if kind == "item_delta":
+            item_id = payload.get("itemId")
+            delta_kind = payload.get("kind")
+            boundary = (
+                completion_seq.get(item_id) if isinstance(item_id, str) else None
+            )
+            if boundary is not None and sequence < boundary:
+                continue  # the completed snapshot carries the full content
+            if (
+                isinstance(item_id, str)
+                and isinstance(delta_kind, str)
+                and delta_kind in _COALESCE_TEXT_KINDS
+                and isinstance(payload.get("delta"), str)
+            ):
+                key = (event.turn_id, item_id, delta_kind)
+                existing = text_group_index.get(key)
+                if existing is None:
+                    text_group_index[key] = len(out)
+                    out.append((sequence, event))
+                else:
+                    first_seq, first_event = out[existing]
+                    merged_payload = dict(first_event.payload)
+                    merged_payload["delta"] = (
+                        str(merged_payload.get("delta", "")) + payload["delta"]
+                    )
+                    merged_payload["coalesced"] = True
+                    out[existing] = (
+                        first_seq,
+                        first_event.model_copy(update={"payload": merged_payload}),
+                    )
+                continue
+            if (
+                isinstance(item_id, str)
+                and delta_kind == "mcpToolProgress"
+                and isinstance(payload.get("delta"), dict)
+            ):
+                existing = progress_index.get(item_id)
+                if existing is None:
+                    progress_index[item_id] = len(out)
+                    out.append((sequence, event))
+                else:
+                    first_seq, _first_event = out[existing]
+                    out[existing] = (first_seq, event)
+                continue
+            out.append((sequence, event))
+            continue
+
+        if kind == "turn_updated" and event.turn_id:
+            existing = turn_update_index.get(event.turn_id)
+            if existing is None:
+                turn_update_index[event.turn_id] = len(out)
+                out.append((sequence, event))
+            else:
+                first_seq, first_event = out[existing]
+                # Per-field absolute patches: later fields win.
+                merged_payload = {**first_event.payload, **payload}
+                out[existing] = (
+                    first_seq,
+                    first_event.model_copy(update={"payload": merged_payload}),
+                )
+            continue
+
+        out.append((sequence, event))
+
+    return out
 
 
 def list_threads(logs_root: Path | str) -> list[ThreadSummary]:

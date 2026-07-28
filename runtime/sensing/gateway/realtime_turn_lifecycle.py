@@ -342,13 +342,14 @@ async def _start_turn(
     emitter.register_turn(turn.id)
     runtime._register_active_turn(turn, log)
     try:
-        log.turn_started(thread_id, turn)
+        evt = log.turn_started(thread_id, turn)
         runtime._active_turn_ids.add(turn.id)
         await emitter.notify(
             ServerMethod.TURN_STARTED,
             {
                 "threadId": thread_id,
                 "turn": turn.model_dump(by_alias=True, mode="json"),
+                "eventId": evt.event_id,
             },
         )
         runtime._record_task_run_started(turn, text=text, params=validated)
