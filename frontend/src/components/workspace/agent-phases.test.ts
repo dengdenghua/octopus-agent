@@ -517,12 +517,22 @@ describe("agent phases", () => {
     ]);
   });
 
-  test("generic phases expose an i18n title key", () => {
+  test("uses the observed target instead of a generic label for a single read", () => {
     const state = deriveAgentPhases([
-      event({ id: "read-1", name: "read_file", input: { path: "a.ts" } }),
+      event({
+        id: "read-1",
+        name: "read_file",
+        input: { path: "runtime/core/cerebrum/react_public_updates.py" },
+      }),
     ]);
-    expect(state.phases.length).toBeGreaterThan(0);
-    expect(state.phases.every((phase) => Boolean(phase.titleKey))).toBe(true);
+    expect(state.phases).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "react_public_updates.py",
+          titleKey: undefined,
+        }),
+      ]),
+    );
   });
 
   test("keeps real todo titles instead of replacing them with business labels", () => {
