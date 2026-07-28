@@ -93,7 +93,12 @@ def model_supports_thinking(model_name: str) -> bool:
     """Whether a model id supports an extended-thinking / reasoning mode.
 
     Model-capability knowledge — lives with the model types so the kernel
-    can ask without importing the sensing/gateway layer.
+    can ask without importing the sensing/gateway layer. Match narrowly:
+    a false positive asks a non-thinking model for a reasoning channel it
+    may reject; a false negative merely leaves the reasoning surface
+    empty (custom endpoints can always declare ``supports_thinking`` in
+    ``custom_models.json`` — ``custom_model_supports_thinking`` ORs into
+    the router-level decision).
     """
     m = (model_name or "").lower()
     if m.startswith(("o1", "o3", "o4")):
@@ -101,6 +106,21 @@ def model_supports_thinking(model_name: str) -> bool:
     if "gpt-5" in m or "gpt-oss" in m:
         return True
     if "deepseek-v4" in m or "deepseek-reasoner" in m:
+        return True
+    # Moonshot reasoning models expose ``reasoning_content`` — the
+    # thinking preview and the K2-thinking line. Plain K2 / K2-instruct
+    # do not think, so match the thinking variants only.
+    if "kimi-thinking" in m or "k2-thinking" in m:
+        return True
+    # Qwen3 hybrid series honors ``enable_thinking``; the later
+    # ``-instruct-2507`` refresh dropped the thinking mode.
+    if "qwen3" in m and "instruct" not in m:
+        return True
+    # Zhipu GLM reasoning generations (``thinking.type=enabled``).
+    if "glm-4.5" in m or "glm-4.6" in m:
+        return True
+    # Gemini thinking generations think natively.
+    if "gemini-2.5" in m or "gemini-3" in m:
         return True
     if "sonnet-4" in m or "opus-4" in m:
         return True
