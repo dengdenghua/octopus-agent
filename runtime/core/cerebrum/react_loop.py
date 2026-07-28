@@ -121,6 +121,10 @@ from runtime.core.cerebrum.react_loop_controls import (
     pick_react_variant,
     record_react_variant_result,
 )
+from runtime.core.cerebrum.react_loop_state import (
+    _LoopControl,
+    _LoopState,
+)
 from runtime.core.cerebrum.react_model_deadlines import (
     _MODEL_STREAM_DEADLINE,
     _collect_model_stream_text_with_deadline,
@@ -155,6 +159,9 @@ from runtime.core.cerebrum.react_parsing import (
     _safe_for_streamdown,
     _summarize_observation,
     extract_streamable_thought,
+)
+from runtime.core.cerebrum.react_phase_6c import (
+    _phase_6c_parse_and_guard,
 )
 from runtime.core.cerebrum.react_public_updates import (
     _PUBLIC_EVIDENCE_STREAM_GATE_CHARS,
@@ -258,23 +265,29 @@ __all__ = [
     "_extract_final_answer",
     "_failed_verification_followup_guard",
     "_finalize_react_turn",
+    "_finish_reason_is_length_limited",
     "_format_background_task_heartbeat",
     "_format_skill_catalog",
     "_guard_hit_recorder",
     "_guard_reason_for_user",
     "_has_unrecovered_beak_failure",
     "_image_blocks_from_attachments",
+    "_is_format_violation",
     "_is_scoped_artifact_write",
     "_long_task_budget_limits",
     "_looks_like_image_attachment",
+    "_looks_like_unfinished_work",
     "_mirror_checkpoint",
     "_normalized_tool_call_from_react_action",
     "_native_tool_calls_missing_required_args",
     "_parse_action",
+    "_parse_reasoning_action_fallback",
     "_parse_step",
+    "_persist_react_trajectory",
     "_placeholder_observation",
     "_quiet_evidence_targets",
     "_react_completion_receipt",
+    "_recover_explicit_read_actions",
     "_redundant_green_verification_guard",
     "_rehydrate_messages_from_steps",
     "_reset_checkpoint_mirror_for_tests",
@@ -285,7 +298,9 @@ __all__ = [
     "_safe_for_streamdown",
     "_should_auto_checkpoint",
     "_skill_available_in_executor",
+    "_stage_update_timeout_fallback",
     "_tool_event_extras_from_beak_step",
+    "_unfinished_implementation_recovery_needed",
     "_unverified_write_followup_guard",
     "_WRITE_TOOLS",
     "get_react_variant_stats",
@@ -402,7 +417,6 @@ def stream_react_loop(
         build_loop_tool_specs,
         native_tool_use_active,
         require_public_update_on_tool_specs,
-        step_from_tool_calls,
         trim_text_protocol_for_native,
     )
 
@@ -1869,6 +1883,36 @@ def stream_react_loop(
         if _initial_public_update:
             _last_public_update_key = re.sub(r"\s+", " ", _initial_public_update).strip().casefold()
 
+    # ── _LoopState assembly (Wave 2) ─────────────────────────────────
+    # Reference-typed fields share objects with the locals above;
+    # constant scalars are snapshotted here and per-iteration scalars
+    # are synced at each extracted-phase call site (currently 6c).
+    state = _LoopState(
+        stack=stack,
+        goal=intent.normalized_goal,
+        executor=executor,
+        react_task_id=react_task_id,
+        pause_controller=_pause,
+        effective_wp=_effective_wp,
+        format_violation_bail_at=_format_violation_bail_at,
+        final_guard_grounded_source_paths=_final_guard_grounded_source_paths,
+        guard_impasse_state=_guard_impasse_state,
+        is_code_mode=_is_code_mode,
+        browser_operation_mode=_browser_operation_mode,
+        todo_protocol_required=_todo_protocol_required,
+        todo_protocol_visible=_todo_protocol_visible,
+        file_inspection_tools_visible=_file_inspection_tools_visible,
+        read_only_turn=_read_only_turn,
+        no_tool_turn=_no_tool_turn,
+        steps=steps,
+        executed_beak_steps=executed_beak_steps,
+        native_mode=_native_mode,
+        throughput_chars=_throughput_chars,
+        terminated_reason=terminated_reason,
+        final_answer=final_answer,
+        final_answer_emitted=final_answer_emitted,
+    )
+
     for i in range(resume_from_iter, max_iterations):
         # ── PHASE 6a · cancel / pause guard ────────────────────────────
         _guard_terminated_reason = yield from _cancel_pause_guard(
@@ -2422,432 +2466,63 @@ def stream_react_loop(
             _logger.debug("budget check failed", exc_info=True)
 
         # ── PHASE 6c · parse step / format-violation check ─────────────
-        text = (resp.text or raw_text or "").strip()
-        resp_thinking = (getattr(resp, "thinking", "") or "").strip()
-        if _native_mode and resp is not None and getattr(resp, "tool_calls", None):
-            # Native tool-use: read the action straight off the structured
-            # tool_calls instead of regex-parsing it out of free text. Only
-            # falls through to the text parser when the model returned no
-            # tool calls (i.e. it produced a final answer).
-            step = step_from_tool_calls(
-                resp.tool_calls,
-                text=resp.text or "",
-                thinking=getattr(resp, "thinking", "") or "",
-                iteration=i + 1,
-                evidence_round=_request_has_tool_evidence,
-            )
-            maybe_final = None
-            _missing_native_args = _native_tool_calls_missing_required_args(resp.tool_calls)
-            if _missing_native_args:
-                # Some OpenAI-compatible reasoning providers surface a tool
-                # name from their private XML envelope but drop its JSON
-                # arguments. Executing that call only creates misleading
-                # "missing path/command" failures. Fall back to the explicit
-                # ReAct wire format for the next round, where the ordinary
-                # parser can recover a complete Action payload.
-                _native_mode = False
-                step.action = ""
-                step.actions = []
-                step.action_results = []
-                step.observation = (
-                    "[tool-call-protocol-error] The provider emitted native "
-                    "tool call(s) without required JSON arguments: "
-                    + ", ".join(_missing_native_args)
-                    + ". Nothing was executed. Retry on the next round using "
-                    "exactly Action: skill_name({JSON arguments}); include every "
-                    "required path, command, code, query, or content field."
-                )
-        else:
-            step, maybe_final = _parse_step(text, iteration=i + 1)
-            if not text and resp_thinking:
-                reasoning_step = _parse_reasoning_action_fallback(
-                    resp_thinking,
-                    iteration=i + 1,
-                )
-                if reasoning_step is not None:
-                    step = reasoning_step
-                    maybe_final = None
-        if _looks_like_special_tool_envelope(text) and not step.actions and not step.action:
-            # The provider exposed a private tool sentinel but supplied no
-            # structured call.  Make the failure an Observation so the next
-            # model round repairs its syntax instead of ending the user turn
-            # with raw control tokens and zero executed tools.
-            step.observation = (
-                "[tool-call-protocol-error] Provider emitted a tool-call envelope "
-                "without an executable tool name and JSON arguments. No tool was "
-                "executed. Retry now using Action: skill_name({JSON}); do not narrate "
-                "the intended call or repeat the private <|tool_calls_*|> markers."
-            )
-            maybe_final = None
-        if (
-            _looks_like_observation_echo(text)
-            and not step.observation
-            and not step.action
-            and maybe_final is None
-        ):
-            step.observation = text
-        if (
-            _iteration_soft_timed_out
-            and maybe_final is None
-            and (not step.action or _evidence_convergence_active is not None)
-        ):
-            _model_timeout_recoveries += 1
-            if _model_timeout_recoveries >= 2:
-                if _evidence_convergence_active is not None:
-                    # A provider can ignore tools=[] and finish a timed-out
-                    # convergence round with another phantom tool call. That
-                    # action is unusable once the requested evidence is
-                    # complete and must not reset the stall counter. Surface a
-                    # truthful handoff as ordinary answer text before the
-                    # terminal receipt; emitting react_error first makes the
-                    # realtime gateway close the turn and drop that text.
-                    final_answer = _stage_update_timeout_fallback(steps)
-                    step.observation = (
-                        "[model-iteration-timeout] evidence synthesis retry also timed out"
-                    )
-                    steps.append(step)
-                    terminated_reason = "model_stall"
-                    break
-                stall_message = (
-                    "模型连续两次在单轮时限内未能给出下一步操作或最终答案。"
-                    "前面已完成的结果仍已保留，但这次无法可靠完成最终汇总。"
-                    "你可以点击继续，系统会从已保存的进度重新收敛。"
-                )
-                yield {
-                    "type": "react_error",
-                    "kind": "model_stall",
-                    "message": stall_message,
-                    "iteration": i + 1,
-                }
-                step.observation = "[model-iteration-timeout] convergence retry also timed out"
-                steps.append(step)
-                terminated_reason = "model_stall"
-                break
-            _fallback_model = None
-            if not _final_stream_started:
-                _fallback_model = _try_react_model_failover("model stream timeout")
-            recovery_update = (
-                "当前模型响应过慢，已保留现有结果并切换备用模型继续。"
-                if _fallback_model
-                else (
-                    "这一轮响应超过了单轮时限；已保留前面的有效结果，"
-                    "下一轮会减少额外操作，直接收拢阶段结论、必要操作或最终答案。"
-                )
-            )
-            yield {
-                "type": "commentary_delta",
-                "delta": recovery_update,
-                "progress_source": "runtime",
-                # This is an operational truth, not generic stage narration.
-                # Keep it visible so a slow-provider failover never looks like
-                # an unexplained frozen conversation.
-                "public_status": True,
-                "iteration": i + 1,
-            }
-            if _fallback_model:
-                yield {
-                    "type": "react_retry",
-                    "kind": "model_failover",
-                    "model": _fallback_model,
-                    "iteration": i + 1,
-                    "attempt": _model_failovers,
-                }
-            step.public_update = recovery_update
-            _timeout_recovery_observation = (
-                "[model-iteration-timeout] The previous model stream kept producing "
-                "private reasoning without a usable Action or Final Answer. Preserve "
-                "all completed tool results. A backup model may now be active. "
-                "On the next turn, do not deliberate at "
-                "length: emit one concrete Update plus the next necessary Action, or "
-                "emit the complete Final Answer directly."
-            )
-            if _evidence_convergence_active is not None:
-                _recovery_directive = build_direct_answer_directive(
-                    goal=intent.normalized_goal,
-                    decision=_evidence_convergence_active,
-                    steps=steps,
-                )
-                if _recovery_directive:
-                    _timeout_recovery_observation += f"\n\n{_recovery_directive}"
-            step.observation = _timeout_recovery_observation
-            _force_convergence_next = True
-        elif step.action or maybe_final is not None:
-            _model_timeout_recoveries = 0
-        _finish_reason = (getattr(resp, "finish_reason", "") or "").strip().lower()
-        _length_limited = _finish_reason_is_length_limited(_finish_reason)
-        _length_limit_should_continue = False
-        if (
-            maybe_final
-            and not _final_stream_started
-            and _evidence_convergence_active is None
-            and not (_todo_protocol_required and _todo_protocol_visible)
-            and not _final_answer_needs_pre_emit_guard(
-                maybe_final,
-                is_code_mode=_is_code_mode,
-                browser_operation_mode=_browser_operation_mode,
-            )
-        ):
-            # Fall-through emission for routers that don't actually
-            # stream (e.g. tests, non-streaming providers): yield the
-            # parsed final once. When _final_stream_started is true the
-            # user has already seen these tokens live, so skip to avoid
-            # duplicate text in the transcript.
-            yield {
-                "type": "text_delta",
-                "delta": maybe_final,
-                "iteration": i + 1,
-            }
-            _final_delta_emitted_this_iteration = True
+        # Sync per-iteration scalars into state; the phase pulls/pushes
+        # them internally and the write-set is synced back below.
+        state.native_mode = _native_mode
+        state.evidence_convergence_active = _evidence_convergence_active
+        state.model_timeout_recoveries = _model_timeout_recoveries
+        state.model_failovers = _model_failovers
+        state.final_stream_started = _final_stream_started
+        state.force_convergence_next = _force_convergence_next
+        state.tools_active = tools_active
+        state.consecutive_format_violations = consecutive_format_violations
+        state.throughput_chars = _throughput_chars
+        state.final_answer = final_answer
+        state.terminated_reason = terminated_reason
+        state.final_answer_emitted = final_answer_emitted
+        state.final_delta_emitted_this_iteration = _final_delta_emitted_this_iteration
 
-        # Chat-style answer recovery: the model produced plain
-        # markdown without any ReAct anchor BUT we already streamed
-        # it live via the 120-char early-flush branch in the LLM
-        # call loop above. Treat that streamed prose AS the final
-        # answer — don't waste a second LLM round to bail. Without
-        # this short-circuit, real chat-style replies (mimo's
-        # default shape) burn the bail-at budget and emit the same
-        # text twice on iteration N+1.
-        if (
-            _final_stream_started
-            and not maybe_final
-            and step.action.lower() in {"none", "n/a", ""}
-            and not _looks_like_observation_echo(text)
-            and not _FINAL_RE.search(text)
-            and not _looks_like_unfinished_work(text)
-        ):
-            _guard_hit = _evaluate_final_answer_guards(
-                steps=steps,
-                step=step,
-                final_answer=text,
-                is_code_mode=_is_code_mode,
-                todo_protocol_required=_todo_protocol_required,
-                todo_protocol_visible=_todo_protocol_visible,
-                file_inspection_tools_visible=_file_inspection_tools_visible,
-                tools_active=tools_active,
-                goal=intent.normalized_goal,
-                browser_operation_mode=_browser_operation_mode,
-                grounded_source_paths=_final_guard_grounded_source_paths,
-                categories=(
-                    None
-                    if (_browser_operation_mode or _is_code_mode)
-                    else frozenset({"security", "protocol", "research"})
-                ),
-            )
-            if _guard_hit is not None:
-                _guard_label, _guard_message = _guard_hit
-                if _note_guard_impasse(_guard_impasse_state, _guard_label, steps):
-                    # Same loop-level bound as the main guard site: the
-                    # chat-flush path rejects and continues too, so an
-                    # unsatisfiable guard here would livelock identically.
-                    _logger.warning(
-                        "react_loop guard impasse (chat-flush) · %s rejected 3x "
-                        "with no intervening tool execution — terminating",
-                        _guard_label,
-                    )
-                    final_answer = _guard_impasse_final_answer(_guard_label, _guard_message)
-                    terminated_reason = "guard_impasse"
-                    steps.append(step)
-                    break
-                _final_stream_started = False
-                step.observation = (
-                    (((step.observation or "") + "\n\n") if step.observation else "")
-                    + f"[{_guard_label}]\n"
-                    + _guard_message
-                )
-                maybe_final = None
-            else:
-                final_answer = text
-                terminated_reason = "final_answer"
-                final_answer_emitted = True
-                steps.append(step)
-                break
+        def _try_failover_for_6c(reason: str) -> str | None:
+            # The failover closure reads the loop's ``_native_mode`` and
+            # bumps ``_model_failovers`` via nonlocal; mirror both through
+            # state so the phase observes the same values the inline code
+            # used to see. ``next_custom_model_fallback`` keeps resolving
+            # through the react_loop module global (tests patch it there).
+            nonlocal _native_mode
+            _native_mode = state.native_mode
+            _fallback = _try_react_model_failover(reason)
+            state.model_failovers = _model_failovers
+            return _fallback
 
-        if maybe_final is None and not step.action and not step.observation:
-            _recovered_read_actions = _recover_explicit_read_actions(
-                goal=intent.normalized_goal,
-                model_text=step.thought or text,
-                workspace_path=(_effective_wp if isinstance(_effective_wp, str) else None),
-                steps=steps,
-                executor=executor,
-                read_only=_read_only_turn,
-            )
-            if _recovered_read_actions:
-                step.actions = _recovered_read_actions
-                step.action = "; ".join(_recovered_read_actions)
-                if not step.thought:
-                    step.thought = text
-                consecutive_format_violations = 0
-
-        if _is_format_violation(step, maybe_final):
-            # Length-limited generation gets a free pass on the
-            # zero-anchor format violation. The model didn't emit a
-            # final answer because it ran out of tokens mid-sentence,
-            # not because it broke the protocol — the continuation
-            # branch below will inject a "Continue exactly where it
-            # stopped" nudge and the next iteration will finish.
-            _is_length_truncated = _finish_reason_is_length_limited(
-                getattr(resp, "finish_reason", "")
-            )
-            if _is_length_truncated:
-                # Surface the partial text so the user sees streaming
-                # progress; don't count it against bail-at.
-                if text and not maybe_final:
-                    yield {
-                        "type": "text_delta",
-                        "delta": text,
-                        "iteration": i + 1,
-                    }
-                consecutive_format_violations = 0
-            elif _unfinished_implementation_recovery_needed(
-                text,
-                intent.normalized_goal,
-                is_code_mode=_is_code_mode,
-            ):
-                # Free-form implementation diagnosis is not a final answer.
-                # Providers sometimes narrate the exact remaining defect but
-                # omit the ReAct Action anchor; the old two-strike fallback
-                # terminated at that point and left knowingly broken code.
-                # Preserve the diagnosis as an observation and make the next
-                # round a bounded, no-extended-thinking convergence attempt.
-                consecutive_format_violations = 0
-                _final_stream_started = False
-                step.observation = (
-                    "[unfinished-work-recovery] Your previous prose explicitly says work remains. "
-                    "Do not restate the diagnosis. Execute the next necessary tool call now using "
-                    "Action: skill_name({JSON}); after focused verification passes, emit Final Answer."
-                )
-                _force_convergence_next = True
-                yield {
-                    "type": "commentary_delta",
-                    "delta": "检测到尚未完成的实现诊断；已保留结论，下一轮直接执行修复。",
-                    "progress_source": "runtime",
-                    "iteration": i + 1,
-                }
-            else:
-                consecutive_format_violations += 1
-                _plain_answer_can_finish = bool(
-                    text
-                    and not maybe_final
-                    and (
-                        _no_tool_turn
-                        or i > 0
-                        or executed_beak_steps
-                        or any(
-                            prior_step.action_results
-                            or (prior_step.action and prior_step.observation)
-                            for prior_step in steps
-                        )
-                    )
-                )
-                _logger.warning(
-                    "react_loop iter %d · LLM produced zero ReAct anchors "
-                    "(consec=%d/%d) · raw head=%r",
-                    i + 1,
-                    consecutive_format_violations,
-                    _format_violation_bail_at,
-                    text[:200],
-                )
-                if (
-                    consecutive_format_violations >= _format_violation_bail_at
-                    or _plain_answer_can_finish
-                ):
-                    # Salvage the model's raw output as the final reply.
-                    # Without this yield the gateway records a turn that
-                    # produced no text → frontend renders the stream as
-                    # "本次回复已中断" even though the model spoke. This
-                    # is the most common shape of zero-anchor: a research
-                    # / chat-style answer in plain markdown without
-                    # ``Final Answer:`` prefix. Treat it as the answer
-                    # rather than silently discarding it.
-                    # If the chat-style early-flush branch above already
-                    # streamed this text live, skip the duplicate yield —
-                    # otherwise the user sees the answer twice.
-                    _guard_hit = None
-                    if text and not maybe_final:
-                        _guard_hit = _evaluate_final_answer_guards(
-                            steps=steps,
-                            step=step,
-                            final_answer=text,
-                            is_code_mode=_is_code_mode,
-                            todo_protocol_required=_todo_protocol_required,
-                            todo_protocol_visible=_todo_protocol_visible,
-                            file_inspection_tools_visible=_file_inspection_tools_visible,
-                            tools_active=tools_active,
-                            goal=intent.normalized_goal,
-                            browser_operation_mode=_browser_operation_mode,
-                            grounded_source_paths=_final_guard_grounded_source_paths,
-                            categories=(
-                                None
-                                if (_browser_operation_mode or _is_code_mode)
-                                else frozenset({"security", "protocol", "research"})
-                            ),
-                        )
-                    if _guard_hit is not None:
-                        _guard_label, _guard_message = _guard_hit
-                        if _note_guard_impasse(
-                            _guard_impasse_state,
-                            _guard_label,
-                            steps,
-                        ):
-                            _logger.warning(
-                                "react_loop guard impasse (plain-answer recovery) · "
-                                "%s rejected 3x with no intervening tool execution — "
-                                "terminating",
-                                _guard_label,
-                            )
-                            final_answer = _guard_impasse_final_answer(
-                                _guard_label,
-                                _guard_message,
-                            )
-                            terminated_reason = "guard_impasse"
-                            steps.append(step)
-                            break
-                        consecutive_format_violations = 0
-                        step.observation = (
-                            (((step.observation or "") + "\n\n") if step.observation else "")
-                            + f"[{_guard_label}]\n"
-                            + _guard_message
-                        )
-                    if _guard_hit is not None:
-                        consecutive_format_violations = 0
-                        maybe_final = None
-                    elif text and not maybe_final:
-                        # Guarded plain prose is a valid final answer even when
-                        # the provider omitted the literal ReAct label. The old
-                        # path surfaced the text and then returned ``None``, so
-                        # the gateway still marked a visibly complete reply as
-                        # interrupted. Finish the turn normally instead.
-                        if not _final_stream_started:
-                            yield {
-                                "type": "text_delta",
-                                "delta": text,
-                                "iteration": i + 1,
-                            }
-                        final_answer = text
-                        final_answer_emitted = True
-                        terminated_reason = "final_answer"
-                        steps.append(step)
-                        break
-                    else:
-                        _persist_react_trajectory(
-                            stack,
-                            react_task_id=react_task_id,
-                            beak_steps=executed_beak_steps,
-                            success=False,
-                        )
-                        _pause.unregister_active(str(react_task_id))
-                        return None
-        else:
-            consecutive_format_violations = 0
-
-        if resp_thinking and not step.thought:
-            step.thought = resp_thinking
-
-        _throughput_chars += len(text)
-        _tp = _maybe_emit_throughput(_throughput_chars)
-        if _tp is not None:
-            yield _tp
-
+        _loop_ctrl = yield from _phase_6c_parse_and_guard(
+            state,
+            resp=resp,
+            raw_text=raw_text,
+            i=i,
+            request_has_tool_evidence=_request_has_tool_evidence,
+            iteration_soft_timed_out=_iteration_soft_timed_out,
+            try_react_model_failover=_try_failover_for_6c,
+            maybe_emit_throughput=_maybe_emit_throughput,
+        )
+        _native_mode = state.native_mode
+        _model_timeout_recoveries = state.model_timeout_recoveries
+        _final_stream_started = state.final_stream_started
+        _force_convergence_next = state.force_convergence_next
+        consecutive_format_violations = state.consecutive_format_violations
+        _throughput_chars = state.throughput_chars
+        final_answer = state.final_answer
+        terminated_reason = state.terminated_reason
+        final_answer_emitted = state.final_answer_emitted
+        _final_delta_emitted_this_iteration = state.final_delta_emitted_this_iteration
+        step = state.step
+        maybe_final = state.maybe_final
+        text = state.text
+        _length_limited = state.length_limited
+        _length_limit_should_continue = state.length_limit_should_continue
+        if _loop_ctrl is _LoopControl.RETURN_NONE:
+            return None
+        if _loop_ctrl is _LoopControl.BREAK:
+            break
         # ── PHASE 6d · action dispatch + observation ───────────────────
         observation: str | None = step.observation or None
         resolved_name: str | None = None
