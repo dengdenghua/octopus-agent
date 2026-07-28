@@ -1037,6 +1037,10 @@ export interface Translations {
     statusError: string;
     statusDone: string;
     progress: string;
+    thinkingDetail: string;
+    thinkingInProgress: string;
+    thinkingDone: string;
+    executionDetail: string;
     roundTitle: (iteration: number) => string;
     roundActivitySummary: (actionCount: number, factCount: number) => string;
     artifacts: string;

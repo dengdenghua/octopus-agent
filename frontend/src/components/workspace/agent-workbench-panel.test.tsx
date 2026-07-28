@@ -1276,7 +1276,7 @@ describe("<AgentWorkbenchPanel />", () => {
     await waitFor(() => expect(onSelectTab).toHaveBeenCalledWith("terminal"));
   });
 
-  test("keeps selected public thinking in the transcript instead of repeating it in the summary", async () => {
+  test("renders selected public thinking detail in the summary panel", async () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         focusedEventId="thinking-7"
@@ -1297,16 +1297,15 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    // The detail text now renders in a thinking-detail card so the user can
+    // read the full thought after clicking the thinking row in the chat.
     expect(
-      screen.queryByTestId("focused-process-event"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("当前对话")).not.toBeInTheDocument();
-    expect(screen.queryByText("已确认时间线顺序")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(
+      screen.getByText(
         "已确认公开进展位于工具结果之后，最终回答之前；下一步检查刷新后的顺序是否保持。",
       ),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
+    // The summary label and transcript-only metadata stay out of the panel.
+    expect(screen.queryByText("当前对话")).not.toBeInTheDocument();
     expect(screen.queryByText("phase-verify")).not.toBeInTheDocument();
     expect(screen.queryByText(/时间线第 7 条/)).not.toBeInTheDocument();
     expect(screen.queryByText("#7")).not.toBeInTheDocument();
@@ -1315,7 +1314,7 @@ describe("<AgentWorkbenchPanel />", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("does not duplicate selected execution events in the summary", async () => {
+  test("renders selected execution detail in the summary panel", async () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         focusedEventId="write-9"
@@ -1333,14 +1332,11 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    // The detail text now renders in an execution-detail card.
     expect(
-      screen.queryByTestId("focused-process-event"),
-    ).not.toBeInTheDocument();
+      screen.getByText("修改了主对话里的进展行，右侧会展示对应证据。"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("当前对话")).not.toBeInTheDocument();
-    expect(screen.queryByText("已更新消息排版")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("修改了主对话里的进展行，右侧会展示对应证据。"),
-    ).not.toBeInTheDocument();
     expect(screen.queryByText("执行日志")).not.toBeInTheDocument();
   });
 

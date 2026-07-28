@@ -1249,6 +1249,10 @@ export const enUS: Translations = {
     statusError: "Error",
     statusDone: "Done",
     progress: "Progress",
+    thinkingDetail: "Thinking",
+    thinkingInProgress: "Thinking",
+    thinkingDone: "Done",
+    executionDetail: "Execution",
     roundTitle: (iteration) => `Round ${iteration}`,
     roundActivitySummary: (actionCount, factCount) =>
       actionCount > 0 && factCount > 0

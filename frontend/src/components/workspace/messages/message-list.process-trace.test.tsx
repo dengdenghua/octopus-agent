@@ -1121,7 +1121,7 @@ describe("streamingMessageProgressKey", () => {
 });
 
 describe("MessageList reasoning privacy", () => {
-  test("does not derive visible thinking from raw reasoning content", () => {
+  test("falls back to raw reasoning content for the thinking row when no public summary exists", () => {
     const privateChineseReasoning =
       '\u7528\u6237\u95ee\u6211"\u4f60\u662f\u8c01"\uff0c\u6839\u636e\u6211\u7684\u8eab\u4efd\uff0c\u6211\u5e94\u8be5\u56de\u7b54"\u6211\u662f Octopus"\u3002';
     const assistant: AIMessage = {
@@ -1143,14 +1143,15 @@ describe("MessageList reasoning privacy", () => {
     renderMessageList({ thread, locale: "zh-CN" });
 
     expect(screen.getByText("\u6211\u662f Octopus\u3002")).toBeInTheDocument();
-    expect(
-      screen.queryByText(/\u601d\u8003\u8fc7\u7a0b/),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText(privateChineseReasoning)).not.toBeInTheDocument();
-    expect(screen.queryByText(/SOUL\.md/)).not.toBeInTheDocument();
+    // With no explicit public_reasoning_summary, the thinking row now falls
+    // back to raw reasoning_content so the user can see what the model is
+    // thinking instead of staring at an empty dot. The row stays collapsed
+    // and muted; full text opens on click in the right sidebar.
+    expect(screen.getByText(/用户问我/)).toBeInTheDocument();
+    expect(screen.getByText(/SOUL\.md/)).toBeInTheDocument();
   });
 
-  test("does not expose raw reasoning-only streaming messages", () => {
+  test("shows raw reasoning-only streaming messages as the thinking row", () => {
     const leakedReasoning =
       "好的，用户之前发了很长一段关于我是Octopus的系统指令，现在又发了当前日期，我应该先判断是否需要工具。";
     const assistant: AIMessage = {
@@ -1169,9 +1170,11 @@ describe("MessageList reasoning privacy", () => {
 
     renderMessageList({ thread, locale: "zh-CN" });
 
-    expect(screen.queryByText(leakedReasoning)).not.toBeInTheDocument();
-    expect(screen.queryByText(/系统指令/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/当前日期/)).not.toBeInTheDocument();
+    // Reasoning-only streaming messages now surface in the thinking row
+    // (collapsed, muted) so the user sees the model is actively reasoning
+    // instead of a blank turn. The full text opens on click.
+    expect(screen.getByText(/系统指令/)).toBeInTheDocument();
+    expect(screen.getByText(/当前日期/)).toBeInTheDocument();
   });
 
   test("renders explicitly public reasoning summaries without exposing raw reasoning", () => {

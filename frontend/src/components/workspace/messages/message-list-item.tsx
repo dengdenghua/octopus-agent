@@ -33,6 +33,7 @@ import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   extractContentFromMessage,
+  extractReasoningContentFromMessage,
   extractTextFromMessage,
   parseUploadedFiles,
   stripInternalToolProtocol,
@@ -192,9 +193,18 @@ function looksLikeBoilerplateThinking(text?: string | null): boolean {
 }
 
 function buildPublicThinkingSummary(message: Message): string | null {
-  // Raw reasoning_content can contain private chain-of-thought. Only render
-  // summaries that the backend explicitly marks as public.
-  return getPublicReasoningSummary(message);
+  // Prefer summaries the backend explicitly marks as public. Fall back to
+  // the raw reasoning_content so the user can see what the model is actually
+  // thinking instead of staring at an empty dot — the row stays collapsed
+  // and muted by default, and the full text only opens on click.
+  const explicit = getPublicReasoningSummary(message);
+  if (explicit) return explicit;
+  const raw = extractReasoningContentFromMessage(message);
+  if (raw && raw.trim()) {
+    const cleaned = raw.trim();
+    if (!looksLikeBoilerplateThinking(cleaned)) return cleaned;
+  }
+  return null;
 }
 
 function cleanClipboardText(value: string): string {
@@ -218,9 +228,10 @@ export function messageClipboardText(message: Message): string {
   const cleanedVisible = cleanClipboardText(visibleContent);
   if (cleanedVisible) return cleanedVisible;
 
-  // Never fall back to raw reasoning_content/thinking blocks. If the backend
-  // explicitly supplies a public summary, copying mirrors the visible row.
-  return cleanClipboardText(buildPublicThinkingSummary(message) ?? "");
+  // Clipboard only includes explicitly public reasoning summaries, never the
+  // raw reasoning_content fallback used for the on-screen thinking row —
+  // copying private chain-of-thought into another app is a leak risk.
+  return cleanClipboardText(getPublicReasoningSummary(message) ?? "");
 }
 
 type MarkdownRenderProps = Pick<

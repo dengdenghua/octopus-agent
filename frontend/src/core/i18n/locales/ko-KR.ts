@@ -1235,6 +1235,10 @@ export const koKR: Translations = {
     statusError: "오류",
     statusDone: "완료",
     progress: "진행 상황",
+    thinkingDetail: "사고 상세",
+    thinkingInProgress: "사고 중",
+    thinkingDone: "완료",
+    executionDetail: "실행 상세",
     roundTitle: (iteration) => `라운드 ${iteration}`,
     roundActivitySummary: (actionCount, factCount) =>
       actionCount > 0 && factCount > 0

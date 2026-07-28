@@ -222,7 +222,8 @@ def test_direct_answer_directive_keeps_original_request_after_evidence() -> None
         steps=[step],
     )
     assert directive.index("[bounded-read-evidence]") < directive.index("[original-user-request]")
-    assert directive.rstrip().endswith("or expand scope.")
+    assert "or expand scope." in directive
+    assert "conversational tone" in directive
     assert "告诉我项目名称" in directive
 
 

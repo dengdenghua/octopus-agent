@@ -50,6 +50,7 @@ import {
 } from "./agent-workbench-events";
 import { useSubtask } from "@/core/tasks/context";
 import { SubtaskHoverPreview } from "./messages/parallel-subtasks-grid";
+import { MarkdownContent } from "./messages/markdown-content";
 
 // ── Shared UI primitives ──────────────────────────────────────────────
 
@@ -1067,6 +1068,55 @@ export function AgentSummaryPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
+        {/* 思考详情：当用户从对话区点击思考行聚焦到此处时，展示完整思考文本 */}
+        {focusedProcessEvent?.kind === "thinking" &&
+          focusedProcessEvent.detail && (
+            <section className="border-b border-border-subtle py-4">
+              <div className="mb-2 flex items-center gap-2">
+                <BrainCircuitIcon className="size-3.5 text-muted-foreground" />
+                <h3 className="text-xs font-medium text-foreground">
+                  {t.agentWorkbenchPages.thinkingDetail}
+                </h3>
+                {focusedProcessEvent.status && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {focusedProcessEvent.status === "running"
+                      ? t.agentWorkbenchPages.thinkingInProgress
+                      : focusedProcessEvent.status === "error"
+                        ? t.agentWorkbench.statusError
+                        : t.agentWorkbenchPages.thinkingDone}
+                  </span>
+                )}
+              </div>
+              <div className="rounded-lg border border-border-subtle bg-muted/20 p-3 pl-4 text-sm text-muted-foreground">
+                <MarkdownContent
+                  content={focusedProcessEvent.detail}
+                  isLoading={false}
+                  rehypePlugins={[]}
+                  className="text-sm leading-relaxed"
+                />
+              </div>
+            </section>
+          )}
+        {/* 执行详情：当用户从对话区点击执行行聚焦到此处时，展示执行步骤摘要 */}
+        {focusedProcessEvent?.kind === "execution" &&
+          focusedProcessEvent.detail && (
+            <section className="border-b border-border-subtle py-4">
+              <div className="mb-2 flex items-center gap-2">
+                <ListChecksIcon className="size-3.5 text-muted-foreground" />
+                <h3 className="text-xs font-medium text-foreground">
+                  {t.agentWorkbenchPages.executionDetail}
+                </h3>
+              </div>
+              <div className="rounded-lg border border-border-subtle bg-muted/20 p-3 text-sm text-muted-foreground">
+                <MarkdownContent
+                  content={focusedProcessEvent.detail}
+                  isLoading={false}
+                  rehypePlugins={[]}
+                  className="text-sm leading-relaxed"
+                />
+              </div>
+            </section>
+          )}
         {/* 进展 */}
         {!focusedProcessEvent && (phases.length > 0 || showOutline) && (
           <section className="border-b border-border-subtle py-4">

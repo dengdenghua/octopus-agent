@@ -262,6 +262,10 @@ def _conversation_messages_for_react(
     ``intent.user_context["conversation_messages"]``. This adapter keeps
     follow-up replies like "yes" or "go check it" anchored to the same
     thread without making the frontend resend the whole transcript.
+
+    For AI turns that executed tools, a compact ``[上轮操作: ...]`` summary
+    is prepended to the content so the next round's model can see what was
+    actually done without inflating the transcript with raw tool I/O.
     """
 
     legacy_messages, _, _ = _flatten_turns_to_messages(turns)
@@ -278,7 +282,27 @@ def _conversation_messages_for_react(
         content = item.get("content")
         if role is None or not isinstance(content, str) or not content.strip():
             continue
-        history.append({"role": role, "content": content.strip()})
+        content = content.strip()
+        # Attach a compact tool-action summary so the next turn's model
+        # understands what the previous round actually did, not just the
+        # final prose. This is the cheapest way to give multi-turn
+        # conversations continuity without rehydrating full step history.
+        if role == "assistant":
+            tool_calls = item.get("tool_calls")
+            if isinstance(tool_calls, list) and tool_calls:
+                tool_names: list[str] = []
+                for call in tool_calls:
+                    if not isinstance(call, dict):
+                        continue
+                    name = call.get("name")
+                    if isinstance(name, str) and name and name not in tool_names:
+                        tool_names.append(name)
+                if tool_names:
+                    summary = "、".join(tool_names[:6])
+                    if len(tool_names) > 6:
+                        summary += f" 等 {len(tool_names)} 个操作"
+                    content = f"[上轮操作: {summary}]\n{content}"
+        history.append({"role": role, "content": content})
     if max_messages > 0 and len(history) > max_messages:
         return history[-max_messages:]
     return history

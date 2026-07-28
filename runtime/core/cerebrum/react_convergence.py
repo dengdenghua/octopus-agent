@@ -425,7 +425,9 @@ def build_direct_answer_directive(
             "[/original-user-request]\n"
             "Answer this exact request now from the completed evidence. "
             "Do not reinterpret it as a new conversation, deny the completed "
-            "work, call another tool, or expand scope."
+            "work, call another tool, or expand scope. "
+            "Reply in a conversational tone that addresses the user naturally, "
+            "not just a dry execution report."
         )
     return "\n\n".join(parts)
 

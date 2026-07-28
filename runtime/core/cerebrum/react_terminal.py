@@ -107,8 +107,13 @@ def _finalize_react_turn(
                         "或存在权限/登录/信息缺失阻塞, 不要宣称完成; "
                         "请明确请求用户协助并列出被阻塞的 todo。"
                         "只有所有 todo completed 且验证通过, 才给 Final Answer。"
+                        "回复时用对话语气回应用户, 而不是只列执行结果。"
                         if is_code_mode
-                        else "已达最大迭代次数,请基于以上推理直接给出 Final Answer。"
+                        else (
+                            "已达最大迭代次数,请基于以上推理直接给出 Final Answer。"
+                            "用对话语气回应用户的问题, 像真人交流一样自然, "
+                            "不要只报告执行结果。"
+                        )
                     ),
                 )
             )

@@ -1193,6 +1193,10 @@ export const zhCN: Translations = {
     statusError: "异常",
     statusDone: "已完成",
     progress: "进展",
+    thinkingDetail: "思考详情",
+    thinkingInProgress: "思考中",
+    thinkingDone: "已完成",
+    executionDetail: "执行详情",
     roundTitle: (iteration) => `第 ${iteration} 轮`,
     roundActivitySummary: (actionCount, factCount) =>
       actionCount > 0 && factCount > 0

@@ -1238,6 +1238,10 @@ export const jaJP: Translations = {
     statusError: "エラー",
     statusDone: "完了",
     progress: "進捗",
+    thinkingDetail: "思考詳細",
+    thinkingInProgress: "思考中",
+    thinkingDone: "完了",
+    executionDetail: "実行詳細",
     roundTitle: (iteration) => `ラウンド ${iteration}`,
     roundActivitySummary: (actionCount, factCount) =>
       actionCount > 0 && factCount > 0
