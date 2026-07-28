@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 from typing import Any
 
 from runtime.core.cerebrum.planner import Rule
@@ -189,9 +190,14 @@ def _build_stack(
     journal: Journal | None = None,
 ):
     from runtime.core.cerebrum import LLMPlanner, StaticPlanner
+    from runtime.execution.suckers.builtins import register_all
 
     registry = SkillRegistry()
-    register_builtins(registry)
+    # Use register_all so write/edit/git/web skills are available to the
+    # headless CLI. Plain register_builtins only gives list_cwd/read_file/
+    # count_words/hash_text — the agent can read but never write, which
+    # silently breaks SWE-bench and any autonomous code task.
+    register_all(registry)
 
     immunity = TrustEngine(
         trusted_sources=trusted_sources or ["skill://public/*"],
@@ -271,6 +277,18 @@ def _build_arm_pool(runtime, signal_bus=None) -> ArmPool:
 def _make_router(model: str, mock_response: str | None, api_key: str | None) -> ModelRouter:
     if model.startswith("mock/") or mock_response is not None:
         return MockModelRouter(response=mock_response or _default_mock_plan())
+
+    # If OPENAI_BASE_URL is set, use the OpenAI-compatible router (Kimi, DeepSeek, etc.)
+    openai_base_url = os.environ.get("OPENAI_BASE_URL")
+    if openai_base_url:
+        from runtime.sensing.model_router.openai_router import OpenAIModelRouter
+
+        return OpenAIModelRouter(
+            base_url=openai_base_url,
+            api_key=os.environ.get("OPENAI_API_KEY"),
+            default_model=model,
+        )
+
     from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter
 
     return AnthropicModelRouter(api_key=api_key, default_model=model)

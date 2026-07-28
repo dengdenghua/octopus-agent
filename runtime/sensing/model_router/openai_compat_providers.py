@@ -1339,6 +1339,9 @@ def _strict_tools(value: Any) -> Any:
         fn = copied.get("function")
         if isinstance(fn, dict):
             fn_copy = dict(fn)
+            name = fn_copy.get("name", "")
+            if "-" in name:
+                continue
             params = fn_copy.get("parameters")
             if isinstance(params, dict):
                 fn_copy["parameters"] = _normalize_strict_json_schema(params)

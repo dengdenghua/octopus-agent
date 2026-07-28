@@ -69,15 +69,16 @@ You are a software engineer tasked with resolving a GitHub issue.
 1. Explore the repository structure to understand the codebase.
 2. Search for relevant code using grep, code_search, or ast_search.
 3. Identify the root cause of the issue described above.
-4. Make the minimal changes needed to fix the issue.
+4. **Make the minimal changes needed to fix the issue.** You MUST actually call the `edit_file` or `write_text_file` tool to modify the source code — do NOT just describe or plan the change. A turn that ends without a real file-write tool call is a failure.
 5. Run the relevant tests to verify your fix works.
-6. Do NOT add or remove tests — only fix the source code.
+6. Tests must remain unchanged; limit changes to source code only.
 7. Ensure your changes are committed (staged) so they appear in `git diff`.
 
 Remember:
 - Keep changes minimal and focused on the issue.
 - Match the existing code style of the project.
 - If tests fail, iterate on your fix until they pass.
+- **Action over description**: every iteration must either call a tool or finish. Never end an iteration with only a plan/read — call `edit_file` to apply the fix as soon as you know what to change.
 """
 
 
@@ -257,6 +258,34 @@ def prepare_workspace(
 # ── Agent invocation ────────────────────────────────────────
 
 
+def _build_agent_env(model: str) -> dict[str, str]:
+    """Build env vars for the agent subprocess from custom_models.json.
+
+    When the model is configured with an OpenAI-compatible ``base_url``,
+    inject ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` so ``_make_router``
+    picks the OpenAI router instead of falling back to Anthropic.
+    """
+    env = {**os.environ, "NO_COLOR": "1"}
+    custom_models_path = REPO_ROOT / "data" / "custom_models.json"
+    if not custom_models_path.is_file():
+        return env
+    try:
+        with open(custom_models_path, encoding="utf-8") as f:
+            custom_models = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return env
+    cfg = custom_models.get(model)
+    if not cfg or cfg.get("provider") != "openai":
+        return env
+    base_url = cfg.get("base_url")
+    api_key = cfg.get("api_key")
+    if base_url:
+        env["OPENAI_BASE_URL"] = base_url
+    if api_key:
+        env["OPENAI_API_KEY"] = api_key
+    return env
+
+
 def run_octopus_agent(
     instance: SwebenchInstance,
     workspace: Path,
@@ -292,12 +321,14 @@ def run_octopus_agent(
         str(max_iterations),
         "--max-usd",
         str(max_usd),
-        prompt,
     ]
     if model:
-        command[7:7] = ["--model", model]
+        command.extend(["--model", model])
     if extra_args:
         command.extend(extra_args)
+    command.append(prompt)
+
+    agent_env = _build_agent_env(model)
 
     logger.info("[%s] Starting agent (model=%s, timeout=%ss)", instance.instance_id, model, timeout_seconds)
     start = time.time()
@@ -310,7 +341,7 @@ def run_octopus_agent(
             timeout=timeout_seconds,
             check=False,
             cwd=str(REPO_ROOT),
-            env={**os.environ, "NO_COLOR": "1"},
+            env=agent_env,
         )
     except subprocess.TimeoutExpired:
         elapsed = time.time() - start
@@ -355,6 +386,8 @@ def run_octopus_agent(
         len(patch.splitlines()),
         event_count,
     )
+    if not success and not patch and completed.stderr.strip():
+        logger.error("[%s] Agent stderr:\n%s", instance.instance_id, completed.stderr[-3000:])
 
     return {
         "patch": patch,

@@ -118,6 +118,9 @@ frontend/output/
 .codex-artifacts/
 .playwright-cli/
 evidence/
+# SWE-bench / benchmark prediction summaries
+predictions_*.summary.json
+tmp_acceptance/
 
 # Android — 正式 Android 端在同级 ../octopus-mobile/，主仓库不跟踪
 /mobile/

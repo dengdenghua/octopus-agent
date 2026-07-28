@@ -30,6 +30,12 @@ class _CliCodeAgent:
     agent_id: str = "octopus-cli"
     model: str | None = None
     capabilities: dict[str, bool] | None = None
+    # CLI ``code`` mode must be able to call every registered skill
+    # (edit_file, write_text_file, git_*, …). Without this, the skill
+    # policy resolved from the agent only allows ATOMIC_SKILL_NAMES
+    # (read-only tools), silently stripping write tools from the
+    # native tool-use catalog and breaking SWE-bench / autonomous edits.
+    extra_skills: tuple[str, ...] = ("*",)
 
     def __post_init__(self) -> None:
         if self.capabilities is None:
