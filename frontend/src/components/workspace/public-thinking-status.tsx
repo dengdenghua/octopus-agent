@@ -152,21 +152,17 @@ export function PublicThinkingStatus({
         className,
       )}
     >
-      <span className="relative flex size-1.5 shrink-0 items-center justify-center">
-        {phase !== "slow" && phase !== "disconnected" && (
-          <span className="absolute inline-flex size-1.5 animate-pulse rounded-full bg-primary/20 motion-reduce:animate-none" />
+      <span
+        className={cn(
+          "inline-block size-1 shrink-0 rounded-full",
+          phase === "slow"
+            ? "bg-amber-500/50"
+            : phase === "disconnected"
+              ? "bg-destructive/50"
+              : "bg-muted-foreground/40",
         )}
-        <span
-          className={cn(
-            "relative inline-flex size-1 rounded-full",
-            phase === "slow"
-              ? "bg-amber-500/55"
-              : phase === "disconnected"
-                ? "bg-destructive/55"
-                : "bg-primary/55",
-          )}
-        />
-      </span>
+        aria-hidden="true"
+      />
       <span className="shrink-0">{label}</span>
       {elapsedSeconds > 0 && (
         <span className="tabular-nums text-muted-foreground/40">
