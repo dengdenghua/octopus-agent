@@ -42,7 +42,9 @@ describe("<AgentProgressPill />", () => {
       <AgentProgressPill events={[]} hasAnswer hasStreamingAnswer isLoading />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Thinking...");
+    // Answer tokens are flowing — that is processing, not "thinking".
+    expect(screen.getByRole("status")).toHaveTextContent("Working");
+    expect(screen.getByRole("status")).not.toHaveTextContent("Thinking");
   });
 
   test("keeps heartbeat-only waiting distinct from model work", () => {

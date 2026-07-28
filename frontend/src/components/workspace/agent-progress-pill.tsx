@@ -78,11 +78,13 @@ function fallbackStatusLabel({
   }
   if (runSettled && !runFailed) return s.thinkingCompleted;
   if (vitals && vitals.phase !== "idle") {
+    // Mid-task liveness is "processing", not "thinking": the 思考中 label
+    // is reserved for the pre-first-response window (handled above).
     const elapsedS = Math.floor(vitals.elapsedMs / 1000);
     const suffix = elapsedS >= 3 ? ` · ${elapsedS}s` : "";
-    return `${s.modelWorking}${suffix}`;
+    return `${s.processing}${suffix}`;
   }
-  if (hasStreamingAnswer) return s.modelWorking;
+  if (hasStreamingAnswer) return s.processing;
   // Without wire telemetry, do not manufacture “understanding / planning /
   // analysing” stages from a timer. The only fact we know is that the first
   // observable model event has not arrived yet.
