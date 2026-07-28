@@ -43,6 +43,9 @@ Environment:
   OCTOPUS_VERIFY_STATE_ROOT       Isolated runtime state root for local gates.
                                   Defaults to test-results/local-verify-state.
   OCTOPUS_LIVE_MODEL_SMOKE=1      Also run live OpenAI-compatible provider smoke tests.
+  OCTOPUS_TTFT_LIVE_SMOKE=1       Also run the live TTFT streaming gate (boots a
+                                  real server and drives WS turns against a live
+                                  model; needs config.local.yaml + provider keys).
 EOF
 }
 
@@ -114,6 +117,10 @@ backend_tests=(
 
 if [[ "${OCTOPUS_LIVE_MODEL_SMOKE:-0}" == "1" ]]; then
   backend_tests+=(tests/test_openai_compat_provider_smoke.py)
+fi
+
+if [[ "${OCTOPUS_TTFT_LIVE_SMOKE:-0}" == "1" ]]; then
+  backend_tests+=(tests/test_ttft_live_smoke.py)
 fi
 
 if [[ "$run_backend" == "1" ]]; then
