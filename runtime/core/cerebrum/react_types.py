@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 REACT_SYSTEM_PROMPT_BASE = """你是一个使用 ReAct(Reason + Act) 范式的 AI 助手。
 
@@ -221,3 +222,42 @@ _DEFAULT_REACT_RECIPES: list[ReActRecipe] = [
     ReActRecipe(name="balanced", max_iterations=30, temperature=0.3),
     ReActRecipe(name="aggressive", max_iterations=45, temperature=0.5),
 ]
+
+
+def _native_tool_calls_missing_required_args(tool_calls: Any) -> list[str]:
+    """Return native calls that cannot be safely executed with empty input."""
+
+    allow_empty = {
+        "list_cwd",
+        "todo_read",
+        "bb_keys",
+        "memory_list",
+    }
+    missing: list[str] = []
+    for call in tool_calls or []:
+        name = str(getattr(call, "name", "") or "").strip()
+        value = getattr(call, "input", None)
+        if name and name not in allow_empty and not value:
+            missing.append(name)
+    return missing
+
+
+def _safe_react_error_message(exc: BaseException, *, limit: int = 1200) -> str:
+    """Return a user-visible terminal model error without leaking secrets.
+
+    Provider errors carry important status evidence (for example ``http_402``)
+    that the realtime benchmark uses to separate infrastructure outages from
+    agent failures.  Keep that evidence, but pass the message through the
+    process redactor before it reaches a turn item.
+    """
+
+    message = str(exc).strip() or type(exc).__name__
+    try:
+        from runtime.platform.observability.redactor import redact_text
+
+        message = redact_text(message)
+    except Exception:  # pragma: no cover - diagnostics must never mask failure
+        # If the redactor itself is unavailable, preserve only the exception
+        # class.  Dropping detail is safer than exposing an embedded token.
+        message = type(exc).__name__
+    return message[:limit]

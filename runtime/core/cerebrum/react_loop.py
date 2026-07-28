@@ -99,7 +99,6 @@ from runtime.core.cerebrum.react_guards import (
     _explicit_source_paths,
     _failed_verification_followup_guard,
     _goal_requests_code_mutation,
-    _has_successful_code_write,
     _redundant_green_verification_guard,
     _unverified_write_followup_guard,
 )
@@ -142,7 +141,6 @@ from runtime.core.cerebrum.react_parsing import (
     _has_successful_verification_observation,
     _is_code_write_step,
     _is_format_violation,
-    _latest_todo_items,
     _looks_like_special_tool_envelope,
     _looks_like_unfinished_work,
     _parse_action,
@@ -155,10 +153,15 @@ from runtime.core.cerebrum.react_parsing import (
 from runtime.core.cerebrum.react_public_updates import (
     _PUBLIC_EVIDENCE_STREAM_GATE_CHARS,
     _observed_read_fallback_update,
-    _public_tool_target,
     _runtime_fallback_public_update,
     _safe_public_update,
     _stream_public_evidence_narrative,
+)
+from runtime.core.cerebrum.react_quiet_evidence import (
+    _quiet_evidence_checkpoint_due,
+    _quiet_evidence_targets,
+    _result_checkpoint_is_meaningful,
+    _should_accumulate_quiet_evidence,
 )
 from runtime.core.cerebrum.react_resume import (
     _build_resume_context_prompt,
@@ -171,8 +174,12 @@ from runtime.core.cerebrum.react_types import (
     REACT_SYSTEM_PROMPT_BASE,
     ReActResult,
     ReActStep,
+    _native_tool_calls_missing_required_args,
+    _safe_react_error_message,
 )
 from runtime.core.cerebrum.todo_protocol import (
+    _todo_completion_before_write_guard,
+    _todo_prewrite_guard,
     context_mode,
     render_todo_protocol_guidance,
     should_require_todo_protocol,
@@ -204,158 +211,6 @@ if TYPE_CHECKING:
     from runtime.execution.agents.base import Agent
 
 _logger = logging.getLogger(__name__)
-
-
-def _todo_prewrite_guard(
-    actions: list[str],
-    steps: list[ReActStep],
-    *,
-    required: bool,
-    visible: bool,
-) -> str | None:
-    """Require a visible checklist before substantial multi-step tool work.
-
-    Long tasks start with a user-visible execution contract.  Grounding and
-    implementation happen after that contract exists, so research-heavy turns
-    cannot finish most of their work and only manufacture a checklist at the
-    final-answer boundary.
-    """
-
-    if not (required and visible) or _latest_todo_items(steps):
-        return None
-
-    parsed = [entry for action in actions if (entry := _parse_action(action))]
-    if not parsed or any(name.lower() == "todo_write" for name, _args in parsed):
-        return None
-
-    return (
-        "[todo-before-work] The runtime did not execute this tool work because "
-        "this multi-step task still has no visible checklist. Call todo_write "
-        "now with a complete, non-empty plan, then start the first plan item."
-    )
-
-
-def _todo_completion_before_write_guard(
-    actions: list[str],
-    steps: list[ReActStep],
-    *,
-    required: bool,
-) -> str | None:
-    """Reject an all-completed code checklist with no write evidence.
-
-    Discovery items may be completed while implementation remains pending.
-    The invalid shape is specifically an entirely-completed checklist before
-    any successful workspace mutation (and without a write in the same action
-    batch).  Letting that state execute makes the provider believe the task is
-    done while the Final Answer guard can only push it into a retry loop.
-    """
-
-    if not required or _has_successful_code_write(steps):
-        return None
-    parsed = [entry for action in actions if (entry := _parse_action(action))]
-    if any(_is_code_write_step(ReActStep(iteration=0, action=action)) for action in actions):
-        return None
-    for name, args in parsed:
-        if name != "todo_write":
-            continue
-        raw_items = args.get("items") or args.get("todos") or []
-        items = raw_items if isinstance(raw_items, list) else []
-        statuses = {
-            str(item.get("status") or "").strip().lower()
-            for item in items
-            if isinstance(item, dict)
-        }
-        if items and statuses and statuses <= {"completed", "complete", "done"}:
-            return (
-                "[todo-completion-before-write] The runtime did not accept this "
-                "all-completed checklist because no successful workspace write/edit "
-                "is recorded. Keep the implementation item in_progress, execute the "
-                "real write/edit tool, read the changed artifact back, verify it, and "
-                "only then mark the checklist completed."
-            )
-    return None
-
-
-def _result_checkpoint_is_meaningful(
-    actions: list[str],
-    *,
-    succeeded: bool,
-) -> bool:
-    """Keep milestones and recovery visible while suppressing read-by-read noise."""
-    if not succeeded or len(actions) > 1:
-        return True
-    parsed = [entry for action in actions if (entry := _parse_action(action))]
-    if not parsed:
-        return False
-    name = parsed[0][0].lower()
-    return (
-        name in _WRITE_TOOLS
-        or any(token in name for token in ("write", "edit", "patch", "replace"))
-        or name in {"exec_shell", "shell", "run_command"}
-        or "search" in name
-        or name in {"fetch_url", "browser_open", "browser_get_content"}
-    )
-
-
-def _quiet_evidence_targets(steps: list[ReActStep]) -> set[str]:
-    """Collect distinct read-only evidence targets that have stayed silent.
-
-    A single successful file read is useful execution detail but usually not
-    worth another public sentence. Two different inspected targets establish
-    enough comparative evidence for the model to say what is now known. The
-    decision is structural: it never classifies prose or invents a phase name.
-    """
-
-    targets: set[str] = set()
-    quiet_tools = {
-        "read_file",
-        "read_text_file",
-        "list_cwd",
-        "glob",
-        "grep",
-        "view_file",
-    }
-    for step in steps:
-        actions = step.actions or ([step.action] if step.action else [])
-        for action in actions:
-            parsed = _parse_action(action)
-            if parsed is None:
-                continue
-            name, args = parsed
-            if name.lower() not in quiet_tools:
-                continue
-            target = ""
-            if isinstance(args, dict):
-                target = next(
-                    (
-                        str(args[key]).strip()
-                        for key in ("path", "file_path", "filepath", "filename")
-                        if isinstance(args.get(key), str) and str(args[key]).strip()
-                    ),
-                    "",
-                )
-                if not target:
-                    target = _public_tool_target(args)
-            if target:
-                targets.add(target.casefold())
-    return targets
-
-
-def _quiet_evidence_checkpoint_due(steps: list[ReActStep]) -> bool:
-    """Whether accumulated quiet reads merit one model-authored public beat."""
-
-    return len(_quiet_evidence_targets(steps)) >= 2
-
-
-def _should_accumulate_quiet_evidence(
-    step: ReActStep,
-    *,
-    succeeded: bool,
-    observation: str,
-) -> bool:
-    """Keep successful read evidence even when it arrived in one parallel batch."""
-
-    return succeeded and bool(observation) and bool(_quiet_evidence_targets([step]))
 
 
 # Re-exports for tests/test_react_loop.py and friends — the helpers live
@@ -401,6 +256,7 @@ __all__ = [
     "_parse_action",
     "_parse_step",
     "_placeholder_observation",
+    "_quiet_evidence_targets",
     "_react_completion_receipt",
     "_rehydrate_messages_from_steps",
     "_reset_checkpoint_mirror_for_tests",
@@ -419,45 +275,6 @@ __all__ = [
     "run_react_loop",
     "stream_react_loop",
 ]
-
-
-def _native_tool_calls_missing_required_args(tool_calls: Any) -> list[str]:
-    """Return native calls that cannot be safely executed with empty input."""
-
-    allow_empty = {
-        "list_cwd",
-        "todo_read",
-        "bb_keys",
-        "memory_list",
-    }
-    missing: list[str] = []
-    for call in tool_calls or []:
-        name = str(getattr(call, "name", "") or "").strip()
-        value = getattr(call, "input", None)
-        if name and name not in allow_empty and not value:
-            missing.append(name)
-    return missing
-
-
-def _safe_react_error_message(exc: BaseException, *, limit: int = 1200) -> str:
-    """Return a user-visible terminal model error without leaking secrets.
-
-    Provider errors carry important status evidence (for example ``http_402``)
-    that the realtime benchmark uses to separate infrastructure outages from
-    agent failures.  Keep that evidence, but pass the message through the
-    process redactor before it reaches a turn item.
-    """
-
-    message = str(exc).strip() or type(exc).__name__
-    try:
-        from runtime.platform.observability.redactor import redact_text
-
-        message = redact_text(message)
-    except Exception:  # pragma: no cover - diagnostics must never mask failure
-        # If the redactor itself is unavailable, preserve only the exception
-        # class.  Dropping detail is safer than exposing an embedded token.
-        message = type(exc).__name__
-    return message[:limit]
 
 
 def stream_react_loop(

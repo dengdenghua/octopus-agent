@@ -9,6 +9,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from runtime.core.cerebrum.react_guards import _has_successful_code_write
+from runtime.core.cerebrum.react_parsing import (
+    _is_code_write_step,
+    _latest_todo_items,
+    _parse_action,
+)
+from runtime.core.cerebrum.react_types import ReActStep
+
 _SHORT_ACK_RE = re.compile(
     r"^\s*("
     r"hi|hello|hey|hello everyone|hello all|hi everyone|hi all|hi team|"
@@ -257,3 +265,73 @@ def render_todo_protocol_guidance(*, required: bool, mode: str = "") -> str:
         "- If blocked, update the checklist to show the blocked/incomplete "
         "item and ask the user for the specific missing input."
     )
+
+
+def _todo_prewrite_guard(
+    actions: list[str],
+    steps: list[ReActStep],
+    *,
+    required: bool,
+    visible: bool,
+) -> str | None:
+    """Require a visible checklist before substantial multi-step tool work.
+
+    Long tasks start with a user-visible execution contract.  Grounding and
+    implementation happen after that contract exists, so research-heavy turns
+    cannot finish most of their work and only manufacture a checklist at the
+    final-answer boundary.
+    """
+
+    if not (required and visible) or _latest_todo_items(steps):
+        return None
+
+    parsed = [entry for action in actions if (entry := _parse_action(action))]
+    if not parsed or any(name.lower() == "todo_write" for name, _args in parsed):
+        return None
+
+    return (
+        "[todo-before-work] The runtime did not execute this tool work because "
+        "this multi-step task still has no visible checklist. Call todo_write "
+        "now with a complete, non-empty plan, then start the first plan item."
+    )
+
+
+def _todo_completion_before_write_guard(
+    actions: list[str],
+    steps: list[ReActStep],
+    *,
+    required: bool,
+) -> str | None:
+    """Reject an all-completed code checklist with no write evidence.
+
+    Discovery items may be completed while implementation remains pending.
+    The invalid shape is specifically an entirely-completed checklist before
+    any successful workspace mutation (and without a write in the same action
+    batch).  Letting that state execute makes the provider believe the task is
+    done while the Final Answer guard can only push it into a retry loop.
+    """
+
+    if not required or _has_successful_code_write(steps):
+        return None
+    parsed = [entry for action in actions if (entry := _parse_action(action))]
+    if any(_is_code_write_step(ReActStep(iteration=0, action=action)) for action in actions):
+        return None
+    for name, args in parsed:
+        if name != "todo_write":
+            continue
+        raw_items = args.get("items") or args.get("todos") or []
+        items = raw_items if isinstance(raw_items, list) else []
+        statuses = {
+            str(item.get("status") or "").strip().lower()
+            for item in items
+            if isinstance(item, dict)
+        }
+        if items and statuses and statuses <= {"completed", "complete", "done"}:
+            return (
+                "[todo-completion-before-write] The runtime did not accept this "
+                "all-completed checklist because no successful workspace write/edit "
+                "is recorded. Keep the implementation item in_progress, execute the "
+                "real write/edit tool, read the changed artifact back, verify it, and "
+                "only then mark the checklist completed."
+            )
+    return None
