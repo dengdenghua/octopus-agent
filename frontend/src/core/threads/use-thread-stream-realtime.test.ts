@@ -636,6 +636,38 @@ describe("useThreadStreamRealtime permissions", () => {
     return startTurn;
   }
 
+  it("keeps an empty resumed thread in its loading state until history arrives", () => {
+    vi.mocked(useRealtimeThread).mockReturnValue({
+      state: {
+        ...makeConversation([]),
+        resumeState: "resuming",
+      },
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    expect(result.current[0].isThreadLoading).toBe(true);
+  });
+
+  it("stops showing the history skeleton after an empty resume settles", () => {
+    mockRealtime();
+
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    expect(result.current[0].isThreadLoading).toBe(false);
+  });
+
   it("reports the server-created thread id when starting from the new-thread route", async () => {
     const onStart = vi.fn();
     const liveTurn: Turn = {

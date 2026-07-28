@@ -16,6 +16,15 @@ const frontendPort = process.env.FRONTEND_PORT || "3000";
  */
 export default defineConfig({
   testDir: "./e2e",
+  // The default suite reuses a developer backend on :8000 and exercises
+  // browser/UI contracts only. Specs that own isolated :13000/:18000 servers
+  // belong to playwright.full.config.ts and must never leak into this lane.
+  testMatch: [
+    "chat.spec.ts",
+    "mobile-smoke.spec.ts",
+    "stream-timeline-narrative.spec.ts",
+    "workflow-editor.spec.ts",
+  ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

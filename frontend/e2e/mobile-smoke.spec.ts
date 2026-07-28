@@ -34,7 +34,7 @@ test.describe("Mobile workspace smoke", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test("Settings dialog stays usable across core sections", async ({
-    page,
+    authedPage: page,
   }) => {
     await page.goto("/#/workspace/agents");
     await page.waitForLoadState("domcontentloaded");
@@ -138,7 +138,9 @@ test.describe("Mobile workspace smoke", () => {
     await expect(dialog).toBeHidden();
   });
 
-  test("Realtime composer fits mobile width", async ({ page }) => {
+  test("Realtime composer fits mobile width", async ({
+    authedPage: page,
+  }) => {
     await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");
 
@@ -148,7 +150,9 @@ test.describe("Mobile workspace smoke", () => {
     await expectNoHorizontalOverflow(page, composer, "realtime composer");
   });
 
-  test("Agents category chips scroll within the viewport", async ({ page }) => {
+  test("Agents category chips scroll within the viewport", async ({
+    authedPage: page,
+  }) => {
     await page.goto("/#/workspace/agents");
     await page.waitForLoadState("domcontentloaded");
 
@@ -162,7 +166,9 @@ test.describe("Mobile workspace smoke", () => {
     await expectNoHorizontalOverflow(page, chips, "agents category chips");
   });
 
-  test("Skills list and search fit mobile width", async ({ page }) => {
+  test("Skills list and search fit mobile width", async ({
+    authedPage: page,
+  }) => {
     await page.goto("/#/workspace/skills");
     await page.waitForLoadState("domcontentloaded");
 

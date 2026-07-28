@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -345,6 +346,45 @@ def test_expired_unstarted_claim_can_be_safely_taken_over(tmp_path: Path) -> Non
 
     assert takeover.kind == "execute"
     assert takeover.fencing_token > first.fencing_token
+
+
+def test_sqlite_store_recovers_after_state_directory_is_recreated(tmp_path: Path) -> None:
+    state_root = tmp_path / "state"
+    store_path = state_root / "effects.sqlite3"
+    store = SQLiteEffectStore(store_path)
+    initial = store.claim(
+        effect_key="effect:before-reset",
+        task_id="task",
+        step_id=1,
+        sucker_id="tool",
+        args_fingerprint="args",
+        side_effecting=False,
+        holder_id="worker-a",
+        lease_ttl_s=1,
+        observed_durable_intent=False,
+    )
+    assert initial.kind == "execute"
+    assert len(store.list_receipts()) == 1
+
+    # A long-lived server may outlive a workspace/state reset. The existing
+    # store object must recover without requiring a process restart.
+    shutil.rmtree(state_root)
+
+    assert store.list_receipts() == []
+    after_reset = store.claim(
+        effect_key="effect:after-reset",
+        task_id="task",
+        step_id=2,
+        sucker_id="tool",
+        args_fingerprint="args",
+        side_effecting=False,
+        holder_id="worker-b",
+        lease_ttl_s=1,
+        observed_durable_intent=False,
+    )
+    assert after_reset.kind == "execute"
+    assert store_path.is_file()
+    assert [receipt.effect_key for receipt in store.list_receipts()] == ["effect:after-reset"]
 
 
 def test_sqlite_journal_repair_cannot_overwrite_live_takeover(tmp_path: Path) -> None:

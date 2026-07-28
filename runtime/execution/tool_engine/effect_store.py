@@ -207,14 +207,34 @@ class SQLiteEffectStore:
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
+        # The state directory can be replaced while a long-lived server still
+        # owns this store instance (for example after a workspace reset).  A
+        # new SQLite file is otherwise created without our schema and every
+        # subsequent receipt query fails until the process restarts.
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(
             str(self.path),
             timeout=self._busy_timeout_ms / 1000,
             isolation_level=None,
         )
-        conn.row_factory = sqlite3.Row
-        conn.execute(f"PRAGMA busy_timeout={self._busy_timeout_ms}")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute(f"PRAGMA busy_timeout={self._busy_timeout_ms}")
+            table_exists = conn.execute(
+                """
+                SELECT 1
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'tool_effect_receipts'
+                """
+            ).fetchone()
+            if table_exists is None:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=FULL")
+                conn.executescript(_SCHEMA)
+            return conn
+        except Exception:
+            conn.close()
+            raise
 
     def _initialize(self) -> None:
         deadline = time.monotonic() + (self._busy_timeout_ms / 1000)

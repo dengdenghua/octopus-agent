@@ -909,6 +909,20 @@ export function MessageList({
     () => structuredFailureFromMessages(latestTurnMessages(messages)),
     [messages],
   );
+  const latestTurnHasSettledAnswer = useMemo(
+    () =>
+      latestTurnMessages(messages).some((message) => {
+        if (message.type !== "ai") return false;
+        if (!extractContentFromMessage(message).trim()) return false;
+        if (message.additional_kwargs?.public_progress === true) return false;
+        const responseState = message.additional_kwargs?.response_state;
+        if (responseState === "failed" || responseState === "interrupted") {
+          return false;
+        }
+        return !(message as AIMessage).tool_calls?.length;
+      }),
+    [messages],
+  );
   const presentFailure = useCallback(
     (failure: StructuredFailure): FailurePresentation => {
       const kind = failureKind(failure.detail, failure.code);
@@ -935,6 +949,17 @@ export function MessageList({
   );
   const failureReceipt = useMemo<FailurePresentation | null>(() => {
     if (!thread.error || thread.isLoading) return null;
+    // A provider can finish the visible answer and still close its transport
+    // with a late/stale error. Do not contradict an already settled answer
+    // with a generic "turn failed" banner. Explicit structured failures keep
+    // their receipt because they are authoritative protocol state.
+    if (
+      latestTurnHasSettledAnswer &&
+      !latestStructuredFailure &&
+      failureKind(threadErrorMessage) === "error"
+    ) {
+      return null;
+    }
     return presentFailure(
       latestStructuredFailure ?? {
         detail: threadErrorMessage.trim() || "turn failed",
@@ -942,6 +967,7 @@ export function MessageList({
     );
   }, [
     latestStructuredFailure,
+    latestTurnHasSettledAnswer,
     presentFailure,
     thread.error,
     thread.isLoading,
@@ -1695,8 +1721,14 @@ export function MessageList({
     return <MessageListSkeleton />;
   }
 
+  // A terminal/send error and an active pulse must never be visible at the
+  // same time. If the transport still reports loading while an error is
+  // already authoritative, prefer the recoverable error receipt.
+  const showConversationActivity = thread.isLoading && !thread.error;
   const showEmptyPendingAssistantFrame =
-    messageTurns.length === 0 && thread.isLoading && !hasStreamingAnswer;
+    messageTurns.length === 0 &&
+    showConversationActivity &&
+    !hasStreamingAnswer;
   const emptyPendingAssistantIdentity = showEmptyPendingAssistantFrame
     ? resolveAgentIdentity()
     : null;
@@ -1725,7 +1757,7 @@ export function MessageList({
             agentRole: emptyPendingAssistantIdentity?.role,
             children: (
               <PublicThinkingStatus
-                isLoading={thread.isLoading}
+                isLoading={showConversationActivity}
                 liveToolEvents={liveToolEvents ?? []}
                 hasStreamingMessage={hasStreamingAnswer}
                 vitals={streamVitals}
@@ -1754,7 +1786,7 @@ export function MessageList({
           );
           const showPendingAssistantFrame =
             isLatestTurn &&
-            thread.isLoading &&
+            showConversationActivity &&
             !hasStreamingAnswer &&
             !latestTurnHasVisibleAssistantGroup;
           const pendingAssistantIdentity = showPendingAssistantFrame
@@ -1866,7 +1898,7 @@ export function MessageList({
                     agentRole: pendingAssistantIdentity?.role,
                     children: (
                       <PublicThinkingStatus
-                        isLoading={thread.isLoading}
+                        isLoading={showConversationActivity}
                         liveToolEvents={liveToolEvents ?? []}
                         hasStreamingMessage={hasStreamingAnswer}
                         vitals={streamVitals}
@@ -1880,7 +1912,7 @@ export function MessageList({
                     data-testid="assistant-continuation-activity"
                   >
                     <PublicThinkingStatus
-                      isLoading={thread.isLoading}
+                      isLoading={showConversationActivity}
                       liveToolEvents={liveToolEvents ?? []}
                       hasStreamingMessage={hasStreamingAnswer}
                       vitals={streamVitals}

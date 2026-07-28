@@ -35,12 +35,11 @@ def isolated_code_ui_regression(user_context: dict[str, Any] | None) -> bool:
     metadata = context.get("metadata")
     metadata = metadata if isinstance(metadata, dict) else {}
     regression_enabled = bool(
-        context.get("browser_regression_enabled")
-        or metadata.get("browser_regression_enabled")
+        context.get("browser_regression_enabled") or metadata.get("browser_regression_enabled")
     )
-    browser_surface = str(
-        context.get("browser_surface") or metadata.get("browser_surface") or ""
-    ).strip().lower()
+    browser_surface = (
+        str(context.get("browser_surface") or metadata.get("browser_surface") or "").strip().lower()
+    )
     browser_only = bool(
         context.get("browser_operation_mode")
         or metadata.get("browser_operation_mode")

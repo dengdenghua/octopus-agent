@@ -43,7 +43,7 @@ import { expect, test } from "./fixtures";
 
 test.describe("Workspace collaboration smoke", () => {
   test("workspace switcher trigger is visible in the sidebar", async ({
-    page,
+    authedPage: page,
   }) => {
     // No backend required — the trigger button is always rendered,
     // even when the workspace list fails to load.

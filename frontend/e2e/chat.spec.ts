@@ -7,7 +7,7 @@ import { expect, test } from "./fixtures";
  */
 
 test.describe("Chat golden path", () => {
-  test("root shell loads the workspace", async ({ page }) => {
+  test("root shell loads the workspace", async ({ authedPage: page }) => {
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 
@@ -23,7 +23,7 @@ test.describe("Chat golden path", () => {
     });
   });
 
-  test("can load the workspace chat route", async ({ page }) => {
+  test("can load the workspace chat route", async ({ authedPage: page }) => {
     await page.goto("/#/workspace/realtime/new?agent=general");
     await page.waitForLoadState("domcontentloaded");
 
@@ -33,7 +33,9 @@ test.describe("Chat golden path", () => {
     });
   });
 
-  test("workspace sidebar shows the chat entry", async ({ page }) => {
+  test("workspace sidebar shows the chat entry", async ({
+    authedPage: page,
+  }) => {
     await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");
 
@@ -44,7 +46,7 @@ test.describe("Chat golden path", () => {
     await expect(page.locator("textarea").first()).toBeVisible();
   });
 
-  test("new chat page has a message input", async ({ page }) => {
+  test("new chat page has a message input", async ({ authedPage: page }) => {
     await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");
 

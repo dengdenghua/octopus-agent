@@ -472,6 +472,61 @@ describe("MessageList failure visibility", () => {
     expect(banner).not.toHaveTextContent("beak step 3 failed");
   });
 
+  it("never shows a live activity pulse beside an authoritative failure", () => {
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "调研一个细分赛道" },
+      {
+        id: "assistant-tools",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "search-1",
+            name: "web_search",
+            args: { query: "personalized nutrition market" },
+          },
+        ],
+      } as AIMessage,
+    ];
+
+    renderMessageList(
+      mockThread({
+        messages,
+        isLoading: true,
+        error: new Error("provider stopped before final answer"),
+      }),
+      "en-US",
+    );
+
+    expect(
+      screen.queryByTestId("conversation-activity-pulse"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not contradict a settled answer with a stale generic thread error", () => {
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "调研一个细分赛道" },
+      {
+        id: "assistant-final",
+        type: "ai",
+        content: "赛道分析已经完成，下面是机会点、竞争格局和风险。",
+      },
+    ];
+
+    renderMessageList(
+      mockThread({
+        messages,
+        error: new Error("provider connection closed after completion"),
+      }),
+    );
+
+    expect(
+      screen.getByText("赛道分析已经完成，下面是机会点、竞争格局和风险。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("任务未完成")).not.toBeInTheDocument();
+  });
+
   it("renders historical structured failures as compact receipts with full detail in the workbench", () => {
     const rawDetail = [
       "任务未能完成：内部守卫缺少执行证据。",
@@ -500,12 +555,12 @@ describe("MessageList failure visibility", () => {
 
     renderMessageList(mockThread({ messages }));
 
-    expect(screen.getByText("任务未完成")).toBeInTheDocument();
     expect(
       screen.getByText(
         "该任务要求修改项目文件，但本轮没有产生有效的文件变更。",
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByText("任务未完成")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/implementation task yet/),
     ).not.toBeInTheDocument();
@@ -520,6 +575,33 @@ describe("MessageList failure visibility", () => {
       },
     });
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, onOpen);
+  });
+
+  it("does not present interrupted drafts as settled answers", () => {
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "继续" },
+      {
+        id: "interrupted-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          response_state: "interrupted",
+          message_kind: "answer",
+        },
+      },
+    ];
+
+    renderMessageList(mockThread({ messages }));
+
+    expect(
+      screen.getByText("此回复在生成过程中被中断，可能不完整。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "好的回复" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重新生成回复" }),
+    ).not.toBeInTheDocument();
   });
 
   it("mounts audit actions on the final assistant group when changes live in the processing group", () => {

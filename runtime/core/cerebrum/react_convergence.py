@@ -245,8 +245,7 @@ def constrain_explicit_read_scope(
             continue
         if all(
             any(
-                _path_evidence_matches(requested_path, target)
-                for requested_path in allowed_missing
+                _path_evidence_matches(requested_path, target) for requested_path in allowed_missing
             )
             for target in targets
         ):

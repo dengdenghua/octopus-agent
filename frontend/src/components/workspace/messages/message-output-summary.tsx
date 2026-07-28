@@ -612,14 +612,19 @@ export function MessageOutputSummary({
   };
 
   return (
-    <div className={cn("mt-4 flex w-full flex-col gap-2", className)}>
+    <div
+      className={cn(
+        "mt-2 flex min-w-0 max-w-full flex-col gap-2 overflow-x-clip",
+        className,
+      )}
+    >
       <div
         className={cn(
-          "flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs",
+          "flex min-w-0 flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs",
           isFailure
             ? isNetworkFailure
-              ? "border-amber-500/25 bg-amber-500/[0.06]"
-              : "border-destructive/25 bg-destructive/[0.06]"
+              ? "border-amber-500/20 bg-amber-500/[0.04]"
+              : "border-destructive/20 bg-destructive/[0.035]"
             : "border-emerald-500/20 bg-emerald-500/[0.055]",
         )}
       >
@@ -633,22 +638,20 @@ export function MessageOutputSummary({
           <CheckCircle2Icon className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
         )}
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-foreground">
-            {isFailure ? t.message.taskFailed : t.message.taskOutputs}
+          <div className="truncate font-medium text-foreground/85">
+            {isFailure
+              ? (failure?.message ?? t.message.taskFailed)
+              : t.message.taskOutputs}
           </div>
-          <div className="truncate text-xs text-muted-foreground">
-            {isFailure && failure?.message ? (
-              <span className="text-foreground/80">{failure.message}</span>
-            ) : (
-              <>
-                {t.message.taskCompleted}
-                {summary.changes.length > 0 ? ` · ${changeSummaryLabel}` : ""}
-                {summary.artifacts.length > 0
-                  ? ` · ${t.message.artifactsCreated(summary.artifacts.length)}`
-                  : ""}
-              </>
-            )}
-          </div>
+          {!isFailure && (
+            <div className="truncate text-xs text-muted-foreground">
+              {t.message.taskCompleted}
+              {summary.changes.length > 0 ? ` · ${changeSummaryLabel}` : ""}
+              {summary.artifacts.length > 0
+                ? ` · ${t.message.artifactsCreated(summary.artifacts.length)}`
+                : ""}
+            </div>
+          )}
         </div>
         {summary.changes.length > 0 && (
           <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-xs shadow-[var(--shadow-xs)]">

@@ -898,6 +898,8 @@ export function useThreadStreamRealtime(
     () => conversationStreamingMessage(state),
     [state],
   );
+  const isThreadLoading =
+    state.resumeState === "resuming" && mapped.messages.length === 0;
   const activeThreadId = useMemo(
     () => activeConversationThreadId(state, threadId),
     [state, threadId],
@@ -986,7 +988,7 @@ export function useThreadStreamRealtime(
         subgraphStreams: {},
         values: mapped,
         isLoading,
-        isThreadLoading: false,
+        isThreadLoading,
         error,
         stop,
         refresh,
@@ -1008,6 +1010,7 @@ export function useThreadStreamRealtime(
       mapped,
       streamingMessage,
       isLoading,
+      isThreadLoading,
       error,
       stop,
       refresh,

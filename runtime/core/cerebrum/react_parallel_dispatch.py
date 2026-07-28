@@ -126,6 +126,7 @@ def _dispatch_parallel_actions(
 
         def is_known_but_disabled_tool(name: str) -> tuple[bool, str | None]:
             return (False, None)
+
     for p in parsed_pairs:
         if p is None:
             resolved_names.append(None)
@@ -144,9 +145,7 @@ def _dispatch_parallel_actions(
             # "unregistered" message that invites 7 retries.
             _hit, _group = is_known_but_disabled_tool(name)
             disabled_infos.append(
-                {"group": _group, "config_flag": "enable_web_skills"}
-                if _hit and _group
-                else None
+                {"group": _group, "config_flag": "enable_web_skills"} if _hit and _group else None
             )
         else:
             resolved_names.append(name)

@@ -100,6 +100,7 @@ class RewindResult:
 
 # ── Public API ───────────────────────────────────────────────
 
+
 def list_rewind_points(journal: Any, task_id: str) -> list[RewindPoint]:
     """Enumerate every checkpoint anchor for ``task_id``, oldest-first.
 
@@ -160,8 +161,7 @@ def rewind_to_checkpoint(
     )
     if target is None:
         raise ValueError(
-            f"no react_checkpoint found for task {task_id!r} at "
-            f"iteration {target_iteration}"
+            f"no react_checkpoint found for task {task_id!r} at iteration {target_iteration}"
         )
 
     # Slice file_op events that landed AFTER the target checkpoint.
@@ -189,6 +189,7 @@ def latest_rewind_point(journal: Any, task_id: str) -> RewindPoint | None:
 
 
 # ── Helpers ──────────────────────────────────────────────────
+
 
 def _event_to_rewind_point(event: Any) -> RewindPoint:
     working_set = getattr(event, "working_set_snapshot", []) or []
@@ -251,8 +252,14 @@ def _collect_non_reversible_warnings(
     """
     warnings: list[str] = []
     irreversible_sucker_prefixes = (
-        "exec_shell", "shell_", "git_push", "deploy_", "send_",
-        "post_", "webhook_", "mcp_call_",
+        "exec_shell",
+        "shell_",
+        "git_push",
+        "deploy_",
+        "send_",
+        "post_",
+        "webhook_",
+        "mcp_call_",
     )
     destructive_keywords = ("rm -rf", "git push", "deploy ", "curl -x", "curl -d")
 
@@ -298,9 +305,7 @@ def _collect_non_reversible_warnings(
             continue
 
         if sucker_id and sucker_id.startswith(irreversible_sucker_prefixes):
-            warnings.append(
-                f"non-reversible skill '{sucker_id}' at {getattr(event, 'ts', '')}"
-            )
+            warnings.append(f"non-reversible skill '{sucker_id}' at {getattr(event, 'ts', '')}")
             continue
 
         action_lower = action_text.lower()

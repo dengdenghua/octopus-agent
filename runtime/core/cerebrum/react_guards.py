@@ -341,9 +341,7 @@ def _goal_requests_code_mutation(goal: str) -> bool:
         "迁移",
         "重构",
     )
-    return english_mutation is not None or any(
-        marker in lowered for marker in chinese_markers
-    )
+    return english_mutation is not None or any(marker in lowered for marker in chinese_markers)
 
 
 def _final_answer_claims_no_tool_access(final_answer: str) -> bool:
@@ -460,8 +458,7 @@ def _explicitly_requested_tool_names(goal: str) -> set[str]:
     )
     for pattern in patterns:
         names.update(
-            match.group(1).lower()
-            for match in re.finditer(pattern, text, flags=re.IGNORECASE)
+            match.group(1).lower() for match in re.finditer(pattern, text, flags=re.IGNORECASE)
         )
     return names
 
@@ -498,9 +495,7 @@ def _explicit_tool_request_guard(
 
     del final_answer
     requested = _explicitly_requested_tool_names(goal)
-    missing = sorted(
-        name for name in requested if not _tool_has_execution_receipt(steps, name)
-    )
+    missing = sorted(name for name in requested if not _tool_has_execution_receipt(steps, name))
     if not missing:
         return None
     return (
@@ -679,9 +674,7 @@ def _successful_read_paths(steps: list[ReActStep]) -> set[str]:
             if isinstance(values, list):
                 raw_paths.extend(str(value) for value in values if isinstance(value, str))
             paths.update(
-                normalized
-                for value in raw_paths
-                if (normalized := _normalize_evidence_path(value))
+                normalized for value in raw_paths if (normalized := _normalize_evidence_path(value))
             )
     return paths
 
@@ -2415,10 +2408,7 @@ def _stale_immutable_waiter_snapshot_guard(
         removed_stale_fallback = (
             ".get(" in old_text
             and ", pending" in old_text
-            and not (
-                ".get(" in new_text
-                and ", pending" in new_text
-            )
+            and not (".get(" in new_text and ", pending" in new_text)
         )
         if (old_hit or removed_stale_fallback or full_clean_rewrite) and not new_hit:
             affected.discard(path)
@@ -3116,9 +3106,7 @@ def _trajectory_no_assertion_test_hits(steps: list[ReActStep]) -> dict[str, list
             continue
 
         new_text, _old_text = _extract_step_payloads(step)
-        touched_test_names = {
-            match.group("name") for match in _TEST_FUNC_RE.finditer(new_text)
-        }
+        touched_test_names = {match.group("name") for match in _TEST_FUNC_RE.finditer(new_text)}
         if touched_test_names:
             # A later rewrite of the same test function supersedes the earlier
             # defect. Keeping every historical hit forever made a repaired

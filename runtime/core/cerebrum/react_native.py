@@ -282,11 +282,7 @@ def step_from_tool_calls(
             or (
                 ""
                 if evidence_round
-                else (
-                    structured_public_update
-                    or tagged_public_update
-                    or (text or "").strip()
-                )
+                else (structured_public_update or tagged_public_update or (text or "").strip())
             )
         ),
         action="; ".join(actions),

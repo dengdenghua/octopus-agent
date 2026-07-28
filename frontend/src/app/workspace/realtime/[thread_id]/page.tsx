@@ -3202,6 +3202,25 @@ function RealtimePageContent({
                       <LoadOlderTurnsBanner
                         onLoad={realtimeApprovals.loadOlderTurns}
                       />
+                    ) : !isNewThread &&
+                      !thread.isThreadLoading &&
+                      !thread.isLoading &&
+                      thread.messages.length === 0 ? (
+                      <div
+                        className="mx-auto mt-10 flex max-w-sm flex-col items-center gap-2 text-center text-sm text-muted-foreground"
+                        role="status"
+                      >
+                        <span>{t.conversation.noMessages}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void thread.refresh();
+                          }}
+                          className="text-xs font-medium text-foreground/75 underline-offset-4 hover:text-foreground hover:underline"
+                        >
+                          {t.conversation.retry}
+                        </button>
+                      </div>
                     ) : null
                   }
                   paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}

@@ -37,4 +37,25 @@ test.describe("Stream timeline narrative", () => {
     });
     await expect(page.locator("textarea").first()).toBeVisible();
   });
+
+  test("a missing deep-linked thread settles into a recoverable empty state", async ({
+    authedPage: page,
+  }) => {
+    const missingThreadId = `e2e-missing-${Date.now()}`;
+    await page.goto(`/#/workspace/realtime/${missingThreadId}`);
+    await page.waitForLoadState("domcontentloaded");
+
+    await expect(page).toHaveURL(
+      new RegExp(`#\\/workspace\\/realtime\\/${missingThreadId}$`),
+    );
+    await expect(page.getByText(/还没有消息|No messages yet/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByRole("button", { name: /重试|Retry/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("conversation-activity-pulse"),
+    ).not.toBeVisible();
+  });
 });

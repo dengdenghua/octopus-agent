@@ -28,19 +28,30 @@ function shouldIgnoreConsoleError(text: string): boolean {
   );
 }
 
-// Local-auth login: backend with allow_any_username accepts any username
-// with no password. Returns the access_token for localStorage injection.
-async function loginLocalAuth(
+// Prepare one workspace page across both supported E2E lanes:
+// - developer UI lane: local auth is enabled, so log in and inject the token;
+// - isolated full-stack lane: auth is disabled in config.e2e.yaml, so the
+//   workspace is already accessible and no fabricated credential is needed.
+async function prepareWorkspaceAuth(
+  page: Page,
   username = "e2e-tester",
-): Promise<{ token: string; user: unknown }> {
-  const backend = process.env.BACKEND_URL || "http://127.0.0.1:8000";
-  const res = await fetch(`${backend}/api/auth/local/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username }),
+): Promise<void> {
+  const authStatus = await page.request.get("/api/auth/status");
+  if (!authStatus.ok()) {
+    throw new Error(
+      `auth status failed: ${authStatus.status()} ${await authStatus.text()}`,
+    );
+  }
+  const status = (await authStatus.json()) as { enabled?: boolean };
+  if (!status.enabled) return;
+
+  const res = await page.request.post("/api/auth/local/login", {
+    data: { username },
   });
-  if (!res.ok) {
-    throw new Error(`local-auth login failed: ${res.status} ${await res.text()}`);
+  if (!res.ok()) {
+    throw new Error(
+      `local-auth login failed: ${res.status()} ${await res.text()}`,
+    );
   }
   const data = (await res.json()) as {
     access_token: string;
@@ -49,7 +60,7 @@ async function loginLocalAuth(
   if (!data.access_token) {
     throw new Error("local-auth login returned no access_token");
   }
-  return { token: data.access_token, user: data.user };
+  await injectAuthIntoPage(page, data.access_token, data.user);
 }
 
 // Inject the auth token into localStorage so the SPA accepts the session.
@@ -118,10 +129,10 @@ export const test = base.extend({
   },
 
   // Authenticated page: logs in via local-auth then injects the token so
-  // workspace routes are accessible instead of redirecting to /login.
+  // workspace routes are accessible instead of redirecting to /login. It is
+  // also safe in the isolated full-stack config where auth is disabled.
   authedPage: async ({ page }, run) => {
-    const { token, user } = await loginLocalAuth();
-    await injectAuthIntoPage(page, token, user);
+    await prepareWorkspaceAuth(page);
     await run(page);
   },
 });

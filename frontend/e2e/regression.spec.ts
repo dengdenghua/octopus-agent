@@ -173,12 +173,16 @@ test.describe("workflow-as-skill · editor contract unavailable", () => {
     await page.goto("/#/workspace/workflows");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(page.getByText("工作流编辑器暂不可用")).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(
+      page.getByRole("heading", {
+        name: /工作流编辑器暂不可用|Workflow editor temporarily unavailable/i,
+      }),
+    ).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("workflow-editor")).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /新建实时任务/ }),
+      page.getByRole("link", {
+        name: /新建实时任务|New realtime task/i,
+      }),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Save" })).not.toBeVisible();
   });

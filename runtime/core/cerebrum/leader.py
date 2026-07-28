@@ -93,6 +93,7 @@ HEARTBEAT_SECONDS = 30.0
 
 # ── Errors ───────────────────────────────────────────────────
 
+
 class LeaderError(RuntimeError):
     """Base error for leader-related failures."""
 
@@ -106,6 +107,7 @@ class LeaderAlreadyRunning(LeaderError):
 
 
 # ── Protocol helpers ─────────────────────────────────────────
+
 
 def _read_frame(sock: socket.socket) -> str | None:
     """Read one length-prefixed ndjson frame.
@@ -159,6 +161,7 @@ def _recv_until(sock: socket.socket, delimiter: bytes) -> bytes | None:
 
 
 # ── LeaderProcess (server side) ──────────────────────────────
+
 
 @dataclass
 class LeaderState:
@@ -453,6 +456,7 @@ def _pid_alive(pid: int) -> bool:
 
 # ── LeaderClient (client side) ───────────────────────────────
 
+
 class LeaderClient:
     """Thin JSON-RPC client over UDS.
 
@@ -523,9 +527,7 @@ class LeaderClient:
                 if isinstance(message, Notification):
                     continue
                 if not isinstance(message, JsonRpcResponse):
-                    raise LeaderError(
-                        f"unexpected message type: {type(message).__name__}"
-                    )
+                    raise LeaderError(f"unexpected message type: {type(message).__name__}")
                 break
         if message.error is not None:
             raise LeaderError(f"rpc error {message.error.code}: {message.error.message}")
@@ -539,6 +541,7 @@ class LeaderClient:
 
 
 # ── Convenience ──────────────────────────────────────────────
+
 
 def ensure_leader(
     socket_path: Path | str = DEFAULT_SOCKET_PATH,

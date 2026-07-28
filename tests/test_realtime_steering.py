@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,25 @@ class _Emitter:
 
     async def notify(self, method: Any, params: dict[str, Any]) -> None:
         self.notifications.append((str(method), params))
+
+
+def test_active_turn_lease_recovers_after_state_directory_is_recreated(
+    tmp_path: Path,
+) -> None:
+    runtime = CerebrumRuntime(stack=object(), logs_root=str(tmp_path / "threads"))
+    turn = Turn(thread_id="thread-recreated-state")
+
+    runtime._write_active_turn_lease(turn)
+    lease_path = runtime._active_turn_lease_path(turn.id)
+    assert lease_path.is_file()
+
+    shutil.rmtree(runtime._active_turn_lease_root)
+    runtime._write_active_turn_lease(turn)
+
+    payload = json.loads(lease_path.read_text(encoding="utf-8"))
+    assert payload["turnId"] == turn.id
+    assert payload["threadId"] == turn.thread_id
+    assert payload["instanceId"] == runtime._instance_id
 
 
 @pytest.mark.asyncio
