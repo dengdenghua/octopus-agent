@@ -281,3 +281,99 @@ def _successful_read_paths(steps: list[ReActStep]) -> set[str]:
                 normalized for value in raw_paths if (normalized := _normalize_evidence_path(value))
             )
     return paths
+
+
+def _final_answer_requests_user_help(final_answer: str) -> bool:
+    """Whether the final answer is asking the user to do something
+    rather than reporting a result.
+
+    The completion guards short-circuit when this returns True so a
+    truly blocked agent (missing API key, needs human approval, etc.)
+    can hand off cleanly. **The detection has to be conservative** —
+    a research report that merely *mentions* "permission" or "token"
+    must NOT count as a help request, otherwise the report ends
+    prematurely the moment the model emits its first ``Final Answer:``.
+
+    Strategy:
+      * Inspect only the tail of the answer (last ~400 chars). Help
+        requests live in the closing paragraph, not in body content
+        of a long report.
+      * Require a marker phrase that pairs an action verb with the
+        ask, e.g. ``please confirm`` rather than the bare word
+        ``confirm``. Single-word markers (``token``/``permission``)
+        are too noisy in technical writing.
+      * Or accept a short answer (< 300 chars) with the original
+        looser markers — those really are short hand-off messages.
+    """
+
+    raw = (final_answer or "").strip()
+    if not raw:
+        return False
+    lowered = raw.lower()
+    tail = lowered[-400:]
+
+    # Tight markers: action + dependency phrasing. These appear in
+    # genuine "I need you to ..." sign-offs and almost never in
+    # report prose.
+    tight_markers = (
+        "需要你",
+        "请你",
+        "需要用户",
+        "用户协助",
+        "用户帮忙",
+        "无法继续",
+        "需要确认",
+        "请确认",
+        "需要登录",
+        "请登录",
+        "请提供",
+        "请补充",
+        "需要您",
+        "请您",
+        "缺少 api",
+        "缺少凭证",
+        "缺少权限",
+        "需要权限",
+        "请授权",
+        "需要授权",
+        "没有权限",
+        "等待批准",
+        "等待确认",
+        "need your",
+        "please confirm",
+        "please provide",
+        "please grant",
+        "please supply",
+        "missing api key",
+        "missing credential",
+        "missing token",
+        "permission denied",
+        "access denied",
+        "please log in",
+        "please login",
+        "blocked by",
+    )
+    if any(marker in tail for marker in tight_markers):
+        return True
+
+    # Short final → looser markers are still informative because the
+    # agent isn't writing a report, just signing off. Threshold is
+    # tuned so that a structured Chinese paragraph (which is denser
+    # than English by character count) doesn't trip — a real
+    # hand-off message is closer to one or two sentences.
+    if len(raw) < 150:
+        loose_markers = (
+            "权限",
+            "批准",
+            "缺少",
+            "api key",
+            "credential",
+            "blocked",
+            "permission",
+            "login",
+            "token",
+        )
+        if any(marker in tail for marker in loose_markers):
+            return True
+
+    return False
