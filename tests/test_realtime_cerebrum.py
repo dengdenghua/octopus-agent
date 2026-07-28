@@ -768,6 +768,40 @@ def test_runtime_generated_commentary_is_not_shown_as_model_progress(gateway: An
     assert [(item["text"], item.get("progressKind")) for item in messages] == [("最终答案", None)]
 
 
+def test_runtime_timeout_status_is_visible_before_recovery(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "commentary_delta",
+                "delta": "当前模型响应过慢，已保留现有结果并切换备用模型继续。",
+                "progress_source": "runtime",
+                "public_status": True,
+            },
+            {"type": "text_delta", "delta": "备用模型已经完成回答。"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-runtime-timeout-status",
+                "input": [{"type": "text", "text": "perform a long task"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    messages = [
+        item for item in out["response"].result["turn"]["items"] if item["type"] == "agentMessage"
+    ]
+    assert [item["text"] for item in messages] == [
+        "当前模型响应过慢，已保留现有结果并切换备用模型继续。",
+        "备用模型已经完成回答。",
+    ]
+
+
 def test_grounded_runtime_evidence_is_shown_between_batches(gateway: Any) -> None:
     client, _ = gateway
     _set_script(

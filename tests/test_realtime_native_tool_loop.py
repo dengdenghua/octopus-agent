@@ -220,6 +220,7 @@ def test_browser_surface_marker_promotes_chat_turn_to_tool_mode():
     assert context["native_tool_loop"] is True
     assert context["realtime_public_narrative"] is True
     assert context["realtime_public_orientation"] is True
+    assert context["realtime_public_preface"] is True
 
 
 def test_chrome_surface_marker_promotes_chat_turn_to_external_chrome_mode():

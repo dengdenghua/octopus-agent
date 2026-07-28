@@ -734,8 +734,14 @@ def _build_intent(
             # public update after a genuinely quiet, long-running batch.
             "realtime_public_narrative": True,
             # Ask the working model itself for one natural public sentence
-            # before its first real tool round; no separate narrator call.
+            # before its first real tool round.
             "realtime_public_orientation": True,
+            # Reasoning providers can spend minutes producing only private
+            # tokens before they reach ordinary text or a tool call. Ask the
+            # lightweight, thinking-disabled narrator for the first public
+            # sentence independently so the main conversation never waits on
+            # the working model's hidden chain of thought.
+            "realtime_public_preface": True,
             # Pass attachments through so react_loop can fold image-typed
             # ones into the user message as OpenAI image_url content
             # blocks (vision models then actually "see" the image).

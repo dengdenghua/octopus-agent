@@ -831,7 +831,11 @@ async def _apply_react_event(
         # A completed, explicitly marked evidence receipt is different: it is
         # grounded in a real tool result and must remain visible between
         # ordered batches so the timeline does not collapse into tool rows.
-        if evt.get("progress_source") == "runtime" and not evt.get("public_evidence"):
+        if (
+            evt.get("progress_source") == "runtime"
+            and not evt.get("public_evidence")
+            and not evt.get("public_status")
+        ):
             return
         await state.append_commentary(
             turn,

@@ -1283,6 +1283,91 @@ def test_realtime_missing_public_update_gets_model_authored_orientation() -> Non
     assert "timeline evidence" not in repair_input
 
 
+def test_realtime_preface_arrives_before_a_slow_working_round() -> None:
+    preface = "我先核对回声链路的输入和输出，再确认公开首响是否先于执行事件出现。"
+    router = _CapturingRouter(
+        [
+            preface,
+            (
+                "Thought: compare candidate markets privately\n"
+                f"Update: {preface}\n"
+                'Action: echo({"text": "timeline evidence"})'
+            ),
+            "Final Answer: 回声链路已经核对完成。",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("核对回声链路并说明公开首响顺序")
+    intent.user_context.update(
+        {
+            "mode": "react",
+            "realtime_public_narrative": True,
+            "realtime_public_orientation": True,
+            "realtime_public_preface": True,
+        }
+    )
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
+
+    assert result is not None and result.final_answer == "回声链路已经核对完成。"
+    public = [
+        event
+        for event in events
+        if event["type"] == "commentary_delta" and event.get("progress_source") == "model"
+    ]
+    assert "".join(event["delta"] for event in public) == preface
+    assert public[0]["iteration"] == 0
+    assert events.index(public[0]) < next(
+        index for index, event in enumerate(events) if event["type"] == "tool_start"
+    )
+    preface_request = router.requests[0]
+    assert preface_request.tools == []
+    assert preface_request.enable_thinking is False
+    assert preface_request.reasoning_effort == "low"
+
+
+def test_realtime_preface_has_a_specific_fallback_when_narrator_is_silent() -> None:
+    router = _CapturingRouter(
+        [
+            "",
+            (
+                "Thought: compare the two modules privately\n"
+                'Action: echo({"text": "module evidence"})'
+            ),
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent(
+        "只读比较 runtime/core/cerebrum/react_public_updates.py "
+        "与 runtime/core/cerebrum/react_model_deadlines.py，不要修改文件。"
+    )
+    intent.user_context.update(
+        {
+            "mode": "react",
+            "realtime_public_narrative": True,
+            "realtime_public_orientation": True,
+            "realtime_public_preface": True,
+        }
+    )
+
+    events: list[dict[str, Any]] = []
+    stream = stream_react_loop(stack, intent, agent=None, max_iterations=3)
+    for event in stream:
+        events.append(event)
+        if event["type"] == "tool_start":
+            break
+    stream.close()
+
+    fallback = next(event for event in events if event.get("public_status") is True)
+    assert fallback["iteration"] == 0
+    assert fallback["progress_source"] == "runtime"
+    assert "react_public_updates.py" in fallback["delta"]
+    assert "react_model_deadlines.py" in fallback["delta"]
+    assert events.index(fallback) < next(
+        index for index, event in enumerate(events) if event["type"] == "tool_start"
+    )
+
+
 def test_realtime_quiet_tool_result_gets_model_authored_evidence_checkpoint() -> None:
     router = _CapturingRouter(
         [

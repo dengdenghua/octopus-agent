@@ -52,7 +52,7 @@ _PUBLIC_UPDATE_CODE_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
-_PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S = 8.0
+_PUBLIC_EVIDENCE_NARRATIVE_TIMEOUT_S = 5.0
 _PUBLIC_EVIDENCE_STREAM_GATE_CHARS = 24
 
 
@@ -178,6 +178,42 @@ def _public_narrative_language_instruction(goal: str) -> str:
     if re.search(r"[\u3400-\u9fff]", text):
         return " The user's language is Simplified Chinese; write the update in Simplified Chinese."
     return ""
+
+
+def _initial_public_fallback_update(goal: str) -> str:
+    """Return a task-specific first beat when the bounded narrator is silent."""
+
+    text = str(goal or "").strip()
+    source_labels: list[str] = []
+    for path in _explicit_source_paths(text):
+        label = os.path.basename(path.replace("\\", "/").rstrip("/"))
+        if label and label not in source_labels:
+            source_labels.append(label)
+        if len(source_labels) >= 2:
+            break
+
+    if re.search(r"[\uac00-\ud7af]", text):
+        if source_labels:
+            scope = " 및 ".join(source_labels)
+            return f"먼저 {scope}의 실제 내용을 확인하고, 확인되는 첫 결과부터 바로 공유하겠습니다."
+        return "작업을 시작했습니다. 첫 번째로 확인되는 결과부터 바로 공유하겠습니다."
+    if re.search(r"[\u3040-\u30ff]", text):
+        if source_labels:
+            scope = " と ".join(source_labels)
+            return f"まず {scope} の実内容を確認し、最初に確かめられた結果からすぐ共有します。"
+        return "作業を始めました。最初に確かめられた結果からすぐ共有します。"
+    if re.search(r"[\u3400-\u9fff]", text):
+        if source_labels:
+            scope = " 与 ".join(source_labels)
+            return f"我先核对 {scope} 的实际内容，第一条可确认结果出来后就直接同步。"
+        return "我已经开始处理，第一条可确认结果出来后就直接同步。"
+    if source_labels:
+        scope = " and ".join(source_labels)
+        return (
+            f"I’ll first verify the actual contents of {scope}, then share the first "
+            "confirmed result as soon as it is available."
+        )
+    return "I’ve started working on this and will share the first confirmed result directly."
 
 
 def _observed_read_fallback_update(*, goal: str, step: ReActStep) -> str:
