@@ -34,9 +34,7 @@ describe("<AgentProgressPill />", () => {
   test("does not invent a primary stage before model events arrive", () => {
     renderWithProviders(<AgentProgressPill events={[]} isLoading />);
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Reading this through",
-    );
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking");
   });
 
   test("uses measured activity once answer content is streaming", () => {
@@ -44,7 +42,7 @@ describe("<AgentProgressPill />", () => {
       <AgentProgressPill events={[]} hasAnswer hasStreamingAnswer isLoading />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Organizing");
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking...");
   });
 
   test("keeps heartbeat-only waiting distinct from model work", () => {
@@ -56,9 +54,7 @@ describe("<AgentProgressPill />", () => {
       />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Reading this through · 9s",
-    );
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking · 9s");
   });
 
   test("lets a real stall override an earlier partial answer", () => {

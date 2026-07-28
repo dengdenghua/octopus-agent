@@ -5874,8 +5874,9 @@ export const koKR: Translations = {
 
   // Public Thinking Status
   publicThinkingStatus: {
-    waitingForModel: "내용을 살펴보고 있습니다",
-    modelWorking: "흐름을 정리하고 있습니다",
+    waitingForModel: "생각 중",
+    modelWorking: "생각 중...",
+    thinkingCompleted: "생각 완료",
     slowResponse: "계속 진행 중입니다. 조금 더 걸리고 있습니다",
     reconnecting: "연결이 끊겨 다시 돌아오는 중입니다",
   },

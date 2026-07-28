@@ -57,10 +57,14 @@ function fallbackStatusLabel({
   t,
   vitals,
   hasStreamingAnswer,
+  runSettled,
+  runFailed,
 }: {
   t: ReturnType<typeof useI18n>["t"];
   vitals?: StreamVitals;
   hasStreamingAnswer?: boolean;
+  runSettled?: boolean;
+  runFailed?: boolean;
 }): string {
   const s = t.publicThinkingStatus;
   if (vitals?.phase === "disconnected") return s.reconnecting;
@@ -72,6 +76,7 @@ function fallbackStatusLabel({
     const elapsedS = Math.floor(vitals.elapsedMs / 1000);
     return `${s.waitingForModel}${elapsedS >= 3 ? ` · ${elapsedS}s` : ""}`;
   }
+  if (runSettled && !runFailed) return s.thinkingCompleted;
   if (vitals && vitals.phase !== "idle") {
     const elapsedS = Math.floor(vitals.elapsedMs / 1000);
     const suffix = elapsedS >= 3 ? ` · ${elapsedS}s` : "";
@@ -294,6 +299,8 @@ export function AgentProgressPill({
       t,
       vitals,
       hasStreamingAnswer,
+      runSettled,
+      runFailed,
     });
     // "slow" is the one genuinely ambiguous state — the model may still be
     // working or the turn may be wedged. Tint it so it reads as "taking a

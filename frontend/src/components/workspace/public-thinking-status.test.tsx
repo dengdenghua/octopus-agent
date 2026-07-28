@@ -53,7 +53,7 @@ describe("PublicThinkingStatus", () => {
     );
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("正在整理线索");
+    expect(status).toHaveTextContent("思考中...");
     expect(status).toHaveTextContent("8s");
     expect(status).not.toHaveTextContent("理解");
     expect(status).not.toHaveTextContent("规划");
@@ -71,7 +71,7 @@ describe("PublicThinkingStatus", () => {
     );
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("我在看这件事");
+    expect(status).toHaveTextContent("思考中");
     expect(status).toHaveTextContent("18s");
     expect(status).not.toHaveTextContent("模型处理中");
     expect(status).not.toHaveTextContent("模型");
@@ -88,7 +88,7 @@ describe("PublicThinkingStatus", () => {
     );
 
     const pulse = screen.getByTestId("conversation-activity-pulse");
-    expect(pulse).toHaveTextContent("正在整理线索");
+    expect(pulse).toHaveTextContent("思考中...");
     expect(pulse).toHaveTextContent("12s");
     expect(pulse).toHaveTextContent("搜索资料: Kimi streaming interaction");
     expect(pulse).not.toHaveTextContent("web_search");

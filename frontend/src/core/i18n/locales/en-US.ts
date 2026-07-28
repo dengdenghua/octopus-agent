@@ -5915,8 +5915,9 @@ Strategy:
 
   // Public Thinking Status
   publicThinkingStatus: {
-    waitingForModel: "Reading this through",
-    modelWorking: "Organizing the thread",
+    waitingForModel: "Thinking",
+    modelWorking: "Thinking...",
+    thinkingCompleted: "Thinking complete",
     slowResponse: "Still on it — slower than usual",
     reconnecting: "Connection dropped — reconnecting",
   },

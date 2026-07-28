@@ -5914,8 +5914,9 @@ export const jaJP: Translations = {
 
   // Public Thinking Status
   publicThinkingStatus: {
-    waitingForModel: "内容を確認しています",
-    modelWorking: "流れを整理しています",
+    waitingForModel: "思考中",
+    modelWorking: "思考中...",
+    thinkingCompleted: "思考完了",
     slowResponse: "続けています。少し時間がかかっています",
     reconnecting: "接続が切れました。戻っています",
   },

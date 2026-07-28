@@ -5002,6 +5002,7 @@ export interface Translations {
   publicThinkingStatus: {
     waitingForModel: string;
     modelWorking: string;
+    thinkingCompleted: string;
     slowResponse: string;
     reconnecting: string;
   };
