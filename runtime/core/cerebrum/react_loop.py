@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import contextlib
-import contextvars
 import json
 import logging
 import os
-import queue
 import re
-import threading
 import time
 import uuid
 from collections.abc import Callable, Generator
@@ -111,6 +108,17 @@ from runtime.core.cerebrum.react_loop_controls import (
     pick_react_variant,
     record_react_variant_result,
 )
+from runtime.core.cerebrum.react_model_deadlines import (
+    _MODEL_STREAM_DEADLINE,
+    _collect_model_stream_text_with_deadline,
+    _finish_reason_is_length_limited,
+    _iter_model_stream_with_deadline,
+    _model_evidence_synthesis_timeout_s,
+    _model_iteration_timeout_s,
+    _model_post_tool_timeout_s,
+    _model_recovery_timeout_s,
+    _stage_update_timeout_fallback,
+)
 from runtime.core.cerebrum.react_parallel_dispatch import (
     _WRITE_TOOLS,
     _dispatch_parallel_actions,
@@ -175,10 +183,6 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-
-_LENGTH_LIMITED_FINISH_REASONS = frozenset(
-    {"length", "max_tokens", "max_output_tokens", "output_limit", "token_limit"}
-)
 
 _PUBLIC_UPDATE_PROTOCOL_RE = re.compile(
     r"(?:^|\n)\s*(?:Thought|Action|Observation|Final\s*Answer)\s*:",
@@ -799,233 +803,6 @@ def _should_accumulate_quiet_evidence(
     """Keep successful read evidence even when it arrived in one parallel batch."""
 
     return succeeded and bool(observation) and bool(_quiet_evidence_targets([step]))
-
-
-def _model_iteration_timeout_s() -> float:
-    """Wall-clock ceiling for one hidden model-thinking iteration.
-
-    Provider read timeouts only fire when no bytes arrive. A reasoning model
-    can keep sending private thinking forever, so the loop needs its own bound.
-    Operators may tune it without a deploy; invalid values fall back safely.
-    """
-    raw = os.environ.get("OCTOPUS_REACT_MODEL_ITERATION_TIMEOUT_S", "120")
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        return 120.0
-    return max(10.0, min(value, 900.0))
-
-
-def _model_recovery_timeout_s(base_timeout_s: float) -> float:
-    """Shorter ceiling for the no-extended-thinking convergence retry.
-
-    The first model round may legitimately spend time on deep reasoning. Once
-    that round has already exceeded its deadline, the recovery request is a
-    bounded direct-answer attempt; granting it the full original allowance can
-    make one silent turn block for another two minutes. Keep the value tunable,
-    never lengthen the operator's ordinary iteration timeout, and preserve tiny
-    injected deadlines used by deterministic tests.
-    """
-
-    raw = os.environ.get("OCTOPUS_REACT_MODEL_RECOVERY_TIMEOUT_S", "30")
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        value = 30.0
-    recovery_ceiling = max(10.0, min(value, 120.0))
-    return min(base_timeout_s, recovery_ceiling)
-
-
-def _model_post_tool_timeout_s(base_timeout_s: float) -> float:
-    """Use a tighter ceiling once the turn already has executable evidence."""
-
-    raw = os.environ.get("OCTOPUS_REACT_POST_TOOL_TIMEOUT_S", "45")
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        value = 45.0
-    post_tool_ceiling = max(10.0, min(value, 180.0))
-    return min(base_timeout_s, post_tool_ceiling)
-
-
-def _model_evidence_synthesis_timeout_s(base_timeout_s: float) -> float:
-    """Bound a normal evidence-complete answer without treating it as recovery.
-
-    Reasoning providers can spend more than the 30-second failure-recovery
-    ceiling reading a large completed observation set before their first answer
-    token.  This round is expected synthesis, not a retry after a stall, so give
-    it a modest dedicated window while keeping it well below the initial deep
-    reasoning allowance.
-    """
-
-    raw = os.environ.get("OCTOPUS_REACT_EVIDENCE_SYNTHESIS_TIMEOUT_S", "60")
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        value = 60.0
-    synthesis_ceiling = max(15.0, min(value, 180.0))
-    return min(base_timeout_s, synthesis_ceiling)
-
-
-_MODEL_STREAM_DEADLINE = object()
-
-
-def _iter_model_stream_with_deadline(
-    router: Any,
-    request: Any,
-    timeout_s: float,
-    visible_started: Callable[[], Any],
-) -> Generator[Any, None, None]:
-    """Pump a blocking model iterator through a hard wall-clock deadline.
-
-    Checking elapsed time inside ``for evt in call_stream(...)`` cannot stop a
-    provider that sends no bytes at all: control never returns to the loop.
-    A daemon pump keeps the synchronous router contract while the ReAct thread
-    waits on a bounded queue.  The copied context preserves actor/tracing data.
-    """
-    event_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=64)
-    stop_event = threading.Event()
-    caller_context = contextvars.copy_context()
-    _current_cancellation_token: Any = None
-    try:
-        from runtime.safety.approval.cancellation import (
-            current_cancellation_token as _imported_token,
-        )
-
-        _current_cancellation_token = _imported_token
-    except ImportError:  # pragma: no cover - optional subsystem
-        _current_cancellation_token = None
-
-    def _put(kind: str, value: Any) -> None:
-        while not stop_event.is_set():
-            try:
-                event_queue.put((kind, value), timeout=0.1)
-                return
-            except queue.Full:
-                continue
-
-    def _consume() -> None:
-        try:
-            for event in router.call_stream(request):
-                if stop_event.is_set():
-                    break
-                _put("event", event)
-        except Exception as exc:  # pragma: no cover - re-raised in caller
-            _put("error", exc)
-        finally:
-            _put("done", None)
-
-    worker = threading.Thread(
-        target=lambda: caller_context.run(_consume),
-        name="react-model-stream-pump",
-        daemon=True,
-    )
-    worker.start()
-    timeout_s = max(0.0, timeout_s)
-    deadline = time.monotonic() + timeout_s
-    visible_mode = False
-    visible_activity: Any = None
-    try:
-        while True:
-            token = (
-                _current_cancellation_token() if _current_cancellation_token is not None else None
-            )
-            if token is not None and token.is_cancelled:
-                return
-            current_visible_activity = visible_started()
-            if current_visible_activity and (
-                not visible_mode or current_visible_activity != visible_activity
-            ):
-                # Once an answer is visibly streaming, switch from a hard
-                # thinking ceiling to an inactivity deadline. Long reports
-                # may legitimately exceed the thinking ceiling as long as
-                # user-visible tokens continue to arrive.
-                visible_mode = True
-                visible_activity = current_visible_activity
-                deadline = time.monotonic() + timeout_s
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                yield _MODEL_STREAM_DEADLINE
-                return
-            try:
-                kind, value = event_queue.get(timeout=min(0.25, remaining))
-            except queue.Empty:
-                continue
-            if kind == "event":
-                yield value
-            elif kind == "error":
-                raise value
-            else:
-                return
-    finally:
-        stop_event.set()
-
-
-def _collect_model_stream_text_with_deadline(
-    router: Any,
-    request: Any,
-    timeout_s: float,
-) -> tuple[str, Any] | object:
-    """Collect a tools-disabled synthesis stream without an unbounded call.
-
-    The main ReAct rounds already use the guarded streaming path, but the
-    post-loop convergence pass historically fell back to ``router.call``.
-    A provider that only hangs on that non-streaming endpoint could therefore
-    strand an otherwise completed long task after its final tool.  Reuse the
-    same deadline here and switch to an inactivity deadline after answer text
-    begins, so long reports can finish while silent/private reasoning cannot
-    run forever.
-    """
-    text_parts: list[str] = []
-    final_response = None
-    visible_state = {"chars": 0}
-    for event in _iter_model_stream_with_deadline(
-        router,
-        request,
-        timeout_s,
-        lambda: visible_state["chars"],
-    ):
-        if event is _MODEL_STREAM_DEADLINE:
-            return _MODEL_STREAM_DEADLINE
-        if getattr(event, "type", "") == "text_delta":
-            delta = str(getattr(event, "delta", "") or "")
-            if delta:
-                text_parts.append(delta)
-                visible_state["chars"] += len(delta)
-        elif getattr(event, "type", "") in {"done", "response_end"}:
-            final_response = getattr(event, "final", None) or getattr(event, "response", None)
-    text = "".join(text_parts).strip()
-    if not text and final_response is not None:
-        text = str(getattr(final_response, "text", "") or "").strip()
-    return text, final_response
-
-
-def _stage_update_timeout_fallback(steps: list[ReActStep]) -> str:
-    """Return a truthful visible handoff when final synthesis times out."""
-    updates: list[str] = []
-    for step in steps:
-        update = (step.public_update or "").strip()
-        if update and update not in updates:
-            updates.append(update)
-    if not updates:
-        return (
-            "最终汇总模型在收尾时超过了单轮时限。已完成的工具结果和来源仍保留在"
-            "过程记录中，但这次无法可靠生成最终答复；点击继续即可从现有进度重新收敛。"
-        )
-    joined = "\n\n".join(updates[-6:])
-    return (
-        "最终汇总模型在收尾时超过了单轮时限。以下阶段结论已经在执行过程中确认，"
-        "相关来源和工具结果仍保留在过程记录中；这不是完整最终报告，点击继续可直接"
-        "从现有进度重新收敛。\n\n"
-        f"{joined}"
-    )
-
-
-def _finish_reason_is_length_limited(reason: str | None) -> bool:
-    """True when ``finish_reason`` signals the model was cut off by the output
-    token ceiling rather than finishing on its own. Centralizes the set that
-    PHASE 6c previously inlined in two identical places."""
-    return (reason or "").strip().lower() in _LENGTH_LIMITED_FINISH_REASONS
 
 
 def _tool_call_succeeded(observation: str | None, beak_step: Step | None) -> bool:
