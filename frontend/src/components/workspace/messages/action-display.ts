@@ -260,13 +260,74 @@ function isTeammateToolName(name: string): boolean {
     n.includes("sub_agent") ||
     n.includes("spawn_agent") ||
     n.includes("delegate") ||
-    n === "call_teammate"
+    n === "call_teammate" ||
+    n === "call_agent" ||
+    n === "call_agent_parallel" ||
+    n === "delegate_agent"
   );
+}
+
+function extractTeammateName(args: Record<string, unknown>): string {
+  for (const key of ["agent_name", "display_name"]) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  for (const key of ["agent_id", "subagent_type", "name", "role"]) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim()) {
+      return friendlyRoleName(value.trim());
+    }
+  }
+  const specs = args.specs;
+  if (Array.isArray(specs) && specs.length > 0) {
+    const first = specs[0];
+    if (first && typeof first === "object") {
+      const record = first as Record<string, unknown>;
+      let rawName = "";
+      for (const key of ["agent_id", "agent", "name", "role", "display_name"]) {
+        const value = record[key];
+        if (typeof value === "string" && value.trim()) {
+          rawName = value.trim();
+          break;
+        }
+      }
+      if (rawName) {
+        const friendly = friendlyRoleName(rawName);
+        return specs.length > 1 ? `${friendly} 等` : friendly;
+      }
+    }
+  }
+  return "";
+}
+
+function friendlyRoleName(role: string | undefined | null): string {
+  const value = role?.trim();
+  if (!value) return "Task Agent";
+  const lower = value.toLowerCase();
+  const map: Record<string, string> = {
+    architect: "System Architect",
+    critic: "Reviewer",
+    debugger: "Debug Investigator",
+    designer: "Designer",
+    implementer: "Builder",
+    planner: "Planner",
+    researcher: "Research Specialist",
+    reviewer: "Code Reviewer",
+    security: "Security Reviewer",
+    "security-review": "Security Reviewer",
+    synthesizer: "Synthesizer",
+    writer: "Writer",
+  };
+  return map[lower] ?? value.replace(/[_-]+/g, " ");
 }
 
 function isWebFetchToolName(name: string): boolean {
   const n = name.toLowerCase();
-  return n.includes("fetch") && (n.includes("web") || n.includes("http"));
+  return (
+    n === "fetch_url" ||
+    n === "web_fetch" ||
+    (n.includes("fetch") && (n.includes("web") || n.includes("http")))
+  );
 }
 
 export function getActionDisplay(
@@ -431,12 +492,7 @@ export function getActionDisplay(
   }
 
   if (isTeammateToolName(toolName)) {
-    const teammateName =
-      typeof args.agent_name === "string"
-        ? args.agent_name
-        : typeof args.name === "string"
-          ? args.name
-          : "";
+    const teammateName = extractTeammateName(args);
     return {
       labelKey: "delegate_task",
       verb: "委派任务",

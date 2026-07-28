@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { AIMessage } from "@/core/api/types";
+import type { AIMessage, ToolMessage } from "@/core/api/types";
 import { renderWithProviders } from "@/test/harness";
 
 import { MessageGroup } from "./message-group";
@@ -62,5 +62,34 @@ describe("MessageGroup labelled ReAct trace privacy", () => {
       screen.queryByText("Read webpage: https://example.com/report"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTitle(/Replay/)).not.toBeInTheDocument();
+  });
+
+  it("renders real fetch tools as human activity without leaking the raw tool name", () => {
+    const toolCall: AIMessage = {
+      id: "ai-fetch",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "fetch-1",
+          name: "fetch_url",
+          args: { url: "https://example.com/report" },
+        },
+      ],
+    };
+    const result: ToolMessage = {
+      id: "tool-fetch",
+      type: "tool",
+      content: '{"success":true,"title":"Market report"}',
+      tool_call_id: "fetch-1",
+    };
+
+    renderWithProviders(
+      <MessageGroup messages={[toolCall, result]} isLoading={false} />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByText(/浏览网页/)).toBeInTheDocument();
+    expect(screen.queryByText(/fetch_url/i)).not.toBeInTheDocument();
   });
 });

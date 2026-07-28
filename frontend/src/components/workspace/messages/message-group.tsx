@@ -54,7 +54,9 @@ import {
   shellCommandFromInput,
 } from "../tool-name-groups";
 
+import { AgentAvatar } from "./agent-message-header";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
+import { friendlyRoleName } from "../agent-workbench-pages";
 import {
   extractFactSummary,
   isToolResultError,
@@ -122,6 +124,78 @@ function isTeamCallToolName(name: string): boolean {
     normalized === "delegate_agent" ||
     normalized === "spawn_agent"
   );
+}
+
+function roleIconFromId(roleId: string): string | null {
+  const map: Record<string, string> = {
+    architect: "🏗️",
+    critic: "⚖️",
+    debugger: "🐛",
+    designer: "🎨",
+    implementer: "🛠️",
+    planner: "🗺️",
+    researcher: "🔍",
+    reviewer: "👁️",
+    security: "🛡️",
+    "security-review": "🛡️",
+    synthesizer: "🧩",
+    writer: "✍️",
+  };
+  return map[roleId.toLowerCase()] ?? null;
+}
+
+function subagentIdentityFromArgs(args: Record<string, unknown>): {
+  name: string;
+  icon?: string | null;
+  avatarUrl?: string;
+} {
+  const explicitIcon = typeof args.icon === "string" ? args.icon : null;
+  const avatarUrl =
+    typeof args.avatar_url === "string" ? args.avatar_url : undefined;
+
+  // Helper to pick the raw identity key and map it to a human-readable role.
+  const pickRaw = (source: Record<string, unknown>): string => {
+    return (
+      (typeof source.agent_name === "string" && source.agent_name.trim()) ||
+      (typeof source.display_name === "string" && source.display_name.trim()) ||
+      (typeof source.subagent_type === "string" &&
+        source.subagent_type.trim()) ||
+      (typeof source.agent_id === "string" && source.agent_id.trim()) ||
+      (typeof source.name === "string" && source.name.trim()) ||
+      (typeof source.role === "string" && source.role.trim()) ||
+      ""
+    );
+  };
+
+  // Top-level single-agent delegation (call_agent / delegate_agent)
+  const rawTop = pickRaw(args);
+  if (rawTop) {
+    return {
+      name: friendlyRoleName(rawTop),
+      icon: explicitIcon ?? roleIconFromId(rawTop),
+      avatarUrl,
+    };
+  }
+
+  // Parallel delegation: specs=[{agent_id, prompt}, ...]
+  const specs = args.specs;
+  if (Array.isArray(specs) && specs.length > 0) {
+    const first = specs[0];
+    if (first && typeof first === "object") {
+      const record = first as Record<string, unknown>;
+      const rawFirst = pickRaw(record);
+      if (rawFirst) {
+        const name = friendlyRoleName(rawFirst);
+        return {
+          name: specs.length > 1 ? `${name} 等` : name,
+          icon: explicitIcon ?? roleIconFromId(rawFirst),
+          avatarUrl,
+        };
+      }
+    }
+  }
+
+  return { name: "", icon: explicitIcon, avatarUrl };
 }
 
 function publicActionTextFromTraceTool(
@@ -283,6 +357,23 @@ export function MessageGroup({
   const thinkingStartTimeRef = useRef<number | null>(null);
   const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
   const steps = useMemo(() => convertToSteps(messages), [messages]);
+  // Map parentItemId -> subagent identity so that child tool rows (searches,
+  // reads, edits) spawned by a teammate can show the teammate's avatar.
+  const subagentByParentItemId = useMemo(() => {
+    const map = new Map<
+      string,
+      { name: string; icon?: string | null; avatarUrl?: string }
+    >();
+    for (const step of steps) {
+      if (step.type !== "toolCall") continue;
+      if (!isTeamCallToolName(step.name)) continue;
+      const identity = subagentIdentityFromArgs(step.args);
+      if (identity.name && step.parentItemId) {
+        map.set(step.parentItemId, identity);
+      }
+    }
+    return map;
+  }, [steps]);
   const showInterruptedReceipt =
     !isLoading &&
     messages.some(
@@ -849,6 +940,38 @@ export function MessageGroup({
         actionWorkbenchTab = "agent";
       }
 
+      const isSubagentRow =
+        !isThinking &&
+        ((item.type === "toolCall" && isTeamCallToolName(item.step.name)) ||
+          (isAggregatedGroup && item.aggregateKind === "teammate"));
+      const subagentIdentity = isSubagentRow
+        ? subagentIdentityFromArgs(
+            isAggregatedGroup
+              ? item.items[0]?.step.args ?? {}
+              : item.type === "toolCall"
+                ? item.step.args
+                : {},
+          )
+        : null;
+      const owningSubagent = (() => {
+        if (isSubagentRow) return null;
+        const parentIds = isAggregatedGroup
+          ? item.items
+              .map((child) => child.step.parentItemId)
+              .filter((id): id is string => Boolean(id))
+          : item.type === "toolCall"
+            ? item.step.parentItemId
+              ? [item.step.parentItemId]
+              : []
+            : [];
+        if (parentIds.length === 0) return null;
+        const first = parentIds[0]!;
+        if (parentIds.every((id) => id === first)) {
+          return subagentByParentItemId.get(first) ?? null;
+        }
+        return null;
+      })();
+
       const summary =
         item.type === "reasoningGroup"
           ? summarizeReasoningGroup(item, t)
@@ -916,41 +1039,28 @@ export function MessageGroup({
             <button
               type="button"
               onClick={() => {
-                const hasThinkingDetail =
-                  isThinking &&
-                  processEventDetail &&
-                  processEventDetail.trim() !==
-                    (processEventSummary || summary).trim();
-                if (hasThinkingDetail) {
-                  setExpandedThinkingRows((current) => ({
-                    ...current,
-                    [item.id]: !current[item.id],
-                  }));
-                } else {
-                  // 双向联动：只追加激活，不改变既有点击行为
-                  activateTimelineItem(timelineItemLinkageId(item), "chat");
-                  emitOpenAgentWorkbench({
-                    tab: actionWorkbenchTab,
-                    eventId: workbenchEventId,
-                    eventKind: isThinking ? "thinking" : "execution",
-                    view: isThinking ? "summary" : "trace",
-                    processEvent: {
-                      kind: isThinking ? "thinking" : "execution",
-                      summary: processEventSummary,
-                      detail: processEventDetail || processEventSummary,
-                      status: state,
-                      count,
-                      phaseId: step.phaseId,
-                      parentItemId: step.parentItemId,
-                      timelineSequence: step.timelineSequence,
-                    },
-                    effectKey: needsEffectReview
-                      ? "effect_key" in effectReceipt
-                        ? effectReceipt.effect_key
-                        : effectReceipt.effectKey
-                      : undefined,
-                  });
-                }
+                activateTimelineItem(timelineItemLinkageId(item), "chat");
+                emitOpenAgentWorkbench({
+                  tab: actionWorkbenchTab,
+                  eventId: workbenchEventId,
+                  eventKind: isThinking ? "thinking" : "execution",
+                  view: isThinking ? "summary" : "trace",
+                  processEvent: {
+                    kind: isThinking ? "thinking" : "execution",
+                    summary: processEventSummary,
+                    detail: processEventDetail || processEventSummary,
+                    status: state,
+                    count,
+                    phaseId: step.phaseId,
+                    parentItemId: step.parentItemId,
+                    timelineSequence: step.timelineSequence,
+                  },
+                  effectKey: needsEffectReview
+                    ? "effect_key" in effectReceipt
+                      ? effectReceipt.effect_key
+                      : effectReceipt.effectKey
+                    : undefined,
+                });
               }}
               className={cn(
                 "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] transition-colors",
@@ -1009,6 +1119,20 @@ export function MessageGroup({
                     />
                   </span>
                 </span>
+              ) : isSubagentRow && subagentIdentity?.name ? (
+                <AgentAvatar
+                  agentDisplayName={subagentIdentity.name}
+                  icon={subagentIdentity.icon}
+                  avatarUrl={subagentIdentity.avatarUrl}
+                  className="size-4 shrink-0 rounded-[4px] text-[10px]"
+                />
+              ) : owningSubagent?.name ? (
+                <AgentAvatar
+                  agentDisplayName={owningSubagent.name}
+                  icon={owningSubagent.icon}
+                  avatarUrl={owningSubagent.avatarUrl}
+                  className="size-4 shrink-0 rounded-[4px] text-[10px]"
+                />
               ) : (
                 <ActionIcon className="size-3.5 shrink-0 text-muted-foreground" />
               )}
@@ -1353,22 +1477,43 @@ function extractSafeContextFromArgs(
 function extractTeamCallTarget(
   args: Record<string, unknown>,
 ): string | undefined {
-  for (const key of ["agent", "agent_name", "name", "role", "display_name"]) {
+  for (const key of ["agent_name", "display_name"]) {
     const value = args[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
-  for (const key of ["agents", "roles", "team"]) {
+  for (const key of [
+    "agent",
+    "agent_id",
+    "subagent_type",
+    "name",
+    "role",
+  ]) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim()) {
+      return friendlyRoleName(value.trim());
+    }
+  }
+  for (const key of ["agents", "roles", "team", "specs"]) {
     const value = args[key];
     if (!Array.isArray(value)) continue;
     const names = value
       .map((item) => {
-        if (typeof item === "string") return item.trim();
+        if (typeof item === "string") return friendlyRoleName(item.trim());
         if (typeof item !== "object" || item === null) return "";
         const record = item as Record<string, unknown>;
-        for (const nestedKey of ["name", "role", "agent", "display_name"]) {
+        for (const nestedKey of [
+          "agent_name",
+          "display_name",
+          "agent_id",
+          "agent",
+          "name",
+          "role",
+        ]) {
           const nested = record[nestedKey];
           if (typeof nested === "string" && nested.trim()) {
-            return nested.trim();
+            return nestedKey === "agent_name" || nestedKey === "display_name"
+              ? nested.trim()
+              : friendlyRoleName(nested.trim());
           }
         }
         return "";

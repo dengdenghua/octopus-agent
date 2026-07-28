@@ -490,6 +490,19 @@ def _format_role_catalog() -> str:
     return "\n".join(f"  - {name}: {desc}" for name, desc in rows)
 
 
+def _display_name_for_agent_id(agent_id: str) -> str | None:
+    """Return the human-readable display name for a builtin role, if any."""
+    try:
+        from .ephemeral_agents import BUILTIN_ROLES
+
+        role = BUILTIN_ROLES.get(agent_id)
+        if role is not None:
+            return role.display_name or None
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def _allowed_agent_ids() -> set[str]:
     """Names of every subagent this skill is allowed to spawn — INCLUDES
     the un-advertised builtins (researcher / debugger / explorer /
@@ -858,6 +871,8 @@ def _call_agent(
         result["agent_id"] = target_raw
         result["resolved_to"] = target
         result["custom_role"] = role_label
+    # Expose the human-readable role name to the UI.
+    result["display_name"] = _display_name_for_agent_id(target)
     return result
 
 
@@ -1319,17 +1334,20 @@ def _build_parallel_envelope(
             )
             continue
         agent_id = str(r.get("agent_id") or "")
+        resolved_to = r.get("resolved_to")
         output = str(r.get("output") or "")
         common = {
             "role": str(r.get("role") or r.get("custom_role") or agent_id),
             "agent_id": agent_id,
+            "display_name": r.get("display_name")
+            or _display_name_for_agent_id(str(resolved_to or agent_id)),
             "spec_index": r.get("spec_index"),
             "task_label": r.get("task_label"),
             "bb_key": r.get("bb_key"),
             "task_preview": r.get("task_preview"),
             "codename": r.get("codename"),
             "avatar": r.get("avatar"),
-            "resolved_to": r.get("resolved_to"),
+            "resolved_to": resolved_to,
             "custom_role": r.get("custom_role"),
             "iteration_count": r.get("iteration_count") or r.get("rounds_completed"),
             "rounds_completed": r.get("rounds_completed") or r.get("iteration_count"),

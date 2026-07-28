@@ -135,6 +135,19 @@ describe("getActionDisplay", () => {
     expect(d.aggregateKind).toBe("teammate");
   });
 
+  it("uses the first named role for parallel teammate delegation", () => {
+    const d = getActionDisplay("call_agent_parallel", {
+      specs: [
+        { agent_id: "researcher", prompt: "Collect evidence" },
+        { agent_id: "reviewer", prompt: "Review evidence" },
+      ],
+    });
+    expect(d.labelKey).toBe("delegate_task");
+    expect(d.object).toContain("Research Specialist");
+    expect(d.object).toContain("等");
+    expect(d.aggregateKind).toBe("teammate");
+  });
+
   it("maps delete/remove tools to delete_file label", () => {
     const d = getActionDisplay("delete_file", { path: "tmp.txt" });
     expect(d.labelKey).toBe("delete_file");

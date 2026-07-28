@@ -161,6 +161,131 @@ function renderMessageList(args: {
 }
 
 describe("MessageList process trace lifecycle", () => {
+  test("keeps one coherent assistant lane across a long-task lifecycle", () => {
+    const agent = {
+      name: "general",
+      display_name: "Eve",
+      avatar_url: "/api/agents/general/avatar",
+    };
+    const user = message("user-long", "human", "完成一项多阶段市场调研");
+    const initialThread = mockThread({
+      messages: [user],
+      isLoading: true,
+    });
+    const { rerender } = renderMessageList({
+      thread: initialThread,
+      mode: "chat",
+      locale: "zh-CN",
+      currentAgent: agent,
+    });
+
+    expect(
+      screen.getByTestId("conversation-activity-pulse"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+
+    const planning: AIMessage = {
+      id: "assistant-plan",
+      type: "ai",
+      content: "我先确定赛道，再核对市场与竞品证据。",
+      additional_kwargs: {
+        public_progress: true,
+        phase_id: "turn-long:phase-1",
+        agent_id: "general",
+        agent_display_name: "Eve",
+      },
+    };
+    const searchCall: AIMessage = {
+      id: "assistant-search",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "search-long",
+          name: "web_search",
+          args: { query: "2026 AI mental health market" },
+          phaseId: "turn-long:phase-1",
+        },
+      ],
+      additional_kwargs: {
+        agent_id: "general",
+        agent_display_name: "Eve",
+      },
+    };
+    rerender(
+      messageListTree({
+        thread: mockThread({
+          messages: [user, planning, searchCall],
+          isLoading: true,
+        }),
+        mode: "chat",
+        currentAgent: agent,
+        liveToolEvents: [
+          toolEvent("web_search", {
+            id: "search-long",
+            status: "running",
+            input: { query: "2026 AI mental health market" },
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText("我先确定赛道，再核对市场与竞品证据。"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("搜索网页")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-activity-pulse"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/web_search/)).not.toBeInTheDocument();
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+
+    const searchResult = {
+      id: "search-result-long",
+      type: "tool",
+      content: '{"success":true,"count":8}',
+      tool_call_id: "search-long",
+    } as Message;
+    const finalAnswer: AIMessage = {
+      id: "assistant-final-long",
+      type: "ai",
+      content: "调研完成：建议优先进入校园心理健康基础设施赛道。",
+      additional_kwargs: {
+        agent_id: "general",
+        agent_display_name: "Eve",
+      },
+    };
+    rerender(
+      messageListTree({
+        thread: mockThread({
+          messages: [user, planning, searchCall, searchResult, finalAnswer],
+        }),
+        mode: "chat",
+        currentAgent: agent,
+        completedAgentOutput: true,
+        lastTurnToolEvents: [
+          toolEvent("web_search", {
+            id: "search-long",
+            status: "done",
+            input: { query: "2026 AI mental health market" },
+            output: { success: true, count: 8 },
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "调研完成：建议优先进入校园心理健康基础设施赛道。",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-activity-pulse"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getAllByAltText("Eve")).toHaveLength(1);
+  });
+
   test("keeps hidden user actions out of the document flow", () => {
     const thread = mockThread({
       messages: [message("user-1", "human", "继续")],
@@ -897,7 +1022,7 @@ describe("MessageList process trace lifecycle", () => {
     });
 
     const pulse = screen.getByTestId("conversation-activity-pulse");
-    expect(pulse).toHaveTextContent("Organizing");
+    expect(pulse).toHaveTextContent("Thinking...");
     expect(pulse).toHaveTextContent("Read file: app.ts");
 
     rerender(
@@ -921,7 +1046,7 @@ describe("MessageList process trace lifecycle", () => {
     );
 
     expect(screen.getByTestId("conversation-activity-pulse")).toHaveTextContent(
-      "Organizing",
+      "Thinking...",
     );
 
     rerender(

@@ -301,6 +301,24 @@ export const MessageListItem = memo(function MessageListItem({
 }) {
   const { t } = useI18n();
   const isHuman = message.type === "human";
+  const messageMetadata =
+    message.type === "ai"
+      ? (message.additional_kwargs as Record<string, unknown> | undefined)
+      : undefined;
+  const assistantIsSettledAnswer =
+    message.type === "ai" &&
+    messageMetadata?.message_kind !== "commentary" &&
+    messageMetadata?.public_progress !== true &&
+    messageMetadata?.response_state !== "interrupted" &&
+    messageMetadata?.response_state !== "failed" &&
+    messageMetadata?.run_status !== "streaming";
+  const clipboardText = useMemo(
+    () => messageClipboardText(message),
+    [message],
+  );
+  const showMessageActions =
+    !isLoading &&
+    (isHuman || (assistantIsSettledAnswer && clipboardText.length > 0));
   const params = useParams();
   const threadIdForFeedback = params.threadId ?? params.thread_id ?? null;
   const submitFeedback = useCallback(
@@ -354,7 +372,7 @@ export const MessageListItem = memo(function MessageListItem({
         suppressReasoningPanel={suppressReasoningPanel}
         enableClarificationActions={enableClarificationActions}
       />
-      {!isLoading && (
+      {showMessageActions && (
         <div
           className={cn(
             "flex items-center gap-1.5 text-muted-foreground",
@@ -388,7 +406,7 @@ export const MessageListItem = memo(function MessageListItem({
             </>
           )}
           <CopyButton
-            clipboardData={messageClipboardText(message)}
+            clipboardData={clipboardText}
             size="icon-sm"
             className="size-6 rounded-lg border-0 bg-transparent p-0 text-muted-foreground/70 shadow-none transition-colors duration-200 hover:bg-muted/60 hover:text-foreground focus-visible:ring-0"
           />
