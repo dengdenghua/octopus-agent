@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import Any
 
 from runtime.core.cerebrum.react_context import (
     _estimate_messages_tokens,
+    _serialize_messages_for_checkpoint,
     context_budget_tokens_for_model,
 )
 from runtime.core.cerebrum.react_types import _DEFAULT_REACT_RECIPES, ReActRecipe
@@ -329,3 +330,101 @@ def get_react_variant_stats() -> list[dict[str, Any]]:
 def _reset_react_variants_for_tests() -> None:
     global _REACT_SPLITTER
     _REACT_SPLITTER = None
+
+
+# ── Cancel / pause guard (per-iteration, PHASE 6a) ────────────────
+def _cancel_pause_guard(
+    *,
+    iteration: int,
+    react_task_id: Any,
+    max_iterations: int,
+    stack: Any,
+    messages: list,
+    steps: list,
+    working_set: dict,
+    progress_summary: Any,
+    current_phase: Any,
+    pause_controller: Any,
+    append_pending_live_steering: Callable[[], int],
+) -> Generator[dict[str, Any], None, str | None]:
+    """Per-iteration cancel/pause guard for the ReAct main loop.
+
+    Yields the ``react_paused`` event when a pause request lands and
+    returns the ``terminated_reason`` (``"cancelled"`` / ``"paused"``)
+    when the loop must break, ``None`` otherwise.
+    """
+    # Cancellation check — runs before pause check so a tripped
+    # token wins over an in-flight pause request. The ambient
+    # token is set by the request handler (e.g. FastAPI's
+    # disconnect watcher); when ``CancellationToken.none()`` is
+    # active the call is essentially free (one bool read).
+    try:
+        from runtime.safety.approval.cancellation import current_cancellation_token
+
+        _ct = current_cancellation_token()
+        if _ct.is_cancelled:
+            terminated_reason = "cancelled"
+            _logger.info(
+                "react_loop cancelled at iteration %d (task %s) — reason=%s",
+                iteration,
+                react_task_id,
+                _ct.reason or "client disconnected",
+            )
+            return terminated_reason
+    except (ImportError, AttributeError, TypeError):  # noqa: BLE001 — cancellation subsystem unavailable; proceed normally
+        pass
+
+    # User follow-ups are durable, high-priority inputs. Consume them at
+    # the first model-safe boundary so the next response acknowledges the
+    # user before the original task continues.
+    append_pending_live_steering()
+
+    if pause_controller.is_pause_requested(str(react_task_id) if react_task_id else None):
+        terminated_reason = "paused"
+        _logger.info(
+            "react_loop paused at iteration %d (task %s) — checkpoint written",
+            iteration,
+            react_task_id,
+        )
+        journal = getattr(stack, "journal", None)
+        if journal is not None:
+            with contextlib.suppress(Exception):
+                journal.write_react_checkpoint(
+                    task_id=react_task_id,
+                    iteration_completed=iteration,
+                    max_iterations=max_iterations,
+                    messages_snapshot=_serialize_messages_for_checkpoint(messages),
+                    steps_snapshot=[
+                        {
+                            "iteration": s.iteration,
+                            "thought": s.thought,
+                            "public_update": s.public_update,
+                            "action": s.action,
+                            "observation": s.observation,
+                        }
+                        for s in steps
+                    ],
+                    has_final_answer=False,
+                    working_set_snapshot=list(working_set.values()),
+                    progress_summary=progress_summary,
+                    current_phase=current_phase,
+                )
+            try:
+                req_meta = pause_controller.get_request(str(react_task_id))
+                journal.write_task_paused(
+                    task_id=str(react_task_id) if react_task_id else "",
+                    reason=req_meta.reason if req_meta else "external",
+                    requested_by=req_meta.requested_by if req_meta else "",
+                    iteration=iteration,
+                )
+            except (AttributeError, ImportError):
+                _logger.debug("pause journal write failed", exc_info=True)
+        pause_controller.mark_paused(str(react_task_id) if react_task_id else "")
+        pause_controller.unregister_active(str(react_task_id) if react_task_id else "")
+        yield {
+            "type": "react_paused",
+            "iteration": iteration,
+            "task_id": str(react_task_id) if react_task_id else None,
+        }
+        return terminated_reason
+    return None

@@ -104,6 +104,7 @@ from runtime.core.cerebrum.react_guards import (
 )
 from runtime.core.cerebrum.react_loop_controls import (
     _CONTEXT_PRESSURE_NUDGE,
+    _cancel_pause_guard,
     _disabled_guard_labels,
     _disabled_guards_from_yaml,
     _estimate_context_fullness,
@@ -149,6 +150,7 @@ from runtime.core.cerebrum.react_parsing import (
     _placeholder_observation,
     _safe_for_streamdown,
     _summarize_observation,
+    extract_streamable_thought,
 )
 from runtime.core.cerebrum.react_public_updates import (
     _PUBLIC_EVIDENCE_STREAM_GATE_CHARS,
@@ -1820,79 +1822,21 @@ def stream_react_loop(
 
     for i in range(resume_from_iter, max_iterations):
         # ── PHASE 6a · cancel / pause guard ────────────────────────────
-        # Cancellation check — runs before pause check so a tripped
-        # token wins over an in-flight pause request. The ambient
-        # token is set by the request handler (e.g. FastAPI's
-        # disconnect watcher); when ``CancellationToken.none()`` is
-        # active the call is essentially free (one bool read).
-        try:
-            from runtime.safety.approval.cancellation import current_cancellation_token
-
-            _ct = current_cancellation_token()
-            if _ct.is_cancelled:
-                terminated_reason = "cancelled"
-                _logger.info(
-                    "react_loop cancelled at iteration %d (task %s) — reason=%s",
-                    i,
-                    react_task_id,
-                    _ct.reason or "client disconnected",
-                )
-                break
-        except (ImportError, AttributeError, TypeError):  # noqa: BLE001 — cancellation subsystem unavailable; proceed normally
-            pass
-
-        # User follow-ups are durable, high-priority inputs. Consume them at
-        # the first model-safe boundary so the next response acknowledges the
-        # user before the original task continues.
-        _append_pending_live_steering()
-
-        if _pause.is_pause_requested(str(react_task_id) if react_task_id else None):
-            terminated_reason = "paused"
-            _logger.info(
-                "react_loop paused at iteration %d (task %s) — checkpoint written",
-                i,
-                react_task_id,
-            )
-            journal = getattr(stack, "journal", None)
-            if journal is not None:
-                with contextlib.suppress(Exception):
-                    journal.write_react_checkpoint(
-                        task_id=react_task_id,
-                        iteration_completed=i,
-                        max_iterations=max_iterations,
-                        messages_snapshot=_serialize_messages_for_checkpoint(messages),
-                        steps_snapshot=[
-                            {
-                                "iteration": s.iteration,
-                                "thought": s.thought,
-                                "public_update": s.public_update,
-                                "action": s.action,
-                                "observation": s.observation,
-                            }
-                            for s in steps
-                        ],
-                        has_final_answer=False,
-                        working_set_snapshot=list(_working_set.values()),
-                        progress_summary=_progress_summary,
-                        current_phase=_current_phase,
-                    )
-                try:
-                    req_meta = _pause.get_request(str(react_task_id))
-                    journal.write_task_paused(
-                        task_id=str(react_task_id) if react_task_id else "",
-                        reason=req_meta.reason if req_meta else "external",
-                        requested_by=req_meta.requested_by if req_meta else "",
-                        iteration=i,
-                    )
-                except (AttributeError, ImportError):
-                    _logger.debug("pause journal write failed", exc_info=True)
-            _pause.mark_paused(str(react_task_id) if react_task_id else "")
-            _pause.unregister_active(str(react_task_id) if react_task_id else "")
-            yield {
-                "type": "react_paused",
-                "iteration": i,
-                "task_id": str(react_task_id) if react_task_id else None,
-            }
+        _guard_terminated_reason = yield from _cancel_pause_guard(
+            iteration=i,
+            react_task_id=react_task_id,
+            max_iterations=max_iterations,
+            stack=stack,
+            messages=messages,
+            steps=steps,
+            working_set=_working_set,
+            progress_summary=_progress_summary,
+            current_phase=_current_phase,
+            pause_controller=_pause,
+            append_pending_live_steering=_append_pending_live_steering,
+        )
+        if _guard_terminated_reason is not None:
+            terminated_reason = _guard_terminated_reason
             break
 
         # ── PHASE 6b · LLM call + Final-Answer anchor stream ───────────
@@ -1948,6 +1892,12 @@ def stream_react_loop(
             _streamed_final_chars = 0
             _final_stream_guarded = False
             _final_delta_emitted_this_iteration = False
+            # Incremental Thought-streaming state: while the Final Answer
+            # is still buffered, the Thought prose already decodes token
+            # by token — surface it into the thinking block so tool-heavy
+            # turns show signs of life long before the terminal answer.
+            _thought_stream_cursor = 0
+            _thought_stream_open = False
             # Native tool models keep private thinking in a separate channel,
             # so ordinary text before the first tool call is safe public prose.
             # Stream that model-authored orientation from the main call itself:
@@ -2012,7 +1962,15 @@ def stream_react_loop(
                 # ``current_cancellation_token`` is a contextvar set
                 # by the gateway's interrupt watcher when the user
                 # clicks 停止.
-                _ct_inner = current_cancellation_token()
+                _ct_inner = None
+                try:
+                    from runtime.safety.approval.cancellation import (
+                        current_cancellation_token,
+                    )
+
+                    _ct_inner = current_cancellation_token()
+                except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001 — cancellation subsystem unavailable; mid-stream cancel check skipped
+                    pass
                 if _ct_inner is not None and _ct_inner.is_cancelled:
                     break
                 if evt.type == "text_delta":
@@ -2104,6 +2062,32 @@ def stream_react_loop(
                         # short tasks feel responsive instead of
                         # blocking on full response decode.
                         joined = "".join(text_parts)
+                        # TTFT: while the answer is still anchored out,
+                        # stream the Thought prose into the thinking
+                        # block. Extraction spans only Thought→terminator,
+                        # so Action markup can never leak; skipped when the
+                        # provider already streams native thinking (the
+                        # two would duplicate in the reasoning surface).
+                        if not thinking_parts:
+                            (
+                                _thought_delta,
+                                _thought_stream_cursor,
+                                _thought_stream_open,
+                            ) = extract_streamable_thought(
+                                joined,
+                                _thought_stream_cursor,
+                                _thought_stream_open,
+                            )
+                            if _thought_delta:
+                                yield {
+                                    "type": "thinking_delta",
+                                    "delta": _thought_delta,
+                                    "iteration": i + 1,
+                                }
+                                _throughput_chars += len(_thought_delta)
+                                _tp = _maybe_emit_throughput(_throughput_chars)
+                                if _tp is not None:
+                                    yield _tp
                         m = _FINAL_RE.search(joined)
                         if m and m.group(1).strip():
                             answer_so_far = m.group(1)
@@ -3297,7 +3281,7 @@ def stream_react_loop(
                         )
 
                         _ct_post = current_cancellation_token()
-                    except (ImportError, AttributeError, TypeError):  # noqa: BLE001 — cancellation subsystem unavailable; post-tool cancel check skipped
+                    except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001 — cancellation subsystem unavailable; post-tool cancel check skipped
                         pass
                     _was_cancelled = bool(_ct_post and _ct_post.is_cancelled)
 
