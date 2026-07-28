@@ -371,7 +371,7 @@ def _cancel_pause_guard(
                 _ct.reason or "client disconnected",
             )
             return terminated_reason
-    except (ImportError, AttributeError, TypeError):  # noqa: BLE001 — cancellation subsystem unavailable; proceed normally
+    except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001 — cancellation subsystem unavailable; proceed normally
         pass
 
     # User follow-ups are durable, high-priority inputs. Consume them at

@@ -23,6 +23,7 @@ from runtime.core.cerebrum.react_browser_iteration import (
     _narrow_research_iteration_limit,
 )
 from runtime.core.cerebrum.react_checkpointing import (
+    _auto_checkpoint_and_evaluate_step,
     _checkpoint_interval,
     _checkpoint_mirror,
     _mirror_checkpoint,
@@ -2062,19 +2063,28 @@ def stream_react_loop(
                         # short tasks feel responsive instead of
                         # blocking on full response decode.
                         joined = "".join(text_parts)
+                        m = _FINAL_RE.search(joined)
                         # TTFT: while the answer is still anchored out,
                         # stream the Thought prose into the thinking
-                        # block. Extraction spans only Thought→terminator,
-                        # so Action markup can never leak; skipped when the
-                        # provider already streams native thinking (the
-                        # two would duplicate in the reasoning surface).
+                        # block. Extraction spans only Thought→terminator
+                        # inside the PRE-ANCHOR region (a "Thought:" quoted
+                        # inside the answer body must not echo into the
+                        # reasoning surface); skipped when the provider
+                        # already streams native thinking (the two would
+                        # duplicate in the reasoning surface).
                         if not thinking_parts:
+                            _xml_final_at = joined.lower().find("<final_answer")
+                            _thought_region_end = m.start() if m else len(joined)
+                            if _xml_final_at != -1:
+                                _thought_region_end = min(
+                                    _thought_region_end, _xml_final_at
+                                )
                             (
                                 _thought_delta,
                                 _thought_stream_cursor,
                                 _thought_stream_open,
                             ) = extract_streamable_thought(
-                                joined,
+                                joined[:_thought_region_end],
                                 _thought_stream_cursor,
                                 _thought_stream_open,
                             )
@@ -2088,7 +2098,6 @@ def stream_react_loop(
                                 _tp = _maybe_emit_throughput(_throughput_chars)
                                 if _tp is not None:
                                     yield _tp
-                        m = _FINAL_RE.search(joined)
                         if m and m.group(1).strip():
                             answer_so_far = m.group(1)
                             # Don't pre-stream when the answer body

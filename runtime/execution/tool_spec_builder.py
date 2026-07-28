@@ -14,6 +14,7 @@ re-exports it for the gateway's streaming path.
 from __future__ import annotations
 
 import inspect
+from functools import lru_cache
 from typing import Any
 
 from runtime.core.cerebrum.capability_router import (
@@ -80,18 +81,23 @@ _INTERNAL_PARAMS = frozenset(
 )
 
 
-def _input_schema_from_handler(handler: Any) -> dict[str, Any]:
+@lru_cache(maxsize=512)
+def _input_schema_from_handler(handler: Any) -> tuple[dict[str, Any], ...]:
     """Derive a JSON-Schema ``input_schema`` from a Python handler's
     signature so the LLM sees the correct parameter names and types.
 
     Parameters starting with ``_`` (e.g. ``_kw``), runtime-injected
     ones (``sandbox_dir``, ``allow_sensitive``), and ``self``/``cls``
     are excluded from the schema.
+
+    Result is cached (``lru_cache``) because ``inspect.signature`` is
+    expensive and handlers are immutable — a typical turn builds 50
+    specs, and the same handler objects persist across turns.
     """
     try:
         sig = inspect.signature(handler)
     except (ValueError, TypeError):
-        return {"type": "object", "properties": {}, "additionalProperties": True}
+        return ({"type": "object", "properties": {}, "additionalProperties": True},)
 
     properties: dict[str, Any] = {}
     required: list[str] = []
@@ -150,7 +156,7 @@ def _input_schema_from_handler(handler: Any) -> dict[str, Any]:
     }
     if required:
         schema["required"] = required
-    return schema
+    return (schema,)
 
 
 def build_anthropic_tool_specs(
@@ -272,7 +278,7 @@ def build_anthropic_tool_specs(
         if not desc:
             desc = f"Run the `{name}` skill."
         input_schema = (
-            _input_schema_from_handler(handler)
+            _input_schema_from_handler(handler)[0]
             if handler is not None
             else {"type": "object", "properties": {}, "additionalProperties": True}
         )

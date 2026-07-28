@@ -591,10 +591,11 @@ def _git_status_summary(root: Any) -> str:
     same situational awareness a human gets at first glance, without
     adding seconds to turn startup.
 
-    Capped to ~200 chars total so it never dominates the profile
-    section of the system prompt.
+    All four git subprocess calls run concurrently via threads, cutting
+    worst-case wall time from ~4×timeout to ~1×timeout.
     """
     import subprocess
+    from concurrent.futures import ThreadPoolExecutor
     from pathlib import Path
 
     try:
@@ -620,20 +621,28 @@ def _git_status_summary(root: Any) -> str:
             return ""
         return r.stdout.strip()
 
-    branch = _git("branch", "--show-current") or "(detached)"
-    porcelain = _git("status", "--porcelain")
+    # Run the four independent git queries concurrently to avoid
+    # sequential subprocess latency dominating turn startup.
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="git-profile") as pool:
+        branch_f = pool.submit(_git, "branch", "--show-current")
+        porcelain_f = pool.submit(_git, "status", "--porcelain")
+        upstream_f = pool.submit(_git, "rev-list", "--left-right", "--count", "@{u}...HEAD")
+        last_f = pool.submit(_git, "log", "-1", "--pretty=format:%h %s")
+        branch = branch_f.result() or "(detached)"
+        porcelain = porcelain_f.result()
+        upstream = upstream_f.result()
+        last = last_f.result()
+
     modified = sum(1 for line in porcelain.splitlines() if line and not line.startswith("??"))
     untracked = sum(1 for line in porcelain.splitlines() if line.startswith("??"))
 
     ahead = behind = 0
-    upstream = _git("rev-list", "--left-right", "--count", "@{u}...HEAD")
     if upstream:
         # Output is "<behind>\t<ahead>" relative to upstream.
         upstream_parts = upstream.split()
         if len(upstream_parts) == 2 and upstream_parts[0].isdigit() and upstream_parts[1].isdigit():
             behind, ahead = int(upstream_parts[0]), int(upstream_parts[1])
 
-    last = _git("log", "-1", "--pretty=format:%h %s")
     last_short = (last[:60] + "…") if len(last) > 60 else last
 
     parts: list[str] = [f"branch={branch}"]

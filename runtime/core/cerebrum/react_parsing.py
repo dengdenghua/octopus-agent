@@ -161,6 +161,92 @@ _OBS_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# ── Incremental Thought streaming ─────────────────────────────
+#
+# The ReAct text protocol buffers everything before the Final Answer
+# anchor so Thought/Action markup never leaks into the visible answer —
+# but that also hides the Thought prose until the whole loop ends (the
+# TTFT bottleneck for tool-heavy turns). The Thought prose itself is safe
+# to surface (the UI renders it as a collapsible reasoning block), so the
+# loop pulls it out of the growing buffer incrementally with the helper
+# below. Emitted spans mirror what ``_THOUGHT_RE`` would later call the
+# step's thought; Action blocks and tool envelopes are never emitted.
+
+_THOUGHT_MARKER_RE = re.compile(r"Thought\s*:\s*", re.IGNORECASE)
+
+# Terminators ending a Thought segment: ``_THOUGHT_RE``'s stop conditions
+# plus the tool envelopes the loop treats as implicit actions. Matched
+# case-insensitively against the lowered buffer.
+_THOUGHT_STREAM_TERMINATORS = (
+    "\naction",
+    "\nobservation",
+    "\nfinal",
+    "\nupdate",
+    "\nprogress",
+    "\n\n",
+    "<tool_call>",
+    "<tool_invocation",
+    "<function=",
+)
+
+# Unterminated tail chars held back while a Thought segment is still open.
+# Must exceed the longest terminator (~16 chars) so a terminator split
+# across chunk boundaries can never half-leak into the reasoning stream.
+THOUGHT_STREAM_TAIL_MARGIN = 48
+
+
+def extract_streamable_thought(
+    joined: str,
+    cursor: int,
+    in_thought: bool,
+    *,
+    tail_margin: int = THOUGHT_STREAM_TAIL_MARGIN,
+) -> tuple[str, int, bool]:
+    """Pull newly decodable Thought prose out of a growing LLM buffer.
+
+    Called once per streamed text chunk with the full pre-anchor buffer
+    (``joined``) and the carry state from the previous call. Returns
+    ``(new_text, new_cursor, new_in_thought)`` — feed the latter two back
+    in with the next chunk. Only ``Thought: …terminator`` spans are
+    emitted; everything else (Action blocks, tool envelopes, stray prose)
+    is skipped, so the visible answer can never receive markup. An
+    unterminated trailing segment emits all but its last ``tail_margin``
+    chars, keeping split terminators atomic.
+    """
+    out: list[str] = []
+    pos = cursor
+    open_segment = in_thought
+    lowered = joined.lower()
+    length = len(joined)
+    while pos < length:
+        if not open_segment:
+            marker = _THOUGHT_MARKER_RE.search(joined, pos)
+            if marker is None:
+                break
+            pos = marker.end()
+            open_segment = True
+            continue
+        end = length
+        terminated = False
+        for term in _THOUGHT_STREAM_TERMINATORS:
+            idx = lowered.find(term, pos)
+            if idx != -1 and idx < end:
+                end = idx
+                terminated = True
+        if terminated:
+            if end > pos:
+                out.append(joined[pos:end])
+            pos = end
+            open_segment = False
+            continue
+        safe_end = max(pos, length - tail_margin)
+        if safe_end > pos:
+            out.append(joined[pos:safe_end])
+        pos = safe_end
+        break
+    return "".join(out), pos, open_segment
+
+
 _UNFINISHED_WORK_RE = re.compile(
     r"(?:"
     r"\b(?:still\s+need|not\s+yet|remaining\s+work|unfinished|incomplete)\b"
@@ -929,9 +1015,7 @@ def _payload_has_ambiguous_inflight_leader_election(text: str) -> bool:
 
 
 _WAITER_CALL_RE = re.compile(r"\.wait(?:_for)?\s*\([^\n]*\)|\.wait\s*\(\s*\)")
-_MAPPING_POP_RE = re.compile(
-    r"\.(?:pop)\(\s*(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))"
-)
+_MAPPING_POP_RE = re.compile(r"\.(?:pop)\(\s*(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))")
 
 
 def _payload_has_destructive_waiter_result_pop(text: str) -> bool:
@@ -1032,12 +1116,7 @@ def _payload_has_terminal_pending_entry_leak(text: str) -> bool:
     per-flight object, but the key must leave the *in-flight map* once the
     leader has published terminal state.
     """
-    if (
-        not text
-        or ".wait" not in text
-        or ".set(" not in text
-        or "loader(" not in text
-    ):
+    if not text or ".wait" not in text or ".set(" not in text or "loader(" not in text:
         return False
     assignments = list(_TERMINAL_PENDING_TUPLE_RE.finditer(text))
     if len(assignments) < 2:
@@ -1106,9 +1185,7 @@ def _payload_has_loader_barrier_deadlock(text: str) -> bool:
             )
             if assignment is None:
                 continue
-            total_waits = len(
-                re.findall(rf"\b{re.escape(barrier)}\.wait\s*\(", text)
-            )
+            total_waits = len(re.findall(rf"\b{re.escape(barrier)}\.wait\s*\(", text))
             loader_name = re.escape(definition.group("name"))
             passed_to_cache = re.search(
                 rf"get_or_load\s*\([^\n]{{0,300}}\b{loader_name}\b",
@@ -1347,8 +1424,7 @@ def _node_command_is_verification(command: str) -> bool:
     """
 
     return bool(
-        _NODE_VERIFY_SCRIPT_RE.search(command)
-        or _NODE_INLINE_FAILURE_BRANCH_RE.search(command)
+        _NODE_VERIFY_SCRIPT_RE.search(command) or _NODE_INLINE_FAILURE_BRANCH_RE.search(command)
     )
 
 
