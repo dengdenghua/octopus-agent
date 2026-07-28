@@ -58,8 +58,13 @@ from __future__ import annotations
 import contextlib
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
 
+from runtime.core.cerebrum.react_guard_types import (
+    GuardContext,
+    GuardSpec,
+    _spec_code_mode,
+    _spec_security,
+)
 from runtime.core.cerebrum.react_parsing import (
     _TEST_FUNC_RE,
     _detect_destructive_calls_in_payload,
@@ -3536,75 +3541,6 @@ def _has_successful_browser_action(steps: list[ReActStep]) -> bool:
             ):
                 return True
     return False
-
-
-@dataclass
-class GuardContext:
-    """Everything a guard might need to evaluate a candidate final answer.
-
-    Bundles the trajectory, the proposed final answer, and the loop-level
-    flags that previously gated each guard inline (is_code_mode, the
-    todo-protocol visibility pair, tool-availability flags, and the goal
-    string for the inspection guards).
-    """
-
-    steps: list[ReActStep]
-    final_answer: str
-    is_code_mode: bool
-    todo_protocol_required: bool = False
-    todo_protocol_visible: bool = False
-    file_inspection_tools_visible: bool = False
-    tools_active: bool = False
-    goal: str = ""
-    browser_operation_mode: bool = False
-    grounded_source_paths: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True)
-class GuardSpec:
-    """One registry entry: a guard plus its metadata.
-
-    * ``label`` — the bracketed tag shown to the model ("secret-leak guard").
-    * ``category`` — coarse grouping for telemetry / future enable flags
-      ("security" / "verification" / "test-quality" / "code-smell" / "protocol").
-    * ``invoke`` — takes a GuardContext, returns a guard message or None.
-    * ``enabled`` — soft switch; disabled specs are skipped entirely.
-    """
-
-    label: str
-    category: str
-    invoke: Callable[[GuardContext], str | None]
-    enabled: bool = True
-
-
-def _spec_code_mode(
-    label: str,
-    category: str,
-    fn: Callable[..., str | None],
-) -> GuardSpec:
-    """Build a GuardSpec for the common A-class guard signature
-    ``fn(steps, final_answer, *, is_code_mode)`` that only runs in
-    code mode."""
-
-    def _invoke(ctx: GuardContext) -> str | None:
-        if not ctx.is_code_mode:
-            return None
-        return fn(ctx.steps, ctx.final_answer, is_code_mode=ctx.is_code_mode)
-
-    return GuardSpec(label=label, category=category, invoke=_invoke)
-
-
-def _spec_security(
-    label: str,
-    category: str,
-    fn: Callable[..., str | None],
-) -> GuardSpec:
-    """Build a GuardSpec for security gates that must run in every mode."""
-
-    def _invoke(ctx: GuardContext) -> str | None:
-        return fn(ctx.steps, ctx.final_answer, is_code_mode=ctx.is_code_mode)
-
-    return GuardSpec(label=label, category=category, invoke=_invoke)
 
 
 # ── B/C-class invoke wrappers (non-standard signatures) ───────────
