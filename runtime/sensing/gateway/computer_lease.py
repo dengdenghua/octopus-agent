@@ -42,6 +42,28 @@ def _lease_from_body(body: dict[str, Any] | None) -> dict[str, str]:
     }
 
 
+def _effective_owner(body: dict[str, Any] | None, actor: str | None) -> dict[str, str]:
+    """Resolve the lease owner, binding it to the authenticated principal.
+
+    The exclusive-operator lease serializes desktop control. When auth is on
+    (``actor`` is not None), the lease owner *is* the authenticated actor: a
+    caller cannot claim the lease under, or release/steal, another operator's
+    identity by spoofing ``lease_owner_id`` in the request body. In
+    single-user / dev mode (``actor`` is None) we fall back to the cooperative
+    body-supplied owner, preserving the friction-free local behavior.
+    """
+    owner = _lease_from_body(body)
+    if actor is None:
+        return owner
+    actor_id = actor.strip()[:120] or _DEFAULT_LEASE_OWNER_ID
+    return {
+        "owner_id": actor_id,
+        # Keep any human-facing label the caller supplied, but the identity
+        # that gates claim/release is the authenticated actor, not the label.
+        "owner_label": owner["owner_label"],
+    }
+
+
 def _cleanup_lease(state: ComputerRouterState, now: float | None = None) -> None:
     with state.lease_lock:
         if not state.lease:

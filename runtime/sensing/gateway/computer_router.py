@@ -55,7 +55,13 @@ from .computer_control_session import (
     _update_control_action,
 )
 from .computer_diagnostics import _computer_diagnostic, _execution_failure_diagnostic
-from .computer_lease import _claim_lease, _lease_from_body, _public_lease, _release_lease
+from .computer_lease import (
+    _claim_lease,
+    _effective_owner,
+    _lease_from_body,
+    _public_lease,
+    _release_lease,
+)
 from .computer_replay_evidence import _computer_replay_evidence
 from .computer_router_state import ComputerRouterState
 from .computer_runtime_readiness import _runtime_readiness
@@ -70,13 +76,15 @@ def create_computer_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> APIRouter:
-    def _auth_dep(request: Request) -> None:
+    def _auth_dep(request: Request) -> str | None:
         # Desktop automation can click/type on the host machine. Keep
         # the current friction-free local-dev behavior, but in auth-on
-        # deploys reject anonymous access at the router boundary.
+        # deploys reject anonymous access at the router boundary. Returns the
+        # resolved actor so lease-mutating routes can bind the exclusive lease
+        # to the authenticated principal instead of a spoofable body field.
         from runtime.adapters.web_auth import _resolve_actor
 
-        _resolve_actor(
+        return _resolve_actor(
             request,
             identity_store,
             require_auth,
@@ -310,9 +318,11 @@ def create_computer_router(
         )
 
     @router.post("/actions/preview")
-    def preview_action(body: dict[str, Any]) -> dict[str, Any]:
+    def preview_action(
+        body: dict[str, Any], actor: str | None = Depends(_auth_dep)
+    ) -> dict[str, Any]:
         _cleanup_pending(state)
-        owner = _lease_from_body(body)
+        owner = _effective_owner(body, actor)
         action = _normalize_action(body)
         preview = _queue_preview(state, action, owner)
         control_action_id = _record_control_action(
@@ -721,7 +731,9 @@ def create_computer_router(
         return payload
 
     @router.post("/actions/execute")
-    def execute_action(body: dict[str, Any]) -> dict[str, Any]:
+    def execute_action(
+        body: dict[str, Any], actor: str | None = Depends(_auth_dep)
+    ) -> dict[str, Any]:
         _cleanup_pending(state)
         token = str(body.get("token") or "")
         control_action_id = str(body.get("control_action_id") or f"computer-preview-{token}")
@@ -770,7 +782,7 @@ def create_computer_router(
                     "replay_evidence": _computer_replay_evidence(state),
                 },
             )
-        body_owner = _lease_from_body(body)
+        body_owner = _effective_owner(body, actor)
         item_owner = item.get("lease_owner")
         if isinstance(item_owner, dict):
             owner = {
@@ -933,8 +945,10 @@ def create_computer_router(
         return payload
 
     @router.post("/lease/release")
-    def release_lease(body: dict[str, Any] | None = None) -> dict[str, Any]:
-        owner = _lease_from_body(body)
+    def release_lease(
+        body: dict[str, Any] | None = None, actor: str | None = Depends(_auth_dep)
+    ) -> dict[str, Any]:
+        owner = _effective_owner(body, actor)
         force = bool((body or {}).get("force", False))
         lease_state = _release_lease(state, owner, force=force)
         _ensure_control_session(state, body, owner)

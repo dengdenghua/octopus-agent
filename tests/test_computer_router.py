@@ -337,6 +337,58 @@ def test_execute_claims_computer_lease(monkeypatch):
     )
 
 
+def test_effective_owner_binds_actor_and_falls_back_in_dev():
+    from runtime.sensing.gateway.computer_lease import _effective_owner
+
+    body = {"lease_owner_id": "spoofed", "lease_owner_label": "Label"}
+    # Auth-on: the authenticated actor is the lease owner; the body-supplied
+    # owner_id is ignored, but a human-facing label is preserved.
+    bound = _effective_owner(body, "alice")
+    assert bound["owner_id"] == "alice"
+    assert bound["owner_label"] == "Label"
+    # Single-user / dev (no actor): fall back to the cooperative body owner.
+    dev = _effective_owner(body, None)
+    assert dev["owner_id"] == "spoofed"
+
+
+def test_lease_binds_to_authenticated_actor_ignoring_body(monkeypatch):
+    # Under auth-on, the exclusive-operator lease is bound to the
+    # authenticated principal. A caller cannot claim the lease under another
+    # operator's id by spoofing lease_owner_id in the request body.
+    monkeypatch.setattr(
+        computer_skills,
+        "_mouse_move",
+        lambda **kwargs: {"moved": True, **kwargs},
+    )
+    client = TestClient(_secured_app())
+    auth = {"Authorization": "Bearer sk-alice"}
+
+    preview = client.post(
+        "/api/computer/actions/preview",
+        json={
+            "action": "move",
+            "x": 10,
+            "y": 20,
+            "lease_owner_id": "spoofed-project",
+            "lease_owner_label": "Spoofed",
+        },
+        headers=auth,
+    ).json()
+    result = client.post(
+        "/api/computer/actions/execute",
+        json={"token": preview["token"], "lease_owner_id": "spoofed-project"},
+        headers=auth,
+    ).json()
+
+    assert result["ok"] is True
+    assert result["lease"]["held"] is True
+    # The lease owner is the authenticated actor, not the spoofed body id.
+    assert result["lease"]["owner_id"] == "alice"
+
+    status = client.get("/api/computer/status", headers=auth).json()
+    assert status["lease"]["owner_id"] == "alice"
+
+
 def test_computer_preview_execute_writes_control_session_replay(monkeypatch, tmp_path):
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(
