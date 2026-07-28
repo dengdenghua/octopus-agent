@@ -2613,11 +2613,11 @@ def test_repeated_hidden_reasoning_timeout_is_reported_as_failure(monkeypatch) -
     assert result.terminated_reason == "model_stall"
     assert result.success is False
     assert completed["success"] is False
-    stall_error = next(event for event in events if event["type"] == "react_error")
-    assert stall_error["kind"] == "model_stall"
-    assert not any(
-        event["type"] == "text_delta" and "模型连续两次" in event["delta"] for event in events
-    )
+    # Graceful degradation: instead of a hard react_error banner, the
+    # loop now surfaces a friendly handoff answer so the user can resume
+    # from the preserved progress rather than seeing a system error.
+    assert not any(event["type"] == "react_error" for event in events)
+    assert "点击继续" in (result.final_answer or "")
 
 
 def test_forced_convergence_salvages_plain_report_without_protocol_label() -> None:

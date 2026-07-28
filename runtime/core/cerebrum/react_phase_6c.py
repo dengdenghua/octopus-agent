@@ -45,6 +45,7 @@ from runtime.core.cerebrum.react_loop_state import (
 )
 from runtime.core.cerebrum.react_model_deadlines import (
     _finish_reason_is_length_limited,
+    _model_stall_handoff_answer,
     _stage_update_timeout_fallback,
 )
 from runtime.core.cerebrum.react_native import (
@@ -211,17 +212,12 @@ def _phase_6c_parse_and_guard(
                     steps.append(step)
                     terminated_reason = "model_stall"
                     return _LoopControl.BREAK
-                stall_message = (
-                    "模型连续两次在单轮时限内未能给出下一步操作或最终答案。"
-                    "前面已完成的结果仍已保留，但这次无法可靠完成最终汇总。"
-                    "你可以点击继续，系统会从已保存的进度重新收敛。"
-                )
-                yield {
-                    "type": "react_error",
-                    "kind": "model_stall",
-                    "message": stall_message,
-                    "iteration": i + 1,
-                }
+                # Graceful degradation: instead of a hard "react_error" that
+                # the gateway treats as a turn failure, surface a friendly
+                # handoff as ordinary answer text.  The turn still ends, but
+                # the user sees a natural message (like a thoughtful person
+                # pausing mid-conversation) rather than a system error banner.
+                final_answer = _model_stall_handoff_answer(steps)
                 step.observation = "[model-iteration-timeout] convergence retry also timed out"
                 steps.append(step)
                 terminated_reason = "model_stall"

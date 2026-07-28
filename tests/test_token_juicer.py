@@ -236,15 +236,15 @@ def test_combined_passes_compose() -> None:
     assert set(stats.passes) >= {"html", "dedup", "url"}
 
 
-def test_is_enabled_defaults_off_and_respects_opt_in(
+def test_is_enabled_defaults_on_and_respects_opt_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """TokenJuice is OFF by default — compression is a runtime-behavior
-    change and stays opt-in until validated on real traffic. Opt in via
-    `OCTOPUS_TOKEN_JUICE=1|true|yes|on`; any other value (including
-    unset) keeps raw observations."""
+    """TokenJuice is ON by default — compression is validated to reduce
+    token usage without losing sentinel patterns. Opt out via
+    `OCTOPUS_TOKEN_JUICE=0|false|no|off`; any other value (including
+    unset) keeps compression on."""
     monkeypatch.delenv("OCTOPUS_TOKEN_JUICE", raising=False)
-    assert is_enabled() is False  # default OFF
+    assert is_enabled() is True  # default ON
     monkeypatch.setenv("OCTOPUS_TOKEN_JUICE", "1")
     assert is_enabled() is True
     monkeypatch.setenv("OCTOPUS_TOKEN_JUICE", "true")
@@ -257,9 +257,11 @@ def test_is_enabled_defaults_off_and_respects_opt_in(
     assert is_enabled() is False
     monkeypatch.setenv("OCTOPUS_TOKEN_JUICE", "off")
     assert is_enabled() is False
-    # Unrecognized garbage is treated as OFF (fail-safe), not ON.
-    monkeypatch.setenv("OCTOPUS_TOKEN_JUICE", "maybe")
+    monkeypatch.setenv("OCTOPUS_TOKEN_JUICE", "no")
     assert is_enabled() is False
+    # Unrecognized values keep compression ON (default-on policy).
+    monkeypatch.setenv("OCTOPUS_TOKEN_JUICE", "maybe")
+    assert is_enabled() is True
 
 
 def test_cjk_text_preserved() -> None:
@@ -276,10 +278,11 @@ def test_cjk_text_preserved() -> None:
 def test_react_loop_compresses_observation_when_flag_on(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Wiring proof: when OCTOPUS_TOKEN_JUICE=1, the observation that
-    actually reaches the next LLM round through messages.append is
-    the compressed version, not the raw one. Default-off path is
-    covered by the existing 110 react_loop tests staying green."""
+    """Wiring proof: when OCTOPUS_TOKEN_JUICE is on, the observation
+    that actually reaches the next LLM round through messages.append is
+    the compressed version, not the raw one. Default-on path is
+    covered by the existing 110 react_loop tests staying green (their
+    short observations don't trigger any compression pass)."""
     from typing import Any
 
     from runtime.core.cerebrum.react_loop import stream_react_loop

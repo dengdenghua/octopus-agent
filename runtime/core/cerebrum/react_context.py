@@ -99,7 +99,7 @@ def _compress_context(
         else:
             break
 
-    keep_tail = 8
+    keep_tail = 12
     if len(messages) <= keep_head + keep_tail:
         return _ensure_context_budget(messages, max_tokens=max_tokens)
 

@@ -2241,8 +2241,8 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
             # TokenJuice: compress the observation before it enters
             # the message stream so the next LLM round sees a leaner
             # version. The full observation is preserved in
-            # step.observation for journal / display / guards. Off
-            # by default — opt in via OCTOPUS_TOKEN_JUICE=1.
+            # step.observation for journal / display / guards. On
+            # by default — opt out via OCTOPUS_TOKEN_JUICE=0.
             _obs_for_model = step.observation
             try:
                 from runtime.core.cerebrum.token_juicer import (

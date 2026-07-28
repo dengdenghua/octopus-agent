@@ -50,24 +50,24 @@ def _model_recovery_timeout_s(base_timeout_s: float) -> float:
     injected deadlines used by deterministic tests.
     """
 
-    raw = os.environ.get("OCTOPUS_REACT_MODEL_RECOVERY_TIMEOUT_S", "30")
+    raw = os.environ.get("OCTOPUS_REACT_MODEL_RECOVERY_TIMEOUT_S", "60")
     try:
         value = float(raw)
     except (TypeError, ValueError):
-        value = 30.0
-    recovery_ceiling = max(10.0, min(value, 120.0))
+        value = 60.0
+    recovery_ceiling = max(10.0, min(value, 240.0))
     return min(base_timeout_s, recovery_ceiling)
 
 
 def _model_post_tool_timeout_s(base_timeout_s: float) -> float:
     """Use a tighter ceiling once the turn already has executable evidence."""
 
-    raw = os.environ.get("OCTOPUS_REACT_POST_TOOL_TIMEOUT_S", "45")
+    raw = os.environ.get("OCTOPUS_REACT_POST_TOOL_TIMEOUT_S", "90")
     try:
         value = float(raw)
     except (TypeError, ValueError):
-        value = 45.0
-    post_tool_ceiling = max(10.0, min(value, 180.0))
+        value = 90.0
+    post_tool_ceiling = max(10.0, min(value, 300.0))
     return min(base_timeout_s, post_tool_ceiling)
 
 
@@ -81,12 +81,12 @@ def _model_evidence_synthesis_timeout_s(base_timeout_s: float) -> float:
     reasoning allowance.
     """
 
-    raw = os.environ.get("OCTOPUS_REACT_EVIDENCE_SYNTHESIS_TIMEOUT_S", "60")
+    raw = os.environ.get("OCTOPUS_REACT_EVIDENCE_SYNTHESIS_TIMEOUT_S", "120")
     try:
         value = float(raw)
     except (TypeError, ValueError):
-        value = 60.0
-    synthesis_ceiling = max(15.0, min(value, 180.0))
+        value = 120.0
+    synthesis_ceiling = max(15.0, min(value, 300.0))
     return min(base_timeout_s, synthesis_ceiling)
 
 
@@ -241,6 +241,47 @@ def _stage_update_timeout_fallback(steps: list[ReActStep]) -> str:
         "相关来源和工具结果仍保留在过程记录中；这不是完整最终报告，点击继续可直接"
         "从现有进度重新收敛。\n\n"
         f"{joined}"
+    )
+
+
+def _model_stall_handoff_answer(steps: list[ReActStep]) -> str:
+    """Graceful degradation when the model stalls mid-turn.
+
+    Instead of emitting a ``react_error`` event (which the gateway treats as a
+    turn failure and shows a system error banner), surface a friendly handoff
+    as ordinary answer text.  The turn still ends, but the user sees a natural
+    message — like a thoughtful person pausing mid-conversation — and can click
+    "继续" to resume from the preserved progress.
+    """
+    # Collect any public stage conclusions so the handoff carries real content,
+    # not just an apology.  A turn that already did substantial work should
+    # surface what it found before handing off.
+    updates: list[str] = []
+    for step in steps:
+        update = (step.public_update or "").strip()
+        if update and update not in updates:
+            updates.append(update)
+
+    # Count completed tool calls so the user knows progress was made.
+    completed_tools = sum(
+        1 for step in steps if (step.action or "").strip() and (step.observation or "").strip()
+    )
+
+    if updates:
+        joined = "\n\n".join(updates[-4:])
+        return (
+            "我正在思考下一步，但这一轮响应比较慢。前面已经做了一些工作，"
+            "以下是目前的进展：\n\n"
+            f"{joined}\n\n"
+            "点击继续，我会从当前进度接着完成。"
+        )
+    if completed_tools > 0:
+        return (
+            f"我正在思考下一步，但这一轮响应比较慢。前面已经完成了 {completed_tools} 步操作，"
+            "结果都已保留。点击继续，我会从当前进度接着完成。"
+        )
+    return (
+        "我正在思考，但这一轮响应比较慢。点击继续，我会重新梳理并给出回复。"
     )
 
 

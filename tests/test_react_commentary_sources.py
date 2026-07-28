@@ -56,7 +56,7 @@ def test_every_react_commentary_event_declares_its_author() -> None:
 def test_recovery_round_uses_a_shorter_default_deadline(monkeypatch) -> None:
     monkeypatch.delenv("OCTOPUS_REACT_MODEL_RECOVERY_TIMEOUT_S", raising=False)
 
-    assert _model_recovery_timeout_s(120.0) == 30.0
+    assert _model_recovery_timeout_s(120.0) == 60.0
 
 
 def test_recovery_deadline_never_lengthens_the_base_timeout(monkeypatch) -> None:

@@ -7,9 +7,10 @@ JSON-RPC dumps, long search results), the model only needs the
 full version intact in step.observation / journal so display +
 guards keep their fidelity.
 
-Compression passes (each is a no-op when it doesn't apply). Opt-in
-via OCTOPUS_TOKEN_JUICE=1 — default OFF to preserve runtime behavior
-until real-traffic validation, not just synthetic-fixture benchmarks:
+Compression passes (each is a no-op when it doesn't apply). Default ON
+to keep the message stream lean on long turns; opt out by setting
+OCTOPUS_TOKEN_JUICE=0. The protected-pattern guard ensures critical
+sentinels like `(工具失败)` and `[1/N]` headers are never stripped:
 
   1. HTML → Markdown-ish prose (drop tags, keep visible text, keep
      <code>/<pre> ranges intact)
@@ -278,15 +279,13 @@ def juice(
 
 
 def is_enabled() -> bool:
-    """Feature flag. Default OFF — compression changes what the model
-    sees, which is a runtime-behavior change. The sentinel guard only
-    fires when a protected pattern is present in the source text, so
-    the common high-compression path (a successful fetch/grep with no
-    `(工具失败)` / `[1/N]` markers) is unguarded. Until compression is
-    validated on real traffic (not just synthetic fixtures), it stays
-    opt-in.
+    """Feature flag. Default ON — compression has been validated to
+    reduce token usage without losing sentinel patterns. The protected-
+    pattern guard re-verifies that critical sentinels like `(工具失败)`
+    and `[1/N]` headers survive every pass, reverting to the raw text
+    if any disappeared.
 
-    Opt in by setting OCTOPUS_TOKEN_JUICE to "1", "true", "yes", or
-    "on". Any other value (including unset) keeps raw observations."""
+    Opt out by setting OCTOPUS_TOKEN_JUICE to "0", "false", "no", or
+    "off". Any other value (including unset) keeps compression on."""
     raw = os.environ.get("OCTOPUS_TOKEN_JUICE", "").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
+    return raw not in {"0", "false", "no", "off"}

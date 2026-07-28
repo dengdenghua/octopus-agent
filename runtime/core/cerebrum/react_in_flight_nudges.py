@@ -124,7 +124,7 @@ def _apply_in_flight_nudges(
     # before _compress_context starts dropping older steps.
     if not context_pressure_signaled:
         _ctx_ratio = _estimate_context_fullness(messages, effective_model)
-        if _ctx_ratio > 0.80:
+        if _ctx_ratio > 0.70:
             _midflight_nudges.append(_CONTEXT_PRESSURE_NUDGE.format(level=f"{_ctx_ratio:.0%}"))
             context_pressure_signaled = True
     if _midflight_nudges:
