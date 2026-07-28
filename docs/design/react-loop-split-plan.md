@@ -5,9 +5,10 @@
 
 ## 进度状态（2026-08 更新）
 
-**Wave 1 ✅ 完成，Wave 2 ✅ 完成，PHASE 3 抽离 ✅ 完成——`react_loop.py` 现 1487 行，已达 ~1500 行目标。**
+**Wave 1 ✅ 完成，Wave 2 ✅ 完成，PHASE 3 抽离 ✅ 完成，PHASE 1–2/4/4.5/5 残余 ✅ 完成——
+`react_loop.py` 现 1056 行，`stream_react_loop` 为纯编排骨架（~730 行，含注释与 `_LoopState` 装配）。**
 
-行数轨迹：`6272 → 4456（Wave 1）→ 2463（Wave 2）→ 1487（PHASE 3）`
+行数轨迹：`6272 → 4456（Wave 1）→ 2463（Wave 2）→ 1487（PHASE 3）→ 1324（6g）→ 1056（PHASE 1–2/4/4.5/5 残余）`
 
 Wave 2 提交序列（codex/local-cli-partner-polish 分支）：
 
@@ -22,6 +23,8 @@ Wave 2 提交序列（codex/local-cli-partner-polish 分支）：
 | 6e 后半 guard 状态机 | `fb7ea2212` | `react_final_answer_guards.py` |
 | 6b LLM 调用 + 流式锚点 | `220a3edfc` | 新 `react_model_stream.py` |
 | PHASE 3 prompt 装配（后补） | `45d3f853a` | 新 `react_prompt_assembly.py` |
+| 6g housekeeping（后补） | `bdbefe534` | `react_execution.py`（无 yield，普通函数返回 `_LoopControl`） |
+| PHASE 1–2/4/4.5/5 残余（收官） | `57fdaa893` | `react_prompt_assembly.py`（1–2 bootstrap、4/4.5 事件）+ `react_resume.py`（5 resume/grant） |
 
 **行号锚点已全部漂移**：下文各区段的 L-编号对应拆分前的原始文件，仅具历史参考价值；
 定位请按 `PHASE n` 注释标记或函数名 grep。
@@ -82,14 +85,19 @@ Wave 2 提交序列（codex/local-cli-partner-polish 分支）：
    返回 `_PromptAssembly` dataclass（22 个产出字段）✅
 
 完成后 `stream_react_loop` 为编排骨架，`react_loop.py` = 1487 行（目标 ≈1500，达标）。
+后续两个后补 commit 进一步降到 1056 行（6g + PHASE 1–2/4/4.5/5 残余，见上表）。
 
 ## Wave 3 · 下一步候选
 
-1. **PHASE 1–5 残余**（react_loop.py 内联，合计 ~700 行）：
-   - PHASE 6g housekeeping（循环尾消息拼装，~200 行）——可沿用 `_LoopState` 协议收进 `react_execution.py`；
-   - PHASE 4/4.5/5 message bootstrap + resume（~250 行）；
-   - PHASE 1/2 entry guards + mode/budget 检测（~150 行）。
+1. ~~**PHASE 1–5 残余**（react_loop.py 内联，合计 ~700 行）~~ ✅ 已全部完成：
+   - PHASE 6g housekeeping（循环尾消息拼装，~200 行）——沿用 `_LoopState` 协议收进 `react_execution.py`（`bdbefe534`）；
+   - PHASE 4/4.5/5 message bootstrap + resume（~250 行）——4/4.5 收进 `react_prompt_assembly.py`，
+     5 的 pause 注册/taint/resume/grant 收进 `react_resume.py`；平凡变量初始化、steering/model failover 闭包
+     （守住 `next_custom_model_fallback` patch 点）、realtime preface 留在主函数（`57fdaa893`）；
+   - PHASE 1/2 entry guards + mode/budget 检测（~150 行）——收进 `react_prompt_assembly._resolve_turn_bootstrap`（`57fdaa893`）。
 2. **react_guards 抽象减法审计**（4122 行）：同法体检；评估"这层守卫能否被一次好的工具调用替代"。
+3. **可选体检**：`react_parsing.py` / `react_execution.py`（抽离后体量见长）按同样的内聚度标准过一遍，
+   只在存在清晰可分的簇时动手。
 
 ## 验证策略（每 commit 必跑）
 

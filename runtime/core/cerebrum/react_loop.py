@@ -312,31 +312,43 @@ def stream_react_loop(
     steering_drain: Callable[[], list[str]] | None = None,
 ) -> Generator[dict[str, Any], None, ReActResult | None]:
     # ╔══════════════════════════════════════════════════════════════════╗
-    # ║ stream_react_loop · navigation map (comment-only; do not split). ║
+    # ║ stream_react_loop · navigation map (comment-only).               ║
+    # ║ This function is now the orchestration skeleton; each phase      ║
+    # ║ body lives in a satellite module (pure moves, no rewrites):      ║
     # ║                                                                  ║
-    # ║   PHASE 1 · entry guards / router resolution     (this section)  ║
-    # ║   PHASE 2 · mode + budget detection              ~L611           ║
-    # ║   PHASE 3 · system + volatile prompt assembly    ~L629           ║
-    # ║   PHASE 4 · message bootstrap + start yield      ~L1370          ║
-    # ║   PHASE 5 · pre-loop state init + resume         ~L1495          ║
-    # ║   PHASE 6 · main iteration loop                  ~L1629          ║
-    # ║       6a · cancel / pause guard                  ~L1630          ║
-    # ║       6b · LLM call + Final-Answer anchor stream ~L1700          ║
-    # ║       6c · parse step / format-violation         ~L1952          ║
-    # ║       6d · action dispatch + observation         ~L2079          ║
-    # ║       6e · nudges + guards + step yield          ~L2509          ║
-    # ║       6f · auto-checkpoint + step evaluator      ~L2606          ║
-    # ║       6g · housekeeping (msg append / continue)  ~L2698          ║
-    # ║   PHASE 7 · post-loop terminal handling          ~L2884          ║
-    # ║       (pause / cancel / forced max-iter convergence)             ║
-    # ║   PHASE 8 · finalization + react_completed yield ~L2993          ║
+    # ║   PHASE 1–2 · turn bootstrap          react_prompt_assembly      ║
+    # ║       → _resolve_turn_bootstrap                                  ║
+    # ║   PHASE 3   · prompt + messages       react_prompt_assembly      ║
+    # ║       → _assemble_prompt_and_messages                            ║
+    # ║   PHASE 4/4.5 · start events,         react_prompt_assembly      ║
+    # ║       auto-delegate → _emit_turn_start_events                    ║
+    # ║   PHASE 5   · pause/resume/grant      react_resume               ║
+    # ║       → _resume_or_register_turn                                 ║
+    # ║       (plain inits, steering/model closures, realtime preface    ║
+    # ║        stay here — closures keep react_loop monkeypatch points)  ║
+    # ║   PHASE 6   · main iteration loop (call sites in this function)  ║
+    # ║       6a cancel/pause guard        react_loop_controls           ║
+    # ║          → _cancel_pause_guard                                   ║
+    # ║       6b LLM call + streaming      react_model_stream            ║
+    # ║          → _phase_6b_model_stream                                ║
+    # ║       6c parse / format guard      react_phase_6c                ║
+    # ║          → _phase_6c_parse_and_guard                             ║
+    # ║       6d dispatch + observation    react_execution               ║
+    # ║          → _phase_6d_dispatch_and_observe                        ║
+    # ║       6e in-flight nudges          react_in_flight_nudges        ║
+    # ║          → _apply_in_flight_nudges                               ║
+    # ║       6e guards + step emit        react_final_answer_guards     ║
+    # ║          → _phase_6e_guards_and_step_emit                        ║
+    # ║       6f auto-checkpoint + eval    react_checkpointing           ║
+    # ║          → _auto_checkpoint_and_evaluate_step                    ║
+    # ║       6g housekeeping              react_execution               ║
+    # ║          → _phase_6g_housekeeping                                ║
+    # ║   PHASE 7+8 · terminal + finalize     react_terminal             ║
+    # ║       → _finalize_react_turn                                     ║
     # ║                                                                  ║
-    # ║ Why one big function: ~25 closure vars shared across phases +    ║
-    # ║ interleaved yield points (this is a generator) + checkpoint/     ║
-    # ║ resume coupling make phase extraction semantics-changing. The    ║
-    # ║ side-effect-free pieces (guards, resume-state compute, final-    ║
-    # ║ answer checks) are ALREADY extracted as module-level helpers     ║
-    # ║ above; what remains is the coupled core, kept intact on purpose. ║
+    # ║ Phases exchange per-turn data through _LoopState (see            ║
+    # ║ react_loop_state) and _LoopControl; scalars are synced           ║
+    # ║ local→state→local at each call site ("mailbox" pattern).         ║
     # ╚══════════════════════════════════════════════════════════════════╝
 
     # ── PHASE 1–2 · turn bootstrap (react_prompt_assembly) ─────────────
