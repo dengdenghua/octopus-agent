@@ -5920,6 +5920,7 @@ Strategy:
     thinkingCompleted: "Thinking complete",
     slowResponse: "Still on it — slower than usual",
     reconnecting: "Connection dropped — reconnecting",
+    processing: "Working",
   },
 
   // Evolution Dashboard

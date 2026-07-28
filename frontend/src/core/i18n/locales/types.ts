@@ -5005,6 +5005,7 @@ export interface Translations {
     thinkingCompleted: string;
     slowResponse: string;
     reconnecting: string;
+    processing: string;
   };
 
   // Evolution Dashboard

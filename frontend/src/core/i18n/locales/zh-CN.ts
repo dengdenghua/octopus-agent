@@ -5598,6 +5598,7 @@ export const zhCN: Translations = {
     thinkingCompleted: "思考已完成",
     slowResponse: "还在继续，稍慢一些",
     reconnecting: "连接断开，正在回来",
+    processing: "正在处理",
   },
 
   // Evolution Dashboard

@@ -46,15 +46,18 @@ describe("PublicThinkingStatus", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("shows only the measured runtime state and elapsed time", () => {
+  test("shows a neutral processing label once the task is underway", () => {
     renderWithProviders(
       <PublicThinkingStatus isLoading liveToolEvents={[]} vitals={vitals()} />,
       { locale: "zh-CN" },
     );
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("思考中...");
+    // Mid-task pauses are NOT "thinking" — that label is reserved for the
+    // pre-first-response window of a fresh turn (see the waiting case).
+    expect(status).toHaveTextContent("正在处理");
     expect(status).toHaveTextContent("8s");
+    expect(status).not.toHaveTextContent("思考中");
     expect(status).not.toHaveTextContent("理解");
     expect(status).not.toHaveTextContent("规划");
     expect(status).not.toHaveTextContent("模型");
@@ -88,9 +91,10 @@ describe("PublicThinkingStatus", () => {
     );
 
     const pulse = screen.getByTestId("conversation-activity-pulse");
-    expect(pulse).toHaveTextContent("思考中...");
-    expect(pulse).toHaveTextContent("12s");
+    // The running action leads the line — no generic "思考中" wrapper.
     expect(pulse).toHaveTextContent("搜索资料: Kimi streaming interaction");
+    expect(pulse).toHaveTextContent("12s");
+    expect(pulse).not.toHaveTextContent("思考中");
     expect(pulse).not.toHaveTextContent("web_search");
   });
 

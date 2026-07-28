@@ -129,6 +129,12 @@ export function PublicThinkingStatus({
   if (phase === "idle" || phase === "streaming") return null;
 
   const running = latestRunningEvent(liveToolEvents);
+  const action = running ? eventSummary(running, t) : undefined;
+  // "思考中" (waitingForModel) is reserved for the genuinely pre-response
+  // state of a fresh turn — nothing from the agent yet. Once the task is
+  // underway the line must say what is happening (the running action, or a
+  // neutral "processing" between rounds), not collapse every pause into
+  // "thinking".
   const label =
     phase === "disconnected"
       ? t.publicThinkingStatus.reconnecting
@@ -136,9 +142,11 @@ export function PublicThinkingStatus({
         ? t.publicThinkingStatus.slowResponse
         : phase === "waiting"
           ? t.publicThinkingStatus.waitingForModel
-          : t.publicThinkingStatus.modelWorking;
+          : (action ?? t.publicThinkingStatus.processing);
   const elapsedSeconds = Math.floor((vitals?.elapsedMs ?? 0) / 1000);
-  const detail = running ? eventSummary(running, t) : undefined;
+  // In the working phase the action already leads the line; only the
+  // alert phases keep it as trailing context.
+  const detail = phase === "working" ? undefined : action;
 
   return (
     <div

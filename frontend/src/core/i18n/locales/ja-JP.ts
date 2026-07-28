@@ -5919,6 +5919,7 @@ export const jaJP: Translations = {
     thinkingCompleted: "思考完了",
     slowResponse: "続けています。少し時間がかかっています",
     reconnecting: "接続が切れました。戻っています",
+    processing: "処理中",
   },
 
   // Evolution Dashboard
