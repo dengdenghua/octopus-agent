@@ -9198,7 +9198,8 @@ Strategy:
       docsRecentSubtitle: "Recently opened, edited, or search-hit documents",
       docsRecentStatus: "Recently updated",
       imagesAllTitle: "All images",
-      imagesAllSubtitle: "Photos, screenshots, design assets, and text in images",
+      imagesAllSubtitle:
+        "Photos, screenshots, design assets, and text in images",
       imagesAllStatus: "Smart image search",
       imagesTopicsTitle: "Image topics",
       imagesTopicsSubtitle: "People, places, holidays, receipts, screenshots",

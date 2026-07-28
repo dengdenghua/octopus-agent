@@ -494,6 +494,8 @@ describe("<AgentProgressPill />", () => {
     expect(
       screen.getByRole("button", { name: /Current Progress 2\/2/ }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/Pulling the answer together/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Pulling the answer together/).length,
+    ).toBeGreaterThan(0);
   });
 });

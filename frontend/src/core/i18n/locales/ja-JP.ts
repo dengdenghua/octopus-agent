@@ -389,7 +389,8 @@ export const jaJP: Translations = {
     removeMaterial: "Remove Material",
     startThreadBeforeUpload: "Start or open a thread before uploading files.",
     uploadFailed: "Upload failed",
-    attachmentReadFailed: "添付ファイルの読み取りに失敗しました。もう一度お試しください。",
+    attachmentReadFailed:
+      "添付ファイルの読み取りに失敗しました。もう一度お試しください。",
     maxSubagents: "Max Subagents",
     maxSearches: "Max Searches",
     permissionModeLabel: "Permissions",
@@ -1753,7 +1754,8 @@ export const jaJP: Translations = {
     settingsTooltip: "設定",
     // Project + chat list actions
     deleteProjectTooltip: "プロジェクトを削除",
-    deleteProjectFailed: "プロジェクトの削除に失敗しました。もう一度お試しください。",
+    deleteProjectFailed:
+      "プロジェクトの削除に失敗しました。もう一度お試しください。",
     deleteThreadTooltip: "チャットを削除",
     actionSort: "並べ替え",
     actionNewProject: "プロジェクトフォルダを選択",
@@ -1795,7 +1797,8 @@ export const jaJP: Translations = {
     ariaChatWorkspace: "会話ワークスペース",
     ariaUtilityPanel: "成果物・プラン・リサーチパネル",
     ariaAgentWorkbench: "エージェントワークベンチ",
-    ariaToggleWorkbenchDrawer: "エージェントワークベンチのドロワーを展開・折りたたむ",
+    ariaToggleWorkbenchDrawer:
+      "エージェントワークベンチのドロワーを展開・折りたたむ",
     // Storage library labels
     libraryApps: "アプリ",
     libraryDocs: "ドキュメント",
@@ -8945,8 +8948,7 @@ Strategy:
       "エディターより軽量で、現在のプラグインとスキルエコシステムに適しています。",
     cardLaterLabel: "今後の復旧",
     cardLaterTitle: "API が利用可能になったら編集を再開",
-    cardLaterDesc:
-      "未完成のエディターに入って保存に失敗することを防ぎます。",
+    cardLaterDesc: "未完成のエディターに入って保存に失敗することを防ぎます。",
   },
 
   // Knowledge page
@@ -9017,8 +9019,7 @@ Strategy:
         "octopus-storage が見つかりません。ローカル知識ベースサービスをインストールするか、OCTOPUS_STORAGE_CMD を設定してから再試行してください。",
       startFailed:
         "ローカル知識ベースサービスの起動に失敗しました。バックエンドログを確認して再試行してください。",
-      notConnected:
-        "ローカル知識ベースサービスにまだ接続できません：{url}",
+      notConnected: "ローカル知識ベースサービスにまだ接続できません：{url}",
     },
     toolbar: {
       authorize: "許可",
@@ -9072,8 +9073,7 @@ Strategy:
     },
     images: {
       title: "画像",
-      subtitle:
-        "{count} 項目 · OCR、場所、人物、スクリーンショットを統合検索",
+      subtitle: "{count} 項目 · OCR、場所、人物、スクリーンショットを統合検索",
       searchLabel: "画像を検索：",
       badgeAllImages: "すべての画像",
       filterAll: "すべて {count}",
@@ -9204,13 +9204,15 @@ Strategy:
       docsRecentSubtitle: "最近開いた、編集した、検索ヒットしたドキュメント",
       docsRecentStatus: "最近の更新",
       imagesAllTitle: "すべての画像",
-      imagesAllSubtitle: "写真、スクリーンショット、デザイン素材、画像内テキスト",
+      imagesAllSubtitle:
+        "写真、スクリーンショット、デザイン素材、画像内テキスト",
       imagesAllStatus: "画像スマート検索",
       imagesTopicsTitle: "画像トピック",
       imagesTopicsSubtitle: "人物、場所、行事、領収書、スクリーンショット",
       imagesTopicsStatus: "継続構築中",
       imagesSourcesTitle: "画像ソース",
-      imagesSourcesSubtitle: "フォルダ、アプリ、プロジェクトの由来で自動アーカイブ",
+      imagesSourcesSubtitle:
+        "フォルダ、アプリ、プロジェクトの由来で自動アーカイブ",
       imagesSourcesStatus: "同期済み",
       imagesOcrTitle: "スクリーンショット OCR",
       imagesOcrSubtitle: "スクリーンショット内の文字やUI内容を検索可能に",
