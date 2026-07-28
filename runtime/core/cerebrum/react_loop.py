@@ -103,6 +103,9 @@ from runtime.core.cerebrum.react_guards import (
     _redundant_green_verification_guard,
     _unverified_write_followup_guard,
 )
+from runtime.core.cerebrum.react_in_flight_nudges import (
+    _apply_in_flight_nudges,
+)
 from runtime.core.cerebrum.react_loop_controls import (
     _CONTEXT_PRESSURE_NUDGE,
     _cancel_pause_guard,
@@ -221,8 +224,9 @@ _logger = logging.getLogger(__name__)
 
 # Re-exports for tests/test_react_loop.py and friends — the helpers live
 # in react_parsing / react_execution / react_guards / react_context /
-# react_checkpointing / react_loop_controls / react_parallel_dispatch
-# now, but tests (and the loop body below) reference them through this
+# react_checkpointing / react_loop_controls / react_parallel_dispatch /
+# react_terminal / react_in_flight_nudges now, but tests (and the loop
+# body below) reference them through this
 # module. Listing them in __all__ keeps ruff from auto-removing the
 # imports as "unused".
 __all__ = [
@@ -243,6 +247,7 @@ __all__ = [
     "_code_mode_completion_guard",
     "_code_task_iteration_limit",
     "_collect_model_stream_text_with_deadline",
+    "_completion_phrase_without_todo_guard",
     "_CONTEXT_PRESSURE_NUDGE",
     "_disabled_guard_labels",
     "_disabled_guards_from_yaml",
@@ -251,6 +256,7 @@ __all__ = [
     "_estimate_context_fullness",
     "_execute_action_via_beak",
     "_extract_final_answer",
+    "_failed_verification_followup_guard",
     "_finalize_react_turn",
     "_format_background_task_heartbeat",
     "_format_skill_catalog",
@@ -269,6 +275,7 @@ __all__ = [
     "_placeholder_observation",
     "_quiet_evidence_targets",
     "_react_completion_receipt",
+    "_redundant_green_verification_guard",
     "_rehydrate_messages_from_steps",
     "_reset_checkpoint_mirror_for_tests",
     "_reset_disabled_set_for_tests",
@@ -279,6 +286,7 @@ __all__ = [
     "_should_auto_checkpoint",
     "_skill_available_in_executor",
     "_tool_event_extras_from_beak_step",
+    "_unverified_write_followup_guard",
     "_WRITE_TOOLS",
     "get_react_variant_stats",
     "pick_react_variant",
@@ -3737,74 +3745,24 @@ def stream_react_loop(
                     )
 
         # ── PHASE 6e · in-flight nudges + guards + step yield ──────────
-        # ── In-flight nudges (octopus optimisation §15 + §18) ───
-        # Two soft guards that fire DURING the loop, not at Final
-        # Answer time. They append a short reminder to this step's
-        # observation so the model sees it before composing the
-        # next action. Both are silent when the model is already
-        # doing the right thing.
-        _steps_with_current = steps + [step]
-        _midflight_nudges: list[str] = []
-        # Track any background process snapshot present in this
-        # step's observation so the periodic heartbeat below can
-        # remind the model about live processes.
-        _bg_task_info = _background_task_info_from_observation(step.observation)
-        if _bg_task_info is not None:
-            _bg_task_id = _bg_task_info.get("task_id")
-            if isinstance(_bg_task_id, str) and _bg_task_id:
-                _known_background_tasks[_bg_task_id] = _bg_task_info
-        # Heartbeat: every 5 iterations (i > 0 and i % 5 == 0),
-        # if we have any registered background tasks, append a
-        # reminder to the NEXT step's observation injection.
-        if i > 0 and i % 5 == 0 and _known_background_tasks:
-            _midflight_nudges.append(
-                _format_background_task_heartbeat(list(_known_background_tasks.keys()))
-            )
-        _completion_nudge = _completion_phrase_without_todo_guard(
-            _steps_with_current,
-            todo_protocol_required=_todo_protocol_required and _todo_protocol_visible,
-        )
-        if _completion_nudge:
-            _midflight_nudges.append(f"[completion-tracker]\n{_completion_nudge}")
-        _verify_nudge = _unverified_write_followup_guard(
-            _steps_with_current,
+        (
+            _context_pressure_signaled,
+            _green_verification_convergence_active,
+            _force_convergence_next,
+        ) = _apply_in_flight_nudges(
+            steps=steps,
+            step=step,
+            i=i,
+            known_background_tasks=_known_background_tasks,
+            todo_protocol_required=_todo_protocol_required,
+            todo_protocol_visible=_todo_protocol_visible,
             is_code_mode=_is_code_mode,
+            messages=messages,
+            effective_model=effective_model,
+            context_pressure_signaled=_context_pressure_signaled,
+            green_verification_convergence_active=_green_verification_convergence_active,
+            force_convergence_next=_force_convergence_next,
         )
-        if _verify_nudge:
-            _midflight_nudges.append(f"[verification-tracker]\n{_verify_nudge}")
-        _red_verify_nudge = _failed_verification_followup_guard(
-            _steps_with_current,
-            is_code_mode=_is_code_mode,
-        )
-        if _red_verify_nudge:
-            _midflight_nudges.append(f"[red-verification-recovery]\n{_red_verify_nudge}")
-        _concurrency_nudge = _code_semantic_followup_guard(
-            _steps_with_current,
-            is_code_mode=_is_code_mode,
-        )
-        if _concurrency_nudge:
-            _midflight_nudges.append(f"[code-semantic-repair]\n{_concurrency_nudge}")
-        _green_verify_nudge = _redundant_green_verification_guard(
-            _steps_with_current,
-            is_code_mode=_is_code_mode,
-        )
-        if _green_verify_nudge:
-            _midflight_nudges.append(f"[green-verification-convergence]\n{_green_verify_nudge}")
-            _green_verification_convergence_active = True
-            _force_convergence_next = True
-        # Context-pressure signal — fires once per turn when the rolling
-        # message list approaches the model's context budget. Gives the
-        # model a chance to write a "resume state" hand-off paragraph
-        # before _compress_context starts dropping older steps.
-        if not _context_pressure_signaled:
-            _ctx_ratio = _estimate_context_fullness(messages, effective_model)
-            if _ctx_ratio > 0.80:
-                _midflight_nudges.append(_CONTEXT_PRESSURE_NUDGE.format(level=f"{_ctx_ratio:.0%}"))
-                _context_pressure_signaled = True
-        if _midflight_nudges:
-            step.observation = (
-                ((step.observation or "") + "\n\n") if step.observation else ""
-            ) + "\n\n".join(_midflight_nudges)
 
         if (
             maybe_final
