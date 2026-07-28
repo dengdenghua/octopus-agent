@@ -116,6 +116,11 @@ hearts-etcd = [
 skin = [
     "watchdog>=4.0",
 ]
+# ── SWE-bench evaluation ─────────────────────────────────
+swebench = [
+    "datasets>=2.14",
+    "swebench>=2.0",
+]
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
