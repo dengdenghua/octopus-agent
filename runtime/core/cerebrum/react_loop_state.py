@@ -81,8 +81,11 @@ class _LoopState:
     executed_beak_steps: list = field(default_factory=list)
     messages: list = field(default_factory=list)
     working_set: dict = field(default_factory=dict)
+    final_answer_segments: list = field(default_factory=list)
     # ── per-iteration synced scalars (synced in before 6c) ──
     tools_active: bool = False
+    planning_mode: bool = False
+    enable_tools: bool = True
     effective_model: str = ""
     current_phase: str = ""
     evidence_convergence_active: Any = None
