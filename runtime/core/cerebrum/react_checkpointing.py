@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from collections.abc import Generator
 from typing import Any
 
+from runtime.core.cerebrum.react_context import _serialize_messages_for_checkpoint
 from runtime.core.cerebrum.react_types import ReActStep
 
 _logger = logging.getLogger(__name__)
@@ -123,6 +125,120 @@ def _mirror_checkpoint(task_id: Any, checkpoint_dict: dict[str, Any]) -> None:
         return
     with contextlib.suppress(Exception):
         mirror.put(str(task_id), checkpoint_dict)
+
+
+# ── Per-step auto-checkpoint + evaluator (PHASE 6f) ───────────────
+def _auto_checkpoint_and_evaluate_step(
+    *,
+    maybe_final: Any,
+    step: ReActStep,
+    stack: Any,
+    react_task_id: Any,
+    max_iterations: int,
+    messages: list,
+    steps: list[ReActStep],
+    working_set: dict,
+    progress_summary: Any,
+    current_phase: Any,
+    public_progress_summary: Any,
+    step_evaluator: Any,
+) -> Generator[dict[str, Any], None, None]:
+    """Auto-checkpoint after a completed step, then run the evaluator.
+
+    Yields the ``evaluator_retry_hint`` event when a wired evaluator
+    scores the step below threshold; the retry hint itself is appended
+    to ``messages`` in place.
+    """
+    # ── Periodic auto-checkpoint (P3 long-task durability) ──
+    # Mirrors the pause path's checkpoint write so a SIGKILL or
+    # OOM restart can resume from the last completed iteration.
+    # On after every completed iteration by default; tune or disable via
+    # OCTOPUS_CHECKPOINT_EVERY_N=N (0 disables periodic snapshots).
+    # Failures are swallowed; the turn must not break because
+    # we couldn't snapshot.
+    _ckpt_interval = _checkpoint_interval()
+    if maybe_final is None and _should_auto_checkpoint(step.iteration, _ckpt_interval):
+        _ckpt_journal_auto = getattr(stack, "journal", None)
+        _auto_ckpt_payload = {
+            "task_id": str(react_task_id) if react_task_id else "",
+            "iteration_completed": step.iteration,
+            "max_iterations": max_iterations,
+            "messages_snapshot": _serialize_messages_for_checkpoint(messages),
+            "steps_snapshot": [
+                {
+                    "iteration": s.iteration,
+                    "thought": s.thought,
+                    "public_update": s.public_update,
+                    "action": s.action,
+                    "observation": s.observation,
+                }
+                for s in (steps + [step])
+            ],
+            "has_final_answer": False,
+            "working_set_snapshot": list(working_set.values()),
+            "progress_summary": progress_summary,
+            "current_phase": current_phase,
+        }
+        if _ckpt_journal_auto is not None and hasattr(
+            _ckpt_journal_auto,
+            "write_react_checkpoint",
+        ):
+            with contextlib.suppress(Exception):
+                _ckpt_journal_auto.write_react_checkpoint(
+                    task_id=react_task_id,
+                    iteration_completed=step.iteration,
+                    max_iterations=max_iterations,
+                    messages_snapshot=_auto_ckpt_payload["messages_snapshot"],
+                    steps_snapshot=_auto_ckpt_payload["steps_snapshot"],
+                    has_final_answer=False,
+                    working_set_snapshot=_auto_ckpt_payload["working_set_snapshot"],
+                    progress_summary=progress_summary,
+                    current_phase=current_phase,
+                )
+        # Best-effort distributed mirror — off unless
+        # OCTOPUS_CHECKPOINT_MIRROR_URL is set. Same payload as the
+        # journal write so downstream consumers see one shape.
+        _mirror_checkpoint(react_task_id, _auto_ckpt_payload)
+
+    # ── Step evaluator (optional) ────────────────────────
+    # When wired, the evaluator scores the just-completed step.
+    # A score below 0.3 triggers a retry hint injected into the
+    # conversation so the LLM self-corrects on the next iteration.
+    # This implements the "separate evaluator from generator"
+    # pattern from Anthropic's harness-design research.
+    if step_evaluator is not None:
+        try:
+            _eval_score = step_evaluator(
+                {
+                    "iteration": step.iteration,
+                    "thought": step.thought,
+                    "action": step.action,
+                    "observation": step.observation,
+                    "progress_summary": public_progress_summary,
+                }
+            )
+            if isinstance(_eval_score, (int, float)) and _eval_score < 0.3:
+                _retry_hint = (
+                    f"[evaluator] The previous step scored {_eval_score:.2f}/1.0 "
+                    f"— quality is below threshold. Please reconsider your "
+                    f"approach and try a different strategy."
+                )
+                from runtime.platform.models.llm import Message
+
+                messages.append(
+                    Message(
+                        role="user",
+                        content=_retry_hint,
+                    )
+                )
+                yield {
+                    "type": "evaluator_retry_hint",
+                    "iteration": step.iteration,
+                    "score": _eval_score,
+                    "hint": _retry_hint,
+                }
+        except Exception as _eval_exc:
+            _logger.debug("step_evaluator raised: %s", _eval_exc)
 
 
 def _rehydrate_messages_from_steps(messages: list, steps: list[ReActStep]) -> list:
