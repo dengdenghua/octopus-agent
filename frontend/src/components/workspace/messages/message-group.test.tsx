@@ -79,6 +79,33 @@ describe("MessageGroup todo_write rendering", () => {
     expect(screen.queryByText(/todo_write/)).not.toBeInTheDocument();
   });
 
+  it("hides internal blackboard writes from the public execution timeline", () => {
+    const message: AIMessage = {
+      id: "ai-blackboard",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "bb-1",
+          name: "bb_write",
+          args: {
+            key: "internal.progress",
+            value: "machine-only coordination state",
+          },
+        },
+      ],
+    };
+
+    renderWithProviders(<MessageGroup messages={[message]} />, {
+      locale: "en-US",
+    });
+
+    expect(screen.queryByText(/bb_write/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("machine-only coordination state"),
+    ).not.toBeInTheDocument();
+  });
+
   it("hides auto verification tool calls from restored history", () => {
     const messages: Message[] = [
       {

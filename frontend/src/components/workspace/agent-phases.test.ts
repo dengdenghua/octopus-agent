@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  agentPhaseDisplayTitle,
   businessAgentPhaseKey,
   deriveAgentPhases,
   normalizeBusinessPhaseKey,
@@ -522,5 +523,29 @@ describe("agent phases", () => {
     ]);
     expect(state.phases.length).toBeGreaterThan(0);
     expect(state.phases.every((phase) => Boolean(phase.titleKey))).toBe(true);
+  });
+
+  test("keeps real todo titles instead of replacing them with business labels", () => {
+    expect(
+      agentPhaseDisplayTitle(
+        {
+          id: "phase-1",
+          title: "核对消息分组和右栏联动边界",
+          status: "running",
+          businessKey: "testing",
+          eventIds: [],
+        },
+        {
+          genericPrepare: "准备",
+          genericExecute: "执行",
+          genericDeliver: "交付",
+          planning: "制定方案",
+          exploring: "调查分析",
+          implementing: "执行修改",
+          testing: "验证修改",
+          deploying: "交付上线",
+        },
+      ),
+    ).toBe("核对消息分组和右栏联动边界");
   });
 });

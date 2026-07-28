@@ -89,6 +89,7 @@ const HIDDEN_TIMELINE_TOOL_NAMES = new Set([
   "todo_write",
   "write_todos",
   "bb_keys",
+  "bb_write",
   "query_skill",
   "skill_search",
   "apply_skill",

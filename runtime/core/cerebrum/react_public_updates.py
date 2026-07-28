@@ -286,16 +286,24 @@ def _runtime_fallback_public_update(*, goal: str, step: ReActStep) -> str:
     """
     actions = step.actions or ([step.action] if step.action else [])
     target = ""
+    tool_name = ""
     for action in actions:
         parsed = _parse_action(action)
         if parsed is None:
             continue
-        _name, args = parsed
+        name, args = parsed
         candidate = _public_tool_target(args if isinstance(args, dict) else {})
         if candidate:
             target = candidate
+            tool_name = str(name or "").strip().lower()
             break
     is_cjk = bool(re.search(r"[\u3400-\u9fff]", str(goal or "")))
+    if target in {".", "./"} and tool_name in {
+        "list_cwd",
+        "list_dir",
+        "list_directory",
+    }:
+        return "正在查看当前目录。" if is_cjk else "Checking the current directory."
     if is_cjk:
         if target:
             return f"正在处理 {target}。"

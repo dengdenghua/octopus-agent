@@ -114,7 +114,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
 
-  test("maps free-form todo phase titles to readable business labels", () => {
+  test("keeps free-form todo phase titles visible", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
@@ -133,10 +133,10 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    // Visible titles are the localized business labels…
-    expect(screen.getByText("了解代码结构")).toBeInTheDocument();
-    expect(screen.getByText("开始修改代码")).toBeInTheDocument();
-    // …while the raw todo text stays available via tooltip.
+    // The visible plan remains specific to this task rather than replacing
+    // every row with a generic business bucket label.
+    expect(screen.getByText("阅读鉴权模块源码")).toBeInTheDocument();
+    expect(screen.getByText("修改登录页实现")).toBeInTheDocument();
     expect(screen.getByTitle("阅读鉴权模块源码")).toBeInTheDocument();
     expect(screen.getByTitle("修改登录页实现")).toBeInTheDocument();
   });
@@ -582,10 +582,9 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/进展/);
 
-    // Phase titles map to business labels ("Read context" → exploring,
-    // "Run tests" → testing); raw titles stay on the tooltip.
-    expect(screen.getByText(/了解代码结构/)).toBeInTheDocument();
-    expect(screen.getByText(/验证修改/)).toBeInTheDocument();
+    // Backend phase titles stay visible after their machine prefix is removed.
+    expect(screen.getByText(/Read context/)).toBeInTheDocument();
+    expect(screen.getByText(/Run tests/)).toBeInTheDocument();
     expect(screen.getByTitle(/Read context/)).toBeInTheDocument();
     expect(screen.getByTitle(/Run tests/)).toBeInTheDocument();
 
@@ -2086,10 +2085,8 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expandSummarySection(/进展/);
-    // "write plan.md" matches the ``write`` keyword, which routes to the
-    // implementing bucket before the planning bucket. The raw text remains
-    // available on the tooltip.
-    expect(screen.getAllByText(/开始修改代码/).length).toBeGreaterThan(0);
+    // The current phase follows the streamed todo while preserving its title.
+    expect(screen.getAllByText(/write plan\.md/).length).toBeGreaterThan(0);
     expect(screen.getAllByTitle(/write plan\.md/).length).toBeGreaterThan(0);
 
     rerender(
@@ -2112,10 +2109,7 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    // "run research" matches the exploring bucket (research keyword), so the
-    // visible label becomes the localized exploring title while the raw text
-    // stays on the tooltip.
-    expect(screen.getAllByText(/了解代码结构/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/run research/).length).toBeGreaterThan(0);
     expect(screen.getAllByTitle(/run research/).length).toBeGreaterThan(0);
   });
 });

@@ -70,6 +70,7 @@ from runtime.core.cerebrum.react_loop import (
     run_react_loop,
     stream_react_loop,
 )
+from runtime.core.cerebrum.react_public_updates import _runtime_fallback_public_update
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import JSONLJournal
@@ -1239,6 +1240,23 @@ def test_missing_public_update_emits_runtime_fallback_commentary() -> None:
     assert commentary[0]["delta"]  # non-empty deterministic fallback
     assert commentary[0]["iteration"] == 1
     assert any(event["type"] == "tool_start" for event in events)
+
+
+def test_runtime_fallback_describes_current_directory_without_dot_artifact() -> None:
+    step = ReActStep(
+        iteration=1,
+        action='list_cwd({"path": "."})',
+        actions=['list_cwd({"path": "."})'],
+    )
+
+    assert (
+        _runtime_fallback_public_update(goal="检查当前项目", step=step)
+        == "正在查看当前目录。"
+    )
+    assert (
+        _runtime_fallback_public_update(goal="Inspect the current project", step=step)
+        == "Checking the current directory."
+    )
 
 
 def test_realtime_missing_public_update_gets_model_authored_orientation() -> None:

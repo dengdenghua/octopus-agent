@@ -352,16 +352,17 @@ export function normalizeBusinessPhaseKey(
 }
 
 /**
- * Resolve the text the UI should show for a phase: the localized generic
- * bucket label first, then the localized business phase label, and finally
- * the raw title. The raw title stays available for tooltips.
+ * Resolve the text the UI should show for a phase.
+ *
+ * Synthetic phases use localized generic labels. Real todo phases keep the
+ * model-authored title so the plan stays specific to the current task instead
+ * of collapsing into repeated labels such as "Implement" or "Verify".
  */
 export function agentPhaseDisplayTitle(
   phase: AgentPhase,
   labels: Record<AgentPhaseTitleKey | BusinessAgentPhaseKey, string>,
 ): string {
   if (phase.titleKey) return labels[phase.titleKey];
-  if (phase.businessKey) return labels[phase.businessKey];
   return phase.title;
 }
 
@@ -389,4 +390,3 @@ function normalizePhaseOrdering(phases: AgentPhase[]): AgentPhase[] {
       : phase,
   );
 }
-
