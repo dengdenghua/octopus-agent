@@ -428,9 +428,43 @@ def select_process_backend(mode: str | None = None) -> BackendChoice:
                 "strict process sandbox requested but no hard backend is available "
                 "(install bwrap on Linux or use sandbox-exec on macOS)"
             )
+        _warn_soft_fallback_once()
         return BackendChoice(DirectBackend(), "direct", hard=False)
 
     raise SandboxViolation(f"unknown process sandbox mode: {raw}")
+
+
+_soft_fallback_warned = False
+_soft_fallback_warn_lock = threading.Lock()
+
+
+def _warn_soft_fallback_once() -> None:
+    """Loudly note the auto→direct soft fallback — exactly once per process.
+
+    Before this existed the fallback was silent: on a Linux host without
+    ``bwrap`` every agent command ran with soft constraints only, and
+    the only way to notice was reading the execution-policy metadata.
+    Windows has no hard backend yet, so the warning there points at the
+    tracking gap rather than an install hint.
+    """
+    global _soft_fallback_warned
+    with _soft_fallback_warn_lock:
+        if _soft_fallback_warned:
+            return
+        _soft_fallback_warned = True
+    if sys.platform.startswith("linux"):
+        hint = "install bubblewrap (bwrap) for kernel-level isolation"
+    elif sys.platform == "darwin":
+        hint = "sandbox-exec is unavailable on this host"
+    else:
+        hint = "no hard sandbox backend exists for this platform yet"
+    _logger.warning(
+        "process sandbox: no hard backend available — falling back to soft "
+        "constraints only (cwd lock + env allowlist + output cap). To get "
+        "kernel-level isolation: %s. Set OCTOPUS_PROCESS_SANDBOX=strict to "
+        "refuse execution instead.",
+        hint,
+    )
 
 
 def _sbpl_escape(value: str) -> str:

@@ -63,7 +63,54 @@ class Doctor:
         self._check_ollama(report)
         self._check_config(report)
         self._check_data_dir(report)
+        self._check_sandbox(report)
         return report
+
+    def _check_sandbox(self, report: DoctorReport) -> None:
+        """Report the process-sandbox posture for agent shell commands.
+
+        A hard OS backend (bwrap / seatbelt) means a misbehaving command
+        is stopped by the kernel; the soft fallback only applies policy
+        at the Python layer, so it earns a visible warn.
+        """
+        try:
+            from runtime.safety.sandboxing.sandbox import select_process_backend
+
+            choice = select_process_backend()
+        except Exception as exc:  # noqa: BLE001 — doctor must never crash
+            report.results.append(
+                CheckResult(
+                    name="Process sandbox",
+                    status="warn",
+                    message=f"backend probe failed: {type(exc).__name__}: {exc}",
+                )
+            )
+            return
+        if choice.hard:
+            report.results.append(
+                CheckResult(
+                    name="Process sandbox",
+                    status="ok",
+                    message=f"{choice.name} (kernel-level isolation active)",
+                )
+            )
+            return
+        import sys as _sys
+
+        if _sys.platform.startswith("linux"):
+            hint = "Install bubblewrap (bwrap), or set OCTOPUS_PROCESS_SANDBOX=strict"
+        elif _sys.platform == "darwin":
+            hint = "sandbox-exec missing; set OCTOPUS_PROCESS_SANDBOX=strict to fail closed"
+        else:
+            hint = "No hard backend on this platform yet; soft constraints still apply"
+        report.results.append(
+            CheckResult(
+                name="Process sandbox",
+                status="warn",
+                message=f"{choice.name} (soft constraints only — no kernel isolation)",
+                fix_hint=hint,
+            )
+        )
 
     def _check_python(self, report: DoctorReport) -> None:
         major, minor = sys.version_info[:2]

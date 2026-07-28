@@ -496,6 +496,25 @@ def _format_skill_catalog(
         activation=activation,
         registry=registry,
     )
+    # TF-IDF relevance selection · when the catalog would overflow
+    # ``max_skills``, keep the pinned priority tools and fill the
+    # remaining slots with the skills most relevant to the goal
+    # (TF-IDF over name+summary+description+affinity — zero deps,
+    # deterministic). The priority/capability ordering above already
+    # ranks the full list; this step only decides which non-priority
+    # skills survive the truncation, so a 300-skill registry no longer
+    # evicts goal-relevant skills behind 100 alphabetically-lucky ones.
+    if goal and len(names) > max_skills:
+        try:
+            from runtime.execution.suckers.search import TfIdfSkillSearcher
+
+            pinned = [n for n in names if n in priority_set]
+            rest = [n for n in names if n not in priority_set]
+            budget = max(0, max_skills - len(pinned))
+            relevant = set(TfIdfSkillSearcher(registry).search(goal, k=budget))
+            names = pinned + [n for n in rest if n in relevant]
+        except Exception:  # noqa: BLE001 — selection is an optimization, never fatal
+            pass
     lines: list[str] = ["可用工具 (skill):"]
     for name in names[:max_skills]:
         try:
@@ -611,11 +630,7 @@ def _git_status_summary(root: Any) -> str:
     if upstream:
         # Output is "<behind>\t<ahead>" relative to upstream.
         upstream_parts = upstream.split()
-        if (
-            len(upstream_parts) == 2
-            and upstream_parts[0].isdigit()
-            and upstream_parts[1].isdigit()
-        ):
+        if len(upstream_parts) == 2 and upstream_parts[0].isdigit() and upstream_parts[1].isdigit():
             behind, ahead = int(upstream_parts[0]), int(upstream_parts[1])
 
     last = _git("log", "-1", "--pretty=format:%h %s")

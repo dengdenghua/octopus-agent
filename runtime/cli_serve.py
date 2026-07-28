@@ -143,6 +143,73 @@ def register_intelligence_subscriptions_task(runner: Any) -> int:
     return 1
 
 
+def register_memory_distill_task(runner: Any, stack: Any) -> int:
+    """Periodically roll memory facts up into the six summary buckets.
+
+    Uses the planner's model router when available (LLM-compressed
+    summaries); otherwise the deterministic heuristic path still runs,
+    so the buckets fill even in no-LLM deployments. Interval via
+    ``OCTOPUS_MEMORY_DISTILL_SECONDS`` (default 3600; <=0 disables).
+    """
+    try:
+        interval_s = int(os.environ.get("OCTOPUS_MEMORY_DISTILL_SECONDS") or "3600")
+    except ValueError:
+        interval_s = 3600
+    if interval_s <= 0:
+        return 0
+
+    router = getattr(getattr(stack, "planner", None), "router", None)
+
+    def _tick() -> None:
+        from runtime.memory.users.distill import distill_user_memory
+
+        distill_user_memory(router)
+
+    runner.add_periodic(
+        "memory_distill",
+        interval_s=float(interval_s),
+        callback=_tick,
+        jitter_s=min(120.0, interval_s * 0.1),
+    )
+    return 1
+
+
+def register_cron_executor_task(runner: Any) -> int:
+    """Fire persisted cron jobs (settings-UI shell jobs + schedule_task prompts).
+
+    The store/router/skill only *register* jobs — without this periodic
+    tick nothing ever runs them. Env kill-switches:
+    ``OCTOPUS_CRON_EXECUTOR=0`` disables outright;
+    ``OCTOPUS_CRON_EXECUTOR_POLL_SECONDS`` retunes the poll (default 30s,
+    finer than the 1-minute cron resolution so jobs fire ≤30s late).
+    """
+    if os.environ.get("OCTOPUS_CRON_EXECUTOR", "1").lower() in ("0", "false", "no"):
+        return 0
+    try:
+        interval_s = int(os.environ.get("OCTOPUS_CRON_EXECUTOR_POLL_SECONDS") or "30")
+    except ValueError:
+        interval_s = 30
+    if interval_s <= 0:
+        return 0
+
+    def _tick() -> None:
+        from runtime.execution.cron_executor import run_due_cron_jobs
+
+        run_due_cron_jobs()
+
+    runner.add_periodic(
+        "cron_job_executor",
+        interval_s=float(interval_s),
+        callback=_tick,
+        jitter_s=min(10.0, interval_s * 0.1),
+        # Catch up once on startup for jobs missed while the server was
+        # down (recurring jobs fire a single catch-up run, one-shots
+        # whose fire_at passed fire immediately).
+        run_on_start=True,
+    )
+    return 1
+
+
 def register_reflection_tasks(
     runner: Any,
     stack: Any,
@@ -306,6 +373,10 @@ def run_serve(
     )
 
     register_governance_audit_rotation_task(runner)
+
+    register_cron_executor_task(runner)
+
+    register_memory_distill_task(runner, stack)
 
     reflection_count = 0
     if learn_interval_s > 0:

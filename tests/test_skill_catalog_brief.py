@@ -216,3 +216,47 @@ def test_no_description_at_all_falls_back_to_marker() -> None:
     )
     out = _format_skill_catalog(reg)
     assert "- bare: (无描述)" in out
+
+
+def test_tfidf_selection_keeps_goal_relevant_skill_past_truncation() -> None:
+    """When the registry overflows ``max_skills``, TF-IDF relevance to the
+    goal — not list position — decides which non-priority skills survive."""
+    names = [
+        "read_file",  # priority pin
+        *(f"filler_{i}" for i in range(40)),
+        "kubernetes_deploy",
+    ]
+    reg = _FakeRegistry(
+        [
+            *(
+                _FakeSkill(name=n, summary=f"{n} summary")
+                for n in names
+                if n != "kubernetes_deploy"
+            ),
+            _FakeSkill(
+                name="kubernetes_deploy",
+                summary="Deploy workloads to a Kubernetes cluster",
+                description="Roll out containers, pods and services onto Kubernetes",
+                affinity=["deploy", "k8s"],
+            ),
+        ]
+    )
+
+    out = _format_skill_catalog(
+        reg,
+        max_skills=5,
+        goal="deploy the service to kubernetes",
+    )
+
+    assert "\n  - read_file:" in out  # priority pin always survives
+    assert "\n  - kubernetes_deploy:" in out  # goal-relevant, beats fillers
+
+
+def test_tfidf_selection_skipped_without_goal() -> None:
+    """No goal → legacy order, truncation by position."""
+    names = ["read_file", *(f"filler_{i}" for i in range(40)), "kubernetes_deploy"]
+    reg = _FakeRegistry([_FakeSkill(name=n, summary=f"{n} summary") for n in names])
+
+    out = _format_skill_catalog(reg, max_skills=5, goal="")
+
+    assert "\n  - kubernetes_deploy:" not in out
