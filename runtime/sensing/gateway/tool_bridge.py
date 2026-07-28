@@ -188,9 +188,7 @@ def strip_leaked_protocol_tags(text: str) -> str:
     """
     if not text:
         return text
-    value = _LEAKED_PROTOCOL_BLOCK_RE.sub("", text)
-    value = _LEAKED_PROTOCOL_TAG_RE.sub("", value)
-    return value
+    return _LEAKED_PROTOCOL_TAG_RE.sub("", _LEAKED_PROTOCOL_BLOCK_RE.sub("", text))
 
 
 _PUBLIC_CHECKPOINT_TOOL_RE = re.compile(

@@ -217,3 +217,4 @@ runtime/execution/all_skills/.preinstalled
 
 # 停止打包:技能由 octopus_runtime bootstrap 从 registry 同步(full-bundle 整目录),不再提交
 /skills/public/*/
+.trae/tmp/

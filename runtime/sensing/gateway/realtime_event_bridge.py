@@ -52,7 +52,6 @@ from runtime.protocol.text_limits import (
     append_capped_text as _append_capped_text,
 )
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
-from runtime.sensing.gateway.tool_bridge import strip_leaked_protocol_tags
 from runtime.sensing.gateway.realtime_workbench import (
     _phases_from_todo_preview,
     _phases_with_active_item,
@@ -61,6 +60,7 @@ from runtime.sensing.gateway.realtime_workbench import (
     _workspace_focus_for_file_change,
     _workspace_focus_for_tool,
 )
+from runtime.sensing.gateway.tool_bridge import strip_leaked_protocol_tags
 
 _logger = logging.getLogger(__name__)
 

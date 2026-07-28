@@ -8,19 +8,17 @@ keeps a visible beat and the realtime bridge can bind protocol fields
 
 from __future__ import annotations
 
-from tests.test_react_loop import (
-    _ScriptedRouter,
-    _build_stack_with_executor,
-    _drain,
-    _intent,
-)
-
 from runtime.core.cerebrum.react_loop import (
     ReActStep,
     _runtime_fallback_public_update,
     stream_react_loop,
 )
-
+from tests.test_react_loop import (
+    _build_stack_with_executor,
+    _drain,
+    _intent,
+    _ScriptedRouter,
+)
 
 # ── _runtime_fallback_public_update: deterministic fallback text ──
 
