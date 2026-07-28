@@ -241,6 +241,17 @@ function rememberChatWorkDir(dir: string) {
   }
 }
 
+function readRememberedChatWorkDir(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const remembered = window.localStorage.getItem(CHAT_WORKDIR_KEY)?.trim() ?? "";
+    return isAbsolutePath(remembered) ? remembered : "";
+  } catch (e) {
+    swallow(e, "storage");
+    return "";
+  }
+}
+
 function readAgentWorkbenchOpenPreference(): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -1122,7 +1133,7 @@ function RealtimePageContent({
   // Work directory for Agent project/code state. Empty means the thread uses its
   // isolated personal coding workspace; selecting a local folder binds a user
   // project directory without mixing it with the separate Team workspace.
-  const [workDir, setWorkDir] = useState<string>(() => "");
+  const [workDir, setWorkDir] = useState<string>(readRememberedChatWorkDir);
   const localStartedThreadIdRef = useRef<string | null>(null);
   const handleWorkDirChange = useCallback((dir: string) => {
     setWorkDir(dir);
