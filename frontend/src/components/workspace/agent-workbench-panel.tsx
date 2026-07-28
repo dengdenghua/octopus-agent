@@ -1161,63 +1161,6 @@ export function AgentWorkbenchPanel({
             </div>
           )}
 
-          {/* Agent filter chip row — quick switch between main process and sub-agents */}
-          {!selectedRosterSeat && agentTiles.length > 0 && (
-            <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border-subtle px-5 py-2">
-              <span className="shrink-0 text-xs font-medium text-muted-foreground/70">
-                {t.agentWorkbenchPanel.filterByAgent}
-              </span>
-              <button
-                type="button"
-                onClick={openMainProcess}
-                className={cn(
-                  "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-medium transition-colors",
-                  !selectedAgent
-                    ? "border-foreground/40 bg-foreground/10 text-foreground"
-                    : "border-border-default bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
-                )}
-              >
-                <MonitorIcon className="size-3" />
-                {t.agentWorkbenchPanel.filterChipMain}
-              </button>
-              {agentTiles.map((agent) => {
-                const isActive = selectedAgent?.id === agent.id;
-                const agentLabel = repairMojibakeText(
-                  agent.codename ?? agent.name ?? agent.label,
-                );
-                return (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    onClick={() => openSubagentProcess(agent.id)}
-                    className={cn(
-                      "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-medium transition-colors",
-                      isActive
-                        ? "border-foreground/40 bg-foreground/10 text-foreground"
-                        : "border-border-default bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
-                    )}
-                  >
-                    {agent.avatar ? (
-                      <span aria-hidden="true" className="text-xs">
-                        {agent.avatar}
-                      </span>
-                    ) : null}
-                    <span className="font-mono">{agent.label}</span>
-                    <span
-                      className={cn(
-                        "inline-block size-1.5 shrink-0 rounded-full",
-                        agentRunDotClass(agent.status),
-                      )}
-                    />
-                    <span className="max-w-[100px] truncate text-xs font-normal opacity-70">
-                      {agent.role ? repairMojibakeText(agent.role) : agentLabel}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           {/* Tool call timeline */}
           {selectedRosterSeat ? (
             rosterBlocks.length > 0 ? (
