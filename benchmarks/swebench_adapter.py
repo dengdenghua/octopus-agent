@@ -69,7 +69,7 @@ You are a software engineer tasked with resolving a GitHub issue.
 1. Explore the repository structure to understand the codebase.
 2. Search for relevant code using grep, code_search, or ast_search.
 3. Identify the root cause of the issue described above.
-4. **Make the minimal changes needed to fix the issue.** You MUST actually call the `edit_file` or `write_text_file` tool to modify the source code — do NOT just describe or plan the change. A turn that ends without a real file-write tool call is a failure.
+4. **Make the minimal changes needed to fix the issue.** You MUST actually modify the source code with a file-write tool — do NOT just describe or plan the change. A turn that ends without a real file-write is a failure.
 5. Run the relevant tests to verify your fix works.
 6. Tests must remain unchanged; limit changes to source code only.
 7. Ensure your changes are committed (staged) so they appear in `git diff`.
@@ -78,7 +78,7 @@ Remember:
 - Keep changes minimal and focused on the issue.
 - Match the existing code style of the project.
 - If tests fail, iterate on your fix until they pass.
-- **Action over description**: every iteration must either call a tool or finish. Never end an iteration with only a plan/read — call `edit_file` to apply the fix as soon as you know what to change.
+- **Action over description**: every iteration must either call a tool or finish. Never end an iteration with only a plan/read — apply the fix as soon as you know what to change.
 """
 
 
