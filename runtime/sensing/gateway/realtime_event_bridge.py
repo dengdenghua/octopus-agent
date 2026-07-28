@@ -865,9 +865,14 @@ class _ReactBridgeState:
             await self._emit_completed(turn, log, emitter, self.reasoning)
             self.reasoning = None
             self.reasoning_started_monotonic = None
-        # Close any still-open tool items so the terminal snapshot never
-        # carries a spurious inProgress spinner.
+        # Close abandoned foreground tools so the terminal snapshot never
+        # carries a spurious inProgress spinner. Background processes are
+        # intentionally owned by their watcher after the turn ends; closing
+        # them here would publish a false completion before the process exits.
         for item_id, tool in list(self.tools.items()):
+            preview = tool.input_preview
+            if isinstance(preview, dict) and preview.get("background") is True:
+                continue
             tool.status = status
             await self._emit_completed(turn, log, emitter, tool)
             del self.tools[item_id]
