@@ -932,12 +932,7 @@ def test_turn_interrupt_from_second_connection_stops_running_turn() -> None:
 def test_turn_completed_fans_out_to_thread_watchers(gateway_client: Any) -> None:
     """A second connection that resumed the thread receives the
     terminal turn/completed even though the turn ran on the first
-    connection (previously it had to poll thread/resume again).
-
-    Since the delta-fanout fix, the sibling also receives throttled
-    delta events before the terminal snapshot — drain until
-    ``turn/completed`` arrives.
-    """
+    connection (previously it had to poll thread/resume again)."""
     client, _ = gateway_client
     with client.websocket_connect("/api/realtime") as ws_a:
         _drive_turn(ws_a, thread_id="th_fanout", text="seed", approval_policy="never")
@@ -962,142 +957,11 @@ def test_turn_completed_fans_out_to_thread_watchers(gateway_client: Any) -> None
                 approval_policy="never",
             )
             assert outcome["response"].result["turn"]["status"] == "completed"
-            # Drain B: deltas may arrive first, then turn/completed.
-            fanned: Notification | None = None
-            while True:
-                msg = _recv(ws_b)
-                if isinstance(msg, Notification) and msg.method == "turn/completed":
-                    fanned = msg
-                    break
-            assert fanned is not None
+            fanned = _recv(ws_b)
+            assert isinstance(fanned, Notification)
+            assert fanned.method == "turn/completed"
             assert fanned.params["threadId"] == "th_fanout"
             assert fanned.params["turn"]["status"] == "completed"
-
-
-def test_sibling_connection_receives_delta_events(gateway_client: Any) -> None:
-    """A sibling connection watching the same thread receives delta
-    events (throttled), not just the terminal turn/completed snapshot.
-
-    Previously the sibling only got turn/completed; now the gateway
-    wraps the primary emitter with a fanout proxy that forwards delta
-    notifications to every connection that resumed the thread.
-    """
-    client, _ = gateway_client
-    with client.websocket_connect("/api/realtime") as ws_a:
-        # Seed the thread so ws_b can resume it and gain reducer state.
-        _drive_turn(ws_a, thread_id="th_delta_fanout", text="seed", approval_policy="never")
-        with client.websocket_connect("/api/realtime") as ws_b:
-            # ws_b resumes → becomes a watcher with reducer state.
-            _send(
-                ws_b,
-                JsonRpcRequest(
-                    id=7,
-                    method="thread/resume",
-                    params={"threadId": "th_delta_fanout"},
-                ),
-            )
-            while True:
-                msg = _recv(ws_b)
-                if isinstance(msg, JsonRpcResponse) and msg.id == 7:
-                    break
-
-            # Second turn runs on A; B must observe delta events.
-            outcome = _drive_turn(
-                ws_a,
-                thread_id="th_delta_fanout",
-                text="second turn",
-                approval_policy="never",
-            )
-            assert outcome["response"].result["turn"]["status"] == "completed"
-
-            # Drain B: collect all messages until turn/completed arrives.
-            b_notifications: list[Notification] = []
-            while True:
-                msg = _recv(ws_b)
-                if isinstance(msg, Notification):
-                    b_notifications.append(msg)
-                    if msg.method == "turn/completed":
-                        break
-
-            delta_methods = {
-                "item/agentMessage/delta",
-                "item/reasoning/textDelta",
-                "item/plan/delta",
-                "item/commandExecution/outputDelta",
-            }
-            delta_events = [n for n in b_notifications if n.method in delta_methods]
-            # The sibling must have received at least some deltas.
-            assert len(delta_events) > 0, "sibling should receive delta events"
-
-            # agentMessage deltas forwarded to the sibling must
-            # reconstruct the same text the primary connection saw.
-            agent_deltas = [
-                n.params["delta"]
-                for n in b_notifications
-                if n.method == "item/agentMessage/delta"
-            ]
-            if agent_deltas:
-                assert "".join(agent_deltas) == "second turn"
-
-            # turn/completed must also arrive (existing fanout path).
-            assert any(n.method == "turn/completed" for n in b_notifications)
-
-
-def test_sibling_without_reducer_state_skips_delta_fanout(gateway_client: Any) -> None:
-    """A connection that has NOT resumed the thread must not receive
-    delta events — it has no reducer state, so forwarding deltas would
-    produce ghost UI for items it doesn't know about.
-
-    A non-watcher connection receives no unsolicited notifications at
-    all (no deltas, no ``turn/completed`` — the terminal fanout also
-    keys off ``last_resumed_thread_id``). We verify the absence of
-    deltas by sending a ``ping`` after the turn completes and asserting
-    the ``pong`` reply is the only message received: any incorrectly
-    fanned-out delta or terminal snapshot would precede or follow the
-    pong and surface in ``b_notifications``.
-    """
-    client, _ = gateway_client
-    delta_methods = {
-        "item/agentMessage/delta",
-        "item/reasoning/textDelta",
-        "item/plan/delta",
-        "item/commandExecution/outputDelta",
-    }
-    with client.websocket_connect("/api/realtime") as ws_a:
-        _drive_turn(ws_a, thread_id="th_no_reducer", text="seed", approval_policy="never")
-        with client.websocket_connect("/api/realtime") as ws_b:
-            # ws_b does NOT resume the thread → no reducer state, and
-            # last_resumed_thread_id stays None, so the gateway's
-            # sibling list and terminal-fanout list both skip it.
-            outcome = _drive_turn(
-                ws_a,
-                thread_id="th_no_reducer",
-                text="second",
-                approval_policy="never",
-            )
-            assert outcome["response"].result["turn"]["status"] == "completed"
-
-            # Drive the event loop so any best-effort fanout notifications
-            # (had ws_b been wrongly included) would be queued before the
-            # ping. The ping reply (``pong``) is the ONLY message a
-            # non-watcher should ever see here.
-            _send(ws_b, Notification(method="ping", params={}))
-
-            b_notifications: list[Notification] = []
-            while True:
-                msg = _recv(ws_b)
-                if isinstance(msg, Notification):
-                    b_notifications.append(msg)
-                    if msg.method == "pong":
-                        break
-
-            delta_events = [n for n in b_notifications if n.method in delta_methods]
-            assert len(delta_events) == 0, "non-watcher should not receive deltas"
-            completed_events = [n for n in b_notifications if n.method == "turn/completed"]
-            assert len(completed_events) == 0, "non-watcher should not receive turn/completed"
-            # The only message received must be the pong reply.
-            assert len(b_notifications) == 1
-            assert b_notifications[0].method == "pong"
 
 
 def test_turn_interrupt_missing_turn_id_is_invalid_params(gateway_client: Any) -> None:

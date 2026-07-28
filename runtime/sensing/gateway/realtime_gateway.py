@@ -504,107 +504,6 @@ class RpcConnection:
         return self._request_slots
 
 
-class _SiblingFanoutEmitter:
-    """Wraps the primary RpcConnection and forwards delta notifications
-    to sibling connections watching the same thread.
-
-    Delta forwarding is throttled via a 50ms coalescing window to avoid
-    traffic doubling — multiple deltas arriving within the window are
-    batched and flushed together. Siblings that haven't resumed the
-    thread (no reducer state) are excluded at construction time, so
-    they never receive ghost deltas for items they don't know about.
-
-    Non-delta notifications (item/started, item/completed, turn/started,
-    approval requests, etc.) go to the primary connection only — the
-    sibling receives the terminal ``turn/completed`` snapshot via the
-    existing fanout path in ``_invoke_turn_start``.
-    """
-
-    _DELTA_METHODS = frozenset(
-        {
-            "item/agentMessage/delta",
-            "item/reasoning/textDelta",
-            "item/plan/delta",
-            "item/commandExecution/outputDelta",
-        }
-    )
-    _THROTTLE_S = 0.05
-
-    def __init__(
-        self,
-        primary: RpcConnection,
-        siblings: list[RpcConnection],
-    ) -> None:
-        self._primary = primary
-        self._siblings = siblings
-        self._pending: list[tuple[str, dict[str, Any]]] = []
-        self._flush_task: asyncio.Task[None] | None = None
-
-    @property
-    def actor_id(self) -> str | None:
-        return self._primary.actor_id
-
-    async def notify(
-        self,
-        method: ServerMethod | str,
-        params: dict[str, Any],
-    ) -> None:
-        await self._primary.notify(method, params)
-        method_str = method.value if isinstance(method, ServerMethod) else method
-        if method_str in self._DELTA_METHODS and self._siblings:
-            self._pending.append((method_str, params))
-            if self._flush_task is None or self._flush_task.done():
-                self._flush_task = asyncio.create_task(self._flush())
-
-    async def _flush(self) -> None:
-        await asyncio.sleep(self._THROTTLE_S)
-        pending = self._pending
-        self._pending = []
-        for method_str, params in pending:
-            for sibling in self._siblings:
-                if sibling._closed:
-                    continue
-                with suppress(Exception):
-                    await sibling.notify(method_str, params)
-
-    async def flush_remaining(self) -> None:
-        """Flush any buffered deltas that haven't been forwarded yet.
-
-        Called after the turn completes (but before the terminal
-        ``turn/completed`` fanout) so siblings see the final delta
-        batch before the snapshot.
-        """
-        if self._flush_task is not None and not self._flush_task.done():
-            await self._flush_task
-        if self._pending:
-            pending = self._pending
-            self._pending = []
-            for method_str, params in pending:
-                for sibling in self._siblings:
-                    if sibling._closed:
-                        continue
-                    with suppress(Exception):
-                        await sibling.notify(method_str, params)
-
-    async def request_approval(
-        self,
-        method: ServerMethod | str,
-        params: dict[str, Any],
-        *,
-        timeout: float | None = None,
-    ) -> Any:
-        return await self._primary.request_approval(method, params, timeout=timeout)
-
-    def is_turn_interrupted(self, turn_id: str) -> bool:
-        return self._primary.is_turn_interrupted(turn_id)
-
-    def register_turn(self, turn_id: str) -> None:
-        self._primary.register_turn(turn_id)
-
-    def unregister_turn(self, turn_id: str) -> None:
-        self._primary.unregister_turn(turn_id)
-
-
 # ── Gateway — FastAPI wiring + dispatch loop ─────────────────
 
 
@@ -1012,34 +911,13 @@ class RealtimeGateway:
         except ValueError as exc:
             raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc)) from exc
         params = self._sanitize_turn_params(params, conn)
-        # Snapshot sibling connections watching this thread. Deltas
-        # emitted during the turn are forwarded to them (throttled)
-        # so a second tab sees live progress, not just the terminal
-        # snapshot. Only connections that resumed this thread have
-        # reducer state; others are skipped to avoid ghost UI.
-        siblings = [
-            w
-            for w in self._connections
-            if w is not conn
-            and w.last_resumed_thread_id == thread_id
-            and not w._closed
-        ]
-        emitter: EventEmitter = (
-            _SiblingFanoutEmitter(conn, siblings) if siblings else conn
-        )
         try:
             async with self._turn_locks.hold(thread_id):
-                turn = await self._runtime.start_turn(params, emitter)
+                turn = await self._runtime.start_turn(params, conn)
         except _RpcError:
-            if isinstance(emitter, _SiblingFanoutEmitter):
-                with suppress(Exception):
-                    await emitter.flush_remaining()
             raise
         except Exception as exc:  # noqa: BLE001
             _logger.exception("realtime: turn/start crashed")
-            if isinstance(emitter, _SiblingFanoutEmitter):
-                with suppress(Exception):
-                    await emitter.flush_remaining()
             await conn.notify(
                 ServerMethod.ERROR,
                 {
@@ -1049,11 +927,6 @@ class RealtimeGateway:
                 },
             )
             raise _RpcError(JsonRpcErrorCode.INTERNAL_ERROR, str(exc)) from exc
-        # Flush any remaining throttled deltas before the terminal
-        # snapshot so siblings see the final batch first.
-        if isinstance(emitter, _SiblingFanoutEmitter):
-            with suppress(Exception):
-                await emitter.flush_remaining()
         # Best-effort: emit turn/completed if the runtime didn't.
         # The runtime owns the authoritative status — we only flip the
         # in-progress placeholder to completed so clients watching the
