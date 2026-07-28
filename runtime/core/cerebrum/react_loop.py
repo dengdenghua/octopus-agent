@@ -44,17 +44,13 @@ from runtime.core.cerebrum.react_context import (
     _image_blocks_from_attachments,
     _load_project_rules,
     _looks_like_image_attachment,
-    _prefetch_related_files,
     _serialize_messages_for_checkpoint,
     context_budget_tokens_for_model,
 )
 from runtime.core.cerebrum.react_convergence import (
     EvidenceConvergence,
-    build_direct_answer_directive,
-    constrain_explicit_read_scope,
     evidence_answer_conflicts_with_goal,
     ordered_explicit_read_groups,
-    read_only_evidence_convergence,
 )
 from runtime.core.cerebrum.react_execution import (
     _background_task_info_from_observation,
@@ -68,19 +64,17 @@ from runtime.core.cerebrum.react_execution import (
     _is_scoped_artifact_write,
     _normalized_tool_call_from_react_action,
     _persist_react_trajectory,
+    _phase_6d_dispatch_and_observe,
     _react_completion_receipt,
     _reset_kg_throttle_for_tests,
-    _run_auto_diagnostics,
     _skill_available_in_executor,
     _tool_event_extras_from_beak_step,
     _update_working_set,
 )
 from runtime.core.cerebrum.react_explicit_reads import (
-    _bound_explicit_large_reads,
     _explicit_no_tool_goal,
     _explicit_observed_read_sequence,
     _explicit_read_only_goal,
-    _narrow_command_direct_answer,
     _recover_explicit_read_actions,
 )
 from runtime.core.cerebrum.react_final_answer_guards import (
@@ -95,7 +89,6 @@ from runtime.core.cerebrum.react_final_answer_guards import (
 )
 from runtime.core.cerebrum.react_guards import (
     _code_mode_completion_guard,
-    _code_semantic_followup_guard,
     _completion_phrase_without_todo_guard,
     _explicit_source_paths,
     _failed_verification_followup_guard,
@@ -146,9 +139,6 @@ from runtime.core.cerebrum.react_parsing import (
     _THOUGHT_RE,
     _escape_md_brackets,
     _extract_final_answer,
-    _has_code_verification,
-    _has_successful_verification_observation,
-    _is_code_write_step,
     _is_format_violation,
     _looks_like_special_tool_envelope,
     _looks_like_unfinished_work,
@@ -201,22 +191,13 @@ from runtime.core.cerebrum.todo_protocol import (
     should_require_todo_protocol,
 )
 from runtime.core.cerebrum.work_mode import resolve_work_mode
-from runtime.execution.tool_engine import (
-    normalize_tool_lifecycle_event,
-    tool_lifecycle_event_to_react_event,
-)
 from runtime.platform.config.builder import StackProtocol
 from runtime.platform.models import ParsedIntent, Step, TaskId
 from runtime.safety.approval.approval_gate import ApprovalProvider
-from runtime.safety.hooks.tool_edge_hooks import post_write_diagnostic_record
 from runtime.safety.validation.prompt_injection import (
-    injection_taint_gates,
-    is_untrusted_tool,
     mark_injection_taint,
     reset_injection_taint,
-    scan_for_injection,
     set_injection_gate_handled,
-    wrap_untrusted_observation,
 )
 from runtime.sensing.model_router.rescue_policy import (
     is_retryable_model_error,
@@ -237,9 +218,6 @@ _logger = logging.getLogger(__name__)
 # module. Listing them in __all__ keeps ruff from auto-removing the
 # imports as "unused".
 __all__ = [
-    "ReActResult",
-    "ReActStep",
-    "_ResumeState",
     "_background_task_info_from_observation",
     "_beak_step_effective_success",
     "_build_code_agent_mode_prompt",
@@ -268,6 +246,7 @@ __all__ = [
     "_finish_reason_is_length_limited",
     "_format_background_task_heartbeat",
     "_format_skill_catalog",
+    "_goal_requests_code_mutation",
     "_guard_hit_recorder",
     "_guard_reason_for_user",
     "_has_unrecovered_beak_failure",
@@ -278,8 +257,9 @@ __all__ = [
     "_looks_like_image_attachment",
     "_looks_like_unfinished_work",
     "_mirror_checkpoint",
-    "_normalized_tool_call_from_react_action",
     "_native_tool_calls_missing_required_args",
+    "_normalized_tool_call_from_react_action",
+    "_observed_read_fallback_update",
     "_parse_action",
     "_parse_reasoning_action_fallback",
     "_parse_step",
@@ -287,6 +267,7 @@ __all__ = [
     "_placeholder_observation",
     "_quiet_evidence_targets",
     "_react_completion_receipt",
+    "_record_rejected_step",
     "_recover_explicit_read_actions",
     "_redundant_green_verification_guard",
     "_rehydrate_messages_from_steps",
@@ -295,16 +276,23 @@ __all__ = [
     "_reset_guard_telemetry_for_tests",
     "_reset_kg_throttle_for_tests",
     "_reset_react_variants_for_tests",
+    "_ResumeState",
+    "_runtime_fallback_public_update",
     "_safe_for_streamdown",
     "_should_auto_checkpoint",
     "_skill_available_in_executor",
     "_stage_update_timeout_fallback",
+    "_summarize_observation",
+    "_todo_completion_before_write_guard",
+    "_todo_prewrite_guard",
     "_tool_event_extras_from_beak_step",
     "_unfinished_implementation_recovery_needed",
     "_unverified_write_followup_guard",
     "_WRITE_TOOLS",
     "get_react_variant_stats",
     "pick_react_variant",
+    "ReActResult",
+    "ReActStep",
     "record_react_variant_result",
     "run_react_loop",
     "stream_react_loop",
@@ -1897,6 +1885,18 @@ def stream_react_loop(
         format_violation_bail_at=_format_violation_bail_at,
         final_guard_grounded_source_paths=_final_guard_grounded_source_paths,
         guard_impasse_state=_guard_impasse_state,
+        intent=intent,
+        agent=agent,
+        thread_id=thread_id,
+        approval_provider=approval_provider,
+        output_chunk_sink=output_chunk_sink,
+        router=router,
+        metadata=_metadata,
+        is_goal_mode=_is_goal_mode,
+        observed_read_sequence=_observed_read_sequence,
+        ordered_result_handoffs=_ordered_result_handoffs,
+        realtime_public_orientation=_realtime_public_orientation,
+        realtime_public_narrative=_realtime_public_narrative,
         is_code_mode=_is_code_mode,
         browser_operation_mode=_browser_operation_mode,
         todo_protocol_required=_todo_protocol_required,
@@ -1906,6 +1906,19 @@ def stream_react_loop(
         no_tool_turn=_no_tool_turn,
         steps=steps,
         executed_beak_steps=executed_beak_steps,
+        messages=messages,
+        working_set=_working_set,
+        effective_model=effective_model,
+        current_phase=_current_phase,
+        consecutive_same_failed_actions=_consecutive_same_failed_actions,
+        last_failed_action_fingerprint=_last_failed_action_fingerprint,
+        green_verification_convergence_active=_green_verification_convergence_active,
+        green_convergence_todo_used=_green_convergence_todo_used,
+        result_handoff_ready=_result_handoff_ready,
+        last_public_update_key=_last_public_update_key,
+        saw_successful_code_write=_saw_successful_code_write,
+        clean_verification_rounds_after_write=_clean_verification_rounds_after_write,
+        quiet_evidence_steps=_quiet_evidence_steps,
         native_mode=_native_mode,
         throughput_chars=_throughput_chars,
         terminated_reason=terminated_reason,
@@ -2524,900 +2537,55 @@ def stream_react_loop(
         if _loop_ctrl is _LoopControl.BREAK:
             break
         # ── PHASE 6d · action dispatch + observation ───────────────────
-        observation: str | None = step.observation or None
-        resolved_name: str | None = None
-        action_args: dict[str, Any] | None = None
-        beak_step: Step | None = None
-        tool_ok = False
-        tool_action_requested = (
-            tools_active and step.action and step.action.lower() not in {"none", "n/a", ""}
+        state.maybe_final = maybe_final
+        state.terminated_reason = terminated_reason
+        state.evidence_convergence_active = _evidence_convergence_active
+        state.force_convergence_next = _force_convergence_next
+        state.tools_active = tools_active
+        state.effective_model = effective_model
+        state.current_phase = _current_phase
+        state.consecutive_same_failed_actions = _consecutive_same_failed_actions
+        state.last_failed_action_fingerprint = _last_failed_action_fingerprint
+        state.green_verification_convergence_active = _green_verification_convergence_active
+        state.green_convergence_todo_used = _green_convergence_todo_used
+        state.result_handoff_ready = _result_handoff_ready
+        state.last_public_update_key = _last_public_update_key
+        state.saw_successful_code_write = _saw_successful_code_write
+        state.clean_verification_rounds_after_write = _clean_verification_rounds_after_write
+        state.quiet_evidence_steps = _quiet_evidence_steps
+        _loop_ctrl = yield from _phase_6d_dispatch_and_observe(
+            state,
+            i=i,
+            dispatch_parallel_actions=_dispatch_parallel_actions,
+            write_tools=_WRITE_TOOLS,
+            result_checkpoint_is_meaningful=_result_checkpoint_is_meaningful,
+            should_accumulate_quiet_evidence=_should_accumulate_quiet_evidence,
+            quiet_evidence_checkpoint_due=_quiet_evidence_checkpoint_due,
+            action_batch_fingerprint=_action_batch_fingerprint,
+            deduplicate_actions=_deduplicate_actions,
+            per_action_outcomes=_per_action_outcomes,
+            retry_safe_affinity=_retry_safe_affinity,
+            tool_call_succeeded=_tool_call_succeeded,
         )
-        _duplicate_action_count = 0
-        _explicit_read_scope_note = ""
-        if tool_action_requested and len(step.actions) > 1:
-            step.actions, _duplicate_action_count = _deduplicate_actions(step.actions)
-            step.action = "; ".join(step.actions)
-            tool_action_requested = bool(step.actions)
-        if tool_action_requested:
-            _candidate_actions = step.actions or [step.action]
-            _candidate_actions = _bound_explicit_large_reads(
-                goal=intent.normalized_goal,
-                workspace_path=(_effective_wp if isinstance(_effective_wp, str) else None),
-                actions=_candidate_actions,
-                read_only=_read_only_turn,
-            )
-            step.actions = _candidate_actions
-            step.action = "; ".join(_candidate_actions)
-            _scope_constraint = constrain_explicit_read_scope(
-                goal=intent.normalized_goal,
-                steps=steps,
-                actions=_candidate_actions,
-                read_only=_read_only_turn,
-                enforce_order=_observed_read_sequence,
-            )
-            if _scope_constraint is not None:
-                step.actions = list(_scope_constraint.actions)
-                step.action = "; ".join(step.actions)
-                _explicit_read_scope_note = _scope_constraint.observation_note()
-                tool_action_requested = bool(step.actions)
-                if not tool_action_requested:
-                    observation = _explicit_read_scope_note
-                    step.observation = observation
-                    maybe_final = None
-        _current_action_fingerprint = ""
-        _repeated_failure_skipped = False
-        if tool_action_requested:
-            _current_action_fingerprint = _action_batch_fingerprint(step.actions or [step.action])
-            if (
-                _consecutive_same_failed_actions >= 2
-                and _current_action_fingerprint == _last_failed_action_fingerprint
-            ):
-                observation = (
-                    "[repeated-failing-tool-skipped] The same tool call or ordered tool batch "
-                    "with identical arguments already failed twice, so the runtime did not "
-                    "execute it a third time. Treat the prior failure as definitive. Choose a different "
-                    "action: for a missing file, create it with an allowed write tool; for "
-                    "invalid arguments, correct them; otherwise use a different evidence source."
-                )
-                step.observation = observation
-                step.action = ""
-                step.actions = []
-                tool_action_requested = False
-                maybe_final = None
-                _repeated_failure_skipped = True
-        if _evidence_convergence_active is not None and tool_action_requested:
-            observation = (
-                "The read-only evidence requested by the user is already complete, so "
-                "the runtime did not execute this additional tool call. Answer now from "
-                "the recorded observations; do not broaden the search or call another tool."
-            )
-            step.observation = observation
-            step.action = ""
-            step.actions = []
-            tool_action_requested = False
-            maybe_final = None
-            _force_convergence_next = True
-        if tool_action_requested:
-            _todo_prewrite_message = _todo_prewrite_guard(
-                step.actions or [step.action],
-                steps,
-                # Keep bounded inspections and one-command probes lightweight.
-                # ReAct's plan-first gate applies to genuinely long or explicit
-                # goal-mode work; the native tool bridge enforces its own
-                # equivalent bootstrap from the shared protocol classifier.
-                required=(
-                    _todo_protocol_required
-                    and (
-                        _is_goal_mode
-                        or "\n" in intent.normalized_goal
-                        or len(intent.normalized_goal) >= 80
-                    )
-                ),
-                visible=_todo_protocol_visible,
-            )
-            if _todo_prewrite_message:
-                observation = _todo_prewrite_message
-                step.observation = observation
-                step.action = ""
-                step.actions = []
-                tool_action_requested = False
-                maybe_final = None
-        if _is_code_mode and tool_action_requested:
-            _premature_todo_completion = _todo_completion_before_write_guard(
-                step.actions or [step.action],
-                steps,
-                required=_goal_requests_code_mutation(intent.normalized_goal),
-            )
-            if _premature_todo_completion:
-                observation = _premature_todo_completion
-                step.observation = observation
-                step.action = ""
-                step.actions = []
-                tool_action_requested = False
-                maybe_final = None
-        if _is_code_mode and tool_action_requested:
-            # A deterministic source-level concurrency defect is stronger
-            # evidence than another green/red probe.  Do not let providers
-            # evade the repair instruction by cycling through pytest, lint,
-            # typecheck, or shell variants.  Reads and actual code writes stay
-            # available; a write+verify batch is also allowed because the
-            # ordered outcome tracker will evaluate the post-repair checks.
-            _semantic_repair = _code_semantic_followup_guard(
-                steps,
-                is_code_mode=True,
-            )
-            if _semantic_repair:
-                _candidate_steps = [
-                    ReActStep(iteration=i + 1, action=_candidate)
-                    for _candidate in (step.actions or [step.action])
-                ]
-                _candidate_has_write = any(
-                    _is_code_write_step(_candidate_step) for _candidate_step in _candidate_steps
-                )
-                _candidate_has_verifier = any(
-                    _has_code_verification([_candidate_step])
-                    for _candidate_step in _candidate_steps
-                )
-                if _candidate_has_verifier and not _candidate_has_write:
-                    observation = (
-                        "[semantic-repair-tool-skipped] A deterministic source defect "
-                        "is still present in the latest source edit, so the runtime did not "
-                        "execute another verifier or shell probe. Repair the source first.\n"
-                        + _semantic_repair
-                    )
-                    step.observation = observation
-                    step.action = ""
-                    step.actions = []
-                    tool_action_requested = False
-                    maybe_final = None
-                    _force_convergence_next = True
-        if _green_verification_convergence_active and tool_action_requested:
-            _candidate_actions = step.actions or [step.action]
-            _candidate_names = []
-            for _candidate_action in _candidate_actions:
-                _candidate_parsed = _parse_action(_candidate_action)
-                if _candidate_parsed is not None:
-                    _candidate_names.append(_candidate_parsed[0])
-            _allow_one_todo = (
-                bool(_candidate_names)
-                and all(name == "todo_write" for name in _candidate_names)
-                and not _green_convergence_todo_used
-            )
-            if _allow_one_todo:
-                _green_convergence_todo_used = True
-            else:
-                # Two independent green verification rounds after the latest
-                # write are sufficient evidence. Re-running read/test/lint or
-                # shell probes only burns the turn budget and can turn a valid
-                # implementation into a timeout. Suppress those actions while
-                # preserving one checklist-finalization opportunity.
-                observation = (
-                    "[redundant-tool-skipped] Two separate verification rounds are already green "
-                    "and no code changed afterward. This tool call was not executed. Do not call "
-                    "another tool. Emit `Final Answer:` now with the recorded test/lint evidence."
-                )
-                step.observation = observation
-                step.action = ""
-                step.actions = []
-                tool_action_requested = False
-                maybe_final = None
-                _force_convergence_next = True
-
-        # ``Update:`` is the explicit public checkpoint channel. Emit only
-        # after the whole model turn has parsed, immediately before the tool
-        # starts, so a partial ``Action:`` can never leak into conversation.
-        # De-duplicate retries that repeat the same checkpoint verbatim.
-        step.public_update = _safe_public_update(step.public_update)
-        _checkpoint_actions = step.actions or [step.action]
-        _prior_result_handoff = bool(
-            _ordered_result_handoffs and _result_handoff_ready and tool_action_requested
-        )
-        if _prior_result_handoff:
-            # The evidence narrator already gave the user the preceding fact
-            # and next decision. Do not repeat a stochastic model paraphrase
-            # immediately before the next tool row.
-            step.public_update = ""
-        if (
-            not step.public_update
-            and tool_action_requested
-            and maybe_final is None
-            and _realtime_public_orientation
-            and not _prior_result_handoff
-        ):
-            try:
-                _repaired_public_update = yield from _stream_public_evidence_narrative(
-                    router,
-                    model=effective_model,
-                    goal=intent.normalized_goal,
-                    step=step,
-                    convergence=None,
-                    iteration=i + 1,
-                    previous_key=_last_public_update_key,
-                    pending_action=True,
-                )
-            except Exception as exc:  # noqa: BLE001 — optional public narration
-                _logger.warning("public action orientation repair failed: %s", exc)
-                _repaired_public_update = ""
-            if _repaired_public_update:
-                step.public_update = _repaired_public_update
-                _last_public_update_key = (
-                    re.sub(r"\s+", " ", _repaired_public_update).strip().casefold()
-                )
-        _model_supplied_update = bool(step.public_update)
-        # Force runtime fallback when the model omitted ``Update:`` so the
-        # conversation never collapses into tool rows without a public beat.
-        # ``public_evidence=True`` on the emitted delta lets the realtime
-        # gateway pass it through (generic runtime prose is otherwise dropped)
-        # so the bridge can still bind phase_id/progress_sequence/timeline_sequence.
-        if (
-            not _model_supplied_update
-            and tool_action_requested
-            and maybe_final is None
-            and not _prior_result_handoff
-        ):
-            _fallback_update = _runtime_fallback_public_update(
-                goal=intent.normalized_goal,
-                step=step,
-            )
-            if _fallback_update:
-                step.public_update = _fallback_update
-        _public_update_key = re.sub(r"\s+", " ", step.public_update).strip().casefold()
-        if (
-            step.public_update
-            and tool_action_requested
-            and maybe_final is None
-            and _public_update_key != _last_public_update_key
-        ):
-            yield {
-                "type": "commentary_delta",
-                "delta": step.public_update,
-                "progress_source": "model" if _model_supplied_update else "runtime",
-                "public_evidence": not _model_supplied_update,
-                "start_new_segment": True,
-                "iteration": i + 1,
-            }
-            _last_public_update_key = _public_update_key
-
-        if tool_action_requested:
-            _result_handoff_ready = False
-            observation = None
-            step.observation = ""
-            maybe_final = None
-
-        # Multi-action fast path: when the model emitted >1 tool call
-        # in a single Action: block, dispatch them concurrently and
-        # merge observations. Keeps the legacy single-action path
-        # below untouched — that branch only runs when there is
-        # exactly one action, preserving every existing
-        # approval/retry/cancel/background-task behavior.
-        _parallel_handled = False
-        if tool_action_requested and len(step.actions) > 1:
-            _parallel_obs, _parallel_results = yield from _dispatch_parallel_actions(
-                step.actions,
-                stack=stack,
-                executor=executor,
-                iteration=i + 1,
-                react_task_id=react_task_id,
-                agent=agent,
-                intent=intent,
-                beak_step_sink=executed_beak_steps,
-            )
-            if _parallel_obs is not None:
-                observation = _parallel_obs
-                step.observation = _parallel_obs
-                step.action_results = _parallel_results
-                tool_ok = all(r.get("ok") for r in _parallel_results)
-                _parallel_handled = True
-
-        if not _parallel_handled and not step.observation:
-            will_attempt_tool = tool_action_requested
-            if will_attempt_tool:
-                assert executor is not None
-                parsed = _parse_action(step.action)
-                resolved_name = parsed[0] if parsed and executor.registry.has(parsed[0]) else None
-                if resolved_name is not None:
-                    assert parsed is not None
-                    call_id = uuid.uuid4().hex[:12]
-                    action_args = parsed[1] if isinstance(parsed[1], dict) else {}
-                    _input_preview = action_args
-                    _tool_started_at = time.monotonic()
-                    yield tool_lifecycle_event_to_react_event(
-                        normalize_tool_lifecycle_event(
-                            "tool_start",
-                            {
-                                "tool_name": resolved_name,
-                                "tool_call_id": call_id,
-                                "iteration": i + 1,
-                                "input_preview": _input_preview,
-                            },
-                            origin="react_compat",
-                        )
-                    )
-                    _auto_approve = intent.user_context.get(
-                        "auto_approve", False
-                    ) or intent.flags.get("auto_approve", False)
-                    from runtime.safety.approval.approval_gate import (
-                        ApprovalRequest,
-                        AutoDenyProvider,
-                        approval_action_for_tool,
-                    )
-
-                    try:
-                        from runtime.platform.process.session import current_session as _cs_ap
-
-                        _sess_ap = _cs_ap()
-                        _risk_policy_raw = (
-                            (getattr(_sess_ap, "metadata", {}) or {}).get("approval_risk_policy")
-                            if _sess_ap is not None
-                            else None
-                        )
-                    except (AttributeError, TypeError):
-                        _risk_policy_raw = None
-                    _approval_risk, _approval_action, _approval_policy = approval_action_for_tool(
-                        resolved_name,
-                        str(_input_preview)[:500] if _input_preview else "",
-                        policy=_risk_policy_raw,
-                    )
-                    _scoped_artifact_write = _is_scoped_artifact_write(
-                        resolved_name,
-                        _input_preview,
-                    )
-                    _permission_mode_value = str(
-                        intent.user_context.get("permission_mode")
-                        or _metadata.get("permission_mode")
-                        or ""
-                    ).lower()
-                    _accept_edits_auto_approve = (
-                        _permission_mode_value in {"acceptedits", "accept-edits"}
-                        and resolved_name in _WRITE_TOOLS
-                    )
-                    # Injection taint gate (hard): if untrusted content
-                    # carrying injection markers entered this turn, a
-                    # risky tool can no longer auto-run — force it through
-                    # human approval, overriding auto_approve and the
-                    # scoped-write / accept-edits fast paths. This is the
-                    # escalation from the in-context warning to an actual
-                    # stop: a poisoned page can't drive an exec_shell /
-                    # write / send behind the user's back. Gate at medium+
-                    # so EXFILTRATION (egress tools = medium — the classic
-                    # injection payload) is caught, not just destructive
-                    # high-risk tools; only pure low-risk reads still
-                    # auto-run after taint.
-                    if injection_taint_gates() and _approval_risk.level in {
-                        "medium",
-                        "high",
-                        "critical",
-                    }:
-                        _auto_approve = False
-                        _scoped_artifact_write = False
-                        _accept_edits_auto_approve = False
-                        if _approval_action not in {"ask", "confirm", "deny"}:
-                            _approval_action = "ask"
-                        _approval_risk = _approval_risk.with_injection_taint()
-                    if (
-                        _approval_action == "deny"
-                        and not _auto_approve
-                        and not _scoped_artifact_write
-                    ):
-                        yield {
-                            "type": "tool_end",
-                            "tool_name": resolved_name,
-                            "tool_call_id": call_id,
-                            "iteration": i + 1,
-                            "status": "rejected",
-                            "output_preview": (
-                                f"Denied by approval risk policy "
-                                f"(risk={_approval_risk.level}: {_approval_risk.reason})"
-                            ),
-                            "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
-                            "risk": _approval_risk.to_dict(),
-                            "approval_action": _approval_action,
-                            "approval_policy": _approval_policy.to_dict(),
-                        }
-                        observation = (
-                            "(工具被风险策略拒绝) 此操作被 approval risk policy 拒绝，"
-                            "请换一种方式或询问用户。"
-                        )
-                        _record_rejected_step(steps, messages, step, observation)
-                        continue
-                    if (
-                        _approval_action in {"ask", "confirm"}
-                        and not _auto_approve
-                        and not _scoped_artifact_write
-                        and not _accept_edits_auto_approve
-                    ):
-                        _provider = approval_provider or AutoDenyProvider()
-                        _approval_detail = (
-                            f"{resolved_name} wants to execute "
-                            f"(risk={_approval_risk.level}: {_approval_risk.reason})"
-                        )
-                        yield {
-                            "type": "tool_approval_request",
-                            "tool_name": resolved_name,
-                            "tool_call_id": call_id,
-                            "args_preview": str(_input_preview)[:500] if _input_preview else "",
-                            "detail": _approval_detail,
-                            "risk": _approval_risk.to_dict(),
-                            "approval_action": _approval_action,
-                            "approval_policy": _approval_policy.to_dict(),
-                        }
-                        _decision = _provider.request(
-                            ApprovalRequest(
-                                thread_id=thread_id,
-                                tool_name=resolved_name,
-                                tool_call_id=call_id,
-                                args_preview=str(_input_preview)[:500] if _input_preview else "",
-                                detail=_approval_detail,
-                            ),
-                            timeout=120.0,
-                        )
-                        if not _decision.approved:
-                            yield {
-                                "type": "tool_end",
-                                "tool_name": resolved_name,
-                                "tool_call_id": call_id,
-                                "iteration": i + 1,
-                                "status": "rejected",
-                                "output_preview": _decision.reason or "User denied tool execution",
-                                "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
-                            }
-                            observation = (
-                                "(工具被用户拒绝) 用户拒绝了此操作，请换一种方式或询问用户。"
-                            )
-                            _record_rejected_step(steps, messages, step, observation)
-                            continue
-                    if output_chunk_sink is not None:
-                        from runtime.core.cerebrum.tool_output_sink import push_sink
-
-                        _bound_call_id = call_id
-
-                        def _local_sink(
-                            stream: str,
-                            chunk: str,
-                            bound_call_id: str = _bound_call_id,
-                        ) -> None:
-                            output_chunk_sink(bound_call_id, stream, chunk)
-
-                        def _sink_scope() -> Any:
-                            return push_sink(_local_sink)
-                    else:
-
-                        def _sink_scope() -> Any:
-                            return contextlib.nullcontext()
-
-                    # This single-action path ran its own approval gate
-                    # (incl. the injection-taint escalation) above, so tell
-                    # the executor's chokepoint block this call was reviewed
-                    # — otherwise it would double-block an approved tool.
-                    with _sink_scope():
-                        set_injection_gate_handled(True)
-                        try:
-                            observation, beak_step = _execute_action_via_beak(
-                                stack,
-                                step.action,
-                                react_task_id=react_task_id,
-                                react_step_counter=i + 1,
-                                agent=agent,
-                                intent=intent,
-                            )
-                        finally:
-                            set_injection_gate_handled(False)
-                    if beak_step is not None:
-                        executed_beak_steps.append(beak_step)
-                    # Tool may have been killed mid-run by the cancel
-                    # token. Detect this so we can label the event and
-                    # break the loop — skipping the retry and the next
-                    # LLM round, which would both waste budget.
-                    _ct_post = None
-                    try:
-                        from runtime.safety.approval.cancellation import (
-                            current_cancellation_token,
-                        )
-
-                        _ct_post = current_cancellation_token()
-                    except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001 — cancellation subsystem unavailable; post-tool cancel check skipped
-                        pass
-                    _was_cancelled = bool(_ct_post and _ct_post.is_cancelled)
-
-                    tool_ok = _tool_call_succeeded(observation, beak_step)
-                    if _was_cancelled:
-                        yield {
-                            "type": "tool_end",
-                            "tool_name": resolved_name,
-                            "tool_call_id": call_id,
-                            "iteration": i + 1,
-                            "status": "cancelled",
-                            "output_preview": "(已取消) 用户中断了此操作。",
-                            "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
-                        }
-                        terminated_reason = "cancelled"
-                        break
-                    if not tool_ok and observation:
-                        # C2: only auto-retry idempotent tools. Re-running a
-                        # write/edit/exec/delete/dangerous tool whose first
-                        # attempt already had side effects (a partial write, a
-                        # shell command that ran before its result failed to
-                        # parse) would double them, so non-idempotent failures
-                        # surface to the model instead of silently re-executing.
-                        _retry_affinity: list[str] | None = None
-                        try:
-                            if executor.registry.has(resolved_name):
-                                _retry_affinity = executor.registry.get(
-                                    resolved_name,
-                                ).affinity
-                        except (KeyError, AttributeError):
-                            _retry_affinity = None
-                        if not _retry_safe_affinity(_retry_affinity):
-                            observation = observation + (
-                                "\n[写/执行类工具失败，未自动重试以避免重复副作用；"
-                                "请检查状态后再决定是否重试或换方法]"
-                            )
-                        else:
-                            _logger.info(
-                                "react_loop iter %d · tool %s failed, auto-retrying once",
-                                i + 1,
-                                resolved_name,
-                            )
-                            with _sink_scope():
-                                set_injection_gate_handled(True)
-                                try:
-                                    retry_obs, retry_step = _execute_action_via_beak(
-                                        stack,
-                                        step.action,
-                                        react_task_id=react_task_id,
-                                        react_step_counter=i + 1,
-                                        agent=agent,
-                                        intent=intent,
-                                    )
-                                finally:
-                                    set_injection_gate_handled(False)
-                            if retry_step is not None:
-                                executed_beak_steps.append(retry_step)
-                            retry_ok = _tool_call_succeeded(retry_obs, retry_step)
-                            if retry_ok:
-                                observation = retry_obs
-                                beak_step = retry_step
-                                tool_ok = True
-                            else:
-                                observation = observation + "\n[自动重试仍失败，请换方法或调整参数]"
-                    _background_task = (
-                        _background_task_info_from_observation(observation)
-                        if tool_ok and resolved_name in {"background_exec", "exec_shell"}
-                        else None
-                    )
-                    if _background_task is not None:
-                        yield {
-                            "type": "tool_background",
-                            "tool_name": resolved_name,
-                            "tool_call_id": call_id,
-                            "iteration": i + 1,
-                            "status": "running",
-                            "task_id": _background_task["task_id"],
-                            "snapshot": _background_task,
-                            "output_preview": (
-                                _summarize_observation(observation)
-                                if isinstance(observation, str) and observation
-                                else observation
-                            ),
-                            "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
-                        }
-                    else:
-                        yield tool_lifecycle_event_to_react_event(
-                            normalize_tool_lifecycle_event(
-                                "tool_end",
-                                {
-                                    "tool_name": resolved_name,
-                                    "tool_call_id": call_id,
-                                    "iteration": i + 1,
-                                    "status": "success" if tool_ok else "error",
-                                    "output_preview": (
-                                        _summarize_observation(observation)
-                                        if isinstance(observation, str) and observation
-                                        else observation
-                                    ),
-                                    "duration_ms": int(
-                                        (time.monotonic() - _tool_started_at) * 1000
-                                    ),
-                                    **_tool_event_extras_from_beak_step(beak_step, resolved_name),
-                                },
-                                origin="react_compat",
-                            )
-                        )
-                    # Indirect prompt-injection defense (single-action
-                    # path; mirrors _dispatch_parallel_actions): fence an
-                    # external tool's output as data before it becomes the
-                    # observation the model reads next.
-                    if tool_ok and isinstance(observation, str) and observation:
-                        _pi_affinity: list[str] | None = None
-                        try:
-                            if executor.registry.has(resolved_name):
-                                _pi_affinity = executor.registry.get(
-                                    resolved_name,
-                                ).affinity
-                        except (KeyError, AttributeError):
-                            _pi_affinity = None
-                        if is_untrusted_tool(resolved_name, _pi_affinity):
-                            _pi_scan = scan_for_injection(observation)
-                            observation = wrap_untrusted_observation(
-                                observation,
-                                source=resolved_name,
-                                scan=_pi_scan,
-                            )
-                            if _pi_scan.flagged:
-                                # Taint the turn → force human approval on a
-                                # later high-risk tool (read at the gate).
-                                mark_injection_taint(_pi_scan.severity)
-                                _logger.warning(
-                                    "prompt-injection markers in %s output "
-                                    "(severity=%s, signals=%s)",
-                                    resolved_name,
-                                    _pi_scan.severity,
-                                    ",".join(_pi_scan.labels),
-                                )
-                else:
-                    observation, beak_step = _execute_action_via_beak(
-                        stack,
-                        step.action,
-                        react_task_id=react_task_id,
-                        react_step_counter=i + 1,
-                        agent=agent,
-                        intent=intent,
-                    )
-                    if beak_step is not None:
-                        executed_beak_steps.append(beak_step)
-            if observation is None:
-                observation = _placeholder_observation(step.action)
-            step.observation = observation
-
-        _direct_command_answer = _narrow_command_direct_answer(
-            goal=intent.normalized_goal,
-            step=step,
-            beak_step=beak_step,
-            resolved_name=resolved_name,
-            succeeded=tool_ok,
-        )
-        if _direct_command_answer is not None:
-            maybe_final = _direct_command_answer
-
-        if _duplicate_action_count and step.observation:
-            step.observation += (
-                "\n\n[duplicate-tools-collapsed] The provider emitted "
-                f"{_duplicate_action_count} duplicate call(s) with identical tool arguments "
-                "in one model round. The runtime executed each unique call once."
-            )
-        if (
-            _explicit_read_scope_note
-            and step.observation
-            and _explicit_read_scope_note not in step.observation
-        ):
-            step.observation += "\n\n" + _explicit_read_scope_note
-        if tool_action_requested and _current_action_fingerprint:
-            if tool_ok:
-                _last_failed_action_fingerprint = ""
-                _consecutive_same_failed_actions = 0
-            elif _current_action_fingerprint == _last_failed_action_fingerprint:
-                _consecutive_same_failed_actions += 1
-            else:
-                _last_failed_action_fingerprint = _current_action_fingerprint
-                _consecutive_same_failed_actions = 1
-        elif not _repeated_failure_skipped and tool_action_requested:
-            _last_failed_action_fingerprint = ""
-            _consecutive_same_failed_actions = 0
-
-        # Common single/parallel tool outlet. Keep terminal evidence here so
-        # a model round that launches lint + tests together is counted exactly
-        # like one that launches either verifier alone.
-        if _is_code_mode and tool_action_requested:
-            _ordered_outcomes = _per_action_outcomes(step, default_ok=tool_ok)
-            _last_successful_write_idx = -1
-            for _outcome_idx, (_outcome_step, _outcome_ok) in enumerate(_ordered_outcomes):
-                if _outcome_ok and _is_code_write_step(_outcome_step):
-                    _last_successful_write_idx = _outcome_idx
-
-            if _last_successful_write_idx >= 0:
-                _saw_successful_code_write = True
-                _clean_verification_rounds_after_write = 0
-                _verification_outcomes = _ordered_outcomes[_last_successful_write_idx + 1 :]
-            else:
-                _verification_outcomes = _ordered_outcomes
-
-            if _saw_successful_code_write:
-                for _outcome_step, _outcome_ok in _verification_outcomes:
-                    if not _has_code_verification([_outcome_step]):
-                        continue
-                    if _outcome_ok and _has_successful_verification_observation([_outcome_step]):
-                        # Separate verifier calls in one serial multi-action
-                        # batch are independent evidence rounds. Counting the
-                        # whole batch once caused green code agents to run the
-                        # same suite a dozen more times before convergence.
-                        _clean_verification_rounds_after_write += 1
-                    else:
-                        _clean_verification_rounds_after_write = 0
-
-            if (
-                _clean_verification_rounds_after_write >= 2
-                and not _green_verification_convergence_active
-            ):
-                _green_verification_convergence_active = True
-                _force_convergence_next = True
-                step.observation = (step.observation or observation or "") + (
-                    "\n\n[green-verification-convergence]\n"
-                    "Two clean verifier rounds completed after the latest successful code "
-                    "write. The runtime has recorded terminal-quality evidence. Do not run "
-                    "another verifier or shell probe. Update todo_write once if needed, then "
-                    "emit Final Answer."
-                )
-
-        _evidence_convergence_became_active = False
-        if _evidence_convergence_active is None and tool_action_requested:
-            _evidence_convergence_active = read_only_evidence_convergence(
-                goal=intent.normalized_goal,
-                steps=steps + [step],
-                read_only=_read_only_turn,
-            )
-            if _evidence_convergence_active is not None:
-                _evidence_convergence_became_active = True
-                _force_convergence_next = True
-                _coverage = ", ".join(_evidence_convergence_active.covered[:6])
-                _coverage_note = f" Covered evidence: {_coverage}." if _coverage else ""
-                _direct_answer_directive = build_direct_answer_directive(
-                    goal=intent.normalized_goal,
-                    decision=_evidence_convergence_active,
-                    steps=steps + [step],
-                )
-                step.observation = (step.observation or observation or "") + (
-                    "\n\nThe user's requested read-only evidence is complete."
-                    + _coverage_note
-                    + " The next response must answer directly from these observations. "
-                    "Do not call another tool or expand the investigation."
-                    + (f"\n\n{_direct_answer_directive}" if _direct_answer_directive else "")
-                )
-
-        _meaningful_result_checkpoint = (
-            tool_action_requested
-            and observation
-            and _result_checkpoint_is_meaningful(
-                step.actions or [step.action],
-                succeeded=tool_ok,
-            )
-        )
-        _observed_result_checkpoint = bool(
-            _ordered_result_handoffs
-            and tool_action_requested
-            and observation
-            and (
-                tool_ok
-                or str(observation).lstrip().startswith("(real tool execution succeeded)")
-                or not re.search(
-                    r"(?:tool execution failed|file not found|no such file|"
-                    r"does not exist|permission denied|读取失败|未找到|不存在)",
-                    str(observation),
-                    re.IGNORECASE,
-                )
-            )
-        )
-        if tool_action_requested and _should_accumulate_quiet_evidence(
-            step,
-            succeeded=tool_ok,
-            observation=observation or "",
-        ):
-            _quiet_evidence_steps.append(step)
-            # Keep prompts bounded when a provider repeatedly inspects new
-            # files without producing a checkpoint of its own.
-            _quiet_evidence_steps = _quiet_evidence_steps[-4:]
-        _quiet_evidence_due = _quiet_evidence_checkpoint_due(_quiet_evidence_steps)
-        _model_result_update = ""
-        if _observed_result_checkpoint and maybe_final is None:
-            # Ordered read tasks need a guaranteed conversational beat between
-            # batches. A second model call can be slow, return SKIP, or finish
-            # after the next action is already visible. Publish the completed
-            # read receipt immediately; it is factual, privacy-safe, and gives
-            # the user a stable fact -> next action rhythm.
-            _model_result_update = _safe_public_update(
-                _observed_read_fallback_update(
-                    goal=intent.normalized_goal,
-                    step=step,
-                )
-            )
-            if _model_result_update:
-                yield {
-                    "type": "commentary_delta",
-                    "delta": _model_result_update,
-                    "progress_source": "runtime",
-                    "public_evidence": True,
-                    "start_new_segment": True,
-                    "iteration": i + 1,
-                }
-        if (
-            (_realtime_public_narrative or _ordered_result_handoffs)
-            and maybe_final is None
-            and not _model_result_update
-            and (not _model_supplied_update or _quiet_evidence_due or _observed_result_checkpoint)
-            and (
-                _meaningful_result_checkpoint
-                or _observed_result_checkpoint
-                or _quiet_evidence_due
-                or (
-                    _evidence_convergence_became_active
-                    and _evidence_convergence_active is not None
-                    and len(_evidence_convergence_active.covered) > 1
-                )
-            )
-        ):
-            try:
-                _model_result_update = yield from _stream_public_evidence_narrative(
-                    router,
-                    model=effective_model,
-                    goal=intent.normalized_goal,
-                    step=step,
-                    convergence=(
-                        _evidence_convergence_active
-                        if _evidence_convergence_became_active
-                        else None
-                    ),
-                    evidence_steps=(
-                        _quiet_evidence_steps if _quiet_evidence_due else steps + [step]
-                    ),
-                    iteration=i + 1,
-                    previous_key=_last_public_update_key,
-                    succeeded=tool_ok,
-                )
-            except Exception as exc:  # noqa: BLE001 — optional public narration
-                _logger.warning("public evidence narration failed: %s", exc)
-                _model_result_update = ""
-        if _quiet_evidence_due:
-            # Whether the narrator spoke or the deterministic read receipt was
-            # used, this evidence window has been considered. Start a fresh
-            # window so long read-only tasks get bounded conversational beats.
-            _quiet_evidence_steps = []
-        _model_result_update_key = re.sub(r"\s+", " ", _model_result_update).strip().casefold()
-        if _model_result_update and _model_result_update_key != _last_public_update_key:
-            _last_public_update_key = _model_result_update_key
-            if _ordered_result_handoffs:
-                _result_handoff_ready = True
-
-        if _is_code_mode and observation and _current_phase in ("execute", "verify"):
-            _write_tools = frozenset(
-                {
-                    "write_text_file",
-                    "edit_file",
-                    "multi_edit_file",
-                    "edit_text_file",
-                    "edit_code",
-                    "str_replace",
-                    "write_file",
-                    "create_file",
-                }
-            )
-            if resolved_name in _write_tools and tool_ok:
-                _diag_record = post_write_diagnostic_record(
-                    resolved_name,
-                    action_args or {},
-                    action_args or {},
-                    workspace_path=_effective_wp if isinstance(_effective_wp, str) else "",
-                )
-                _diag_status = str(_diag_record.get("status") or "skipped")
-                _diag_reason = str(_diag_record.get("reason") or "")
-                _diag_target = str(_diag_record.get("target") or "")
-                _diag_text = f"{_diag_status}: {_diag_reason}" + (
-                    f" · {_diag_target}" if _diag_target else ""
-                )
-                step.observation = (
-                    (step.observation or observation) + "\n\n[写后诊断记录]\n" + _diag_text
-                )
-                _auto_diag = _run_auto_diagnostics(
-                    stack,
-                    workspace_path=_effective_wp if isinstance(_effective_wp, str) else None,
-                )
-                if _auto_diag:
-                    step.observation = (
-                        (step.observation or observation) + "\n\n[自动诊断结果]\n" + _auto_diag
-                    )
-                _prefetch = _prefetch_related_files(step.action, _working_set)
-                if _prefetch:
-                    step.observation = (
-                        (step.observation or observation) + "\n\n[关联文件预读]\n" + _prefetch
-                    )
+        maybe_final = state.maybe_final
+        terminated_reason = state.terminated_reason
+        _evidence_convergence_active = state.evidence_convergence_active
+        _force_convergence_next = state.force_convergence_next
+        _consecutive_same_failed_actions = state.consecutive_same_failed_actions
+        _last_failed_action_fingerprint = state.last_failed_action_fingerprint
+        _green_verification_convergence_active = state.green_verification_convergence_active
+        _green_convergence_todo_used = state.green_convergence_todo_used
+        _result_handoff_ready = state.result_handoff_ready
+        _last_public_update_key = state.last_public_update_key
+        _saw_successful_code_write = state.saw_successful_code_write
+        _clean_verification_rounds_after_write = state.clean_verification_rounds_after_write
+        _quiet_evidence_steps = state.quiet_evidence_steps
+        if _loop_ctrl is _LoopControl.RETURN_NONE:
+            return None
+        if _loop_ctrl is _LoopControl.BREAK:
+            break
+        if _loop_ctrl is _LoopControl.NEXT_ITERATION:
+            continue
 
         # ── PHASE 6e · in-flight nudges + guards + step yield ──────────
         (

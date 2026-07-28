@@ -25,6 +25,7 @@ class _LoopControl(enum.Enum):
     """Control signal returned by extracted phase generators."""
 
     CONTINUE = "continue"  # proceed to the next phase / iteration
+    NEXT_ITERATION = "next_iteration"  # skip remaining phases; next loop iteration
     BREAK = "break"  # exit the iteration loop; state carries terminated_reason/final_answer
     RETURN_NONE = "return_none"  # abort the turn; persist/unregister already done
 
@@ -43,6 +44,18 @@ class _LoopState:
     format_violation_bail_at: int = 2
     final_guard_grounded_source_paths: Any = None
     guard_impasse_state: dict = field(default_factory=dict)
+    intent: Any = None
+    agent: Any = None
+    thread_id: str = ""
+    approval_provider: Any = None
+    output_chunk_sink: Any = None
+    router: Any = None
+    metadata: dict = field(default_factory=dict)
+    is_goal_mode: bool = False
+    observed_read_sequence: bool = False
+    ordered_result_handoffs: bool = False
+    realtime_public_orientation: bool = False
+    realtime_public_narrative: bool = False
     # ── mode · turn flags (read-only in 6c) ──
     is_code_mode: bool = False
     browser_operation_mode: bool = False
@@ -54,8 +67,12 @@ class _LoopState:
     # ── convo · shared references (mutated in place, never re-synced) ──
     steps: list = field(default_factory=list)
     executed_beak_steps: list = field(default_factory=list)
+    messages: list = field(default_factory=list)
+    working_set: dict = field(default_factory=dict)
     # ── per-iteration synced scalars (synced in before 6c) ──
     tools_active: bool = False
+    effective_model: str = ""
+    current_phase: str = ""
     evidence_convergence_active: Any = None
     native_mode: bool = False
     model_failovers: int = 0
@@ -64,6 +81,15 @@ class _LoopState:
     throughput_chars: int = 0
     final_stream_started: bool = False
     force_convergence_next: bool = False
+    consecutive_same_failed_actions: int = 0
+    last_failed_action_fingerprint: str = ""
+    green_verification_convergence_active: bool = False
+    green_convergence_todo_used: bool = False
+    result_handoff_ready: bool = False
+    last_public_update_key: str = ""
+    saw_successful_code_write: bool = False
+    clean_verification_rounds_after_write: int = 0
+    quiet_evidence_steps: list = field(default_factory=list)
     # ── emit · terminal accumulators (synced in/out) ──
     final_answer: str | None = None
     terminated_reason: str = "max_iter"
