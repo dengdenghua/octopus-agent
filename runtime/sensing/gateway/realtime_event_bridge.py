@@ -187,7 +187,14 @@ class _ReactBridgeState:
         self,
         on_background_task_start: Callable[[asyncio.Task[None]], None] | None = None,
         timeline_binder: Callable[[Any, str | None], None] | None = None,
+        *,
+        agent_display_name: str | None = None,
+        agent_avatar_url: str | None = None,
+        agent_icon: str | None = None,
     ) -> None:
+        self._agent_display_name = agent_display_name
+        self._agent_avatar_url = agent_avatar_url
+        self._agent_icon = agent_icon
         self.agent_message: AgentMessageItem | None = None
         self.commentary_message: AgentMessageItem | None = None
         self.last_public_commentary_key: str | None = None
@@ -222,6 +229,29 @@ class _ReactBridgeState:
         # but we don't want it bleeding into the NEXT conversation).
         self._on_background_task_start = on_background_task_start
         self._timeline_binder = timeline_binder
+
+    def _new_agent_message(
+        self,
+        *,
+        text: str,
+        message_kind: str = "answer",
+        **kwargs: Any,
+    ) -> AgentMessageItem:
+        """Create a transcript item carrying the owning agent's identity.
+
+        ReAct text and commentary items are created before the frontend has a
+        chance to infer identity from a final answer. Persisting it here keeps
+        the avatar anchored even when a tool-call message is split into a
+        hidden process group plus a visible final answer.
+        """
+        return AgentMessageItem(
+            text=text,
+            message_kind=message_kind,
+            agent_display_name=self._agent_display_name,
+            agent_avatar_url=self._agent_avatar_url,
+            agent_icon=self._agent_icon,
+            **kwargs,
+        )
 
     @staticmethod
     def prose_status_for_turn(turn_status: TurnStatus) -> ItemStatus:
@@ -319,7 +349,7 @@ class _ReactBridgeState:
             self.commentary_message = None
         first = self.agent_message is None
         if first:
-            self.agent_message = AgentMessageItem(text="")
+            self.agent_message = self._new_agent_message(text="")
             self._bind_timeline(self.agent_message)
             turn.items.append(self.agent_message)
             await self._emit_started(turn, log, emitter, self.agent_message)
@@ -398,7 +428,7 @@ class _ReactBridgeState:
             self.progress_sequence += 1
             phase_id = f"{turn.id}:progress:{self.progress_sequence}"
             self.current_phase_id = phase_id
-            self.commentary_message = AgentMessageItem(
+            self.commentary_message = self._new_agent_message(
                 text="",
                 message_kind="commentary",
                 phase_id=phase_id,
@@ -469,6 +499,7 @@ class _ReactBridgeState:
             if kind == "agentMessage" and self.agent_message is not None:
                 item_id = self.agent_message.id
                 logged = log.item_delta(turn.thread_id, turn.id, item_id, "agentMessage", combined)
+                event_id = getattr(logged, "event_id", None)
                 await emitter.notify(
                     ServerMethod.ITEM_AGENT_MESSAGE_DELTA,
                     {
@@ -476,12 +507,13 @@ class _ReactBridgeState:
                         "turnId": turn.id,
                         "itemId": item_id,
                         "delta": combined,
-                        "eventId": logged.event_id,
+                        "eventId": event_id,
                     },
                 )
             elif kind == "commentary" and self.commentary_message is not None:
                 item_id = self.commentary_message.id
                 logged = log.item_delta(turn.thread_id, turn.id, item_id, "agentMessage", combined)
+                event_id = getattr(logged, "event_id", None)
                 await emitter.notify(
                     ServerMethod.ITEM_AGENT_MESSAGE_DELTA,
                     {
@@ -489,12 +521,13 @@ class _ReactBridgeState:
                         "turnId": turn.id,
                         "itemId": item_id,
                         "delta": combined,
-                        "eventId": logged.event_id,
+                        "eventId": event_id,
                     },
                 )
             elif kind == "reasoning" and self.reasoning is not None:
                 item_id = self.reasoning.id
                 logged = log.item_delta(turn.thread_id, turn.id, item_id, "reasoning", combined)
+                event_id = getattr(logged, "event_id", None)
                 await emitter.notify(
                     ServerMethod.ITEM_REASONING_TEXT_DELTA,
                     {
@@ -503,7 +536,7 @@ class _ReactBridgeState:
                         "itemId": item_id,
                         "delta": combined,
                         "contentIndex": 0,
-                        "eventId": logged.event_id,
+                        "eventId": event_id,
                     },
                 )
             # else: the item was already finalized — drop the tail; the

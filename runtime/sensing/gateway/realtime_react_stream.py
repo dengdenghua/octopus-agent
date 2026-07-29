@@ -394,7 +394,7 @@ async def _drive_reflection_fast_path(
                 _safe_put(None, timeout=5.0)
 
     worker = asyncio.create_task(asyncio.to_thread(producer))
-    state = runtime._make_bridge_state(turn.thread_id)
+    state = runtime._make_bridge_state(turn.thread_id, agent=agent)
 
     async def _interrupt_watcher() -> None:
         # Polls the gateway's interrupt registry. Consumer-side polling
@@ -673,7 +673,7 @@ async def _drive_react(
                 _safe_put(None, timeout=5.0)
 
     worker = asyncio.create_task(asyncio.to_thread(producer))
-    state = runtime._make_bridge_state(turn.thread_id, turn.id)
+    state = runtime._make_bridge_state(turn.thread_id, turn.id, agent=agent)
 
     async def _interrupt_watcher() -> None:
         # Polls the gateway's interrupt registry. Consumer-side polling

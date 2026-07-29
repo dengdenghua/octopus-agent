@@ -632,6 +632,7 @@ class CerebrumRuntime:
         self,
         thread_id: str,
         turn_id: str | None = None,
+        agent: Any | None = None,
     ) -> _ReactBridgeState:
         """Build a ``_ReactBridgeState`` wired to the per-thread
         background-task registry, so the next turn on this thread can
@@ -651,9 +652,22 @@ class CerebrumRuntime:
                 self._bind_turn_timeline(turn_id, item, phase_id=phase_id)
 
             binder = _bind
+        agent_id = str(getattr(agent, "agent_id", "") or "").strip()
+        display_name = str(
+            getattr(agent, "display_name", None)
+            or getattr(agent, "name", None)
+            or agent_id
+            or ""
+        ).strip() or None
+        avatar_url = (
+            f"/api/agents/{agent_id}/avatar" if agent_id else None
+        )
         return _ReactBridgeState(
             on_background_task_start=_register,
             timeline_binder=binder,
+            agent_display_name=display_name,
+            agent_avatar_url=avatar_url,
+            agent_icon=getattr(agent, "icon", None),
         )
 
     def _register_active_turn(self, turn: Turn, log: EventLog) -> None:

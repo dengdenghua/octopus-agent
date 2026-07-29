@@ -15,6 +15,8 @@ emit (Task 4).  Invariants pinned here:
   * the completed snapshot carries the stripped text (not the raw leak)
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from runtime.protocol import Turn, TurnParams
@@ -26,8 +28,8 @@ class _StubLog:
     def item_started(self, *args, **kwargs) -> None:  # noqa: ARG002
         pass
 
-    def item_delta(self, *args, **kwargs) -> None:  # noqa: ARG002
-        pass
+    def item_delta(self, *args, **kwargs):  # noqa: ANN002, ANN003
+        return SimpleNamespace(event_id="event-1")
 
     def item_completed(self, *args, **kwargs) -> None:  # noqa: ARG002
         pass
@@ -158,6 +160,23 @@ async def test_text_delta_strips_paired_reasoning_block() -> None:
     assert "".join(emitter.deltas()) == "Sure  done"
     completed = [p for m, p in emitter.notified if m.endswith("item/completed")]
     assert completed[0]["item"]["text"] == "Sure  done"
+
+
+@pytest.mark.asyncio
+async def test_streamed_messages_keep_the_owning_agent_identity() -> None:
+    state = _ReactBridgeState(
+        agent_display_name="Eve",
+        agent_avatar_url="/api/agents/general/avatar",
+    )
+    turn, emitter, log = _make_turn(), _StubEmitter(), _StubLog()
+
+    await state.append_agent_message(turn, log, emitter, "已完成。")
+    await state.flush(turn, log, emitter)
+
+    completed = [p for m, p in emitter.notified if m.endswith("item/completed")]
+    item = completed[0]["item"]
+    assert item["agentDisplayName"] == "Eve"
+    assert item["agentAvatarUrl"] == "/api/agents/general/avatar"
 
 
 @pytest.mark.asyncio
