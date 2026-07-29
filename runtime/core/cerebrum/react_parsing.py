@@ -890,6 +890,20 @@ def _has_code_write(steps: list[ReActStep]) -> bool:
     return any(_is_code_write_step(step) for step in steps)
 
 
+def _has_verification_requiring_code_write(steps: list[ReActStep]) -> bool:
+    """Whether the trajectory changed source-like files that need a verifier.
+
+    The write tools are shared by coding tasks and artifact-producing tasks.
+    A research report such as ``output/market-report.md`` is a persistent
+    write, but it is not a code change and asking the agent to run lint or
+    typecheck after producing it is both misleading and impossible in many
+    personal workspaces.  Keep the broad ``_has_code_write`` signal for
+    mutation-oriented guards; use this narrower signal only where a code
+    verification command is required.
+    """
+    return any(_is_verification_requiring_code_write_step(step) for step in steps)
+
+
 # Canonical write-tool set. Kept as a module-level constant so the
 # completion guard, the post-write verification guard, and the public
 # ``_has_code_write`` helper all stay aligned. Adding a new edit-style
@@ -925,6 +939,39 @@ def _is_code_write_step(step: ReActStep) -> bool:
     for action in actions:
         parsed = _parse_action(action)
         if parsed is not None and parsed[0] in _CODE_WRITE_TOOLS:
+            return True
+    return False
+
+
+_NON_CODE_ARTIFACT_SUFFIXES: frozenset[str] = frozenset(
+    {
+        ".adoc",
+        ".markdown",
+        ".md",
+        ".rst",
+        ".txt",
+    }
+)
+
+
+def _is_verification_requiring_code_write_step(step: ReActStep) -> bool:
+    """Return ``True`` for a write that targets code or has no safe target.
+
+    Unknown write shapes deliberately remain verification-requiring.  The
+    only exemption is a clearly named prose artifact, so a missing/invalid
+    path cannot accidentally weaken code-mode completion safeguards.
+    """
+    actions = step.actions or ([step.action] if step.action else [])
+    for action in actions:
+        parsed = _parse_action(action)
+        if parsed is None or parsed[0] not in _CODE_WRITE_TOOLS:
+            continue
+        _name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if not isinstance(path, str) or not path.strip():
+            return True
+        suffix = _os.path.splitext(path.strip().lower())[1]
+        if suffix not in _NON_CODE_ARTIFACT_SUFFIXES:
             return True
     return False
 

@@ -3583,6 +3583,49 @@ def test_code_mode_completion_guard_allows_completed_verified_work() -> None:
     assert _code_mode_completion_guard(steps, "Done.") is None
 
 
+def test_code_mode_completion_guard_allows_markdown_research_artifact() -> None:
+    """A research report is not source code and does not need typecheck."""
+    steps = [
+        ReActStep(
+            iteration=1,
+            action=(
+                'todo_write({"todos": ['
+                '{"title": "Research market", "status": "completed"},'
+                '{"title": "Write report", "status": "completed"}'
+                "]})"
+            ),
+        ),
+        ReActStep(
+            iteration=2,
+            action=(
+                'write_text_file({"path": "output/nas-market-report-2026.md", '
+                '"content": "# NAS market research"})'
+            ),
+        ),
+    ]
+
+    assert _code_mode_completion_guard(steps, "Research report completed.") is None
+
+
+def test_code_mode_completion_guard_still_requires_verification_for_source_write() -> None:
+    steps = [
+        ReActStep(
+            iteration=1,
+            action=(
+                'todo_write({"todos": ['
+                '{"title": "Patch code", "status": "completed"}'
+                "]})"
+            ),
+        ),
+        ReActStep(iteration=2, action='write_text_file({"path": "app.py", "content": "pass"})'),
+    ]
+
+    guard = _code_mode_completion_guard(steps, "Done.")
+
+    assert guard is not None
+    assert "no verification step" in guard
+
+
 def test_code_mode_completion_guard_rejects_claimed_test_without_test_write() -> None:
     steps = [
         ReActStep(

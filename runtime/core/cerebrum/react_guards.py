@@ -95,6 +95,7 @@ from runtime.core.cerebrum.react_parsing import (
     _detect_unsafe_deser_in_payload,
     _has_code_verification,
     _has_code_write,
+    _has_verification_requiring_code_write,
     _has_test_write,
     _is_code_write_step,
     _latest_todo_items,
@@ -678,7 +679,7 @@ def _code_mode_completion_guard(
             "the repository test directory, read them back, and run them."
         )
 
-    if _has_code_write(steps) and not _has_code_verification(steps):
+    if _has_verification_requiring_code_write(steps) and not _has_code_verification(steps):
         return (
             "Code mode cannot finish yet: files were changed "
             "but no verification step is recorded. "
