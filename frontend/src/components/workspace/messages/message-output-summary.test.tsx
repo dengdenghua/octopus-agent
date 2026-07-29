@@ -13,7 +13,6 @@ import {
   extractResultUrl,
   MessageOutputSummary,
 } from "./message-output-summary";
-import { AGENT_WORKBENCH_OPEN_EVENT } from "../agent-workbench-events";
 
 const selectArtifact = vi.fn();
 const setArtifactsOpen = vi.fn();
@@ -241,6 +240,7 @@ describe("MessageOutputSummary", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("+2").length).toBeGreaterThan(0);
     expect(screen.getAllByText("-0").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "查看过程" })).not.toBeInTheDocument();
   });
 
   it("renders audit notice on the diff summary with undo and review owner controls", async () => {
@@ -549,10 +549,6 @@ describe("MessageList failure visibility", () => {
       { id: "user-2", type: "human", content: "继续" },
       { id: "assistant-2", type: "ai", content: "后续任务已经完成。" },
     ];
-    const opened: CustomEvent[] = [];
-    const onOpen = (event: Event) => opened.push(event as CustomEvent);
-    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, onOpen);
-
     renderMessageList(mockThread({ messages }));
 
     expect(
@@ -570,7 +566,6 @@ describe("MessageList failure visibility", () => {
     expect(
       screen.queryByRole("button", { name: "查看过程" }),
     ).not.toBeInTheDocument();
-    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, onOpen);
   });
 
   it("does not present interrupted drafts as settled answers", () => {

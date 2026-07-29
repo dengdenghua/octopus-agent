@@ -31,7 +31,6 @@ import {
   FilePlus2Icon,
   LinkIcon,
   Loader2Icon,
-  PlayCircleIcon,
   RotateCcwIcon,
   UserCheckIcon,
   WandSparklesIcon,
@@ -47,7 +46,6 @@ import {
 } from "@/components/ui/collapsible";
 
 import { useArtifacts } from "../artifacts";
-import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 
 type OutputArtifact = {
   path: string;
@@ -553,26 +551,6 @@ export function MessageOutputSummary({
   );
   const showAuditActions = Boolean(auditNotice);
 
-  const openProcess = () => {
-    if (!failure) {
-      emitOpenAgentWorkbench({ tab: "agent" });
-      return;
-    }
-    emitOpenAgentWorkbench({
-      tab: "agent",
-      eventId: failure.eventId,
-      eventKind: "execution",
-      view: "trace",
-      processEvent: {
-        kind: "execution",
-        summary: failure.message,
-        detail: failure.detail,
-        status: "error",
-        count: 1,
-      },
-    });
-  };
-
   const handleRevertAll = async () => {
     if (revertableChanges.length === 0 || reverting) return;
     setReverting(true);
@@ -663,16 +641,6 @@ export function MessageOutputSummary({
               -{totalRemoved}
             </span>
           </div>
-        )}
-        {!isFailure && (
-          <button
-            type="button"
-            onClick={openProcess}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
-          >
-            <PlayCircleIcon className="size-3" />
-            {t.message.viewProcess}
-          </button>
         )}
         {resultUrl && (
           <a
