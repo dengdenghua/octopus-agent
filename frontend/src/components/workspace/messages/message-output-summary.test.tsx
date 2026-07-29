@@ -303,7 +303,7 @@ describe("MessageOutputSummary", () => {
     );
   });
 
-  it("scans the turn slice for verifications and the original prompt", () => {
+  it("scans the turn slice for verifications without a duplicate task action", () => {
     const { human, verificationAi, verificationResult, finalAnswer } =
       verificationTurnMessages();
 
@@ -318,30 +318,9 @@ describe("MessageOutputSummary", () => {
     expect(screen.getByText("验证")).toBeInTheDocument();
     expect(screen.getByText("测试通过")).toBeInTheDocument();
     expect(screen.getByText("通过")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /做同款/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /做同款/ })).not.toBeInTheDocument();
   });
 
-  it("strips internal <uploaded_files> markup from the make-similar prompt", () => {
-    const { human, verificationAi, verificationResult, finalAnswer } =
-      verificationTurnMessages();
-    window.location.hash = "";
-
-    renderWithProviders(
-      <MessageOutputSummary
-        messages={[finalAnswer]}
-        turnMessages={[human, verificationAi, verificationResult, finalAnswer]}
-      />,
-      { locale: "zh-CN" },
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /做同款/ }));
-
-    expect(window.location.hash).toContain(
-      encodeURIComponent("修复登录页的报错"),
-    );
-    expect(window.location.hash).not.toContain("uploaded_files");
-    expect(window.location.hash).not.toContain("notes.txt");
-  });
 });
 
 describe("extractResultUrl", () => {
@@ -365,7 +344,7 @@ describe("extractResultUrl", () => {
 });
 
 describe("MessageList receipt wiring", () => {
-  it("renders the verification list and make-similar button through real grouping", () => {
+  it("renders the verification list without a make-similar action", () => {
     const { human, verificationAi, verificationResult, finalAnswer } =
       verificationTurnMessages();
     const thread = mockThread({
@@ -375,7 +354,7 @@ describe("MessageList receipt wiring", () => {
     renderMessageList(thread);
 
     expect(screen.getByText("测试通过")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /做同款/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /做同款/ })).not.toBeInTheDocument();
   });
 
   it("keeps unknown verification tool names and protocol details out of receipts", () => {

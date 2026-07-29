@@ -406,8 +406,7 @@ function messageText(content: Message["content"]): string {
 }
 
 /**
- * First human message text — used as the prompt to carry into "做同款"
- * (start a new task with the same request). Backend-injected
+ * First human message text — used only to retry a failed task. Backend-injected
  * <uploaded_files> blocks are internal markup and must not leak into the
  * new prompt.
  */
@@ -654,22 +653,18 @@ export function MessageOutputSummary({
             {t.message.openResult}
           </a>
         )}
-        {originalPrompt && (
+        {isFailure && originalPrompt && (
           <button
             type="button"
             onClick={handleMakeSimilar}
-            title={
-              isFailure ? t.message.retryTaskHint : t.message.makeSimilarHint
-            }
+            title={t.message.retryTaskHint}
             className={cn(
               "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
-              isFailure
-                ? "border-destructive/30 bg-destructive/[0.08] text-destructive hover:border-destructive/50 hover:bg-destructive/15"
-                : "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-700 transition-colors hover:border-emerald-500/50 hover:bg-emerald-500/15 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200",
+              "border-destructive/30 bg-destructive/[0.08] text-destructive hover:border-destructive/50 hover:bg-destructive/15",
             )}
           >
             <WandSparklesIcon className="size-3" />
-            {isFailure ? t.message.retryTask : t.message.makeSimilar}
+            {t.message.retryTask}
           </button>
         )}
       </div>
