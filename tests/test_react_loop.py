@@ -924,6 +924,32 @@ def test_personal_code_mode_uses_cwd_as_effective_workspace(tmp_path) -> None:
     assert user_messages[-1] == "Create a tiny script"
 
 
+def test_personal_research_does_not_treat_memory_as_local_file_inventory(tmp_path) -> None:
+    router = _CapturingRouter(["Final Answer: done"])
+    intent = _intent("做一个 NAS 市场调研")
+    intent.user_context.update(
+        {
+            "mode": "code",
+            "capability_mode": "code",
+            "workspace_scope": "personal",
+            "personal_workspace_enabled": True,
+            "cwd": str(tmp_path),
+        }
+    )
+
+    result = run_react_loop(_FakeStack(router), intent, agent=None)
+
+    assert result is not None
+    system_text = "\n".join(
+        message.content
+        for message in router.requests[0].messages
+        if message.role == "system" and isinstance(message.content, str)
+    )
+    assert "<personal-research-scope>" in system_text
+    assert "Treat memory as a lead to verify, never as a file inventory." in system_text
+    assert "start with web evidence" in system_text
+
+
 def test_code_agent_mode_prompt_distinguishes_architect_mode() -> None:
     prompt = _build_code_agent_mode_prompt("architect")
 

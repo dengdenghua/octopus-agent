@@ -774,6 +774,22 @@ def _assemble_prompt_and_messages(
             "</swarm-orchestration-guidance>"
         )
     if _is_research_mode:
+        if _wm.scope == "personal":
+            system_parts.append(
+                "\n<personal-research-scope>\n"
+                "This is a personal-space research turn, not a bound project. The "
+                "isolated workspace contains only artifacts for this task; it is not "
+                "evidence that files, reports, or directories mentioned in memory "
+                "exist locally. Treat memory as a lead to verify, never as a file "
+                "inventory. For market, industry, or competitor research, start with "
+                "web evidence unless the user explicitly supplies a local file. Before "
+                "reading any local path, confirm it exists with list_cwd or an observed "
+                "search. If a path is outside the isolated workspace or is absent, do "
+                "not repeatedly climb parent directories or retry variants of that path; "
+                "switch to web evidence, use available facts, or state the exact missing "
+                "input.\n"
+                "</personal-research-scope>"
+            )
         # Mode-aware skill chain: ``deep-research-swarm`` is reserved
         # for swarm mode (TeamRunner with native tool_use). In single-
         # agent / Agent mode (the common case here when ``_is_research_mode``
