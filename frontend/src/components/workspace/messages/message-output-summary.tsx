@@ -6,7 +6,10 @@ import type {
 } from "@/core/api/types";
 import type { FileHunk } from "@/core/realtime";
 import { singleHunkDiff } from "@/components/realtime/item-views/file-change-view";
-import { artifactDisplayPath } from "@/core/artifacts/utils";
+import {
+  artifactDisplayPath,
+  normalizeWorkspaceArtifactRef,
+} from "@/core/artifacts/utils";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -516,7 +519,7 @@ export function MessageOutputSummary({
   };
 
   const openArtifact = (path: string) => {
-    select(path);
+    select(normalizeWorkspaceArtifactRef(path, threadId));
     setOpen(true);
   };
 

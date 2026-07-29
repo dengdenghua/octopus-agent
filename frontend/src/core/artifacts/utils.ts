@@ -40,6 +40,39 @@ export function artifactDisplayPath(filepath: string) {
   return parseWorkspaceOutputRef(filepath)?.relativePath ?? filepath;
 }
 
+/**
+ * Convert a runtime-emitted absolute workspace path into the stable artifact
+ * reference understood by the per-thread outputs API.  Tool traces carry
+ * absolute paths for auditability, while the preview endpoint intentionally
+ * accepts only a scoped relative path.
+ */
+export function normalizeWorkspaceArtifactRef(filepath: string, threadId?: string) {
+  if (!threadId || parseWorkspaceOutputRef(filepath)) return filepath;
+  const parts = filepath.replaceAll("\\", "/").split("/").filter(Boolean);
+  const workspaceIndex = parts.lastIndexOf("workspaces");
+  if (workspaceIndex < 0 || parts[workspaceIndex + 1] !== threadId) {
+    return filepath;
+  }
+  const root = workspaceIndex + 2;
+  const area = parts[root];
+  if (!area) return filepath;
+
+  if (area === "output") {
+    const nestedArea = parts[root + 1];
+    if (nestedArea === "final" || nestedArea === "stages") {
+      const relativePath = parts.slice(root + 2).join("/");
+      return relativePath ? workspaceOutputRef({ area: nestedArea, relativePath }) : filepath;
+    }
+  }
+  if (["output", "deploy", "upload"].includes(area)) {
+    const relativePath = parts.slice(root + 1).join("/");
+    return relativePath
+      ? workspaceOutputRef({ area: area as WorkspaceOutputArea, relativePath })
+      : filepath;
+  }
+  return filepath;
+}
+
 function encodeArtifactPath(path: string) {
   return path
     .replace(/^\/+/, "")

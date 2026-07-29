@@ -8,6 +8,7 @@ import {
   artifactDisplayPath,
   extractArtifactsFromThread,
   parseWorkspaceOutputRef,
+  normalizeWorkspaceArtifactRef,
   resolveArtifactURL,
   urlOfArtifact,
   workspaceOutputRef,
@@ -60,6 +61,22 @@ describe("urlOfArtifact", () => {
     ).toBe(
       "http://localhost:8001/api/threads/t1/outputs/reports/out%20file.md?area=final&download=true",
     );
+  });
+});
+
+describe("normalizeWorkspaceArtifactRef", () => {
+  it("converts an absolute final report path to a scoped output ref", () => {
+    expect(
+      normalizeWorkspaceArtifactRef(
+        "/Users/me/project/data/workspaces/thread-1/output/final/nas-report.md",
+        "thread-1",
+      ),
+    ).toBe("workspace-output:final:nas-report.md");
+  });
+
+  it("does not reinterpret a path from another thread", () => {
+    const filepath = "/Users/me/data/workspaces/thread-other/output/final/report.md";
+    expect(normalizeWorkspaceArtifactRef(filepath, "thread-1")).toBe(filepath);
   });
 });
 

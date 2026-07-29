@@ -157,6 +157,35 @@ describe("MessageOutputSummary", () => {
     expect(setArtifactsOpen).toHaveBeenCalledWith(true);
   });
 
+  it("opens an absolute workspace report through the scoped preview endpoint", () => {
+    const message: AIMessage = {
+      id: "ai-1",
+      type: "ai",
+      content: "Done",
+      tool_calls: [
+        {
+          id: "artifact-1",
+          name: "artifact",
+          args: {
+            path: "/tmp/data/workspaces/thread-1/output/final/nas-report.md",
+            title: "nas-report.md",
+          },
+        },
+      ],
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary messages={[message]} threadId="thread-1" />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByText("nas-report.md"));
+
+    expect(selectArtifact).toHaveBeenCalledWith(
+      "workspace-output:final:nas-report.md",
+    );
+  });
+
   it("summarizes file changes with diff counts", () => {
     const message: AIMessage = {
       id: "ai-1",
