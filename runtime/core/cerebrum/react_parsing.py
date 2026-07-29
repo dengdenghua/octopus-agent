@@ -764,7 +764,13 @@ def _is_format_violation(
         # upstream error); caller's existing exception path handles
         # that.
         return False
-    return final_answer is None and not step.thought and not step.action and not step.observation
+    return (
+        final_answer is None
+        and not step.thought
+        and not step.action
+        and not step.observation
+        and not step.public_update
+    )
 
 
 def _placeholder_observation(action: str) -> str:

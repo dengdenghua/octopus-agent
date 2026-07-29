@@ -542,6 +542,24 @@ def _phase_6c_parse_and_guard(
         else:
             consecutive_format_violations = 0
 
+        # Some reasoning models (e.g. Kimi K3) emit an ``Update:`` progress
+        # line but stop before issuing the required ``Action:`` tool call —
+        # they narrate intent without executing. Inject a compact system
+        # nudge so the next round emits the actual tool call instead of
+        # repeating another Update-only turn until max_iterations.
+        if (
+            not step.action
+            and not maybe_final
+            and getattr(step, "public_update", None)
+            and not getattr(step, "observation", None)
+        ):
+            step.observation = (
+                "[protocol-reminder] Your previous turn published an Update but "
+                "did not emit an Action tool call. The task is not complete. "
+                "Emit exactly one Action: skill_name({\"arg\": \"value\"}) now "
+                "to make progress — do not write another Update without an Action."
+            )
+
         if resp_thinking and not step.thought:
             step.thought = resp_thinking
 
