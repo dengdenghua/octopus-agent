@@ -533,6 +533,7 @@ class Turn(BaseModel):
         default=None,
         alias="workbenchSnapshot",
     )
+    interrupt_reason: str | None = Field(default=None, alias="interruptReason")
 
 
 __all__ = [

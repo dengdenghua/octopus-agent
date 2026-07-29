@@ -964,6 +964,15 @@ async def _start_turn(
                 log.turn_completed(thread_id, turn.id, turn.status)
         if turn.completed_at is None:
             turn.completed_at = now_utc()
+        # Record the concrete interrupt reason so the frontend can
+        # tell the user *why* the turn stopped, not just *that* it did.
+        if not turn.interrupt_reason:
+            reason = "连接断开或后端重启"
+            with contextlib.suppress(Exception):
+                emitter_reason = emitter.get_interrupt_reason(turn.id)
+                if emitter_reason:
+                    reason = emitter_reason
+            turn.interrupt_reason = reason
         # The connection is usually already dead here; send failures
         # must not mask the cancellation.
         with contextlib.suppress(Exception):
@@ -972,6 +981,7 @@ async def _start_turn(
                 {
                     "threadId": thread_id,
                     "turnId": turn.id,
+                    "reason": turn.interrupt_reason,
                 },
             )
         with contextlib.suppress(Exception):

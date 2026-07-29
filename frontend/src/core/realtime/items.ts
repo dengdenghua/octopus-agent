@@ -345,6 +345,8 @@ export interface Turn {
   phases?: AgentPhaseSnapshot[];
   workspaceFocus?: WorkspaceFocus | null;
   workbenchSnapshot?: WorkbenchSnapshotV2 | null;
+  /** Human-readable reason the turn was interrupted (null if not interrupted). */
+  interruptReason?: string | null;
 }
 
 // Lightweight thread metadata for ``thread/list`` responses. Keeps the

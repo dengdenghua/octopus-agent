@@ -229,13 +229,51 @@ def _guard_impasse_final_answer(label: str, message: str) -> str:
     in-loop guard-rejection site so the wording (and the truth it tells)
     can't drift between them."""
     user_reason = _guard_reason_for_user(label, message)
+    actionable = _guard_impasse_actionable_hint(label, message)
     return (
         "任务未能完成:我连续多次尝试收尾,但始终无法满足"
         f"「{label}」要求的执行证据,期间也没有任何新的工具执行成功。"
         "为避免空转,我停止了重试。\n\n"
         f"最后一次拦截原因:\n{user_reason}\n\n"
+        f"{actionable}"
+    )
+
+
+def _guard_impasse_actionable_hint(label: str, message: str) -> str:
+    """Scene-specific actionable advice appended to the impasse message.
+
+    Instead of a single generic "check and retry", give the user a
+    concrete next step based on which guard fired and what the
+    diagnostic says.
+    """
+    msg_lower = (message or "").lower()
+    if "path_blocked" in msg_lower or "escapes_sandbox" in msg_lower:
+        return (
+            "如何解决：该路径在当前工作区沙箱之外。\n"
+            "1) 确认路径是否正确；\n"
+            "2) 切换到 project workspace 模式以扩大工作区范围；\n"
+            "3) 使用 CLI code 模式（python -m runtime.cli code --cwd <项目根目录>）运行任务。"
+        )
+    if "tool" in msg_lower and ("not registered" in msg_lower or "未注册" in msg_lower):
+        return (
+            "如何解决：所需工具未注册或被配置关闭。\n"
+            "1) 检查 config.local.yaml 中对应的 enable_* 开关；\n"
+            "2) 确认工具名称拼写正确；\n"
+            "3) 重启后端使配置生效。"
+        )
+    if "inspection" in label.lower() or "evidence" in label.lower():
+        return (
+            "如何解决：需要先收集执行证据再给出结论。\n"
+            "1) 点击继续，让我先读取相关文件或运行验证命令；\n"
+            "2) 提供必要的权限/登录/信息后我再继续。"
+        )
+    return (
         "这通常意味着模型输出的工具调用格式未被执行层识别,"
-        "或任务所需的能力/权限当前不可用。请检查上面的原因后重试。"
+        "或任务所需的能力/权限当前不可用。\n"
+        "如何解决：\n"
+        "1) 点击继续重试，或补充必要的信息/权限；\n"
+        "2) 检查上面的原因后重新描述任务；\n"
+        "3) 如仍失败，尝试切换到 CLI code 模式运行。"
     )
 
 

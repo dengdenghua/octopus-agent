@@ -602,6 +602,9 @@ function MessageContent_({
   const legacyRunStatus = (
     message.additional_kwargs as { run_status?: unknown } | undefined
   )?.run_status;
+  const interruptReason = (
+    message.additional_kwargs as { interrupt_reason?: unknown } | undefined
+  )?.interrupt_reason;
   const showInterruptedReceipt =
     responseState === "interrupted" ||
     (legacyRunStatus === "streaming" && hasVisibleBody);
@@ -801,7 +804,9 @@ function MessageContent_({
           `run_status=streaming` messages retain the same honest receipt. */}
       {!isCurrentlyStreaming && showInterruptedReceipt && (
         <div className="mt-2 text-xs leading-5 text-muted-foreground/70">
-          {t.conversation.interruptedMessage}
+          {typeof interruptReason === "string" && interruptReason.trim()
+            ? `${t.conversation.interruptedMessage}（原因：${interruptReason}）`
+            : t.conversation.interruptedMessage}
         </div>
       )}
     </AIElementMessageContent>

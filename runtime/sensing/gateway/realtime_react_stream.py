@@ -434,6 +434,11 @@ async def _drive_reflection_fast_path(
                 if not cancel_source.is_cancelled:
                     cancel_source.cancel(reason="user interrupted turn")
                 turn.status = TurnStatus.INTERRUPTED
+                if not turn.interrupt_reason:
+                    with contextlib.suppress(Exception):
+                        reason = emitter.get_interrupt_reason(turn.id)
+                        if reason:
+                            turn.interrupt_reason = reason
                 # Drain rather than break — the producer must reach
                 # its ``None`` sentinel for the worker thread to
                 # finish cleanly.
@@ -718,6 +723,13 @@ async def _drive_react(
                 if not cancel_source.is_cancelled:
                     cancel_source.cancel(reason="user interrupted turn")
                 turn.status = TurnStatus.INTERRUPTED
+                # Record the concrete interrupt reason so the
+                # frontend can tell the user *why* the turn stopped.
+                if not turn.interrupt_reason:
+                    with contextlib.suppress(Exception):
+                        reason = emitter.get_interrupt_reason(turn.id)
+                        if reason:
+                            turn.interrupt_reason = reason
                 # Keep draining so the producer's bounded ``put``
                 # calls succeed and it can reach its ``None`` sentinel
                 # cleanly. Breaking here would leave the worker
@@ -874,6 +886,8 @@ async def _apply_react_event(
             status=ItemStatus.INTERRUPTED,
         )
         turn.status = TurnStatus.INTERRUPTED
+        if not turn.interrupt_reason:
+            turn.interrupt_reason = "任务被取消"
         return
     if kind == "throughput":
         # Piggyback on thread/tokenUsage/updated — the frontend

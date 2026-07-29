@@ -490,6 +490,9 @@ function turnToMessages(turn: Turn): Message[] {
         kwargs.message_kind = messageKind;
         if (isInterruptedMessage) {
           kwargs.response_state = "interrupted";
+          if (turn.interruptReason) {
+            kwargs.interrupt_reason = turn.interruptReason;
+          }
           if (split.finalAnswer?.trim()) {
             // Keep the draft available to the workbench/replay layer without
             // presenting it as the assistant's settled answer in chat.

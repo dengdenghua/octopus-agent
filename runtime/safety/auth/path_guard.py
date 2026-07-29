@@ -97,7 +97,13 @@ def check_path(
                 False,
                 p_in,
                 resolved=resolved_str,
-                reason=f"escapes_sandbox: not under {base}",
+                reason=(
+                    f"escapes_sandbox: not under {base}. "
+                    f"该路径在当前工作区沙箱之外，无法访问。"
+                    f"可操作建议：1) 确认路径是否正确；"
+                    f"2) 切换到 project workspace 模式以扩大工作区范围；"
+                    f"3) 使用 CLI code 模式（python -m runtime.cli code --cwd <项目根目录>）运行任务。"
+                ),
             )
 
     if not allow_sensitive:

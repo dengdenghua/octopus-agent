@@ -479,8 +479,10 @@ def _ensure_sandbox(
         if "escapes_sandbox" in reason:
             reason = (
                 f"path_escapes_sandbox: {verdict.resolved} not under {sandbox_dir}. "
-                f"This usually means the session lost its workspace_path / code-mode context. "
-                f"The write target is outside the allowed scope roots."
+                f"该路径在当前工作区沙箱之外，无法写入。"
+                f"可操作建议：1) 确认路径是否正确；"
+                f"2) 切换到 project workspace 模式以扩大工作区范围；"
+                f"3) 使用 CLI code 模式（python -m runtime.cli code --cwd <项目根目录>）运行任务。"
             )
         return Path(path), reason
     return Path(verdict.resolved) if verdict.resolved else Path(path), None

@@ -165,6 +165,13 @@ class _SseEmitter:
     def is_turn_interrupted(self, turn_id: str) -> bool:
         return "*" in self._interrupted or turn_id in self._interrupted
 
+    def get_interrupt_reason(self, turn_id: str) -> str | None:
+        if "*" in self._interrupted:
+            return "连接断开或后端重启"
+        if turn_id in self._interrupted:
+            return "用户停止了任务"
+        return None
+
     def register_turn(self, turn_id: str) -> None:
         self._interrupted.discard(turn_id)
 

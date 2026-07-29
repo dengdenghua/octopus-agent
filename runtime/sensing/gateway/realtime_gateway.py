@@ -98,6 +98,10 @@ class EventEmitter(Protocol):
         """
         ...
 
+    def get_interrupt_reason(self, turn_id: str) -> str | None:
+        """Return the human-readable reason this turn was interrupted."""
+        ...
+
     def register_turn(self, turn_id: str) -> None:
         """Tell the connection a new turn has begun.
 
@@ -491,6 +495,21 @@ class RpcConnection:
         return self._shared_interrupts is not None and self._shared_interrupts.is_interrupted(
             turn_id
         )
+
+    def get_interrupt_reason(self, turn_id: str) -> str | None:
+        """Return the human-readable reason this turn was interrupted.
+
+        Distinguishes connection teardown (``"*"`` wildcard) from an
+        explicit ``turn/interrupt`` RPC (specific ``turn_id``) so the
+        frontend can tell the user what actually happened.
+        """
+        if "*" in self._interrupted_turns:
+            return "连接断开或后端重启"
+        if turn_id in self._interrupted_turns:
+            return "用户停止了任务"
+        if self._shared_interrupts is not None and self._shared_interrupts.is_interrupted(turn_id):
+            return "用户停止了任务"
+        return None
 
     def request_interrupt(self, turn_id: str) -> None:
         """Called by the dispatcher when a ``turn/interrupt`` arrives."""
