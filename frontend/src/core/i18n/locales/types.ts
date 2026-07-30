@@ -332,6 +332,9 @@ export interface Translations {
     permissionModeAcceptEditsDesc: string;
     permissionModeBypass: string;
     permissionModeBypassDesc: string;
+    permissionModeBypassConfirmTitle: string;
+    permissionModeBypassConfirmDesc: string;
+    permissionModeBypassConfirmAction: string;
     permissionModePlan: string;
     permissionModePlanDesc: string;
     seedWorkflow: string;

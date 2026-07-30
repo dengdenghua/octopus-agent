@@ -25,9 +25,8 @@ describe("<PermissionIndicator />", () => {
     expect(trigger).toBeInTheDocument();
     expect(trigger).toHaveAccessibleName("Permissions: Full access");
     expect(trigger).toHaveTextContent("Full access");
-    expect(trigger.className).toContain("bg-transparent");
-    expect(trigger.className).toContain("hover:bg-muted/55");
-    expect(trigger.className).not.toContain("amber");
+    expect(trigger.className).toContain("bg-amber-500/10");
+    expect(trigger.className).toContain("text-amber-700");
 
     openPermissionMenu(trigger);
 
@@ -57,6 +56,32 @@ describe("<PermissionIndicator />", () => {
     });
   });
 
+  it("warns before enabling full access", async () => {
+    const onModeChange = vi.fn();
+    renderWithProviders(
+      <PermissionIndicator mode="default" onModeChange={onModeChange} />,
+    );
+
+    openPermissionMenu(screen.getByTestId("permission-mode-trigger"));
+    fireEvent.click(
+      await screen.findByTestId("permission-mode-option-bypassPermissions"),
+    );
+
+    expect(onModeChange).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("dialog", { name: "Switch to Full access?" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/skips routine confirmation for commands/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Enable Full access" }));
+
+    await waitFor(() => {
+      expect(onModeChange).toHaveBeenCalledWith("bypassPermissions");
+    });
+  });
+
   it("keeps legacy plan mode out of the menu", async () => {
     renderWithProviders(
       <PermissionIndicator mode="default" onModeChange={vi.fn()} />,
@@ -66,16 +91,16 @@ describe("<PermissionIndicator />", () => {
       screen.getByRole("button", { name: "Permissions: Ask first" }),
     );
 
-    const confirmItem = await screen.findByTestId("permission-mode-option-default");
+    const confirmItem = await screen.findByTestId(
+      "permission-mode-option-default",
+    );
     expect(confirmItem).toBeInTheDocument();
     expect(
       screen.queryByTestId("permission-mode-option-plan"),
     ).not.toBeInTheDocument();
 
     expect(
-      screen.getByText(
-        "Read freely; ask before performing high-risk actions.",
-      ),
+      screen.getByText("Read freely; ask before performing high-risk actions."),
     ).toBeInTheDocument();
   });
 });

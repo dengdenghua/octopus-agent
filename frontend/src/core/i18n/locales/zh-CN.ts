@@ -388,6 +388,10 @@ export const zhCN: Translations = {
     permissionModeBypass: "全权执行",
     permissionModeBypassDesc:
       "跳过常规审批，但安全拦截仍有效；仅用于完全可信的本地任务。",
+    permissionModeBypassConfirmTitle: "切换到全权执行？",
+    permissionModeBypassConfirmDesc:
+      "此模式会跳过命令、文件修改和 Git 操作的常规确认。安全拦截仍有效，但误操作风险会明显提高。",
+    permissionModeBypassConfirmAction: "确认全权执行",
     permissionModePlan: "仅规划",
     permissionModePlanDesc: "只给方案和步骤，暂不调用工具。",
     seedWorkflow: "创建或运行一个工作流：",

@@ -403,6 +403,10 @@ export const jaJP: Translations = {
     permissionModeBypass: "フルアクセス",
     permissionModeBypassDesc:
       "通常の承認をスキップしますが、安全ブロックは引き続き適用されます。完全に信頼できるローカルタスクにのみ使用してください。",
+    permissionModeBypassConfirmTitle: "フルアクセスに切り替えますか？",
+    permissionModeBypassConfirmDesc:
+      "コマンド、ファイル変更、Git 操作の通常確認を省略します。安全ブロックは有効ですが、誤操作のリスクが高まります。",
+    permissionModeBypassConfirmAction: "フルアクセスを有効化",
     permissionModePlan: "計画のみ",
     permissionModePlanDesc: "手順の提案のみ行い、ツールはまだ呼び出しません。",
     seedWorkflow: "ワークフローを作成または実行：",

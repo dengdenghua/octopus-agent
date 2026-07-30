@@ -1,5 +1,10 @@
-import { ChevronDownIcon, ShieldCheckIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ShieldAlertIcon,
+  ShieldCheckIcon,
+} from "lucide-react";
 
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { PermissionMode } from "@/core/permissions";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -35,6 +40,7 @@ export function PermissionIndicator({
   compact = false,
 }: PermissionIndicatorProps) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const labels: Record<PermissionMode, { label: string; description: string }> =
     {
       default: {
@@ -55,64 +61,93 @@ export function PermissionIndicator({
       },
     };
   const current = labels[mode] ?? labels.default;
+  const isBypassMode = mode === "bypassPermissions";
+
+  const handleModeChange = async (value: string) => {
+    const nextMode = value as PermissionMode;
+    if (nextMode === mode) return;
+    if (nextMode === "bypassPermissions") {
+      const accepted = await confirm({
+        title: t.chatInputBox.permissionModeBypassConfirmTitle,
+        description: t.chatInputBox.permissionModeBypassConfirmDesc,
+        confirmLabel: t.chatInputBox.permissionModeBypassConfirmAction,
+        destructive: false,
+      });
+      if (!accepted) return;
+    }
+    onModeChange(nextMode);
+  };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          data-testid="permission-mode-trigger"
-          className={cn(
-            "flex items-center gap-1.5 text-xs font-medium transition-all duration-200",
-            compact
-              ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
-              : cn("h-8 rounded-lg px-2.5", PERMISSION_TRIGGER_TONE),
-            className,
-          )}
-          title={`${t.chatInputBox.permissionModeLabel}: ${current.description}`}
-          aria-label={`${t.chatInputBox.permissionModeLabel}: ${current.label}`}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            data-testid="permission-mode-trigger"
+            className={cn(
+              "flex items-center gap-1.5 text-xs font-medium transition-all duration-200",
+              isBypassMode
+                ? "h-8 rounded-lg border border-amber-500/35 bg-amber-500/10 px-2.5 text-amber-700 hover:border-amber-500/50 hover:bg-amber-500/15 dark:text-amber-300"
+                : compact
+                  ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
+                  : cn("h-8 rounded-lg px-2.5", PERMISSION_TRIGGER_TONE),
+              className,
+            )}
+            title={`${t.chatInputBox.permissionModeLabel}: ${current.description}`}
+            aria-label={`${t.chatInputBox.permissionModeLabel}: ${current.label}`}
+          >
+            {isBypassMode ? (
+              <ShieldAlertIcon className="size-3.5" />
+            ) : (
+              <ShieldCheckIcon className="size-3 opacity-75" />
+            )}
+            <span>{current.label}</span>
+            <ChevronDownIcon className="size-3 opacity-35" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          data-testid="permission-mode-menu"
+          side="top"
+          align="start"
+          className="w-64"
         >
-          <ShieldCheckIcon className="size-3 opacity-75" />
-          <span>{current.label}</span>
-          <ChevronDownIcon className="size-3 opacity-35" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        data-testid="permission-mode-menu"
-        side="top"
-        align="start"
-        className="w-64"
-      >
-        <DropdownMenuLabel className="text-xs text-muted-foreground">
-          {t.chatInputBox.permissionModeLabel}
-        </DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={mode}
-          onValueChange={(value) => onModeChange(value as PermissionMode)}
-        >
-          {PERMISSION_OPTIONS.map((option) => {
-            const item = labels[option];
-            return (
-              <DropdownMenuRadioItem
-                key={option}
-                data-testid={`permission-mode-option-${option}`}
-                value={option}
-                className="items-start py-2 text-left"
-                aria-label={`${item.label}: ${item.description}`}
-              >
-                <span className="min-w-0">
-                  <span className="block text-xs font-medium leading-5">
-                    {item.label}
+          <DropdownMenuLabel className="text-xs text-muted-foreground">
+            {t.chatInputBox.permissionModeLabel}
+          </DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={mode} onValueChange={handleModeChange}>
+            {PERMISSION_OPTIONS.map((option) => {
+              const item = labels[option];
+              return (
+                <DropdownMenuRadioItem
+                  key={option}
+                  data-testid={`permission-mode-option-${option}`}
+                  value={option}
+                  className={cn(
+                    "items-start py-2 text-left",
+                    option === "bypassPermissions" &&
+                      "text-amber-700 focus:bg-amber-500/10 focus:text-amber-800 dark:text-amber-300 dark:focus:text-amber-200",
+                  )}
+                  aria-label={`${item.label}: ${item.description}`}
+                >
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-xs font-medium leading-5">
+                      {option === "bypassPermissions" && (
+                        <ShieldAlertIcon className="size-3.5" />
+                      )}
+                      {item.label}
+                    </span>
+                    <span className="block text-xs leading-4 text-muted-foreground">
+                      {item.description}
+                    </span>
                   </span>
-                  <span className="block text-xs leading-4 text-muted-foreground">
-                    {item.description}
-                  </span>
-                </span>
-              </DropdownMenuRadioItem>
-            );
-          })}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+                </DropdownMenuRadioItem>
+              );
+            })}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {confirmDialog}
+    </>
   );
 }

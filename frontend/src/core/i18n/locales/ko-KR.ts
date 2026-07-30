@@ -402,6 +402,10 @@ export const koKR: Translations = {
     permissionModeBypass: "전권 실행",
     permissionModeBypassDesc:
       "일반적인 승인을 건너뛰지만 안전 차단은 그대로 적용됩니다. 완전히 신뢰하는 로컬 작업에만 사용하세요.",
+    permissionModeBypassConfirmTitle: "전권 실행으로 전환할까요?",
+    permissionModeBypassConfirmDesc:
+      "명령, 파일 변경 및 Git 작업의 일반 확인을 건너뜁니다. 안전 차단은 유지되지만 오작동 위험이 높아집니다.",
+    permissionModeBypassConfirmAction: "전권 실행 사용",
     permissionModePlan: "계획만",
     permissionModePlanDesc: "단계만 제안하고 도구는 아직 호출하지 않습니다.",
     seedWorkflow: "워크플로를 생성하거나 실행하세요: ",

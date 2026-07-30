@@ -407,6 +407,10 @@ export const enUS: Translations = {
     permissionModeBypass: "Full access",
     permissionModeBypassDesc:
       "Skip routine approvals; safety blocks still apply. Use only for fully trusted local tasks.",
+    permissionModeBypassConfirmTitle: "Switch to Full access?",
+    permissionModeBypassConfirmDesc:
+      "This mode skips routine confirmation for commands, file changes, and Git operations. Safety blocks remain active, but accidental changes are more likely.",
+    permissionModeBypassConfirmAction: "Enable Full access",
     permissionModePlan: "Plan only",
     permissionModePlanDesc: "Suggest steps only; do not call tools yet.",
     seedWorkflow: "Create or run a workflow: ",
