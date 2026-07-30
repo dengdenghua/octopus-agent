@@ -25,8 +25,9 @@ describe("<PermissionIndicator />", () => {
     expect(trigger).toBeInTheDocument();
     expect(trigger).toHaveAccessibleName("Permissions: Full access");
     expect(trigger).toHaveTextContent("Full access");
-    expect(trigger.className).toContain("bg-amber-500/10");
     expect(trigger.className).toContain("text-amber-700");
+    expect(trigger.className).not.toContain("border-amber");
+    expect(trigger.className).not.toContain("bg-amber");
 
     openPermissionMenu(trigger);
 

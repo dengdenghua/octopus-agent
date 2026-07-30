@@ -88,7 +88,7 @@ export function PermissionIndicator({
             className={cn(
               "flex items-center gap-1.5 text-xs font-medium transition-all duration-200",
               isBypassMode
-                ? "h-8 rounded-lg border border-amber-500/35 bg-amber-500/10 px-2.5 text-amber-700 hover:border-amber-500/50 hover:bg-amber-500/15 dark:text-amber-300"
+                ? "h-8 px-1.5 text-amber-700 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
                 : compact
                   ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
                   : cn("h-8 rounded-lg px-2.5", PERMISSION_TRIGGER_TONE),
