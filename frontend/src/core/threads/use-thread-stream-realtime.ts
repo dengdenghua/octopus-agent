@@ -15,6 +15,8 @@ import {
   conversationToAgentThreadState,
 } from "@/core/threads/realtime-adapter";
 import { swallow } from "@/core/utils/log";
+import { toast } from "sonner";
+import { useI18n } from "@/core/i18n/hooks";
 import { useRealtimeThread, type StreamVitals } from "@/core/realtime";
 import { itemStreamText } from "@/core/realtime/reducer";
 import type {
@@ -837,6 +839,7 @@ export function useThreadStreamRealtime(
   } = realtime;
   const [isUploading, setIsUploading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const { t } = useI18n();
   const permissionRuntime = useMemo(
     () =>
       permissionRuntimeConfig(
@@ -1029,6 +1032,7 @@ export function useThreadStreamRealtime(
       if (!text && files.length === 0) return;
       const effectiveThreadId =
         _threadId && _threadId !== "new" ? _threadId : threadId;
+      const hasFileUploads = files.length > 0;
       void (async () => {
         setSendError(null);
         if (isLoading) {
@@ -1040,12 +1044,24 @@ export function useThreadStreamRealtime(
           await steer({ input: text });
           return;
         }
-        setIsUploading(files.length > 0);
+        setIsUploading(hasFileUploads);
         try {
           const attachments =
             effectiveThreadId && effectiveThreadId !== "new"
               ? await uploadPromptInputFiles(effectiveThreadId, files)
               : await fallbackFileAttachmentsAsync(files);
+          if (
+            hasFileUploads &&
+            attachments.length > 0 &&
+            !attachments.every((a) => !a.path && !a.artifact_url)
+          ) {
+            // Only toast when at least one attachment got a real server-side
+            // path/artifact_url — i.e. the file was actually uploaded, not
+            // just name-only fallback. Keeps the signal meaningful.
+            toast.success(
+              t.agentWorkbenchPages.inputsUploadedFiles(attachments.length),
+            );
+          }
           const rawContext =
             context && typeof context === "object"
               ? (context as Record<string, unknown>)
@@ -1111,6 +1127,9 @@ export function useThreadStreamRealtime(
         setSendError(
           err instanceof Error ? err.message : "Failed to send message",
         );
+        if (hasFileUploads) {
+          toast.error(t.chatInputBox.uploadFailed);
+        }
         // The input box clears its draft optimistically on submit, so a
         // failed send (socket drop before turn/start lands) would eat
         // the user's text. Hand it back — the box restores the draft
