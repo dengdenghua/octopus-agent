@@ -630,6 +630,12 @@ export function MessageOutputSummary({
               {summary.artifacts.length > 0
                 ? ` · ${t.message.artifactsCreated(summary.artifacts.length)}`
                 : ""}
+              {summary.verifications.length > 0
+                ? ` · ${t.message.verificationRan} ${
+                    summary.verifications.filter((entry) => entry.passed)
+                      .length
+                  }/${summary.verifications.length}`
+                : ""}
             </div>
           )}
         </div>

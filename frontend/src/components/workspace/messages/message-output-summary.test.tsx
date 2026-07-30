@@ -347,6 +347,7 @@ describe("MessageOutputSummary", () => {
     expect(screen.getByText("验证")).toBeInTheDocument();
     expect(screen.getByText("测试通过")).toBeInTheDocument();
     expect(screen.getByText("通过")).toBeInTheDocument();
+    expect(screen.getByText(/任务完成.*验证 1\/1/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /做同款/ })).not.toBeInTheDocument();
   });
 
