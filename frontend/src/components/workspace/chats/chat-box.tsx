@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { env } from "@/env";
 import { getWorkspaceArtifactRefetchInterval } from "@/core/artifacts/polling";
 import { listWorkspaceArtifactRefs } from "@/core/artifacts/workspace-outputs";
+import { normalizeWorkspaceArtifactRef } from "@/core/artifacts/utils";
 import { cn } from "@/lib/utils";
 
 import { ArtifactPanel, useArtifacts } from "../artifacts";
@@ -63,6 +64,7 @@ const ChatBox: React.FC<{
     artifacts,
     open: artifactsOpen,
     autoOpen,
+    selectedArtifact,
     setOpen: setArtifactsOpen,
     setArtifacts,
     select: selectArtifact,
@@ -79,6 +81,7 @@ const ChatBox: React.FC<{
     const mergedArtifacts = mergeArtifacts(
       workspaceArtifacts,
       thread.values.artifacts ?? EMPTY_ARTIFACTS,
+      threadId,
     );
     setArtifacts((current) =>
       artifactsEqual(current, mergedArtifacts) ? current : mergedArtifacts,
@@ -99,6 +102,17 @@ const ChatBox: React.FC<{
     thread.values.artifacts,
     workspaceArtifacts,
   ]);
+
+  // A receipt opened before its workspace artifact list finished loading can
+  // leave an old absolute path selected. Normalize that existing selection as
+  // well, otherwise the drawer keeps querying the legacy uploads endpoint.
+  useEffect(() => {
+    if (!selectedArtifact) return;
+    const normalized = normalizeWorkspaceArtifactRef(selectedArtifact, threadId);
+    if (normalized !== selectedArtifact) {
+      selectArtifact(normalized, true);
+    }
+  }, [selectedArtifact, selectArtifact, threadId]);
 
   useEffect(() => {
     if (thread.isLoading) return;
@@ -152,10 +166,11 @@ const ChatBox: React.FC<{
   );
 };
 
-function mergeArtifacts(primary: string[], fallback: string[]) {
+function mergeArtifacts(primary: string[], fallback: string[], threadId: string) {
   const merged: string[] = [];
   const seen = new Set<string>();
-  for (const artifact of [...primary, ...fallback]) {
+  for (const rawArtifact of [...primary, ...fallback]) {
+    const artifact = normalizeWorkspaceArtifactRef(rawArtifact, threadId);
     if (seen.has(artifact)) continue;
     seen.add(artifact);
     merged.push(artifact);
