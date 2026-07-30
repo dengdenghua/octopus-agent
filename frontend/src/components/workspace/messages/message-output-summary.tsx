@@ -157,6 +157,14 @@ function isCreatedFileChange(
   return !normalizedOp && counts.added > 0 && counts.removed === 0;
 }
 
+function isFinalOutputArtifactPath(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/").toLowerCase();
+  return (
+    normalized.includes("/output/final/") ||
+    normalized.startsWith("output/final/")
+  );
+}
+
 function artifactFromToolCall(toolCall: ToolCall): OutputArtifact | null {
   if (toolCall.name !== "artifact") return null;
   const path = toolCall.args.path;
@@ -364,9 +372,7 @@ function summarizeOutputs(messages: Message[]): OutputSummary {
         added: (existing?.added ?? 0) + change.added,
         created: Boolean(existing?.created || change.created),
         removed: (existing?.removed ?? 0) + change.removed,
-        diffTruncated: Boolean(
-          existing?.diffTruncated || change.diffTruncated,
-        ),
+        diffTruncated: Boolean(existing?.diffTruncated || change.diffTruncated),
         hunks: [...carried, ...change.hunks],
       });
     }
@@ -523,13 +529,35 @@ export function MessageOutputSummary({
     setOpen(true);
   };
 
-  const totalAdded = summary.changes.reduce((sum, item) => sum + item.added, 0);
-  const totalRemoved = summary.changes.reduce(
+  const finalOutputChanges = summary.changes.filter(
+    (change) => change.created && isFinalOutputArtifactPath(change.path),
+  );
+  const reviewableChanges = summary.changes.filter(
+    (change) => !finalOutputChanges.includes(change),
+  );
+  const artifactByPath = new Map(
+    summary.artifacts.map((artifact) => [
+      normalizeWorkspaceArtifactRef(artifact.path, threadId),
+      artifact,
+    ]),
+  );
+  for (const change of finalOutputChanges) {
+    const artifactRef = normalizeWorkspaceArtifactRef(change.path, threadId);
+    if (!artifactByPath.has(artifactRef)) {
+      artifactByPath.set(artifactRef, { path: change.path });
+    }
+  }
+  const visibleArtifacts = [...artifactByPath.values()];
+  const totalAdded = reviewableChanges.reduce(
+    (sum, item) => sum + item.added,
+    0,
+  );
+  const totalRemoved = reviewableChanges.reduce(
     (sum, item) => sum + item.removed,
     0,
   );
-  const createdChanges = summary.changes.filter((change) => change.created);
-  const editedChanges = summary.changes.filter((change) => !change.created);
+  const createdChanges = reviewableChanges.filter((change) => change.created);
+  const editedChanges = reviewableChanges.filter((change) => !change.created);
   const hasOnlyCreatedChanges =
     createdChanges.length > 0 && editedChanges.length === 0;
   const changeSummaryLabel = hasOnlyCreatedChanges
@@ -544,11 +572,11 @@ export function MessageOutputSummary({
     ? FilePlus2Icon
     : FileCheck2Icon;
   const visibleChanges = changesOpen
-    ? summary.changes
-    : summary.changes.slice(0, 3);
+    ? reviewableChanges
+    : reviewableChanges.slice(0, 3);
   // A truncated diff may end mid-hunk; reverse-applying it would
   // conflict or corrupt the file, so it never enters the revert batch.
-  const revertableChanges = summary.changes.filter(
+  const revertableChanges = reviewableChanges.filter(
     (change) => change.diff?.trim() && !change.diffTruncated,
   );
   const showAuditActions = Boolean(auditNotice);
@@ -626,20 +654,19 @@ export function MessageOutputSummary({
           {!isFailure && (
             <div className="truncate text-xs text-muted-foreground">
               {t.message.taskCompleted}
-              {summary.changes.length > 0 ? ` · ${changeSummaryLabel}` : ""}
-              {summary.artifacts.length > 0
-                ? ` · ${t.message.artifactsCreated(summary.artifacts.length)}`
+              {reviewableChanges.length > 0 ? ` · ${changeSummaryLabel}` : ""}
+              {visibleArtifacts.length > 0
+                ? ` · ${t.message.artifactsCreated(visibleArtifacts.length)}`
                 : ""}
               {summary.verifications.length > 0
                 ? ` · ${t.message.verificationRan} ${
-                    summary.verifications.filter((entry) => entry.passed)
-                      .length
+                    summary.verifications.filter((entry) => entry.passed).length
                   }/${summary.verifications.length}`
                 : ""}
             </div>
           )}
         </div>
-        {summary.changes.length > 0 && (
+        {reviewableChanges.length > 0 && (
           <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-xs shadow-[var(--shadow-xs)]">
             <span className="text-emerald-600 dark:text-emerald-400">
               +{totalAdded}
@@ -677,13 +704,13 @@ export function MessageOutputSummary({
           </button>
         )}
       </div>
-      {summary.artifacts.length > 0 && (
+      {visibleArtifacts.length > 0 && (
         <section aria-label={t.message.artifactsSummary} className="space-y-2">
           <div className="text-sm font-semibold text-foreground">
             {t.message.artifactsSummary}
           </div>
           <div className="flex flex-col gap-2">
-            {summary.artifacts.map((artifact) => (
+            {visibleArtifacts.map((artifact) => (
               <button
                 key={artifact.path}
                 type="button"
@@ -770,7 +797,7 @@ export function MessageOutputSummary({
         </section>
       )}
 
-      {summary.changes.length > 0 && (
+      {reviewableChanges.length > 0 && (
         <Collapsible open={changesOpen} onOpenChange={setChangesOpen}>
           <section
             aria-label={t.message.changesSummary}
@@ -852,14 +879,14 @@ export function MessageOutputSummary({
                     threadId={threadId}
                   />
                 ))}
-                {!changesOpen && summary.changes.length > 3 && (
+                {!changesOpen && reviewableChanges.length > 3 && (
                   <li className="px-3 py-2 text-xs text-muted-foreground">
-                    {t.message.moreFiles(summary.changes.length - 3)}
+                    {t.message.moreFiles(reviewableChanges.length - 3)}
                   </li>
                 )}
               </ul>
             </CollapsibleContent>
-            {summary.artifacts.length > 0 && (
+            {visibleArtifacts.length > 0 && (
               <div className="border-t border-border-default px-3 py-2 text-xs text-muted-foreground">
                 <DownloadIcon className="mr-1 inline size-3.5 align-[-2px]" />
                 {t.message.downloadStillInArtifactsPanel}

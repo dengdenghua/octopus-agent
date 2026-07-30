@@ -193,6 +193,15 @@ describe("MessageOutputSummary", () => {
       content: "Done",
       tool_calls: [
         {
+          id: "artifact-1",
+          name: "artifact",
+          args: {
+            path: "workspace-output:final:nas_market_research_plan.md",
+            title: "nas_market_research_plan.md",
+            kind: "Markdown",
+          },
+        },
+        {
           id: "change-1",
           name: "file_change",
           args: {
@@ -255,21 +264,31 @@ describe("MessageOutputSummary", () => {
       ],
     };
 
-    renderWithProviders(<MessageOutputSummary messages={[message]} />, {
-      locale: "zh-CN",
-    });
+    renderWithProviders(
+      <MessageOutputSummary messages={[message]} threadId="thread-1" />,
+      { locale: "zh-CN" },
+    );
 
-    expect(screen.getByText("已生成 1 个产物")).toBeInTheDocument();
-    expect(screen.getByText("新建")).toBeInTheDocument();
+    expect(screen.getByText(/任务完成 · 已生成 1 个产物/)).toBeInTheDocument();
+    expect(screen.getByText("产物汇总")).toBeInTheDocument();
     expect(screen.queryByText("已编辑 1 个文件")).not.toBeInTheDocument();
+    expect(screen.queryByText("新建")).not.toBeInTheDocument();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "data/workspaces/thread-1/output/final/nas_market_research_plan.md",
       ),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("+2").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("-0").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: "查看过程" })).not.toBeInTheDocument();
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("nas_market_research_plan.md")).toHaveLength(1);
+
+    fireEvent.click(screen.getByText("nas_market_research_plan.md"));
+
+    expect(selectArtifact).toHaveBeenCalledWith(
+      "workspace-output:final:nas_market_research_plan.md",
+    );
+    expect(setArtifactsOpen).toHaveBeenCalledWith(true);
+    expect(
+      screen.queryByRole("button", { name: "查看过程" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders audit notice on the diff summary with undo and review owner controls", async () => {
@@ -290,11 +309,11 @@ describe("MessageOutputSummary", () => {
           args: {
             changes: [
               {
-                path: "data/workspaces/thread-1/output/final/report.md",
+                path: "runtime/generated/report.md",
                 op: "create",
                 diff: [
                   "--- /dev/null",
-                  "+++ b/data/workspaces/thread-1/output/final/report.md",
+                  "+++ b/runtime/generated/report.md",
                   "@@ -0,0 +1 @@",
                   "+# Report",
                 ].join("\n"),
@@ -348,9 +367,10 @@ describe("MessageOutputSummary", () => {
     expect(screen.getByText("测试通过")).toBeInTheDocument();
     expect(screen.getByText("通过")).toBeInTheDocument();
     expect(screen.getByText(/任务完成.*验证 1\/1/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /做同款/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /做同款/ }),
+    ).not.toBeInTheDocument();
   });
-
 });
 
 describe("extractResultUrl", () => {
@@ -384,7 +404,9 @@ describe("MessageList receipt wiring", () => {
     renderMessageList(thread);
 
     expect(screen.getByText("测试通过")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /做同款/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /做同款/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps unknown verification tool names and protocol details out of receipts", () => {
