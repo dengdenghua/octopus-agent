@@ -318,9 +318,14 @@ export function AgentWorkbenchPanel({
   );
 
   const visibleTabs = workbenchTabs.filter((tab) => !closedTabs.has(tab.id));
+  const inferredWorkspaceLabel = inferredWorkDir
+    ?.split(/[\\/]/)
+    .filter(Boolean)
+    .pop();
   const workspaceLabel =
-    inferredWorkDir?.split(/[\\/]/).filter(Boolean).pop() ||
-    t.agentWorkbenchPanel.mainComputer;
+    !inferredWorkspaceLabel || inferredWorkspaceLabel === threadId
+      ? t.agentWorkbenchPanel.mainComputer
+      : inferredWorkspaceLabel;
 
   // Browser tab content, shared by the empty shell and the main render path.
   const canShowDeployedPreview = Boolean(resultPreviewUrl);

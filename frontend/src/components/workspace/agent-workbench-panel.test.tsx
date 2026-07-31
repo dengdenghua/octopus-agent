@@ -161,6 +161,30 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("工位")).not.toBeInTheDocument();
   });
 
+  test("does not expose an internal thread id as the workspace label", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "report-1",
+            name: "read_file",
+            input: {
+              path: "/tmp/data/workspaces/thread-internal-1/output/final/report.md",
+            },
+          }),
+        ]}
+        threadId="thread-internal-1"
+        workDir="/tmp/data/workspaces/thread-internal-1"
+        runSettled
+      />,
+    );
+
+    expect(screen.queryByText("thread-internal-1")).not.toBeInTheDocument();
+    const workbenchHeader = screen.getByRole("banner");
+    expect(within(workbenchHeader).getByTitle("主电脑")).toBeInTheDocument();
+    expect(within(workbenchHeader).getByText("已完成")).toBeInTheDocument();
+  });
+
   test("empty shell says the controller is idle when no turn is running", () => {
     renderWorkbench(<AgentWorkbenchPanel activeTab="agent" events={[]} />);
     expect(screen.getByText("当前还没有活跃的协作过程。")).toBeInTheDocument();
