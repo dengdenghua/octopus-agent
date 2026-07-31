@@ -74,6 +74,12 @@ describe("normalizeWorkspaceArtifactRef", () => {
     ).toBe("workspace-output:final:nas-report.md");
   });
 
+  it("converts a relative final report path to a scoped output ref", () => {
+    expect(
+      normalizeWorkspaceArtifactRef("output/final/nas-report.md", "thread-1"),
+    ).toBe("workspace-output:final:nas-report.md");
+  });
+
   it("does not reinterpret a path from another thread", () => {
     const filepath = "/Users/me/data/workspaces/thread-other/output/final/report.md";
     expect(normalizeWorkspaceArtifactRef(filepath, "thread-1")).toBe(filepath);

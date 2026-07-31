@@ -48,7 +48,24 @@ export function artifactDisplayPath(filepath: string) {
  */
 export function normalizeWorkspaceArtifactRef(filepath: string, threadId?: string) {
   if (!threadId || parseWorkspaceOutputRef(filepath)) return filepath;
-  const parts = filepath.replaceAll("\\", "/").split("/").filter(Boolean);
+  const normalizedPath = filepath.replaceAll("\\", "/");
+  const relativeOutputMatch = normalizedPath.match(
+    /^output\/(final|stages|deploy|upload)\/(.+)$/,
+  );
+  if (relativeOutputMatch) {
+    return workspaceOutputRef({
+      area: relativeOutputMatch[1] as WorkspaceOutputArea,
+      relativePath: relativeOutputMatch[2],
+    });
+  }
+  const relativeOutputFileMatch = normalizedPath.match(/^output\/([^/]+)$/);
+  if (relativeOutputFileMatch) {
+    return workspaceOutputRef({
+      area: "output",
+      relativePath: relativeOutputFileMatch[1],
+    });
+  }
+  const parts = normalizedPath.split("/").filter(Boolean);
   const workspaceIndex = parts.lastIndexOf("workspaces");
   if (workspaceIndex < 0 || parts[workspaceIndex + 1] !== threadId) {
     return filepath;
