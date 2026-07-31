@@ -270,15 +270,17 @@ describe("MessageOutputSummary", () => {
     );
 
     expect(screen.getByText(/任务完成 · 已生成 1 个产物/)).toBeInTheDocument();
-    expect(screen.getByText("产物汇总")).toBeInTheDocument();
     expect(screen.queryByText("已编辑 1 个文件")).not.toBeInTheDocument();
-    expect(screen.queryByText("新建")).not.toBeInTheDocument();
+    expect(screen.getByText("新建")).toBeInTheDocument();
     expect(
       screen.queryByText(
         "data/workspaces/thread-1/output/final/nas_market_research_plan.md",
       ),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText("nas_market_research_plan.md")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "接受" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /撤销/ })).toBeInTheDocument();
+    expect(screen.getByLabelText("审核交给")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("nas_market_research_plan.md"));
 

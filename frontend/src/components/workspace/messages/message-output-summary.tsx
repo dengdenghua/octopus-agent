@@ -447,7 +447,6 @@ export function extractResultUrl(messages: Message[]): string | null {
 }
 
 export function MessageOutputSummary({
-  auditNotice,
   messages,
   turnMessages,
   threadId,
@@ -490,6 +489,7 @@ export function MessageOutputSummary({
     reviewAssignees[0]!.value,
   );
   const [reverting, setReverting] = useState(false);
+  const [changesAccepted, setChangesAccepted] = useState(false);
 
   if (
     !failure &&
@@ -532,22 +532,22 @@ export function MessageOutputSummary({
   const finalOutputChanges = summary.changes.filter(
     (change) => change.created && isFinalOutputArtifactPath(change.path),
   );
-  const reviewableChanges = summary.changes.filter(
-    (change) => !finalOutputChanges.includes(change),
+  const finalOutputRefs = new Set(
+    finalOutputChanges.map((change) =>
+      normalizeWorkspaceArtifactRef(change.path, threadId),
+    ),
   );
-  const artifactByPath = new Map(
-    summary.artifacts.map((artifact) => [
-      normalizeWorkspaceArtifactRef(artifact.path, threadId),
-      artifact,
-    ]),
+  const reviewableChanges = summary.changes;
+  const visibleArtifacts = summary.artifacts.filter(
+    (artifact) =>
+      !finalOutputRefs.has(
+        normalizeWorkspaceArtifactRef(artifact.path, threadId),
+      ),
   );
-  for (const change of finalOutputChanges) {
-    const artifactRef = normalizeWorkspaceArtifactRef(change.path, threadId);
-    if (!artifactByPath.has(artifactRef)) {
-      artifactByPath.set(artifactRef, { path: change.path });
-    }
-  }
-  const visibleArtifacts = [...artifactByPath.values()];
+  const hasOnlyFinalOutputChanges =
+    reviewableChanges.length > 0 &&
+    reviewableChanges.every((change) => finalOutputChanges.includes(change));
+  const effectiveChangesOpen = hasOnlyFinalOutputChanges || changesOpen;
   const totalAdded = reviewableChanges.reduce(
     (sum, item) => sum + item.added,
     0,
@@ -571,7 +571,7 @@ export function MessageOutputSummary({
   const ChangeSummaryIcon = hasOnlyCreatedChanges
     ? FilePlus2Icon
     : FileCheck2Icon;
-  const visibleChanges = changesOpen
+  const visibleChanges = effectiveChangesOpen
     ? reviewableChanges
     : reviewableChanges.slice(0, 3);
   // A truncated diff may end mid-hunk; reverse-applying it would
@@ -579,7 +579,7 @@ export function MessageOutputSummary({
   const revertableChanges = reviewableChanges.filter(
     (change) => change.diff?.trim() && !change.diffTruncated,
   );
-  const showAuditActions = Boolean(auditNotice);
+  const showAuditActions = reviewableChanges.length > 0;
 
   const handleRevertAll = async () => {
     if (revertableChanges.length === 0 || reverting) return;
@@ -798,14 +798,19 @@ export function MessageOutputSummary({
       )}
 
       {reviewableChanges.length > 0 && (
-        <Collapsible open={changesOpen} onOpenChange={setChangesOpen}>
+        <Collapsible
+          open={effectiveChangesOpen}
+          onOpenChange={(open) => {
+            if (!hasOnlyFinalOutputChanges) setChangesOpen(open);
+          }}
+        >
           <section
             aria-label={t.message.changesSummary}
             className="overflow-hidden rounded-lg border border-border-default bg-muted/25"
           >
             <div className="flex flex-wrap items-start gap-2 px-3 py-2.5 sm:flex-nowrap sm:items-center">
               <ChangeSummaryIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/45" />
-              <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none">
+              {hasOnlyFinalOutputChanges ? (
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-foreground">
                     {changeSummaryLabel}
@@ -820,18 +825,44 @@ export function MessageOutputSummary({
                     </span>
                   </span>
                 </span>
-                <ChevronDownIcon
-                  className={cn(
-                    "size-4 shrink-0 text-muted-foreground/60 transition-transform",
-                    !changesOpen && "-rotate-90",
-                  )}
-                />
-              </CollapsibleTrigger>
+              ) : (
+                <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-foreground">
+                      {changeSummaryLabel}
+                    </span>
+                    <span className="mt-0.5 block font-mono text-xs leading-none">
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        +{totalAdded}
+                      </span>
+                      <span className="mx-1 text-muted-foreground"> </span>
+                      <span className="text-red-600 dark:text-red-400">
+                        -{totalRemoved}
+                      </span>
+                    </span>
+                  </span>
+                  <ChevronDownIcon
+                    className={cn(
+                      "size-4 shrink-0 text-muted-foreground/60 transition-transform",
+                      !changesOpen && "-rotate-90",
+                    )}
+                  />
+                </CollapsibleTrigger>
+              )}
               {showAuditActions && (
                 <div
                   aria-label={t.message.auditActions}
                   className="ml-auto flex shrink-0 items-center gap-1.5"
                 >
+                  <button
+                    type="button"
+                    onClick={() => setChangesAccepted(true)}
+                    disabled={changesAccepted}
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-transparent px-2 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/60 disabled:cursor-default disabled:text-emerald-600 disabled:opacity-100 dark:disabled:text-emerald-400"
+                  >
+                    <CheckCircle2Icon className="size-3 text-muted-foreground/70" />
+                    {changesAccepted ? t.message.accepted : t.message.accept}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleRevertAll()}
@@ -877,9 +908,14 @@ export function MessageOutputSummary({
                     key={change.path}
                     change={change}
                     threadId={threadId}
+                    onOpenArtifact={
+                      finalOutputChanges.includes(change)
+                        ? () => openArtifact(change.path)
+                        : undefined
+                    }
                   />
                 ))}
-                {!changesOpen && reviewableChanges.length > 3 && (
+                {!effectiveChangesOpen && reviewableChanges.length > 3 && (
                   <li className="px-3 py-2 text-xs text-muted-foreground">
                     {t.message.moreFiles(reviewableChanges.length - 3)}
                   </li>
@@ -910,9 +946,11 @@ export function MessageOutputSummary({
 function ChangeRow({
   change,
   threadId,
+  onOpenArtifact,
 }: {
   change: OutputChange;
   threadId?: string;
+  onOpenArtifact?: () => void;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -954,32 +992,22 @@ function ChangeRow({
 
   return (
     <li className="text-sm">
-      <div
-        role={hasHunks ? "button" : undefined}
-        tabIndex={hasHunks ? 0 : undefined}
-        aria-expanded={hasHunks ? open : undefined}
-        className={cn(
-          "flex items-center gap-3 px-3 py-2",
-          hasHunks && "cursor-pointer hover:bg-muted/30",
-        )}
-        onClick={hasHunks ? () => setOpen((prev) => !prev) : undefined}
-        onKeyDown={
-          hasHunks
-            ? (event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                setOpen((prev) => !prev);
-              }
-            : undefined
-        }
-      >
+      <div className="flex items-center gap-3 px-3 py-2">
         {hasHunks && (
-          <ChevronDownIcon
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground/60 transition-transform",
-              !open && "-rotate-90",
-            )}
-          />
+          <button
+            type="button"
+            aria-label={t.message.changesSummary}
+            aria-expanded={open}
+            onClick={() => setOpen((prev) => !prev)}
+            className="shrink-0 rounded-sm text-muted-foreground/60 transition-colors hover:text-foreground"
+          >
+            <ChevronDownIcon
+              className={cn(
+                "size-3.5 transition-transform",
+                !open && "-rotate-90",
+              )}
+            />
+          </button>
         )}
         <span
           className={cn(
@@ -991,9 +1019,20 @@ function ChangeRow({
         >
           {change.created ? t.message.fileCreated : t.message.fileEdited}
         </span>
-        <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
-          {change.path}
-        </span>
+        {onOpenArtifact ? (
+          <button
+            type="button"
+            title={change.path}
+            onClick={onOpenArtifact}
+            className="min-w-0 flex-1 truncate text-left font-mono text-muted-foreground transition-colors hover:text-foreground hover:underline"
+          >
+            {getFileName(artifactDisplayPath(change.path))}
+          </button>
+        ) : (
+          <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
+            {change.path}
+          </span>
+        )}
         {change.diffTruncated && (
           <span
             title={t.message.diffTruncatedTooltip}
