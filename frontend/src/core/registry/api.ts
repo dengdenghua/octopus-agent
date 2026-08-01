@@ -141,6 +141,12 @@ export interface RegistryPlugin {
   description: string;
   category?: string | null;
   tags?: string[] | null;
+  bundle?: {
+    ref?: string | null;
+    checksum?: string | null;
+    size?: number | null;
+  } | null;
+  install_mode?: "plugin-bundle" | "prompt-only" | string;
 }
 
 export interface RegistryPluginsResponse {

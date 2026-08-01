@@ -14,8 +14,11 @@ additive 新文件,零碰 Codex WIP(cowork/oct/i18n);SDK 读/解析半边仍 run
 from __future__ import annotations
 
 import json
+import hashlib
 import re
+import tarfile
 import tempfile
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -198,6 +201,63 @@ def _materialize_registry_plugin_prompt(asset: Any, skills_root: Path) -> tuple[
     return skill_name, skill_dir / "SKILL.md"
 
 
+def _install_registry_plugin_bundle(
+    asset: Any,
+    *,
+    client: Any,
+    plugin_root: Path,
+    publisher_trust_store_path: Path | None,
+) -> dict[str, Any]:
+    """Download and install a signed plugin bundle through the local lifecycle gate."""
+    bundle = getattr(asset, "bundle", None)
+    if bundle is None or not getattr(bundle, "ref", None):
+        raise ValueError("registry plugin has no installable bundle")
+    data = client.fetch_bundle(str(asset.id))
+    expected = str(getattr(bundle, "checksum", "") or "").removeprefix("sha256:").lower()
+    if expected and hashlib.sha256(data).hexdigest() != expected:
+        raise ValueError("registry plugin bundle checksum mismatch")
+    declared_size = getattr(bundle, "size", None)
+    if declared_size is not None and len(data) != int(declared_size):
+        raise ValueError("registry plugin bundle size mismatch")
+    if len(data) > 50 * 1024 * 1024:
+        raise ValueError("registry plugin bundle is too large")
+
+    from runtime.platform.plugins.plugin_lifecycle import install_local_plugin
+
+    plugin_root = Path(plugin_root).expanduser().resolve(strict=False)
+    plugin_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".registry-plugin-", dir=plugin_root.parent) as tmp:
+        tmp_root = Path(tmp)
+        with tarfile.open(fileobj=BytesIO(data), mode="r:*") as archive:
+            members = archive.getmembers()
+            if not members:
+                raise ValueError("registry plugin bundle is empty")
+            for member in members:
+                path = Path(member.name)
+                if path.is_absolute() or ".." in path.parts:
+                    raise ValueError(f"unsafe path in plugin bundle: {member.name}")
+                if member.issym() or member.islnk() or not (member.isdir() or member.isfile()):
+                    raise ValueError(f"unsupported entry in plugin bundle: {member.name}")
+            try:
+                archive.extractall(tmp_root, filter="data")
+            except TypeError:  # pragma: no cover - Python 3.11 compatibility
+                archive.extractall(tmp_root)
+
+        candidates = [
+            path.parent.parent
+            for path in tmp_root.rglob(".codex-plugin/plugin.json")
+            if path.is_file()
+        ]
+        if len(candidates) != 1:
+            raise ValueError("plugin bundle must contain exactly one .codex-plugin/plugin.json")
+        return install_local_plugin(
+            candidates[0],
+            plugin_root=plugin_root,
+            publisher_trust_store_path=publisher_trust_store_path,
+            confirm_install=True,
+        )
+
+
 def _register_runtime(skill_registry: Any, skills_root: Path) -> int:
     """把 skills_root 下的 prompt-skill 注册进**活 registry**(无需重启)。
     已注册的同名会被 register_market_skills 自身跳过,故只净增新装的。"""
@@ -228,6 +288,8 @@ def create_registry_consumer_router(
     jwt_audience: str | None = None,
     registry_base: str | None = None,
     skills_root: Path | str | None = None,
+    plugin_root: Path | str | None = None,
+    publisher_trust_store_path: Path | str | None = None,
 ) -> Any:
     require_fastapi(__name__)
 
@@ -244,6 +306,12 @@ def create_registry_consumer_router(
         except Exception:  # noqa: BLE001
             skills_root = Path("skills/public")
     skills_root = Path(skills_root)
+    if plugin_root is None:
+        plugin_root = Path(__file__).resolve().parents[3] / ".octopus" / "plugins" / "codex"
+    plugin_root = Path(plugin_root)
+    publisher_trust_store_path = (
+        Path(publisher_trust_store_path) if publisher_trust_store_path is not None else None
+    )
 
     def _auth_dep(request: Request) -> None:
         from runtime.adapters.web_auth import _resolve_actor
@@ -426,14 +494,26 @@ def create_registry_consumer_router(
             ]
         total = len(assets)
         paged = assets[offset : offset + limit]
+        plugin_rows = []
+        for asset in paged:
+            row = asset.model_dump()
+            row["install_mode"] = (
+                "plugin-bundle" if asset.bundle and asset.bundle.ref else "prompt-only"
+            )
+            row["installable"] = True
+            plugin_rows.append(row)
         return {
-            "plugins": [a.model_dump() for a in paged],
+            "plugins": plugin_rows,
             "total": total,
             "offset": offset,
             "limit": limit,
             "source": base,
-            "installable": True,
-            "install_mode": "prompt-only",
+            "installable": bool(paged),
+            "install_mode": (
+                "plugin-bundle"
+                if any(asset.bundle and asset.bundle.ref for asset in paged)
+                else "prompt-only"
+            ),
         }
 
     @router.get("/api/registry/plugins/{slug}")
@@ -450,7 +530,7 @@ def create_registry_consumer_router(
         d["body_preview"] = body[:1200]
         d["body_chars"] = len(body)
         d["installable"] = True
-        d["install_mode"] = "prompt-only"
+        d["install_mode"] = "plugin-bundle" if p.bundle and p.bundle.ref else "prompt-only"
         return d
 
     @router.post("/api/registry/plugins/{slug}/install")
@@ -461,7 +541,16 @@ def create_registry_consumer_router(
         if _asset_type(asset_id) != "plugin":
             raise HTTPException(400, f"not a plugin asset: {asset_id}")
         try:
-            asset = RegistryClient(base).fetch(asset_id)
+            client = RegistryClient(base)
+            asset = client.fetch(asset_id)
+            if asset.bundle and asset.bundle.ref:
+                result = _install_registry_plugin_bundle(
+                    asset,
+                    client=client,
+                    plugin_root=plugin_root,
+                    publisher_trust_store_path=publisher_trust_store_path,
+                )
+                return {"installed": asset_id, "install_mode": "plugin-bundle", **result}
             installed_name, path = _materialize_registry_plugin_prompt(asset, skills_root)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc

@@ -7437,8 +7437,10 @@ export const zhCN: Translations = {
     installed: "已安装",
     browseOnly: "仅浏览",
     pluginsSafetyNotice:
-      "插件安装为提示能力：只保存 registry 的说明文本，不下载或执行远程代码。",
+      "插件分为能力说明和签名插件包两类；插件包会经过校验和权限检查后安装。",
     typeLabelStore: "商城",
+    typeLabelPluginBundle: "商城 · 插件包",
+    typeLabelPromptCapability: "商城 · 能力说明",
     typeLabelTwinRole: "商城 · 数字分身岗位模板",
     categoryDigitalTwin: "数字分身",
   },

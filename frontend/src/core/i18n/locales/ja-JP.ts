@@ -7825,8 +7825,10 @@ export const jaJP: Translations = {
     installed: "インストール済み",
     browseOnly: "閲覧のみ",
     pluginsSafetyNotice:
-      "プラグインはプロンプト専用の機能としてインストールされます。registry のテキストだけを保存し、リモートコードはダウンロードも実行もしません。",
+      "プラグインには機能説明と署名付きバンドルがあります。バンドルは検証と権限チェック後にのみインストールされます。",
     typeLabelStore: "ストア",
+    typeLabelPluginBundle: "ストア · プラグインバンドル",
+    typeLabelPromptCapability: "ストア · 機能説明",
     typeLabelTwinRole: "ストア · デジタルツイン職務テンプレート",
     categoryDigitalTwin: "デジタルツイン",
   },

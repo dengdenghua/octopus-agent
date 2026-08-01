@@ -7779,8 +7779,10 @@ export const koKR: Translations = {
     installed: "설치됨",
     browseOnly: "둘러보기 전용",
     pluginsSafetyNotice:
-      "플러그인은 프롬프트 전용 기능으로 설치됩니다. 레지스트리 텍스트만 저장하며 원격 코드는 다운로드하거나 실행하지 않습니다.",
+      "플러그인은 기능 설명 또는 서명된 번들입니다. 번들은 체크섬, 게시자, 권한 검사를 통과한 후에만 설치됩니다.",
     typeLabelStore: "스토어",
+    typeLabelPluginBundle: "스토어 · 플러그인 번들",
+    typeLabelPromptCapability: "스토어 · 기능 설명",
     typeLabelTwinRole: "스토어 · 디지털 트윈 직무 템플릿",
     categoryDigitalTwin: "디지털 트윈",
   },

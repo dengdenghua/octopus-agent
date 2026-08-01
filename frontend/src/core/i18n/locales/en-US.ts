@@ -7831,8 +7831,10 @@ Strategy:
     installed: "Installed",
     browseOnly: "Browse only",
     pluginsSafetyNotice:
-      "Plugins install as prompt-only capabilities: registry text is saved locally, but remote code is never downloaded or executed.",
+      "Plugins are either capability notes or signed bundles. Bundles are installed only after checksum, publisher, and permission checks.",
     typeLabelStore: "Store",
+    typeLabelPluginBundle: "Store · Plugin bundle",
+    typeLabelPromptCapability: "Store · Capability note",
     typeLabelTwinRole: "Store · Digital twin role template",
     categoryDigitalTwin: "Digital Twin",
   },

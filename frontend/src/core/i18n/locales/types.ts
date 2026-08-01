@@ -6707,6 +6707,8 @@ export interface Translations {
     browseOnly: string;
     pluginsSafetyNotice: string;
     typeLabelStore: string;
+    typeLabelPluginBundle: string;
+    typeLabelPromptCapability: string;
     typeLabelTwinRole: string;
     categoryDigitalTwin: string;
   };

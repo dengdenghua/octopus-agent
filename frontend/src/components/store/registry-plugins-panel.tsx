@@ -9,6 +9,7 @@ import {
   type RegistryPlugin,
 } from "@/core/registry/api";
 import { useSkills } from "@/core/skills/hooks";
+import { usePlugins } from "@/core/plugins/hooks";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 
@@ -26,10 +27,14 @@ export function RegistryPluginsPanel() {
   const [installing, setInstalling] = useState<Record<string, boolean>>({});
   const [installed, setInstalled] = useState<Record<string, boolean>>({});
   const { skills: localSkills } = useSkills();
+  const { plugins: localPlugins } = usePlugins();
   const localPluginNames = new Set(
     localSkills
       .filter((skill) => skill.name.startsWith("plugin-"))
       .map((skill) => skill.name.toLowerCase()),
+  );
+  const localCodePluginIds = new Set(
+    localPlugins.map((plugin) => plugin.id.toLowerCase()),
   );
 
   const load = useCallback(async () => {
@@ -120,8 +125,10 @@ export function RegistryPluginsPanel() {
             (() => {
               const slug = registrySlug(plugin.id);
               const name = `plugin-${slug}`;
-              const done =
-                installed[slug] || localPluginNames.has(name.toLowerCase());
+              const isBundle = Boolean(plugin.bundle?.ref);
+              const done = isBundle
+                ? installed[slug] || localCodePluginIds.has(slug.toLowerCase())
+                : installed[slug] || localPluginNames.has(name.toLowerCase());
               const busy = installing[slug];
               return (
                 <RegistryAssetCard
@@ -130,7 +137,11 @@ export function RegistryPluginsPanel() {
                   description={plugin.description}
                   category={null}
                   categoryLabel={plugin.category ?? undefined}
-                  typeLabel={t.store.typeLabelStore}
+                  typeLabel={
+                    isBundle
+                      ? t.store.typeLabelPluginBundle
+                      : t.store.typeLabelPromptCapability
+                  }
                   actionSlot={
                     <Button
                       size="sm"
