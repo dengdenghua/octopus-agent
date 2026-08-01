@@ -7816,7 +7816,7 @@ export const jaJP: Translations = {
   // Store panels (registry skills/plugins/roles)
   store: {
     skillsPanelTitle: "スキルストア · registry から必要に応じてインストール",
-    pluginsPanelTitle: "プラグインストア · registry を閲覧",
+    pluginsPanelTitle: "プラグインストア · 機能をインストール",
     searchSkillsPlaceholder: "スキルを検索",
     searchPluginsPlaceholder: "プラグインを検索",
     searchRolesPlaceholder: "ロールを検索",
@@ -7825,7 +7825,7 @@ export const jaJP: Translations = {
     installed: "インストール済み",
     browseOnly: "閲覧のみ",
     pluginsSafetyNotice:
-      "プラグインアセットは実行可能な統合(kind=code)としてマークされているため、安全のためワンクリックインストールにはまだ対応しておらず、まずは閲覧用として提供しています。",
+      "プラグインはプロンプト専用の機能としてインストールされます。registry のテキストだけを保存し、リモートコードはダウンロードも実行もしません。",
     typeLabelStore: "ストア",
     typeLabelTwinRole: "ストア · デジタルツイン職務テンプレート",
     categoryDigitalTwin: "デジタルツイン",

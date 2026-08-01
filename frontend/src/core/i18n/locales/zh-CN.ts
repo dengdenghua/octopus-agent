@@ -7428,7 +7428,7 @@ export const zhCN: Translations = {
   // Store panels (registry skills/plugins/roles)
   store: {
     skillsPanelTitle: "技能商城 · 从 registry 按需安装",
-    pluginsPanelTitle: "插件商城 · registry 浏览",
+    pluginsPanelTitle: "插件商城 · 安装能力",
     searchSkillsPlaceholder: "搜索技能",
     searchPluginsPlaceholder: "搜索插件",
     searchRolesPlaceholder: "搜索角色",
@@ -7437,7 +7437,7 @@ export const zhCN: Translations = {
     installed: "已安装",
     browseOnly: "仅浏览",
     pluginsSafetyNotice:
-      "插件类资产标记为可执行集成(kind=code),为安全暂不支持一键安装,先供浏览了解。",
+      "插件安装为提示能力：只保存 registry 的说明文本，不下载或执行远程代码。",
     typeLabelStore: "商城",
     typeLabelTwinRole: "商城 · 数字分身岗位模板",
     categoryDigitalTwin: "数字分身",

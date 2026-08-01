@@ -7770,7 +7770,7 @@ export const koKR: Translations = {
   // Store panels (registry skills/plugins/roles)
   store: {
     skillsPanelTitle: "스킬 스토어 · 레지스트리에서 필요에 따라 설치",
-    pluginsPanelTitle: "플러그인 스토어 · 레지스트리 둘러보기",
+    pluginsPanelTitle: "플러그인 스토어 · 기능 설치",
     searchSkillsPlaceholder: "스킬 검색",
     searchPluginsPlaceholder: "플러그인 검색",
     searchRolesPlaceholder: "역할 검색",
@@ -7779,7 +7779,7 @@ export const koKR: Translations = {
     installed: "설치됨",
     browseOnly: "둘러보기 전용",
     pluginsSafetyNotice:
-      "플러그인 자산은 실행 가능한 통합(kind=code)으로 표시되어 있어 보안상 원클릭 설치는 아직 지원하지 않으며, 먼저 둘러보기용으로 제공됩니다.",
+      "플러그인은 프롬프트 전용 기능으로 설치됩니다. 레지스트리 텍스트만 저장하며 원격 코드는 다운로드하거나 실행하지 않습니다.",
     typeLabelStore: "스토어",
     typeLabelTwinRole: "스토어 · 디지털 트윈 직무 템플릿",
     categoryDigitalTwin: "디지털 트윈",

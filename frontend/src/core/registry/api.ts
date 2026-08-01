@@ -131,7 +131,7 @@ export async function installRegistryRole(
   return (await res.json()) as RoleInstallResult;
 }
 
-// 插件(plugin)—— 只读浏览(kind=code,产品侧暂不做一键安装)。
+// 插件(plugin)——安装为 prompt-only 本地能力；不会下载或执行远程代码。
 export interface RegistryPlugin {
   id: string; // "plugin/<slug>"
   type: string;
@@ -150,6 +150,15 @@ export interface RegistryPluginsResponse {
   limit: number;
   source: string;
   installable: boolean;
+  install_mode?: "prompt-only" | string;
+}
+
+export interface PluginInstallResult {
+  installed: string;
+  installed_name: string;
+  path: string;
+  registered_now: number;
+  install_mode: "prompt-only" | string;
 }
 
 export async function listRegistryPlugins(params?: {
@@ -170,4 +179,19 @@ export async function listRegistryPlugins(params?: {
   if (!res.ok)
     throw new Error(`registry plugins list failed: HTTP ${res.status}`);
   return (await res.json()) as RegistryPluginsResponse;
+}
+
+export async function installRegistryPlugin(
+  slug: string,
+): Promise<PluginInstallResult> {
+  const bare = registrySlug(slug);
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/registry/plugins/${encodeURIComponent(bare)}/install`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`install failed: HTTP ${res.status} ${txt}`.trim());
+  }
+  return (await res.json()) as PluginInstallResult;
 }

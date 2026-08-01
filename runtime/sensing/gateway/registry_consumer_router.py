@@ -34,9 +34,10 @@ from runtime.sensing._fastapi_guard import require_fastapi
 # twin / experience(见 asset.type,api.octoapk.com 实测 473 条)。角色类(role/
 # twin-role)与 skill 同属 kind=data 声明式 prompt,落地规则等价 → 直接可"安装"成
 # 本地可用 agent(同 enterprise_assets_router._scaffold_local_agent 的落地形状)。
-# plugin 类目前统一标 kind=code(codex-plugin 集成说明),即便实测 body 常是纯文本,
-# 出于沿用 octopus_runtime.materialize.SAFE_TYPES 的既有安全边界,本路由只做只读浏览、
-# 不提供一键安装(避免绕过该边界)。
+# plugin 类目前统一标 kind=code(codex-plugin 集成说明)。它们的 registry body
+# 是提示词/能力说明，不是可直接执行的插件包；安装时只把 body 落地为本地
+# prompt-skill，不下载、导入或执行远程代码。真正的本地代码插件仍需走本地
+# 插件目录和显式权限审核。
 _ROLE_ASSET_TYPES = ("role", "twin-role")
 
 
@@ -138,6 +139,63 @@ def _is_installable_role_asset(asset: Any) -> bool:
     return str(getattr(asset, "type", "") or "") in _ROLE_ASSET_TYPES and (
         str(getattr(asset, "kind", "") or "") == "data"
     )
+
+
+def _materialize_registry_plugin_prompt(asset: Any, skills_root: Path) -> tuple[str, Path]:
+    """Install a registry plugin as a prompt-only local capability.
+
+    Public registry plugin assets currently contain a bounded text body rather than
+    a signed executable bundle. Keeping that boundary explicit makes the marketplace
+    useful without turning a one-click install into remote code execution.
+    """
+    asset_id = str(getattr(asset, "id", "") or "")
+    if _asset_type(asset_id) != "plugin":
+        raise ValueError(f"not a plugin asset: {asset_id}")
+    slug = str(getattr(asset, "slug", "") or asset_id.split("/", 1)[-1])
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", slug):
+        raise ValueError(f"unsafe plugin slug from registry payload: {slug!r}")
+    if str(getattr(asset, "type", "") or "") != "plugin":
+        raise ValueError(f"registry payload type mismatch: {getattr(asset, 'type', '')!r}")
+
+    # Keep installed names disjoint from first-party skills and stable across updates.
+    skill_name = f"plugin-{slug}"
+    skill_dir = Path(skills_root) / skill_name
+    _ensure_safe_dir(Path(skills_root))
+    _ensure_safe_dir(skill_dir)
+
+    display_name = " ".join(str(getattr(asset, "name", "") or slug).split())
+    description = " ".join(str(getattr(asset, "description", "") or "").split())
+    tags = [str(tag).strip() for tag in (getattr(asset, "tags", None) or []) if str(tag).strip()]
+    body = str(getattr(asset, "body", "") or "").strip()
+    if len(body.encode("utf-8")) > 256 * 1024:
+        raise ValueError("registry plugin prompt is too large")
+    if not body:
+        body = description or f"Use the {display_name} integration when it is available."
+    frontmatter = (
+        "---\n"
+        f"name: {skill_name}\n"
+        f"description: {description or display_name}\n"
+        "source: registry-plugin\n"
+        f"version: {str(getattr(asset, 'version', '') or 'unknown')}\n"
+        f"tags: [{', '.join(tags)}]\n"
+        "---\n\n"
+    )
+    _atomic_write_text(skill_dir / "SKILL.md", frontmatter + body + "\n")
+    _atomic_write_text(
+        skill_dir / "PLUGIN.json",
+        json.dumps(
+            {
+                "id": asset_id,
+                "name": display_name,
+                "version": getattr(asset, "version", None),
+                "source": "registry",
+                "execution": "prompt-only",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+    return skill_name, skill_dir / "SKILL.md"
 
 
 def _register_runtime(skill_registry: Any, skills_root: Path) -> int:
@@ -342,7 +400,7 @@ def create_registry_consumer_router(
             "path": str(agent_root),
         }
 
-    # ─── 插件(plugin)─── 只读浏览(kind=code,沿用 SAFE_TYPES 边界,不提供安装)───
+    # ─── 插件(plugin)─── 安装为 prompt-only 能力，不执行远程代码 ───
 
     @router.get("/api/registry/plugins")
     def list_registry_plugins(
@@ -374,7 +432,8 @@ def create_registry_consumer_router(
             "offset": offset,
             "limit": limit,
             "source": base,
-            "installable": False,
+            "installable": True,
+            "install_mode": "prompt-only",
         }
 
     @router.get("/api/registry/plugins/{slug}")
@@ -390,7 +449,31 @@ def create_registry_consumer_router(
         body = d.pop("body", "")
         d["body_preview"] = body[:1200]
         d["body_chars"] = len(body)
-        d["installable"] = False
+        d["installable"] = True
+        d["install_mode"] = "prompt-only"
         return d
+
+    @router.post("/api/registry/plugins/{slug}/install")
+    def install_registry_plugin(slug: str) -> dict[str, Any]:
+        from octopus_runtime import RegistryClient
+
+        asset_id = slug if "/" in slug else f"plugin/{slug}"
+        if _asset_type(asset_id) != "plugin":
+            raise HTTPException(400, f"not a plugin asset: {asset_id}")
+        try:
+            asset = RegistryClient(base).fetch(asset_id)
+            installed_name, path = _materialize_registry_plugin_prompt(asset, skills_root)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - normalize registry/install failures
+            raise HTTPException(502, f"install failed: {exc}") from exc
+        registered = _register_runtime(skill_registry, skills_root)
+        return {
+            "installed": asset_id,
+            "installed_name": installed_name,
+            "path": str(path),
+            "registered_now": registered,
+            "install_mode": "prompt-only",
+        }
 
     return router

@@ -1,23 +1,36 @@
 import { useCallback, useEffect, useState } from "react";
-import { Info, Loader2, LockIcon, RefreshCw } from "lucide-react";
+import { Check, Download, Info, Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { listRegistryPlugins, type RegistryPlugin } from "@/core/registry/api";
+import {
+  installRegistryPlugin,
+  listRegistryPlugins,
+  registrySlug,
+  type RegistryPlugin,
+} from "@/core/registry/api";
+import { useSkills } from "@/core/skills/hooks";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 
 import { RegistryAssetCard } from "./registry-asset-card";
 
-// 插件商城:从公网 registry 浏览插件资产(kind=code · codex-plugin 集成说明)。
-// 只读——沿用 octopus_runtime.materialize.SAFE_TYPES 的安全边界(只有声明式
-// prompt-pack 才可一键落地),插件类暂不提供一键安装,先可见可查。卡片排版对齐
-// 角色/技能商城面板(RegistryAssetCard),保持三个商城面板观感统一。
+// 插件商城:从公网 registry 浏览并安装 prompt-only 能力。插件 body 会作为
+// 本地提示技能保存；不会下载、导入或执行远程代码。真正的代码插件仍走本地
+// 插件目录和显式权限审核。卡片排版与角色/技能商城保持统一。
 export function RegistryPluginsPanel() {
   const { t } = useI18n();
   const [plugins, setPlugins] = useState<RegistryPlugin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [installing, setInstalling] = useState<Record<string, boolean>>({});
+  const [installed, setInstalled] = useState<Record<string, boolean>>({});
+  const { skills: localSkills } = useSkills();
+  const localPluginNames = new Set(
+    localSkills
+      .filter((skill) => skill.name.startsWith("plugin-"))
+      .map((skill) => skill.name.toLowerCase()),
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -31,6 +44,20 @@ export function RegistryPluginsPanel() {
       setLoading(false);
     }
   }, []);
+
+  const onInstall = async (plugin: RegistryPlugin) => {
+    const slug = registrySlug(plugin.id);
+    setInstalling((m) => ({ ...m, [slug]: true }));
+    setError(null);
+    try {
+      await installRegistryPlugin(slug);
+      setInstalled((m) => ({ ...m, [slug]: true }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInstalling((m) => ({ ...m, [slug]: false }));
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -89,27 +116,47 @@ export function RegistryPluginsPanel() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          {filtered.map((plugin) => (
-            <RegistryAssetCard
-              key={plugin.id}
-              name={plugin.name}
-              description={plugin.description}
-              category={null}
-              categoryLabel={plugin.category ?? undefined}
-              typeLabel={t.store.typeLabelStore}
-              actionSlot={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 rounded-sm px-3 text-xs"
-                  disabled
-                >
-                  <LockIcon className="mr-1 h-3 w-3" />
-                  {t.store.browseOnly}
-                </Button>
-              }
-            />
-          ))}
+          {filtered.map((plugin) =>
+            (() => {
+              const slug = registrySlug(plugin.id);
+              const name = `plugin-${slug}`;
+              const done =
+                installed[slug] || localPluginNames.has(name.toLowerCase());
+              const busy = installing[slug];
+              return (
+                <RegistryAssetCard
+                  key={plugin.id}
+                  name={plugin.name}
+                  description={plugin.description}
+                  category={null}
+                  categoryLabel={plugin.category ?? undefined}
+                  typeLabel={t.store.typeLabelStore}
+                  actionSlot={
+                    <Button
+                      size="sm"
+                      variant={done ? "outline" : "default"}
+                      className="h-7 rounded-sm px-3 text-xs"
+                      disabled={busy || done}
+                      onClick={() => void onInstall(plugin)}
+                    >
+                      {busy ? (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      ) : done ? (
+                        <Check className="mr-1 h-3 w-3" />
+                      ) : (
+                        <Download className="mr-1 h-3 w-3" />
+                      )}
+                      {busy
+                        ? t.store.installing
+                        : done
+                          ? t.store.installed
+                          : t.store.install}
+                    </Button>
+                  }
+                />
+              );
+            })(),
+          )}
         </div>
       )}
     </div>

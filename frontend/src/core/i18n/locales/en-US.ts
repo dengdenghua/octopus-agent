@@ -7822,7 +7822,7 @@ Strategy:
   // Store panels (registry skills/plugins/roles)
   store: {
     skillsPanelTitle: "Skill Store · Install on demand from the registry",
-    pluginsPanelTitle: "Plugin Store · Browse the registry",
+    pluginsPanelTitle: "Plugin Store · Install capabilities",
     searchSkillsPlaceholder: "Search skills",
     searchPluginsPlaceholder: "Search plugins",
     searchRolesPlaceholder: "Search roles",
@@ -7831,7 +7831,7 @@ Strategy:
     installed: "Installed",
     browseOnly: "Browse only",
     pluginsSafetyNotice:
-      "Plugin assets are marked as executable integrations (kind=code). For safety, one-click install is not available yet — they are provided for browsing only.",
+      "Plugins install as prompt-only capabilities: registry text is saved locally, but remote code is never downloaded or executed.",
     typeLabelStore: "Store",
     typeLabelTwinRole: "Store · Digital twin role template",
     categoryDigitalTwin: "Digital Twin",

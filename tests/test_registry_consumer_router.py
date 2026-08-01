@@ -125,7 +125,11 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setattr(loader, "default_agents_root", lambda: tmp_path / "agents")
 
     app = FastAPI()
-    app.include_router(create_registry_consumer_router(registry_base="https://registry.test"))
+    app.include_router(
+        create_registry_consumer_router(
+            registry_base="https://registry.test", skills_root=tmp_path / "skills"
+        )
+    )
     return TestClient(app)
 
 
@@ -138,7 +142,11 @@ def no_raise_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setattr(loader, "default_agents_root", lambda: tmp_path / "agents")
 
     app = FastAPI()
-    app.include_router(create_registry_consumer_router(registry_base="https://registry.test"))
+    app.include_router(
+        create_registry_consumer_router(
+            registry_base="https://registry.test", skills_root=tmp_path / "skills"
+        )
+    )
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -233,16 +241,33 @@ def test_rejects_registry_payload_that_is_not_installable_role(
     assert not (tmp_path / "agents" / "registry_not_really_role").exists()
 
 
-def test_plugins_are_browsable_but_not_installable(client: TestClient) -> None:
+def test_plugins_are_browsable_and_install_as_prompt_capabilities(
+    client: TestClient, tmp_path
+) -> None:
     data = client.get("/api/registry/plugins").json()
 
-    assert data["installable"] is False
+    assert data["installable"] is True
+    assert data["install_mode"] == "prompt-only"
     assert data["total"] == 1
     assert data["plugins"][0]["id"] == "plugin/browser-tool"
 
     detail = client.get("/api/registry/plugins/browser-tool").json()
-    assert detail["installable"] is False
+    assert detail["installable"] is True
+    assert detail["install_mode"] == "prompt-only"
     assert detail["body_preview"] == "plugin manifest"
+
+    installed = client.post("/api/registry/plugins/browser-tool/install").json()
+    assert installed["installed"] == "plugin/browser-tool"
+    assert installed["installed_name"] == "plugin-browser-tool"
+    assert installed["install_mode"] == "prompt-only"
+    skill_md = tmp_path / "skills" / "plugin-browser-tool" / "SKILL.md"
+    assert skill_md.is_file()
+    assert "plugin manifest" in skill_md.read_text(encoding="utf-8")
+    assert json.loads(
+        (tmp_path / "skills" / "plugin-browser-tool" / "PLUGIN.json").read_text(
+            encoding="utf-8"
+        )
+    )["execution"] == "prompt-only"
 
 
 def test_materialize_skill_rejects_unsafe_registry_slug(tmp_path) -> None:
