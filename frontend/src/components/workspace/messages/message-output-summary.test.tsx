@@ -186,6 +186,36 @@ describe("MessageOutputSummary", () => {
     );
   });
 
+  it("delegates artifact navigation to the host workbench when provided", () => {
+    const onOpenArtifact = vi.fn();
+    const message: AIMessage = {
+      id: "ai-workbench-artifact",
+      type: "ai",
+      content: "Done",
+      tool_calls: [
+        {
+          id: "artifact-workbench-1",
+          name: "artifact",
+          args: { path: "output/final/report.md", title: "report.md" },
+        },
+      ],
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[message]}
+        threadId="thread-1"
+        onOpenArtifact={onOpenArtifact}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByText("report.md"));
+
+    expect(onOpenArtifact).toHaveBeenCalledWith("output/final/report.md");
+    expect(setArtifactsOpen).not.toHaveBeenCalled();
+  });
+
   it("summarizes file changes with diff counts", () => {
     const message: AIMessage = {
       id: "ai-1",

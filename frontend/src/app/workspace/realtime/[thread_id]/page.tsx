@@ -57,6 +57,7 @@ import type { ReasoningMode } from "@/components/workspace/reasoning-mode";
 import type { PersonalMode } from "@/components/workspace/personal-mode-selector";
 import { RecRecorderOverlay } from "@/components/workspace/rec-recorder-overlay";
 import type { PromptInputFilePart } from "@/core/uploads";
+import { normalizeWorkspaceArtifactRef } from "@/core/artifacts/utils";
 import { ChatPageLayout } from "@/components/workspace/chat-page-layout";
 import { AgentWelcome } from "@/components/workspace/agent-welcome";
 import { RealtimeApprovalPrompt } from "@/components/workspace/realtime-approval-toasts";
@@ -2968,47 +2969,33 @@ function RealtimePageContent({
 
   const openWorkbenchArtifact = useCallback(
     (path: string) => {
+      const normalizedPath = normalizeWorkspaceArtifactRef(path, threadId);
       if (path) {
-        if (!artifacts.includes(path)) {
-          setArtifacts((prev) => [...prev, path]);
+        if (!artifacts.includes(normalizedPath)) {
+          setArtifacts((prev) => [...prev, normalizedPath]);
         }
-        selectArtifact(path, true);
+        selectArtifact(normalizedPath, true);
       }
-      setArtifactsOpen(true);
+      // Keep the artifact in the same right-side workbench surface. The
+      // dedicated artifact drawer remains available from the global panel
+      // menu, but a conversation click should not fork the workspace UI.
+      setArtifactsOpen(false);
       setShowAgentPlan(false);
-      setAgentWorkbenchDismissed(true);
-      setAgentWorkbenchManuallyOpened(false);
+      setAgentWorkbenchDismissed(false);
+      setAgentWorkbenchManuallyOpened(true);
       setShowResearchHistory(false);
       setShowResearch(false);
       setShowPreview(false);
-      setAgentWorkbenchTabTouched(false);
+      setAgentWorkbenchTab("agent");
+      setAgentWorkbenchTabTouched(true);
     },
-    [artifacts, selectArtifact, setArtifactsOpen, setArtifacts],
+    [artifacts, selectArtifact, setArtifactsOpen, setArtifacts, threadId],
   );
 
   const openFinalArtifactPanel = useCallback(() => {
     const firstEntry = finalArtifactEntries[0];
-    if (firstEntry?.path) {
-      if (!artifacts.includes(firstEntry.path)) {
-        setArtifacts((prev) => [...prev, firstEntry.path!]);
-      }
-      selectArtifact(firstEntry.path, true);
-    }
-    setArtifactsOpen(true);
-    setShowAgentPlan(false);
-    setAgentWorkbenchDismissed(true);
-    setAgentWorkbenchManuallyOpened(false);
-    setShowResearchHistory(false);
-    setShowResearch(false);
-    setShowPreview(false);
-    setAgentWorkbenchTabTouched(false);
-  }, [
-    finalArtifactEntries,
-    artifacts,
-    selectArtifact,
-    setArtifactsOpen,
-    setArtifacts,
-  ]);
+    if (firstEntry?.path) openWorkbenchArtifact(firstEntry.path);
+  }, [finalArtifactEntries, openWorkbenchArtifact]);
 
   const openAgentPlanPanel = useCallback(() => {
     setArtifactsOpen(false);
@@ -3224,6 +3211,7 @@ function RealtimePageContent({
                   className="size-full"
                   threadId={threadId}
                   thread={thread}
+                  onOpenArtifact={openWorkbenchArtifact}
                   header={
                     realtimeApprovals.hasMoreTurns ? (
                       <LoadOlderTurnsBanner

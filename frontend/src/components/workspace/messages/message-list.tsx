@@ -664,6 +664,7 @@ export function MessageList({
   paddingBottom = MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   header,
   footer,
+  onOpenArtifact,
   lastTurnToolEvents,
   liveToolEvents,
   currentAgent,
@@ -685,6 +686,7 @@ export function MessageList({
    * banner when the thread resumed with a paginated window. */
   header?: ReactNode;
   footer?: ReactNode;
+  onOpenArtifact?: (path: string) => void;
   lastTurnToolEvents?: LiveToolEvent[];
   liveToolEvents?: LiveToolEvent[];
   completedAgentOutput?: boolean;
@@ -1498,6 +1500,7 @@ export function MessageList({
                   : undefined
               }
               threadId={threadId}
+              onOpenArtifact={onOpenArtifact}
               failure={failure}
               className="ml-11 w-auto"
             />

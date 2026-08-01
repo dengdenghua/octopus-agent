@@ -54,15 +54,15 @@ export function normalizeWorkspaceArtifactRef(filepath: string, threadId?: strin
   );
   if (relativeOutputMatch) {
     return workspaceOutputRef({
-      area: relativeOutputMatch[1] as WorkspaceOutputArea,
-      relativePath: relativeOutputMatch[2],
+      area: relativeOutputMatch[1]! as WorkspaceOutputArea,
+      relativePath: relativeOutputMatch[2]!,
     });
   }
   const relativeOutputFileMatch = normalizedPath.match(/^output\/([^/]+)$/);
   if (relativeOutputFileMatch) {
     return workspaceOutputRef({
       area: "output",
-      relativePath: relativeOutputFileMatch[1],
+      relativePath: relativeOutputFileMatch[1]!,
     });
   }
   const parts = normalizedPath.split("/").filter(Boolean);

@@ -450,6 +450,7 @@ export function MessageOutputSummary({
   messages,
   turnMessages,
   threadId,
+  onOpenArtifact: onOpenArtifactProp,
   failure,
   className,
 }: {
@@ -461,6 +462,8 @@ export function MessageOutputSummary({
    *  Falls back to `messages` when absent. */
   turnMessages?: Message[];
   threadId?: string;
+  /** Keep artifact navigation inside the host workbench when available. */
+  onOpenArtifact?: (path: string) => void;
   failure?: FailurePresentation | null;
   className?: string;
 }) {
@@ -525,6 +528,10 @@ export function MessageOutputSummary({
   };
 
   const openArtifact = (path: string) => {
+    if (onOpenArtifactProp) {
+      onOpenArtifactProp(path);
+      return;
+    }
     select(normalizeWorkspaceArtifactRef(path, threadId));
     setOpen(true);
   };
