@@ -12,8 +12,17 @@ import { useSkills } from "@/core/skills/hooks";
 import { usePlugins } from "@/core/plugins/hooks";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
+import { getBackendBaseURL } from "@/core/config";
 
 import { RegistryAssetCard } from "./registry-asset-card";
+
+function registryAssetUrl(value?: string | null): string | null {
+  if (!value) return null;
+  // Registry metadata is untrusted.  Only consume asset paths served by our
+  // own backend; remote URLs must not be fetched from a marketplace response.
+  if (/^https?:\/\//i.test(value)) return null;
+  return `${getBackendBaseURL()}${value.startsWith("/") ? value : `/${value}`}`;
+}
 
 // 插件商城:从公网 registry 浏览并安装 prompt-only 能力。插件 body 会作为
 // 本地提示技能保存；不会下载、导入或执行远程代码。真正的代码插件仍走本地
@@ -142,6 +151,8 @@ export function RegistryPluginsPanel() {
                       ? t.store.typeLabelPluginBundle
                       : t.store.typeLabelPromptCapability
                   }
+                  iconUrl={registryAssetUrl(plugin.logo_url || plugin.icon_url)}
+                  iconText={plugin.icon}
                   actionSlot={
                     <Button
                       size="sm"

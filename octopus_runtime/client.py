@@ -70,6 +70,13 @@ class RegistryAsset(BaseModel):
     mode: str | None = None  # inject | tool
     platforms: list[str] | None = None
     deps: list[str] | None = None
+    # Registry publishers may provide a small text/emoji icon.  Keep the
+    # metadata instead of silently dropping it during Pydantic validation;
+    # image assets are resolved from trusted local plugin bundles by the
+    # consumer route.
+    icon: str | None = None
+    logo: str | None = None
+    icon_url: str | None = None
     content: AssetContent | None = None
     bundle: BundleRef | None = None  # 有则该技能是整目录分发(full-bundle)
 

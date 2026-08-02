@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { CloudIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,9 +11,9 @@ import {
 import { cn } from "@/lib/utils";
 
 // 商城资产(角色/插件/技能)卡片——视觉语言对齐本地角色库的 AgentCard /
-// AgentWorldCard(同尺寸图标框、同 Card/Badge 排版),差异只在没有真实
-// avatar_url/rating/downloads(registry 信封不带这些字段),用渐变图标
-// 占位替代头像。三个商城面板(角色/插件/技能)共用本组件,保证观感统一。
+// AgentWorldCard(同尺寸图标框、同 Card/Badge 排版)。有可信的本地
+// logo 时展示官方图标，否则回退到 registry 提供的文字/emoji 图标。
+// 三个商城面板共用本组件,保证观感统一。
 
 const CATEGORY_STYLE_MAP: Record<
   string,
@@ -79,7 +78,46 @@ interface RegistryAssetCardProps {
   categoryLabel?: string;
   typeLabel: string;
   featured?: boolean;
+  iconUrl?: string | null;
+  iconText?: string | null;
   actionSlot: ReactNode;
+}
+
+function AssetBrandIcon({
+  name,
+  style,
+  iconUrl,
+  iconText,
+}: {
+  name: string;
+  style: { bg: string; text: string; icon: string };
+  iconUrl?: string | null;
+  iconText?: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+  const showImage = Boolean(iconUrl) && !failed;
+  return (
+    <div
+      className={cn(
+        "flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default",
+        style.bg,
+      )}
+    >
+      {showImage ? (
+        <img
+          src={iconUrl ?? undefined}
+          alt={`${name} logo`}
+          className="h-full w-full object-contain p-1.5"
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className={cn("text-lg leading-none", style.text)}>
+          {iconText || style.icon}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function RegistryAssetCard({
@@ -89,6 +127,8 @@ export function RegistryAssetCard({
   categoryLabel,
   typeLabel,
   featured,
+  iconUrl,
+  iconText,
   actionSlot,
 }: RegistryAssetCardProps) {
   const style = categoryStyleFor(category);
@@ -105,17 +145,12 @@ export function RegistryAssetCard({
       )}
       <CardHeader className="flex flex-1 flex-col px-3 pb-2 pt-3">
         <div className="flex items-start gap-2">
-          <div
-            className={cn(
-              "relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border-default text-lg leading-none",
-              style.bg,
-            )}
-          >
-            <span className={style.text}>{style.icon}</span>
-            <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 shadow-[var(--shadow-xs)]">
-              <CloudIcon className="h-2.5 w-2.5 text-white" />
-            </div>
-          </div>
+          <AssetBrandIcon
+            name={name}
+            style={style}
+            iconUrl={iconUrl}
+            iconText={iconText}
+          />
           <div className="min-w-0 flex-1">
             <CardTitle className="truncate text-sm font-semibold leading-5">
               {name}

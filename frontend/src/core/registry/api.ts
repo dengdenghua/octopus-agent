@@ -141,6 +141,13 @@ export interface RegistryPlugin {
   description: string;
   category?: string | null;
   tags?: string[] | null;
+  /** Publisher fallback icon (usually an emoji) when no trusted local logo exists. */
+  icon?: string | null;
+  /** Trusted local plugin asset URLs, added by the runtime consumer route. */
+  logo_url?: string | null;
+  icon_url?: string | null;
+  brand_color?: string | null;
+  local_plugin_id?: string | null;
   bundle?: {
     ref?: string | null;
     checksum?: string | null;
