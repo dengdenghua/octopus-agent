@@ -1,0 +1,44 @@
+# 自动化页面「已配置」Tab 实现 - Verification Checklist
+
+- [ ] 目录 `src/components/workspace/automation/` 已创建
+- [ ] `automation-configured-tab.tsx` 文件已创建
+- [ ] 组件正确复用 IntelligenceSubscription 和 IntelligenceReport 类型定义
+- [ ] 组件正确复用 apiFetch 函数
+- [ ] 组件正确复用 scheduleText 函数
+- [ ] 组件正确复用 subscriptionsKey 和 reportsKey 查询键
+- [ ] 组件正确复用所有 useQuery 和 useMutation hooks
+- [ ] 组件正确复用删除确认 Dialog 逻辑
+- [ ] 蓝色本地运行提示条（LocalTaskBanner）正确显示：rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 flex items-center justify-between
+- [ ] 提示条包含 InfoIcon（size-4, text-primary）和文字「本地任务仅在「电脑保持唤醒」时运行」
+- [ ] 提示条右侧包含「保持电脑唤醒」文字（text-xs text-muted-foreground）和 Switch 组件
+- [ ] Switch 状态正确存入 localStorage key=`octopus:keep-awake`，默认值为 true
+- [ ] 空状态正确显示：rounded-lg border border-dashed border-border-default bg-card/50 p-8 text-center，包含 CloudIcon、「还没有自动化任务」、引导文案
+- [ ] 任务卡片列表使用 space-y-1.5 间距
+- [ ] 每个任务卡片有 group 类名，hover 时操作按钮显示（opacity-0 group-hover:opacity-100 transition-opacity）
+- [ ] 任务卡片样式正确：flex items-center gap-3 rounded-lg border border-border-default bg-card/60 px-3 py-2.5 transition-colors hover:bg-card
+- [ ] 任务卡片左侧显示 CloudIcon（size-4 text-muted-foreground shrink-0）
+- [ ] 任务卡片显示任务名（min-w-0 flex-1 truncate text-sm font-medium）
+- [ ] 任务卡片显示 Work 模式 Badge（variant="secondary" rounded px-1.5 py-0 text-[10px] font-normal）
+- [ ] 任务卡片显示自然语言调度文本（shrink-0 text-xs text-muted-foreground）
+- [ ] 操作按钮组包含立即运行按钮（variant="ghost" size="icon" size-7 rounded-md，PlayCircleIcon size-3.5）
+- [ ] 操作按钮组包含更多菜单 DropdownMenu
+- [ ] 更多菜单包含「立即运行」和「删除」（text-destructive）选项
+- [ ] 运行中状态显示 Loader2Icon（animate-spin）
+- [ ] 任务卡片右侧显示 Switch 开关（checked={enabled} onCheckedChange={toggleEnabled}）
+- [ ] 所有颜色使用语义令牌（text-primary, text-muted-foreground, bg-card, border-border-default 等），无硬编码颜色（text-emerald-*, text-amber-*, bg-red-* 等）
+- [ ] 圆角符合规范：卡片 rounded-lg，按钮 rounded-md，Badge rounded
+- [ ] 无 backdrop-filter、无大阴影、无渐变
+- [ ] 使用正确的 shadcn/ui 组件：Button, Switch, Badge, DropdownMenu, Dialog
+- [ ] 使用正确的 lucide-react 图标：CloudIcon, InfoIcon, PlayCircleIcon, MoreHorizontalIcon, Trash2Icon, Loader2Icon
+- [ ] 删除确认 Dialog 正确保留
+- [ ] zh-CN.ts 的 intelligence 对象已添加新文案：localTaskBanner, keepAwake, noTasksYet, noTasksHint, moreActions, deleteTask, modeWork
+- [ ] en-US.ts 已添加对应英文翻译
+- [ ] ja-JP.ts 已添加文案
+- [ ] ko-KR.ts 已添加文案
+- [ ] types.ts 的 Translations 类型已更新
+- [ ] page.tsx 已导入 AutomationConfiguredTab 组件
+- [ ] configured TabsContent 的占位内容已替换为 `<AutomationConfiguredTab />`
+- [ ] 「手动新建」和「在对话中创建」按钮保持空 onClick
+- [ ] intelligence-panel.tsx 文件未被删除
+- [ ] 未引入新依赖
+- [ ] TypeScript 类型检查通过（除已有 reducer.ts 错误外无新错误）
