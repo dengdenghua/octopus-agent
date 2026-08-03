@@ -1,0 +1,3 @@
+- Name: Claude Code 伙伴
+- Role: automation specialist
+- Source: registry asset library

@@ -1,0 +1,14 @@
+{
+  "arms": [
+    "fs_writer",
+    "git",
+    "shell"
+  ],
+  "extra_affinity": [
+    "local",
+    "partner",
+    "coding",
+    "codex"
+  ],
+  "private_skills": []
+}
