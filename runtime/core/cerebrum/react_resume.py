@@ -408,8 +408,17 @@ def _resume_or_register_turn(
                 terminated_reason = _rs.terminated_reason
                 react_task_id = resume_task_id
                 _resume_event = _rs.resume_event
-        except (AttributeError, KeyError, TypeError, ValueError):
-            _logger.debug("resume checkpoint loading failed", exc_info=True)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            # Explicitly observable downgrade: a rejected/corrupt resume
+            # checkpoint must surface as a warning (with the task id + reason)
+            # instead of silently falling back to a fresh run. The caller
+            # still proceeds with a fresh run, but operators can see that a
+            # resume was attempted and rejected.
+            _logger.warning(
+                "resume checkpoint rejected (task %s) — falling back to fresh run: %s",
+                resume_task_id,
+                type(exc).__name__,
+            )
 
     if resume_task_id is not None:
         _grant = _pause.consume_grant(str(resume_task_id))

@@ -46,7 +46,6 @@ from runtime.core.cerebrum.react_loop import (
     _long_task_budget_limits,
     _looks_like_special_tool_envelope,
     _looks_like_unfinished_work,
-    _model_post_tool_timeout_s,
     _narrow_research_iteration_limit,
     _native_tool_calls_missing_required_args,
     _normalized_tool_call_from_react_action,
@@ -61,6 +60,7 @@ from runtime.core.cerebrum.react_loop import (
     _safe_for_streamdown,
     _safe_public_update,
     _should_auto_checkpoint,
+    _stage_model_timeout_s,
     _todo_completion_before_write_guard,
     _todo_prewrite_guard,
     _unfinished_implementation_recovery_needed,
@@ -2061,7 +2061,7 @@ def test_evidence_synthesis_stall_emits_visible_handoff_without_phantom_tool_loo
 
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
-        lambda: 0.025,
+        lambda config_timeout_s=None: 0.025,
     )
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop.next_custom_model_fallback",
@@ -2176,8 +2176,7 @@ def test_silent_tool_rounds_do_not_generate_runtime_authored_updates() -> None:
     model_commentary = [
         event
         for event in events
-        if event["type"] == "commentary_delta"
-        and event.get("progress_source") == "model"
+        if event["type"] == "commentary_delta" and event.get("progress_source") == "model"
     ]
     assert model_commentary == []
 
@@ -2347,7 +2346,7 @@ def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeyp
 
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
-        lambda: 0.025,
+        lambda config_timeout_s=None: 0.025,
     )
     router = StallingThenConvergingRouter()
     intent = _intent("perform a long analysis")
@@ -2366,20 +2365,14 @@ def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeyp
     assert any(event["type"] == "commentary_delta" for event in events)
 
 
-def test_post_tool_model_round_uses_tighter_timeout(monkeypatch) -> None:
-    monkeypatch.setenv("OCTOPUS_REACT_POST_TOOL_TIMEOUT_S", "45")
-
-    assert _model_post_tool_timeout_s(120.0) == 45.0
-    assert _model_post_tool_timeout_s(20.0) == 20.0
+def test_post_tool_model_round_uses_tighter_timeout() -> None:
+    assert _stage_model_timeout_s(120.0, "post_tool") == 90.0
+    assert _stage_model_timeout_s(20.0, "post_tool") == 20.0
 
 
-def test_evidence_synthesis_has_more_time_than_failure_recovery(monkeypatch) -> None:
-    from runtime.core.cerebrum.react_loop import _model_evidence_synthesis_timeout_s
-
-    monkeypatch.setenv("OCTOPUS_REACT_EVIDENCE_SYNTHESIS_TIMEOUT_S", "60")
-
-    assert _model_evidence_synthesis_timeout_s(120.0) == 60.0
-    assert _model_evidence_synthesis_timeout_s(20.0) == 20.0
+def test_evidence_synthesis_has_more_time_than_failure_recovery() -> None:
+    assert _stage_model_timeout_s(120.0, "evidence_synthesis") == 120.0
+    assert _stage_model_timeout_s(20.0, "evidence_synthesis") == 20.0
 
 
 def test_hidden_reasoning_timeout_switches_to_backup_model(monkeypatch) -> None:
@@ -2405,7 +2398,7 @@ def test_hidden_reasoning_timeout_switches_to_backup_model(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
-        lambda: 0.025,
+        lambda config_timeout_s=None: 0.025,
     )
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop.next_custom_model_fallback",
@@ -2468,7 +2461,7 @@ def test_post_tool_timeout_backup_reuses_evidence_and_finishes_plain_answer(
 
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
-        lambda: 0.025,
+        lambda config_timeout_s=None: 0.025,
     )
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop.next_custom_model_fallback",
@@ -2565,7 +2558,7 @@ def test_silent_model_stream_is_interrupted_by_wall_clock_deadline(monkeypatch) 
 
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
-        lambda: 0.025,
+        lambda config_timeout_s=None: 0.025,
     )
     router = SilentThenConvergingRouter()
     intent = _intent("perform a long analysis")
@@ -2620,7 +2613,7 @@ def test_repeated_hidden_reasoning_timeout_is_reported_as_failure(monkeypatch) -
 
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
-        lambda: 0.0,
+        lambda config_timeout_s=None: 0.0,
     )
     intent = _intent("perform a long analysis")
     intent.user_context["mode"] = "react"
@@ -2666,6 +2659,54 @@ def test_forced_convergence_salvages_plain_report_without_protocol_label() -> No
     assert result is not None
     assert result.final_answer == plain_report
     assert any(event["type"] == "text_delta" and event["delta"] == plain_report for event in events)
+
+
+def test_forced_convergence_uses_raised_normal_mode_max_tokens() -> None:
+    """Forced convergence in normal mode must carry the raised max_tokens cap.
+
+    Guards against a regression back to the old 400-token ceiling that made
+    iteration-exhausted convergence answers too short (Codex-parity tuning).
+    """
+    router = _CapturingRouter(
+        [
+            'Thought: inspect once\nAction: echo({"text": "evidence"})',
+            "Final Answer: converged",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("echo once")
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=1))
+
+    assert result is not None
+    assert result.final_answer == "converged"
+    # The forced-convergence request is the final call; assert its cap.
+    assert router.requests[-1].max_tokens == 2000
+    assert router.requests[-1].tools == []
+    assert any(event["type"] == "react_completed" for event in events)
+
+
+def test_forced_convergence_max_tokens_honors_config() -> None:
+    """budget.convergence_max_tokens from the stack config overrides the default."""
+    from runtime.platform.config.schema import AgentConfig, BudgetConfig
+
+    router = _CapturingRouter(
+        [
+            'Thought: inspect once\nAction: echo({"text": "evidence"})',
+            "Final Answer: converged",
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    stack.config = AgentConfig(budget=BudgetConfig(convergence_max_tokens=4000))
+    intent = _intent("echo once")
+    intent.user_context["mode"] = "react"
+
+    _, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=1))
+
+    assert result is not None
+    assert result.final_answer == "converged"
+    assert router.requests[-1].max_tokens == 4000
 
 
 def test_react_loop_injects_relevant_memory_hub_records(
@@ -3611,11 +3652,7 @@ def test_code_mode_completion_guard_still_requires_verification_for_source_write
     steps = [
         ReActStep(
             iteration=1,
-            action=(
-                'todo_write({"todos": ['
-                '{"title": "Patch code", "status": "completed"}'
-                "]})"
-            ),
+            action=('todo_write({"todos": [{"title": "Patch code", "status": "completed"}]})'),
         ),
         ReActStep(iteration=2, action='write_text_file({"path": "app.py", "content": "pass"})'),
     ]
@@ -3919,6 +3956,127 @@ def test_format_skill_catalog_hides_serial_call_agent_but_keeps_parallel() -> No
 
     assert "\n  - call_agent:" not in out
     assert "\n  - call_agent_parallel:" in out
+
+
+def test_format_skill_catalog_drops_capability_conditional_tools_for_plain_turn() -> None:
+    """Capability-aware priority trimming: a plain prose turn must NOT front-load
+    browser / git / delegation tools it will never use. They stay discoverable
+    via search_capabilities / query_skill, which are always present."""
+    reg = SkillRegistry()
+    for name in (
+        "search_capabilities",
+        "browser_navigate",
+        "live_browser_state",
+        "git_status",
+        "git_diff",
+        "call_agent_parallel",
+        "bb_write",
+        "read_file",
+        "web_search",
+        "exec_shell",
+    ):
+        reg.register(
+            Skill(
+                name=name,
+                description=f"Run {name}.",
+                trusted_source=f"skill://public/{name}",
+                handler=lambda **_kwargs: {},
+            ),
+            verify_tests=False,
+        )
+
+    out = _format_skill_catalog(reg, goal="hello, 你好")
+    lines = [l for l in out.splitlines() if l.startswith("  - ")]
+    # Always-on primitives present and front-loaded.
+    assert any(l.startswith("  - read_file:") for l in lines)
+    assert any(l.startswith("  - web_search:") for l in lines)
+    assert any(l.startswith("  - exec_shell:") for l in lines)
+    assert any(l.startswith("  - search_capabilities:") for l in lines)
+    # Capability-conditional tools must NOT be front-loaded for a plain turn:
+    # every always-on primitive precedes every browser/git/delegation tool.
+    idx = {l.split(":")[0].strip().lstrip("- "): i for i, l in enumerate(lines)}
+    for always in ("read_file", "web_search", "exec_shell", "search_capabilities"):
+        for cond in (
+            "browser_navigate",
+            "live_browser_state",
+            "git_status",
+            "git_diff",
+            "call_agent_parallel",
+            "bb_write",
+        ):
+            assert idx[always] < idx[cond], (
+                f"{cond} front-loaded ahead of always-on {always} in a plain turn"
+            )
+
+
+def test_format_skill_catalog_keeps_browser_tools_for_browser_turn() -> None:
+    """A browser turn still front-loads the browser tools."""
+    reg = SkillRegistry()
+    for name in ("browser_navigate", "live_browser_state", "read_file"):
+        reg.register(
+            Skill(
+                name=name,
+                description=f"Run {name}.",
+                trusted_source=f"skill://public/{name}",
+                handler=lambda **_kwargs: {},
+            ),
+            verify_tests=False,
+        )
+
+    out = _format_skill_catalog(
+        reg,
+        goal="用浏览器打开页面点击按钮",
+        user_context={"mode": "browser"},
+    )
+    lines = [l for l in out.splitlines() if l.startswith("  - ")]
+    idx = {l.split(":")[0].strip().lstrip("- "): i for i, l in enumerate(lines)}
+    assert "\n  - browser_navigate:" in out
+    assert "\n  - live_browser_state:" in out
+    # Browser tools come before the generic read_file in a browser turn.
+    assert idx["browser_navigate"] < idx["read_file"]
+
+
+def test_format_skill_catalog_injects_capability_index_only_when_inactive() -> None:
+    """A vague goal (no activated capability lane) must surface the lightweight
+    capability index so the model still knows the lanes exist; an explicit
+    code/browser goal must NOT pay for it (its lanes are already listed)."""
+    reg = SkillRegistry()
+    for name in (
+        "read_file",
+        "web_search",
+        "browser_navigate",
+        "live_browser_state",
+        "call_agent_parallel",
+    ):
+        reg.register(
+            Skill(
+                name=name,
+                description=f"Run {name}.",
+                trusted_source=f"skill://public/{name}",
+                handler=lambda **_kwargs: {},
+            ),
+            verify_tests=False,
+        )
+
+    vague = _format_skill_catalog(reg, goal="你好，帮我整理一下思路")
+    assert "<capability-index>" in vague
+    assert "browser-ui:" in vague
+    assert "search_capabilities" in vague
+
+    code = _format_skill_catalog(reg, goal="修复前端代码bug", user_context={"mode": "code"})
+    assert "<capability-index>" not in code
+
+
+def test_capability_index_lists_lane_representative_tools() -> None:
+    from runtime.core.cerebrum.capability_router import capability_index
+
+    idx = capability_index()
+    # Each lane shows its own representative tools, not the generic trio.
+    assert "browser-ui: live_browser_state" in idx
+    assert "delegation: call_agent_parallel" in idx
+    assert "memory: recall" in idx
+    # Generic anchors should not dominate the lane lines.
+    assert "todo_write" not in idx
 
 
 def test_format_skill_catalog_uses_isolated_browser_for_code_ui_regression() -> None:
@@ -5753,7 +5911,7 @@ def test_forced_convergence_timeout_preserves_public_stage_updates(
 
     monkeypatch.setattr(
         "runtime.core.cerebrum.react_loop._model_iteration_timeout_s",
-        lambda: 0.03,
+        lambda config_timeout_s=None: 0.03,
     )
     stack = _build_stack_with_executor(
         _SlowConvergenceRouter(
@@ -7938,8 +8096,12 @@ def test_public_progress_summary_uses_natural_public_copy() -> None:
     summary = _build_progress_summary(
         [ReActStep(iteration=1, action='read_file({"path": "src/app.py"})')],
         {
-            "/Users/dangbei/Public/octopus/octopus-agent/src/app.py": {"relevance": "related"},
-            "/Users/dangbei/Public/octopus/octopus-agent/src/view.tsx": {"relevance": "editing"},
+            "/Users/alice/Public/octopus/octopus-agent/src/app.py": {  # lint: allow-user-path
+                "relevance": "related"
+            },
+            "/Users/alice/Public/octopus/octopus-agent/src/view.tsx": {  # lint: allow-user-path
+                "relevance": "editing"
+            },
         },
         "execute",
     )

@@ -407,6 +407,35 @@ _RULES: tuple[dict[str, Any], ...] = (
 )
 
 
+def capability_index() -> str:
+    """A lightweight "capability map" for the prompt, shown when no capability
+    is activated for the turn (e.g. a vague goal). It lists each capability
+    lane plus a couple of representative tools, so the model knows the lanes
+    exist even when their full tool sets are omitted from the trimmed catalog.
+    Keeping it name-only (no schemas) keeps the token cost to a few dozen.
+    """
+    lines: list[str] = []
+    # Universal anchors don't discriminate lanes — skip them so each lane
+    # shows its own representative tools instead of repeating the same
+    # todo_write/search_capabilities/use_capability trio.
+    _generic = {
+        "todo_write",
+        "search_capabilities",
+        "query_capability",
+        "use_capability",
+        "search_skills",
+        "query_skill",
+    }
+    for rule in _RULES:
+        label = str(rule["label"])
+        reps = [str(s) for s in rule["skills"] if s not in _generic][:3]
+        if not reps:
+            reps = [str(s) for s in rule["skills"][:1]]
+        if reps:
+            lines.append(f"- {label}: {', '.join(reps)}")
+    return "\n".join(lines)
+
+
 def _context_text(goal: str, user_context: dict[str, Any] | None) -> tuple[str, str]:
     user_context = user_context or {}
     pieces = [str(goal or "")]

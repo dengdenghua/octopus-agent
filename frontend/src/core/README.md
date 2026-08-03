@@ -20,20 +20,20 @@
 | `mcp/`                 | `adapters/mcp_client/`                                               | Model Context Protocol |
 | `memory/`              | `memory/`                                                            | 记忆/Journal/知识图谱  |
 | `messages/`            | `protocol/items.py`                                                  | 消息协议               |
-| `models/`              | `sensing/eyes/`                                                      | LLM 模型路由           |
+| `models/`              | `platform/models/`                                                   | LLM 模型路由           |
 | `observability/`       | `adapters/instrumentation/`                                          | 追踪+指标              |
 | `parallel-agents/`     | `execution/arms/`, `safety/chromatophores/`                          | 并行执行+Boids 仲裁    |
 | `plugins/`             | `execution/suckers/`                                                 | 技能（Skill）插件      |
 | `realtime/`            | `protocol/`                                                          | WebSocket JSON-RPC     |
-| `regeneration/`        | `safety/regeneration/`                                               | 反思+自进化            |
+| `regeneration/`        | `safety/recovery/`, `sensing/gateway/`                               | 反思+自进化 · `/api/regeneration/*` |
 | `research/`            | `research/deep_research.py`                                          | 深度研究               |
 | `settings/`            | `platform/config/`                                                   | 用户设置持久化         |
 | `skills/`              | `execution/suckers/`                                                 | 技能注册表             |
 | `tasks/`               | `core/cerebrum/`, `execution/`                                       | 任务规划+执行          |
-| `teach-repeat/`        | `safety/regeneration/`                                               | 示教→固化工作流        |
+| `teach-repeat/`        | `sensing/gateway/teach_repeat_router.py`                             | 示教→固化工作流 · `/api/teach-repeat/*` |
 | `teams/`               | `execution/arms/`                                                    | 团队协作（多 Agent）   |
 | `threads/`             | `platform/ui/`                                                       | 会话线程               |
-| `tools/`               | `execution/beak/executor.py`                                         | 工具执行               |
+| `tools/`               | `execution/tool_engine/executor.py`                                  | 工具执行               |
 | `uploads/`             | `platform/ui/uploads_router.py`                                      | 文件上传               |
 
 ## 协议层镜像

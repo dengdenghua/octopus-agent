@@ -73,6 +73,67 @@ def _public_symbols(path: Path) -> list[str]:
     return names
 
 
+def _symbol_doc(node: ast.AST) -> str:
+    """First paragraph of a class/function docstring · or empty."""
+    doc = ast.get_docstring(node)
+    if not doc:
+        return ""
+    for para in doc.split("\n\n"):
+        para = para.strip()
+        if para:
+            return re.sub(r"\s+", " ", para)[:140]
+    return ""
+
+
+def _func_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """Reconstruct a compact call signature from the AST (deterministic)."""
+    args = node.args
+    params: list[str] = [a.arg for a in args.posonlyargs]
+    params += [a.arg for a in args.args]
+    if args.vararg:
+        params.append(f"*{args.vararg.arg}")
+    if args.kwonlyargs:
+        params += [kw.arg for kw in args.kwonlyargs]
+    if args.kwarg:
+        params.append(f"**{args.kwarg.arg}")
+    prefix = "async def " if isinstance(node, ast.AsyncFunctionDef) else "def "
+    return f"{prefix}{node.name}({', '.join(params)})"
+
+
+def _class_signature(node: ast.ClassDef) -> str:
+    bases = [ast.unparse(b) for b in node.bases]
+    return f"class {node.name}" + (f"({', '.join(bases)})" if bases else "")
+
+
+def _symbols_of(path: Path) -> list[dict[str, str]]:
+    """Ordered public top-level classes + functions with compact signatures.
+
+    ''Key classes & functions'' is sourced from the AST at generation time, so
+    the wiki can never drift from the real symbol names (the historical source
+    of hand-written typos like ``Pllanner`` / ``BaseArmWorker``)."""
+    try:
+        src = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    out: list[dict[str, str]] = []
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+            out.append(
+                {"kind": "class", "sig": _class_signature(node), "doc": _symbol_doc(node)}
+            )
+        elif isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef)
+        ) and not node.name.startswith("_"):
+            out.append(
+                {"kind": "func", "sig": _func_signature(node), "doc": _symbol_doc(node)}
+            )
+    return out
+
+
 def _load_jsonc(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
     cleaned: list[str] = []
@@ -469,6 +530,29 @@ def _describe_dir(
             doc = _module_docstring(f) or "—"
             doc = doc.replace("|", "\\|")
             lines.append(f"| `{rel}` | {doc} |")
+        lines.append("")
+
+        # ── Key classes & functions · AST-derived ──────────
+        # Public top-level symbols with compact signatures, extracted from the
+        # AST at generation time. This is the authoritative "key classes &
+        # functions" reference — it cannot drift from the real symbol names.
+        lines.append("## Key classes & functions")
+        lines.append("")
+        lines.append("> AST 自动提取 · 仅列公开顶层 class / function · 签名与真实代码一致。")
+        lines.append("")
+        for f in files:
+            symbols = _symbols_of(f)
+            if not symbols:
+                continue
+            rel = f.relative_to(pkg).as_posix()
+            lines.append(f"### `{rel}`")
+            lines.append("")
+            lines.append("| Kind | Symbol | Doc |")
+            lines.append("| --- | --- | --- |")
+            for s in symbols:
+                doc = s["doc"].replace("|", "\\|")
+                lines.append(f"| {s['kind']} | `{s['sig']}` | {doc} |")
+            lines.append("")
         lines.append("")
 
     # ── Reverse-import map · "who uses this package" ───────
