@@ -9,8 +9,14 @@ import {
 } from "@/core/registry/api";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
+import { getBackendBaseURL } from "@/core/config";
 
 import { RegistryAssetCard } from "./registry-asset-card";
+
+function registryAssetUrl(value?: string | null): string | null {
+  if (!value || /^https?:\/\//i.test(value)) return null;
+  return `${getBackendBaseURL()}${value.startsWith("/") ? value : `/${value}`}`;
+}
 
 // 角色商城:从公网 registry 浏览 / 安装角色资产(role + twin-role · 数字分身岗位模板)。
 // 安装即在本地 scaffold 一个可用 agent(profile.jsonc + agent-core/SOUL.md),下次刷新
@@ -190,6 +196,8 @@ export function RegistryRolesPanel() {
                     ? t.store.typeLabelTwinRole
                     : t.store.typeLabelStore
                 }
+                iconUrl={registryAssetUrl(role.logo_url || role.icon_url)}
+                iconText={role.icon || "🎭"}
                 actionSlot={
                   <Button
                     size="sm"

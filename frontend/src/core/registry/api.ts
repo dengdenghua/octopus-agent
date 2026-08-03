@@ -12,6 +12,9 @@ export interface RegistrySkill {
   description: string;
   category?: string | null;
   tags?: string[] | null;
+  icon?: string | null;
+  logo_url?: string | null;
+  icon_url?: string | null;
   platforms?: string[] | null;
   content?: { checksum?: string | null } | null;
 }
@@ -78,6 +81,9 @@ export interface RegistryRole {
   description: string;
   category?: string | null;
   tags?: string[] | null;
+  icon?: string | null;
+  logo_url?: string | null;
+  icon_url?: string | null;
 }
 
 export interface RegistryRolesResponse {

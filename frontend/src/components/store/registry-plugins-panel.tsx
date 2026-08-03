@@ -152,7 +152,7 @@ export function RegistryPluginsPanel() {
                       : t.store.typeLabelPromptCapability
                   }
                   iconUrl={registryAssetUrl(plugin.logo_url || plugin.icon_url)}
-                  iconText={plugin.icon}
+                  iconText={plugin.icon || "🔌"}
                   actionSlot={
                     <Button
                       size="sm"

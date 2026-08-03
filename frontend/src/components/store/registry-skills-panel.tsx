@@ -11,8 +11,14 @@ import {
 import { useSkills } from "@/core/skills/hooks";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
+import { getBackendBaseURL } from "@/core/config";
 
 import { RegistryAssetCard } from "./registry-asset-card";
+
+function registryAssetUrl(value?: string | null): string | null {
+  if (!value || /^https?:\/\//i.test(value)) return null;
+  return `${getBackendBaseURL()}${value.startsWith("/") ? value : `/${value}`}`;
+}
 
 // 技能商城:从公网 registry 浏览 / 安装 prompt-skill(母体接 registry)。卡片排版
 // 对齐角色/插件商城面板(RegistryAssetCard),保持三个商城面板观感统一。
@@ -124,6 +130,8 @@ export function RegistrySkillsPanel() {
                 category={null}
                 categoryLabel={skill.category ?? undefined}
                 typeLabel={t.store.typeLabelStore}
+                iconUrl={registryAssetUrl(skill.logo_url || skill.icon_url)}
+                iconText={skill.icon || "🧩"}
                 actionSlot={
                   <Button
                     size="sm"
