@@ -956,12 +956,18 @@ class TestToolBridgeParentIdTracking:
     def test_session_meta_flips_around_tool_call(self):
         """Parent agentic loop should stash/clear
         ``_active_parent_tool_use_id`` so sub-agents can correlate."""
-        from runtime.sensing.gateway import tool_bridge
+        from runtime.sensing.gateway import _tool_bridge_loop
 
         # We validate the source directly · the integration path
         # requires a full stack, but the invariant we care about
-        # (set before handler, pop after) is structural.
-        src = tool_bridge.__file__ if hasattr(tool_bridge, "__file__") else None
+        # (set before handler, pop after) is structural. The loop
+        # body lives in the ``_tool_bridge_loop`` satellite module
+        # (``tool_bridge`` is now a re-export hub), so read that.
+        src = (
+            _tool_bridge_loop.__file__
+            if hasattr(_tool_bridge_loop, "__file__")
+            else None
+        )
         assert src is not None
         with open(src, encoding="utf-8") as f:
             text = f.read()

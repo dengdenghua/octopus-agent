@@ -124,8 +124,24 @@ class DeviceHello:
         self.screen_size: list[int] = payload.get("screen_size", [1080, 2400])
         self.capabilities: list[str] = payload.get("capabilities", [])
         self.version: str = payload.get("version", "0.0.0")
+        # iOS 专用字段（仅 platform == "ios" 时填充）
+        self.ios_version: str = payload.get("ios_version", "17.0")
+        self.udid: str = payload.get("udid", "")
+        self.wda_port: int = payload.get("wda_port", 8100)
+        self.bundle_id: str | None = payload.get("bundle_id")
 
     def to_meta(self) -> dict[str, Any]:
+        if self.platform == "ios":
+            return {
+                "platform": "ios",
+                "model": self.model,
+                "ios_version": self.ios_version,
+                "udid": self.udid,
+                "wda_url": f"http://localhost:{self.wda_port}",
+                "bundle_id": self.bundle_id,
+                "screen_size": self.screen_size,
+                "version": self.version,
+            }
         return {
             "brand": self.brand,
             "model": self.model,

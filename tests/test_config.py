@@ -28,7 +28,10 @@ class TestSchemaDefaults:
         cfg = AgentConfig()
         assert cfg.name == "octopus-agent"
         assert cfg.planner.type == "static"
-        assert cfg.budget.max_tokens == 50_000
+        assert cfg.budget.max_tokens == 100_000
+        assert cfg.budget.max_usd == 1.00
+        assert cfg.budget.model_iteration_timeout_s == 120.0
+        assert cfg.budget.convergence_max_tokens == 2000
         assert cfg.immunity.unknown_policy == "quarantine"
         assert cfg.local_auth.allow_any_username is False
         assert cfg.intel_sources == []

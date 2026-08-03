@@ -1,0 +1,450 @@
+"""System-prompt guidance sections for the PHASE 3 assembly.
+
+Leaf of the prompt-assembly split. Two helpers build the middle of the system
+prompt: core guidance (workspace rules, project profile, code-mode steering,
+goal-mode, long-task, memory/templates, user preferences, reporting cadence,
+tool-choice policy) and delegation guidance (workflow preset, mode contract,
+codex composer, output style, thinking, personal mode, agent auto-delegation,
+swarm, research). Never imports ``react_loop``.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from runtime.core.cerebrum._react_prompt_assembly_state import _AssemblyState
+from runtime.core.cerebrum.react_context import (
+    _build_code_agent_mode_prompt,
+    _build_personal_agent_mode_prompt,
+    _build_project_profile_prompt,
+    _build_project_signals_prompt,
+    _build_workflow_preset_prompt,
+    _load_project_rules,
+)
+
+_logger = logging.getLogger(__name__)
+
+
+def _assemble_core_guidance(state: _AssemblyState) -> None:
+    """Approval gate + workspace / project / code-mode / cadence sections."""
+    if state.approval_provider is not None:
+        # Approval-gate etiquette only means anything when a gate exists to
+        # be tripped. Keeping it out of REACT_SYSTEM_PROMPT_BASE stops every
+        # plain-chat turn — which can never see an approval request — from
+        # paying for it (the base prompt is charged on literally every turn;
+        # see tests/test_system_prompt_size.py).
+        state.system_parts.append(
+            "\n- 如果任务明确要求通过**内置审批门**演示批准/拒绝,应发起一次对应高风险"
+            "工具调用,让系统生成真实审批请求。收到拒绝后不得重试危险动作或再次询问同一"
+            "确认;应把 `approval_denied` 等事实准确写入安全计划,完成仍可安全完成的收尾"
+        )
+    if isinstance(state.effective_wp, str) and state.effective_wp.strip():
+        _effective_wp_text = state.effective_wp.strip()
+        _workspace_label = (
+            "个人隔离工作目录" if not (isinstance(state.wp, str) and state.wp.strip()) else "当前工作目录"
+        )
+        state.system_parts.append(
+            f"\n{_workspace_label}: {_effective_wp_text}\n"
+            "所有文件操作（list_cwd / read_file / write 等）的相对路径都基于此目录。"
+            "分析或编程时请从这个目录开始,不要使用其他目录。"
+        )
+        if isinstance(state.wp, str) and state.wp.strip():
+            _rules = _load_project_rules(_effective_wp_text)
+            if _rules:
+                state.system_parts.append("\n<project-rules>\n" + _rules + "\n</project-rules>")
+            _profile = _build_project_profile_prompt(
+                _effective_wp_text,
+                include_diagnostics=state.is_code_mode,
+            )
+            if _profile:
+                state.system_parts.append("\n<project-profile>\n" + _profile + "\n</project-profile>")
+        if state.is_code_mode:
+            state.system_parts.append(
+                "\n<code-mode>\n"
+                "**编程三阶段** (强制):\n"
+                "1. **理解** (1-3 轮): `list_cwd` + `read_file` 摸清目录与关键文件;"
+                "禁止写操作。Discovery 用 `list_cwd`/`read_file`/`grep_text`/`glob_files`,"
+                "不要用 `exec_shell` 跑 find/ls/cat/grep。\n"
+                "2. **执行** (2-N 轮): `todo_write` 列计划 → 小步改 (`edit_file`/`multi_edit_file`/"
+                "`propose_patch`) → 相关、低风险文件可成组修改。完成一个可验证里程碑后"
+                "批量更新 todo；不要在每个微小编辑之间重复清单往返。"
+                "每个连贯改动批次完成后跑相应 lint/typecheck/test。\n"
+                "3. **验证** (1-2 轮): 项目自带 lint/typecheck/test 跑过再 Final Answer。"
+                "失败回阶段 2 修;不要 fake 验证通过。\n"
+                "**第一轮 Thought 必须声明阶段**(理解/执行/验证)。\n"
+                "**收工硬约束**: 仍有 pending/in_progress todo、改动未验证、"
+                "或工具/权限/登录阻塞时, 不能给完成式 Final Answer;"
+                "用 Final Answer 描述阻塞 + 列出未完成 todo + 已做过的验证。\n"
+                "</code-mode>"
+            )
+            state.system_parts.append(_build_code_agent_mode_prompt(state.agent_mode_value))
+            _workflow_preset_prompt = _build_workflow_preset_prompt(state.workflow_preset_value)
+            if _workflow_preset_prompt:
+                state.system_parts.append(_workflow_preset_prompt)
+            _signals_prompt = _build_project_signals_prompt(state.project_signals)
+            if _signals_prompt:
+                state.system_parts.append(_signals_prompt)
+            if state.browser_regression_enabled:
+                _preview_line = (
+                    f"优先测试预览地址: {state.browser_regression_preview_url}\n"
+                    if isinstance(state.browser_regression_preview_url, str)
+                    and state.browser_regression_preview_url.strip()
+                    else "如果当前任务产出了可预览页面，请先启动或定位预览地址。\n"
+                )
+                state.system_parts.append(
+                    "\n<browser-regression-guidance>\n"
+                    "用户已在代码模式开启 UI 回归。完成代码修改和静态验证后，如果改动涉及前端、HTML、样式、交互或可视输出，"
+                    "必须补充浏览器回归检查。\n"
+                    + _preview_line
+                    + "这是代码模式的隔离预览，不依赖 Octopus Electron 桌面桥。对该 localhost/127.0.0.1 地址，"
+                    "直接使用 browser_navigate，再用 browser_state/browser_type/browser_click/browser_extract 检查；"
+                    "不要自建第二个 HTTP 服务；只使用本段列出的隔离浏览器工具完成验证。\n"
+                    + "浏览器回归应模拟真人操作：使用可见鼠标移动、点击、输入和滚动路径，检查关键交互、布局、控制台错误和明显视觉回归。"
+                    "发现问题时回到执行阶段修复，再重新验证。\n"
+                    "如果没有可测试 UI、缺少登录/权限或预览无法启动，请在 Final Answer 里明确说明阻塞原因和已完成的静态验证。\n"
+                    "</browser-regression-guidance>"
+                )
+        if state.is_goal_mode:
+            state.system_parts.append(
+                "\n<goal-mode-guidance>\n"
+                "当前为 Codex 风格 Goal 模式: Goal 是跨轮次持续存在的 objective, "
+                "不是把单次 ReAct 循环拉长到无限。\n"
+                "本轮仍受 max_iterations 和预算约束; 到达边界时要留下可恢复状态, "
+                "不要为了凑完成而扩大范围或重定义成功。\n"
+                "开始执行前把 objective 拆成可审计 todo; 每次改动或验证后更新 todo。\n"
+                "完成前必须做 completion audit: 从原始 objective 推导每个显式要求、"
+                "交付物、命令、测试、验收条件, 并逐项用当前证据验证。\n"
+                "只有证据证明全部要求满足、所有 todo completed、必要验证完成时, "
+                "才能给完成式 Final Answer。\n"
+                "如果证据不足或还有工作, Final Answer 只能报告进度、剩余项、"
+                "下一个具体动作或阻塞原因; 不要声明完成。\n"
+                "同一阻塞连续多轮确认前不要把目标视为 blocked; 可以请求用户输入, "
+                "但要先保留恢复上下文。\n"
+                "</goal-mode-guidance>"
+            )
+        # Long-task / large-context guidance — only relevant when the turn is
+        # going to be more than a couple of rounds. Skipping short / chat turns
+        # keeps the system prompt small for them and improves prompt cache hits
+        # across turn types.
+        if state.todo_protocol_required or state.is_research_mode or state.is_swarm_mode or state.is_goal_mode:
+            state.system_parts.append(
+                "\n<long-task>\n"
+                "**深度**: 长任务可以显式配置更高 max_iter; 当前轮始终受传入的 "
+                "max_iterations 约束。跑到第 10/20 轮会有 system 检查,"
+                "实诚回答(还在推进/已经完成/工具连续失败); 答完了就停, 别凑轮数。\n"
+                "**大项目**: 文件 >20 个时不要试图全读 — 维护"
+                "「工作集」(直接相关 3-8 个文件), 已读过的不要在后续 Thought 复述。"
+                "context 接近上限时优先保留: 当前正在改的文件 > 任务目标 > 历史推理。\n"
+                "**进度**: 第一轮 todo_write 列完整计划 → 每个可验证里程碑批量更新 →"
+                "Final Answer 前再同步一次准确状态 →"
+                "完成里程碑在 Thought 给一句话总结。\n"
+                "</long-task>"
+            )
+
+        # Memory + skill-template playbook — only inject when the user's
+        # request looks like one we've seen before, otherwise the model is
+        # just told about features it doesn't need this turn.
+        if state.todo_protocol_required:
+            state.system_parts.append(
+                "\n<memory-and-templates>\n"
+                "**模板复用** (低成本高回报): 看到「以后也按这格式 / 做成 X 那样」→"
+                "先 `list_learned_skills()`(0 token), 命中就 `apply_skill(name, request)`,"
+                "没命中再考虑 `learn_skill_from_text(name, sample, golden_samples=[...])`"
+                "(framework 会用 golden_samples 校验模板才落盘)。\n"
+                "**记忆四档**(按需,不要每次都用):\n"
+                "  - `recall` — 用户提到旧上下文 → 第一轮就查\n"
+                "  - `remember` — 项目级事实(项目名 / deadline / API key 路径)\n"
+                "  - `note_user` — 用户偏好(语言 / 详略 / 技术水平)\n"
+                "  - `update_soul` — 你自己的持久教训(不是一次性观察)\n"
+                "</memory-and-templates>"
+            )
+
+        # User long-term preferences — persistent settings the user has
+        # asked us to honor across turns (e.g. "always 4-space indent",
+        # "no Co-Authored-By footer"). Injected before reporting-cadence
+        # so cadence/tool guidance can't shadow user-stated defaults.
+        try:
+            from runtime.memory.users.user_preferences import (
+                _load_user_preferences as _load_prefs,
+            )
+
+            _prefs = _load_prefs(state.user_context.get("actor") or state.metadata.get("actor"))
+        except ImportError:
+            _logger.debug("user_preferences module not available", exc_info=True)
+            _prefs = {}
+        except Exception:  # noqa: BLE001 - never break turn startup
+            _logger.debug("user_preferences load failed", exc_info=True)
+            _prefs = {}
+        if _prefs:
+            _pref_lines = [f"- {k}: {v}" for k, v in sorted(_prefs.items())]
+            state.system_parts.append(
+                "\n<user-preferences>\n"
+                "用户的长期偏好（影响默认行为；用户在本轮另有要求时以本轮为准）:\n"
+                + "\n".join(_pref_lines)
+                + "\n</user-preferences>"
+            )
+
+        # Cadence + final-answer shape — applies to every mode that has
+        # visible tool work (octopus optimisation §27 + §30). Skipped for pure
+        # chat where there's no work to report on.
+        if state.todo_protocol_required:
+            state.system_parts.append(
+                "\n<reporting-cadence>\n"
+                "**进度节奏**(避免闷头干 N 步再一次性 dump):\n"
+                "- 每改 2-3 个文件、或每完成一个清单项, 在下一轮 Thought 里给\n"
+                "  一句话进度("
+                "本轮做了 X / 接下来 Y / 若 Z 不对请打断"
+                ")\n"
+                "- 不要积攒 5+ 步成果再统一汇报 — 用户看不到你做了什么就\n"
+                "  无法 mid-course 纠偏\n"
+                "- 单次 Thought 不超过 6 行;真要展开就拆成多轮\n"
+                "</reporting-cadence>\n"
+                "<final-answer-shape>\n"
+                "**Final Answer 结构**(任务完成时;请求协助时另议):\n"
+                "- 第 1 行: 一句话总结(做了什么 / 状态如何)\n"
+                "- 改动: 列出修改/新建的文件路径(逐行,绝对或工作目录相对)\n"
+                "- 验证: 跑过的命令 + 关键结果("
+                "如 `pytest tests/foo.py -q` → 4 passed"
+                ")\n"
+                "- 未做(可选): 故意跳过的、需要后续做的\n"
+                "调研/报告类任务输出报告本身, 但仍在结尾附改动 + 来源说明。\n"
+                "</final-answer-shape>\n"
+                "<tool-choice-policy>\n"
+                "**工具选择硬约束**(优先级 / 危险性 / cwd):\n"
+                "- 文件发现: 用 `list_cwd` / `glob_files`(若可用); **不要**\n"
+                '  `exec_shell("find ...")` / `exec_shell("ls ...")`\n'
+                "- 内容搜索: 用 `code_search` / `grep`(项目内置, 跨平台);\n"
+                '  **不要** `exec_shell("grep -r ...")`\n'
+                "- 文件读取: 用 `read_file` 带 `offset`/`limit`(超 2000 行\n"
+                '  必带);**不要** `exec_shell("cat"/"head"/"tail")`\n'
+                "- exec_shell 限定用途: 编译 / 测试 / 构建 / git / 跑特定\n"
+                "  CLI(那种没专用 skill 的 ad-hoc 命令)\n"
+                "- 长运行命令(dev server / watcher / docker compose / 长测试):\n"
+                "  用 `exec_shell(run_in_background=True)` 或 `background_exec`, 然后用\n"
+                "  `read_shell_output(task_id)` / `read_background_output(task_id)` 轮询;\n"
+                "  结束时用 `kill_shell(task_id)` / `kill_background_exec(task_id)`\n"
+                "- **危险命令预审**: 调 exec_shell 前在 Thought 里分类:\n"
+                "  * destructive(`rm -rf` / drop database / `git push --force`\n"
+                "    main / chmod 777 / sudo / docker rm -f / kubectl delete):\n"
+                "    描述影响范围, 然后 Final Answer 请求用户确认;**不要**\n"
+                "    赌默认 approval 会兜住\n"
+                "  * mutating(普通 git commit / npm install / pytest -x):\n"
+                "    继续\n"
+                "  * read-only(`ls` / `git status` / `cat README`): 安静继续\n"
+                "- **cwd 习惯**: 多个 exec_shell 调用之间 cwd 可能被工具重置;\n"
+                "  显式用 `exec_shell(cwd=...)` 参数, **不要**在 command 字\n"
+                "  符串里 `cd X && do Y`(`cd` 失败是 silent 的)\n"
+                "- **Edit 失败时**: old_string 不唯一就 (a) 加上下文使其唯一,\n"
+                "  或 (b) `replace_all=True`;不要把同一调用换个壳重发\n"
+                "- **并行 tool_use**: 同一轮里 emit 的多个 tool_use blocks,\n"
+                "  如果它们彼此**没有数据依赖**(典型: 多个 `read_file` 读\n"
+                "  不同文件 / `Read(a) + Glob(...) + Bash(git status)`),\n"
+                "  尽量在一个 assistant message 里一次性 emit,\n"
+                "  框架会并发执行 → 单 turn 速度大幅加快。\n"
+                "  反例: 第一个 `read_file` 的结果决定第二个 `edit_file` 的\n"
+                "  参数 → 必须串行(分两轮 emit),不要塞一起。\n"
+                "</tool-choice-policy>"
+            )
+
+
+def _assemble_delegation_guidance(state: _AssemblyState) -> None:
+    """Workflow preset / mode contract / codex / output-style / thinking /
+    personal-mode / agent-delegation / swarm / research sections."""
+    if not state.is_code_mode:
+        _workflow_preset_prompt = _build_workflow_preset_prompt(state.workflow_preset_value)
+        if _workflow_preset_prompt:
+            state.system_parts.append(_workflow_preset_prompt)
+    if state.mode_contract_value:
+        state.system_parts.append(
+            "\n<mode-contract>\n" + state.mode_contract_value[:4000] + "\n</mode-contract>"
+        )
+    if state.is_codex_composer_plan_or_spec:
+        state.system_parts.append(
+            "\n<codex-composer-mode>\n"
+            "当前为 Codex 风格 "
+            + (
+                "Spec"
+                if state.codex_mode_value == "spec" or state.completion_policy_value == "spec"
+                else "Plan"
+            )
+            + " 模式。默认产出计划/规格和验收口径,不要主动进入实现或写文件; "
+            "可以读取必要上下文来提高计划/规格质量。不要把计划模式解释为"
+            "先计划再自动执行；若用户明确要求继续执行,再按普通执行模式推进。"
+            "若同时存在 code-mode 指令,本模式覆盖其中"
+            "执行/写入阶段要求,仅保留代码理解、上下文读取和验收设计要求。\n"
+            "</codex-composer-mode>"
+        )
+    try:
+        from runtime.core.cerebrum.output_styles import render_output_style
+
+        _output_style_value = (
+            state.user_context.get("output_style") or state.metadata.get("output_style") or ""
+        )
+        _output_style_block = render_output_style(_output_style_value)
+        if _output_style_block:
+            # Volatile: user can switch per turn; would break cache prefix.
+            state.volatile_parts.append(_output_style_block)
+    except (ImportError, AttributeError):
+        _logger.debug("output_styles overlay not available", exc_info=True)
+    try:
+        from runtime.core.cerebrum.thinking_mode import render_thinking_guidance
+
+        _thinking_guidance = render_thinking_guidance(state.user_context.get("thinking_plan"))
+    except (ImportError, AttributeError):
+        _logger.debug("thinking_mode guidance not available", exc_info=True)
+        _thinking_guidance = ""
+    if _thinking_guidance:
+        # Volatile: changes whenever the model picks a new thinking plan.
+        state.volatile_parts.append(_thinking_guidance)
+    state.system_parts.append(
+        "\n<user-facing-process-language>\n"
+        "Internal tool names are execution details, not product language. "
+        "Use names like `call_agent_parallel`, `web_search`, `fetch_url`, "
+        "`todo_write`, `bb_keys`, or `query_skill` only inside tool actions "
+        "and private reasoning. In Final Answer and any user-facing prose, "
+        "describe the work in human terms instead: call a teammate, search "
+        "sources, read webpages, make a plan, or check team context. Do not "
+        "show raw tool names unless the user explicitly asks for technical "
+        "debug details.\n"
+        "</user-facing-process-language>"
+    )
+    # Personal-space work mode (no bound project dir). The code/project
+    # agent-mode steering above only runs under a workspace_path; this is its
+    # personal-space counterpart and applies to non-code turns only.
+    if not state.is_code_mode:
+        _personal_mode_prompt = _build_personal_agent_mode_prompt(state.personal_mode_value)
+        if _personal_mode_prompt:
+            state.system_parts.append("\n" + _personal_mode_prompt)
+    if not state.is_swarm_mode and state.mode_value not in {"chat", "flash", "inspiration"}:
+        state.system_parts.append(
+            "\n<agent-auto-delegation-guidance>\n"
+            "Current mode is single-agent Agent/ReAct. You remain the lead, "
+            "but you may use real subagents when parallelism will materially "
+            "improve speed or quality.\n"
+            "\n"
+            "Use `call_agent_parallel` proactively when the task has 2-4 "
+            "independent work lanes: e.g. market research lanes, competitor "
+            "comparison lanes, frontend/backend/test investigation lanes, "
+            "or reproduce/read-code/review lanes. This tool spawns real "
+            "specialist turns concurrently; it is not a display shortcut.\n"
+            "\n"
+            "Decision policy:\n"
+            "- Simple or sequential work: do it yourself with atomic tools.\n"
+            "- Large ambiguous work: first clarify if needed, then "
+            "todo_write a visible plan before fan-out.\n"
+            "- If using subagents, make exactly one `call_agent_parallel` "
+            "batch for the current turn. Pick roles from the actual lanes "
+            "(researcher, explorer, debugger, reviewer, architect, "
+            "security-review). Do not call serial `call_agent`.\n"
+            "- Ask workers for compact, evidence-backed findings and any "
+            "files touched. After the observation returns, synthesize the "
+            "outputs yourself, resolve conflicts, verify critical claims, "
+            "and produce one integrated final result.\n"
+            "- Never finish with raw worker logs or a partial plan. If "
+            "workers fail partially, use the surviving outputs and state "
+            "the residual risk.\n"
+            "</agent-auto-delegation-guidance>"
+        )
+    if state.is_swarm_mode:
+        state.system_parts.append(
+            "\n<swarm-orchestration-guidance>\n"
+            "Current mode is SWARM. Treat swarm as an adaptive long-task "
+            "orchestration mode, not a fixed template.\n"
+            "\n"
+            "Decision policy:\n"
+            "- If the user's request is simple or can be completed by the "
+            "lead in one short pass, do NOT spawn subagents; answer or use "
+            "the smallest necessary tool path.\n"
+            "- If the task is large, long-running, research-heavy, or has "
+            "independent work lanes, create/update a visible todo_write plan "
+            "first. Use stage-like item names such as task analysis, parallel "
+            "research/execution round N, synthesis, quality review, and "
+            "delivery only when those stages are actually needed.\n"
+            "- For durable research/report/build tasks, write or update "
+            "`plan.md` before substantial execution when a workspace/file "
+            "output is available.\n"
+            "- Choose skills dynamically. For research/report work, prefer "
+            "`deep-research-swarm` -> `report-writing` -> `docx` when the "
+            "user explicitly asked for a file deliverable. When the user "
+            "did not specify a format, default to a markdown report "
+            "rendered directly in the chat reply (the UI renders it "
+            "natively) and skip the `.docx` export. If a needed skill is "
+            "missing, say which capability is missing and use the best "
+            "available real tools.\n"
+            "- Use `call_agent_parallel` only for independent subtasks. Pick "
+            "the number and roles from the task itself; do not force a fixed "
+            "headcount. Good roles include researcher, explorer, architect, "
+            "reviewer, debugger, and security-review.\n"
+            "- Ask parallel workers to write compact findings to blackboard "
+            "keys with `bb_write`; after the batch, read them with `bb_keys` "
+            "and `bb_read`, synthesize conflicts, and cross-check important "
+            "claims before final delivery.\n"
+            "- Never finish with only raw worker logs, a partial plan, or "
+            "'still working' prose. Final Answer must include the integrated "
+            "result and any created file paths. If blocked, update todo_write "
+            "and ask for the specific missing input.\n"
+            "</swarm-orchestration-guidance>"
+        )
+    if state.is_research_mode:
+        if state.work_mode.scope == "personal":
+            state.system_parts.append(
+                "\n<personal-research-scope>\n"
+                "This is a personal-space research turn, not a bound project. The "
+                "isolated workspace contains only artifacts for this task; it is not "
+                "evidence that files, reports, or directories mentioned in memory "
+                "exist locally. Treat memory as a lead to verify, never as a file "
+                "inventory. For market, industry, or competitor research, start with "
+                "web evidence unless the user explicitly supplies a local file. Before "
+                "reading any local path, confirm it exists with list_cwd or an observed "
+                "search. If a path is outside the isolated workspace or is absent, do "
+                "not repeatedly climb parent directories or retry variants of that path; "
+                "switch to web evidence, use available facts, or state the exact missing "
+                "input.\n"
+                "</personal-research-scope>"
+            )
+        # Mode-aware skill chain: ``deep-research-swarm`` is reserved for swam
+        # mode (TeamRunner with native tool_use). In single-agent / Agent mode
+        # (the common case here when ``_is_research_mode`` is true but
+        # ``_is_swarm_mode`` is false) we point the model at ``deep-research``
+        # instead — the single-agent counterpart that returns the 7-phase
+        # instruction document the parent ReAct loop drives via plain
+        # ``web_search`` / ``fetch_url``.
+        _research_skill = "deep-research-swarm" if state.is_swarm_mode else "deep-research"
+        state.system_parts.append(
+            "\n<research-skill-chain-guidance>\n"
+            "This turn is a research/report task. Drive the work through "
+            "the visible research-skill chain when the corresponding "
+            "skills are available, otherwise fall back to atomic tools.\n"
+            "Suggested workflow (skip steps the user did not ask for):\n"
+            "1. Create or update a concrete `plan.md` for the task with "
+            "`write_text_file` before substantial research begins.\n"
+            f"2. Call `{_research_skill}` to load the research workflow, "
+            "then follow it for evidence collection and cross-checking.\n"
+            "3. **Default deliverable is the report rendered directly in "
+            "the chat reply (markdown).** The chat UI renders headings, "
+            "tables, and citations natively, so a long-form markdown "
+            "answer is already the final product — do NOT auto-export to "
+            ".docx / .pdf / any other file format unless the user "
+            "explicitly asked for that format.\n"
+            "4. Only when the user asks for a file deliverable: call "
+            "`report-writing` and/or `docx` (or the appropriate format "
+            "skill) to produce the file, then include the file path in "
+            "the final answer alongside the chat-rendered summary.\n"
+            "5. Do not finish with only 'still searching' / 'still "
+            "writing' prose — the final answer must contain the actual "
+            "report text.\n"
+            "If one of the optional skills is not visible, state which "
+            "capability is missing, then fall back to the best available "
+            "tools without pretending the skill chain ran.\n"
+            "</research-skill-chain-guidance>"
+        )
+        state.system_parts.append(
+            "\n<research-final-guidance>\n"
+            "当前任务具有调研/研究报告性质。工具搜索与浏览只是证据收集阶段，不能把过程模板当作最终回答。\n"
+            "在给 Final Answer 前，必须输出用户可直接阅读的完整报告正文；"
+            "报告至少包含：执行摘要、关键结论、分维度分析、对比表或清单、"
+            "风险/不确定性、建议、来源说明。\n"
+            "如果搜索轮次或预算接近上限，不要停在「正在整理/继续搜索」；"
+            "应基于已有证据生成阶段性完整报告，并清楚标注仍需补证的点。\n"
+            "</research-final-guidance>"
+        )

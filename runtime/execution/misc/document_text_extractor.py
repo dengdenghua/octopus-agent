@@ -297,7 +297,7 @@ def _extract_pdf(data: bytes) -> str | None:
                 if (text := (page.extract_text() or "").strip())
             ]
             return "\n\n".join(pages) or None
-    except Exception:
+    except Exception:  # noqa: BLE001 — malformed/unsupported PDFs fall through to pypdf
         pass
     try:
         import pypdf  # type: ignore[import-not-found]

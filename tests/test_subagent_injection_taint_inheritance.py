@@ -116,3 +116,66 @@ def test_parallel_runner_submit_no_taint_leaves_context_clean(monkeypatch):
     runner.submit(task)
 
     assert "_inherited_injection_taint" not in task.context
+
+
+def test_parallel_runner_executes_task_with_wired_stack(monkeypatch):
+    """Regression: ``_run_task`` used to import a non-existent ``get_app_state()``
+    helper, so every task failed on ImportError. The runner must drive the
+    react loop against the stack wired into it (via ``create_parallel_task_router
+    (stack=...)``) instead."""
+    import time
+
+    import runtime
+    import runtime.core.cerebrum.react_loop
+    from runtime.execution.misc.parallel_runner import (
+        ParallelTask,
+        ParallelTaskRunner,
+        TaskStatus,
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_run_react_loop(stack, intent, agent, **kwargs):
+        captured["stack"] = stack
+        captured["intent"] = intent
+        return "finished"
+
+    monkeypatch.setattr(runtime.core.cerebrum.react_loop, "run_react_loop", _fake_run_react_loop)
+
+    fake_stack = object()
+    runner = ParallelTaskRunner(max_workers=1, stack=fake_stack)
+    task = ParallelTask(prompt="hello", workspace_path="/tmp/x")
+    runner.submit(task)
+
+    # Wait for the pool worker to finish the task.
+    deadline = time.monotonic() + 5
+    while task.status in (TaskStatus.QUEUED, TaskStatus.RUNNING) and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+    assert captured.get("stack") is fake_stack
+    assert task.status == TaskStatus.COMPLETED
+    assert task.result == "finished"
+    assert task.error == ""
+
+
+def test_parallel_runner_raises_without_wired_stack(monkeypatch):
+    """Without a stack, ``_run_task`` must fail loudly rather than silently
+    importing a missing helper."""
+    import time
+
+    from runtime.execution.misc.parallel_runner import (
+        ParallelTask,
+        ParallelTaskRunner,
+        TaskStatus,
+    )
+
+    runner = ParallelTaskRunner(max_workers=1, stack=None)
+    task = ParallelTask(prompt="hello", workspace_path="/tmp/x")
+    runner.submit(task)
+
+    deadline = time.monotonic() + 5
+    while task.status in (TaskStatus.QUEUED, TaskStatus.RUNNING) and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+    assert task.status == TaskStatus.FAILED
+    assert "no execution stack" in task.error

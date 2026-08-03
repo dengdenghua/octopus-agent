@@ -87,6 +87,15 @@ def add_fact(
     scope: str = "global",
     agent_id: str | None = None,
     project: str | None = None,
+    owner: str = "local-user",
+    visibility: str = "private",
+    team_id: str | None = None,
+    allowed_users: list[str] | None = None,
+    allowed_roles: list[str] | None = None,
+    allowed_agents: list[str] | None = None,
+    provenance: dict[str, Any] | None = None,
+    title: str | None = None,
+    tags: list[str] | None = None,
 ) -> dict[str, Any] | None:
     if not read_config().get("enabled", True):
         return None
@@ -118,6 +127,21 @@ def add_fact(
         "scope": scope,
         "agent_id": clean_agent,
         "project": clean_project,
+        "asset_type": "atom",
+        "layer": "L1",
+        "title": _clean_label(title or content[:MAX_LABEL_CHARS], fallback="Memory"),
+        "tags": _clean_string_list(tags or [category]),
+        "owner": _clean_scope_value(owner) or "local-user",
+        "visibility": _normalize_choice(
+            visibility, {"private", "team", "restricted", "agent"}, "private"
+        ),
+        "status": "active",
+        "asset_version": 1,
+        "team_id": _clean_scope_value(team_id),
+        "allowed_users": _clean_string_list(allowed_users),
+        "allowed_roles": _clean_string_list(allowed_roles),
+        "allowed_agents": _clean_string_list(allowed_agents),
+        "provenance": _normalize_provenance(provenance, fallback_source=source),
     }
     memory["facts"] = [*facts, fact][-max_facts:]
     write_memory(memory)
@@ -347,6 +371,9 @@ def normalize_memory(raw: Any) -> dict[str, Any]:
                 "category": _clean_label(item.get("category") or "context", fallback="context"),
                 "confidence": max(0.0, min(1.0, confidence)),
                 "createdAt": str(item.get("createdAt") or last_updated),
+                "updatedAt": str(
+                    item.get("updatedAt") or item.get("createdAt") or last_updated
+                ),
                 "source": _clean_label(item.get("source") or "manual", fallback="manual"),
                 "scope": _normalize_scope(
                     item.get("scope") or "global",
@@ -355,6 +382,50 @@ def normalize_memory(raw: Any) -> dict[str, Any]:
                 ),
                 "agent_id": _clean_scope_value(item.get("agent_id")),
                 "project": _clean_scope_value(item.get("project")),
+                "asset_type": _normalize_choice(
+                    item.get("asset_type"),
+                    {
+                        "conversation",
+                        "atom",
+                        "scenario",
+                        "persona",
+                        "skill",
+                        "wiki",
+                        "code_graph",
+                        "media",
+                    },
+                    "atom",
+                ),
+                "layer": _normalize_choice(
+                    str(item.get("layer") or "L1").upper(),
+                    {"L0", "L1", "L2", "L3"},
+                    "L1",
+                ),
+                "title": _clean_label(
+                    item.get("title") or content[:MAX_LABEL_CHARS],
+                    fallback="Memory",
+                ),
+                "tags": _clean_string_list(item.get("tags") or [item.get("category")]),
+                "owner": _clean_scope_value(item.get("owner")) or "local-user",
+                "visibility": _normalize_choice(
+                    item.get("visibility"),
+                    {"private", "team", "restricted", "agent"},
+                    "private",
+                ),
+                "status": _normalize_choice(
+                    item.get("status"),
+                    {"draft", "active", "archived", "rejected"},
+                    "active",
+                ),
+                "asset_version": max(1, _coerce_int(item.get("asset_version"), 1)),
+                "team_id": _clean_scope_value(item.get("team_id")),
+                "allowed_users": _clean_string_list(item.get("allowed_users")),
+                "allowed_roles": _clean_string_list(item.get("allowed_roles")),
+                "allowed_agents": _clean_string_list(item.get("allowed_agents")),
+                "provenance": _normalize_provenance(
+                    item.get("provenance"),
+                    fallback_source=item.get("source") or "manual",
+                ),
             }
         )
     base.update(
@@ -407,6 +478,35 @@ def _clean_section_summary(value: Any) -> str:
 def _clean_label(value: Any, *, fallback: str) -> str:
     text = " ".join(str(value or "").split()).strip()
     return text[:MAX_LABEL_CHARS].rstrip() or fallback
+
+
+def _clean_string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        value = value.split(",")
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    cleaned = [_clean_scope_value(item) for item in value]
+    return list(dict.fromkeys(item for item in cleaned if item))
+
+
+def _normalize_choice(value: Any, allowed: set[str], fallback: str) -> str:
+    clean = _clean_label(value, fallback=fallback)
+    return clean if clean in allowed else fallback
+
+
+def _normalize_provenance(value: Any, *, fallback_source: Any) -> dict[str, Any]:
+    raw = value if isinstance(value, dict) else {}
+    return {
+        "source_type": _clean_label(
+            raw.get("source_type") or fallback_source,
+            fallback="manual",
+        ),
+        "source_id": _clean_scope_value(raw.get("source_id")),
+        "source_uri": str(raw.get("source_uri") or "").strip()[:500],
+        "captured_at": str(raw.get("captured_at") or "").strip()[:80],
+        "parent_ids": _clean_string_list(raw.get("parent_ids")),
+        "evidence": _clean_section_summary(raw.get("evidence")),
+    }
 
 
 def _coerce_int(value: Any, default: int) -> int:

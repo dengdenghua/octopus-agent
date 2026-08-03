@@ -69,10 +69,15 @@ class ParallelTask:
 
 
 class ParallelTaskRunner:
-    def __init__(self, max_workers: int = 3):
+    def __init__(self, max_workers: int = 3, stack: Any = None):
         self._tasks: dict[str, ParallelTask] = {}
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="parallel-task")
         self._cancelled: set[str] = set()
+        # The wired execution stack (``StackProtocol``) this runner drives
+        # ``run_react_loop`` against. Previously ``_run_task`` reached for a
+        # ``get_app_state()`` helper that never existed, so every task failed
+        # on ImportError. Hold the stack here instead.
+        self._stack = stack
 
     def submit(self, task: ParallelTask) -> ParallelTask:
         # Carry the spawning parent's prompt-injection taint into the
@@ -125,11 +130,10 @@ class ParallelTaskRunner:
         try:
             from runtime.core.cerebrum.react_loop import run_react_loop
             from runtime.platform.models import ParsedIntent
-            from runtime.platform.models.pipeline import IntentType
 
             intent = ParsedIntent(
                 raw=task.prompt,
-                intent_type=IntentType.TASK,
+                intent_type="task",
                 normalized_goal=task.prompt,
                 user_context={
                     "workspace_path": task.workspace_path,
@@ -139,11 +143,9 @@ class ParallelTaskRunner:
                 },
             )
 
-            from runtime.platform.ui.app import get_app_state
-
-            state = get_app_state()
+            state = self._stack
             if not state:
-                raise RuntimeError("app state not available")
+                raise RuntimeError("parallel runner has no execution stack wired in")
 
             result = run_react_loop(
                 stack=state,
@@ -172,8 +174,15 @@ def get_runner() -> ParallelTaskRunner:
     return _runner
 
 
-def create_parallel_task_router() -> Any:
+def create_parallel_task_router(stack: Any = None) -> Any:
     require_fastapi(__name__)
+
+    # Wire the execution stack into the runner so ``_run_task`` can drive
+    # ``run_react_loop``. Without this the runner has no stack to run against.
+    global _runner
+    _runner = get_runner()
+    if stack is not None:
+        _runner._stack = stack
 
     router = APIRouter(tags=["parallel-tasks"])
 

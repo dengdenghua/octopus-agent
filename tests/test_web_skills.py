@@ -71,6 +71,34 @@ class _MockClient:
         return self._post or _MockResponse(text="")
 
 
+@pytest.fixture(autouse=True)
+def _resolve_to_public_ip(monkeypatch):
+    """Pin DNS resolution to a public IP for these fetch-logic tests.
+
+    The sandbox resolver maps ``example.com`` / ``x.com`` to
+    ``198.18.0.43`` (reserved benchmark range), which the SSRF guard
+    correctly rejects. These tests exercise fetch/truncation/extract
+    logic, not DNS — so force a public IP so they stay hermetic. The
+    SSRF-specific behavior is covered separately in ``test_url_guard.py``.
+    """
+    import socket
+
+    import runtime.safety.auth.url_guard as _guard
+
+    def _fake_getaddrinfo(host, *a, **kw):
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                ("142.250.72.14", 0),
+            )
+        ]
+
+    monkeypatch.setattr(_guard.socket, "getaddrinfo", _fake_getaddrinfo)
+
+
 # ═══════════════════════════════════════════════════════════
 # fetch_url
 # ═══════════════════════════════════════════════════════════

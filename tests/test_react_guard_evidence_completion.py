@@ -176,3 +176,34 @@ def test_pre_emit_buffers_preparatory_chat_but_not_conclusion() -> None:
         "结论：两个实现都保留了因果顺序，但本项目还额外暴露了阶段标识。",
         is_code_mode=False,
     )
+
+
+def test_pre_emit_does_not_buffer_report_with_code_fence() -> None:
+    """Regression: a report that quotes a markdown code fence must still
+    stream. Previously `` ``` `` in the body forced full buffering, so any
+    report containing code rendered all at once instead of typewriter-style."""
+    fence = "```"
+    report = (
+        "## 调研结论\n\n"
+        "两个实现都保留了因果顺序。涉及代码：\n\n"
+        f"{fence}python\nprint(1)\n{fence}\n\n"
+        "综上，建议采用方案 A。"
+    )
+    assert not _final_answer_needs_pre_emit_guard(report, is_code_mode=False)
+    # code mode alone must not force buffering either — in the realtime
+    # workbench a mounted workspace makes ``is_code`` true even for a
+    # personal-space report, so treating it as a hard gate made every
+    # final report render wholesale.
+    assert not _final_answer_needs_pre_emit_guard(report, is_code_mode=True)
+
+
+def test_pre_emit_still_buffers_executable_risk() -> None:
+    """Only genuinely dangerous executable content forces buffering."""
+    assert _final_answer_needs_pre_emit_guard(
+        "执行 exec(open('/etc/passwd').read()) 来查看。",
+        is_code_mode=True,
+    )
+    assert _final_answer_needs_pre_emit_guard(
+        "通过 subprocess.run 删除该目录。",
+        is_code_mode=False,
+    )

@@ -23,11 +23,14 @@ why the model must keep working.
 from __future__ import annotations
 
 from runtime.core.cerebrum.react_parsing import (
+    _has_test_write,
     _parse_action,
+    _step_introduces_destructive_call,
     _step_introduces_dynamic_exec,
     _step_introduces_magic_number,
     _step_introduces_network_in_loop,
     _step_introduces_repeated_literal,
+    _step_introduces_secret,
     _step_introduces_shell_injection,
     _step_introduces_unsafe_deser,
 )
@@ -371,16 +374,148 @@ def _magic_number_guard(
     )
 
 
+# ──────────────────────────────────────────────────────────────────
+# §34 — secret-in-payload guard
+# ──────────────────────────────────────────────────────────────────
+# Editing a runtime file with an embedded secret (sk-..., ghp_...,
+# AKIA..., private key block, ``api_key="..."``) is a serious leak.
+# We fire on ANY new secret-shaped string in any code-write trajectory
+# step — secrets in non-code files (env templates) are caught by the
+# generic pattern set, which is correct.
+
+_SECRET_LOOKBACK = 12
+
+
+def _trajectory_secret_hits(steps: list[ReActStep]) -> dict[str, str]:
+    """Map ``path -> secret-label`` for any step that introduced a
+    new secret pattern. Last write wins for a given path."""
+    out: dict[str, str] = {}
+    window = steps[-_SECRET_LOOKBACK:] if steps else []
+    for step in window:
+        labels = _step_introduces_secret(step)
+        if not labels:
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        _name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if isinstance(path, str):
+            out[path] = ", ".join(labels)
+    return out
+
+
+def _secret_in_payload_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Reject finals where a write introduced a credential-shaped string.
+
+    No help-request short circuit — leaking a secret while asking for
+    help is still a leak. The guard always fires when a hit lands.
+    """
+    if not steps:
+        return None
+    hits = _trajectory_secret_hits(steps)
+    if not hits:
+        return None
+    items = list(hits.items())
+    preview = "; ".join(f"{path} ({label})" for path, label in items[:3])
+    if len(items) > 3:
+        preview += f"; +{len(items) - 3} more"
+    return (
+        "Cannot finish yet: a write step introduced a credential-shaped "
+        f"value in: {preview}. Hard-coding API keys, GitHub PATs, AWS "
+        'access keys, private-key blocks, or `api_key="..."` literals '
+        "into source is a security incident. Move the value to an "
+        "environment variable or local config (gitignored), or — if the "
+        "string is genuinely a non-secret fixture — make that explicit "
+        "(e.g. wrap with a clearly-marked test helper) and try again."
+    )
+
+
+# ──────────────────────────────────────────────────────────────────
+# §37 — destructive-call guard
+# ──────────────────────────────────────────────────────────────────
+# Adding ``shutil.rmtree`` / ``os.remove`` / ``Path.unlink`` / shell
+# ``rm -rf`` to non-test runtime code is a high-blast-radius change.
+# We don't reject outright — sometimes the agent legitimately needs to
+# clean up — but we require explicit acknowledgement: either the code
+# is wrapped in safe_rm helpers (the existing octopus tooling at
+# runtime/execution/arms/safe_rm.py handles this), OR the trajectory
+# touched a test that exercises the destructive path.
+
+_DESTRUCTIVE_LOOKBACK = 12
+
+
+def _trajectory_destructive_hits(steps: list[ReActStep]) -> dict[str, str]:
+    """Map ``path -> labels`` for any step that introduced a new
+    destructive call. Last write wins per path."""
+    out: dict[str, str] = {}
+    window = steps[-_DESTRUCTIVE_LOOKBACK:] if steps else []
+    for step in window:
+        labels = _step_introduces_destructive_call(step)
+        if not labels:
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        _name, args = parsed
+        path = args.get("path") or args.get("file") or args.get("file_path")
+        if isinstance(path, str):
+            out[path] = ", ".join(labels)
+    return out
+
+
+def _new_destructive_call_guard(
+    steps: list[ReActStep],
+    final_answer: str,
+    *,
+    is_code_mode: bool,
+) -> str | None:
+    """Reject finals where a write step introduced a new destructive
+    filesystem/shell call without a paired test edit."""
+    if not steps:
+        return None
+    if _user_help_requested(final_answer):
+        return None
+    hits = _trajectory_destructive_hits(steps)
+    if not hits:
+        return None
+    if _has_test_write(steps):
+        return None  # Tests touched in trajectory — assume coverage.
+    items = list(hits.items())
+    preview = "; ".join(f"{path} ({label})" for path, label in items[:3])
+    if len(items) > 3:
+        preview += f"; +{len(items) - 3} more"
+    return (
+        "Cannot finish yet: a destructive filesystem/process call was "
+        f"added without a paired test edit: {preview}. "
+        "rm -rf / shutil.rmtree / Path.unlink / os.remove are easy to "
+        "get catastrophically wrong (wrong path, race conditions, "
+        "permission loops). Either wrap the call in the project's "
+        "safe_rm helper (runtime/execution/arms/safe_rm.py), add a "
+        "test that exercises the cleanup with proper fixtures, or "
+        "explicitly justify why this code path can't be tested."
+    )
+
+
 __all__ = [
     "_dynamic_exec_guard",
     "_magic_number_guard",
     "_network_in_loop_guard",
+    "_new_destructive_call_guard",
     "_repeated_literal_guard",
+    "_secret_in_payload_guard",
     "_shell_injection_guard",
+    "_trajectory_destructive_hits",
     "_trajectory_dynamic_exec_hits",
     "_trajectory_magic_number_hits",
     "_trajectory_network_in_loop_paths",
     "_trajectory_repeated_literal_hits",
+    "_trajectory_secret_hits",
     "_trajectory_shell_injection_hits",
     "_trajectory_unsafe_deser_hits",
     "_unsafe_deser_guard",

@@ -16,6 +16,8 @@ Allowed forms (NOT flagged):
   * ``/Users/Public``, ``/Users/Shared`` — non-user-specific
   * ``/home/runner`` — GitHub Actions runner (CI)
   * Comments / docstrings — those are documentation
+  * Deliberate test fixtures carrying ``# lint: allow-user-path`` on
+    the same line; the marker keeps the exception narrow and reviewable
 
 Flagged:
   * ``C:\\Users\\alice`` (a specific username)
@@ -62,6 +64,8 @@ _PATH_PATTERN = re.compile(
     """,
     re.VERBOSE,
 )
+
+_INLINE_FIXTURE_MARKER = "# lint: allow-user-path"
 
 # Files we scan. Skip generated / vendored content.
 SCAN_GLOBS = (
@@ -138,6 +142,8 @@ def scan() -> list[tuple[Path, int, str, str]]:
             for lineno, line in enumerate(lines, 1):
                 if _line_is_comment(line, ext):
                     continue
+                if _INLINE_FIXTURE_MARKER in line:
+                    continue
                 for match in _PATH_PATTERN.finditer(line):
                     username = match.group("username")
                     if username in _EXCLUDED_USERNAMES:
@@ -179,7 +185,8 @@ def main() -> int:
             "If you must reference a real user dir, do it via runtime\n"
             "configuration, not committed source.\n"
             "\nIf the hit is a documentation example or test fixture, add\n"
-            "the path to SKIP_GLOBS in this file with a comment explaining."
+            "`# lint: allow-user-path` on that fixture line, with a nearby\n"
+            "comment explaining why the path shape is part of the test."
         )
         return 1
     return 0

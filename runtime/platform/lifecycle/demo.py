@@ -219,7 +219,7 @@ class InteractiveDemo:
         self._print("  6. 备份数据:  python -m runtime backup")
         self._print("  7. 编译知识:  python -m runtime wiki compile")
         self._print()
-        self._print("  文档: https://github.com/octopus-agent/octopus-agent")
+        self._print("  文档: https://github.com/dengdenghua/octopus-agent")
         print()
 
 

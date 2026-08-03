@@ -17,12 +17,27 @@ class PlannerConfig(BaseModel):
     max_nodes: int = Field(default=10, gt=0, le=50)
 
 
+# ─── Budget defaults · single source of truth ─────────────────────────
+# These constants are the ONE authoritative home for the default budget
+# values. Other modules (react_loop, pause_control, cli_run, presets)
+# reference these instead of re-hardcoding the same numbers.
+BUDGET_DEFAULT_MAX_TOKENS = 100_000
+BUDGET_DEFAULT_MAX_USD = 1.00
+BUDGET_DEFAULT_MAX_LATENCY_MS = 600_000
+
+
 class BudgetConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    max_tokens: int = Field(default=50_000, gt=0)
-    max_usd: float = Field(default=0.50, gt=0.0)
-    max_latency_ms: int = Field(default=600_000, gt=0)
+    max_tokens: int = Field(default=BUDGET_DEFAULT_MAX_TOKENS, gt=0)
+    max_usd: float = Field(default=BUDGET_DEFAULT_MAX_USD, gt=0.0)
+    max_latency_ms: int = Field(default=BUDGET_DEFAULT_MAX_LATENCY_MS, gt=0)
+    # Wall-clock ceiling (seconds) for one hidden model-thinking iteration.
+    # 10..900, default 120. Controlled only by this config (no env override).
+    model_iteration_timeout_s: float = Field(default=120.0, ge=10.0, le=900.0)
+    # Forced-convergence max_tokens cap for normal (non research/swarm) mode.
+    # Default 2000; research/swarm convergence stays fixed at 5000.
+    convergence_max_tokens: int = Field(default=2000, gt=0)
 
 
 class ImmunityConfig(BaseModel):

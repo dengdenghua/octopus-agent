@@ -105,7 +105,7 @@ def test_prioritizes_delegation_tools_before_catalog_truncation() -> None:
     )
     reg = _FakeRegistry(skills)
 
-    out = _format_skill_catalog(reg, max_skills=40)
+    out = _format_skill_catalog(reg, max_skills=40, goal="并行子agent分工，多路并行")
 
     assert "\n  - call_agent_parallel:" in out
     assert "\n  - bb_write:" in out
@@ -131,7 +131,14 @@ def test_prioritizes_common_general_tools_in_toolbar_order() -> None:
     ]
     reg = _FakeRegistry([_FakeSkill(name=name, summary=f"{name} summary") for name in names])
 
-    out = _format_skill_catalog(reg, max_skills=12)
+    # A code/UI/delegation turn activates the conditional priority lanes
+    # (git, browser, delegation). The front-loaded toolbar order then covers
+    # the always-on core plus the lane-conditional tools.
+    out = _format_skill_catalog(
+        reg,
+        max_skills=12,
+        goal="修复代码bug，并行子agent分工，检查浏览器页面",
+    )
     lines = [line for line in out.splitlines() if line.startswith("  - ")]
     visible_names = [line.split(":", 1)[0].replace("  - ", "") for line in lines]
 
@@ -141,11 +148,11 @@ def test_prioritizes_common_general_tools_in_toolbar_order() -> None:
         "query_skill",
         "read_file",
         "edit_file",
-        "web_search",
         "exec_shell",
         "git_status",
-        "call_agent_parallel",
         "browser_navigate",
+        "call_agent_parallel",
+        "web_search",
     ]
 
 

@@ -21,7 +21,7 @@ def _clean_env(monkeypatch):
     for name in list(__import__("os").environ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
-    monkeypatch.setenv("HOME", "/home/tester")
+    monkeypatch.setenv("HOME", "/home/tester")  # lint: allow-user-path
     monkeypatch.setenv("LANG", "en_US.UTF-8")
 
 
@@ -38,7 +38,7 @@ def test_drops_credential_named_vars(monkeypatch):
 def test_keeps_benign_vars():
     env = scrub_credential_env()
     assert env["PATH"] == "/usr/bin:/bin"
-    assert env["HOME"] == "/home/tester"
+    assert env["HOME"] == "/home/tester"  # lint: allow-user-path
     assert env["LANG"] == "en_US.UTF-8"
 
 

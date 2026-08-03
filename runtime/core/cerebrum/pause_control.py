@@ -8,6 +8,10 @@ from pathlib import Path
 from threading import RLock
 from typing import Literal
 
+from runtime.platform.config.schema import (
+    BUDGET_DEFAULT_MAX_TOKENS,
+    BUDGET_DEFAULT_MAX_USD,
+)
 from runtime.platform.io import atomic_write_json
 from runtime.platform.process.paths import app_paths
 from runtime.platform.process.service_provider import get_provider
@@ -33,8 +37,8 @@ class ActiveTask:
     max_iterations: int = 0
     tokens_spent: int = 0
     cost_usd: float = 0.0
-    max_tokens: int = 50000  # Implementation note.
-    max_usd: float = 0.5
+    max_tokens: int = BUDGET_DEFAULT_MAX_TOKENS  # Implementation note.
+    max_usd: float = BUDGET_DEFAULT_MAX_USD
 
     def to_dict(self) -> dict:
         return {
@@ -335,8 +339,8 @@ class PauseController:
         thread_id: str = "",
         agent_id: str = "",
         max_iterations: int = 0,
-        max_tokens: int = 50000,
-        max_usd: float = 0.5,
+        max_tokens: int = BUDGET_DEFAULT_MAX_TOKENS,
+        max_usd: float = BUDGET_DEFAULT_MAX_USD,
     ) -> None:
         with self._lock:
             self._active[task_id] = ActiveTask(

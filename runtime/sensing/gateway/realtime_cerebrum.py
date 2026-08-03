@@ -35,461 +35,127 @@ the bridge stays in the runtime's coroutine.
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import hashlib
-import json
 import logging
 import os
-import shlex
 import threading
-import time
 from pathlib import Path
-from queue import Empty, SimpleQueue
+from queue import SimpleQueue
 from typing import Any
 
 from runtime.memory.threads.event_log import EventLog
 from runtime.platform.models import ParsedIntent
-from runtime.platform.models.primitives import now_utc
 from runtime.platform.process.bounded_set import BoundedSet
 from runtime.platform.process.keyed_lock import KeyedLock
 from runtime.protocol import (
-    AgentMessageItem,
-    ItemStatus,
-    JsonRpcErrorCode,
     ReasoningItem,
-    ServerMethod,
     SteeringUserMessageItem,
-    TodoEntry,
     TodoListItem,
     Turn,
     TurnParams,
-    TurnStatus,
 )
 from runtime.safety.approval.approval_gate import (
     ApprovalProvider,
 )
-from runtime.safety.approval.approval_policy_store import load_policy
-
-
-def _format_project_os_result(state: dict[str, Any]) -> str:
-    """Human-readable Project OS result for the realtime chat surface."""
-    raw_project = state.get("project")
-    project: dict[str, Any] = raw_project if isinstance(raw_project, dict) else {}
-    raw_result = state.get("result")
-    result: dict[str, Any] = raw_result if isinstance(raw_result, dict) else {}
-    raw_milestones = state.get("milestones")
-    milestones: list[Any] = raw_milestones if isinstance(raw_milestones, list) else []
-    raw_tasks = state.get("tasks")
-    tasks_by_ms: dict[str, Any] = raw_tasks if isinstance(raw_tasks, dict) else {}
-    roster = [str(member) for member in (state.get("roster") or []) if str(member).strip()]
-
-    project_name = str(project.get("name") or "当前项目")
-    project_id = str(project.get("id") or "")
-    status = str(result.get("final_status") or project.get("status") or "running")
-    ticks = result.get("ticks")
-
-    reused = bool(state.get("reused"))
-    control = state.get("control") if isinstance(state.get("control"), dict) else None
-    if control:
-        headline = "Project OS 已执行控制命令。"
-    else:
-        headline = "Project OS 已继续推进项目。" if reused else "Project OS 已接管并运行项目。"
-    lines = [
-        headline,
-        "",
-    ]
-    if project_id:
-        lines.append(f"项目：{project_name}（{project_id}）")
-    else:
-        lines.append(f"项目：{project_name}")
-    lines.append(f"状态：{status}" + (f" · ticks {ticks}" if ticks is not None else ""))
-    if roster:
-        lines.append(f"成员：{', '.join(roster)}")
-    lines.append("")
-    lines.append("里程碑进展：")
-
-    for milestone in milestones[:6]:
-        if not isinstance(milestone, dict):
-            continue
-        ms_id = str(milestone.get("id") or "")
-        ms_name = str(milestone.get("name") or ms_id or "milestone")
-        ms_status = str(milestone.get("status") or "pending")
-        tasks = tasks_by_ms.get(ms_id) if isinstance(tasks_by_ms, dict) else []
-        tasks = tasks if isinstance(tasks, list) else []
-        done = sum(1 for task in tasks if isinstance(task, dict) and task.get("status") == "done")
-        lines.append(f"- {ms_name}：{ms_status} · {done}/{len(tasks)} 任务完成")
-        assignments: list[str] = []
-        for task in tasks[:4]:
-            if not isinstance(task, dict):
-                continue
-            task_id = str(task.get("id") or "")
-            assignee = str(task.get("assigned_agent") or task.get("assigned_role") or "")
-            task_status = str(task.get("status") or "")
-            if task_id and assignee:
-                assignments.append(f"{task_id}->{assignee}({task_status})")
-        if assignments:
-            lines.append(f"  派发：{', '.join(assignments)}")
-    if len(milestones) > 6:
-        lines.append(f"- 其余 {len(milestones) - 6} 个里程碑已省略，可在 Project OS 视图继续查看。")
-    if status == "blocked":
-        lines.append("")
-        lines.append("项目已阻塞；请处理失败任务、验收条件或依赖后再继续推进。")
-    elif status not in {"done", "failed"}:
-        lines.append("")
-        lines.append("项目还未结束；后续回合会继续从当前 Project OS 状态推进。")
-    return "\n".join(lines)
-
-
-def _project_os_todo_item(state: dict[str, Any]) -> TodoListItem | None:
-    """Map Project OS milestones to the existing realtime todo-list item."""
-    raw_project = state.get("project")
-    project: dict[str, Any] = raw_project if isinstance(raw_project, dict) else {}
-    raw_milestones = state.get("milestones")
-    milestones: list[Any] = raw_milestones if isinstance(raw_milestones, list) else []
-    raw_tasks = state.get("tasks")
-    tasks_by_ms: dict[str, Any] = raw_tasks if isinstance(raw_tasks, dict) else {}
-    if not milestones:
-        return None
-
-    def _status(raw: Any) -> str:
-        value = str(raw or "").strip()
-        if value == "done":
-            return "completed"
-        if value in {"active", "in_progress", "running"}:
-            return "in_progress"
-        if value in {"blocked", "failed"}:
-            return "blocked"
-        return "pending"
-
-    entries: list[TodoEntry] = []
-    for milestone in milestones:
-        if not isinstance(milestone, dict):
-            continue
-        ms_id = str(milestone.get("id") or "").strip()
-        name = str(milestone.get("name") or ms_id or "milestone").strip()
-        status = _status(milestone.get("status"))
-        tasks = tasks_by_ms.get(ms_id) if isinstance(tasks_by_ms, dict) else []
-        tasks = tasks if isinstance(tasks, list) else []
-        done = sum(1 for task in tasks if isinstance(task, dict) and task.get("status") == "done")
-        suffix = f" · {done}/{len(tasks)} tasks" if tasks else ""
-        entries.append(TodoEntry(title=f"{name}{suffix}", status=status))
-    if not entries:
-        return None
-
-    project_name = str(project.get("name") or "Project OS").strip()
-    project_id = str(project.get("id") or "").strip()
-    explanation = f"Project OS · {project_name}" + (f" ({project_id})" if project_id else "")
-    return TodoListItem(explanation=explanation, plan=entries)
-
-
-def _parse_project_os_control(text: str) -> dict[str, Any] | None:
-    """Parse explicit Project OS control commands in project-mode chat."""
-    raw = str(text or "").strip()
-    if not raw.startswith("/project"):
-        return None
-    try:
-        parts = shlex.split(raw)
-    except ValueError:
-        return {"type": "help"}
-    if len(parts) < 2:
-        return {"type": "help"}
-    command = parts[1].lower()
-    rest = parts[2:]
-
-    def _kv(tokens: list[str]) -> dict[str, str]:
-        out: dict[str, str] = {}
-        for token in tokens:
-            if "=" not in token:
-                continue
-            key, value = token.split("=", 1)
-            key = key.strip().lower()
-            if key:
-                out[key] = value.strip()
-        return out
-
-    if command == "recover":
-        opts = _kv(rest)
-        task_ids = [
-            item.strip()
-            for item in opts.get("tasks", opts.get("task_ids", "")).split(",")
-            if item.strip()
-        ]
-        return {
-            "type": "recover",
-            "task_ids": task_ids,
-            "run": "run" in rest or opts.get("run", "").lower() in {"1", "true", "yes"},
-        }
-    if command == "task" and len(rest) >= 2:
-        task_id = rest[0]
-        action = rest[1].lower()
-        tail = rest[2:]
-        opts = _kv(tail)
-        return {
-            "type": "task",
-            "task_id": task_id,
-            "action": action,
-            "assigned_agent": opts.get("agent") or opts.get("assigned_agent"),
-            "assigned_role": opts.get("role") or opts.get("assigned_role"),
-            "reason": opts.get("reason", ""),
-            "output": opts.get("output"),
-            "run": "run" in tail or opts.get("run", "").lower() in {"1", "true", "yes"},
-            "cascade": opts.get("cascade", "true").lower() not in {"0", "false", "no"},
-        }
-    return {"type": "help"}
-
+from runtime.sensing.gateway._realtime_cerebrum_project_os import (
+    _drive_project_os,
+    _format_project_os_result,
+    _parse_project_os_control,
+)
+from runtime.sensing.gateway._realtime_cerebrum_requests import _handle_request
+from runtime.sensing.gateway._realtime_cerebrum_steering import (
+    _active_turn_lease_path,
+    _bind_turn_timeline,
+    _drain_turn_steering,
+    _has_fresh_active_turn_lease,
+    _publish_discovered_steering,
+    _register_active_turn,
+    _remove_active_turn_lease,
+    _set_turn_steering_accepting,
+    _sync_persisted_turn_steering,
+    _unregister_active_turn,
+    _write_active_turn_lease,
+)
+from runtime.sensing.gateway._realtime_cerebrum_thread import (
+    _emit_agent_message,
+    _emit_item_completed,
+    _emit_item_started,
+    _emit_reasoning,
+    _emit_todo_list,
+    _ensure_thread,
+    _log_for,
+    _make_bridge_state,
+    _reap_stale_background_tasks,
+    _require_thread_id,
+    _require_thread_owner,
+    _resolve_agent,
+    _resume_turns,
+    _snapshot_to_thread_store,
+    _wrap_with_policy,
+)
 
 # ── Split-module compat re-exports ────────────────────────────
 # The helpers below moved out of this file into focused sibling
 # modules. Re-import them under their original names (redundant-alias
 # form marks an intentional re-export) so existing imports and tests
 # that reach into ``realtime_cerebrum`` keep working unchanged.
-from runtime.sensing.gateway.realtime_approval import (
-    GatewayApprovalProvider as GatewayApprovalProvider,
-)
+from runtime.sensing.gateway.realtime_approval import GatewayApprovalProvider
 from runtime.sensing.gateway.realtime_event_bridge import (
-    _file_change_item_from_tool_evt as _file_change_item_from_tool_evt,
+    _ReactBridgeState,
 )
-from runtime.sensing.gateway.realtime_event_bridge import (
-    _ReactBridgeState as _ReactBridgeState,
-)
-from runtime.sensing.gateway.realtime_event_bridge import (
-    _safe_list_remove as _safe_list_remove,
-)
-from runtime.sensing.gateway.realtime_event_bridge import (
-    _verification_item_from_tool_evt as _verification_item_from_tool_evt,
-)
-from runtime.sensing.gateway.realtime_gateway import (
-    EventEmitter,
-    RealtimeRuntime,
-    _RpcError,
-)
+from runtime.sensing.gateway.realtime_gateway import EventEmitter, RealtimeRuntime
 from runtime.sensing.gateway.realtime_react_stream import (
-    _agentic_stream_event_to_react_event as _agentic_stream_event_to_react_event,
-)
-from runtime.sensing.gateway.realtime_react_stream import (
-    _apply_react_event as _apply_react_event,
-)
-from runtime.sensing.gateway.realtime_react_stream import (
-    _drive_react as _drive_react,
-)
-from runtime.sensing.gateway.realtime_react_stream import (
-    _drive_reflection_fast_path as _drive_reflection_fast_path,
-)
-from runtime.sensing.gateway.realtime_react_stream import (
-    _is_auth_context_error as _is_auth_context_error,
-)
-from runtime.sensing.gateway.realtime_react_stream import (
-    _model_error_reply as _model_error_reply,
-)
-from runtime.sensing.gateway.realtime_react_stream import (
-    _should_use_native_tool_loop as _should_use_native_tool_loop,
-)
-from runtime.sensing.gateway.realtime_react_stream import (
-    _should_use_reflection_fast_path as _should_use_reflection_fast_path,
-)
-from runtime.sensing.gateway.realtime_react_stream import (
-    _try_reflex_reply as _try_reflex_reply,
+    _apply_react_event,
+    _drive_react,
+    _drive_reflection_fast_path,
+    _should_use_reflection_fast_path,
+    _try_reflex_reply,
 )
 from runtime.sensing.gateway.realtime_team_stream import (
-    _drive_group_fanout as _drive_group_fanout,
-)
-from runtime.sensing.gateway.realtime_team_stream import (
-    _drive_swarm_mesh as _drive_swarm_mesh,
-)
-from runtime.sensing.gateway.realtime_team_stream import (
-    _drive_team_topology as _drive_team_topology,
-)
-from runtime.sensing.gateway.realtime_thread_history import (
-    _build_ai_kwargs as _build_ai_kwargs,
-)
-from runtime.sensing.gateway.realtime_thread_history import (
-    _conversation_messages_for_react as _conversation_messages_for_react,
-)
-from runtime.sensing.gateway.realtime_thread_history import (
-    _flatten_turns_to_messages as _flatten_turns_to_messages,
-)
-from runtime.sensing.gateway.realtime_thread_history import (
-    _title_from_messages as _title_from_messages,
+    _drive_group_fanout,
+    _drive_swarm_mesh,
+    _drive_team_topology,
 )
 from runtime.sensing.gateway.realtime_thread_ops import (
-    _handle_hunk_decide as _handle_hunk_decide,
-)
-from runtime.sensing.gateway.realtime_thread_ops import (
-    _maybe_compact as _maybe_compact,
-)
-from runtime.sensing.gateway.realtime_thread_ops import (
-    _maybe_compact_locked as _maybe_compact_locked,
-)
-from runtime.sensing.gateway.realtime_thread_ops import (
-    _resolve_hunk_path as _resolve_hunk_path,
-)
-from runtime.sensing.gateway.realtime_thread_ops import (
-    compact_thread as compact_thread,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _agent_id_from_params as _agent_id_from_params,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _build_intent as _build_intent,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _conversation_messages_from_params as _conversation_messages_from_params,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _execution_resume_intent as _execution_resume_intent,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _input_attachments as _input_attachments,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _input_metadata as _input_metadata,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _join_text as _join_text,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _parse_resume_confirmation as _parse_resume_confirmation,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _parse_resume_intent as _parse_resume_intent,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _preview_text as _preview_text,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _reflex_response_to_text as _reflex_response_to_text,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _resume_confirmation_text as _resume_confirmation_text,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _resume_task_id_from_intent as _resume_task_id_from_intent,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _safe_int as _safe_int,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _safe_str as _safe_str,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _should_default_planning_mode as _should_default_planning_mode,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _should_default_topology as _should_default_topology,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _turn_mode as _turn_mode,
+    _handle_hunk_decide,
+    _maybe_compact,
+    _maybe_compact_locked,
+    _resolve_hunk_path,
+    compact_thread,
 )
 from runtime.sensing.gateway.realtime_turn_lifecycle import (
-    _consume_confirmed_resume_intent as _consume_confirmed_resume_intent,
-)
-from runtime.sensing.gateway.realtime_turn_lifecycle import (
-    _record_pending_resume_intent as _record_pending_resume_intent,
-)
-from runtime.sensing.gateway.realtime_turn_lifecycle import (
-    _start_turn as _start_turn,
+    _consume_confirmed_resume_intent,
+    _record_pending_resume_intent,
+    _start_turn,
 )
 from runtime.sensing.gateway.realtime_turn_outcome import (
-    _code_change_paths as _code_change_paths,
+    _record_failed_turn_proposal,
+    _record_react_trace_event,
+    _record_successful_turn_example,
+    _record_task_run_finished,
+    _record_task_run_started,
 )
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _failed_turn_description as _failed_turn_description,
+from runtime.sensing.gateway._event_bridge_tool_items import (
+    _file_change_item_from_tool_evt,
 )
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _failed_turn_metadata as _failed_turn_metadata,
+from runtime.sensing.gateway._realtime_react_stream_helpers import (
+    _agentic_stream_event_to_react_event,
+    _should_use_native_tool_loop,
 )
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _file_change_item_ids as _file_change_item_ids,
+from runtime.sensing.gateway.realtime_thread_history import (
+    _conversation_messages_for_react,
+    _flatten_turns_to_messages,
 )
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _file_change_items as _file_change_items,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _is_code_change_path as _is_code_change_path,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _record_failed_turn_proposal as _record_failed_turn_proposal,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _record_react_trace_event as _record_react_trace_event,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _record_successful_turn_example as _record_successful_turn_example,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _record_task_run_finished as _record_task_run_finished,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _record_task_run_started as _record_task_run_started,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _successful_turn_description as _successful_turn_description,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _successful_turn_metadata as _successful_turn_metadata,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _turn_failure_text as _turn_failure_text,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _turn_goal_text as _turn_goal_text,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _turn_has_failed_code_verification as _turn_has_failed_code_verification,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _turn_has_passing_code_verification as _turn_has_passing_code_verification,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _turn_has_unverified_code_changes as _turn_has_unverified_code_changes,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _turn_item_counts as _turn_item_counts,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _turn_model as _turn_model,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _verification_items as _verification_items,
-)
-from runtime.sensing.gateway.realtime_turn_outcome import (
-    _verification_matches_code_changes as _verification_matches_code_changes,
+from runtime.sensing.gateway.realtime_turn_input import (
+    _build_intent,
+    _should_default_planning_mode,
+    _should_default_topology,
 )
 from runtime.sensing.gateway.realtime_workbench import (
-    _coerce_preview_record as _coerce_preview_record,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _current_workbench_phase as _current_workbench_phase,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _first_string as _first_string,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _phase_title as _phase_title,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _phases_from_todo_preview as _phases_from_todo_preview,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _phases_with_active_item as _phases_with_active_item,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _terminal_workbench_phases as _terminal_workbench_phases,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _todo_phase_status as _todo_phase_status,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _workbench_snapshot as _workbench_snapshot,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _workbench_status as _workbench_status,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _workspace_focus_for_file_change as _workspace_focus_for_file_change,
-)
-from runtime.sensing.gateway.realtime_workbench import (
-    _workspace_focus_for_tool as _workspace_focus_for_tool,
+    _current_workbench_phase,
+    _phase_title,
+    _terminal_workbench_phases,
+    _workbench_snapshot,
+    _workbench_status,
 )
 
 _logger = logging.getLogger(__name__)
@@ -637,109 +303,19 @@ class CerebrumRuntime:
         """Build a ``_ReactBridgeState`` wired to the per-thread
         background-task registry, so the next turn on this thread can
         sweep any watchers the previous turn left running."""
-
-        def _register(task: asyncio.Task[None]) -> None:
-            bucket = self._thread_background_tasks.setdefault(thread_id, [])
-            bucket.append(task)
-            # Auto-clean when the task finishes naturally — keeps the
-            # bucket bounded for long-lived threads.
-            task.add_done_callback(lambda t: _safe_list_remove(bucket, t))
-
-        binder = None
-        if turn_id is not None:
-
-            def _bind(item: Any, phase_id: str | None) -> None:
-                self._bind_turn_timeline(turn_id, item, phase_id=phase_id)
-
-            binder = _bind
-        agent_id = str(getattr(agent, "agent_id", "") or "").strip()
-        display_name = str(
-            getattr(agent, "display_name", None)
-            or getattr(agent, "name", None)
-            or agent_id
-            or ""
-        ).strip() or None
-        avatar_url = (
-            f"/api/agents/{agent_id}/avatar" if agent_id else None
-        )
-        return _ReactBridgeState(
-            on_background_task_start=_register,
-            timeline_binder=binder,
-            agent_display_name=display_name,
-            agent_avatar_url=avatar_url,
-            agent_icon=getattr(agent, "icon", None),
-        )
+        return _make_bridge_state(self, thread_id, turn_id=turn_id, agent=agent)
 
     def _register_active_turn(self, turn: Turn, log: EventLog) -> None:
-        self._active_turns[turn.id] = (turn, log)
-        self._turn_steering[turn.id] = SimpleQueue()
-        self._turn_steering_seen[turn.id] = {
-            item.id for item in turn.items if isinstance(item, SteeringUserMessageItem)
-        }
-        self._turn_steering_notified[turn.id] = set(self._turn_steering_seen[turn.id])
-        self._turn_steering_last_sync[turn.id] = 0.0
-        try:
-            self._turn_steering_log_offsets[turn.id] = log.path.stat().st_size
-        except OSError:
-            self._turn_steering_log_offsets[turn.id] = 0
-        self._turn_steering_accepting[turn.id] = True
-        previous = max(
-            (item for item in turn.items if item.timeline_sequence is not None),
-            key=lambda item: item.timeline_sequence or 0,
-            default=None,
-        )
-        self._turn_timeline[turn.id] = (
-            previous.timeline_sequence or 0 if previous is not None else 0,
-            previous.id if previous is not None else None,
-        )
-        self._write_active_turn_lease(turn)
-
-        async def _refresh_lease() -> None:
-            try:
-                while turn.id in self._active_turns:
-                    await asyncio.sleep(2.0)
-                    self._write_active_turn_lease(turn)
-            except asyncio.CancelledError:
-                return
-
-        self._active_turn_lease_tasks[turn.id] = asyncio.create_task(_refresh_lease())
+        _register_active_turn(self, turn, log)
 
     def _unregister_active_turn(self, turn_id: str) -> None:
-        self._active_turns.pop(turn_id, None)
-        self._turn_steering.pop(turn_id, None)
-        self._turn_steering_seen.pop(turn_id, None)
-        self._turn_steering_notified.pop(turn_id, None)
-        self._turn_steering_last_sync.pop(turn_id, None)
-        self._turn_steering_log_offsets.pop(turn_id, None)
-        self._turn_steering_accepting.pop(turn_id, None)
-        self._turn_timeline.pop(turn_id, None)
-        task = self._active_turn_lease_tasks.pop(turn_id, None)
-        if task is not None:
-            task.cancel()
-        self._remove_active_turn_lease(turn_id)
+        _unregister_active_turn(self, turn_id)
 
     def _active_turn_lease_path(self, turn_id: str) -> Path:
-        digest = hashlib.sha256(turn_id.encode("utf-8")).hexdigest()
-        return self._active_turn_lease_root / f"{digest}.json"
+        return _active_turn_lease_path(self, turn_id)
 
     def _write_active_turn_lease(self, turn: Turn) -> None:
-        path = self._active_turn_lease_path(turn.id)
-        payload = {
-            "turnId": turn.id,
-            "threadId": turn.thread_id,
-            "instanceId": self._instance_id,
-            "updatedAt": time.time(),
-            "acceptingSteering": self._turn_steering_accepting.get(turn.id, False),
-        }
-        temporary = path.with_suffix(f".{self._instance_id}.tmp")
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temporary.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
-            os.replace(temporary, path)
-        except OSError:
-            _logger.warning("failed to refresh active-turn lease %s", turn.id, exc_info=True)
-            with contextlib.suppress(OSError):
-                temporary.unlink()
+        _write_active_turn_lease(self, turn)
 
     def _has_fresh_active_turn_lease(
         self,
@@ -748,34 +324,18 @@ class CerebrumRuntime:
         *,
         require_accepting_steering: bool = False,
     ) -> bool:
-        try:
-            payload = json.loads(self._active_turn_lease_path(turn_id).read_text(encoding="utf-8"))
-            fresh = (
-                payload.get("turnId") == turn_id
-                and payload.get("threadId") == thread_id
-                and time.time() - float(payload.get("updatedAt") or 0) <= 8.0
-            )
-            return fresh and (
-                not require_accepting_steering or payload.get("acceptingSteering") is True
-            )
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
-            return False
+        return _has_fresh_active_turn_lease(
+            self,
+            thread_id,
+            turn_id,
+            require_accepting_steering=require_accepting_steering,
+        )
 
     def _remove_active_turn_lease(self, turn_id: str) -> None:
-        path = self._active_turn_lease_path(turn_id)
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            if payload.get("instanceId") != self._instance_id:
-                return
-            path.unlink()
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
-            return
+        _remove_active_turn_lease(self, turn_id)
 
     def _set_turn_steering_accepting(self, turn: Turn, accepting: bool) -> None:
-        if turn.id not in self._active_turns:
-            return
-        self._turn_steering_accepting[turn.id] = accepting
-        self._write_active_turn_lease(turn)
+        _set_turn_steering_accepting(self, turn, accepting)
 
     def _bind_turn_timeline(
         self,
@@ -784,20 +344,7 @@ class CerebrumRuntime:
         *,
         phase_id: str | None = None,
     ) -> None:
-        sequence, previous_id = self._turn_timeline.get(turn_id, (0, None))
-        if getattr(item, "timeline_sequence", None) is None:
-            active = self._active_turns.get(turn_id)
-            sequence = (
-                active[1].reserve_timeline_sequence(turn_id) if active is not None else sequence + 1
-            )
-            item.timeline_sequence = sequence
-        else:
-            sequence = max(sequence, int(item.timeline_sequence))
-        if getattr(item, "parent_item_id", None) is None:
-            item.parent_item_id = previous_id
-        if getattr(item, "phase_id", None) is None:
-            item.phase_id = phase_id
-        self._turn_timeline[turn_id] = (sequence, item.id)
+        _bind_turn_timeline(self, turn_id, item, phase_id=phase_id)
 
     def _sync_persisted_turn_steering(
         self,
@@ -805,95 +352,17 @@ class CerebrumRuntime:
         *,
         force: bool = False,
     ) -> list[SteeringUserMessageItem]:
-        active = self._active_turns.get(turn_id)
-        if active is None:
-            return []
-        turn, log = active
-        now = time.monotonic()
-        with self._turn_steering_lock:
-            last_sync = self._turn_steering_last_sync.get(turn_id, 0.0)
-            if not force and now - last_sync < 0.1:
-                return []
-            self._turn_steering_last_sync[turn_id] = now
-        with self._turn_steering_lock:
-            offset = self._turn_steering_log_offsets.get(turn_id, 0)
-            events, next_offset = log.tail_events(offset)
-            self._turn_steering_log_offsets[turn_id] = next_offset
-        discovered: list[SteeringUserMessageItem] = []
-        pending = self._turn_steering.get(turn_id)
-        if pending is None:
-            return []
-        incoming: list[SteeringUserMessageItem] = []
-        for event in events:
-            if event.event != "item_completed" or event.turn_id != turn_id:
-                continue
-            raw_item = event.payload.get("item")
-            if not isinstance(raw_item, dict) or raw_item.get("type") != "steeringUserMessage":
-                continue
-            try:
-                incoming.append(SteeringUserMessageItem.model_validate(raw_item))
-            except (TypeError, ValueError):
-                continue
-        with self._turn_steering_lock:
-            seen = self._turn_steering_seen.setdefault(turn_id, set())
-            live_indexes = {item.id: index for index, item in enumerate(turn.items)}
-            for item in incoming:
-                existing_index = live_indexes.get(item.id)
-                if existing_index is None:
-                    turn.items.append(item)
-                    live_indexes[item.id] = len(turn.items) - 1
-                else:
-                    turn.items[existing_index] = item
-                if item.id in seen:
-                    continue
-                seen.add(item.id)
-                sequence = item.timeline_sequence
-                if sequence is None:
-                    sequence = log.reserve_timeline_sequence(turn_id)
-                    item.timeline_sequence = sequence
-                current_sequence, _ = self._turn_timeline.get(turn_id, (0, None))
-                self._turn_timeline[turn_id] = (max(current_sequence, sequence), item.id)
-                pending.put((item.id, item.text))
-                discovered.append(item)
-        return discovered
+        return _sync_persisted_turn_steering(self, turn_id, force=force)
 
     async def _publish_discovered_steering(
         self,
         turn: Turn,
         emitter: EventEmitter,
     ) -> None:
-        self._sync_persisted_turn_steering(turn.id)
-        with self._turn_steering_lock:
-            notified = self._turn_steering_notified.setdefault(turn.id, set())
-            pending = [
-                item
-                for item in turn.items
-                if isinstance(item, SteeringUserMessageItem) and item.id not in notified
-            ]
-            notified.update(item.id for item in pending)
-        for item in pending:
-            await emitter.notify(
-                ServerMethod.ITEM_COMPLETED,
-                {
-                    "threadId": turn.thread_id,
-                    "turnId": turn.id,
-                    "item": item.model_dump(by_alias=True, mode="json"),
-                },
-            )
+        await _publish_discovered_steering(self, turn, emitter)
 
     def _drain_turn_steering(self, turn_id: str) -> list[str]:
-        self._sync_persisted_turn_steering(turn_id, force=True)
-        pending = self._turn_steering.get(turn_id)
-        if pending is None:
-            return []
-        messages: list[str] = []
-        while True:
-            try:
-                _, text = pending.get_nowait()
-            except Empty:
-                break
-            messages.append(text)
-        return messages
+        return _drain_turn_steering(self, turn_id)
 
     # ── Turn telemetry records (bodies in realtime_turn_outcome) ──
 
@@ -939,22 +408,7 @@ class CerebrumRuntime:
         common case (new turn after the prior one finished cleanly)
         is a no-op.
         """
-        bucket = self._thread_background_tasks.get(thread_id)
-        if not bucket:
-            return
-        stale = [t for t in bucket if not t.done()]
-        if not stale:
-            self._thread_background_tasks.pop(thread_id, None)
-            return
-        for task in stale:
-            task.cancel()
-        for task in stale:
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await task
-        # Drop the whole bucket; done-callbacks may still fire and
-        # try to remove from a stale list, but ``_safe_list_remove``
-        # tolerates missing entries.
-        self._thread_background_tasks.pop(thread_id, None)
+        await _reap_stale_background_tasks(self, thread_id)
 
     def _resolve_agent(self, params: TurnParams) -> Any:
         """Pick the agent for this turn.
@@ -967,34 +421,7 @@ class CerebrumRuntime:
           3. The default agent passed at construction time.
           4. ``None``.
         """
-        agent_id: str | None = None
-        for block in params.input:
-            md = block.get("metadata") if isinstance(block, dict) else None
-            if not isinstance(md, dict):
-                continue
-            candidates: list[Any] = [md.get("agent_id"), md.get("agent"), md.get("agent_name")]
-            context = md.get("context")
-            if isinstance(context, dict):
-                candidates.extend(
-                    [
-                        context.get("agent_id"),
-                        context.get("agent"),
-                        context.get("agent_name"),
-                    ]
-                )
-            agent_id = next(
-                (value.strip() for value in candidates if isinstance(value, str) and value.strip()),
-                None,
-            )
-            if agent_id:
-                break
-        if agent_id and self._agent_registry is not None:
-            try:
-                if self._agent_registry.has(agent_id):
-                    return self._agent_registry.get(agent_id)
-            except (AttributeError, TypeError, OSError):  # noqa: BLE001 — agent lookup failed; fall back to default
-                pass
-        return self._default_agent
+        return _resolve_agent(self, params)
 
     def _wrap_with_policy(self, fallback: ApprovalProvider) -> ApprovalProvider:
         """Two-layer permission: static rules first, fallback otherwise.
@@ -1004,23 +431,7 @@ class CerebrumRuntime:
         bouncing the runtime. The file is small (a handful of rules)
         so the IO cost is irrelevant compared to a turn's LLM calls.
         """
-        from pathlib import Path
-
-        if self._policy_path is None:
-            return fallback
-        path = Path(self._policy_path)
-        policy = load_policy(path)
-        if not policy.rules:
-            return fallback
-        from runtime.safety.audit.trust_gateway import TrustGatewayApprovalProvider
-
-        return TrustGatewayApprovalProvider(
-            static_policy=policy,
-            fallback=fallback,
-            trace_store=getattr(self, "_trace_store", None),
-            turn_id=getattr(fallback, "_turn_id", None),
-            agent_id=getattr(getattr(self, "_default_agent", None), "agent_id", None),
-        )
+        return _wrap_with_policy(self, fallback)
 
     # ── Compaction (bodies in realtime_thread_ops) ────────────
 
@@ -1041,19 +452,10 @@ class CerebrumRuntime:
         await _maybe_compact_locked(self, thread_id, log, emitter)
 
     def _log_for(self, thread_id: str) -> EventLog:
-        from runtime.memory.threads.event_log import thread_log_path
-
-        return EventLog(thread_log_path(self._logs_root, thread_id))
+        return _log_for(self, thread_id)
 
     def _require_thread_id(self, value: Any) -> str:
-        from runtime.memory.threads.event_log import validate_thread_id
-
-        if not isinstance(value, str):
-            raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "threadId required")
-        try:
-            return validate_thread_id(value)
-        except ValueError as exc:
-            raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc)) from exc
+        return _require_thread_id(self, value)
 
     def _require_thread_owner(
         self,
@@ -1062,11 +464,7 @@ class CerebrumRuntime:
         *,
         turns: list[Turn] | None = None,
     ) -> None:
-        from runtime.memory.threads.event_log import owner_actor_id_from_turns
-
-        owner = owner_actor_id_from_turns(turns if turns is not None else log.replay())
-        if owner is not None and actor_id != owner:
-            raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {log.path.stem}")
+        _require_thread_owner(self, log, actor_id, turns=turns)
 
     def _resume_turns(
         self,
@@ -1075,28 +473,7 @@ class CerebrumRuntime:
         turns: list[Turn] | None = None,
     ) -> list[Turn]:
         """Replay and close in-progress turns left by an older process."""
-        turns = turns if turns is not None else log.replay()
-        if not turns:
-            return turns
-        stale = [
-            turn
-            for turn in turns
-            if turn.status == TurnStatus.IN_PROGRESS
-            and turn.id not in self._active_turn_ids
-            and not self._has_fresh_active_turn_lease(turn.thread_id, turn.id)
-        ]
-        for turn in stale:
-            turn.status = TurnStatus.FAILED
-            turn.error = {
-                "message": "上次执行在后端重启或连接中断时未完成，已自动结束。请重新发送或点击重试。",
-                "code": "stale_in_progress_turn",
-            }
-            turn.completed_at = now_utc()
-            for item in turn.items:
-                if item.status == ItemStatus.IN_PROGRESS:
-                    item.status = ItemStatus.FAILED
-            log.turn_completed(turn.thread_id, turn.id, turn.status, error=turn.error)
-        return turns
+        return _resume_turns(self, log, turns=turns)
 
     def _snapshot_to_thread_store(
         self,
@@ -1119,76 +496,10 @@ class CerebrumRuntime:
         durable record; the legacy store is a derived cache for the
         sidebar.
         """
-        store = self._thread_store
-        if store is None:
-            return
-        try:
-            turns = log.replay()
-            messages, artifacts, todos = _flatten_turns_to_messages(turns)
-            title = _title_from_messages(messages) or ""
-            values: dict[str, Any] = {
-                "title": title,
-                "messages": messages,
-                "artifacts": artifacts,
-            }
-            if todos is not None:
-                values["todos"] = todos
-            uc = (intent.user_context or {}) if intent is not None else {}
-            metadata: dict[str, Any] = {}
-            for key in (
-                "mode",
-                "agent",
-                "agent_name",
-                "workspace_path",
-                "workspace_scope",
-                "personal_workspace_path",
-                "personal_workspace_enabled",
-                "owner_actor_id",
-                "actor_id",
-            ):
-                v = uc.get(key) if isinstance(uc, dict) else None
-                if v is not None:
-                    # ThreadStateStore.search() filters by ``metadata.agent``
-                    # so we normalise the key name the sidebar expects.
-                    metadata[
-                        "agent"
-                        if key == "agent_name"
-                        else "owner_actor_id"
-                        if key == "actor_id"
-                        else key
-                    ] = v
-            store.ensure_thread(thread_id, metadata=metadata, values=values)
-            store.update_state(
-                thread_id,
-                values=values,
-                metadata=metadata if metadata else None,
-            )
-        except Exception as exc:  # noqa: BLE001
-            _logger.debug(
-                "snapshot to thread_store skipped (%s: %s)",
-                type(exc).__name__,
-                exc,
-                exc_info=True,
-            )
+        _snapshot_to_thread_store(self, thread_id, log, intent=intent)
 
     async def _ensure_thread(self, thread_id: str, emitter: EventEmitter) -> EventLog:
-        log = self._log_for(thread_id)
-        async with self._lock:
-            if thread_id in self._known_threads:
-                return log
-            existed = log.path.exists() and log.path.stat().st_size > 0
-            if not existed:
-                evt = log.thread_started(thread_id)
-                await emitter.notify(
-                    ServerMethod.THREAD_STARTED,
-                    {
-                        "thread": {"id": thread_id},
-                        "threadId": thread_id,
-                        "eventId": evt.event_id,
-                    },
-                )
-            self._known_threads.add(thread_id)
-        return log
+        return await _ensure_thread(self, thread_id, emitter)
 
     # ── RealtimeRuntime ──────────────────────────────────────
 
@@ -1226,292 +537,7 @@ class CerebrumRuntime:
         params: dict[str, Any],
         emitter: EventEmitter,
     ) -> Any:
-        if method == "turn/steer":
-            thread_id = self._require_thread_id(params.get("threadId"))
-            turn_id = params.get("turnId")
-            text = params.get("text")
-            item_id = params.get("itemId")
-            if not isinstance(turn_id, str) or not turn_id:
-                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn/steer requires turnId")
-            if not isinstance(text, str) or not text.strip():
-                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn/steer requires text")
-            text = text.strip()
-            if len(text) > 32_768:
-                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn/steer text is too long")
-            log = self._log_for(thread_id)
-            turns = log.replay()
-            self._require_thread_owner(
-                log,
-                getattr(emitter, "actor_id", None),
-                turns=turns,
-            )
-            active = self._active_turns.get(turn_id)
-            local_active = active is not None and turn_id in self._active_turn_ids
-            if local_active:
-                if not self._turn_steering_accepting.get(turn_id, False):
-                    raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is finalizing")
-                assert active is not None
-                turn = active[0]
-            else:
-                if not self._has_fresh_active_turn_lease(
-                    thread_id,
-                    turn_id,
-                    require_accepting_steering=True,
-                ):
-                    raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is not active")
-                found_turn = next((candidate for candidate in turns if candidate.id == turn_id), None)
-                if found_turn is None or found_turn.status != TurnStatus.IN_PROGRESS:
-                    raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "target turn is not active")
-                turn = found_turn
-            if turn.thread_id != thread_id:
-                raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "turn does not belong to thread")
-            if isinstance(item_id, str) and item_id:
-                existing = next((item for item in turn.items if item.id == item_id), None)
-                if existing is not None:
-                    await emitter.notify(
-                        ServerMethod.ITEM_COMPLETED,
-                        {
-                            "threadId": thread_id,
-                            "turnId": turn_id,
-                            "item": existing.model_dump(by_alias=True, mode="json"),
-                        },
-                    )
-                    return {"turnId": turn_id, "itemId": item_id, "accepted": True}
-            else:
-                item_id = None
-            item = SteeringUserMessageItem(
-                **({"id": item_id} if item_id else {}),
-                text=text,
-                targetTurnId=turn_id,
-            )
-            if local_active:
-                self._bind_turn_timeline(turn_id, item)
-            else:
-                previous = max(
-                    (
-                        candidate
-                        for candidate in turn.items
-                        if candidate.timeline_sequence is not None
-                    ),
-                    key=lambda candidate: candidate.timeline_sequence or 0,
-                    default=None,
-                )
-                item.timeline_sequence = log.reserve_timeline_sequence(turn_id)
-                item.parent_item_id = previous.id if previous is not None else None
-            turn.items.append(item)
-            if local_active:
-                pending = self._turn_steering.get(turn_id)
-                if pending is None:
-                    raise _RpcError(
-                        JsonRpcErrorCode.INVALID_PARAMS,
-                        "target turn is no longer active",
-                    )
-                with self._turn_steering_lock:
-                    self._turn_steering_seen.setdefault(turn_id, set()).add(item.id)
-                    self._turn_steering_notified.setdefault(turn_id, set()).add(item.id)
-                # Queue before the first socket await so the model cannot cross
-                # a safe boundary while the UI notification is still in flight.
-                pending.put((item.id, text))
-            await self._emit_item_started(turn, log, emitter, item)
-            item.status = ItemStatus.COMPLETED
-            await self._emit_item_completed(turn, log, emitter, item)
-            return {"turnId": turn_id, "itemId": item.id, "accepted": True}
-        if method in ("thread/resume", "thread/read"):
-            thread_id = self._require_thread_id(params.get("threadId"))
-            log = self._log_for(thread_id)
-            preflight_snapshot = log.snapshot()
-            preflight_turns = log.replay(preflight_snapshot)
-            self._require_thread_owner(
-                log,
-                getattr(emitter, "actor_id", None),
-                turns=preflight_turns,
-            )
-            summary = log.summary(preflight_snapshot)
-            if summary is not None and summary.archived:
-                raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
-            # Close stale turns before capturing one immutable file prefix.
-            # Cursor and replay then come from the exact same snapshot, so a
-            # concurrent append is either wholly included or wholly deferred.
-            self._resume_turns(log, turns=preflight_turns)
-            snapshot = log.snapshot()
-            turns = log.replay(snapshot)
-            raw_after_sequence = params.get("afterSequence")
-            requested_stream_id = params.get("eventStreamId")
-            before_turn_id = (
-                params.get("beforeTurnId") if isinstance(params.get("beforeTurnId"), str) else None
-            )
-            if (
-                isinstance(raw_after_sequence, int)
-                and not isinstance(raw_after_sequence, bool)
-                and raw_after_sequence >= 0
-                and before_turn_id is None
-                and (
-                    not isinstance(requested_stream_id, str)
-                    or requested_stream_id == snapshot.stream_id
-                )
-            ):
-                changed_ids, next_sequence, requires_reset = log.cursor_delta(
-                    raw_after_sequence,
-                    snapshot=snapshot,
-                )
-                if not requires_reset:
-                    changed = set(changed_ids)
-                    return {
-                        "thread": {"id": thread_id, "path": str(log.path)},
-                        "turns": [
-                            turn.model_dump(by_alias=True, mode="json")
-                            for turn in turns
-                            if turn.id in changed
-                        ],
-                        "totalTurns": len(turns),
-                        "hasMore": False,
-                        "incremental": True,
-                        "nextEventSequence": next_sequence,
-                        "eventStreamId": snapshot.stream_id,
-                    }
-            next_sequence = log.latest_sequence(snapshot=snapshot)
-            raw_limit = params.get("limit")
-            window, has_more = EventLog.paginate_turns(
-                turns,
-                limit=(
-                    raw_limit
-                    if isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
-                    else None
-                ),
-                before_turn_id=before_turn_id,
-            )
-            return {
-                "thread": {"id": thread_id, "path": str(log.path)},
-                "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
-                "totalTurns": len(turns),
-                "hasMore": has_more,
-                "incremental": False,
-                "nextEventSequence": next_sequence,
-                "eventStreamId": snapshot.stream_id,
-            }
-        if method == "thread/events":
-            # Raw sequenced log slice for client-side replay (P2 of
-            # docs/client-replay-design.md). Unlike thread/resume's
-            # materialized turn snapshots, this ships the persisted events
-            # themselves so a reconnecting client folds only what it missed.
-            thread_id = self._require_thread_id(params.get("threadId"))
-            log = self._log_for(thread_id)
-            preflight_snapshot = log.snapshot()
-            preflight_turns = log.replay(preflight_snapshot)
-            self._require_thread_owner(
-                log,
-                getattr(emitter, "actor_id", None),
-                turns=preflight_turns,
-            )
-            summary = log.summary(preflight_snapshot)
-            if summary is not None and summary.archived:
-                raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
-            # Close stale turns BEFORE capturing the immutable prefix, same
-            # discipline as thread/resume: events and cursor below describe
-            # the exact same file prefix, so a concurrent append is either
-            # wholly included or wholly deferred to the next call.
-            self._resume_turns(log, turns=preflight_turns)
-            snapshot = log.snapshot()
-            requested_stream_id = params.get("eventStreamId")
-            raw_after = params.get("afterSequence")
-            after = (
-                raw_after
-                if isinstance(raw_after, int)
-                and not isinstance(raw_after, bool)
-                and raw_after >= 0
-                else 0
-            )
-            # Stream-id mismatch or an unsafe incremental window (compaction
-            # inside it, or a cursor beyond the current file) means the
-            # client must rebuild from scratch — serve the full log instead
-            # of an interpretable slice.
-            requires_reset = False
-            if isinstance(requested_stream_id, str) and requested_stream_id != snapshot.stream_id:
-                requires_reset = True
-            elif after > 0:
-                _, requires_reset = snapshot.cursor_delta(after)
-            if requires_reset:
-                after = 0
-            raw_limit = params.get("limit")
-            limit = (
-                raw_limit
-                if isinstance(raw_limit, int)
-                and not isinstance(raw_limit, bool)
-                and raw_limit > 0
-                else None
-            )
-            coalesce = params.get("mode") == "coalesce"
-            # Slice RAW events first; the limit counts raw entries so paging
-            # covers the log at a steady rate regardless of coalescing.
-            raw_slice = [(seq, event) for seq, event in snapshot.events if seq > after]
-            has_more = False
-            consumed_through = snapshot.cursor
-            if limit is not None and len(raw_slice) > limit:
-                raw_slice = raw_slice[:limit]
-                has_more = True
-                consumed_through = raw_slice[-1][0]
-            # mode=coalesce shrinks full-log fetches (cold start / cache
-            # backfill) without changing the state the slice rebuilds.
-            # Replay-equivalence lives in coalesce_events' docstring — note
-            # its eventId caveat: NEVER serve coalesced slices to a client
-            # whose dedupe ledger may hold live-delivered ids.
-            if coalesce:
-                from runtime.memory.threads.event_log import coalesce_events
-
-                raw_slice = coalesce_events(raw_slice)
-            events = [
-                {"sequence": sequence, **event.model_dump(by_alias=True, mode="json")}
-                for sequence, event in raw_slice
-            ]
-            # Drift-check metadata: computed from the SAME snapshot, so the
-            # client can verify its folded state against the authoritative
-            # replay without a second round trip. Only meaningful on the
-            # final page (has_more=False).
-            turns = log.replay(snapshot)
-            last_turn = turns[-1] if turns else None
-            return {
-                "thread": {"id": thread_id, "path": str(log.path)},
-                "events": events,
-                "cursor": consumed_through,
-                "streamId": snapshot.stream_id,
-                "requiresReset": requires_reset,
-                "hasMore": has_more,
-                "turnCount": len(turns),
-                "lastTurnId": last_turn.id if last_turn is not None else None,
-                "lastTurnStatus": last_turn.status.value if last_turn is not None else None,
-            }
-        if method == "thread/compact":
-            thread_id = self._require_thread_id(params.get("threadId"))
-            self._require_thread_owner(self._log_for(thread_id), getattr(emitter, "actor_id", None))
-            return await self.compact_thread(thread_id, emitter)
-        if method == "thread/list":
-            from runtime.memory.threads.event_log import list_threads
-
-            include_archived = bool(params.get("includeArchived"))
-            actor_id = getattr(emitter, "actor_id", None)
-            summaries = list_threads(self._logs_root)
-            items = []
-            for summary in summaries:
-                if not include_archived and summary.archived:
-                    continue
-                log = self._log_for(summary.thread_id)
-                try:
-                    self._require_thread_owner(log, actor_id)
-                except _RpcError:
-                    continue
-                items.append(summary.model_dump(by_alias=True, mode="json"))
-            return {"threads": items}
-        if method == "thread/archive":
-            from runtime.memory.threads.event_log import archive_thread
-
-            thread_id = self._require_thread_id(params.get("threadId"))
-            self._require_thread_owner(self._log_for(thread_id), getattr(emitter, "actor_id", None))
-            if not archive_thread(self._logs_root, thread_id):
-                raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
-            return {"threadId": thread_id, "archived": True}
-        if method == "item/fileChange/hunkDecide":
-            return await self._handle_hunk_decide(params, emitter)
-        raise _RpcError(JsonRpcErrorCode.METHOD_NOT_FOUND, method)
+        return await _handle_request(self, method, params, emitter)
 
     async def compact_thread(
         self,
@@ -1656,16 +682,7 @@ class CerebrumRuntime:
         emitter: EventEmitter,
         item: Any,
     ) -> None:
-        evt = log.item_started(turn.thread_id, turn.id, item)
-        await emitter.notify(
-            ServerMethod.ITEM_STARTED,
-            {
-                "threadId": turn.thread_id,
-                "turnId": turn.id,
-                "item": item.model_dump(by_alias=True, mode="json"),
-                "eventId": evt.event_id,
-            },
-        )
+        await _emit_item_started(self, turn, log, emitter, item)
 
     async def _emit_item_completed(
         self,
@@ -1674,16 +691,7 @@ class CerebrumRuntime:
         emitter: EventEmitter,
         item: Any,
     ) -> None:
-        evt = log.item_completed(turn.thread_id, turn.id, item)
-        await emitter.notify(
-            ServerMethod.ITEM_COMPLETED,
-            {
-                "threadId": turn.thread_id,
-                "turnId": turn.id,
-                "item": item.model_dump(by_alias=True, mode="json"),
-                "eventId": evt.event_id,
-            },
-        )
+        await _emit_item_completed(self, turn, log, emitter, item)
 
     async def _emit_agent_message(
         self,
@@ -1692,11 +700,7 @@ class CerebrumRuntime:
         emitter: EventEmitter,
         text: str,
     ) -> None:
-        item = AgentMessageItem(text=text)
-        turn.items.append(item)
-        await self._emit_item_started(turn, log, emitter, item)
-        item.status = ItemStatus.COMPLETED
-        await self._emit_item_completed(turn, log, emitter, item)
+        await _emit_agent_message(self, turn, log, emitter, text)
 
     async def _emit_todo_list(
         self,
@@ -1705,10 +709,7 @@ class CerebrumRuntime:
         emitter: EventEmitter,
         item: TodoListItem,
     ) -> None:
-        turn.items.append(item)
-        await self._emit_item_started(turn, log, emitter, item)
-        item.status = ItemStatus.COMPLETED
-        await self._emit_item_completed(turn, log, emitter, item)
+        await _emit_todo_list(self, turn, log, emitter, item)
 
     async def _emit_reasoning(
         self,
@@ -1717,10 +718,7 @@ class CerebrumRuntime:
         emitter: EventEmitter,
         item: ReasoningItem,
     ) -> None:
-        turn.items.append(item)
-        await self._emit_item_started(turn, log, emitter, item)
-        item.status = ItemStatus.COMPLETED
-        await self._emit_item_completed(turn, log, emitter, item)
+        await _emit_reasoning(self, turn, log, emitter, item)
 
     async def _drive_project_os(
         self,
@@ -1733,208 +731,14 @@ class CerebrumRuntime:
         text: str,
     ) -> None:
         """Run Project OS directly from a cowork thread in project mode."""
-        if self._cowork_group_store is None:
-            await self._emit_agent_message(
-                turn,
-                log,
-                emitter,
-                "Project OS 需要先绑定协作组；当前线程还没有可用的 cowork group。",
-            )
-            return
-        if self._project_store is None:
-            from runtime.projectos.store import ProjectStore
-
-            self._project_store = ProjectStore()
-
-        context = intent.user_context if isinstance(intent.user_context, dict) else {}
-        goal = str(getattr(intent, "normalized_goal", "") or text or "").strip() or "当前目标"
-        raw_name = str(context.get("team_name") or context.get("project") or "").strip()
-        name = raw_name[:80] if raw_name else "当前项目"
-        try:
-            max_ticks = int(context.get("project_os_max_ticks") or 50)
-        except (TypeError, ValueError):
-            max_ticks = 50
-        max_ticks = max(1, min(max_ticks, 200))
-
-        control = _parse_project_os_control(text)
-        from runtime.projectos.cowork_bridge import full_project_state, run_project_from_group
-
-        def _run() -> dict[str, Any]:
-            if control is not None:
-                project = self._project_store.project_for_thread(thread_id)
-                if project is None:
-                    return {
-                        "ok": False,
-                        "error": "project_not_found",
-                        "message": "Project OS 当前线程还没有可恢复或干预的项目。",
-                    }
-                engine = None
-                if control.get("type") in {"recover", "task"}:
-                    from runtime.projectos.cowork_bridge import engine_for_group
-
-                    engine = engine_for_group(
-                        self._project_store,
-                        self._cowork_group_store,
-                        thread_id,
-                        hooks=dict(self._project_os_hooks),
-                    )
-                if control.get("type") == "recover" and engine is not None:
-                    intervention = engine.recover(
-                        project.id,
-                        task_ids=control.get("task_ids") or [],
-                    )
-                    result = (
-                        engine.run(project.id, max_ticks=max_ticks)
-                        if control.get("run")
-                        else {"final_status": intervention.get("project_status")}
-                    )
-                    state = full_project_state(self._project_store, project.id) or {}
-                    return {
-                        "ok": True,
-                        "roster": [],
-                        "reused": True,
-                        "control": control,
-                        "intervention": intervention,
-                        "result": result,
-                        **state,
-                    }
-                if control.get("type") == "task" and engine is not None:
-                    intervention = engine.intervene_task(
-                        project.id,
-                        str(control.get("task_id") or ""),
-                        action=str(control.get("action") or ""),
-                        assigned_agent=control.get("assigned_agent"),
-                        assigned_role=control.get("assigned_role"),
-                        output=control.get("output"),
-                        reason=str(control.get("reason") or ""),
-                        cascade=bool(control.get("cascade", True)),
-                    )
-                    intervention_events = [
-                        str(event) for event in (intervention.get("events") or [])
-                    ]
-                    if any(
-                        event.startswith(
-                            (
-                                "task_not_found:",
-                                "milestone_not_found:",
-                                "unknown_task_action:",
-                            )
-                        )
-                        for event in intervention_events
-                    ):
-                        state = full_project_state(self._project_store, project.id) or {}
-                        return {
-                            "ok": False,
-                            "error": "project_task_intervention_failed",
-                            "message": "Project OS 任务控制命令未执行："
-                            + ", ".join(intervention_events),
-                            "control": control,
-                            "intervention": intervention,
-                            **state,
-                        }
-                    result = (
-                        engine.run(project.id, max_ticks=max_ticks)
-                        if control.get("run")
-                        else {"final_status": intervention.get("project_status")}
-                    )
-                    state = full_project_state(self._project_store, project.id) or {}
-                    return {
-                        "ok": True,
-                        "roster": [],
-                        "reused": True,
-                        "control": control,
-                        "intervention": intervention,
-                        "result": result,
-                        **state,
-                    }
-                return {
-                    "ok": False,
-                    "error": "unknown_project_command",
-                    "message": (
-                        "可用命令：/project recover [tasks=T1,T2] [run]；"
-                        "/project task <task_id> <reassign|reset|complete|skip> "
-                        "[agent=agent-id] [reason=...] [run]"
-                    ),
-                }
-            return run_project_from_group(
-                self._project_store,
-                self._cowork_group_store,
-                thread_id,
-                name=name,
-                goal=goal,
-                hooks=dict(self._project_os_hooks),
-                run=True,
-                max_ticks=max_ticks,
-                reuse_active=True,
-            )
-
-        loop = asyncio.get_running_loop()
-        try:
-            state = await loop.run_in_executor(None, _run)
-        except ValueError:
-            await self._emit_agent_message(
-                turn,
-                log,
-                emitter,
-                "Project OS 已进入项目模式，但当前协作组没有可执行的 agent 成员。"
-                "请先添加至少一个参与者后再运行项目。",
-            )
-            return
-        if not state.get("ok", True):
-            await self._emit_agent_message(
-                turn,
-                log,
-                emitter,
-                str(state.get("message") or "Project OS 控制命令无法执行。"),
-            )
-            return
-        raw_project = state.get("project")
-        project: dict[str, Any] = raw_project if isinstance(raw_project, dict) else {}
-        project_id = project.get("id")
-        if project_id and isinstance(state.get("trace"), dict):
-            state["trace"]["audit_events"] = self._project_store.events_for_project(
-                str(project_id),
-                limit=20,
-            )
-        if project_id and state.get("control"):
-            state["trace"] = {
-                "schema": "octopus.projectos.control_trace.v1",
-                "thread_id": thread_id,
-                "project_id": project.get("id"),
-                "project_name": project.get("name"),
-                "project_status": (
-                    state.get("result", {}).get("final_status")
-                    if isinstance(state.get("result"), dict)
-                    else project.get("status")
-                ),
-                "available_actions": state.get("available_actions") or [],
-                "action_specs": state.get("action_specs") or [],
-                "control": state.get("control"),
-                "intervention": state.get("intervention"),
-                "audit_events": self._project_store.events_for_project(
-                    str(project_id),
-                    limit=20,
-                ),
-            }
-        todo_item = _project_os_todo_item(state)
-        if todo_item is not None:
-            await self._emit_todo_list(turn, log, emitter, todo_item)
-        trace = state.get("trace")
-        if isinstance(trace, dict):
-            await self._emit_reasoning(
-                turn,
-                log,
-                emitter,
-                ReasoningItem(
-                    summary=["Project OS run trace"],
-                    content=json.dumps(trace, ensure_ascii=False, sort_keys=True),
-                ),
-            )
-        await self._emit_agent_message(
+        await _drive_project_os(
+            self,
             turn,
             log,
             emitter,
-            _format_project_os_result(state),
+            intent,
+            thread_id=thread_id,
+            text=text,
         )
 
     def _is_local_partner(self, agent: Any) -> bool:

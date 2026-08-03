@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from runtime.memory.threads.event_log import _merge_delta
+from runtime.memory.threads._replay import _merge_delta
 from runtime.protocol import CommandExecutionItem, ReasoningItem
 from runtime.protocol.text_limits import (
     MAX_AGGREGATED_OUTPUT,

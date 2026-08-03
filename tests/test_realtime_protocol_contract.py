@@ -45,6 +45,7 @@ ACTIVE_REDUCED_NOTIFICATIONS = {
     ServerMethod.TURN_STARTED.value,
     ServerMethod.TURN_COMPLETED.value,
     ServerMethod.TURN_INTERRUPTED.value,
+    ServerMethod.TURN_COMPACTED.value,
     ServerMethod.TURN_DIFF_UPDATED.value,
     ServerMethod.TURN_PLAN_UPDATED.value,
     ServerMethod.WORKBENCH_SNAPSHOT.value,

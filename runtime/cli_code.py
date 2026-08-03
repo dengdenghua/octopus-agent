@@ -147,8 +147,8 @@ def run_code_command(args: Any, *, color: bool = True) -> int:  # noqa: ARG001
             model=model,
             thread_id=thread_id,
             max_iterations=int(getattr(args, "max_iterations", 30) or 30),
-            max_tokens_budget=int(getattr(args, "max_tokens", 50_000) or 50_000),
-            max_usd_budget=float(getattr(args, "max_usd", 0.50) or 0.50),
+            max_tokens_budget=int(getattr(args, "max_tokens", 100_000) or 100_000),
+            max_usd_budget=float(getattr(args, "max_usd", 1.00) or 1.00),
             approval_provider=provider,
             planning_mode=permission_mode == "plan",
         )

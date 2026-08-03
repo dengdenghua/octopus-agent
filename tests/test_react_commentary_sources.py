@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from runtime.core.cerebrum.react_loop import _model_recovery_timeout_s
+from runtime.core.cerebrum.react_loop import _stage_model_timeout_s
 
 REACT_LOOP = (
     Path(__file__).resolve().parents[1]
@@ -53,14 +53,10 @@ def test_every_react_commentary_event_declares_its_author() -> None:
     )
 
 
-def test_recovery_round_uses_a_shorter_default_deadline(monkeypatch) -> None:
-    monkeypatch.delenv("OCTOPUS_REACT_MODEL_RECOVERY_TIMEOUT_S", raising=False)
-
-    assert _model_recovery_timeout_s(120.0) == 60.0
+def test_recovery_round_uses_a_shorter_default_deadline() -> None:
+    assert _stage_model_timeout_s(120.0, "recovery") == 60.0
 
 
-def test_recovery_deadline_never_lengthens_the_base_timeout(monkeypatch) -> None:
-    monkeypatch.setenv("OCTOPUS_REACT_MODEL_RECOVERY_TIMEOUT_S", "600")
-
-    assert _model_recovery_timeout_s(45.0) == 45.0
-    assert _model_recovery_timeout_s(0.025) == 0.025
+def test_recovery_deadline_never_lengthens_the_base_timeout() -> None:
+    assert _stage_model_timeout_s(45.0, "recovery") == 45.0
+    assert _stage_model_timeout_s(0.025, "recovery") == 0.025

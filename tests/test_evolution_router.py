@@ -67,7 +67,15 @@ def test_auto_verifier_drift_queue_endpoint(monkeypatch) -> None:
     assert response.json()["created"] == 1
 
 
-def test_agent_scorecard_endpoint() -> None:
+def test_agent_scorecard_endpoint(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
+        str(tmp_path / "no-infrastructure-receipt.json"),
+    )
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_EVAL_BUNDLE",
+        str(tmp_path / "no-behavioral-bundle.json"),
+    )
     app = FastAPI()
     app.include_router(create_evolution_router())
     client = TestClient(app)
@@ -656,6 +664,10 @@ def test_e2e_surpass_certification_endpoint(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv(
         "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
         str(tmp_path / "no-infrastructure-receipt.json"),
+    )
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_EVAL_BUNDLE",
+        str(tmp_path / "no-behavioral-bundle.json"),
     )
     app = FastAPI()
     app.include_router(create_evolution_router())

@@ -16,13 +16,20 @@ Security model:
     ``identity_has_admin_role`` and the ``/api/agents/local-partners``
     endpoints in ``agents_router.py``.
 
-Module organization:
+Module organization (this file keeps the runtime-sensitivity-relevant core so
+that test monkeypatches of ``which_command`` / ``run_local_partner`` /
+``subprocess.run`` / ``_login_shell_path`` keep working; the rest lives in
+``_agents_local_partner_*`` sibling submodules):
   * ``LOCAL_PARTNER_SPECS`` — the registry of supported partners
-  * ``validate_alias`` / ``identity_has_admin_role`` — security gates
-  * ``safe_executable`` — PATH-poisoning defense
-  * ``which_command`` / ``dir_registered`` — detection helpers
+    (``_agents_local_partner_specs``)
+  * ``validate_alias`` / ``identity_has_admin_role`` / ``safe_executable`` —
+    security gates (``_agents_local_partner_security``)
+  * ``which_command`` / ``dir_registered`` / ``resolve_local_command`` —
+    detection helpers (kept here)
   * ``to_wire`` / ``soul_template`` — output formatters
+  * ``doctor_summary`` — readiness aggregation (``_agents_local_partner_doctor``)
   * ``write_partner_agent`` — the registration writer
+    (``_agents_local_partner_writer``)
 """
 
 from __future__ import annotations
@@ -30,7 +37,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import time
@@ -40,254 +46,22 @@ from pathlib import Path
 from typing import Any
 
 from runtime.execution.agents.local_partner_bridge import build_partner_argv, run_local_partner
-from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
-from runtime.platform.process.paths import project_root
 
-from .agents_models import LocalPartnerWire
-
-# ── Security primitives ────────────────────────────────────────────
-#
-# These constants and helpers fence off the shape of user-controllable
-# values that flow into LLM context (SOUL.md, IDENTITY.md) or trigger
-# command resolution (shutil.which).
-#
-# ``_LOCAL_PARTNER_ALIAS_RE`` is intentionally tight:
-#   * 1..64 chars
-#   * letters / digits / CJK / space / a few punctuation marks
-#   * no control chars, no slashes, no markdown break-out chars
-#
-# Tightening past prompt-injection still leaves SOUL.md as a markdown
-# file the LLM may eventually read — so we additionally require alias
-# to not look like an instruction stub. We don't claim immunity, just
-# defense in depth.
-
-# Allowed alias characters: letters, digits, CJK, regular space,
-# hyphen, underscore, dot. Notably NOT \s (which would allow \n / \r
-# / \t and enable line-break-based prompt injection into SOUL.md).
-# Length capped at 64. Rejecting markdown structural chars
-# (`*` `_` `[` `]` `(` `)` `>` `#`) prevents trivial markdown
-# break-out from the SOUL template.
-_LOCAL_PARTNER_ALIAS_RE = re.compile(
-    r"^[A-Za-z0-9一-龥　-〿 .\-_]{1,64}$",
+from ._agents_local_partner_doctor import doctor_summary
+from ._agents_local_partner_guidance import (
+    _is_codebuddy_launcher,
+    _partner_command_hints,
+    _partner_diagnostic_items,
+    _partner_guidance,
 )
-_SAFE_LOCAL_PARTNER_AGENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
-
-
-def _require_safe_agent_id(value: str) -> str:
-    agent_id = str(value or "").strip()
-    if not _SAFE_LOCAL_PARTNER_AGENT_ID_RE.fullmatch(agent_id):
-        raise ValueError(
-            "local partner agent_id may only contain alphanumeric characters, "
-            "hyphens, and underscores"
-        )
-    return agent_id
-
-
-def _cleanup_created_agent_dir(agent_dir: Path, *, created: bool) -> None:
-    if created and agent_dir.is_dir() and not agent_dir.is_symlink():
-        shutil.rmtree(agent_dir, ignore_errors=True)
-
-
-def validate_alias(value: str | None) -> str:
-    """Reject aliases that could pollute SOUL.md / IDENTITY.md or DoS disk.
-
-    Raises ``ValueError`` on bad input — caller must convert to HTTP 400.
-    """
-    if value is None:
-        return ""
-    candidate = value.strip()
-    if not candidate:
-        return ""
-    if len(candidate) > 64:
-        raise ValueError("alias must be 64 chars or fewer")
-    if not _LOCAL_PARTNER_ALIAS_RE.fullmatch(candidate):
-        raise ValueError("alias may only contain letters, digits, CJK, spaces, '.', '-', '_'")
-    return candidate
-
-
-def identity_has_admin_role(identity: Any) -> bool:
-    """Conservative admin check.
-
-    True iff the resolved identity carries the ``admin`` role. This is
-    the gate for endpoints that mutate global agent registry / write
-    files under ``default_agents_root()``.
-    """
-    if identity is None:
-        return False
-    roles = getattr(identity, "roles", ()) or ()
-    return "admin" in {str(role).lower() for role in roles}
-
-
-def safe_executable(executable_path: str) -> bool:
-    """Reject executables that resolve into the current working
-    directory subtree. Defense against the most common PATH-poisoning
-    scenario: an attacker drops a fake ``claude.cmd`` in cwd and
-    Windows' default ``.``-in-PATH resolves to it before the real one.
-
-    Note we INTENTIONALLY do not reject paths under the user's home —
-    legitimate per-user installs of Claude Code, Codex, etc. live
-    there (``~/AppData/Local/Programs/...`` on Windows, ``~/.local/bin``
-    on Linux). Rejecting home-paths would block every real install.
-
-    Returns True iff the resolved path lives outside cwd. When path
-    resolution fails we REJECT (fail-closed) — a resolve error means
-    we cannot verify the path is safe, and accepting it would open a
-    PATH-poisoning vector.
-    """
-    from pathlib import Path
-
-    try:
-        resolved = Path(executable_path).resolve()
-    except (OSError, RuntimeError):
-        return False  # fail-closed on resolve error
-
-    try:
-        cwd = Path.cwd().resolve()
-    except (OSError, RuntimeError):
-        return False  # fail-closed on resolve error
-
-    try:
-        resolved.relative_to(cwd)
-    except ValueError:
-        return True
-    return False
-
-
-# ── Partner specs registry ─────────────────────────────────────────
-
-LOCAL_PARTNER_SPECS: dict[str, dict[str, Any]] = {
-    "claude-code": {
-        "id": "claude-code",
-        "agent_id": "local_claude_code",
-        "name": "Claude Code",
-        "default_alias": "Claude Code 伙伴",
-        "description": "检测本机 Claude Code CLI，注册为可被团队指派的本地开发伙伴。",
-        "commands": ["claude", "claude.cmd", "claude.exe", "claude.ps1"],
-        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
-        "tags": ["local", "partner", "coding", "claude"],
-        "icon": "CC",
-        "avatar_url": "https://claude.ai/favicon.ico",
-    },
-    "codex-cli": {
-        "id": "codex-cli",
-        "agent_id": "local_codex_cli",
-        "name": "Codex CLI",
-        "default_alias": "Codex CLI 伙伴",
-        "description": "检测本机 Codex CLI，注册为可被团队指派的本地工程伙伴。",
-        "commands": ["codex", "codex.cmd", "codex.exe", "codex.ps1"],
-        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
-        "tags": ["local", "partner", "coding", "codex"],
-        "icon": "CX",
-        "avatar_url": "https://chatgpt.com/favicon.ico",
-    },
-    "openclaw": {
-        "id": "openclaw",
-        "agent_id": "local_openclaw",
-        "name": "OpenClaw",
-        "default_alias": "OpenClaw 伙伴",
-        "description": "检测本机 OpenClaw 自动化能力，注册为可被团队指派的本地执行伙伴。",
-        "commands": ["openclaw", "openclaw.cmd", "openclaw.exe", "openclaw.ps1"],
-        "tool_groups": ["desktop_operator", "shell"],
-        "tags": ["local", "partner", "automation", "desktop"],
-        "icon": "OC",
-    },
-    "trae-cli": {
-        "id": "trae-cli",
-        "agent_id": "local_trae_cli",
-        "name": "Trae CLI",
-        "default_alias": "Trae CLI 伙伴",
-        "description": "检测本机 Trae CLI，注册为可被团队指派的本地工程伙伴。",
-        "commands": [
-            "trae-cli",
-            "traecli",
-            "trae-agent",
-            "ta",
-            "trae",
-            "trae.cmd",
-            "trae.exe",
-            "trae.ps1",
-        ],
-        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
-        "tags": ["local", "partner", "coding", "trae"],
-        "icon": "TR",
-        "avatar_url": "https://lf-static.traecdn.us/obj/trae-ai-tx/trae_website/favicon.png",
-    },
-    "qoder-cli": {
-        "id": "qoder-cli",
-        "agent_id": "local_qoder_cli",
-        "name": "Qoder CLI",
-        "default_alias": "Qoder CLI 伙伴",
-        "description": "检测本机 Qoder CLI，注册为可被团队指派的本地工程伙伴。",
-        "commands": [
-            "qodercli",
-            "qoder",
-            "qoder-cli",
-            "qodercli.cmd",
-            "qodercli.exe",
-            "qodercli.ps1",
-            "qoder.cmd",
-            "qoder.exe",
-            "qoder.ps1",
-        ],
-        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
-        "tags": ["local", "partner", "coding", "qoder"],
-        "icon": "QD",
-        "avatar_url": (
-            "https://img.alicdn.com/imgextra/i3/"
-            "O1CN01KliT1u1jEq947NlKH_!!6000000004517-55-tps-180-180.svg"
-        ),
-    },
-    "kimi-cli": {
-        "id": "kimi-cli",
-        "agent_id": "local_kimi_cli",
-        "name": "Kimi CLI",
-        "default_alias": "Kimi CLI 伙伴",
-        "description": "检测本机 Kimi CLI，注册为可被团队指派的本地工程伙伴。",
-        "commands": [
-            "kimi",
-            "kimi-cli",
-            "kimi-code",
-            "kimi-coding",
-            "kimi-code.cmd",
-            "kimi-code.exe",
-            "kimi-code.ps1",
-            "kimi.cmd",
-            "kimi.exe",
-            "kimi.ps1",
-        ],
-        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
-        "tags": ["local", "partner", "coding", "kimi"],
-        "icon": "KM",
-        "avatar_url": "https://www.kimi.com/favicon.ico",
-    },
-    "codebuddy-cli": {
-        "id": "codebuddy-cli",
-        "agent_id": "local_codebuddy_cli",
-        "name": "CodeBuddy CLI",
-        "default_alias": "CodeBuddy CLI 伙伴",
-        "description": (
-            "检测本机腾讯 CodeBuddy CLI，注册为可被团队指派的本地工程伙伴。"
-            "官方 codebuddy 命令支持 headless 输出；桌面版 buddy 启动器仅作为发现兜底。"
-        ),
-        "commands": [
-            "codebuddy",
-            "codebuddy-code",
-            "cbc",
-            "codebuddy.cmd",
-            "codebuddy.exe",
-            "codebuddy.ps1",
-            "cbc.cmd",
-            "cbc.exe",
-            "cbc.ps1",
-            "~/.codebuddy/bin/buddy",
-        ],
-        "tool_groups": ["web_read", "fs_writer", "git", "shell"],
-        "tags": ["local", "partner", "coding", "codebuddy", "tencent"],
-        "icon": "CB",
-        "avatar_url": "https://codebuddy-1328495429.cos.accelerate.myqcloud.com/web/ide/logo.svg",
-    },
-}
-
+from ._agents_local_partner_security import (
+    identity_has_admin_role,
+    safe_executable,
+    validate_alias,
+)
+from ._agents_local_partner_specs import LOCAL_PARTNER_SPECS
+from ._agents_local_partner_writer import soul_template, write_partner_agent
+from .agents_models import LocalPartnerWire
 
 # ── Model config (the CLI's OWN model namespace) ───────────────────
 
@@ -320,14 +94,6 @@ def _trae_model_label(command: str | None = None) -> tuple[str, str]:
 _CODEBUDDY_MODELS_RE = re.compile(r"Currently supported:\s*\(([^)]*)\)", re.IGNORECASE)
 
 
-def _is_codebuddy_launcher(command: str) -> bool:
-    exe_name = Path(command).name.lower()
-    normalized = command.replace("\\", "/")
-    return exe_name in {"buddy", "buddy.exe", "buddy.cmd", "buddy.ps1"} or (
-        exe_name == "code" and "/CodeBuddy.app/" in normalized
-    )
-
-
 def _parse_codebuddy_models(help_text: str) -> list[str]:
     match = _CODEBUDDY_MODELS_RE.search(help_text or "")
     if not match:
@@ -353,253 +119,6 @@ def _codebuddy_model_options(command: str | None = None) -> tuple[list[str], str
         return [], command
     models = _parse_codebuddy_models(f"{proc.stdout or ''}\n{proc.stderr or ''}")
     return models, f"{command} --help" if models else command
-
-
-_SHELL_BARE_COMMAND_RE = re.compile(r"^[A-Za-z0-9_@%+=:,./~-]+$")
-
-
-def _display_command(command: str | None) -> str | None:
-    if not command:
-        return None
-    return command if _SHELL_BARE_COMMAND_RE.fullmatch(command) else shlex.quote(command)
-
-
-def _partner_guidance(
-    partner_id: str,
-    command: str | None,
-    *,
-    ready: bool,
-    headless_supported: bool,
-) -> dict[str, str | None]:
-    """Copyable commands/instructions for the connect dialog.
-
-    The UI should not need provider-specific branching for "how do I open this
-    natively?" or "how do I verify it can be driven headless?". Keeping these
-    strings here makes each partner's quirks reviewable with the detection code.
-    """
-    native = _display_command(command) if command else None
-    install: str | None = None
-    setup_hint: str | None = None
-    verify: str | None = None
-
-    if partner_id == "codebuddy-cli":
-        install = "npm install -g @tencent-ai/codebuddy-code"
-        setup_hint = (
-            "首次使用请运行原生 CodeBuddy CLI，并按提示登录/授权；"
-            "桌面端账号或免费权益不一定会同步到 CLI。"
-        )
-        if command and not _is_codebuddy_launcher(command):
-            native = _display_command(command)
-            verify = shlex.join(
-                [
-                    command,
-                    "-p",
-                    "--output-format",
-                    "text",
-                    "--permission-mode",
-                    "plan",
-                    "--max-turns",
-                    "1",
-                    "请只回复 OK，不要修改文件。",
-                ]
-            )
-    elif partner_id == "trae-cli":
-        if command:
-            setup_hint = (
-                "Trae CLI 需要在原生 CLI 内完成模型选择；若 models 为空，请先处理 CLI 账号、"
-                "企业网络或模型授权。桌面端可用不代表 CLI 已获得同一权益。"
-            )
-        if command:
-            verify = shlex.join([command, "models", "--json"])
-    elif partner_id == "qoder-cli":
-        if command:
-            setup_hint = (
-                "Qoder CLI 会走 -p headless 模式；若不可用，请先在原生 CLI 内完成登录/授权，"
-                "并确认 CLI 账号权益可用。"
-            )
-    elif partner_id == "kimi-cli":
-        if command:
-            setup_hint = "已保留 Kimi 入口；等官方稳定 prompt→stdout headless 参数后再启用自动派工。"
-    elif partner_id == "claude-code":
-        if command:
-            setup_hint = "使用 Claude Code 自己的登录态、订阅权益和模型配置；Octopus 只负责派工。"
-    elif partner_id == "codex-cli":
-        if command:
-            setup_hint = "使用 Codex CLI 自己的登录态、订阅权益和模型配置；Octopus 只负责派工。"
-
-    if command and headless_supported and not verify:
-        argv = build_partner_argv(partner_id, command, "请只回复 OK，不要修改文件。")
-        if argv:
-            verify = shlex.join(argv)
-    if ready and not setup_hint:
-        setup_hint = "已可被 Octopus 自动派工；也可以打开原生 CLI 使用它自己的快捷指令。"
-
-    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli"}:
-        interaction_hint = (
-            "Octopus 这里是一次性派工入口，不是原生交互终端；"
-            "`/model <模型名>` 可转成本次模型覆盖，`/login`、`/doctor`、`/clear` "
-            "等会话/账号指令请回原生 CLI 使用。"
-        )
-    elif partner_id == "trae-cli":
-        interaction_hint = (
-            "Trae 的模型、登录和企业网络状态由 Trae CLI 自己管理；"
-            "Octopus 只做派工，不转发 Trae 原生 `/` 指令，也不会继承 Trae 桌面端免费额度。"
-        )
-    elif partner_id in {"qoder-cli", "kimi-cli"}:
-        interaction_hint = (
-            "Octopus 会保留原文任务并尽量走该 CLI 的 headless 能力；"
-            "原生 `/` 指令请在对应 CLI 终端里使用。"
-        )
-    else:
-        interaction_hint = None
-
-    launch_cwd = str(project_root()) if native else None
-    return {
-        "install_command": install if not command else None,
-        "native_command": native,
-        "native_launch_command": (
-            f"cd {shlex.quote(launch_cwd)} && {native}" if native and launch_cwd else None
-        ),
-        "native_launch_cwd": launch_cwd,
-        "verify_command": verify,
-        "setup_hint": setup_hint,
-        "interaction_hint": interaction_hint,
-    }
-
-
-def _partner_command_hints(partner_id: str) -> list[dict[str, str]]:
-    """Small UX map for native-CLI muscle memory in Octopus.
-
-    These are intentionally product-facing, not exhaustive vendor docs. They
-    answer the question users hit first: "If I type a familiar / command here,
-    will Octopus run it, translate it, or tell me to open the native CLI?"
-    """
-    hints = [
-        {
-            "command": "/help",
-            "scope": "Octopus 说明",
-            "behavior": "显示本地伙伴兼容说明，不转发给外部 CLI。",
-        },
-        {
-            "command": "/models",
-            "scope": "Octopus 说明",
-            "behavior": "解释模型来源；不会调用外部 CLI 的交互式模型菜单。",
-        },
-        {
-            "command": "/login /doctor /status",
-            "scope": "原生 CLI",
-            "behavior": "账号、诊断、状态类命令请在原生 CLI 终端里执行。",
-        },
-        {
-            "command": "/clear /compact /resume",
-            "scope": "原生 CLI",
-            "behavior": "会话类命令不转发；在 Octopus 里请开启新任务或回原生 CLI。",
-        },
-    ]
-    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli"}:
-        hints.insert(
-            0,
-            {
-                "command": "/model <模型名>",
-                "scope": "一次性覆盖",
-                "behavior": "换行接任务时，转成该 CLI 本次调用的模型参数。",
-            },
-        )
-    else:
-        hints.insert(
-            0,
-            {
-                "command": "/model <模型名>",
-                "scope": "CLI 默认",
-                "behavior": "Octopus 会识别意图，但本伙伴暂不支持稳定模型参数，仍使用 CLI 默认模型。",
-            },
-        )
-    if partner_id == "trae-cli":
-        hints.append(
-            {
-                "command": "trae-cli models --json",
-                "scope": "原生 CLI",
-                "behavior": "用于确认 Trae CLI 账号/企业网络下是否已经分配可用模型。",
-            }
-        )
-    return hints
-
-
-def _partner_diagnostic_items(
-    partner_id: str,
-    *,
-    command: str | None,
-    ready: bool,
-    headless_supported: bool,
-    readiness_status: str,
-    verify_command: str | None,
-) -> list[dict[str, str]]:
-    """Compact provider-owned diagnostics for the connect dialog.
-
-    These are intentionally generated server-side because each CLI owns a
-    different model namespace, login boundary, and headless capability. The UI
-    renders the matrix without duplicating partner-specific rules.
-    """
-    model_value = "CLI 默认"
-    model_detail = "模型由该 CLI 自己的配置决定；Octopus 不使用全局模型列表覆盖它。"
-    if partner_id in {"claude-code", "codex-cli", "codebuddy-cli"}:
-        model_value = "可一次性覆盖"
-        model_detail = "`/model <模型名>` 换行接任务时会转成本次 CLI 模型参数。"
-    elif partner_id == "trae-cli":
-        model_value = "Trae CLI models"
-        model_detail = "以 `trae-cli models --json` 和原生 `/model` 配置为准。"
-    elif partner_id == "kimi-cli":
-        model_value = "待 headless 稳定"
-        model_detail = "保留发现入口；稳定 prompt→stdout 参数明确后再启用自动派工。"
-
-    account_detail = "桌面端账号、免费权益、企业授权不一定同步到 CLI。"
-    if partner_id in {"claude-code", "codex-cli"}:
-        account_detail = "使用该 CLI 自己的登录态、订阅权益和模型配置。"
-    elif partner_id == "codebuddy-cli":
-        account_detail = "首次运行原生 CodeBuddy CLI 登录/授权；桌面端权益不保证同步。"
-    elif partner_id == "trae-cli":
-        account_detail = "Trae 桌面端可用不代表 CLI 已获得同一模型/企业权益。"
-
-    headless_value = "可自动派工" if headless_supported else "仅原生/待适配"
-    headless_tone = "ready" if ready else ("warning" if command else "blocked")
-    if readiness_status in {"launcher_only", "headless_unsupported"}:
-        headless_tone = "blocked"
-    elif readiness_status == "model_unconfigured":
-        headless_tone = "warning"
-
-    check_value = verify_command or "先安装/打开原生 CLI"
-    check_detail = (
-        "复制验证命令或点健康检查确认真实 prompt→stdout 可用。"
-        if verify_command
-        else "未发现可验证的 headless 命令；先安装官方 CLI 或回原生终端处理。"
-    )
-
-    return [
-        {
-            "label": "模型来源",
-            "value": model_value,
-            "tone": "ready" if ready else "warning",
-            "detail": model_detail,
-        },
-        {
-            "label": "账号/权益",
-            "value": "CLI 独立",
-            "tone": "warning",
-            "detail": account_detail,
-        },
-        {
-            "label": "Headless",
-            "value": headless_value,
-            "tone": headless_tone,
-            "detail": f"当前状态：{readiness_status}。",
-        },
-        {
-            "label": "检查命令",
-            "value": check_value,
-            "tone": "neutral" if verify_command else "blocked",
-            "detail": check_detail,
-        },
-    ]
 
 
 def readiness_for_partner(
@@ -677,9 +196,6 @@ def partner_model(partner_id: str) -> dict[str, Any]:
     (e.g. codex ``gpt-5.5``), NOT octopus's — so the UI can display it instead of
     the octopus model selector. Returns ``{partner_id, model, source}`` with
     ``model=""`` when not found. Best-effort and total — never raises."""
-    import os
-    from pathlib import Path
-
     home = Path(os.path.expanduser("~"))
     model = ""
     source = ""
@@ -818,7 +334,7 @@ def which_command(commands: list[str]) -> tuple[str | None, str | None]:
                 if candidate.is_file() and os.access(candidate, os.X_OK):
                     return str(candidate), str(candidate.resolve())
             except OSError:
-                pass
+                continue
         path = resolve_local_command(command)
         if path:
             return command, path
@@ -899,101 +415,6 @@ def to_wire(
             verify_command=guidance.get("verify_command"),
         ),
     )
-
-
-_DOCTOR_STATUS_LABELS = {
-    "registered": "已连接",
-    "ready": "可自动派工",
-    "model_unconfigured": "模型未配置",
-    "launcher_only": "仅发现启动器",
-    "headless_unsupported": "暂不支持 headless",
-    "missing": "未安装",
-    "detected": "已检测到",
-    "unsafe_executable": "路径不安全",
-}
-
-
-def _doctor_next_action(status: str) -> str:
-    if status in {"registered", "ready"}:
-        return "可直接派工；建议健康检查后再跑重要任务。"
-    if status == "model_unconfigured":
-        return "打开原生 CLI 登录/选模型，并确认 CLI 账号或企业授权可用。"
-    if status == "launcher_only":
-        return "安装官方 headless CLI；桌面/IDE 启动器只能手动使用。"
-    if status == "headless_unsupported":
-        return "回原生 CLI 使用，或等待厂商稳定 prompt-to-stdout 参数。"
-    if status == "unsafe_executable":
-        return "移除不安全 PATH，改用官方安装路径。"
-    if status == "missing":
-        return "安装对应官方 CLI，并确认命令进入 PATH。"
-    return "打开原生 CLI 复查登录、模型、权限和网络状态。"
-
-
-def doctor_summary(partners: list[LocalPartnerWire]) -> dict[str, Any]:
-    """Aggregate local partner readiness into a doctor-style report.
-
-    The per-partner cards stay detailed; this summary answers the operator's
-    first question: "what on this machine is actually usable right now?"
-    """
-    total = len(partners)
-    detected = sum(1 for partner in partners if partner.detected)
-    ready = sum(1 for partner in partners if partner.ready)
-    registered = sum(1 for partner in partners if partner.registered)
-    groups_by_status: dict[str, dict[str, Any]] = {}
-    for partner in partners:
-        status = str(
-            partner.effective_status
-            or partner.readiness_status
-            or partner.status
-            or "missing"
-        )
-        group = groups_by_status.setdefault(
-            status,
-            {
-                "status": status,
-                "label": _DOCTOR_STATUS_LABELS.get(status, status),
-                "count": 0,
-                "partner_ids": [],
-                "next_action": _doctor_next_action(status),
-            },
-        )
-        group["count"] += 1
-        group["partner_ids"].append(partner.id)
-
-    groups = sorted(
-        groups_by_status.values(),
-        key=lambda group: (
-            0 if group["status"] in {"registered", "ready"} else 1,
-            str(group["label"]),
-        ),
-    )
-    needs_attention = total - sum(
-        int(group["count"]) for group in groups if group["status"] in {"registered", "ready"}
-    )
-    next_actions: list[str] = []
-    seen: set[str] = set()
-    for group in groups:
-        if group["status"] in {"registered", "ready"}:
-            continue
-        action = str(group["next_action"])
-        if action and action not in seen:
-            next_actions.append(action)
-            seen.add(action)
-    if not next_actions and ready:
-        next_actions.append("全部可用伙伴建议先跑健康检查，再执行重要派工。")
-    elif not next_actions:
-        next_actions.append("先安装至少一个官方 CLI，并完成原生登录/授权。")
-
-    return {
-        "summary": f"{ready}/{total} 个本地 CLI 伙伴可自动派工，{needs_attention} 个需要处理。",
-        "total": total,
-        "detected": detected,
-        "ready": ready,
-        "registered": registered,
-        "needs_attention": needs_attention,
-        "groups": groups,
-        "next_actions": next_actions[:4],
-    }
 
 
 _PROBE_PROMPT = "请只回复 OK，不要修改文件。"
@@ -1110,175 +531,19 @@ def probe_partner(
     )
 
 
-# ── SOUL.md template + agent writer ────────────────────────────────
-
-
-def soul_template(*, alias: str, partner_name: str, command: str) -> str:
-    """Render the SOUL.md persona block for a registered partner."""
-    return f"""# Soul
-
-## Persona
-
-你是 {alias}，一个接入到 Octopus 人力池的本地伙伴。你的背后对应本机已经安装的 {partner_name} 工作流。
-
-## Working Style
-
-- 优先用中文和用户协作，保持简洁、可执行。
-- 当任务明确需要调用本地伙伴能力时，通过 shell 运行 `{command}`，并把关键结果整理回对话。
-- 调用外部命令前先判断是否必要；涉及文件写入、网络、账号态或长任务时说明将要做什么。
-- 如果本地工具返回错误,先给出降级方案,而不是把用户卡在工具细节里。
-"""
-
-
-def write_partner_agent(
-    *,
-    spec: dict[str, Any],
-    alias: str,
-    command: str,
-    executable: str,
-    runtime: Any,
-    registry: Any,
-) -> Any:
-    """Write a LocalPartner agent's profile + SOUL/IDENTITY/AGENTS docs
-    to disk and register it in the agent registry. Returns the loaded
-    Agent instance.
-
-    Idempotent: if the agent dir already exists with a profile.jsonc,
-    we just reload + re-register without overwriting any existing
-    customizations the user made.
-    """
-    import uuid
-
-    from runtime.execution.agents.loader import default_agents_root, load_agent
-    from runtime.platform.io import atomic_write_text
-
-    agent_id = _require_safe_agent_id(str(spec["agent_id"]))
-    root = default_agents_root().resolve()
-    agent_dir = root / agent_id
-    if agent_dir.is_symlink():
-        raise ValueError(f"agent folder is not a real directory: {agent_id}")
-    if agent_dir.exists() and not agent_dir.is_dir():
-        raise ValueError(f"agent path is not a directory: {agent_id}")
-    if agent_dir.exists():
-        profile_path = agent_dir / "profile.jsonc"
-        if profile_path.is_symlink() or not profile_path.is_file():
-            raise ValueError(f"agent folder exists without profile: {agent_id}")
-        agent = load_agent(agent_dir, runtime, root / "_shared")
-        if hasattr(registry, "replace"):
-            registry.replace(agent)
-        elif not registry.has(agent_id):
-            registry.register(agent)
-        return agent
-
-    created_agent_dir = False
-    try:
-        agent_dir.mkdir(parents=True)
-        created_agent_dir = True
-        for rel in (
-            "agent-core",
-            "agent-core/.soul_history",
-            "agent-core/diary",
-            "agent-core/skills",
-            "memory",
-            "permissions",
-            "project",
-            "runtime",
-            "sessions",
-            "skills",
-        ):
-            (agent_dir / rel).mkdir(parents=True, exist_ok=True)
-    except OSError:
-        _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
-        raise
-
-    did = f"DID-{uuid.uuid4().hex[:12].upper()}-{uuid.uuid4().hex[:6].upper()}"
-    profile = {
-        "id": agent_id,
-        "templateId": str(spec["id"]),
-        "templateVersion": "1.0.0",
-        "name": alias,
-        "icon": str(spec.get("icon") or "L"),
-        "did": did,
-        "description": str(spec["description"]),
-        "avatar": "avatar.svg",
-        "model": {"provider": "auto", "name": "auto"},
-        "runtime": "local_partner",
-        "creator": "user",
-        "category": "automation",
-        "tags": list(spec.get("tags") or []),
-        "defaultProject": {"dir": "project"},
-        "capabilities": {
-            "local_partner": True,
-            "local_partner_id": str(spec["id"]),
-            "local_partner_command": command,
-            "local_partner_executable": executable,
-        },
-    }
-    try:
-        atomic_write_text(
-            agent_dir / "profile.jsonc",
-            (
-                f"// Octopus local partner profile · {agent_id}\n"
-                "// Created by local partner registration\n\n"
-                + json.dumps(profile, ensure_ascii=False, indent=2)
-            ),
-        )
-        soul = soul_template(
-            alias=alias,
-            partner_name=str(spec["name"]),
-            command=command,
-        )
-        atomic_write_text(agent_dir / "agent-core" / "SOUL.md", soul, newline=None)
-        atomic_write_text(
-            agent_dir / "agent-core" / "IDENTITY.md",
-            f"""# Identity
-
-- **Name**: {alias}
-- **Role**: Local partner bridge for {spec["name"]}
-
-## Boundary
-
-- You are registered from a local executable detected on this machine.
-- Respect the current workspace and the user's requested task.
-""",
-            newline=None,
-        )
-        atomic_write_text(
-            agent_dir / "agent-core" / "AGENTS.md",
-            """# Working rules
-
-Before using the local partner command, understand the user's task and current workspace. Keep outputs concise and user-facing.
-""",
-            newline=None,
-        )
-        atomic_write_text(
-            agent_dir / "agent-core" / "tool-registry.jsonc",
-            (
-                "// Tool registry for this local partner\n\n"
-                + json.dumps(
-                    {
-                        "arms": list(spec.get("tool_groups") or []),
-                        "extra_affinity": ["local_partner", str(spec["id"])],
-                        "private_skills": [],
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            ),
-        )
-        atomic_write_text(agent_dir / "avatar.svg", pixel_agent_avatar_svg(alias), newline=None)
-    except OSError:
-        _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
-        raise
-
-    try:
-        agent = load_agent(agent_dir, runtime, root / "_shared")
-    except (OSError, ValueError, TypeError):
-        _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
-        raise
-    try:
-        registry.register(agent)
-    except (ValueError, TypeError):
-        _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
-        raise
-    return agent
+__all__ = [
+    "LOCAL_PARTNER_SPECS",
+    "dir_registered",
+    "doctor_summary",
+    "identity_has_admin_role",
+    "partner_model",
+    "probe_partner",
+    "readiness_for_partner",
+    "resolve_local_command",
+    "safe_executable",
+    "soul_template",
+    "to_wire",
+    "validate_alias",
+    "which_command",
+    "write_partner_agent",
+]

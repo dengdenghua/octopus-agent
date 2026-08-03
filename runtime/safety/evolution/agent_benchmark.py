@@ -369,6 +369,7 @@ BENCHMARK_CASES: tuple[AgentBenchmarkCase, ...] = (
             "runtime/sensing/gateway/realtime_turn_lifecycle.py",
             "runtime/sensing/gateway/realtime_turn_routing.py",
             "runtime/core/cerebrum/react_loop.py",
+            "runtime/core/cerebrum/react_guards.py",
             "tests/test_realtime_cerebrum.py",
             "tests/test_react_loop.py",
         ),

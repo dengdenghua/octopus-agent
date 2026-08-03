@@ -1,0 +1,419 @@
+"""Thread/session + emit helpers for the realtime runtime.
+
+Split out of ``realtime_cerebrum.py``: thread id/owner validation,
+turn replay/resume, the legacy ``ThreadStateStore`` snapshot bridge,
+agent resolution, policy wrapping, thread bootstrap and the small
+``item/*`` emission helpers the drivers rely on.
+
+Every function takes the owning ``CerebrumRuntime`` as its first
+argument; cross-method calls go through the runtime so subclass
+overrides keep working.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import logging
+from typing import TYPE_CHECKING, Any
+
+from runtime.memory.threads.event_log import EventLog
+from runtime.platform.models import ParsedIntent
+from runtime.platform.models.primitives import now_utc
+from runtime.protocol import (
+    AgentMessageItem,
+    ItemStatus,
+    JsonRpcErrorCode,
+    ReasoningItem,
+    ServerMethod,
+    TodoListItem,
+    TurnParams,
+    TurnStatus,
+)
+from runtime.safety.approval.approval_gate import ApprovalProvider
+from runtime.safety.approval.approval_policy_store import load_policy
+from runtime.sensing.gateway.realtime_event_bridge import _ReactBridgeState, _safe_list_remove
+from runtime.sensing.gateway.realtime_gateway import EventEmitter, _RpcError
+from runtime.sensing.gateway.realtime_thread_history import (
+    _flatten_turns_to_messages,
+    _title_from_messages,
+)
+
+if TYPE_CHECKING:
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+_logger = logging.getLogger(__name__)
+
+
+def _make_bridge_state(
+    runtime: CerebrumRuntime,
+    thread_id: str,
+    turn_id: str | None = None,
+    agent: Any | None = None,
+) -> _ReactBridgeState:
+    """Build a ``_ReactBridgeState`` wired to the per-thread
+    background-task registry, so the next turn on this thread can
+    sweep any watchers the previous turn left running."""
+
+    def _register(task: asyncio.Task[None]) -> None:
+        bucket = runtime._thread_background_tasks.setdefault(thread_id, [])
+        bucket.append(task)
+        # Auto-clean when the task finishes naturally — keeps the
+        # bucket bounded for long-lived threads.
+        task.add_done_callback(lambda t: _safe_list_remove(bucket, t))
+
+    binder = None
+    if turn_id is not None:
+
+        def _bind(item: Any, phase_id: str | None) -> None:
+            runtime._bind_turn_timeline(turn_id, item, phase_id=phase_id)
+
+        binder = _bind
+    agent_id = str(getattr(agent, "agent_id", "") or "").strip()
+    display_name = str(
+        getattr(agent, "display_name", None)
+        or getattr(agent, "name", None)
+        or agent_id
+        or ""
+    ).strip() or None
+    avatar_url = (
+        f"/api/agents/{agent_id}/avatar" if agent_id else None
+    )
+    return _ReactBridgeState(
+        on_background_task_start=_register,
+        timeline_binder=binder,
+        agent_display_name=display_name,
+        agent_avatar_url=avatar_url,
+        agent_icon=getattr(agent, "icon", None),
+    )
+
+
+async def _reap_stale_background_tasks(runtime: CerebrumRuntime, thread_id: str) -> None:
+    """Cancel and reap any background watchers from prior turns
+    on this thread before a new turn begins.
+
+    Called at the top of ``start_turn``. ``done`` tasks are
+    already pruned by the registration done-callback, so this
+    loop only fires for actually-still-running watchers — the
+    common case (new turn after the prior one finished cleanly)
+    is a no-op.
+    """
+    bucket = runtime._thread_background_tasks.get(thread_id)
+    if not bucket:
+        return
+    stale = [t for t in bucket if not t.done()]
+    if not stale:
+        runtime._thread_background_tasks.pop(thread_id, None)
+        return
+    for task in stale:
+        task.cancel()
+    for task in stale:
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+    # Drop the whole bucket; done-callbacks may still fire and
+    # try to remove from a stale list, but ``_safe_list_remove``
+    # tolerates missing entries.
+    runtime._thread_background_tasks.pop(thread_id, None)
+
+
+def _resolve_agent(runtime: CerebrumRuntime, params: TurnParams) -> Any:
+    """Pick the agent for this turn.
+
+    Lookup order:
+      1. Realtime input metadata (``agent_id`` / ``agent`` /
+         ``agent_name``), including the nested ``context`` bag the
+         web UI sends on ``turn/start``.
+      2. The registry's match for that id, if any.
+      3. The default agent passed at construction time.
+      4. ``None``.
+    """
+    agent_id: str | None = None
+    for block in params.input:
+        md = block.get("metadata") if isinstance(block, dict) else None
+        if not isinstance(md, dict):
+            continue
+        candidates: list[Any] = [md.get("agent_id"), md.get("agent"), md.get("agent_name")]
+        context = md.get("context")
+        if isinstance(context, dict):
+            candidates.extend(
+                [
+                    context.get("agent_id"),
+                    context.get("agent"),
+                    context.get("agent_name"),
+                ]
+            )
+        agent_id = next(
+            (value.strip() for value in candidates if isinstance(value, str) and value.strip()),
+            None,
+        )
+        if agent_id:
+            break
+    if agent_id and runtime._agent_registry is not None:
+        try:
+            if runtime._agent_registry.has(agent_id):
+                return runtime._agent_registry.get(agent_id)
+        except (AttributeError, TypeError, OSError):  # noqa: BLE001 — agent lookup failed; fall back to default
+            pass
+    return runtime._default_agent
+
+
+def _wrap_with_policy(runtime: CerebrumRuntime, fallback: ApprovalProvider) -> ApprovalProvider:
+    """Two-layer permission: static rules first, fallback otherwise.
+
+    Reads ``permissions.json`` on every turn so UI-initiated edits
+    (the "always trust" button) take effect immediately without
+    bouncing the runtime. The file is small (a handful of rules)
+    so the IO cost is irrelevant compared to a turn's LLM calls.
+    """
+    from pathlib import Path
+
+    if runtime._policy_path is None:
+        return fallback
+    path = Path(runtime._policy_path)
+    policy = load_policy(path)
+    if not policy.rules:
+        return fallback
+    from runtime.safety.audit.trust_gateway import TrustGatewayApprovalProvider
+
+    return TrustGatewayApprovalProvider(
+        static_policy=policy,
+        fallback=fallback,
+        trace_store=getattr(runtime, "_trace_store", None),
+        turn_id=getattr(fallback, "_turn_id", None),
+        agent_id=getattr(getattr(runtime, "_default_agent", None), "agent_id", None),
+    )
+
+
+def _log_for(runtime: CerebrumRuntime, thread_id: str) -> EventLog:
+    from runtime.memory.threads.event_log import thread_log_path
+
+    return EventLog(thread_log_path(runtime._logs_root, thread_id))
+
+
+def _require_thread_id(runtime: CerebrumRuntime, value: Any) -> str:
+    from runtime.memory.threads.event_log import validate_thread_id
+
+    if not isinstance(value, str):
+        raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "threadId required")
+    try:
+        return validate_thread_id(value)
+    except ValueError as exc:
+        raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc)) from exc
+
+
+def _require_thread_owner(
+    runtime: CerebrumRuntime,
+    log: EventLog,
+    actor_id: str | None,
+    *,
+    turns: list[Turn] | None = None,
+) -> None:
+    from runtime.memory.threads.event_log import owner_actor_id_from_turns
+
+    owner = owner_actor_id_from_turns(turns if turns is not None else log.replay())
+    if owner is not None and actor_id != owner:
+        raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {log.path.stem}")
+
+
+def _resume_turns(
+    runtime: CerebrumRuntime,
+    log: EventLog,
+    *,
+    turns: list[Turn] | None = None,
+) -> list[Turn]:
+    """Replay and close in-progress turns left by an older process."""
+    turns = turns if turns is not None else log.replay()
+    if not turns:
+        return turns
+    stale = [
+        turn
+        for turn in turns
+        if turn.status == TurnStatus.IN_PROGRESS
+        and turn.id not in runtime._active_turn_ids
+        and not runtime._has_fresh_active_turn_lease(turn.thread_id, turn.id)
+    ]
+    for turn in stale:
+        turn.status = TurnStatus.FAILED
+        turn.error = {
+            "message": "上次执行在后端重启或连接中断时未完成，已自动结束。请重新发送或点击重试。",
+            "code": "stale_in_progress_turn",
+        }
+        turn.completed_at = now_utc()
+        for item in turn.items:
+            if item.status == ItemStatus.IN_PROGRESS:
+                item.status = ItemStatus.FAILED
+        log.turn_completed(turn.thread_id, turn.id, turn.status, error=turn.error)
+    return turns
+
+
+def _snapshot_to_thread_store(
+    runtime: CerebrumRuntime,
+    thread_id: str,
+    log: EventLog,
+    intent: ParsedIntent | None = None,
+) -> None:
+    """Flatten the realtime conversation into the legacy
+    ``AgentThreadState`` shape and upsert it into ``ThreadStateStore``.
+
+    Without this bridge, realtime turns live only in the per-thread
+    JSONL event log under ``data/threads/`` and never surface in the
+    sidebar's "recent chats" list, which reads ``ThreadStateStore``
+    (``agents/<agent>/sessions/<thread>.jsonl`` + the legacy
+    ``data/threads.jsonl`` index).
+
+    Called after every turn — completed, failed, or interrupted —
+    so a half-completed conversation still shows up in history.
+    Failures here are swallowed: the realtime event log is the
+    durable record; the legacy store is a derived cache for the
+    sidebar.
+    """
+    store = runtime._thread_store
+    if store is None:
+        return
+    try:
+        turns = log.replay()
+        messages, artifacts, todos = _flatten_turns_to_messages(turns)
+        title = _title_from_messages(messages) or ""
+        values: dict[str, Any] = {
+            "title": title,
+            "messages": messages,
+            "artifacts": artifacts,
+        }
+        if todos is not None:
+            values["todos"] = todos
+        uc = (intent.user_context or {}) if intent is not None else {}
+        metadata: dict[str, Any] = {}
+        for key in (
+            "mode",
+            "agent",
+            "agent_name",
+            "workspace_path",
+            "workspace_scope",
+            "personal_workspace_path",
+            "personal_workspace_enabled",
+            "owner_actor_id",
+            "actor_id",
+        ):
+            v = uc.get(key) if isinstance(uc, dict) else None
+            if v is not None:
+                # ThreadStateStore.search() filters by ``metadata.agent``
+                # so we normalise the key name the sidebar expects.
+                metadata[
+                    "agent"
+                    if key == "agent_name"
+                    else "owner_actor_id"
+                    if key == "actor_id"
+                    else key
+                ] = v
+        store.ensure_thread(thread_id, metadata=metadata, values=values)
+        store.update_state(
+            thread_id,
+            values=values,
+            metadata=metadata if metadata else None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug(
+            "snapshot to thread_store skipped (%s: %s)",
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
+
+
+async def _ensure_thread(runtime: CerebrumRuntime, thread_id: str, emitter: EventEmitter) -> EventLog:
+    log = runtime._log_for(thread_id)
+    async with runtime._lock:
+        if thread_id in runtime._known_threads:
+            return log
+        existed = log.path.exists() and log.path.stat().st_size > 0
+        if not existed:
+            evt = log.thread_started(thread_id)
+            await emitter.notify(
+                ServerMethod.THREAD_STARTED,
+                {
+                    "thread": {"id": thread_id},
+                    "threadId": thread_id,
+                    "eventId": evt.event_id,
+                },
+            )
+        runtime._known_threads.add(thread_id)
+    return log
+
+
+async def _emit_item_started(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    log: EventLog,
+    emitter: EventEmitter,
+    item: Any,
+) -> None:
+    evt = log.item_started(turn.thread_id, turn.id, item)
+    await emitter.notify(
+        ServerMethod.ITEM_STARTED,
+        {
+            "threadId": turn.thread_id,
+            "turnId": turn.id,
+            "item": item.model_dump(by_alias=True, mode="json"),
+            "eventId": evt.event_id,
+        },
+    )
+
+
+async def _emit_item_completed(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    log: EventLog,
+    emitter: EventEmitter,
+    item: Any,
+) -> None:
+    evt = log.item_completed(turn.thread_id, turn.id, item)
+    await emitter.notify(
+        ServerMethod.ITEM_COMPLETED,
+        {
+            "threadId": turn.thread_id,
+            "turnId": turn.id,
+            "item": item.model_dump(by_alias=True, mode="json"),
+            "eventId": evt.event_id,
+        },
+    )
+
+
+async def _emit_agent_message(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    log: EventLog,
+    emitter: EventEmitter,
+    text: str,
+) -> None:
+    item = AgentMessageItem(text=text)
+    turn.items.append(item)
+    await runtime._emit_item_started(turn, log, emitter, item)
+    item.status = ItemStatus.COMPLETED
+    await runtime._emit_item_completed(turn, log, emitter, item)
+
+
+async def _emit_todo_list(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    log: EventLog,
+    emitter: EventEmitter,
+    item: TodoListItem,
+) -> None:
+    turn.items.append(item)
+    await runtime._emit_item_started(turn, log, emitter, item)
+    item.status = ItemStatus.COMPLETED
+    await runtime._emit_item_completed(turn, log, emitter, item)
+
+
+async def _emit_reasoning(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    log: EventLog,
+    emitter: EventEmitter,
+    item: ReasoningItem,
+) -> None:
+    turn.items.append(item)
+    await runtime._emit_item_started(turn, log, emitter, item)
+    item.status = ItemStatus.COMPLETED
+    await runtime._emit_item_completed(turn, log, emitter, item)

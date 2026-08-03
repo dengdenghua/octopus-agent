@@ -132,11 +132,7 @@ def test_scan_with_no_reachable_services_returns_empty(
     every dev box has dozens of silent ports."""
     # Point the scanner at a definitely-dead port range to avoid
     # any flake from a real local service appearing mid-test.
-    monkeypatch.setattr(
-        "runtime.sensing.gateway.config_router.os.environ",
-        {**__import__("os").environ, "OCTOPUS_TEST_NO_REACH": "1"},
-        raising=False,
-    )
+    monkeypatch.setenv("OCTOPUS_TEST_NO_REACH", "1")
     # Use the targets override to point all candidates at a
     # port nothing is listening on (1-1023 are reserved and
     # nothing userland binds there).

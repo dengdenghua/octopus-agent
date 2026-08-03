@@ -607,7 +607,7 @@ def _decision_from_terminal_receipt(
                     step=Step.model_validate_json(raw),
                 )
             except (TypeError, ValueError):
-                pass
+                raw = None
         return StoreDecision(
             "indeterminate",
             fencing_token=token,

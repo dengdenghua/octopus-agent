@@ -1052,9 +1052,7 @@ class TestLocalPartners:
         assert codebuddy["native_launch_command"].startswith(
             f"cd {shlex.quote(str(repo_root))} && "
         )
-        assert codebuddy["native_launch_command"].endswith(
-            f" && {codebuddy['native_command']}"
-        )
+        assert codebuddy["native_launch_command"].endswith(f" && {codebuddy['native_command']}")
 
     def test_local_partner_effective_status_reflects_not_ready_state(
         self,
@@ -1066,9 +1064,9 @@ class TestLocalPartners:
         monkeypatch.setattr(
             agents_router_module,
             "_which_local_partner_command",
-            lambda commands: ("trae-cli", str(tmp_path / "trae-cli"))
-            if "trae-cli" in commands
-            else (None, None),
+            lambda commands: (
+                ("trae-cli", str(tmp_path / "trae-cli")) if "trae-cli" in commands else (None, None)
+            ),
         )
 
         class _Proc:
@@ -1200,7 +1198,7 @@ class TestLocalPartners:
     ):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
 
-        launcher = "/Users/me/.codebuddy/bin/buddy"
+        launcher = "/Users/me/.codebuddy/bin/buddy"  # lint: allow-user-path
         app_code = "/Volumes/CodeBuddy/CodeBuddy.app/Contents/Resources/app/bin/code"
 
         def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
@@ -1258,7 +1256,9 @@ class TestLocalPartners:
         )
         assert partners["codebuddy-cli"]["native_command"] is None
         assert partners["codebuddy-cli"]["verify_command"] is None
-        diagnostics = {item["label"]: item for item in partners["codebuddy-cli"]["diagnostic_items"]}
+        diagnostics = {
+            item["label"]: item for item in partners["codebuddy-cli"]["diagnostic_items"]
+        }
         assert diagnostics["Headless"]["value"] == "仅原生/待适配"
         assert diagnostics["检查命令"]["tone"] == "blocked"
 
@@ -1296,9 +1296,11 @@ class TestLocalPartners:
         monkeypatch.setattr(
             agents_router_module,
             "_which_local_partner_command",
-            lambda commands: ("codex", str(tmp_path / "codex"))
-            if any(cmd.startswith("codex") for cmd in commands)
-            else (None, None),
+            lambda commands: (
+                ("codex", str(tmp_path / "codex"))
+                if any(cmd.startswith("codex") for cmd in commands)
+                else (None, None)
+            ),
         )
         monkeypatch.setattr(agents_router_module, "_safe_local_partner_executable", lambda _: True)
         seen: dict = {}
@@ -1337,9 +1339,11 @@ class TestLocalPartners:
         monkeypatch.setattr(
             agents_router_module,
             "_which_local_partner_command",
-            lambda commands: ("codex", str(tmp_path / "codex"))
-            if any(cmd.startswith("codex") for cmd in commands)
-            else (None, None),
+            lambda commands: (
+                ("codex", str(tmp_path / "codex"))
+                if any(cmd.startswith("codex") for cmd in commands)
+                else (None, None)
+            ),
         )
         monkeypatch.setattr(agents_router_module, "_safe_local_partner_executable", lambda _: True)
 
@@ -1381,9 +1385,9 @@ class TestLocalPartners:
         monkeypatch.setattr(
             agents_router_module,
             "_which_local_partner_command",
-            lambda commands: ("trae-cli", str(tmp_path / "trae-cli"))
-            if "trae-cli" in commands
-            else (None, None),
+            lambda commands: (
+                ("trae-cli", str(tmp_path / "trae-cli")) if "trae-cli" in commands else (None, None)
+            ),
         )
         monkeypatch.setattr(agents_router_module, "_safe_local_partner_executable", lambda _: True)
 
@@ -1422,9 +1426,11 @@ class TestLocalPartners:
         monkeypatch.setattr(
             agents_router_module,
             "_which_local_partner_command",
-            lambda commands: ("codex", str(tmp_path / "codex"))
-            if any(cmd.startswith("codex") for cmd in commands)
-            else (None, None),
+            lambda commands: (
+                ("codex", str(tmp_path / "codex"))
+                if any(cmd.startswith("codex") for cmd in commands)
+                else (None, None)
+            ),
         )
         monkeypatch.setattr(agents_router_module, "_safe_local_partner_executable", lambda _: False)
         app = FastAPI()
@@ -1488,9 +1494,9 @@ class TestLocalPartners:
         monkeypatch.setattr(
             agents_local_partner,
             "which_command",
-            lambda commands: ("trae-cli", "/usr/bin/trae-cli")
-            if "trae-cli" in commands
-            else (None, None),
+            lambda commands: (
+                ("trae-cli", "/usr/bin/trae-cli") if "trae-cli" in commands else (None, None)
+            ),
         )
 
         class _Proc:
@@ -1530,18 +1536,18 @@ class TestLocalPartners:
         monkeypatch.setattr(
             agents_router_module,
             "_which_local_partner_command",
-            lambda commands: ("trae-cli", "/usr/bin/trae-cli")
-            if "trae-cli" in commands
-            else (None, None),
+            lambda commands: (
+                ("trae-cli", "/usr/bin/trae-cli") if "trae-cli" in commands else (None, None)
+            ),
         )
         from runtime.sensing.gateway import agents_local_partner
 
         monkeypatch.setattr(
             agents_local_partner,
             "which_command",
-            lambda commands: ("trae-cli", "/usr/bin/trae-cli")
-            if "trae-cli" in commands
-            else (None, None),
+            lambda commands: (
+                ("trae-cli", "/usr/bin/trae-cli") if "trae-cli" in commands else (None, None)
+            ),
         )
 
         class _Proc:
@@ -1574,9 +1580,9 @@ class TestLocalPartners:
         monkeypatch.setattr(
             agents_local_partner,
             "which_command",
-            lambda commands: ("codebuddy", "/usr/bin/codebuddy")
-            if "codebuddy" in commands
-            else (None, None),
+            lambda commands: (
+                ("codebuddy", "/usr/bin/codebuddy") if "codebuddy" in commands else (None, None)
+            ),
         )
 
         class _Proc:

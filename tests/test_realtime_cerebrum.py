@@ -498,7 +498,7 @@ def test_silent_tool_round_does_not_manufacture_public_narrative(gateway: Any) -
                 "iteration": 1,
                 "input_preview": {
                     "command": "cat ~/.ssh/id_rsa && pnpm test",
-                    "cwd": "/Users/dangbei/Public/octopus/octopus-agent",
+                    "cwd": "/Users/alice/Public/octopus/octopus-agent",  # lint: allow-user-path
                     "token": "super-secret",
                 },
             },
@@ -532,7 +532,7 @@ def test_silent_tool_round_does_not_manufacture_public_narrative(gateway: Any) -
     assert public_text == "最终答案"
     assert "exec_shell" not in public_text
     assert "cat ~/.ssh/id_rsa" not in public_text
-    assert "/Users/dangbei/Public" not in public_text
+    assert "/Users/alice/Public" not in public_text  # lint: allow-user-path
     assert "super-secret" not in public_text
 
 
@@ -703,7 +703,7 @@ def test_unsafe_tool_public_description_is_omitted_without_leaking(
                 "tool_call_id": "unsafe-described-tool",
                 "iteration": 1,
                 "input_preview": {
-                    "public_description": "读取 /Users/dangbei/secret.txt token=super-secret",
+                    "public_description": "读取 /Users/alice/secret.txt token=super-secret",  # lint: allow-user-path
                 },
             },
             {
@@ -734,7 +734,7 @@ def test_unsafe_tool_public_description_is_omitted_without_leaking(
     ]
     public_text = "\n".join(item["text"] for item in messages)
     assert public_text == "最终答案"
-    assert "/Users/dangbei/secret.txt" not in public_text
+    assert "/Users/alice/secret.txt" not in public_text  # lint: allow-user-path
     assert "super-secret" not in public_text
 
 

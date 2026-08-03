@@ -1,0 +1,391 @@
+"""Code-context prelude and mode/workflow/signals prompt builders.
+
+Extracted from ``react_context.py``. Pure builders — no behaviour change.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+_CODE_CONTEXT_README_NAMES = ("README.md", "readme.md", "TASK.md")
+_CODE_CONTEXT_STYLE_SUFFIXES = (
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".go",
+    ".rs",
+    ".html",
+    ".css",
+)
+_CODE_CONTEXT_SKIP_DIR_NAMES = {
+    ".git",
+    ".hg",
+    ".svn",
+    ".idea",
+    ".vscode",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    ".next",
+    "target",
+}
+
+
+def _build_code_context_prelude(workspace_path: str, goal: str = "") -> str:
+    root = Path(workspace_path).expanduser()
+    if not root.is_dir():
+        return ""
+
+    parts: list[str] = ["[startup-code-context]"]
+
+    readme = _find_code_context_readme(root)
+    if readme is not None:
+        readme_text = _read_code_context_file(readme, max_chars=2000)
+        if readme_text:
+            readme_rel = readme.relative_to(root).as_posix()
+            parts.append(f'Observation: read_file("{readme_rel}")')
+            parts.append(f"Path: {readme.relative_to(root).as_posix()}")
+            parts.append(readme_text)
+
+    style_file = _find_code_context_style_file(root)
+    if style_file is not None and style_file != readme:
+        style_text = _read_code_context_file(style_file, max_chars=1500)
+        if style_text:
+            style_rel = style_file.relative_to(root).as_posix()
+            parts.append(f'Observation: read_file("{style_rel}")')
+            parts.append(f"Path: {style_file.relative_to(root).as_posix()}")
+            parts.append(style_text)
+
+    acceptance = _task_acceptance_context(goal, "\n".join(parts))
+    if acceptance:
+        parts.append(acceptance)
+
+    if len(parts) == 1:
+        return ""
+    return "\n\n".join(parts)
+
+
+def _task_acceptance_context(goal: str, observed_context: str) -> str:
+    """Add bounded, task-derived acceptance checks for common high-risk work.
+
+    This is deliberately phrased as verification guidance rather than a
+    solution. It makes security and cross-cutting maintenance obligations
+    stable across model providers without changing the user's requested API.
+    """
+
+    goal_text = str(goal or "").lower()
+    context_text = observed_context.lower()
+    checks: list[str] = []
+    path_boundary_task = any(
+        term in goal_text
+        for term in ("path-boundary", "path boundary", "traversal", "symlink escape")
+    )
+    if path_boundary_task and any(
+        term in context_text for term in ("unquote", "url decode", "pathboundaryerror")
+    ):
+        checks.append(
+            "Security path-boundary acceptance: test plain, encoded, and repeatedly/double-encoded "
+            "traversal; normalize separators; resolve symlinks; prove containment in the canonical "
+            "root; raise the public boundary exception for every rejected input; preserve valid "
+            "nested reads; and add focused regression tests for these cases."
+        )
+    crosscutting_change = any(
+        term in goal_text for term in ("cross-cutting", "cross cutting", "rename")
+    ) and any(term in goal_text for term in ("config", "configuration", "setting", "option"))
+    if crosscutting_change:
+        checks.append(
+            "Cross-cutting configuration acceptance: search runtime consumers, schemas, CLI flags, "
+            "documentation, examples/sample configs, and tests; preserve the documented legacy "
+            "alias or migration path; then rerun a repository-wide search for stale names."
+        )
+    concurrent_cache_task = (
+        "cache" in goal_text
+        and any(term in goal_text for term in ("concurrent", "simultaneous", "并发"))
+        and any(term in goal_text for term in ("ttl", "expire", "过期"))
+    )
+    if concurrent_cache_task:
+        checks.append(
+            "Concurrent cache acceptance: implement single-flight behavior per key so all simultaneous "
+            "misses share exactly one loader result; never hold unrelated keys behind that load; wake "
+            "all waiters on success or failure; do not cache exceptions; use a monotonic TTL clock; "
+            "and add a barrier-based regression proving one loader call under real thread contention. "
+            "Read the existing cache implementation and focused tests first, use one per-key pending "
+            "state/condition instead of ad-hoc retry loops, then run the smallest targeted test and lint. "
+            "Choose leader versus follower exactly once while holding the map lock; only the creator of "
+            "the pending entry may call the loader, and followers must wait outside that lock. Never call "
+            "a helper that re-acquires the same non-reentrant lock while its caller still holds it. A shared "
+            "pending Event/result/exception entry is the simplest auditable shape. "
+            "For failure fan-out tests, hold the first loader in-flight with an Event until followers "
+            "have joined; a barrier only before get_or_load does not prove those callers became waiters, "
+            "so do not assert scheduler-dependent exception counts. "
+            "If the starter still calls the loader directly or the tests directory has no focused "
+            "cache test, make the first mutations cache.py and tests/test_cache.py before invoking "
+            "test tooling. Use the registered run_tests/lint_check tools; do not install dependencies, "
+            "probe unrelated system Python environments, or substitute shell redirection for file tools. "
+            "The only permitted product diffs are cache.py and tests/test_cache.py: do not modify "
+            "pyproject.toml or add tests/__init__.py, conftest.py, helper scripts, or packaging metadata. "
+            "If run_tests times out or fails, inspect its tail and repair cache.py/tests directly before "
+            "running it again; do not create alternate test-runner scripts. "
+            "When lint_check reports fixable import/format diagnostics, inspect its returned diff or call "
+            "lint_check with fix=true instead of guessing edits or probing for a system ruff executable. "
+            "Once those checks pass, stop and report the result instead of adding duplicate scripts or "
+            "running unrelated broad suites."
+        )
+    if not checks:
+        return ""
+    return "[task-acceptance-contract]\n" + "\n".join(f"- {check}" for check in checks)
+
+
+def _build_code_agent_mode_prompt(agent_mode: str | None) -> str:
+    """Mode-specific operating contract for Agent page project/code turns."""
+    mode = (agent_mode or "coder").strip().lower()
+    aliases = {
+        "build": "builder",
+        "builder": "builder",
+        "new": "builder",
+        "code": "coder",
+        "coder": "coder",
+        "debugger": "coder",
+        "architect": "architect",
+        "architecture": "architect",
+    }
+    canonical = aliases.get(mode, "coder")
+    if canonical == "builder":
+        body = (
+            "当前项目子模式: builder / 构建者。\n"
+            "- 适合从零搭建项目、补脚手架、初始化配置、生成可运行最小闭环。\n"
+            "- 先确认目标产物、运行入口和验收命令;优先创建最小可运行版本。\n"
+            "- 不要过早引入大型框架或复杂抽象;每完成一个可运行切片就验证。"
+        )
+    elif canonical == "architect":
+        body = (
+            "当前项目子模式: architect / 架构师。\n"
+            "- 适合跨模块设计、迁移方案、安全边界、接口契约和技术债治理。\n"
+            "- 默认先读现有结构与约束,给出设计取舍;涉及大范围修改前先分阶段执行。\n"
+            "- 优先保持兼容性和可回滚性;避免一次性重写核心路径。"
+        )
+    else:
+        body = (
+            "当前项目子模式: coder / 编码者。\n"
+            "- 适合修 bug、加功能、写测试、重构局部代码。\n"
+            "- 优先定位最小相关文件,做小步修改,每个修改点配套验证。\n"
+            "- 交付时说明改了哪里、跑了什么验证、还有什么残余风险。"
+        )
+    return f"<code-agent-mode>\n{body}\n</code-agent-mode>"
+
+
+def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
+    """Operating contract for an intensity workflow preset (e.g. audit.ultracode).
+
+    Most of the frontend's preset bundle (skill packs, verification policy) is
+    advisory metadata, but ``audit.ultracode`` carries real behaviour: it steers
+    the turn toward a DEEP multi-agent review instead of a single-pass read.
+
+    Spawn DEPTH is deliberately NOT set here — it stays governed by the operator
+    orchestration budget (``OCTOPUS_ORCH_TOKEN_BUDGET``; conservative 48-spawn cap
+    unless the operator opts in). This prompt only steers WHAT to do, never how
+    many agents to allow, so a client picking this preset cannot escalate its own
+    spawn budget. The directive is also defensive about skill availability: if the
+    ``run_orchestration`` skill is gated out for this agent, fall back to a manual
+    multi-pass review rather than calling a tool that isn't there.
+    """
+    preset = (workflow_preset or "").strip().lower()
+    if preset == "codex.plan":
+        body = (
+            "当前工作流: codex.plan / Plan 模式。\n"
+            "- 可以读取上下文、搜索资料、检查代码结构并提出少量澄清问题。\n"
+            "- 默认不要写文件、改代码、执行实现性改动或启动长任务;用户明确要求执行时才切换。\n"
+            "- 输出可执行计划,至少包含目标理解、约束/风险、步骤、验收标准和需要确认的点。"
+        )
+    elif preset == "codex.spec":
+        body = (
+            "当前工作流: codex.spec / Spec 模式。\n"
+            "- 目标是沉淀规格,不是马上实现。默认不要改代码或写入项目文件。\n"
+            "- 输出目标、非目标、用户故事/流程、接口或数据契约、边界条件、验收标准和开放问题。\n"
+            "- 如果现有代码会影响规格,先读相关文件再写规格;不要凭空假设接口。"
+        )
+    elif preset == "codex.goal":
+        body = (
+            "当前工作流: codex.goal / Goal 模式。\n"
+            "- 围绕 objective 持续推进,但单轮仍受 max_iterations、token 和成本预算约束。\n"
+            "- 开始前拆成可审计 todo;每次推进后更新状态,保留可恢复上下文。\n"
+            "- 完成前做 completion audit: 逐项核对原始目标、交付物、测试/验收和当前证据。"
+        )
+    elif preset == "audit.ultracode":
+        body = (
+            "当前工作流: audit.ultracode / 最高强度审查。\n"
+            "- 不要单轮通读了事,做多代理并行深审。若具备 `run_orchestration` 技能,"
+            "用它发起编排(agent_id 传一组不同视角的角色,如 [critic, explorer, "
+            "researcher];n=5、rounds=2~3、verify=true、synthesize=true),让发现经过 "
+            "收集→去重→投票核验→综合;不具备该技能时,改为按模块多轮交叉审查。\n"
+            "- 扇出深度由部署预算自动伸缩,你只负责发起编排,不要自行抬高 max_spawns。\n"
+            "- 汇总按 严重度 + 证据(文件:行)+ 修复顺序 归并;核验未通过的发现标注为存疑。"
+        )
+    else:
+        return ""
+    return f"<workflow-preset>\n{body}\n</workflow-preset>"
+
+
+def _build_personal_agent_mode_prompt(personal_mode: str | None) -> str:
+    """Operating contract for a PERSONAL-space work mode (no bound user project).
+
+    The code/project modes (:func:`_build_code_agent_mode_prompt`) only apply once
+    a workspace directory is bound. Personal space is the agent's own
+    conversational/work space — it still has a sandbox to write in, so it can carry
+    its own modes. Only "build" carries steering here; "general" is the default
+    (no contract) and "research" is handled upstream by the existing deep-research
+    reasoning mode, not by this prompt.
+    """
+    mode = (personal_mode or "").strip().lower()
+    if mode not in {"build", "builder", "make", "maker"}:
+        return ""
+    body = (
+        "当前空间: 个人工作空间(未绑定用户项目目录),你有自己的沙箱工作目录可写。\n"
+        "构建模式 / maker:\n"
+        "- 主动产出可运行的成果,而不是只给方案:需要时在工作目录里创建文件、写代码、跑起来验证。\n"
+        "- 每完成一个可运行切片就自测一次;优先最小可运行版本,不要堆到最后才验证。\n"
+        "- 收工用 Final Answer 说明:产出了什么、怎么运行或获取(关键文件 / 命令 / 导出方式)、残余风险。"
+    )
+    return f"<personal-agent-mode>\n{body}\n</personal-agent-mode>"
+
+
+def _build_project_signals_prompt(project_signals: Any) -> str:
+    if not isinstance(project_signals, dict):
+        return ""
+    signals = project_signals.get("signals")
+    if not isinstance(signals, dict):
+        signals = project_signals
+
+    def _list(key: str, limit: int = 8) -> list[str]:
+        value = signals.get(key)
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value[:limit] if isinstance(item, str) and item.strip()]
+
+    def _commands(limit: int = 8) -> list[str]:
+        value = signals.get("commands")
+        if not isinstance(value, list):
+            return []
+        formatted: list[str] = []
+        for item in value[:limit]:
+            if not isinstance(item, dict):
+                continue
+            kind = str(item.get("kind") or "").strip()
+            command = str(item.get("command") or "").strip()
+            source = str(item.get("source") or "").strip()
+            if not kind or not command:
+                continue
+            suffix = f" ({source[:80]})" if source else ""
+            formatted.append(f"[{kind}] {command}{suffix}")
+        return formatted
+
+    lines: list[str] = []
+    recommended = project_signals.get("recommended_mode")
+    if isinstance(recommended, str) and recommended.strip():
+        confidence = project_signals.get("confidence")
+        suffix = (
+            f" ({round(float(confidence) * 100)}%)" if isinstance(confidence, (int, float)) else ""
+        )
+        lines.append(f"- 推荐子模式: {recommended.strip()}{suffix}")
+    reason = project_signals.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        lines.append(f"- 检测依据: {reason.strip()[:240]}")
+
+    file_count = signals.get("file_count")
+    if isinstance(file_count, int):
+        lines.append(f"- 文件数量: {file_count}")
+    git_commits = signals.get("git_commits")
+    if isinstance(git_commits, int) and git_commits > 0:
+        lines.append(f"- Git 提交数: {git_commits}")
+    if signals.get("has_readme") is True:
+        lines.append("- README: 已发现")
+
+    manifests = _list("manifests")
+    if manifests:
+        lines.append("- 项目清单/技术栈信号: " + ", ".join(manifests))
+    lock_files = _list("lock_files")
+    if lock_files:
+        lines.append("- 锁文件/包管理器信号: " + ", ".join(lock_files))
+    structure_dirs = _list("structure_dirs", limit=12)
+    if structure_dirs:
+        lines.append("- 关键目录: " + ", ".join(structure_dirs))
+    commands = _commands()
+    if commands:
+        lines.append("- 候选验证命令: " + "; ".join(commands))
+
+    if not lines:
+        return ""
+    if commands:
+        lines.append(
+            "- 验证建议: 修改后优先从候选命令里选择最相关的一条执行;"
+            "如果候选命令不适用,说明原因并选择更窄的验证。"
+        )
+    else:
+        lines.append(
+            "- 验证建议: 优先根据上述清单和锁文件选择项目自带 lint/typecheck/test/build 命令;"
+            "不确定时先读取 package/pyproject/README 等清单文件再执行。"
+        )
+    return "<project-signals>\n" + "\n".join(lines) + "\n</project-signals>"
+
+
+def _find_code_context_readme(root: Path) -> Path | None:
+    for name in _CODE_CONTEXT_README_NAMES:
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    try:
+        for candidate in sorted(root.iterdir(), key=lambda p: p.name.lower()):
+            if candidate.is_file() and candidate.name.lower() == "readme.md":
+                return candidate
+    except OSError:
+        return None
+    return None
+
+
+def _find_code_context_style_file(root: Path) -> Path | None:
+    def _candidate_depth(path: Path) -> int:
+        return len(path.relative_to(root).parts)
+
+    candidates: list[Path] = []
+    try:
+        for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
+            if child.is_file() and child.suffix.lower() in _CODE_CONTEXT_STYLE_SUFFIXES:
+                if child.name.lower() != "readme.md":
+                    candidates.append(child)
+            elif child.is_dir():
+                if child.name in _CODE_CONTEXT_SKIP_DIR_NAMES:
+                    continue
+                try:
+                    for grand in sorted(child.iterdir(), key=lambda p: p.name.lower()):
+                        if grand.is_file() and grand.suffix.lower() in _CODE_CONTEXT_STYLE_SUFFIXES:  # noqa: SIM102
+                            if grand.name.lower() != "readme.md":
+                                candidates.append(grand)
+                                break
+                except OSError:
+                    continue
+    except OSError:
+        return None
+    if not candidates:
+        return None
+    candidates.sort(key=lambda p: (_candidate_depth(p), p.as_posix().lower()))
+    return candidates[0]
+
+
+def _read_code_context_file(path: Path, *, max_chars: int) -> str:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    text = text.strip()
+    if not text:
+        return ""
+    if len(text) > max_chars:
+        text = text[:max_chars] + "\n...(truncated)"
+    return text

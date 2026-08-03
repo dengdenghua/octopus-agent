@@ -79,8 +79,8 @@ def check_docs_fresh(live_count: int) -> int:
         for issue in stale:
             print(f"  {issue}", file=sys.stderr)
         print(
-            f"\nLive count is now {live_count}. Update the docs or regenerate "
-            f"with 'python tools/lint/count_tests.py'.",
+            f"\nLive count is now {live_count}. Update the documented floor; "
+            "this command only measures and checks it.",
             file=sys.stderr,
         )
         return 1

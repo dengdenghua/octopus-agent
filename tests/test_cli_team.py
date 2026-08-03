@@ -268,6 +268,10 @@ def test_detect_none_when_nothing_installed(monkeypatch) -> None:
     monkeypatch.setattr(alp.shutil, "which", lambda _c: None)
     monkeypatch.setattr(alp, "_login_shell_path", lambda: "")
     monkeypatch.setattr(alp, "_common_local_bin_entries", lambda: [])
+    # cli_team resolves via local_partner_discovery.resolve_local_command too;
+    # neutralize it so the test is deterministic regardless of what CLIs exist
+    # on the machine.
+    monkeypatch.setattr(ct, "resolve_local_command", lambda _c: None)
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     assert ct.detect_installed_partners() == []
 

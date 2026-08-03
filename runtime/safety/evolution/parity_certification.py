@@ -394,6 +394,7 @@ REQUIREMENTS: tuple[CertificationRequirement, ...] = (
             "runtime/sensing/gateway/team_tasks_router.py",
             "runtime/execution/parallel_agents/orchestrator.py",
             "runtime/execution/parallel_agents/models.py",
+            "runtime/execution/parallel_agents/_orchestrator_models.py",
             "runtime/execution/parallel_agents/process_worker.py",
             "tests/test_organization.py",
             "tests/test_organizations_router.py",

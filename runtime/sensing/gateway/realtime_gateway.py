@@ -16,15 +16,20 @@ Replaces the SSE+POST pattern. The gateway owns:
 The gateway is transport-bound. The actual turn loop (planning, LLM
 calls, tool dispatch) lives in implementations of ``RealtimeRuntime``.
 The gateway only knows about envelopes and items.
+
+This module is intentionally split into cohesive submodules
+(``_realtime_gateway_*``) to keep it under the line budget; the public
+surface (``RealtimeGateway``, ``RpcConnection``, ``ApprovalManager``,
+protocols, exceptions) is re-exported here so ``from
+runtime.sensing.gateway.realtime_gateway import X`` keeps working.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
 from contextlib import suppress
-from typing import Any, Protocol
+from typing import Any
 
 try:  # Optional-dep guard: mirror sibling gateways (openai_gateway etc.)
     from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -56,471 +61,23 @@ from runtime.protocol import (
     Turn,
     TurnStatus,
     decode_message,
-    encode_message,
+)
+from runtime.sensing.gateway._realtime_gateway_approval import ApprovalManager, SharedTurnInterrupts
+from runtime.sensing.gateway._realtime_gateway_connection import RpcConnection
+from runtime.sensing.gateway._realtime_gateway_frame import (
+    _FRAME_BYTE_LIMIT,
+    _FRAME_TRUNC_MARK,
+    _bound_oversized_frame,
+)
+from runtime.sensing.gateway._realtime_gateway_types import (
+    _APPROVAL_TIMEOUT_DEFAULT,
+    EventEmitter,
+    RealtimeRuntime,
+    _ApprovalError,
+    _RpcError,
 )
 
 _logger = logging.getLogger(__name__)
-
-# Default approval wait. 10 minutes is enough for the operator to
-# notice and respond; tune via the RealtimeGateway constructor for
-# environments with stricter SLAs.
-_APPROVAL_TIMEOUT_DEFAULT = 600.0
-
-
-# ── Public types ──────────────────────────────────────────────
-
-
-class EventEmitter(Protocol):
-    """Sink the runtime uses to push events out to a client.
-
-    A ``RpcConnection`` implements this. Implementations must be
-    coroutine-safe — one turn loop may interleave deltas from multiple
-    items, and asyncio task scheduling can reorder otherwise atomic
-    sequences.
-    """
-
-    async def notify(self, method: ServerMethod | str, params: dict[str, Any]) -> None: ...
-
-    async def request_approval(
-        self,
-        method: ServerMethod | str,
-        params: dict[str, Any],
-        *,
-        timeout: float | None = None,
-    ) -> Any: ...
-
-    def is_turn_interrupted(self, turn_id: str) -> bool:
-        """Cooperative cancel signal.
-
-        Runtime authors poll this between long-running steps. Returns
-        ``True`` once the client has issued ``turn/interrupt`` for the
-        given ``turn_id`` (or once the connection is closing).
-        """
-        ...
-
-    def get_interrupt_reason(self, turn_id: str) -> str | None:
-        """Return the human-readable reason this turn was interrupted."""
-        ...
-
-    def register_turn(self, turn_id: str) -> None:
-        """Tell the connection a new turn has begun.
-
-        The gateway routes any ``turn/interrupt`` RPC for this turn id
-        to this connection's interrupt registry. Runtime authors call
-        this immediately after constructing the Turn but before the
-        first await that could be interrupted.
-        """
-        ...
-
-    def unregister_turn(self, turn_id: str) -> None: ...
-
-
-class RealtimeRuntime(Protocol):
-    """The contract turn loops implement to plug into the gateway.
-
-    Implementations supply the actual agent logic. The gateway only
-    invokes ``start_turn``; everything else (interruption, steering,
-    listing) is dispatched by ``handle_request`` if implemented.
-    """
-
-    async def start_turn(self, params: dict[str, Any], emitter: EventEmitter) -> Turn: ...
-
-    async def handle_request(
-        self,
-        method: str,
-        params: dict[str, Any],
-        emitter: EventEmitter,
-    ) -> Any:
-        """Dispatch any non-``turn/start`` client method.
-
-        Defaults to method-not-found. Override to add ``thread/list``,
-        ``turn/interrupt``, etc.
-        """
-        ...
-
-
-# ── ApprovalManager — per-connection ──────────────────────────
-
-
-class ApprovalManager:
-    """Tracks server→client requests awaiting a client response.
-
-    Bound to a single ``RpcConnection``: when the WS closes, all
-    outstanding futures are cancelled. There is no shared state across
-    connections, so multi-worker deployments don't deadlock.
-    """
-
-    def __init__(self) -> None:
-        self._pending: dict[int | str, asyncio.Future[Any]] = {}
-        self._pending_turn_ids: dict[int | str, str] = {}
-        self._lock = asyncio.Lock()
-        self._next_id = 1
-
-    async def open(self, *, turn_id: str | None = None) -> tuple[int, asyncio.Future[Any]]:
-        """Reserve a request id and return its pending future."""
-        async with self._lock:
-            req_id = self._next_id
-            self._next_id += 1
-            loop = asyncio.get_running_loop()
-            fut: asyncio.Future[Any] = loop.create_future()
-            self._pending[req_id] = fut
-            if turn_id:
-                self._pending_turn_ids[req_id] = turn_id
-            return req_id, fut
-
-    async def resolve(self, req_id: int | str, response: JsonRpcResponse) -> None:
-        async with self._lock:
-            fut = self._pending.pop(req_id, None)
-            self._pending_turn_ids.pop(req_id, None)
-        if fut is None or fut.done():
-            return
-        if response.error is not None:
-            fut.set_exception(_ApprovalError(response.error))
-            return
-        fut.set_result(response.result)
-
-    async def cancel_one(self, req_id: int | str, reason: str = "cancelled") -> None:
-        async with self._lock:
-            fut = self._pending.pop(req_id, None)
-            self._pending_turn_ids.pop(req_id, None)
-        if fut is not None and not fut.done():
-            fut.cancel()
-        _logger.debug("approval cancelled req_id=%s (%s)", req_id, reason)
-
-    async def cancel_turn(self, turn_id: str) -> int:
-        """Cancel every approval request owned by one interrupted turn."""
-        async with self._lock:
-            request_ids = [
-                req_id
-                for req_id, pending_turn_id in self._pending_turn_ids.items()
-                if pending_turn_id == turn_id
-            ]
-            futures = [self._pending.pop(req_id, None) for req_id in request_ids]
-            for req_id in request_ids:
-                self._pending_turn_ids.pop(req_id, None)
-        cancelled = 0
-        for fut in futures:
-            if fut is not None and not fut.done():
-                # Resolve as an explicit decline instead of cancelling the
-                # Future: asyncio.wait_for can translate inner cancellation
-                # into a timeout, which incorrectly fails the whole turn.
-                fut.set_result({"action": "decline", "reason": "turn interrupted"})
-                cancelled += 1
-        if cancelled:
-            _logger.debug("approval manager cancelled %d for turn %s", cancelled, turn_id)
-        return cancelled
-
-    async def cancel_all(self, reason: str = "connection closed") -> None:
-        async with self._lock:
-            pending = list(self._pending.items())
-            self._pending.clear()
-            self._pending_turn_ids.clear()
-        for _, fut in pending:
-            if not fut.done():
-                fut.cancel()
-        if pending:
-            _logger.debug("approval manager cancelled %d pending (%s)", len(pending), reason)
-
-
-class _ApprovalError(Exception):
-    def __init__(self, error: JsonRpcError) -> None:
-        super().__init__(error.message)
-        self.error = error
-
-
-class SharedTurnInterrupts:
-    """Gateway-wide interrupt registry, shared by every connection.
-
-    The per-connection ``_interrupted_turns`` set only works when the
-    ``turn/interrupt`` RPC arrives on the same connection that runs
-    the turn. A second tab (or a post-reconnect socket) on the same
-    thread is a *different* connection, so its interrupt must be
-    visible to the emitter the turn was registered on. Runtimes keep
-    polling ``emitter.is_turn_interrupted`` — that check consults this
-    registry too. Entries are keyed by turn id, flagged only while the
-    turn is known to be running, and cleared on unregister (the turn
-    lifecycle's ``finally``) so ids never leak.
-    """
-
-    def __init__(self) -> None:
-        self._active_turn_ids: set[str] = set()
-        self._interrupted_turn_ids: set[str] = set()
-
-    def register(self, turn_id: str) -> None:
-        self._active_turn_ids.add(turn_id)
-        # A stale interrupt that predates this registration must not
-        # poison the new turn (mirrors RpcConnection.register_turn).
-        self._interrupted_turn_ids.discard(turn_id)
-
-    def unregister(self, turn_id: str) -> None:
-        self._active_turn_ids.discard(turn_id)
-        self._interrupted_turn_ids.discard(turn_id)
-
-    def request_interrupt(self, turn_id: str) -> bool:
-        """Flag ``turn_id``; True only when a running turn was hit."""
-        if turn_id not in self._active_turn_ids:
-            return False
-        self._interrupted_turn_ids.add(turn_id)
-        return True
-
-    def is_interrupted(self, turn_id: str) -> bool:
-        return turn_id in self._interrupted_turn_ids
-
-
-# ── RpcConnection — per WebSocket ────────────────────────────
-
-
-RequestHandler = Callable[[dict[str, Any]], Awaitable[Any]]
-
-# A single WS frame over the client's ~16 MiB message ceiling is dropped
-# with code 1009, which kills the whole connection (and has taken backends
-# down mid-run). The per-field caps upstream (e.g. command output) are the
-# primary defense; this is the last-ditch net for ANY field that grows
-# unbounded — a huge diff, a huge snapshot. Bound to 12 MiB, leaving margin
-# for protocol overhead. The trigger is an O(1) char-count so normal frames
-# pay nothing; only the rare oversized frame does the precise byte work.
-_FRAME_BYTE_LIMIT = 12 * 1024 * 1024
-# A JSON char is at most 4 UTF-8 bytes, so under this many chars a frame is
-# guaranteed under the byte limit and can skip the encode-and-measure path.
-_FRAME_CHAR_FASTPASS = _FRAME_BYTE_LIMIT // 4
-_FRAME_TRUNC_MARK = "…(字段过大已截断以保住连接)"
-_FRAME_TRUNCATED_KEY = "_frameTruncated"
-
-
-def _iter_string_leaves(obj: Any) -> list[tuple[Any, Any, int]]:
-    """Every (container, key, length) for string leaves, so the largest can
-    be found and shortened in place."""
-    out: list[tuple[Any, Any, int]] = []
-
-    def walk(node: Any) -> None:
-        if isinstance(node, dict):
-            for k, v in node.items():
-                if isinstance(v, str):
-                    out.append((node, k, len(v)))
-                else:
-                    walk(v)
-        elif isinstance(node, list):
-            for i, v in enumerate(node):
-                if isinstance(v, str):
-                    out.append((node, i, len(v)))
-                else:
-                    walk(v)
-
-    walk(obj)
-    return out
-
-
-def _inject_trunc_metadata(params: dict[str, Any]) -> None:
-    """Mark the frame as truncated at the params level so the truncation
-    notice lives in metadata, not inside user-visible content strings."""
-    params[_FRAME_TRUNCATED_KEY] = True
-
-
-def _bound_oversized_frame(
-    message: JsonRpcRequest | JsonRpcResponse | Notification,
-) -> JsonRpcRequest | JsonRpcResponse | Notification:
-    """Return a copy whose serialized size is under ``_FRAME_BYTE_LIMIT``,
-    halving the single longest string leaf until it fits. Structure is
-    preserved (only string leaves shrink), so the JSON stays valid."""
-    params = getattr(message, "params", None)
-    if not isinstance(params, dict):
-        return message  # responses/errors carry no bulk field to shrink
-    import copy
-
-    params = copy.deepcopy(params)
-    truncated = False
-    for _ in range(80):  # bounded; each pass halves the biggest string
-        leaves = _iter_string_leaves(params)
-        if not leaves:
-            break
-        container, key, longest = max(leaves, key=lambda x: x[2])
-        if longest <= len(_FRAME_TRUNC_MARK) + 1024:
-            break  # nothing left big enough to help
-        s = container[key]
-        container[key] = s[: max(1024, len(s) // 2)] + _FRAME_TRUNC_MARK
-        truncated = True
-        trimmed = message.model_copy(update={"params": params})
-        if len(encode_message(trimmed).encode("utf-8")) <= _FRAME_BYTE_LIMIT:
-            if truncated:
-                _inject_trunc_metadata(params)
-                trimmed = message.model_copy(update={"params": params})
-            _logger.warning(
-                "realtime: frame for %s exceeded %d bytes — truncated its "
-                "largest field to protect the connection",
-                getattr(message, "method", "?"),
-                _FRAME_BYTE_LIMIT,
-            )
-            return trimmed
-    if truncated:
-        _inject_trunc_metadata(params)
-    return message.model_copy(update={"params": params})
-
-
-class RpcConnection:
-    """One client. Owns the WS, the approval manager, and a write lock.
-
-    The write lock serializes ``websocket.send_text`` calls — Starlette
-    raises if two coroutines write concurrently. The class is the only
-    place that ever touches the WS object.
-    """
-
-    def __init__(
-        self,
-        ws: WebSocket,
-        *,
-        approval_timeout: float = _APPROVAL_TIMEOUT_DEFAULT,
-        max_in_flight_requests: int = 32,
-        shared_interrupts: SharedTurnInterrupts | None = None,
-    ) -> None:
-        self.ws = ws
-        self.approval = ApprovalManager()
-        self._approval_timeout = approval_timeout
-        self._request_slots = asyncio.Semaphore(max(1, max_in_flight_requests))
-        self._write_lock = asyncio.Lock()
-        self._closed = False
-        # Authenticated actor id (None when auth is not required and no
-        # credentials were presented). Set by ``RealtimeGateway._serve``
-        # after the handshake gate runs. Runtime handlers consult this
-        # for thread-ownership scoping.
-        self.actor_id: str | None = None
-        # Last thread this connection successfully resumed. The gateway
-        # uses it to fan terminal turn events out to sibling
-        # connections watching the same thread.
-        self.last_resumed_thread_id: str | None = None
-        # Per-turn interrupt flags. The runtime registers each turn id
-        # before any awaitable that could be cancelled; the dispatcher
-        # for ``turn/interrupt`` flips the flag; the runtime polls
-        # ``is_turn_interrupted`` between steps. ``shared_interrupts``
-        # is the gateway-wide registry so interrupts issued on *other*
-        # connections reach turns running on this one.
-        self._interrupted_turns: set[str] = set()
-        self._shared_interrupts = shared_interrupts
-
-    async def send(self, message: JsonRpcRequest | JsonRpcResponse | Notification) -> None:
-        if self._closed:
-            return
-        async with self._write_lock:
-            try:
-                text = encode_message(message)
-                # O(1) char-count fast-path; only a rare oversized frame
-                # pays the precise byte measure + shrink.
-                if (
-                    len(text) > _FRAME_CHAR_FASTPASS
-                    and len(text.encode("utf-8")) > _FRAME_BYTE_LIMIT
-                ):
-                    text = encode_message(_bound_oversized_frame(message))
-                await self.ws.send_text(text)
-            except WebSocketDisconnect:
-                # Client went away mid-stream. Flip the closed flag so
-                # subsequent ``send`` calls fast-path return rather than
-                # raising on every queued notify; also signal interrupt
-                # for every in-flight turn so the runtime bails out
-                # promptly. Swallowing here keeps the runtime's per-
-                # event try/except simple — they don't have to know
-                # the difference between "a single bad payload" and
-                # "the connection died".
-                self._closed = True
-                self._interrupted_turns.add("*")
-            except RuntimeError as exc:
-                # Starlette raises RuntimeError when ``send`` is called
-                # after the WS lifecycle has progressed past ``connected``
-                # (e.g. ``Cannot call "send" once a close message has been
-                # sent``). Treat the same as a clean disconnect.
-                if "close" in str(exc).lower() or "disconnect" in str(exc).lower():
-                    self._closed = True
-                    self._interrupted_turns.add("*")
-                else:
-                    raise
-
-    # EventEmitter
-    async def notify(self, method: ServerMethod | str, params: dict[str, Any]) -> None:
-        method_str = method.value if isinstance(method, ServerMethod) else method
-        await self.send(Notification(method=method_str, params=params))
-
-    # EventEmitter
-    async def request_approval(
-        self,
-        method: ServerMethod | str,
-        params: dict[str, Any],
-        *,
-        timeout: float | None = None,
-    ) -> Any:
-        method_str = method.value if isinstance(method, ServerMethod) else method
-        turn_id = params.get("turnId")
-        if isinstance(turn_id, str) and self.is_turn_interrupted(turn_id):
-            return {"action": "decline", "reason": "turn interrupted"}
-        req_id, fut = await self.approval.open(
-            turn_id=turn_id if isinstance(turn_id, str) else None,
-        )
-        await self.send(JsonRpcRequest(id=req_id, method=method_str, params=params))
-        try:
-            return await asyncio.wait_for(fut, timeout=timeout or self._approval_timeout)
-        except TimeoutError as exc:
-            await self.approval.cancel_one(req_id, "timeout")
-            raise _ApprovalError(
-                JsonRpcError(
-                    code=JsonRpcErrorCode.APPROVAL_TIMEOUT,
-                    message=f"timed out waiting for {method_str}",
-                )
-            ) from exc
-
-    async def close(self) -> None:
-        self._closed = True
-        # Treat a closing connection as an interrupt for every
-        # in-flight turn. Runtime authors should bail out promptly
-        # rather than try to push more state down a dead socket.
-        self._interrupted_turns.add("*")
-        await self.approval.cancel_all()
-
-    # EventEmitter — interrupt registry
-    def register_turn(self, turn_id: str) -> None:
-        # Discarding any stale interrupt that arrived before the turn
-        # was even known. Out-of-order ``turn/interrupt`` is unusual
-        # but possible (client races); treat as a no-op rather than
-        # leaving a poisoned flag for the next turn with the same id.
-        self._interrupted_turns.discard(turn_id)
-        if self._shared_interrupts is not None:
-            self._shared_interrupts.register(turn_id)
-
-    def unregister_turn(self, turn_id: str) -> None:
-        self._interrupted_turns.discard(turn_id)
-        if self._shared_interrupts is not None:
-            self._shared_interrupts.unregister(turn_id)
-
-    def is_turn_interrupted(self, turn_id: str) -> bool:
-        if "*" in self._interrupted_turns:
-            return True
-        if turn_id in self._interrupted_turns:
-            return True
-        return self._shared_interrupts is not None and self._shared_interrupts.is_interrupted(
-            turn_id
-        )
-
-    def get_interrupt_reason(self, turn_id: str) -> str | None:
-        """Return the human-readable reason this turn was interrupted.
-
-        Distinguishes connection teardown (``"*"`` wildcard) from an
-        explicit ``turn/interrupt`` RPC (specific ``turn_id``) so the
-        frontend can tell the user what actually happened.
-        """
-        if "*" in self._interrupted_turns:
-            return "连接断开或后端重启"
-        if turn_id in self._interrupted_turns:
-            return "用户停止了任务"
-        if self._shared_interrupts is not None and self._shared_interrupts.is_interrupted(turn_id):
-            return "用户停止了任务"
-        return None
-
-    def request_interrupt(self, turn_id: str) -> None:
-        """Called by the dispatcher when a ``turn/interrupt`` arrives."""
-        self._interrupted_turns.add(turn_id)
-
-    def requests_saturated(self) -> bool:
-        return self._request_slots.locked()
-
-    async def acquire_request_slot(self) -> asyncio.Semaphore:
-        await self._request_slots.acquire()
-        return self._request_slots
 
 
 # ── Gateway — FastAPI wiring + dispatch loop ─────────────────
@@ -1006,16 +563,11 @@ class RealtimeGateway:
         return cleaned
 
 
-class _RpcError(Exception):
-    def __init__(self, code: int, message: str, data: Any = None) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.data = data
-
-
 # Type re-exports for runtime authors.
 __all__ = [
+    "_FRAME_BYTE_LIMIT",
+    "_FRAME_TRUNC_MARK",
+    "_bound_oversized_frame",
     "ApprovalManager",
     "EventEmitter",
     "Item",

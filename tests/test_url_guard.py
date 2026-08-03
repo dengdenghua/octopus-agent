@@ -14,6 +14,26 @@ from runtime.safety.auth import check_url, is_safe_url
 
 
 class TestScheme:
+    @pytest.fixture(autouse=True)
+    def _resolve_example_to_public(self, monkeypatch):
+        """Sandbox DNS maps ``example.com`` → 198.18.0.43 (reserved); these
+        scheme tests just assert http/https are allowed, so pin it public."""
+        import runtime.safety.auth.url_guard as _guard
+
+        monkeypatch.setattr(
+            _guard.socket,
+            "getaddrinfo",
+            lambda host, *a, **kw: [
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    socket.IPPROTO_TCP,
+                    "",
+                    ("142.250.72.14", 0),
+                )
+            ],
+        )
+
     def test_http_allowed(self):
         v = check_url("http://example.com/path")
         assert v.allow

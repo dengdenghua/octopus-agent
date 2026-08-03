@@ -28,9 +28,7 @@ from runtime.core.cerebrum.react_loop_state import _LoopControl, _LoopState
 from runtime.core.cerebrum.react_model_deadlines import (
     _MODEL_STREAM_DEADLINE,
     _iter_model_stream_with_deadline,
-    _model_evidence_synthesis_timeout_s,
-    _model_post_tool_timeout_s,
-    _model_recovery_timeout_s,
+    _stage_model_timeout_s,
 )
 from runtime.core.cerebrum.react_parsing import (
     _ACTION_RE,
@@ -49,7 +47,7 @@ from runtime.platform.models.llm import (
     ModelRequest,
     thinking_budget_for_effort,
 )
-from runtime.sensing.model_router.rescue_policy import is_retryable_model_error
+from runtime.platform.models.rescue_policy import is_retryable_model_error
 
 _logger = logging.getLogger(__name__)
 
@@ -59,6 +57,7 @@ def _phase_6b_model_stream(
     *,
     i: int,
     model_iteration_timeout_s: Callable[[], float],
+    model_iteration_timeout_s_config: float | None = None,
     try_react_model_failover: Callable[[str], str | None],
 ) -> Generator[dict, None, _LoopControl]:
     """PHASE 6b · per-iteration model call + live anchor streaming.
@@ -198,14 +197,16 @@ def _phase_6b_model_stream(
             _native_orientation_emitted = ""
             _native_orientation_disabled = False
             _iteration_soft_timed_out = False
-            _base_iteration_timeout = _model_iteration_timeout_s()
+            _base_iteration_timeout = _model_iteration_timeout_s(model_iteration_timeout_s_config)
             _has_tool_evidence = _request_has_tool_evidence
             if _iteration_recovery_mode and _evidence_convergence_active is not None:
-                _iteration_timeout = _model_evidence_synthesis_timeout_s(_base_iteration_timeout)
+                _iteration_timeout = _stage_model_timeout_s(
+                    _base_iteration_timeout, "evidence_synthesis"
+                )
             elif _iteration_recovery_mode:
-                _iteration_timeout = _model_recovery_timeout_s(_base_iteration_timeout)
+                _iteration_timeout = _stage_model_timeout_s(_base_iteration_timeout, "recovery")
             elif _has_tool_evidence:
-                _iteration_timeout = _model_post_tool_timeout_s(_base_iteration_timeout)
+                _iteration_timeout = _stage_model_timeout_s(_base_iteration_timeout, "post_tool")
             else:
                 _iteration_timeout = _base_iteration_timeout
 

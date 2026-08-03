@@ -54,6 +54,36 @@ logger = logging.getLogger(__name__)
 DecisionEngine = Callable[[str, MobileDevice], Awaitable[list[ToolCall]]]
 
 
+def _build_device_from_hello(
+    hello: DeviceHello, ws_server: TentacleWebSocketServer | None
+) -> MobileDevice | Any:
+    """根据 device/hello 的平台字段创建设备实例.
+
+    - ``platform == "ios"`` → :class:`runtime.tentacle.ios.device.IOSDevice`
+      （通过 WDA HTTP 直接控制，无需 ws_server）
+    - 其他平台 → :class:`MobileDevice`（Android / 兼容回退）
+
+    Args:
+        hello: 设备上报的元信息（含 platform / ios 专属字段）
+        ws_server: WebSocket 服务器（Android 设备用于收发指令，iOS 忽略）
+    """
+    if hello.platform == "ios":
+        from .ios.device import IOSDevice
+
+        return IOSDevice(
+            tentacle_id=hello.tentacle_id,
+            base_url=f"http://localhost:{hello.wda_port}",
+            bundle_id=hello.bundle_id,
+            device_meta=hello.to_meta(),
+        )
+
+    return MobileDevice(
+        tentacle_id=hello.tentacle_id,
+        device_meta=hello.to_meta(),
+        ws_server=ws_server,
+    )
+
+
 class TentacleCoordinator:
     """触手协调器 —— 一键启动所有触手基础设施.
 
@@ -168,19 +198,15 @@ class TentacleCoordinator:
     # ── 回调：设备连接 ──────────────────────────────────────
 
     async def _on_device_hello(self, hello: DeviceHello, ws: WebSocketConnection) -> None:
-        """设备首次连接 —— 创建 MobileDevice 并注册到 Pool."""
+        """设备首次连接 —— 创建设备并注册到 Pool."""
         # 检查是否已存在
         existing = self.pool.get(hello.tentacle_id)
         if existing is not None:
             logger.warning("device reconnected id=%s", hello.tentacle_id)
             await existing.disconnect()
 
-        # 创建新设备
-        device = MobileDevice(
-            tentacle_id=hello.tentacle_id,
-            device_meta=hello.to_meta(),
-            ws_server=self.ws_server,
-        )
+        # 创建新设备（按平台分发）
+        device = _build_device_from_hello(hello, ws_server=self.ws_server)
         device.mark_online()
 
         # 注册到 Pool

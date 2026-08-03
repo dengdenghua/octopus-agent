@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import base64
 import contextlib
 import threading
 from typing import Any
-
-from .registry import Skill, SkillRegistry
-from .testing import SkillExpect, SkillTestCase
 
 try:
     from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
@@ -21,6 +17,20 @@ DEFAULT_TIMEOUT_MS = 10_000
 MAX_TEXT_BYTES = 100_000
 MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024  # 10MB hard cap
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
+# Import helpers from submodule (after constants are defined so the
+# circular import resolves cleanly — see _browser_skills_helpers.py).
+from ._browser_skills_helpers import (  # noqa: E402  (after constants)
+    _browser_result_payload,
+    _call_browser_backend,
+    _child_frame_snapshots,
+    _extract_from_page,
+    _find_matches_in_text,
+    _materialize_higher_track_screenshot,
+    _navigate_and_read,
+    _requested_browser_track,
+)
 
 
 def _has_agent_browser_session() -> bool:
@@ -83,81 +93,6 @@ def _browser_get(
     )
 
 
-def _navigate_and_read(
-    page: Any, url: str, timeout_ms: int, wait_ms: int, max_bytes: int
-) -> dict[str, Any]:
-    resp = None
-    if url:
-        try:
-            resp = page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"nav_error: {type(e).__name__}: {e}"}
-
-    if wait_ms > 0:
-        page.wait_for_timeout(wait_ms)
-
-    try:
-        title = page.title()
-        text = page.inner_text("body")
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"read_error: {type(e).__name__}: {e}"}
-
-    truncated = len(text) > max_bytes
-    if truncated:
-        text = text[:max_bytes]
-
-    return {
-        "url": page.url,
-        "status_code": resp.status if resp else None,
-        "title": title,
-        "length": len(text),
-        "truncated": truncated,
-        "content": text,
-        "frames": _child_frame_snapshots(page, max_bytes=max_bytes),
-    }
-
-
-def _child_frame_snapshots(page: Any, *, max_bytes: int) -> list[dict[str, Any]]:
-    """Return readable evidence from child frames without failing the page read.
-
-    ``body.innerText`` on the top page intentionally excludes iframe
-    documents.  Browser tasks that must wait for an iframe confirmation would
-    therefore have no observable success signal even though the UI completed.
-    Keep this best-effort and bounded: cross-origin or detached frames may
-    reject DOM access and should not make the whole browser observation fail.
-    """
-
-    frames_value = getattr(page, "frames", [])
-    frames = frames_value() if callable(frames_value) else frames_value
-    if not isinstance(frames, (list, tuple)):
-        return []
-    main_frame = getattr(page, "main_frame", None)
-    snapshots: list[dict[str, Any]] = []
-    remaining = max(0, int(max_bytes))
-    for frame in frames:
-        if frame is main_frame:
-            continue
-        try:
-            frame_text = str(frame.inner_text("body") or "")
-            frame_url = str(getattr(frame, "url", "") or "")
-            frame_name = str(getattr(frame, "name", "") or "")
-        except Exception:  # noqa: BLE001 - detached/cross-origin frame
-            continue
-        clipped = frame_text[:remaining]
-        snapshots.append(
-            {
-                "url": frame_url,
-                "name": frame_name,
-                "content": clipped,
-                "truncated": len(frame_text) > len(clipped),
-            }
-        )
-        remaining = max(0, remaining - len(clipped))
-        if remaining == 0:
-            break
-    return snapshots
-
-
 # ═══════════════════════════════════════════════════════════
 # browser_extract
 # ═══════════════════════════════════════════════════════════
@@ -199,47 +134,8 @@ def _browser_extract(
     )
 
 
-def _extract_from_page(
-    page: Any,
-    url: str,
-    selector: str,
-    attr: str | None,
-    limit: int,
-    timeout_ms: int,
-    wait_ms: int,
-) -> dict[str, Any]:
-    if url:
-        try:
-            page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        except Exception as e:  # noqa: BLE001
-            return {"error": f"nav_error: {type(e).__name__}: {e}", "items": []}
-
-    if wait_ms > 0:
-        page.wait_for_timeout(wait_ms)
-
-    try:
-        handles = page.query_selector_all(selector)
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"selector_error: {type(e).__name__}: {e}", "items": []}
-
-    items: list[str] = []
-    for h in handles[:limit]:
-        try:
-            val = h.inner_text() if attr is None else h.get_attribute(attr) or ""
-        except (AttributeError, RuntimeError):  # noqa: BLE001
-            val = ""
-        items.append(val)
-
-    return {
-        "url": page.url,
-        "selector": selector,
-        "attr": attr,
-        "count": len(items),
-        "items": items,
-    }
-
-
 # ═══════════════════════════════════════════════════════════
+# Higher-track dispatch (stays here for monkeypatch compatibility)
 # ═══════════════════════════════════════════════════════════
 
 
@@ -254,21 +150,6 @@ def _higher_track_backends() -> list[Any]:
     )
 
     return [ExtensionBackend(), ElectronBackend()]
-
-
-def _requested_browser_track() -> Any:
-    """Resolve the trusted per-turn browser track preference, if present."""
-
-    try:
-        from runtime.execution.suckers.browser_backend import Track
-        from runtime.platform.process.session import current_session
-
-        session = current_session()
-        metadata = getattr(session, "metadata", None) if session is not None else None
-        raw = str((metadata or {}).get("browser_track_preference") or "").strip().lower()
-        return Track(raw) if raw else None
-    except (AttributeError, TypeError, ValueError, ImportError):
-        return None
 
 
 def _annotate_browser_track_result(
@@ -349,135 +230,6 @@ def _dispatch_higher_track(
         return result
     except Exception as e:  # noqa: BLE001
         return {"error": f"browser_error: {type(e).__name__}: {e}"}
-
-
-def _call_browser_backend(
-    backend: Any,
-    verb: str,
-    payload: dict[str, Any],
-    *,
-    fallback_url: str = "",
-):
-    if verb == "navigate":
-        return backend.navigate(str(payload.get("url") or fallback_url))
-    if verb == "click":
-        return backend.click(str(payload.get("selector") or ""))
-    if verb == "type":
-        return backend.type(
-            str(payload.get("selector") or ""),
-            str(payload.get("text") or ""),
-            clear=bool(payload.get("clear") or payload.get("clear_first")),
-        )
-    if verb == "scroll":
-        delta_raw = payload.get("delta_y", payload.get("deltaY", 0))
-        return backend.scroll(
-            selector=payload.get("selector"),
-            delta_y=int(delta_raw or 0),
-        )
-    if verb == "wait":
-        timeout_raw = payload.get("timeout_ms", payload.get("timeout", 10_000))
-        return backend.wait(
-            str(payload.get("selector") or ""),
-            timeout_ms=int(timeout_raw or 10_000),
-        )
-    if verb == "state":
-        return backend.state(max_items=int(payload.get("max_items") or 30))
-    if verb == "extract":
-        return backend.extract()
-    if verb == "screenshot":
-        return backend.screenshot(
-            str(payload.get("path") or ""),
-            full_page=bool(payload.get("full_page")),
-        )
-    raise ValueError(f"unsupported browser backend verb: {verb}")
-
-
-def _materialize_higher_track_screenshot(
-    result: dict[str, Any],
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    path = str(payload.get("path") or "").strip()
-    if not path:
-        return result
-    raw_data = result.get("dataUrl") or result.get("data")
-    if not isinstance(raw_data, str) or not raw_data.strip():
-        return result
-    data = raw_data.strip()
-    if "," in data:
-        data = data.split(",", 1)[1]
-    try:
-        image_bytes = base64.b64decode(data)
-    except (ValueError, TypeError):
-        return result
-    size = len(image_bytes)
-    if size > MAX_SCREENSHOT_BYTES:
-        return {
-            "error": f"screenshot too large: {size} > {MAX_SCREENSHOT_BYTES}",
-            "path": path,
-        }
-    from pathlib import Path as _P  # noqa: N814
-
-    target = _P(path)
-    with contextlib.suppress(OSError):
-        target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(image_bytes)
-    return {
-        **result,
-        "path": path,
-        "size_bytes": size,
-        "full_page": bool(payload.get("full_page")),
-        "track": result.get("track", "extension"),
-    }
-
-
-def _find_matches_in_text(
-    *,
-    text: str,
-    needle: str,
-    url: str = "",
-    title: str = "",
-    case_sensitive: bool = False,
-    max_results: int = 20,
-    context_chars: int = 80,
-) -> dict[str, Any]:
-    haystack = text if case_sensitive else text.lower()
-    target = needle if case_sensitive else needle.lower()
-    matches: list[dict[str, Any]] = []
-    start = 0
-    while len(matches) < max_results:
-        idx = haystack.find(target, start)
-        if idx < 0:
-            break
-        left = max(0, idx - context_chars)
-        right = min(len(text), idx + len(needle) + context_chars)
-        matches.append(
-            {
-                "index": idx,
-                "snippet": text[left:right].replace("\n", " ").strip(),
-            }
-        )
-        start = idx + max(1, len(target))
-    return {
-        "url": url,
-        "title": title,
-        "text": needle,
-        "count": len(matches),
-        "truncated": len(matches) >= max_results,
-        "matches": matches,
-    }
-
-
-def _browser_result_payload(result: Any) -> dict[str, Any]:
-    raw = getattr(result, "raw", None)
-    if isinstance(raw, dict):
-        return raw
-    ok = bool(getattr(result, "ok", False))
-    data = getattr(result, "data", None)
-    if isinstance(data, dict):
-        return dict(data)
-    if ok:
-        return {}
-    return {"error": str(getattr(result, "error", None) or "browser_error")}
 
 
 def _with_page(
@@ -563,6 +315,11 @@ def _with_page(
         return {"error": f"browser_error: {type(e).__name__}: {e}"}
 
 
+# ═══════════════════════════════════════════════════════════
+# browser_navigate
+# ═══════════════════════════════════════════════════════════
+
+
 def _browser_navigate(
     url: str = "",
     *,
@@ -597,6 +354,11 @@ def _browser_navigate(
         }
 
     return _with_page(page, _act, verb="navigate", payload={"url": url}, url=url)
+
+
+# ═══════════════════════════════════════════════════════════
+# browser_find
+# ═══════════════════════════════════════════════════════════
 
 
 def _browser_find(
@@ -681,6 +443,11 @@ def _browser_find(
     return _with_page(page, _act)
 
 
+# ═══════════════════════════════════════════════════════════
+# browser_state
+# ═══════════════════════════════════════════════════════════
+
+
 def _browser_state(
     url: str = "",
     *,
@@ -743,6 +510,11 @@ def _browser_state(
     )
 
 
+# ═══════════════════════════════════════════════════════════
+# browser_click
+# ═══════════════════════════════════════════════════════════
+
+
 def _browser_click(
     url: str = "",
     selector: str = "",
@@ -800,6 +572,11 @@ def _browser_click(
         payload={"selector": selector},
         url=url,
     )
+
+
+# ═══════════════════════════════════════════════════════════
+# browser_type
+# ═══════════════════════════════════════════════════════════
 
 
 def _browser_type(
@@ -894,6 +671,11 @@ def _browser_type(
     )
 
 
+# ═══════════════════════════════════════════════════════════
+# browser_scroll
+# ═══════════════════════════════════════════════════════════
+
+
 def _browser_scroll(
     url: str = "",
     *,
@@ -952,6 +734,11 @@ def _browser_scroll(
         },
         url=url,
     )
+
+
+# ═══════════════════════════════════════════════════════════
+# browser_upload
+# ═══════════════════════════════════════════════════════════
 
 
 def _browser_upload(
@@ -1020,6 +807,11 @@ def _browser_upload(
     )
 
 
+# ═══════════════════════════════════════════════════════════
+# browser_wait
+# ═══════════════════════════════════════════════════════════
+
+
 def _browser_wait(
     url: str = "",
     selector: str = "",
@@ -1074,6 +866,11 @@ def _browser_wait(
         payload={"selector": selector, "timeout": timeout_ms},
         url=url,
     )
+
+
+# ═══════════════════════════════════════════════════════════
+# browser_screenshot
+# ═══════════════════════════════════════════════════════════
 
 
 def _browser_screenshot(
@@ -1155,264 +952,14 @@ def _browser_screenshot(
 
 
 # ═══════════════════════════════════════════════════════════
+# Registrar · moved to _browser_skills_handlers to keep this file
+# under 1000 lines.  Re-exported below so public callers are
+# unaffected.  The import MUST come after all handler definitions
+# above so the submodule can resolve them at load time.
 # ═══════════════════════════════════════════════════════════
+from ._browser_skills_handlers import (  # noqa: E402  (after defs)
+    BROWSER_SKILL_NAMES,
+    register_browser_skills,
+)
 
-
-BROWSER_SKILL_NAMES = [
-    "browser_get",
-    "browser_extract",
-    "browser_navigate",
-    "browser_click",
-    "browser_type",
-    "browser_upload",
-    "browser_scroll",
-    "browser_wait",
-    "browser_screenshot",
-    "browser_find",
-    "browser_state",
-]
-
-
-def register_browser_skills(
-    registry: SkillRegistry,
-    *,
-    verify_tests: bool = True,
-) -> int:
-    if not PLAYWRIGHT_AVAILABLE:
-        return 0
-
-    def _register(skill: Skill) -> None:
-        registry.register(skill, verify_tests=verify_tests)
-
-    _register(
-        Skill(
-            name="browser_get",
-            description=(
-                "Read rendered title, body text, and child-frame text. Pass url to navigate "
-                "first, or omit url to read the current persistent agent browser page; use "
-                "wait_ms before reading delayed UI or iframe confirmations."
-            ),
-            affinity=["web", "browser", "io"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_get",
-            handler=_browser_get,
-            tests=[
-                SkillTestCase(
-                    name="missing_url_returns_error",
-                    tier="golden",
-                    args={"url": ""},
-                    expect=SkillExpect(schema_keys=["error"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_extract",
-            description=(
-                "Extract CSS matches (text or attr). Pass url to navigate, or omit it to "
-                "use the current persistent agent browser page."
-            ),
-            affinity=["web", "browser", "scrape"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_extract",
-            handler=_browser_extract,
-            tests=[
-                SkillTestCase(
-                    name="missing_selector_returns_error",
-                    tier="golden",
-                    args={"url": "https://example.com", "selector": ""},
-                    expect=SkillExpect(schema_keys=["error", "items"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_navigate",
-            description=(
-                "Navigate the persistent agent browser page to a URL and return final URL + status."
-            ),
-            affinity=["web", "browser", "nav"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_navigate",
-            handler=_browser_navigate,
-            tests=[
-                SkillTestCase(
-                    name="missing_url_error",
-                    tier="golden",
-                    args={"url": ""},
-                    expect=SkillExpect(schema_keys=["error"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_click",
-            description=(
-                "Click a CSS selector on the current persistent page; url is optional and "
-                "navigates first when supplied."
-            ),
-            affinity=["web", "browser", "interact"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_click",
-            handler=_browser_click,
-            tests=[
-                SkillTestCase(
-                    name="missing_selector_error",
-                    tier="golden",
-                    args={"url": "https://example.com", "selector": ""},
-                    expect=SkillExpect(schema_keys=["error"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_type",
-            description=(
-                "Fill an input/contenteditable or choose a native select option by visible "
-                "label/value on the current persistent page; url is optional and navigates "
-                "first when supplied. Pass content as text (value and option_label are also "
-                "accepted aliases)."
-            ),
-            affinity=["web", "browser", "interact"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_type",
-            handler=_browser_type,
-            tests=[
-                SkillTestCase(
-                    name="missing_selector_error",
-                    tier="golden",
-                    args={
-                        "url": "https://example.com",
-                        "selector": "",
-                        "text": "x",
-                    },
-                    expect=SkillExpect(schema_keys=["error"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_upload",
-            description=(
-                "Upload a workspace file into a CSS-selected file input on the current "
-                "persistent page. Pass selector and path; url is optional after navigation."
-            ),
-            affinity=["web", "browser", "interact", "read"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_upload",
-            handler=_browser_upload,
-            tests=[
-                SkillTestCase(
-                    name="missing_path_error",
-                    tier="golden",
-                    args={"selector": "#file", "path": ""},
-                    expect=SkillExpect(schema_keys=["error"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_scroll",
-            description="Navigate and scroll to element or Y coordinate.",
-            affinity=["web", "browser", "interact"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_scroll",
-            handler=_browser_scroll,
-            tests=[
-                SkillTestCase(
-                    name="missing_target_error",
-                    tier="golden",
-                    args={"url": "https://example.com"},
-                    expect=SkillExpect(schema_keys=["error"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_wait",
-            description=(
-                "Wait on the current persistent page for a CSS selector state; url is optional."
-            ),
-            affinity=["web", "browser", "interact"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_wait",
-            handler=_browser_wait,
-            tests=[
-                SkillTestCase(
-                    name="bad_state_error",
-                    tier="golden",
-                    args={
-                        "url": "https://example.com",
-                        "selector": "body",
-                        "state": "floating",
-                    },
-                    expect=SkillExpect(schema_keys=["error"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_screenshot",
-            description="Navigate and save a page screenshot (path_guard enforced).",
-            affinity=["web", "browser", "capture"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_screenshot",
-            handler=_browser_screenshot,
-            tests=[
-                SkillTestCase(
-                    name="missing_path_error",
-                    tier="golden",
-                    args={"url": "https://example.com", "path": ""},
-                    expect=SkillExpect(schema_keys=["error"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_find",
-            description="Navigate to a page and find text, returning match snippets.",
-            affinity=["web", "browser", "find"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_find",
-            handler=_browser_find,
-            tests=[
-                SkillTestCase(
-                    name="missing_text_error",
-                    tier="golden",
-                    args={"url": "https://example.com", "text": ""},
-                    expect=SkillExpect(schema_keys=["error", "matches"]),
-                ),
-            ],
-        )
-    )
-    _register(
-        Skill(
-            name="browser_state",
-            description=(
-                "Return persistent browser state (optionally navigate with url): title, URL, "
-                "viewport, scroll, child-frame text, and visible links/buttons/inputs/headings."
-            ),
-            affinity=["web", "browser", "observe"],
-            cost_profile="high",
-            trusted_source="skill://public/browser_state",
-            handler=_browser_state,
-            tests=[
-                SkillTestCase(
-                    name="missing_url_error",
-                    tier="golden",
-                    args={"url": ""},
-                    expect=SkillExpect(schema_keys=["error"]),
-                ),
-            ],
-        )
-    )
-    return 11
+__all__ = ["BROWSER_SKILL_NAMES", "register_browser_skills"]

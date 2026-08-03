@@ -30,7 +30,7 @@ from runtime.core.cerebrum.react_parsing import (
     _parse_action,
 )
 from runtime.core.cerebrum.react_types import ReActStep
-from runtime.sensing.model_router.rescue_policy import next_custom_model_fallback
+from runtime.platform.models.rescue_policy import next_custom_model_fallback
 
 _PUBLIC_UPDATE_PROTOCOL_RE = re.compile(
     r"(?:^|\n)\s*(?:Thought|Action|Observation|Final\s*Answer)\s*:",

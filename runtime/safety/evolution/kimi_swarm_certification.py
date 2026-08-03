@@ -99,6 +99,7 @@ CHECKS: tuple[KimiSwarmEvidenceCheck, ...] = (
         paths=(
             "runtime/execution/agents/group_fanout.py",
             "runtime/sensing/gateway/realtime_team_stream.py",
+            "runtime/sensing/gateway/_team_stream_group_fanout.py",
             "tests/test_group_fanout.py",
         ),
         required_terms=(
@@ -120,6 +121,7 @@ CHECKS: tuple[KimiSwarmEvidenceCheck, ...] = (
         capability="runtime_integration",
         paths=(
             "runtime/sensing/gateway/realtime_team_stream.py",
+            "runtime/sensing/gateway/_team_stream_group_fanout.py",
             "tests/test_realtime_cerebrum.py",
         ),
         required_terms=(

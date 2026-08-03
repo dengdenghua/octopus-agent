@@ -42,6 +42,7 @@ _LOG = logging.getLogger("octopus.platform.plugin_hub")
 
 # Default plugin directory
 _DEFAULT_PLUGIN_DIR = Path.home() / ".octopus" / "plugins"
+_DEFAULT_BUNDLED_PLUGIN_DIR = Path(__file__).resolve().parent / "bundled"
 
 
 class PluginHub:
@@ -71,12 +72,18 @@ class PluginHub:
         self,
         plugin_dir: str | Path | None = None,
         *,
+        bundled_plugin_dir: str | Path | None = None,
         skill_registry: Any = None,
         channel_manager: Any = None,
         fastapi_app: Any = None,
         event_bus: Any = None,
     ) -> None:
         self._dir = Path(plugin_dir) if plugin_dir else _DEFAULT_PLUGIN_DIR
+        self._bundled_dir = (
+            Path(bundled_plugin_dir)
+            if bundled_plugin_dir is not None
+            else (_DEFAULT_BUNDLED_PLUGIN_DIR if plugin_dir is None else None)
+        )
         self._skill_registry = skill_registry
         self._channel_manager = channel_manager
         self._fastapi_app = fastapi_app
@@ -99,28 +106,33 @@ class PluginHub:
         This only reads ``plugin.yaml`` files — it does not load any code.
         """
         results: list[dict[str, Any]] = []
-        if not self._dir.exists():
-            return results
-
-        for item in sorted(self._dir.iterdir()):
-            if not item.is_dir():
+        seen: set[str] = set()
+        for base, bundled in self._plugin_roots():
+            if not base.exists():
                 continue
-            manifest_data = self._read_manifest_file(item)
-            if manifest_data is None:
-                continue
-            pname = manifest_data.get("name", item.name)
-            results.append(
-                {
-                    "id": pname,
-                    "name": pname,
-                    "version": manifest_data.get("version", "0.1.0"),
-                    "description": manifest_data.get("description", ""),
-                    "author": manifest_data.get("author", ""),
-                    "tags": manifest_data.get("tags", []),
-                    "dir": str(item),
-                    "loaded": pname in self._plugins,
-                }
-            )
+            for item in sorted(base.iterdir()):
+                if not item.is_dir():
+                    continue
+                manifest_data = self._read_manifest_file(item)
+                if manifest_data is None:
+                    continue
+                pname = manifest_data.get("name", item.name)
+                if pname in seen:
+                    continue
+                seen.add(pname)
+                results.append(
+                    {
+                        "id": pname,
+                        "name": pname,
+                        "version": manifest_data.get("version", "0.1.0"),
+                        "description": manifest_data.get("description", ""),
+                        "author": manifest_data.get("author", ""),
+                        "tags": manifest_data.get("tags", []),
+                        "dir": str(item),
+                        "bundled": bundled,
+                        "loaded": pname in self._plugins,
+                    }
+                )
         return results
 
     # ── Load ───────────────────────────────────────────────────
@@ -136,7 +148,10 @@ class PluginHub:
             if name in self._plugins:
                 return self._plugins[name]
 
-            plugin_dir = self._dir / name
+            plugin_dir = self._resolve_plugin_dir(name)
+            if plugin_dir is None:
+                _LOG.warning("Plugin directory not found: %s", name)
+                return None
             if not plugin_dir.is_dir():
                 _LOG.warning("Plugin directory not found: %s", plugin_dir)
                 return None
@@ -154,8 +169,9 @@ class PluginHub:
                 return None
 
             try:
-                if str(self._dir) not in sys.path:
-                    sys.path.insert(0, str(self._dir))
+                import_root = str(plugin_dir.parent)
+                if import_root not in sys.path:
+                    sys.path.insert(0, import_root)
                 mod = importlib.import_module(name)
             except Exception as exc:
                 _LOG.error("Failed to import plugin %s: %s", name, exc)
@@ -363,10 +379,18 @@ class PluginHub:
         ctx = self._contexts.get(name)
         if ctx is None:
             return False
+        if self._bundled_dir is not None:
+            try:
+                Path(ctx.plugin_dir).relative_to(self._bundled_dir)
+            except ValueError:
+                pass
+            else:
+                _LOG.warning("Bundled plugin config is read-only: %s", name)
+                return False
         ctx.config.update(config)
 
         # Persist to plugin.yaml
-        plugin_dir = self._dir / name
+        plugin_dir = Path(ctx.plugin_dir)
         manifest_path = plugin_dir / "plugin.yaml"
         if manifest_path.exists():
             try:
@@ -419,6 +443,19 @@ class PluginHub:
         return result
 
     # ── Internal helpers ───────────────────────────────────────
+
+    def _plugin_roots(self) -> list[tuple[Path, bool]]:
+        roots: list[tuple[Path, bool]] = []
+        if self._bundled_dir is not None:
+            roots.append((self._bundled_dir, True))
+        roots.append((self._dir, False))
+        return roots
+
+    def _resolve_plugin_dir(self, name: str) -> Path | None:
+        for item in self.discover():
+            if item["id"] == name:
+                return Path(item["dir"])
+        return None
 
     def _read_manifest_file(self, plugin_dir: Path) -> dict[str, Any] | None:
         """Read plugin.yaml or plugin.json from the plugin directory."""

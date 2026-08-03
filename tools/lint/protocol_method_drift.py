@@ -69,6 +69,15 @@ SERVER_METHODS_NOT_IN_REDUCER: frozenset[str] = frozenset(
     }
 )
 
+# Reducer events synthesized locally while replaying the persisted event log.
+# They never cross the server-to-client wire, so adding them to ServerMethod
+# would incorrectly advertise a backend protocol method.
+REDUCER_METHODS_NOT_ON_WIRE: frozenset[str] = frozenset(
+    {
+        "turn/finalized",
+    }
+)
+
 
 def _python_enum_values(module_path: Path, class_name: str) -> set[str]:
     """Return the string values of a StrEnum subclass in the given module."""
@@ -144,16 +153,7 @@ def main() -> int:
     missing_in_reducer = expected_in_reducer - reducer_methods
     # Drift: reducer method literals that don't exist as server enum
     # values (typos, stale handlers).
-    unknown_in_reducer = (
-        reducer_methods
-        - server_methods
-        - frozenset(
-            {
-                # Typed-only narrowing strings — not real wire methods.
-                # Add documented exceptions here.
-            }
-        )
-    )
+    unknown_in_reducer = reducer_methods - server_methods - REDUCER_METHODS_NOT_ON_WIRE
 
     issues: list[str] = []
     if missing_in_reducer:
@@ -180,7 +180,8 @@ def main() -> int:
         print(
             f"OK · {len(server_methods)} ServerMethod values, "
             f"{len(reducer_methods)} reducer literals, no drift "
-            f"(excluding {len(SERVER_METHODS_NOT_IN_REDUCER)} known one-sided)."
+            f"(excluding {len(SERVER_METHODS_NOT_IN_REDUCER)} server-only and "
+            f"{len(REDUCER_METHODS_NOT_ON_WIRE)} replay-only)."
         )
         return 0
 

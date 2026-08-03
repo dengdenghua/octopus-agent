@@ -55,6 +55,7 @@ CHECKS: tuple[AgentLoopCheck, ...] = (
         paths=(
             "runtime/memory/runtime_state/process_timeline.py",
             "runtime/sensing/gateway/agent_trace_router.py",
+            "runtime/sensing/gateway/_agent_trace_router_trace.py",
             "tests/test_process_timeline.py",
             "tests/test_agent_trace_router.py",
         ),
@@ -102,6 +103,7 @@ CHECKS: tuple[AgentLoopCheck, ...] = (
         title="Mixed browser and code completion evidence",
         paths=(
             "runtime/core/cerebrum/react_guards.py",
+            "runtime/core/cerebrum/react_browser_guards.py",
             "tests/test_react_guard_browser.py",
         ),
         required_terms=(

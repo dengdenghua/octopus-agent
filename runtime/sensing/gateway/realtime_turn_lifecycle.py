@@ -22,7 +22,6 @@ from runtime.platform.models.primitives import now_utc
 from runtime.protocol import (
     ErrorItem,
     ItemStatus,
-    ItemType,
     ServerMethod,
     Turn,
     TurnParams,
@@ -30,6 +29,20 @@ from runtime.protocol import (
     VerificationItem,
 )
 from runtime.safety.approval.approval_gate import ApprovalProvider
+from runtime.sensing.gateway._realtime_turn_lifecycle_helpers import (
+    _inject_cowork_turn_plan,
+    _turn_has_observable_output,
+)
+from runtime.sensing.gateway._realtime_turn_lifecycle_resume import (
+    _consume_confirmed_resume_intent,
+    _record_pending_resume_intent,
+)
+
+# Re-exported helper names reachable from the old module-level surface.
+__all__ = [
+    "_consume_confirmed_resume_intent",
+    "_record_pending_resume_intent",
+]
 from runtime.sensing.gateway.realtime_approval import GatewayApprovalProvider
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 from runtime.sensing.gateway.realtime_thread_history import (
@@ -37,14 +50,11 @@ from runtime.sensing.gateway.realtime_thread_history import (
 )
 from runtime.sensing.gateway.realtime_turn_input import (
     _build_intent,
-    _execution_resume_intent,
     _extract_codex_composer_mode,
     _input_attachments,
     _input_metadata,
     _join_text,
-    _parse_resume_confirmation,
     _resume_confirmation_text,
-    _safe_int,
     _should_default_planning_mode,
     _should_default_topology,
     _turn_mode,
@@ -62,105 +72,6 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
 _logger = logging.getLogger(__name__)
-
-
-def _turn_has_observable_output(turn: Turn) -> bool:
-    """Return true once the runtime produced anything visible beyond input.
-
-    A turn that only contains the user's message but no agent text, no
-    reasoning, no tool/file/artifact/error item is a silent failure. It
-    should not be marked completed because the UI has nothing meaningful
-    to render and the user sees a stuck/empty answer.
-    """
-    for item in turn.items:
-        item_type = getattr(item, "type", None)
-        if item_type in {
-            ItemType.USER_MESSAGE,
-            ItemType.STEERING_USER_MESSAGE,
-        }:
-            continue
-        if item_type == ItemType.AGENT_MESSAGE:
-            if str(getattr(item, "text", "") or "").strip():
-                return True
-            continue
-        if item_type == ItemType.REASONING:
-            if str(getattr(item, "content", "") or "").strip() or bool(
-                getattr(item, "summary", None)
-            ):
-                return True
-            continue
-        if item_type == ItemType.PLAN:
-            if str(getattr(item, "text", "") or "").strip():
-                return True
-            continue
-        if item_type == ItemType.TODO_LIST:
-            if bool(getattr(item, "plan", None)):
-                return True
-            continue
-        return True
-    return False
-
-
-def _inject_cowork_turn_plan(
-    runtime: Any,
-    *,
-    thread_id: str,
-    text: str,
-    intent: Any,
-) -> None:
-    """Attach cowork turn-planning diagnostics to the realtime intent.
-
-    Single-responder plans stay advisory; multi-responder plans are converted
-    into the existing ``agent_roster`` shape so the stable group-fanout driver
-    can run the selected members in parallel.
-    """
-    store = getattr(runtime, "_cowork_group_store", None)
-    if store is None:
-        store = getattr(getattr(runtime, "_app_state", None), "cowork_group_store", None)
-    if store is None:
-        return
-    try:
-        from runtime.memory.cowork.turn_plan import plan_turn_for_thread
-
-        plan = plan_turn_for_thread(store, thread_id, text).to_dict()
-    except Exception as exc:  # noqa: BLE001
-        _logger.debug("cowork turn plan skipped: %s", exc, exc_info=True)
-        return
-    context = getattr(intent, "user_context", None)
-    if not isinstance(context, dict):
-        return
-    context.setdefault("cowork_plan", plan)
-    context.setdefault("cowork_mode", plan.get("mode"))
-    context.setdefault("cowork_responders", plan.get("responders") or [])
-    context.setdefault("cowork_is_multi", bool(plan.get("is_multi")))
-    responders = [
-        str(agent_id) for agent_id in (plan.get("responders") or []) if str(agent_id or "").strip()
-    ]
-    if plan.get("is_multi") and len(responders) > 1:
-        context.setdefault(
-            "agent_roster",
-            [{"agent_id": agent_id, "display_name": agent_id} for agent_id in responders],
-        )
-
-    # Enforce the responder's context grant on the single-responder react path.
-    # A member pulled in with from_join/range/summary must not see history beyond
-    # their grant. The async runner already slices via context_view; this closes
-    # the realtime path. (Multi-responder fanout passes only the current message,
-    # not history, so there's nothing to leak there.)
-    if not plan.get("is_multi") and len(responders) == 1:
-        msgs = context.get("conversation_messages")
-        if isinstance(msgs, list) and msgs:
-            try:
-                from runtime.memory.cowork.context_view import (
-                    resolve_view,
-                    slice_messages,
-                )
-
-                view = resolve_view(store.state(thread_id), responders[0], len(msgs))
-                if view is not None and view.scope != "all":
-                    context["conversation_messages"] = slice_messages(view, msgs)
-            except Exception as exc:  # noqa: BLE001 — grant slice is best-effort
-                _logger.debug("cowork grant slice skipped: %s", exc, exc_info=True)
 
 
 async def _start_turn(
@@ -1042,60 +953,3 @@ async def _start_turn(
         runtime._active_turn_ids.discard(turn.id)
         runtime._unregister_active_turn(turn.id)
         emitter.unregister_turn(turn.id)
-
-
-async def _record_pending_resume_intent(
-    runtime: CerebrumRuntime,
-    thread_id: str,
-    resume_intent: dict[str, Any],
-) -> None:
-    async with runtime._resume_intents_lock:
-        runtime._pending_resume_intents[thread_id] = dict(resume_intent)
-    if runtime._trace_store is None:
-        return
-    with contextlib.suppress(Exception):
-        runtime._trace_store.record_resume_request(
-            thread_id=thread_id,
-            checkpoint_id=int(resume_intent.get("checkpoint_id") or 0),
-            task_id=resume_intent.get("task_id"),
-            status="pending",
-            intent=resume_intent,
-        )
-
-
-async def _consume_confirmed_resume_intent(
-    runtime: CerebrumRuntime,
-    thread_id: str,
-    text: str,
-) -> dict[str, Any] | None:
-    checkpoint_id = _parse_resume_confirmation(text)
-    if checkpoint_id is None:
-        return None
-    async with runtime._resume_intents_lock:
-        pending = runtime._pending_resume_intents.get(thread_id)
-        pending_request_id: int | None = None
-        if not isinstance(pending, dict) and runtime._trace_store is not None:
-            with contextlib.suppress(Exception):
-                request = runtime._trace_store.latest_pending_resume_request(thread_id=thread_id)
-                if isinstance(request, dict):
-                    pending = request.get("intent")
-                    pending_request_id = _safe_int(request.get("id"))
-        if not isinstance(pending, dict):
-            return None
-        if _safe_int(pending.get("checkpoint_id")) != checkpoint_id:
-            return None
-        runtime._pending_resume_intents.pop(thread_id, None)
-    if runtime._trace_store is not None:
-        with contextlib.suppress(Exception):
-            confirmed = runtime._trace_store.confirm_resume_request(
-                thread_id=thread_id,
-                checkpoint_id=checkpoint_id,
-                confirmation_text=f"确认恢复 checkpoint #{checkpoint_id}",
-            )
-            if isinstance(confirmed, dict):
-                confirmed_intent = confirmed.get("intent")
-                pending = confirmed_intent if isinstance(confirmed_intent, dict) else pending
-                pending_request_id = _safe_int(confirmed.get("id")) or pending_request_id
-            if pending_request_id is not None:
-                runtime._trace_store.consume_resume_request(pending_request_id)
-    return _execution_resume_intent(pending, checkpoint_id)

@@ -107,7 +107,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
         GapBehaviorCheck(
             id="local_partner_diagnostic_matrix",
             title="Local partner diagnostics document model source, entitlement, headless, and health checks",
-            path="runtime/sensing/gateway/agents_local_partner.py",
+            path="runtime/sensing/gateway/_agents_local_partner_guidance.py",
             required_terms=(
                 "_partner_diagnostic_items",
                 "模型来源",
@@ -212,7 +212,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
         GapBehaviorCheck(
             id="group_fanout_realtime_audit",
             title="Realtime fanout records arbitration audit evidence",
-            path="runtime/sensing/gateway/realtime_team_stream.py",
+            path="runtime/sensing/gateway/_team_stream_group_fanout.py",
             required_terms=(
                 "octopus.group_fanout_audit.v1",
                 "ReasoningItem",
@@ -232,7 +232,7 @@ BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
         GapBehaviorCheck(
             id="parallel_batch_coordination_contract",
             title="Parallel batches expose task-level coordination summary",
-            path="runtime/execution/parallel_agents/orchestrator.py",
+            path="runtime/execution/parallel_agents/_orchestrator_models.py",
             required_terms=(
                 "octopus.parallel_batch_coordination.v1",
                 "_build_coordination_summary",

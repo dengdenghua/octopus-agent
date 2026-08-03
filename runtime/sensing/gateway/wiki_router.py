@@ -397,6 +397,13 @@ def create_wiki_router(
                 "changes_pending": None,
                 "root": str(user_root),
                 "autosync": wiki_generic.get_settings(user_root).get("autosync", False),
+                "consistent": s.get("consistent", False),
+                "schema": s.get("schema"),
+                "plugin_id": s.get("plugin_id"),
+                "plugin_version": s.get("plugin_version"),
+                "generator_version": s.get("generator_version"),
+                "policy_digest": s.get("policy_digest"),
+                "project_id": s.get("project_id"),
             }
         manifest = _load_manifest()
         exists = bool(manifest)

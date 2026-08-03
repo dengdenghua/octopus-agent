@@ -636,6 +636,13 @@ class TestAgentCompetitorScorecard:
             "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
             str(tmp_path / "no-infrastructure-receipt.json"),
         )
+        # Also pin the behavioral bundle to a missing path so the test deterministically
+        # exercises the "no behavioral evidence" gap even when a real evidence bundle
+        # has been committed to the repo.
+        monkeypatch.setenv(
+            "OCTOPUS_BEHAVIORAL_EVAL_BUNDLE",
+            str(tmp_path / "no-behavioral-bundle.json"),
+        )
         report = compute_agent_competitor_scorecard()
 
         assert report["schema"] == "octopus.agent_competitor_scorecard.v1"
@@ -920,6 +927,13 @@ class TestAgentCompetitorScorecard:
         monkeypatch.setenv(
             "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
             str(tmp_path / "no-infrastructure-receipt.json"),
+        )
+        # Pin the behavioral bundle to a missing path so the test deterministically
+        # exercises the "no behavioral evidence" gap even when a machine-local
+        # evidence bundle has been left in the repo by a prior live run.
+        monkeypatch.setenv(
+            "OCTOPUS_BEHAVIORAL_EVAL_BUNDLE",
+            str(tmp_path / "no-behavioral-bundle.json"),
         )
         report = compute_e2e_surpass_certification(target_score=95)
 

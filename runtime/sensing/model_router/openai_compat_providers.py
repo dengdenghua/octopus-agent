@@ -6,77 +6,40 @@ prefer stricter sampling payloads, and several expose reasoning text
 through provider-specific response keys.  This module keeps those rules
 data-driven so ``OpenAIModelRouter`` can stay a normal chat-completions
 transport instead of accumulating provider-specific branches.
+
+The immutable provider catalog (dataclasses, the ``_PROFILES`` registry,
+and pure data-only accessors) lives in ``_providers_data`` and the
+response-parsing helpers (reasoning/usage extraction, tool-call argument
+decoding) live in ``_response_parsers``.  Both are re-exported here so
+existing import sites continue to work unchanged.
 """
 
 from __future__ import annotations
 
-import ast
-import html
 import json
 import re
-from dataclasses import dataclass, field, replace
-from typing import Any, Literal
+from dataclasses import replace
+from typing import Any
 
-ThinkingRequestStyle = Literal["openai", "none", "minimax_adaptive"]
-
-
-@dataclass(frozen=True)
-class OpenAICompatProviderProfile:
-    id: str
-    display_name: str
-    base_url_markers: tuple[str, ...] = ()
-    model_markers: tuple[str, ...] = ()
-    thinking_request_style: ThinkingRequestStyle = "none"
-    omit_sampling_parameters: bool = False
-    drop_tool_choice: bool = False
-    strict_tool_schema: bool = False
-    max_temperature: float | None = None
-    unsupported_request_fields: tuple[str, ...] = field(default_factory=tuple)
-    retry_without_tool_choice: bool = True
-    retry_without_sampling: bool = True
-    retry_max_tokens_as_completion_tokens: bool = True
-    compatibility_notes: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class OpenAICompatRetryPayload:
-    payload: dict[str, Any]
-    reason: str
-    removed_fields: tuple[str, ...] = ()
-    added_fields: tuple[str, ...] = ()
-    changed_fields: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class OpenAICompatProfileProbe:
-    profile_id: str
-    base_url: str
-    model: str
-    smoke_provider_configured: bool
-    base_url_resolves_to: str
-    model_resolves_to: str
-
-
-GENERIC_OPENAI_PROFILE = OpenAICompatProviderProfile(
-    id="openai_compat",
-    display_name="OpenAI-compatible",
-    thinking_request_style="openai",
+from ._providers_data import (
+    GENERIC_OPENAI_PROFILE,
+    REQUIRED_DOMESTIC_PROFILE_IDS,
+    OpenAICompatProfileProbe,
+    OpenAICompatProviderProfile,
+    OpenAICompatRetryPayload,
+    _compatibility_score,
+    _profile_by_id,
+    _sample_base_url_from_profile_markers,
+    _sample_model_from_profile_markers,
+    describe_openai_compat_profile,
+    known_openai_compat_profiles,
+    openai_compat_profile_ids,
+    resolve_openai_compat_profile,
 )
-
-REQUIRED_DOMESTIC_PROFILE_IDS: tuple[str, ...] = (
-    "kimi_coding",
-    "kimi",
-    "deepseek",
-    "qwen",
-    "glm",
-    "doubao",
-    "minimax",
-    "hunyuan",
-    "baichuan",
-    "yi",
-    "stepfun",
-    "siliconflow",
-    "qianfan",
+from ._response_parsers import (
+    extract_openai_compat_reasoning,
+    extract_openai_compat_usage,
+    parse_tool_call_arguments,
 )
 
 _OPTIONAL_REQUEST_FIELD_FALLBACKS = (
@@ -109,173 +72,6 @@ _STRICT_SCHEMA_DROPPED_KEYS = frozenset(
         "xml",
     }
 )
-
-
-_PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
-    OpenAICompatProviderProfile(
-        id="kimi_coding",
-        display_name="Kimi Coding",
-        base_url_markers=(
-            "api.kimi.com/coding",
-            "api.moonshot.ai/coding",
-            "api.moonshot.cn/coding",
-            "/coding/v1",
-        ),
-        model_markers=(
-            "kimi-code",
-            "kimi-for-coding",
-            "kimi-coding",
-            "k2-code",
-            "k2 code",
-            "k2.7-code",
-            "k2.7 code",
-            "k2.7code",
-            "k2.7_code",
-        ),
-        omit_sampling_parameters=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=(
-            "coding endpoint rejects sampling knobs",
-            "drops OpenAI reasoning/thinking extensions",
-        ),
-    ),
-    OpenAICompatProviderProfile(
-        id="deepseek",
-        display_name="DeepSeek",
-        base_url_markers=("api.deepseek.com",),
-        model_markers=("deepseek-", "deepseek/", "deepseek_"),
-        compatibility_notes=(
-            "reasoning text may arrive as reasoning_content",
-            "some deployments prefer max_completion_tokens on retry",
-        ),
-    ),
-    OpenAICompatProviderProfile(
-        id="kimi",
-        display_name="Kimi / Moonshot",
-        base_url_markers=(
-            "api.moonshot.cn",
-            "api.moonshot.ai",
-            "platform.moonshot",
-            "api.kimi.com",
-        ),
-        model_markers=("kimi", "moonshot"),
-        max_temperature=1.0,
-        compatibility_notes=("temperature is clamped to 1.0",),
-    ),
-    OpenAICompatProviderProfile(
-        id="qwen",
-        display_name="Alibaba Cloud Qwen / DashScope",
-        base_url_markers=("dashscope.aliyuncs.com", "bailian.aliyuncs.com"),
-        model_markers=("qwen", "qwq", "qvq", "tongyi"),
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=(
-            "DashScope-compatible mode may reject OpenAI-only fields",
-            "max_tokens can be retried as max_completion_tokens",
-            "tool schemas are normalized for stricter compatible-mode validation",
-        ),
-    ),
-    OpenAICompatProviderProfile(
-        id="glm",
-        display_name="Zhipu / Z.AI GLM",
-        base_url_markers=("open.bigmodel.cn", "api.z.ai"),
-        model_markers=("glm-", "chatglm", "zai/", "z.ai/"),
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=(
-            "GLM reasoning may arrive as reasoning",
-            "legacy function_call responses are accepted",
-            "parallel_tool_calls is removed for OpenAI-compatible strict mode",
-        ),
-    ),
-    OpenAICompatProviderProfile(
-        id="doubao",
-        display_name="Volcano Engine Doubao / Ark",
-        base_url_markers=("ark.cn-beijing.volces.com", "volces.com/api/v3"),
-        model_markers=("doubao",),
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=(
-            "Ark OpenAI-compatible endpoint uses strict request validation",
-            "tool schemas are normalized before the first request",
-        ),
-    ),
-    OpenAICompatProviderProfile(
-        id="minimax",
-        display_name="MiniMax",
-        base_url_markers=("api.minimaxi.com", "api.minimax.io", "api.minimax.chat"),
-        model_markers=("minimax", "abab"),
-        thinking_request_style="minimax_adaptive",
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=(
-            "thinking requests are translated to MiniMax adaptive style",
-            "parallel tool-call hints are removed for stricter gateways",
-        ),
-    ),
-    OpenAICompatProviderProfile(
-        id="hunyuan",
-        display_name="Tencent Hunyuan",
-        base_url_markers=("api.hunyuan.cloud.tencent.com",),
-        model_markers=("hunyuan",),
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=("tool schemas may require additionalProperties stripping",),
-    ),
-    OpenAICompatProviderProfile(
-        id="baichuan",
-        display_name="Baichuan",
-        base_url_markers=("api.baichuan-ai.com", "platform.baichuan-ai.com"),
-        model_markers=("baichuan",),
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=("falls back by removing strict OpenAI-only fields",),
-    ),
-    OpenAICompatProviderProfile(
-        id="yi",
-        display_name="01.AI Yi",
-        base_url_markers=("api.lingyiwanwu.com", "platform.01.ai"),
-        model_markers=("yi-", "yi_", "yi/"),
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=("falls back by removing strict OpenAI-only fields",),
-    ),
-    OpenAICompatProviderProfile(
-        id="stepfun",
-        display_name="StepFun",
-        base_url_markers=("api.stepfun.ai", "api.stepfun.com"),
-        model_markers=("step-", "stepfun"),
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=("falls back by removing strict OpenAI-only fields",),
-    ),
-    OpenAICompatProviderProfile(
-        id="siliconflow",
-        display_name="SiliconFlow",
-        base_url_markers=("api.siliconflow.cn", "api.siliconflow.com"),
-        model_markers=("siliconflow/",),
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=("proxy-hosted models vary; diagnostics surface normalized payloads",),
-    ),
-    OpenAICompatProviderProfile(
-        id="qianfan",
-        display_name="Baidu Qianfan",
-        base_url_markers=("qianfan.baidubce.com",),
-        model_markers=("ernie", "wenxin", "qianfan"),
-        strict_tool_schema=True,
-        unsupported_request_fields=("parallel_tool_calls",),
-        compatibility_notes=("falls back by removing strict OpenAI-only fields",),
-    ),
-)
-
-
-def known_openai_compat_profiles() -> tuple[OpenAICompatProviderProfile, ...]:
-    return _PROFILES
-
-
-def openai_compat_profile_ids() -> tuple[str, ...]:
-    return tuple(profile.id for profile in (GENERIC_OPENAI_PROFILE, *_PROFILES))
 
 
 def sample_openai_compat_profile_probe(
@@ -502,55 +298,6 @@ def probe_openai_compat_request_contract(
             for item in retry_plan
         ],
     }
-
-
-def describe_openai_compat_profile(
-    profile: OpenAICompatProviderProfile,
-) -> dict[str, Any]:
-    """Machine-readable summary for UI/API compatibility diagnostics."""
-    normalization_hints: list[str] = []
-    if profile.thinking_request_style != "openai":
-        normalization_hints.append(f"thinking:{profile.thinking_request_style}")
-    if profile.omit_sampling_parameters:
-        normalization_hints.append("drop_sampling_parameters")
-    if profile.drop_tool_choice:
-        normalization_hints.append("drop_tool_choice")
-    if profile.strict_tool_schema:
-        normalization_hints.append("strict_tool_schema")
-    if profile.max_temperature is not None:
-        normalization_hints.append(f"max_temperature:{profile.max_temperature:g}")
-    for field_name in profile.unsupported_request_fields:
-        normalization_hints.append(f"drop:{field_name}")
-    if profile.retry_without_tool_choice:
-        normalization_hints.append("retry_without_tool_choice")
-    if profile.retry_without_sampling:
-        normalization_hints.append("retry_without_sampling")
-    if profile.retry_max_tokens_as_completion_tokens:
-        normalization_hints.append("retry_max_tokens_as_completion_tokens")
-    score = _compatibility_score(profile)
-    return {
-        "id": profile.id,
-        "display_name": profile.display_name,
-        "compat_score": score,
-        "normalization_hints": normalization_hints,
-        "notes": list(profile.compatibility_notes),
-    }
-
-
-def resolve_openai_compat_profile(
-    base_url: str,
-    model: str | None = None,
-) -> OpenAICompatProviderProfile:
-    base = (base_url or "").strip().lower()
-    model_probe = (model or "").strip().lower()
-
-    for profile in _PROFILES:
-        if profile.base_url_markers and any(marker in base for marker in profile.base_url_markers):
-            return profile
-    for profile in _PROFILES:
-        if profile.model_markers and any(marker in model_probe for marker in profile.model_markers):
-            return profile
-    return GENERIC_OPENAI_PROFILE
 
 
 def apply_custom_openai_compat_profile(
@@ -791,28 +538,6 @@ def plan_openai_compat_retries(
     return variants
 
 
-def _compatibility_score(profile: OpenAICompatProviderProfile) -> int:
-    score = 100
-    if profile.thinking_request_style != "openai":
-        score -= 6
-    if profile.omit_sampling_parameters:
-        score -= 10
-    if profile.drop_tool_choice:
-        score -= 8
-    if profile.strict_tool_schema:
-        score -= 3
-    if profile.max_temperature is not None:
-        score -= 3
-    score -= min(12, len(profile.unsupported_request_fields) * 3)
-    if profile.retry_without_tool_choice:
-        score -= 2
-    if profile.retry_without_sampling:
-        score -= 2
-    if profile.retry_max_tokens_as_completion_tokens:
-        score -= 2
-    return max(60, score)
-
-
 def _request_contract_summary(
     *,
     normalized: dict[str, Any],
@@ -1023,158 +748,6 @@ def _smoke_provider_by_id() -> dict[str, Any]:
     return {provider.id: provider for provider in openai_compat_smoke_providers()}
 
 
-def _sample_model_from_profile_markers(profile: OpenAICompatProviderProfile) -> str:
-    markers = tuple(profile.model_markers or ())
-    marker = str(markers[0] if markers else profile.id).rstrip("-_/ ")
-    return marker or profile.id
-
-
-def _sample_base_url_from_profile_markers(profile: OpenAICompatProviderProfile) -> str:
-    markers = tuple(profile.base_url_markers or ())
-    marker = str(markers[0] if markers else "example.com/v1")
-    if marker.startswith("http://") or marker.startswith("https://"):
-        return marker.rstrip("/")
-    if marker.startswith("/"):
-        return f"https://api.example.com{marker}".rstrip("/")
-    return f"https://{marker.rstrip('/')}"
-
-
-def extract_openai_compat_reasoning(message: dict[str, Any]) -> str:
-    pieces: list[str] = []
-    for key in (
-        "reasoning_content",
-        "reasoning",
-        "thinking",
-        "reasoning_text",
-        "thought",
-    ):
-        value = message.get(key)
-        rendered = _render_reasoning_value(value)
-        if rendered:
-            pieces.append(rendered)
-
-    details = _render_reasoning_value(message.get("reasoning_details"))
-    if details:
-        pieces.append(details)
-
-    return "\n".join(piece for piece in pieces if piece)
-
-
-def extract_openai_compat_usage(data: dict[str, Any]) -> tuple[int, int]:
-    usage = _coerce_usage(data.get("usage"))
-    if usage is None:
-        choices = data.get("choices")
-        if isinstance(choices, list):
-            for choice in choices:
-                if not isinstance(choice, dict):
-                    continue
-                usage = _coerce_usage(choice.get("usage"))
-                if usage is not None:
-                    break
-    if usage is None:
-        return 0, 0
-    return (
-        _int_from_any(
-            usage.get("prompt_tokens")
-            or usage.get("input_tokens")
-            or usage.get("promptTokens")
-            or usage.get("inputTokens")
-        ),
-        _int_from_any(
-            usage.get("completion_tokens")
-            or usage.get("output_tokens")
-            or usage.get("completionTokens")
-            or usage.get("outputTokens")
-        ),
-    )
-
-
-_XML_PARAMETER_RE = re.compile(
-    r"<parameter\b(?P<attrs>[^>]*)>(?P<value>.*?)</parameter>",
-    re.IGNORECASE | re.DOTALL,
-)
-_XML_PARAMETER_NAME_RE = re.compile(
-    r"\bname\s*=\s*(['\"])(?P<name>[^'\"]+)\1",
-    re.IGNORECASE,
-)
-
-
-def _xml_parameter_arguments(text: str) -> dict[str, Any]:
-    parsed: dict[str, Any] = {}
-    for match in _XML_PARAMETER_RE.finditer(text):
-        attrs = match.group("attrs") or ""
-        name_match = _XML_PARAMETER_NAME_RE.search(attrs)
-        if name_match is None:
-            continue
-        name = html.unescape(name_match.group("name")).strip()
-        if not name:
-            continue
-        raw = html.unescape(match.group("value") or "").strip()
-        if re.search(r"\bstring\s*=\s*(['\"])true\1", attrs, re.IGNORECASE):
-            parsed[name] = raw
-            continue
-        if raw.lower() == "true":
-            parsed[name] = True
-        elif raw.lower() == "false":
-            parsed[name] = False
-        elif raw.lower() in {"null", "none"}:
-            parsed[name] = None
-        else:
-            try:
-                decoded = json.loads(raw)
-            except (TypeError, ValueError, json.JSONDecodeError):
-                decoded = raw
-            parsed[name] = decoded
-    return parsed
-
-
-def _normalize_tool_argument_mapping(parsed: dict[str, Any]) -> dict[str, Any]:
-    normalized = dict(parsed)
-    wrapper_keys: list[str] = []
-    recovered: dict[str, Any] = {}
-    for key, raw in parsed.items():
-        if not isinstance(raw, str) or "<parameter" not in raw.lower():
-            continue
-        xml_args = _xml_parameter_arguments(raw)
-        if xml_args:
-            wrapper_keys.append(key)
-            recovered.update(xml_args)
-    for key in wrapper_keys:
-        normalized.pop(key, None)
-    normalized.update(recovered)
-    return normalized
-
-
-def parse_tool_call_arguments(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return _normalize_tool_argument_mapping(value)
-    if value is None:
-        return {}
-    text = value if isinstance(value, str) else str(value)
-    text = text.strip()
-    if not text:
-        return {}
-
-    parsed: Any
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, str):
-            parsed = json.loads(parsed)
-        return _normalize_tool_argument_mapping(parsed) if isinstance(parsed, dict) else {}
-    except (
-        TypeError,
-        ValueError,
-        json.JSONDecodeError,
-    ):  # expected · falls through to the ast.literal_eval fallback below
-        pass
-
-    try:
-        parsed = ast.literal_eval(text)
-        return _normalize_tool_argument_mapping(parsed) if isinstance(parsed, dict) else {}
-    except (SyntaxError, ValueError, TypeError):
-        return _xml_parameter_arguments(text)
-
-
 def _normalize_thinking_fields(
     payload: dict[str, Any],
     profile: OpenAICompatProviderProfile,
@@ -1235,18 +808,6 @@ def _payload_delta(
         )
     )
     return removed, added, changed
-
-
-def _profile_by_id(value: Any) -> OpenAICompatProviderProfile | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    target = value.strip().lower().replace("-", "_")
-    if target == GENERIC_OPENAI_PROFILE.id:
-        return GENERIC_OPENAI_PROFILE
-    for profile in _PROFILES:
-        if profile.id == target:
-            return profile
-    return None
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -1365,45 +926,6 @@ def _normalize_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
         else:
             out[key] = value
     return out
-
-
-def _render_reasoning_value(value: Any) -> str:
-    if value is None or value == "":
-        return ""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, int | float | bool):
-        return str(value)
-    if isinstance(value, list):
-        pieces = [_render_reasoning_detail(item) for item in value]
-        return "\n".join(piece for piece in pieces if piece)
-    if isinstance(value, dict):
-        return _render_reasoning_detail(value)
-    return json.dumps(value, ensure_ascii=False, default=str)
-
-
-def _render_reasoning_detail(value: Any) -> str:
-    if isinstance(value, str):
-        return value
-    if not isinstance(value, dict):
-        return _render_reasoning_value(value)
-    for key in ("text", "content", "reasoning", "summary", "delta"):
-        item = value.get(key)
-        if isinstance(item, str) and item:
-            return item
-    return json.dumps(value, ensure_ascii=False, default=str)
-
-
-def _coerce_usage(value: Any) -> dict[str, Any] | None:
-    return value if isinstance(value, dict) else None
-
-
-def _int_from_any(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        match = re.search(r"\d+", str(value or ""))
-        return int(match.group(0)) if match else 0
 
 
 __all__ = [

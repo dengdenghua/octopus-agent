@@ -26,8 +26,8 @@ from runtime.execution.agents.local_partner_bridge import (
     harvest_to_blackboard,
     run_local_partner,
 )
+from runtime.execution.agents.local_partner_discovery import resolve_local_command
 from runtime.execution.subagents.worktree_loop import is_git_repo, worktree_scope
-from runtime.sensing.gateway.agents_local_partner import resolve_local_command
 
 _MAX_MEMBERS = 6
 _DIFF_PREVIEW_CHARS = 1200

@@ -256,7 +256,14 @@ def test_argv_none_for_unknown_or_empty() -> None:
     assert build_partner_argv("kimi-cli", "kimi", "do a thing") is None
     # CodeBuddy's IDE launcher opens an app chat session and does not provide
     # the documented headless stdout contract; don't treat it as drivable.
-    assert build_partner_argv("codebuddy-cli", "/Users/me/.codebuddy/bin/buddy", "x") is None
+    assert (
+        build_partner_argv(
+            "codebuddy-cli",
+            "/Users/me/.codebuddy/bin/buddy",  # lint: allow-user-path
+            "x",
+        )
+        is None
+    )
     assert (
         build_partner_argv(
             "codebuddy-cli",

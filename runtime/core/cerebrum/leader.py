@@ -280,12 +280,12 @@ class LeaderProcess:
             if self.socket_path.exists():
                 self.socket_path.unlink()
         except OSError:
-            pass
+            _LOG.debug("failed to remove leader socket %s", self.socket_path, exc_info=True)
         try:
             if self.pid_path.exists():
                 self.pid_path.unlink()
         except OSError:
-            pass
+            _LOG.debug("failed to remove leader PID file %s", self.pid_path, exc_info=True)
         _LOG.info("leader stopped")
 
     # ── Server loop ──────────────────────────────────────────
@@ -556,7 +556,7 @@ def ensure_leader(
     try:
         return LeaderClient.connect(socket_path)
     except LeaderNotRunning:
-        pass
+        _LOG.debug("leader is not running; starting a detached process")
 
     # Spawn a detached leader process.
     import subprocess

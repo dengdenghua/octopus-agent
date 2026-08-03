@@ -18,6 +18,7 @@ by ``Session.turn_id`` upstream.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import threading
 from collections import OrderedDict
@@ -28,6 +29,7 @@ from dataclasses import dataclass, field
 
 _PER_TURN_ABSOLUTE_LIMIT: int = 5
 _MAX_TRACKED_TURNS: int = 1024
+_LOG = logging.getLogger(__name__)
 
 # Per-turn state. OrderedDict for LRU eviction.
 _TURN_DELEGATIONS: OrderedDict[str, int] = OrderedDict()
@@ -196,7 +198,9 @@ def ultracode_token_budget() -> int:
             if value > 0:
                 return value
         except (TypeError, ValueError):
-            pass
+            _LOG.warning(
+                "invalid %s=%r; using the fallback budget", _ULTRACODE_TOKEN_BUDGET_ENV, raw
+            )
     operator = operator_orchestration_token_budget()
     if operator is not None:
         return operator

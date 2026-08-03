@@ -13,25 +13,25 @@ from .schema import (
 _PRESETS: dict[str, dict[str, Any]] = {
     "personal": {
         "planner": PlannerConfig(type="llm", model="gpt-4o-mini"),
-        "budget": BudgetConfig(max_tokens=50000, max_usd=0.50, max_latency_ms=600000),
+        "budget": BudgetConfig(),
         "immunity": ImmunityConfig(unknown_policy="quarantine"),
         "learn": LearnConfig(min_hits=3, max_rules=30),
     },
     "team": {
         "planner": PlannerConfig(type="llm", model="gpt-4o-mini"),
-        "budget": BudgetConfig(max_tokens=100000, max_usd=2.00, max_latency_ms=600000),
+        "budget": BudgetConfig(max_usd=2.00),
         "immunity": ImmunityConfig(unknown_policy="quarantine"),
         "learn": LearnConfig(min_hits=5, max_rules=60),
     },
     "enterprise": {
         "planner": PlannerConfig(type="llm", model="gpt-4o-mini"),
-        "budget": BudgetConfig(max_tokens=200000, max_usd=10.00, max_latency_ms=600000),
+        "budget": BudgetConfig(max_tokens=200000, max_usd=10.00),
         "immunity": ImmunityConfig(unknown_policy="reject"),
         "learn": LearnConfig(min_hits=5, max_rules=100),
     },
     "research": {
         "planner": PlannerConfig(type="llm", model="gpt-4o-mini"),
-        "budget": BudgetConfig(max_tokens=500000, max_usd=50.00, max_latency_ms=600000),
+        "budget": BudgetConfig(max_tokens=500000, max_usd=50.00),
         "immunity": ImmunityConfig(unknown_policy="allow"),
         "learn": LearnConfig(min_hits=2, max_rules=200),
     },

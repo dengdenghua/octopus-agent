@@ -25,6 +25,10 @@ def test_production_readiness_gate_requires_behavioral_release_evidence(
         "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
         str(tmp_path / "no-infrastructure-receipt.json"),
     )
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_EVAL_BUNDLE",
+        str(tmp_path / "no-behavioral-bundle.json"),
+    )
     result = gate.run_gate(review_queue_path=review_queue_path)
 
     assert result.failures
@@ -127,9 +131,19 @@ def test_production_readiness_gate_forwards_behavioral_bundle_path(
 
 
 def test_production_readiness_gate_prints_e2e_summary(
+    monkeypatch,
+    tmp_path: Path,
     capsys,
     review_queue_path: Path,
 ) -> None:
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
+        str(tmp_path / "no-infrastructure-receipt.json"),
+    )
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_EVAL_BUNDLE",
+        str(tmp_path / "no-behavioral-bundle.json"),
+    )
     code = gate.main(["--review-queue-path", str(review_queue_path)])
 
     captured = capsys.readouterr()
@@ -148,6 +162,10 @@ def test_production_readiness_gate_can_emit_json_summary(
     monkeypatch.setenv(
         "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
         str(tmp_path / "no-infrastructure-receipt.json"),
+    )
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_EVAL_BUNDLE",
+        str(tmp_path / "no-behavioral-bundle.json"),
     )
     code = gate.main(
         [
@@ -176,10 +194,19 @@ def test_production_readiness_gate_can_emit_json_summary(
 
 
 def test_production_readiness_gate_can_write_json_output(
+    monkeypatch,
     capsys,
     review_queue_path: Path,
     tmp_path: Path,
 ) -> None:
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
+        str(tmp_path / "no-infrastructure-receipt.json"),
+    )
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_EVAL_BUNDLE",
+        str(tmp_path / "no-behavioral-bundle.json"),
+    )
     output_path = tmp_path / "reports" / "readiness.json"
 
     code = gate.main(

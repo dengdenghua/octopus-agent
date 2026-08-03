@@ -51,6 +51,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+from runtime.platform.plugins.bundled.project_wiki.service import (
+    OUTPUT_DIR_NAME,
+    is_current_manifest,
+    manifest_metadata,
+)
+
 # File extensions we know how to summarize.
 _LANG_BY_EXT: dict[str, str] = {
     ".py": "python",
@@ -342,7 +348,7 @@ def _render_readme(root: Path, files: list[dict[str, Any]]) -> str:
 
 
 def wiki_dir(root: Path) -> Path:
-    return root / ".octopus-wiki"
+    return root / OUTPUT_DIR_NAME
 
 
 def status(root: Path) -> dict[str, Any]:
@@ -356,12 +362,15 @@ def status(root: Path) -> dict[str, Any]:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {"exists": False, "status": "corrupt"}
+    current = is_current_manifest(root, data)
     return {
         "exists": True,
-        "status": "current",
+        "status": "current" if current else "outdated",
+        "consistent": current,
         "generated_at": data.get("generated_at"),
         "files_analyzed": data.get("files_analyzed", 0),
         "by_lang": data.get("by_lang", {}),
+        **manifest_metadata(root),
     }
 
 
@@ -425,6 +434,7 @@ def generate(root: Path) -> dict[str, Any]:
     (out_dir / "README.md").write_text(_render_readme(root, files), encoding="utf-8")
 
     manifest = {
+        **manifest_metadata(root),
         "generated_at": int(t0),
         "elapsed_ms": int((time.time() - t0) * 1000),
         "files_analyzed": len(files),
@@ -449,18 +459,22 @@ def get_settings(root: Path) -> dict[str, Any]:
     """Return the autosync flag etc. · safe defaults when file missing."""
     p = _settings_path(root)
     if not p.is_file():
-        return {"autosync": False}
+        return {"autosync": False, **manifest_metadata(root)}
     try:
-        return {"autosync": False, **json.loads(p.read_text(encoding="utf-8"))}
+        return {
+            "autosync": False,
+            **manifest_metadata(root),
+            **json.loads(p.read_text(encoding="utf-8")),
+        }
     except (OSError, json.JSONDecodeError):
-        return {"autosync": False}
+        return {"autosync": False, **manifest_metadata(root)}
 
 
 def set_settings(root: Path, autosync: bool) -> dict[str, Any]:
     """Persist per-project wiki settings."""
     wd = wiki_dir(root)
     wd.mkdir(parents=True, exist_ok=True)
-    payload = {"autosync": bool(autosync)}
+    payload = {**manifest_metadata(root), "autosync": bool(autosync)}
     _settings_path(root).write_text(
         json.dumps(payload, indent=2),
         encoding="utf-8",

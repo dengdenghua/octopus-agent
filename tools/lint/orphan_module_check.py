@@ -71,6 +71,10 @@ _CONSUMER_ROOTS: tuple[str, ...] = (
 _CONSUMER_EXCLUDE: tuple[str, ...] = (
     "__pycache__",
     "tools/lint/fixtures",
+    # Downloaded SWE-bench repositories are evaluation inputs, not Octopus
+    # consumers. Parsing them adds tens of seconds and emits warnings from
+    # upstream legacy syntax without improving the dependency graph.
+    "benchmarks/results",
 )
 
 # CANDIDATE scan (what may be flagged AS an orphan) additionally skips
@@ -101,7 +105,7 @@ def _lazy_module_map() -> dict[str, str]:
     if not init_path.is_file():
         return {}
     try:
-        tree = ast.parse(init_path.read_text(encoding="utf-8"))
+        tree = ast.parse(init_path.read_text(encoding="utf-8"), filename=str(init_path))
     except (OSError, UnicodeDecodeError, SyntaxError):
         return {}
     for node in ast.walk(tree):
@@ -166,7 +170,7 @@ def _consumed_targets(path: Path) -> set[str]:
     """Absolute dotted module paths this file imports."""
     out: set[str] = set()
     try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except (OSError, UnicodeDecodeError, SyntaxError):
         return out
     self_dotted = _dotted(path)

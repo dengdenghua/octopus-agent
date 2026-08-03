@@ -91,7 +91,7 @@ def close_process_messages(messages: Any) -> None:
         messages.close()
         messages.join_thread()
     except (AttributeError, OSError, ValueError):
-        pass
+        return
 
 
 def terminate_process(process: Any, *, grace_s: float = 0.2) -> bool:

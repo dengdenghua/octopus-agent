@@ -42,7 +42,7 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 # attribution pages) are NOT flagged.
 GITHUB_URL_RE = re.compile(
     r"https?://(?:www\.)?github\.com/"
-    r"(?P<owner>octopus(?:-ai|-agent)?|octopus-agent|octopus-ai)"
+    r"(?P<owner>dengdenghua|octopus(?:-ai|-agent)?|octopus-agent|octopus-ai)"
     r"/(?P<repo>octopus(?:-agent)?)(?=/|$|[\s\"'#)])",
     re.IGNORECASE,
 )

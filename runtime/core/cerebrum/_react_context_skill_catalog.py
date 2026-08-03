@@ -305,7 +305,9 @@ def _format_skill_catalog(
     # capability map so the model still knows the lanes exist even if their
     # full tool sets were trimmed away. It stays discoverable via
     # search_capabilities — the index is only a name-level hint, not schemas.
-    if not activation.active:
+    # Skip it when ``include_names`` explicitly restricts the toolset: the
+    # generic lane index would list tools that were intentionally filtered out.
+    if not activation.active and include_names is None:
         try:
             from runtime.core.cerebrum.capability_router import capability_index
 

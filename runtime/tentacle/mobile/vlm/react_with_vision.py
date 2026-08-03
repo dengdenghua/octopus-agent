@@ -409,19 +409,21 @@ class VisionReAct:
     def suggested_action_to_tool_calls(
         actions: list[SuggestedAction],
         tentacle_id: str,
+        platform: str = "android",
     ) -> list[ToolCall]:
         """将 VLM 建议的操作转换为 Tentacle ToolCall 列表.
 
         映射关系：
-        - tap → android.tap (x, y)
-        - swipe → android.swipe (direction)
-        - type → android.input_text (text)
-        - scroll → android.swipe (direction)
-        - long_press → android.long_press (x, y)
+        - tap → {platform}.tap (x, y)
+        - swipe → {platform}.swipe (direction)
+        - type → {platform}.input_text (text)
+        - scroll → {platform}.swipe (direction)
+        - long_press → {platform}.long_press (x, y)
 
         Args:
             actions: VLM 建议的操作列表
             tentacle_id: 目标设备 ID
+            platform: 设备平台前缀（``ios`` / ``android``），默认 ``android``
 
         Returns:
             转换后的 ToolCall 列表
@@ -435,20 +437,20 @@ class VisionReAct:
             args: dict[str, Any] = {}
 
             if action.action == "tap" and action.coordinates:
-                tool_name = "android.tap"
+                tool_name = f"{platform}.tap"
                 args = {"x": action.coordinates[0], "y": action.coordinates[1]}
             elif action.action == "long_press" and action.coordinates:
-                tool_name = "android.long_press"
+                tool_name = f"{platform}.long_press"
                 args = {"x": action.coordinates[0], "y": action.coordinates[1]}
             elif action.action == "type" and action.text:
-                tool_name = "android.input_text"
+                tool_name = f"{platform}.input_text"
                 args = {"text": action.text}
                 # 如果有坐标，先点击目标位置
                 if action.coordinates:
                     tap_call = BaseToolCall(
                         call_id=f"{call_id}-tap",
                         tentacle_id=tentacle_id,
-                        tool="android.tap",
+                        tool=f"{platform}.tap",
                         args={"x": action.coordinates[0], "y": action.coordinates[1]},
                     )
                     # 注意：这里返回的是 llm.chat_types.ToolCall，需要转换
@@ -460,7 +462,7 @@ class VisionReAct:
                         )
                     )
             elif action.action in ("swipe", "scroll"):
-                tool_name = "android.swipe"
+                tool_name = f"{platform}.swipe"
                 # 默认向上滑动（最常见）
                 args = {"direction": "up"}
             else:

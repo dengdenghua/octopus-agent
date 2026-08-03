@@ -91,9 +91,11 @@ ROOT_ALLOWLIST: set[str] = {
     "QUICKSTART.md",
     "CONTRIBUTING.md",
     "CHANGELOG.md",
+    "CODE_WIKI.md",
     "CLAUDE.md",
     "LICENSE",
     "NOTICE",
+    "SECURITY.md",
     # ── Container / build ───────────────────────────────────
     "Dockerfile",
     "docker-compose.yml",

@@ -74,6 +74,8 @@ def _finalize_react_turn(
     final_guard_grounded_source_paths: Any,
     final_answer_emitted: bool,
     model_iteration_timeout_s: Callable[[], float],
+    model_iteration_timeout_s_config: float | None = None,
+    convergence_max_tokens: int = 2000,
 ) -> Generator[dict[str, Any], None, ReActResult | None]:
     """Run PHASE 7/8 and return the turn's ``ReActResult`` (or None).
 
@@ -148,13 +150,13 @@ def _finalize_react_turn(
             convergence_request = ModelRequest(
                 model=effective_model,
                 messages=messages,
-                max_tokens=5000 if (is_research_mode or is_swarm_mode) else 400,
+                max_tokens=5000 if (is_research_mode or is_swarm_mode) else convergence_max_tokens,
                 temperature=0.2,
             )
             convergence_result = _collect_model_stream_text_with_deadline(
                 router,
                 convergence_request,
-                model_iteration_timeout_s(),
+                model_iteration_timeout_s(model_iteration_timeout_s_config),
             )
             if convergence_result is _MODEL_STREAM_DEADLINE:
                 final_answer = _stage_update_timeout_fallback(steps)

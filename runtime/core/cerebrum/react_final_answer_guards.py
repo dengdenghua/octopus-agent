@@ -120,8 +120,19 @@ def _final_answer_needs_pre_emit_guard(
     is_code_mode: bool,
     browser_operation_mode: bool = False,
 ) -> bool:
-    """Whether user-visible final text must be buffered until guards pass."""
-    if is_code_mode or browser_operation_mode:
+    """Whether user-visible final text must be buffered until guards pass.
+
+    Only genuinely dangerous executable content must force full buffering.
+    ``is_code_mode`` no longer forces buffering by itself: in the realtime
+    workbench ``is_code`` is effectively always true because a workspace is
+    mounted (see ``work_mode.resolve_work_mode``), so treating it as a hard
+    gate made every final report render wholesale instead of streaming.
+    Markdown code fences (`` ``` ``) are likewise not a reason to buffer —
+    a report that quotes code would otherwise never stream. The terminal
+    guard in ``_evaluate_final_answer_guards`` still re-evaluates the full
+    text, so mid-stream preview of non-executable prose is safe.
+    """
+    if browser_operation_mode:
         return True
     body = text or ""
     if not body:
@@ -135,9 +146,11 @@ def _final_answer_needs_pre_emit_guard(
     if _incomplete_final_answer_guard(body) is not None:
         return True
     lower = body.lower()
+    # Only real executable risk forces buffering. ``subprocess``/``os.system``
+    # and friends are kept because previewing an actual command before it is
+    # vetted is the one case where streaming is unsafe.
     if (
-        "```" in body
-        or "subprocess" in lower
+        "subprocess" in lower
         or "os.system" in lower
         or "os.popen" in lower
         or "pickle." in lower

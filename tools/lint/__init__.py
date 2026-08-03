@@ -1,11 +1,6 @@
-"""octopus-agent · static invariant linter."""
+"""Static lint commands for octopus-agent.
 
-from .invariant_check import (
-    ALL_RULES,
-    LintIssue,
-    Rule,
-    lint_file,
-    lint_tree,
-)
-
-__all__ = ["ALL_RULES", "LintIssue", "Rule", "lint_file", "lint_tree"]
+Command modules are intentionally not imported here: eager imports make
+``python -m tools.lint.<command>`` execute a module that is already present in
+``sys.modules``, producing a runtime warning and risking duplicate state.
+"""

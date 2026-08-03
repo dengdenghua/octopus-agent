@@ -45,6 +45,7 @@ CHECKS: tuple[RepoContextCheck, ...] = (
             "runtime/memory/hemolymph/repo_context.py",
             "tests/test_repo_context.py",
             "runtime/safety/evolution/agent_competitor_scorecard.py",
+            "runtime/safety/evolution/_agent_competitor_scorecard_drilldown.py",
         ),
         required_terms=(
             "collect_codebase_sources",

@@ -1,7 +1,8 @@
-# tools/lint · MVP 不变量静态检查
+# tools/lint · 不变量与仓库质量门禁
 
-> **当前 5 条不变量落成为可运行的 AST/Regex 检查 = 约 300 行 Python**。
-> 直接回答"架构太复杂"的质疑：**MVP 层不复杂，可工程化**。
+`invariant_check.py` 负责语义不变量；同目录的独立 ratchet 还覆盖导入方向、
+异步阻塞、异常吞噬、特性开关、孤儿模块、路径与文档漂移。CI 以这些脚本的
+实际退出码为准，本页不再维护容易过期的规则数量或代码行数声明。
 
 ---
 
@@ -99,4 +100,4 @@ ALL_RULES.append(MyNewRule())
 - [ ] LINT-07 NO_GENESTUDIO_SHORTCUT（需要调用图分析）
 - [ ] pyright plugin 版本（更强类型信息）
 - [ ] fix 模式（--fix 自动修正部分违规）
-- [ ] 与 ruff / mypy 联合 pipeline
+- [x] 与 ruff / mypy 联合 pipeline（见 `.github/workflows/ci.yml`）

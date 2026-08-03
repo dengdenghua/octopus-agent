@@ -23,6 +23,10 @@ from runtime.execution.swarm import SwarmResult, SwarmRuntime
 from runtime.execution.swarm.drive import run_swarm
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal, Journal, JSONLJournal
+from runtime.platform.config.schema import (
+    BUDGET_DEFAULT_MAX_TOKENS,
+    BUDGET_DEFAULT_MAX_USD,
+)
 from runtime.platform.i18n import _
 from runtime.platform.models import (
     ArmId,
@@ -43,8 +47,8 @@ def run_goal(
     goal: str,
     *,
     intent_type: IntentType = "task",
-    max_tokens: int = 50_000,
-    max_usd: float = 0.50,
+    max_tokens: int = BUDGET_DEFAULT_MAX_TOKENS,
+    max_usd: float = BUDGET_DEFAULT_MAX_USD,
     color: bool = True,
     args_override: dict[str, Any] | None = None,
     planner_type: str = "static",

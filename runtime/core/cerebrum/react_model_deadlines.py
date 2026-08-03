@@ -10,7 +10,6 @@ inactivity deadline once user-visible tokens start flowing.
 from __future__ import annotations
 
 import contextvars
-import os
 import queue
 import threading
 import time
@@ -23,71 +22,56 @@ _LENGTH_LIMITED_FINISH_REASONS = frozenset(
     {"length", "max_tokens", "max_output_tokens", "output_limit", "token_limit"}
 )
 
-
-def _model_iteration_timeout_s() -> float:
+def _model_iteration_timeout_s(config_timeout_s: float | None = None) -> float:
     """Wall-clock ceiling for one hidden model-thinking iteration.
 
     Provider read timeouts only fire when no bytes arrive. A reasoning model
     can keep sending private thinking forever, so the loop needs its own bound.
-    Operators may tune it without a deploy; invalid values fall back safely.
+    The value is injected from ``config.budget.model_iteration_timeout_s`` by
+    the loop; invalid values fall back safely. Precedence: config > 120s.
     """
-    raw = os.environ.get("OCTOPUS_REACT_MODEL_ITERATION_TIMEOUT_S", "120")
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        return 120.0
-    return max(10.0, min(value, 900.0))
+    if config_timeout_s is not None:
+        return max(10.0, min(config_timeout_s, 900.0))
+    return 120.0
 
 
-def _model_recovery_timeout_s(base_timeout_s: float) -> float:
-    """Shorter ceiling for the no-extended-thinking convergence retry.
-
-    The first model round may legitimately spend time on deep reasoning. Once
-    that round has already exceeded its deadline, the recovery request is a
-    bounded direct-answer attempt; granting it the full original allowance can
-    make one silent turn block for another two minutes. Keep the value tunable,
-    never lengthen the operator's ordinary iteration timeout, and preserve tiny
-    injected deadlines used by deterministic tests.
-    """
-
-    raw = os.environ.get("OCTOPUS_REACT_MODEL_RECOVERY_TIMEOUT_S", "60")
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        value = 60.0
-    recovery_ceiling = max(10.0, min(value, 240.0))
-    return min(base_timeout_s, recovery_ceiling)
+# Per-stage deadline policy for model rounds. Each entry maps a stage name to
+# (ceiling, lower clamp, upper clamp); the model call never exceeds the
+# operator's ordinary iteration timeout and never lengthens tiny injected
+# deadlines used by deterministic tests. Aggregates the former
+# ``_model_recovery_timeout_s`` / ``_model_post_tool_timeout_s`` /
+# ``_model_evidence_synthesis_timeout_s`` helpers into one stage-driven policy.
+_MODEL_STAGE_TIMEOUT_S: dict[str, tuple[float, float, float]] = {
+    # stage -> (ceiling, lower clamp, upper clamp)
+    "recovery": (60.0, 10.0, 240.0),
+    "post_tool": (90.0, 10.0, 300.0),
+    "evidence_synthesis": (120.0, 15.0, 300.0),
+}
 
 
-def _model_post_tool_timeout_s(base_timeout_s: float) -> float:
-    """Use a tighter ceiling once the turn already has executable evidence."""
+def _stage_model_timeout_s(base_timeout_s: float, stage: str) -> float:
+    """Clamp a model round's timeout to its stage ceiling.
 
-    raw = os.environ.get("OCTOPUS_REACT_POST_TOOL_TIMEOUT_S", "90")
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        value = 90.0
-    post_tool_ceiling = max(10.0, min(value, 300.0))
-    return min(base_timeout_s, post_tool_ceiling)
+    ``stage`` is one of ``"recovery"`` / ``"post_tool"`` / ``"evidence_synthesis"``.
 
+    - recovery: a shorter ceiling for the no-extended-thinking convergence
+      retry. The first model round may legitimately spend time on deep
+      reasoning; once it has exceeded its deadline the recovery request is a
+      bounded direct-answer attempt, so granting it the full original allowance
+      could make one silent turn block for another two minutes.
+    - post_tool: a tighter ceiling once the turn already has executable
+      evidence.
+    - evidence_synthesis: a modest dedicated window for a normal
+      evidence-complete answer, keeping it well below the initial deep
+      reasoning allowance without treating it as a stall recovery.
 
-def _model_evidence_synthesis_timeout_s(base_timeout_s: float) -> float:
-    """Bound a normal evidence-complete answer without treating it as recovery.
-
-    Reasoning providers can spend more than the 30-second failure-recovery
-    ceiling reading a large completed observation set before their first answer
-    token.  This round is expected synthesis, not a retry after a stall, so give
-    it a modest dedicated window while keeping it well below the initial deep
-    reasoning allowance.
+    Each ceiling is fixed by the stage, clamped to its range, and never
+    lengthens the base timeout (nor tiny injected test deadlines).
     """
 
-    raw = os.environ.get("OCTOPUS_REACT_EVIDENCE_SYNTHESIS_TIMEOUT_S", "120")
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        value = 120.0
-    synthesis_ceiling = max(15.0, min(value, 300.0))
-    return min(base_timeout_s, synthesis_ceiling)
+    default, lower, upper = _MODEL_STAGE_TIMEOUT_S[stage]
+    ceiling = max(lower, min(default, upper))
+    return min(base_timeout_s, ceiling)
 
 
 _MODEL_STREAM_DEADLINE = object()

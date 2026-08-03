@@ -157,6 +157,76 @@ def test_add_fact_respects_configured_max_facts(
     ]
 
 
+def test_memory_assets_add_governance_and_provenance(client: TestClient) -> None:
+    created = client.post(
+        "/api/memory/facts",
+        json={
+            "content": "Release requires a reviewer approval",
+            "title": "Release gate",
+            "category": "delivery",
+            "tags": ["release", "governance"],
+            "visibility": "team",
+            "team_id": "octopus-core",
+            "provenance": {
+                "source_type": "conversation",
+                "source_id": "thread-42",
+                "evidence": "The release owner confirmed the review gate.",
+            },
+        },
+    )
+    assert created.status_code == 200
+    fact_id = created.json()["facts"][0]["id"]
+
+    hidden = client.get("/api/memory/assets")
+    visible = client.get(
+        "/api/memory/assets",
+        params={"team_id": "octopus-core", "q": "reviewer approval"},
+    )
+
+    assert hidden.status_code == 200
+    # The local owner retains access even when the asset is shared with a team.
+    assert hidden.json()["count"] == 1
+    asset = visible.json()["items"][0]
+    assert asset["asset_type"] == "atom"
+    assert asset["layer"] == "L1"
+    assert asset["title"] == "Release gate"
+    assert asset["tags"] == ["release", "governance"]
+    assert asset["visibility"] == "team"
+    assert asset["provenance"]["source_id"] == "thread-42"
+
+    trace = client.get(f"/api/memory/assets/{fact_id}/trace")
+    assert trace.status_code == 200
+    assert trace.json()["trace_complete"] is True
+    assert trace.json()["source"]["evidence"].startswith("The release owner")
+
+
+def test_memory_asset_patch_normalizes_governance_and_versions(client: TestClient) -> None:
+    created = client.post(
+        "/api/memory/facts",
+        json={"content": "Keep deployment notes", "visibility": "private"},
+    ).json()
+    fact_id = created["facts"][0]["id"]
+
+    updated = client.patch(
+        f"/api/memory/facts/{fact_id}",
+        json={
+            "visibility": "restricted",
+            "allowed_users": ["alice", "alice", "bob"],
+            "layer": "L2",
+            "status": "draft",
+        },
+    )
+
+    assert updated.status_code == 200
+    fact = updated.json()["facts"][0]
+    assert fact["visibility"] == "restricted"
+    assert fact["allowed_users"] == ["alice", "bob"]
+    assert fact["layer"] == "L2"
+    assert fact["status"] == "draft"
+    assert fact["asset_version"] == 2
+    assert fact["updatedAt"]
+
+
 class TestMemoryRouterAuth:
     def _client(self, require_auth: bool) -> TestClient:
         from runtime.safety.auth import Identity, IdentityStore

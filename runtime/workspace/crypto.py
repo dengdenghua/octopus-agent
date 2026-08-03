@@ -69,7 +69,7 @@ def _read_machine_id() -> str:
                     if len(parts) >= 4:
                         return parts[-2]
         except (OSError, subprocess.SubprocessError):
-            pass
+            _LOG.debug("macOS platform UUID probe failed; using fallback", exc_info=True)
     if system == "Linux":
         for candidate in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
             try:
@@ -87,7 +87,7 @@ def _read_machine_id() -> str:
                 if "MachineGuid" in line:
                     return line.split()[-1]
         except (OSError, subprocess.SubprocessError):
-            pass
+            _LOG.debug("Windows machine GUID probe failed; using fallback", exc_info=True)
     # Last resort: MAC address via uuid.getnode() (always available, stable
     # within a single host's lifetime, not stable across hardware swaps).
     return f"mac:{uuid.getnode():012x}"
@@ -136,7 +136,7 @@ def _resolve_key() -> bytes:
                 _CIPHER_KEY_CACHE = env_key.encode("utf-8")
                 return _CIPHER_KEY_CACHE
         except (ValueError, base64.binascii.Error):
-            pass
+            _LOG.debug("workspace key is a passphrase rather than a Fernet key")
         _CIPHER_KEY_CACHE = _derive_fernet_key(env_key)
         return _CIPHER_KEY_CACHE
     _CIPHER_KEY_CACHE = _derive_fernet_key(_machine_id())
@@ -197,7 +197,7 @@ def _walk_decrypt(value: Any, cipher: Any) -> Any:
             out[k] = _walk_decrypt(v, cipher)
         return out
     if isinstance(value, str) and value.startswith(_ENC_PREFIX):
-        token = value[len(_ENC_PREFIX):]
+        token = value[len(_ENC_PREFIX) :]
         if cipher is None:
             # Best-effort: return the ciphertext minus the marker so the
             # value isn't silently dropped; the caller can decide what to do.

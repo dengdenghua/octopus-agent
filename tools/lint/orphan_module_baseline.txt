@@ -4,12 +4,28 @@
 # A line for a module used only via importlib/registry documents
 # that dynamic dependency — keep it, it's not a bug.
 
+runtime/core/cerebrum/react_loop_exports.py
 runtime/execution/loops/dispatcher.py
 runtime/execution/suckers/echo_skills.py
 runtime/execution/suckers/enterprise_skills.py
+runtime/execution/suckers/ephemeral_limits.py
+runtime/execution/suckers/memory_file_ops.py
+runtime/memory/cowork/models.py
 runtime/platform/lifecycle/data_migration.py
 runtime/platform/lifecycle/demo.py
 runtime/platform/plugins/plugin_compat.py
+runtime/platform/ui/agent_watcher_lifecycle.py
+runtime/platform/ui/server_options.py
+runtime/research/deep_research_models.py
+runtime/safety/evolution/scorecard_calculations.py
+runtime/sensing/gateway/agent_trace_dependencies.py
+runtime/sensing/gateway/openai_gateway/synthesis.py
+runtime/sensing/gateway/realtime_frame_bounds.py
+runtime/sensing/gateway/realtime_react_policy.py
+runtime/sensing/gateway/realtime_turn_support.py
+runtime/tentacle/dashboard_support.py
+runtime/tentacle/mobile/_mcp_sse.py
+runtime/tentacle/mobile/mcp_transports.py
 runtime/tests/conftest.py
 runtime/tests/test_react_loop_commentary.py
 runtime/tests/test_realtime_workbench.py

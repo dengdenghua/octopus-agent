@@ -106,6 +106,7 @@ CHECKS: tuple[DigitalEmployeeCheck, ...] = (
             "runtime/projectos/timeline.py",
             "runtime/sensing/gateway/projects_router.py",
             "runtime/safety/evolution/agent_competitor_scorecard.py",
+            "runtime/safety/evolution/_agent_competitor_scorecard_drilldown.py",
             "frontend/src/components/workspace/agent-operator-panel.tsx",
             "tests/test_evolution_modules.py",
         ),

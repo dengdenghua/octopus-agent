@@ -8,16 +8,26 @@ isolated agent turn and returns a compact result to the caller.
 from __future__ import annotations
 
 import concurrent.futures
-import contextlib
 import logging
 import os
-import random
 import threading
 import time
-import uuid
 from collections.abc import Callable
 from typing import Any
 
+from ._bridge_identity import (
+    _CODENAME_POOL,  # noqa: F401 — re-exported for test access via bridge._CODENAME_POOL
+    _avatar_for_role,
+    _codename_for_role,
+    _resolve_cheap_subagent_model,
+)
+from ._bridge_trace import (
+    _attach_trace_fields,
+    _ensure_context_trace_fields,
+    _safe_emit,
+    _safe_journal_emit,
+    _subagent_trace_context,
+)
 from .registry import SubagentRegistry
 from .schema_output import (
     coerce_schema_output,
@@ -92,140 +102,6 @@ def active_subagent_count() -> int:
         return _ACTIVE_SUBAGENTS
 
 
-# Permissive default for the cheap subagent model. Operators should
-# override this to point at their org's actual cheap model — either
-# via the ``OCTOPUS_SUBAGENT_CHEAP_MODEL`` env var or via the
-# ``subagent_cheap_model`` service-provider key. ``glm-4-flash`` is
-# kept as a sensible fallback so unconfigured deployments still get
-# *some* cost reduction instead of falling back to the primary model.
-_DEFAULT_CHEAP_SUBAGENT_MODEL: str = "glm-4-flash"
-
-
-# ── Sub-agent visualisation: codename + avatar ────────────────
-#
-# Every spawned sub-agent gets a friendly codename ("Spark / Nova /
-# Quark / Atlas / ...") and a role-specific emoji avatar. Both flow
-# out as ``subagent_spawned`` lifecycle events so the frontend
-# Workbench panel can show a card the moment the agent starts —
-# instead of waiting for its first tool call to leak the role string
-# through ``sub_tool_*`` events.
-
-_CODENAME_POOL: tuple[str, ...] = (
-    "Spark",
-    "Nova",
-    "Quark",
-    "Atlas",
-    "Echo",
-    "Lyra",
-    "Vega",
-    "Pixel",
-    "Halo",
-    "Comet",
-    "Drift",
-    "Ember",
-    "Flux",
-    "Glow",
-    "Helios",
-    "Iris",
-    "Juno",
-    "Kite",
-    "Lumen",
-    "Maple",
-    "Nimbus",
-    "Orbit",
-    "Prism",
-    "Quest",
-    "Rune",
-    "Sable",
-    "Tide",
-    "Umbra",
-    "Volt",
-    "Whisk",
-    "Xeno",
-    "Yarrow",
-    "Zenith",
-    "Aurora",
-    "Blaze",
-    "Cinder",
-    "Dune",
-    "Frost",
-)
-
-# Role → emoji avatar. Falls back to 🐙 (octopus mascot) for unknown
-# roles. Kept short so the UI doesn't have to ship an icon library
-# just for sub-agent tiles.
-_ROLE_AVATAR: dict[str, str] = {
-    "researcher": "🔍",
-    "research": "🔍",
-    "explorer": "🧭",
-    "fact_checker": "✅",
-    "fact-checker": "✅",
-    "critic": "🛡️",
-    "reviewer": "🛡️",
-    "security": "🛡️",
-    "security-review": "🛡️",
-    "performance": "⚡",
-    "style": "🎨",
-    "synthesizer": "✍️",
-    "writer": "✍️",
-    "architect": "🏗️",
-    "designer": "📐",
-    "implementer": "🔧",
-    "coder": "🔧",
-    "reproducer": "🐛",
-    "hypothesizer": "💡",
-    "verifier": "🧪",
-    "debugger": "🐛",
-    "planner": "📋",
-    "evaluator": "⚖️",
-    "generator": "✨",
-}
-_DEFAULT_AVATAR = "🐙"
-
-
-def _codename_for_role(role: str) -> str:
-    """Pick a stable-but-friendly codename for a sub-agent.
-
-    Random within the pool so callers can't accidentally rely on a
-    specific name; UI uses the codename only as a display label, not
-    an identifier. Counter suffix prevents collisions inside one
-    parent turn.
-    """
-    name = random.choice(_CODENAME_POOL)
-    suffix = uuid.uuid4().hex[:3]
-    return f"{name}-{suffix}"
-
-
-def _avatar_for_role(role: str) -> str:
-    if not isinstance(role, str):
-        return _DEFAULT_AVATAR
-    key = role.strip().lower()
-    return _ROLE_AVATAR.get(key, _DEFAULT_AVATAR)
-
-
-def _resolve_cheap_subagent_model() -> str | None:
-    """Resolve the model name used for cheap-routed subagent calls.
-
-    Resolution order:
-    1. ``OCTOPUS_SUBAGENT_CHEAP_MODEL`` env var (operator override)
-    2. ``subagent_cheap_model`` service-provider config key
-    3. ``"glm-4-flash"`` (sensible default — operators should override
-       to match their org's actual cheap tier)
-    """
-    env_val = os.environ.get("OCTOPUS_SUBAGENT_CHEAP_MODEL")
-    if env_val and env_val.strip():
-        return env_val.strip()
-    try:
-        from runtime.platform.process.service_provider import get_provider
-
-        cfg_val = get_provider().get("subagent_cheap_model")
-        if isinstance(cfg_val, str) and cfg_val.strip():
-            return cfg_val.strip()
-    except Exception:  # noqa: BLE001 — config lookup is best-effort
-        pass
-    return _DEFAULT_CHEAP_SUBAGENT_MODEL
-
-
 def set_sub_agent_runner(runner: SubAgentRunner | None) -> None:
     """Inject the runner used for persistent subagent dispatch."""
     global _RUNNER
@@ -244,131 +120,6 @@ def set_subagent_registry(registry: SubagentRegistry | None) -> None:
 
 def get_subagent_registry() -> SubagentRegistry | None:
     return _REGISTRY
-
-
-def _safe_emit(emitter: Callable[[dict], None] | None, event: dict) -> None:
-    """Fire-and-forget event emission. Exceptions are swallowed."""
-    if emitter is None:
-        return
-    with contextlib.suppress(Exception):
-        emitter(event)
-
-
-def _safe_journal_emit(event: dict) -> None:
-    """Mirror a lifecycle event into the genome journal so the
-    realtime gateway / observability subscribers see it without
-    relying on the in-memory ``event_emitter`` being plumbed.
-
-    Best-effort; never raises. The runtime journal helper is
-    imported lazily so unit tests that don't bootstrap the journal
-    stack stay green.
-    """
-    if not isinstance(event, dict):
-        return
-    kind = event.get("type")
-    if kind not in {"subagent_spawned", "subagent_finished"}:
-        return
-    try:
-        from runtime.execution.suckers.ephemeral_runner import (
-            _emit_subagent_lifecycle_event,
-        )
-    except ImportError:
-        return
-    with contextlib.suppress(Exception):
-        _emit_subagent_lifecycle_event(kind, event)
-
-
-def _clean_trace_value(value: Any, *, limit: int = 256) -> str:
-    if value is None:
-        return ""
-    text = str(value).strip()
-    if not text:
-        return ""
-    return text[:limit]
-
-
-def _trace_context_value(
-    context: dict[str, Any] | None,
-    metadata: dict[str, Any],
-    *keys: str,
-) -> str:
-    if isinstance(context, dict):
-        for key in keys:
-            value = _clean_trace_value(context.get(key))
-            if value:
-                return value
-    for key in keys:
-        value = _clean_trace_value(metadata.get(key))
-        if value:
-            return value
-    return ""
-
-
-def _subagent_trace_context(
-    context: dict[str, Any] | None,
-    session: Any,
-) -> dict[str, str]:
-    """Derive stable parent trace anchors for subagent observability."""
-    metadata = getattr(session, "metadata", None)
-    if not isinstance(metadata, dict):
-        metadata = {}
-
-    thread_id = (
-        _trace_context_value(
-            context,
-            metadata,
-            "thread_id",
-            "caller_thread_id",
-            "conversation_id",
-        )
-        or _clean_trace_value(getattr(session, "thread_id", None))
-        or _clean_trace_value(getattr(session, "conversation_id", None))
-    )
-    turn_id = _trace_context_value(
-        context, metadata, "turn_id", "caller_turn_id"
-    ) or _clean_trace_value(getattr(session, "turn_id", None))
-    trace = {
-        "thread_id": thread_id,
-        "turn_id": turn_id,
-        "parent_task_id": _trace_context_value(
-            context,
-            metadata,
-            "parent_task_id",
-            "parent_run_id",
-            "parent_trace_id",
-        ),
-        "task_id": _trace_context_value(context, metadata, "task_id"),
-        "run_id": _trace_context_value(context, metadata, "run_id", "task_run_id"),
-        "trace_id": _trace_context_value(context, metadata, "trace_id"),
-        "source": _trace_context_value(context, metadata, "source"),
-        "parent_agent_id": (
-            _trace_context_value(context, metadata, "parent_agent_id", "caller_agent_id")
-            or _clean_trace_value(getattr(session, "agent_id", None))
-        ),
-    }
-    return {key: value for key, value in trace.items() if value}
-
-
-def _ensure_context_trace_fields(
-    context: dict[str, Any] | None,
-    trace: dict[str, str],
-) -> dict[str, Any] | None:
-    if not trace:
-        return context
-    if context is None:
-        context = {}
-    for key, value in trace.items():
-        context.setdefault(key, value)
-    return context
-
-
-def _attach_trace_fields(payload: dict[str, Any], trace: dict[str, str]) -> dict[str, Any]:
-    if not trace:
-        return payload
-    payload.setdefault("trace", dict(trace))
-    for key, value in trace.items():
-        payload.setdefault(key, value)
-    return payload
 
 
 def call_subagent(
