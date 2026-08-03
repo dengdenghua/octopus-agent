@@ -315,10 +315,17 @@ function turnToMessages(turn: Turn): Message[] {
       pending = newPending();
       return;
     }
+    const kwargs = buildAiAdditionalKwargs(pending);
+    if (turn.status === "interrupted") {
+      kwargs.response_state = "interrupted";
+      if (turn.interruptReason) {
+        kwargs.interrupt_reason = turn.interruptReason;
+      }
+    }
     const ai: AIMessage = {
       type: "ai",
       content: "",
-      additional_kwargs: buildAiAdditionalKwargs(pending),
+      additional_kwargs: kwargs,
       ...(pending.toolCalls.length > 0
         ? { tool_calls: pending.toolCalls }
         : {}),
@@ -617,9 +624,47 @@ function turnToMessages(turn: Turn): Message[] {
   }
 
   flushPendingAsTrailingAi();
+  appendInterruptedTurnReceipt(out, turn);
   appendFailedTurnReceipt(out, turn);
   attachGroundingToNarrativeAnchor(out, turn.grounding);
   return out;
+}
+
+/**
+ * Preserve an assistant-owned terminal frame even when a turn is cancelled
+ * before the provider emits its first reasoning or answer item. Without this
+ * synthetic receipt, the transcript ends at the user's prompt: there is no
+ * avatar, no interruption explanation, and no visible recovery affordance.
+ */
+function appendInterruptedTurnReceipt(out: Message[], turn: Turn): void {
+  if (turn.status !== "interrupted") return;
+  if (
+    out.some(
+      (message) =>
+        message.type === "ai" &&
+        message.additional_kwargs?.response_state === "interrupted",
+    )
+  ) {
+    return;
+  }
+
+  pushSyntheticInterruptedReceipt(out, turn);
+}
+
+function pushSyntheticInterruptedReceipt(out: Message[], turn: Turn): void {
+  const additionalKwargs: Record<string, unknown> = {
+    response_state: "interrupted",
+    message_kind: "answer",
+  };
+  if (turn.interruptReason) {
+    additionalKwargs.interrupt_reason = turn.interruptReason;
+  }
+  out.push({
+    id: `${turn.id}-interrupted-receipt`,
+    type: "ai",
+    content: "",
+    additional_kwargs: additionalKwargs,
+  } as AIMessage);
 }
 
 function appendFailedTurnReceipt(out: Message[], turn: Turn): void {

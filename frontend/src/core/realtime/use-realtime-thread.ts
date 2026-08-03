@@ -148,6 +148,11 @@ export interface UseRealtimeThreadValue {
 // with the most recent window; older history pages in on demand via
 // loadOlderTurns().
 const RESUME_TURN_LIMIT = 50;
+// A route switch or hot reload unmounts the thread hook. Closing its socket
+// immediately also cancels the server-side turn, even though the user never
+// pressed Stop. Keep that one transport alive until the active turn emits a
+// terminal event; the timeout is only a leak guard for a wedged provider.
+const DETACHED_TURN_CLOSE_TIMEOUT_MS = 10 * 60 * 1_000;
 
 interface ResumeResponse {
   thread?: { id: string; path?: string };
@@ -694,11 +699,40 @@ export function useRealtimeThread(
       }
     };
 
+    let cancelled = false;
+    let openedOnce = false;
+    let detached = false;
+    let detachedCloseTimer: ReturnType<typeof setTimeout> | null = null;
+    let detachedClient: RealtimeClient | null = null;
+    const closeDetachedClient = (): void => {
+      if (detachedCloseTimer !== null) {
+        clearTimeout(detachedCloseTimer);
+        detachedCloseTimer = null;
+      }
+      detachedClient?.close();
+      detachedClient = null;
+      detached = false;
+    };
+
     const onNotification = (note: {
       method: string;
       params: Record<string, unknown>;
     }): void => {
-      if (cancelled) return;
+      if (cancelled) {
+        const belongsToDetachedThread =
+          note.params?.threadId === args.threadId;
+        const turn = note.params?.turn as { status?: unknown } | undefined;
+        const reachedTerminalState =
+          (note.method === "turn/completed" &&
+            (turn?.status === "completed" ||
+              turn?.status === "interrupted" ||
+              turn?.status === "failed")) ||
+          note.method === "turn/interrupted";
+        if (detached && belongsToDetachedThread && reachedTerminalState) {
+          closeDetachedClient();
+        }
+        return;
+      }
       // Dedupe against the eventId ledger: this notification may be a live
       // duplicate of an event an incremental thread/events fold already
       // applied (or vice versa, delivered live first and folded later).
@@ -829,14 +863,13 @@ export function useRealtimeThread(
           onClose: deps.onClose,
         }));
 
-    let cancelled = false;
-    let openedOnce = false;
     const client = factory({
       onIncomingRequest,
       onNotification,
       onOpen,
       onClose,
     });
+    detachedClient = client;
     clientRef.current = client;
     // Cold start: hydrate from the local replay cache BEFORE the first
     // resume goes out. A hydrated cursor routes the initial resume into
@@ -877,7 +910,19 @@ export function useRealtimeThread(
 
     return () => {
       cancelled = true;
-      client.close();
+      const latestTurn = stateRef.current.turns.at(-1);
+      if (latestTurn?.status === "inProgress") {
+        // Navigating away is not an implicit Stop. The detached socket keeps
+        // the server-side request and event journal alive; its terminal event
+        // closes this transport, with a bounded timeout as a final safeguard.
+        detached = true;
+        detachedCloseTimer = setTimeout(
+          closeDetachedClient,
+          DETACHED_TURN_CLOSE_TIMEOUT_MS,
+        );
+      } else {
+        closeDetachedClient();
+      }
       clientRef.current = null;
       resolvers.clear();
       for (const timer of timers.values()) {

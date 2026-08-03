@@ -1355,6 +1355,37 @@ describe("MessageList stalled-run warning", () => {
     expect(screen.queryByText('str = ""')).not.toBeInTheDocument();
   });
 
+  test("shows the agent avatar when a turn is interrupted before first token", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "Research the market"),
+        {
+          id: "turn-1-interrupted-receipt",
+          type: "ai",
+          content: "",
+          additional_kwargs: {
+            response_state: "interrupted",
+            interrupt_reason: "connection closed",
+          },
+        } as AIMessage,
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      currentAgent: {
+        name: "general",
+        display_name: "Eve",
+        avatar_url: "/api/agents/general/avatar",
+      },
+    });
+
+    expect(screen.getByAltText("Eve")).toBeInTheDocument();
+    expect(
+      screen.getByText(/This response was interrupted during generation/i),
+    ).toBeInTheDocument();
+  });
+
   test("keeps late process callbacks above the interrupted terminal receipt", () => {
     const agentMetadata = {
       agent_id: "general",

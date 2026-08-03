@@ -870,6 +870,24 @@ describe("conversationToAgentThreadState · error", () => {
 });
 
 describe("conversationToAgentThreadState · interrupted turn", () => {
+  it("creates an assistant receipt when interruption happens before first token", () => {
+    const turn = makeTurn([userMsg("q")], "interrupted");
+    turn.interruptReason = "connection closed";
+    const state = conversationToAgentThreadState(makeConv([turn]));
+
+    expect(state.messages).toHaveLength(2);
+    expect(state.messages[1]).toMatchObject({
+      id: `${turn.id}-interrupted-receipt`,
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        response_state: "interrupted",
+        message_kind: "answer",
+        interrupt_reason: "connection closed",
+      },
+    });
+  });
+
   it("flushes leftover reasoning/tool_calls as a synthetic AIMessage", () => {
     const state = conversationToAgentThreadState(
       makeConv([
@@ -889,6 +907,7 @@ describe("conversationToAgentThreadState · interrupted turn", () => {
     expect(ai.type).toBe("ai");
     expect(ai.content).toBe("");
     expect(ai.additional_kwargs?.reasoning_content).toBe("thinking…");
+    expect(ai.additional_kwargs?.response_state).toBe("interrupted");
     expect(ai.tool_calls).toHaveLength(1);
   });
 

@@ -683,6 +683,78 @@ describe("useRealtimeThread reconnect reconciliation", () => {
   });
 });
 
+describe("useRealtimeThread detached active turn", () => {
+  it("keeps the socket alive across route unmount until the turn finishes", async () => {
+    let emitNotification!: (note: {
+      method: string;
+      params: Record<string, unknown>;
+    }) => void;
+    const close = vi.fn();
+    const factory = (deps: {
+      onNotification: (note: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+    }) => {
+      emitNotification = deps.onNotification;
+      return {
+        connect: () => deps.onOpen?.(),
+        close,
+        notify: () => {},
+        request: () =>
+          Promise.resolve({ thread: { id: "th" }, turns: [] }),
+      };
+    };
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    act(() => {
+      emitNotification({
+        method: "turn/started",
+        params: {
+          threadId: "th",
+          turn: {
+            id: "turn-live",
+            threadId: "th",
+            status: "inProgress",
+            items: [],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: null,
+            error: null,
+          },
+        },
+      });
+    });
+
+    rendered.unmount();
+    expect(close).not.toHaveBeenCalled();
+
+    act(() => {
+      emitNotification({
+        method: "turn/completed",
+        params: {
+          threadId: "th",
+          turn: {
+            id: "turn-live",
+            threadId: "th",
+            status: "completed",
+            items: [],
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: "2026-01-01T00:00:01.000Z",
+            error: null,
+          },
+        },
+      });
+    });
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("useRealtimeThread turn/start delivery anchoring", () => {
   // The server holds the turn/start response until the turn completes,
   // so a mid-turn socket drop rejects the pending request. Once the
