@@ -521,6 +521,27 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
             *tuple(root for root in write_scope.roots if root != workspace_path),
         )
 
+    # Uploaded attachments are a separate, server-owned read domain.  The
+    # gateway derives these roots from WorkspaceManager rather than trusting
+    # attachment paths supplied by the browser.  Keep them read-only even in
+    # full-access code mode.
+    raw_attachment_roots = meta.get("attachment_read_roots")
+    if isinstance(raw_attachment_roots, list):
+        attachment_roots: list[Path] = []
+        for raw_root in raw_attachment_roots:
+            if not isinstance(raw_root, str) or not raw_root.strip():
+                continue
+            try:
+                root = Path(raw_root).expanduser()
+                if not root.is_absolute():
+                    continue
+                root = root.resolve()
+            except (OSError, ValueError):
+                continue
+            if root.is_dir() and root not in readable_roots and root not in attachment_roots:
+                attachment_roots.append(root)
+        readable_roots = (*readable_roots, *attachment_roots)
+
     if write_scope.mode == "plan" or permission_mode == "plan":
         writable_roots = ()
 

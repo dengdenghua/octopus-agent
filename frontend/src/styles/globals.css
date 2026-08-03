@@ -60,6 +60,7 @@
 @source inline("text-{foreground,muted-foreground,primary,secondary,accent}");
 @source inline("text-{2xs,3xs}");
 @source inline("bg-{background,muted,primary,secondary,accent}");
+@source inline("bg-{destructive,primary,accent,secondary,ring,chart-3}/10");
 @source inline("border-{border,input}");
 
 @custom-variant dark (&:is(.dark *));

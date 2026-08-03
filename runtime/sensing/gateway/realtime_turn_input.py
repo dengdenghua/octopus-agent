@@ -663,6 +663,18 @@ def _build_intent(
             store=thread_store,
         )
     context_payload = dict(context_payload)
+    attachments = _input_attachments(params.input)
+    # Attachment paths arrive from the client and therefore are not authority.
+    # Grant read access only to the upload directory derived server-side from
+    # this thread's WorkspaceManager.  The execution scope consumes this as a
+    # read-only root; it is never added to writable roots.
+    if attachments and workspaces is not None:
+        try:
+            upload_root = workspaces.layout(params.thread_id).upload.resolve()
+        except (OSError, ValueError):
+            upload_root = None
+        if upload_root is not None:
+            context_payload["attachment_read_roots"] = [str(upload_root)]
     # ``TurnParams.cwd`` is the public single-shot / power-user working
     # directory contract.  Merely carrying it as ``user_context.cwd`` leaves
     # the execution scope in chat mode, where filesystem tools default to the
@@ -742,9 +754,8 @@ def _build_intent(
             # sentence independently so the main conversation never waits on
             # the working model's hidden chain of thought.
             "realtime_public_preface": True,
-            # Pass attachments through so react_loop can fold image-typed
-            # ones into the user message as OpenAI image_url content
-            # blocks (vision models then actually "see" the image).
-            "attachments": _input_attachments(params.input),
+            # Pass attachments through so images become image_url blocks and
+            # documents become a path/metadata manifest with bounded previews.
+            "attachments": attachments,
         },
     )

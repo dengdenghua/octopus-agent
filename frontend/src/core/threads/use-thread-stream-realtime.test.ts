@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ArtifactItem,
@@ -24,8 +24,23 @@ vi.mock("@/core/realtime", () => ({
   useRealtimeThread: vi.fn(),
 }));
 
+vi.mock("@/core/i18n/hooks", () => ({
+  useI18n: () => ({
+    t: {
+      agentWorkbenchPages: {
+        inputsUploadedFiles: (count: number) => `${count} file(s) uploaded`,
+      },
+      chatInputBox: { uploadFailed: "Upload failed" },
+    },
+  }),
+}));
+
 const BASE_TS = "2026-05-09T00:00:00.000Z";
 const DONE_TS = "2026-05-09T00:00:02.000Z";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function makeConversation(turns: Turn[]): Conversation {
   return {
@@ -773,6 +788,61 @@ describe("useThreadStreamRealtime permissions", () => {
         ],
       }),
     );
+  });
+
+  it("passes uploaded document path and extracted preview to the turn", async () => {
+    const startTurn = mockRealtime();
+    const file = new File(["deck body"], "deck.pptx", {
+      type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          files: [
+            {
+              filename: "deck.pptx",
+              size: file.size,
+              path: "/managed/th-test/upload/deck.pptx",
+              virtual_path: "upload/deck.pptx",
+              artifact_url: "/api/threads/th-test/artifacts/deck.pptx",
+              extension: "pptx",
+              modified: 1,
+              extracted_text: "[Slide 1]\nQuarterly review",
+            },
+          ],
+        }),
+      }),
+    );
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", {
+        text: "summarize",
+        files: [
+          {
+            type: "file",
+            mediaType: file.type,
+            filename: file.name,
+            url: "blob:deck",
+            file,
+          },
+        ],
+      });
+    });
+
+    await waitFor(() => expect(startTurn).toHaveBeenCalled());
+    expect(startTurn.mock.calls[0]?.[0].attachments).toEqual([
+      expect.objectContaining({
+        filename: "deck.pptx",
+        path: "/managed/th-test/upload/deck.pptx",
+        extracted_text: "[Slide 1]\nQuarterly review",
+      }),
+    ]);
   });
 
   it("dispatches failed image attachments back to the composer on send error", async () => {

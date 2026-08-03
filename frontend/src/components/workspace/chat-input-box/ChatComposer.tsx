@@ -853,14 +853,9 @@ export function ChatComposer({
         pendingImageSources={pendingImageSources}
         onRemoveFile={removePendingFile}
         onRemoveImage={removePendingImage}
+        isUploading={isUploading}
         t={t}
       />
-      {isUploading && (
-        <div className="flex items-center gap-1.5 px-3 pb-1 pt-0.5 text-xs text-muted-foreground">
-          <Loader2Icon className="size-3 animate-spin" />
-          {t.uploads.uploadingFiles}
-        </div>
-      )}
       <textarea
         data-testid="chat-composer-input"
         ref={textareaRef}

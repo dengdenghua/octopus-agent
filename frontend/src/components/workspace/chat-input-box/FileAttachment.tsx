@@ -4,6 +4,7 @@ import {
   FileCodeIcon,
   FileJsonIcon,
   FileArchiveIcon,
+  Loader2Icon,
   XIcon,
 } from "lucide-react";
 
@@ -18,6 +19,7 @@ interface FileAttachmentProps {
   pendingImageSources: Record<string, string>;
   onRemoveFile: (id: string) => void;
   onRemoveImage: (index: number) => void;
+  isUploading?: boolean;
   t: Translations;
 }
 
@@ -145,49 +147,49 @@ function fileTypeInfo(ext: string): FileTypeInfo {
   if (pdfLike.has(ext))
     return {
       icon: <FileTextIcon className="size-4" />,
-      bgClass: "bg-red-50",
-      textClass: "text-red-400",
+      bgClass: "bg-destructive/10",
+      textClass: "text-destructive",
     };
   if (docLike.has(ext))
     return {
       icon: <FileTextIcon className="size-4" />,
-      bgClass: "bg-blue-50",
-      textClass: "text-blue-400",
+      bgClass: "bg-primary/10",
+      textClass: "text-primary",
     };
   if (sheetLike.has(ext))
     return {
       icon: <FileTextIcon className="size-4" />,
-      bgClass: "bg-emerald-50",
-      textClass: "text-emerald-400",
+      bgClass: "bg-accent/10",
+      textClass: "text-accent",
     };
   if (slideLike.has(ext))
     return {
       icon: <FileTextIcon className="size-4" />,
-      bgClass: "bg-orange-50",
-      textClass: "text-orange-400",
+      bgClass: "bg-secondary/10",
+      textClass: "text-secondary",
     };
   if (codeLike.has(ext))
     return {
       icon: <FileCodeIcon className="size-4" />,
-      bgClass: "bg-indigo-50",
-      textClass: "text-indigo-400",
+      bgClass: "bg-ring/10",
+      textClass: "text-ring",
     };
   if (configLike.has(ext))
     return {
       icon: <FileJsonIcon className="size-4" />,
-      bgClass: "bg-violet-50",
-      textClass: "text-violet-400",
+      bgClass: "bg-chart-3/10",
+      textClass: "text-chart-3",
     };
   if (archiveLike.has(ext))
     return {
       icon: <FileArchiveIcon className="size-4" />,
-      bgClass: "bg-gray-50",
-      textClass: "text-gray-400",
+      bgClass: "bg-muted",
+      textClass: "text-muted-foreground",
     };
   return {
     icon: <FileIcon className="size-4" />,
-    bgClass: "bg-gray-50",
-    textClass: "text-gray-400",
+    bgClass: "bg-muted",
+    textClass: "text-muted-foreground",
   };
 }
 
@@ -226,13 +228,14 @@ export function FileAttachment({
   pendingImageSources,
   onRemoveFile,
   onRemoveImage,
+  isUploading = false,
   t,
 }: FileAttachmentProps) {
-  if (pendingFiles.length === 0 && pendingImages.length === 0) {
+  if (pendingFiles.length === 0 && pendingImages.length === 0 && !isUploading) {
     return null;
   }
   return (
-    <div className="flex gap-2 overflow-x-auto px-3 pb-2 pt-1">
+    <div className="flex flex-wrap items-center gap-2 overflow-x-auto px-3 pb-2 pt-1">
       {pendingFiles.map((file) => {
         const ext = fileExt(file.name);
         const displayName = cleanFileName(file.name);
@@ -296,6 +299,12 @@ export function FileAttachment({
           </div>
         );
       })}
+      {isUploading && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2Icon className="size-3 animate-spin" />
+          {t.uploads.uploadingFiles}
+        </div>
+      )}
     </div>
   );
 }

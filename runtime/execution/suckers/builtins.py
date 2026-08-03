@@ -26,6 +26,7 @@ MAX_READ_LINES_WITHOUT_RANGE = 2000
 # Multimodal dispatch · 2026-05-30 · screenshots / PDFs / notebooks no longer
 # fall through the text path and explode on UnicodeDecodeError.
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_DOCUMENT_EXTS = {".pptx", ".docx", ".xlsx", ".csv", ".tsv"}
 _IMAGE_MEDIA_TYPES = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -233,6 +234,44 @@ def _read_file_notebook(
     )
 
 
+def _read_file_document(p: Path, *, max_bytes: int) -> dict[str, Any]:
+    """Extract bounded text from an Office or delimited document."""
+
+    size = p.stat().st_size
+    if size > _BINARY_READ_CAP:
+        return {
+            "error": f"document_too_large: {size} bytes (cap {_BINARY_READ_CAP})",
+            "error_type": "too_large",
+            "path": str(p.resolve()),
+            "size_bytes": size,
+        }
+    from runtime.execution.misc.document_text_extractor import extract_document_path
+
+    try:
+        extracted = extract_document_path(p, max_chars=max_bytes)
+    except OSError as exc:
+        return {
+            "error": f"document_read_failed: {exc}",
+            "error_type": "read_failed",
+            "path": str(p.resolve()),
+        }
+    if extracted is None:
+        return {
+            "error": f"document_parse_failed: unsupported or invalid {p.suffix.lower()} file",
+            "error_type": "parse_failed",
+            "path": str(p.resolve()),
+        }
+    return {
+        "ok": True,
+        "kind": "document",
+        "format": extracted.format,
+        "path": str(p.resolve()),
+        "size_bytes": size,
+        "truncated": extracted.truncated,
+        "text": extracted.text,
+    }
+
+
 def _list_cwd(path: str = ".", cwd: str | None = None, **_kw: Any) -> dict[str, Any]:
     p = Path(path)
     if cwd and not p.is_absolute():
@@ -349,6 +388,7 @@ def _read_file(
     - image (.png / .jpg / .jpeg / .webp / .gif) → ``_read_file_image``
     - .pdf → ``_read_file_pdf`` (requires ``pages`` if total > 10)
     - .ipynb → ``_read_file_notebook`` (delegates to notebook_skills)
+    - Office/delimited documents → bounded structured text extraction
     """
     if cwd and not Path(path).is_absolute():
         path = str(Path(cwd) / path)
@@ -379,6 +419,8 @@ def _read_file(
             sandbox_dir=sandbox_dir,
             allow_sensitive=allow_sensitive,
         )
+    if suffix in _DOCUMENT_EXTS:
+        return _read_file_document(p, max_bytes=max_bytes)
     return _read_file_text(p, max_bytes=max_bytes, offset=offset, limit=limit)
 
 
@@ -468,7 +510,7 @@ def register_builtins(registry: SkillRegistry) -> SkillRegistry:
             name="read_file",
             description=(
                 "用途: 读取单个文件，按扩展名自动分发: 文本 (UTF-8, 默认 100KB / 2000 行硬上限) / 图片 (.png/.jpg/.jpeg/.webp/.gif → base64) / PDF (.pdf, 需要 pages 切片当 >10 页) / Notebook (.ipynb → 委托给 notebook_read)。\n"
-                "何时不用: 想找某段内容用 grep_text；只看前 N 行或某个范围用 read_file_range；按 pattern 找文件用 glob_files；其他二进制 / 非 UTF-8 内容会拒读。\n"
+                "何时不用: 想找某段内容用 grep_text；只看前 N 行或某个范围用 read_file_range；按 pattern 找文件用 glob_files；不支持的二进制会拒读。支持 image/PDF/ipynb/PPTX/DOCX/XLSX/CSV/TSV。\n"
                 '关键参数: path (必填); offset/limit (文本按行切片); max_bytes (文本默认 102400); pages (PDF 切片 "1-5" / "3" / "1-3,7,10-12")。\n'
                 '示例: read_file({"path": "runtime/execution/suckers/builtins.py", "offset": 0, "limit": 100}) · read_file({"path": "doc.pdf", "pages": "1-5"}) · read_file({"path": "shot.png"})'
             ),

@@ -294,6 +294,32 @@ def _prepare_scoped_args(
             )
         supplied = args.get("sandbox_dir")
         default_sandbox = scope.primary_write if _mutates_files else read_primary
+        if not _mutates_files:
+            # A read tool may target any granted readable root, not only the
+            # primary project directory. Pick the containing root for an
+            # absolute path (notably the per-thread upload directory) so the
+            # handler's own path_guard enforces the same narrow boundary.
+            for path_param in _path_params:
+                raw_path = args.get(path_param)
+                if not isinstance(raw_path, (str, Path)) or not Path(raw_path).is_absolute():
+                    continue
+                try:
+                    resolved_path = Path(raw_path).expanduser().resolve(strict=False)
+                except OSError:
+                    continue
+                matching_roots: list[Path] = []
+                for readable_root in scope.readable_roots:
+                    try:
+                        resolved_path.relative_to(readable_root.resolve(strict=False))
+                    except (OSError, ValueError):
+                        continue
+                    matching_roots.append(readable_root)
+                if matching_roots:
+                    default_sandbox = max(
+                        matching_roots,
+                        key=lambda candidate: len(candidate.parts),
+                    )
+                break
         if not supplied:
             # Lazily create the primary root so the skill can open
             # files there without having to mkdir itself.

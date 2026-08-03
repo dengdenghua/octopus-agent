@@ -86,6 +86,8 @@ class TestUploadPost:
         assert entry["filename"] == "hello.txt"
         assert entry["size"] == len(b"hi there")
         assert "artifact_url" in entry
+        assert Path(entry["path"]).is_absolute()
+        assert entry["extracted_text"] == "hi there"
 
     def test_multiple_files_in_one_request(
         self,

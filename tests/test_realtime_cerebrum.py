@@ -2416,6 +2416,43 @@ def test_code_capability_without_project_gets_personal_workspace(tmp_path: Path)
     assert "workspace_path" not in intent.user_context
 
 
+def test_attachment_read_root_is_derived_from_thread_workspace(tmp_path: Path) -> None:
+    from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    manager = WorkspaceManager(tmp_path / "workspaces")
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-with-doc",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "summarize this deck",
+                    "attachments": [
+                        {
+                            "filename": "deck.pptx",
+                            # Deliberately malicious client path: authorization
+                            # must still come from WorkspaceManager.
+                            "path": "/tmp/not-authoritative/deck.pptx",
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    intent = _build_intent(
+        "summarize this deck",
+        params,
+        workspaces=manager,
+    )
+
+    expected = manager.layout("th-with-doc").upload.resolve()
+    assert intent.user_context["attachment_read_roots"] == [str(expected)]
+    assert intent.user_context["attachments"][0]["path"] == ("/tmp/not-authoritative/deck.pptx")
+
+
 def test_explicit_turn_cwd_becomes_code_workspace(tmp_path: Path) -> None:
     from runtime.platform.runtime_policy.workspaces import WorkspaceManager
     from runtime.protocol.items import TurnParams

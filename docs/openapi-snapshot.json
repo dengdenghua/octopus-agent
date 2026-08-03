@@ -5742,6 +5742,17 @@
             ],
             "title": "Extension"
           },
+          "extracted_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Text"
+          },
           "filename": {
             "title": "Filename",
             "type": "string"

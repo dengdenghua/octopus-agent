@@ -113,13 +113,50 @@ def test_build_content_image_only_no_text() -> None:
     assert result[0]["type"] == "image_url"
 
 
-def test_build_content_text_only_when_attachments_are_not_images() -> None:
-    """Non-image attachments don't trigger the multimodal path."""
+def test_build_content_non_image_includes_readable_file_manifest() -> None:
+    """Non-image attachments stay text-shaped but expose their real path."""
     result = _build_user_message_content(
         "hello",
-        [{"url": "https://example.com/doc.pdf", "mediaType": "application/pdf"}],
+        [
+            {
+                "filename": "doc.pdf",
+                "path": "/tmp/thread/upload/doc.pdf",
+                "artifact_url": "/api/threads/t/artifacts/doc.pdf",
+                "mediaType": "application/pdf",
+            }
+        ],
     )
-    assert result == "hello"
+    assert isinstance(result, str)
+    assert result.startswith("hello\n\n<attached_files")
+    assert '"filename": "doc.pdf"' in result
+    assert '"path": "/tmp/thread/upload/doc.pdf"' in result
+    assert "Use the path field with read_file" in result
+
+
+def test_build_content_document_preview_is_bounded_and_marked_untrusted() -> None:
+    result = _build_user_message_content(
+        "summarize",
+        [
+            {
+                "filename": "deck.pptx",
+                "path": "/tmp/deck.pptx",
+                "extracted_text": "x" * 10_000,
+            }
+        ],
+    )
+    assert isinstance(result, str)
+    assert 'trust="untrusted"' in result
+    assert '"preview_truncated": true' in result
+    assert len(result) < 5_000
+
+
+def test_build_content_filename_only_attachment_is_still_visible() -> None:
+    result = _build_user_message_content(
+        "inspect",
+        [{"filename": "legacy.docx", "mediaType": "application/octet-stream"}],
+    )
+    assert isinstance(result, str)
+    assert '"filename": "legacy.docx"' in result
 
 
 def test_build_content_multiple_images() -> None:

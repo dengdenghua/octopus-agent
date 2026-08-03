@@ -451,6 +451,44 @@ class TestExecutorEnforcement:
         assert step.success
         assert (allowed / "ok.txt").read_text(encoding="utf-8") == "within-scope"
 
+    def test_read_tool_selects_attachment_sandbox_for_absolute_path(
+        self,
+        tmp_path: Path,
+        mk_session,
+    ):
+        from runtime.execution.suckers.builtins import _read_file
+        from runtime.execution.suckers.registry import Skill
+        from runtime.execution.tool_engine.executor import _prepare_scoped_args
+        from runtime.platform.models import SkillId
+        from runtime.platform.process.session import session_scope
+
+        project = tmp_path / "project"
+        project.mkdir()
+        uploads = tmp_path / "managed" / "thread-read" / "upload"
+        uploads.mkdir(parents=True)
+        document = uploads / "notes.txt"
+        document.write_text("attachment body", encoding="utf-8")
+
+        sess = mk_session(mode="code", thread_id="thread-read")
+        sess.metadata["workspace_path"] = str(project)
+        sess.metadata["attachment_read_roots"] = [str(uploads)]
+        skill = Skill(
+            name="read_file",
+            affinity=["file", "io"],
+            trusted_source="skill://public/read_file",
+            handler=_read_file,
+        )
+
+        with session_scope(sess):
+            args = _prepare_scoped_args(
+                skill,
+                SkillId("read_file"),
+                {"path": str(document)},
+            )
+
+        assert args["sandbox_dir"] == str(uploads)
+        assert _read_file(**args)["content"] == "attachment body"
+
     def test_code_sandbox_defaults_writes_to_octopus_work(
         self,
         tmp_path: Path,
@@ -670,6 +708,27 @@ class TestExecutionScope:
         assert scope.allows_write(sandboxed / "scratch.py")
         assert not scope.allows_write(wp / "src" / "main.py")
         assert scope.allows_read(wp / "src" / "main.py")
+
+    def test_attachment_roots_are_read_only(
+        self,
+        mk_session,
+        tmp_path: Path,
+    ):
+        from runtime.platform.process.scope import resolve_execution_scope
+
+        project = tmp_path / "project"
+        project.mkdir()
+        uploads = tmp_path / "managed" / "thread-1" / "upload"
+        uploads.mkdir(parents=True)
+
+        sess = mk_session(mode="code", thread_id="thread-1")
+        sess.metadata["workspace_path"] = str(project)
+        sess.metadata["attachment_read_roots"] = [str(uploads)]
+        scope = resolve_execution_scope(sess)
+
+        assert scope.primary_read == project
+        assert scope.allows_read(uploads / "deck.pptx")
+        assert not scope.allows_write(uploads / "deck.pptx")
 
     def test_full_execution_scope_allows_workspace_writes(
         self,

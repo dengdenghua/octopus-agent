@@ -7,6 +7,8 @@ PDF "must specify pages when >10 pages" refusal.
 from __future__ import annotations
 
 import base64
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -110,6 +112,26 @@ class TestPdfDispatch:
         r = _read_file(path=str(path))
         assert r.get("ok") is True, r
         assert r["pages_extracted"] == [1, 2, 3]
+
+
+class TestOfficeDocumentDispatch:
+    def test_pptx_returns_slide_text(self, tmp_path: Path):
+        path = tmp_path / "deck.pptx"
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr(
+                "ppt/slides/slide1.xml",
+                '<p:sld xmlns:p="p" xmlns:a="a"><a:t>Quarterly plan</a:t></p:sld>',
+            )
+        path.write_bytes(buffer.getvalue())
+
+        result = _read_file(path=str(path))
+
+        assert result["ok"] is True
+        assert result["kind"] == "document"
+        assert result["format"] == "pptx"
+        assert "--- slide 1 ---" in result["text"]
+        assert "Quarterly plan" in result["text"]
 
 
 class TestNotebookDispatch:

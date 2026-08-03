@@ -26,6 +26,7 @@ Covered by ``test_filename_path_traversal_stripped``.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import os
 from pathlib import Path
@@ -47,6 +48,7 @@ except ImportError:  # pragma: no cover
     FileResponse = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
+from runtime.execution.misc.document_text_extractor import extract_text_from_upload
 from runtime.platform.process.paths import app_paths
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
 from runtime.sensing._fastapi_guard import require_fastapi
@@ -71,6 +73,7 @@ if FASTAPI_AVAILABLE:
         artifact_url: str
         extension: str | None = None
         modified: int
+        extracted_text: str | None = None
 
     class UploadPostResponse(BaseModel):
         success: bool
@@ -236,7 +239,12 @@ def create_uploads_router(
             chunks.append(chunk)
         return b"".join(chunks)
 
-    def _metadata(thread_id: str, file_path: Path) -> dict[str, Any]:
+    def _metadata(
+        thread_id: str,
+        file_path: Path,
+        *,
+        extracted_text: str | None = None,
+    ) -> dict[str, Any]:
         rel_name = file_path.name
         stat = file_path.stat()
         return {
@@ -247,6 +255,7 @@ def create_uploads_router(
             "artifact_url": (f"/api/threads/{thread_id}/artifacts/{rel_name}"),
             "extension": file_path.suffix.lstrip(".") or None,
             "modified": int(stat.st_mtime),
+            "extracted_text": extracted_text,
         }
 
     def _require_store() -> None:
@@ -314,7 +323,11 @@ def create_uploads_router(
             target = upload_dir / safe_name
             data = await _read_upload_limited(upload)
             _write_upload_bytes(target, data)
-            uploaded.append(_metadata(thread_id, target))
+            ext = target.suffix.lstrip(".") or None
+            # OOXML/PDF parsing is CPU/file-format work. Keep it off FastAPI's
+            # event loop so one large deck does not stall realtime traffic.
+            extracted = await asyncio.to_thread(extract_text_from_upload, data, ext)
+            uploaded.append(_metadata(thread_id, target, extracted_text=extracted))
         return {
             "success": True,
             "files": uploaded,

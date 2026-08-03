@@ -247,6 +247,7 @@ def _execute_action_via_beak(
                 "workspace_scope",
                 "personal_workspace_path",
                 "personal_workspace_enabled",
+                "attachment_read_roots",
                 "mode",
                 "capability_mode",
                 "code_mode",
@@ -1177,19 +1178,19 @@ def _phase_6d_dispatch_and_observe(
             and _consecutive_same_noop_actions >= 2
             and _current_action_fingerprint == _last_noop_action_fingerprint
         ):
-                observation = (
-                    "[repeated-noop-tool-skipped] The same tool call with identical "
-                    "arguments already ran twice but produced no effect (ok=True but "
-                    "empty/zero-count result). The runtime did not execute it a third "
-                    "time. The arguments are likely under a wrong key — re-read the "
-                    "tool description and re-issue with the correct parameter names."
-                )
-                step.observation = observation
-                step.action = ""
-                step.actions = []
-                tool_action_requested = False
-                maybe_final = None
-                _repeated_noop_skipped = True
+            observation = (
+                "[repeated-noop-tool-skipped] The same tool call with identical "
+                "arguments already ran twice but produced no effect (ok=True but "
+                "empty/zero-count result). The runtime did not execute it a third "
+                "time. The arguments are likely under a wrong key — re-read the "
+                "tool description and re-issue with the correct parameter names."
+            )
+            step.observation = observation
+            step.action = ""
+            step.actions = []
+            tool_action_requested = False
+            maybe_final = None
+            _repeated_noop_skipped = True
         if _evidence_convergence_active is not None and tool_action_requested:
             observation = (
                 "The read-only evidence requested by the user is already complete, so "

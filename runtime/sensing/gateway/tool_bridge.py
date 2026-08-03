@@ -157,9 +157,7 @@ _NATIVE_TEXT_STREAM_SUPPRESS_MARKERS = (
 # user prose: checkpoints strip it (``_native_public_checkpoint``) and so
 # must the live/buffered round-text path, otherwise the label leaks into
 # the visible timeline raw.
-_NATIVE_ROUND_TEXT_PREFIX_RE = re.compile(
-    r"^\s*(?:Update|Progress)\s*:\s*", re.IGNORECASE
-)
+_NATIVE_ROUND_TEXT_PREFIX_RE = re.compile(r"^\s*(?:Update|Progress)\s*:\s*", re.IGNORECASE)
 # Structural protocol tag names that must ride structured fields
 # (reasoning / tool_use / tool_result), never literal text_delta prose.
 # Shared between checkpoint detection (``_PUBLIC_CHECKPOINT_PROTOCOL_RE``)
@@ -1463,6 +1461,7 @@ def _session_metadata_from_intent(intent: ParsedIntent) -> dict[str, Any]:
         "workspace_scope",
         "personal_workspace_path",
         "personal_workspace_enabled",
+        "attachment_read_roots",
         "sandbox_mode",
         "permission_mode",
         "approval_policy",
@@ -2578,13 +2577,9 @@ def stream_agentic_fallback(
                     round_text_chunks.append(event.delta)
                     if not _round_prefix_decided:
                         _joined_prefix_probe = "".join(round_text_chunks)
-                        _prefix_match = _NATIVE_ROUND_TEXT_PREFIX_RE.match(
-                            _joined_prefix_probe
-                        )
+                        _prefix_match = _NATIVE_ROUND_TEXT_PREFIX_RE.match(_joined_prefix_probe)
                         if _prefix_match:
-                            round_text_chunks[:] = [
-                                _joined_prefix_probe[_prefix_match.end() :]
-                            ]
+                            round_text_chunks[:] = [_joined_prefix_probe[_prefix_match.end() :]]
                             _round_prefix_decided = True
                         elif len(_joined_prefix_probe) >= len("Progress: "):
                             # Past the longest label — the opening is prose.
@@ -2627,7 +2622,7 @@ def stream_agentic_fallback(
                             if _safe_upto > _round_text_streamed:
                                 yield (
                                     "text",
-                                    _joined_round[_round_text_streamed : _safe_upto],
+                                    _joined_round[_round_text_streamed:_safe_upto],
                                     None,
                                 )
                                 _round_text_streamed = _safe_upto
@@ -3131,7 +3126,7 @@ def stream_agentic_fallback(
             # during the round — deliver only the held-back tail. Content
             # is identical to the old full dump; only timing changed.
             if _round_text_streamed < len(round_text):
-                yield ("text", round_text[_round_text_streamed :], None)
+                yield ("text", round_text[_round_text_streamed:], None)
             _final_duration = int((time.monotonic() - _started_at) * 1000)
             yield (
                 "stats",

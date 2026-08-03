@@ -1164,6 +1164,8 @@ export function useThreadStreamRealtime(
       permissionRuntime.sandbox_mode,
       permissionRuntime.execution_environment,
       threadId,
+      t.agentWorkbenchPages,
+      t.chatInputBox.uploadFailed,
     ],
   );
 
@@ -1219,6 +1221,7 @@ function uploadedFileToAttachment(
     artifact_url: file.artifact_url,
     extension: file.extension,
     modified: file.modified,
+    extracted_text: file.extracted_text ?? null,
   };
 }
 
