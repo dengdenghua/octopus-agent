@@ -717,7 +717,7 @@ export default function PrivacySettingsPage() {
         <p className="mt-1 text-xs text-muted-foreground">
           {copy.profileDescription}{" "}
           <a
-            href="https://github.com/octopus-agent/octopus-agent/blob/main/docs/constitution.md"
+            href="https://github.com/dengdenghua/octopus-agent/blob/main/docs/constitution.md"
             className="underline underline-offset-2"
             target="_blank"
             rel="noreferrer"

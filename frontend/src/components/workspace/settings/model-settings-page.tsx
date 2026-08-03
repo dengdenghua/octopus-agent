@@ -31,6 +31,14 @@ import { cn } from "@/lib/utils";
 import { swallow } from "@/core/utils/log";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
+import {
+  disableNASModel,
+  downloadNASModel,
+  enableNASModel,
+  listNASModels,
+  startNASService,
+  type NASModel,
+} from "@/core/storage/api";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   clearThreadModelReferences,
@@ -1641,6 +1649,8 @@ export default function ModelSettingsPage() {
         <LocalModelsSection onImported={fetchModels} />
       </div>
 
+      <LocalVisionSection />
+
       {/* Official models */}
       <OfficialModelsSection />
 
@@ -1770,6 +1780,98 @@ export default function ModelSettingsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function LocalVisionSection() {
+  const [model, setModel] = useState<NASModel | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      await startNASService();
+      const models = await listNASModels();
+      setModel(models.find((item) => item.model_id === "vision-default") ?? null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const run = async (action: () => Promise<NASModel>, pending: string) => {
+    setBusy(true);
+    setMessage(pending);
+    try {
+      const next = await action();
+      setModel(next);
+      if (next.status === "loading") {
+        const timer = window.setInterval(() => {
+          void listNASModels()
+            .then((models) => {
+              const current = models.find((item) => item.model_id === "vision-default");
+              if (current) setModel(current);
+              if (current && current.status !== "loading") {
+                window.clearInterval(timer);
+                setBusy(false);
+                setMessage(current.notes);
+              }
+            })
+            .catch(() => undefined);
+        }, 2000);
+        window.setTimeout(() => {
+          window.clearInterval(timer);
+          setBusy(false);
+        }, 15 * 60 * 1000);
+      } else {
+        setBusy(false);
+        setMessage(next.notes);
+      }
+    } catch (error) {
+      setBusy(false);
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const downloaded = model?.provider === "local" && Boolean(model.endpoint);
+  const enabled = model?.status === "running";
+
+  return (
+    <SettingsSection
+      title="本地图片理解（CLIP）"
+      description="用于图片、视频关键帧的语义检索。模型下载到本机，不上传原始文件。"
+    >
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <span className={cn("size-2 rounded-full", enabled ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+            {enabled ? "已启用" : downloaded ? "已下载，未启用" : "尚未下载"}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            sentence-transformers/clip-ViT-B-32 · 约 600MB
+          </p>
+          {message ? <p className="mt-1 text-xs text-muted-foreground">{message}</p> : null}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {!downloaded ? (
+            <Button size="sm" onClick={() => void run(() => downloadNASModel("vision-default"), "正在下载模型…")} disabled={busy}>
+              {busy ? "下载中…" : "下载并启用"}
+            </Button>
+          ) : enabled ? (
+            <Button size="sm" variant="outline" onClick={() => void run(() => disableNASModel("vision-default"), "正在关闭…")} disabled={busy}>
+              关闭
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => void run(() => enableNASModel("vision-default"), "正在启用…")} disabled={busy}>
+              启用
+            </Button>
+          )}
+        </div>
+      </div>
+    </SettingsSection>
   );
 }
 

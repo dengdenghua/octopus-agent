@@ -5,7 +5,6 @@ import { McpSettingsPage } from "@/components/workspace/settings/mcp-settings-pa
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 
@@ -13,7 +12,6 @@ export default function McpPage() {
   const { t } = useI18n();
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody>
         <div className="ui-density-stack mx-auto flex w-full max-w-(--container-width-md) flex-col py-2">
           <CapabilityQualityStrip surface="integrations" />

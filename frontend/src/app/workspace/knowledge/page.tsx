@@ -1,100 +1,55 @@
 import { useState } from "react";
-import {
-  BrainIcon,
-  DatabaseIcon,
-  FileTextIcon,
-  type LucideIcon,
-  NetworkIcon,
-} from "lucide-react";
+import { BrainIcon, FileTextIcon, NetworkIcon } from "lucide-react";
 
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CapabilityQualityStrip } from "@/components/workspace/capability-quality-strip";
 import { KnowledgeGraphPanel } from "@/components/workspace/knowledge-graph-panel";
+import { MemoryAssetsPanel } from "@/components/workspace/memory-assets-panel";
+import { WikiPanel } from "@/components/workspace/wiki-panel";
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
-
-function ComingSoonTab({
-  icon: Icon,
-  title,
-}: {
-  icon: LucideIcon;
-  title: string;
-}) {
-  const { t } = useI18n();
-  return (
-    <Empty className="min-h-64">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <Icon />
-        </EmptyMedia>
-        <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{t.knowledge.comingSoon}</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
-  );
-}
 
 export default function KnowledgePage() {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState("graph");
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody>
-        <div className="ui-density-stack mx-auto flex w-full max-w-6xl flex-col py-2">
-          <CapabilityQualityStrip surface="knowledge" />
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid h-auto w-full max-w-lg grid-cols-4 rounded-lg p-1">
-              <TabsTrigger value="graph" className="h-8 gap-1.5 px-3 text-xs">
-                <NetworkIcon className="size-3.5" />
-                {t.knowledgeGraph.graph}
-              </TabsTrigger>
-              <TabsTrigger value="memory" className="h-8 gap-1.5 px-3 text-xs">
-                <BrainIcon className="size-3.5" />
-                {t.evolutionDashboard.memories}
-              </TabsTrigger>
-              <TabsTrigger value="wiki" className="h-8 gap-1.5 px-3 text-xs">
-                <FileTextIcon className="size-3.5" />
-                Wiki
-              </TabsTrigger>
-              <TabsTrigger value="files" className="h-8 gap-1.5 px-3 text-xs">
-                <DatabaseIcon className="size-3.5" />
-                {t.knowledge.tabFiles}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+        <div className="flex h-full min-h-0 w-full flex-col bg-white">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-muted px-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">知识库</div>
+              <div className="truncate text-xs text-muted-foreground">
+                实体、关系与本地记忆
+              </div>
+            </div>
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="flex h-8 rounded-md bg-transparent p-0">
+                <TabsTrigger value="graph" className="h-8 gap-1.5 px-3 text-xs">
+                  <NetworkIcon className="size-3.5" />
+                  {t.knowledgeGraph.graph}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="memory"
+                  className="h-8 gap-1.5 px-3 text-xs"
+                >
+                  <BrainIcon className="size-3.5" />
+                  {t.evolutionDashboard.memories}
+                </TabsTrigger>
+                <TabsTrigger value="wiki" className="h-8 gap-1.5 px-3 text-xs">
+                  <FileTextIcon className="size-3.5" />
+                  Wiki
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
 
-          <div className="workspace-panel ui-density-panel">
+          <div className="min-h-0 flex-1 overflow-auto border-0 bg-white p-3">
             {activeTab === "graph" && <KnowledgeGraphPanel />}
-            {activeTab === "memory" && (
-              <ComingSoonTab
-                icon={BrainIcon}
-                title={t.knowledge.memoryManagement}
-              />
-            )}
-            {activeTab === "wiki" && (
-              <ComingSoonTab
-                icon={FileTextIcon}
-                title={t.knowledge.wikiDocs}
-              />
-            )}
-            {activeTab === "files" && (
-              <ComingSoonTab
-                icon={DatabaseIcon}
-                title={t.knowledge.fileManagement}
-              />
-            )}
+            {activeTab === "memory" && <MemoryAssetsPanel />}
+            {activeTab === "wiki" && <WikiPanel />}
           </div>
         </div>
       </WorkspaceBody>

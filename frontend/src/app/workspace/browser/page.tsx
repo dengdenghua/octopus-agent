@@ -17,7 +17,6 @@ import { CapabilityQualityStrip } from "@/components/workspace/capability-qualit
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
@@ -156,7 +155,6 @@ export default function BrowserPage() {
   return (
     <BrowserProvider>
       <WorkspaceContainer>
-        <WorkspaceHeader />
         <WorkspaceBody className="overflow-hidden">
           <BrowserPageBody />
         </WorkspaceBody>

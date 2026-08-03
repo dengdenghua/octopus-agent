@@ -35,7 +35,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -205,7 +204,6 @@ export default function ReflexMonitorPage() {
 
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           {/* Hero / actions */}

@@ -46,7 +46,6 @@ import {
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -229,7 +228,6 @@ export default function ReflexEditorPage() {
 
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
           <section className="workspace-panel px-6 py-4">

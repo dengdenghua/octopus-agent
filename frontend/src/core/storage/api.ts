@@ -89,6 +89,13 @@ export interface NASServiceStartResponse {
   auth_token?: string | null;
 }
 
+export interface NASDirectoryEntry {
+  name: string;
+  path: string;
+  type: "dir" | "file";
+  size: number | null;
+}
+
 export class NASRequestError extends Error {
   constructor(
     public readonly path: string,
@@ -202,6 +209,24 @@ export function listNASModels(): Promise<NASModel[]> {
   return request("/v1/models");
 }
 
+export function downloadNASModel(modelId: string): Promise<NASModel> {
+  return request(`/v1/models/${encodeURIComponent(modelId)}/download`, {
+    method: "POST",
+  });
+}
+
+export function enableNASModel(modelId: string): Promise<NASModel> {
+  return request(`/v1/models/${encodeURIComponent(modelId)}/enable`, {
+    method: "POST",
+  });
+}
+
+export function disableNASModel(modelId: string): Promise<NASModel> {
+  return request(`/v1/models/${encodeURIComponent(modelId)}/disable`, {
+    method: "POST",
+  });
+}
+
 export function updateNASPolicy(policy: NASPolicy): Promise<NASPolicy> {
   return request("/v1/policy", {
     method: "PUT",
@@ -211,6 +236,10 @@ export function updateNASPolicy(policy: NASPolicy): Promise<NASPolicy> {
 
 export function listNASSources(): Promise<NASSource[]> {
   return request("/v1/sources");
+}
+
+export function listNASDirectory(path: string): Promise<NASDirectoryEntry[]> {
+  return request(`/v1/browse?path=${encodeURIComponent(path)}`);
 }
 
 export function createNASSource(path: string): Promise<NASSource> {
@@ -240,6 +269,87 @@ export function searchNAS(query: string): Promise<NASSearchResponse> {
     method: "POST",
     body: JSON.stringify({ query, top_k: 8, source_ids: [] }),
   });
+}
+
+export interface NASApp {
+  app_id: string;
+  name: string;
+  path: string;
+  category: string;
+  bundle_id: string | null;
+  icon_available: boolean;
+}
+
+export interface NASFileAsset {
+  asset_id: string;
+  source_id: string;
+  name: string;
+  path: string;
+  extension: string;
+  kind: "document" | "image" | "video";
+  size: number;
+  mtime_ns: number;
+  indexed?: boolean;
+  ai_labels?: string[];
+}
+
+export interface NASAlbum {
+  label: string;
+  count: number;
+  cover_asset_id?: string;
+}
+
+export function listNASAlbums(): Promise<NASAlbum[]> {
+  return request("/v1/albums");
+}
+
+export function listNASApps(): Promise<NASApp[]> {
+  return request("/v1/apps");
+}
+
+export function openNASApp(
+  appId: string,
+): Promise<{ ok: boolean; app_id: string }> {
+  return request(`/v1/apps/${encodeURIComponent(appId)}/open`, {
+    method: "POST",
+  });
+}
+
+export function revealNASApp(
+  appId: string,
+): Promise<{ ok: boolean; app_id: string }> {
+  return request(`/v1/apps/${encodeURIComponent(appId)}/reveal`, {
+    method: "POST",
+  });
+}
+
+export function listNASFiles(
+  kind: "document" | "image" | "video" = "document",
+  limit = 500,
+): Promise<NASFileAsset[]> {
+  return request(`/v1/files?kind=${kind}&limit=${limit}`);
+}
+
+export function getNASAppIconURL(appId: string): string {
+  return `${getNASBaseURL()}/v1/apps/${encodeURIComponent(appId)}/icon`;
+}
+
+export function getNASFileContentURL(assetId: string): string {
+  return `${getNASBaseURL()}/v1/files/${encodeURIComponent(assetId)}/content`;
+}
+
+export async function loadNASAssetURL(path: string): Promise<string> {
+  const response = await fetch(`${getNASBaseURL()}${path}`, {
+    headers: getNASAuthHeaders(),
+  });
+  if (!response.ok) {
+    throw new NASRequestError(
+      path,
+      response.status,
+      await response.text().catch(() => ""),
+    );
+  }
+  return URL.createObjectURL(await response.blob());
 }
 
 export function answerNAS(query: string): Promise<NASAnswerResponse> {

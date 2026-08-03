@@ -45,7 +45,6 @@ import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { AgentOperatorPanel } from "@/components/workspace/agent-operator-panel";
 import { RunReviewPanel } from "@/components/workspace/run-review-panel";
@@ -121,7 +120,6 @@ export default function ObservabilityPage({
   const tab = normalizeObservabilityTab(initialTab);
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
           <section className="workspace-panel px-6 py-5">

@@ -260,9 +260,10 @@ export function groupMessages<T>(
         groups.push({ id: message.id, type: "assistant", messages: [message] });
       } else if (hasReasoning(message)) {
         // Reasoning-only intermediate message (no content, no tool
-        // calls yet). Group as processing so the user sees a fold for
-        // the partial chain of thought.
-        appendToCurrentProcessingGroup(message);
+        // calls yet). Render as a normal assistant message so
+        // MessageListItem can show a collapsed thinking row from the raw
+        // reasoning_content instead of an empty process lane.
+        groups.push({ id: message.id, type: "assistant", messages: [message] });
       }
     }
   }

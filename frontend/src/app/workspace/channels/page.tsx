@@ -36,7 +36,6 @@ import { ChannelPairingsSheet } from "@/components/workspace/channel-pairings-sh
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -320,7 +319,6 @@ export default function ChannelsPage() {
 
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="ui-density-stack mx-auto flex w-full max-w-6xl flex-col">
           {confirmDialog}

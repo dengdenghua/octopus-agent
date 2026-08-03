@@ -289,11 +289,11 @@
   --appearance-radius-sm: calc(0.375rem * var(--corner-radius-scale, 1));
   --appearance-radius-md: calc(0.5rem * var(--corner-radius-scale, 1));
   --appearance-radius-lg: calc(0.75rem * var(--corner-radius-scale, 1));
-  --appearance-radius-xl: calc(1rem * var(--corner-radius-scale, 1));
-  --appearance-radius-2xl: calc(1.25rem * var(--corner-radius-scale, 1));
+  --appearance-radius-xl: calc(0.75rem * var(--corner-radius-scale, 1));
+  --appearance-radius-2xl: calc(0.875rem * var(--corner-radius-scale, 1));
   --appearance-radius-3xl: calc(1.5rem * var(--corner-radius-scale, 1));
-  --appearance-radius-panel: calc(1.75rem * var(--corner-radius-scale, 1));
-  --appearance-radius-control: calc(0.75rem * var(--corner-radius-scale, 1));
+  --appearance-radius-panel: calc(1rem * var(--corner-radius-scale, 1));
+  --appearance-radius-control: calc(0.625rem * var(--corner-radius-scale, 1));
   --appearance-radius-pill: calc(999px * var(--corner-radius-scale, 1));
 
   /* Semantic design tokens. These map to existing theme vars
@@ -368,37 +368,37 @@
   --border-strong: color-mix(in oklch, var(--border) 85%, transparent);
 
   --radius: 0.5rem;
-  --background: oklch(0.985 0.003 264);
-  --foreground: oklch(0.15 0.006 264);
+  --background: oklch(0.985 0.004 255);
+  --foreground: oklch(0.22 0.012 255);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.006 264);
+  --card-foreground: oklch(0.22 0.012 255);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.006 264);
-  --primary: oklch(0.45 0.2 264);
+  --popover-foreground: oklch(0.22 0.012 255);
+  --primary: oklch(0.6 0.15 253);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.955 0.006 264);
-  --secondary-foreground: oklch(0.205 0.005 264);
-  --muted: oklch(0.952 0.004 264);
-  --muted-foreground: oklch(0.42 0.018 264);
-  --accent: oklch(0.94 0.018 264);
-  --accent-foreground: oklch(0.25 0.05 264);
+  --secondary: oklch(0.96 0.006 255);
+  --secondary-foreground: oklch(0.3 0.016 255);
+  --muted: oklch(0.955 0.005 255);
+  --muted-foreground: oklch(0.48 0.014 255);
+  --accent: oklch(0.945 0.012 250);
+  --accent-foreground: oklch(0.34 0.04 250);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.885 0.006 264);
-  --input: oklch(0.875 0.006 264);
-  --ring: oklch(0.45 0.2 264);
+  --border: oklch(0.89 0.008 255);
+  --input: oklch(0.91 0.008 255);
+  --ring: oklch(0.62 0.12 253);
   --chart-1: oklch(0.55 0.2 264);
   --chart-2: oklch(0.6 0.15 180);
   --chart-3: oklch(0.55 0.2 330);
   --chart-4: oklch(0.65 0.18 80);
   --chart-5: oklch(0.6 0.22 20);
-  --sidebar: oklch(0.965 0.004 264);
-  --sidebar-foreground: oklch(0.15 0.006 264);
-  --sidebar-primary: oklch(0.45 0.2 264);
+  --sidebar: oklch(0.972 0.006 255);
+  --sidebar-foreground: oklch(0.22 0.012 255);
+  --sidebar-primary: oklch(0.56 0.1 250);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.94 0.02 264);
-  --sidebar-accent-foreground: oklch(0.25 0.05 264);
-  --sidebar-border: oklch(0.88 0.006 264);
-  --sidebar-ring: oklch(0.45 0.2 264);
+  --sidebar-accent: oklch(0.94 0.014 250);
+  --sidebar-accent-foreground: oklch(0.33 0.04 250);
+  --sidebar-border: oklch(0.89 0.008 255);
+  --sidebar-ring: oklch(0.6 0.11 250);
 
   --container-width-xs: calc(var(--spacing) * 72);
   --container-width-sm: calc(var(--spacing) * 144);
@@ -458,38 +458,38 @@
   color-scheme: light;
   --radius: 0.75rem;
   --corner-radius-scale: 1;
-  --background: oklch(0.972 0.004 255);
-  --foreground: oklch(0.16 0.006 255);
+  --background: oklch(0.982 0.005 255);
+  --foreground: oklch(0.22 0.012 255);
   --card: oklch(0.998 0.001 255);
-  --card-foreground: oklch(0.16 0.006 255);
+  --card-foreground: oklch(0.22 0.012 255);
   --popover: oklch(0.998 0.001 255);
-  --popover-foreground: oklch(0.16 0.006 255);
-  --primary: oklch(0.62 0.205 253);
+  --popover-foreground: oklch(0.22 0.012 255);
+  --primary: oklch(0.61 0.15 253);
   --primary-foreground: oklch(0.995 0 0);
-  --secondary: oklch(0.94 0.008 255);
-  --secondary-foreground: oklch(0.22 0.01 255);
-  --muted: oklch(0.93 0.006 255);
-  --muted-foreground: oklch(0.47 0.014 255);
-  --accent: oklch(0.92 0.035 253);
-  --accent-foreground: oklch(0.27 0.06 253);
+  --secondary: oklch(0.96 0.006 255);
+  --secondary-foreground: oklch(0.3 0.016 255);
+  --muted: oklch(0.95 0.005 255);
+  --muted-foreground: oklch(0.48 0.014 255);
+  --accent: oklch(0.94 0.014 250);
+  --accent-foreground: oklch(0.33 0.04 250);
   --destructive: oklch(0.64 0.22 25);
   --destructive-foreground: oklch(0.995 0 0);
-  --border: oklch(0.875 0.006 255);
-  --input: oklch(0.89 0.006 255);
-  --ring: oklch(0.62 0.205 253);
+  --border: oklch(0.89 0.008 255);
+  --input: oklch(0.91 0.008 255);
+  --ring: oklch(0.62 0.12 253);
   --chart-1: oklch(0.62 0.205 253);
   --chart-2: oklch(0.72 0.17 155);
   --chart-3: oklch(0.66 0.19 335);
   --chart-4: oklch(0.78 0.16 85);
   --chart-5: oklch(0.68 0.2 25);
-  --sidebar: oklch(0.95 0.008 255);
-  --sidebar-foreground: oklch(0.17 0.006 255);
-  --sidebar-primary: oklch(0.62 0.205 253);
+  --sidebar: oklch(0.97 0.006 255);
+  --sidebar-foreground: oklch(0.22 0.012 255);
+  --sidebar-primary: oklch(0.56 0.1 250);
   --sidebar-primary-foreground: oklch(0.995 0 0);
-  --sidebar-accent: oklch(0.905 0.03 253);
-  --sidebar-accent-foreground: oklch(0.25 0.055 253);
-  --sidebar-border: oklch(0.86 0.006 255);
-  --sidebar-ring: oklch(0.62 0.205 253);
+  --sidebar-accent: oklch(0.935 0.016 250);
+  --sidebar-accent-foreground: oklch(0.33 0.04 250);
+  --sidebar-border: oklch(0.885 0.008 255);
+  --sidebar-ring: oklch(0.6 0.11 250);
   font-family:
     -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
     "Helvetica Neue", Arial, sans-serif;
@@ -498,9 +498,9 @@
   text-rendering: optimizeLegibility;
   letter-spacing: 0;
   --shadow-card:
-    0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+    0 1px 2px rgba(30, 50, 75, 0.035), 0 5px 16px rgba(30, 50, 75, 0.045);
   --shadow-elevated:
-    0 2px 6px rgba(0, 0, 0, 0.06), 0 18px 44px rgba(0, 0, 0, 0.12);
+    0 2px 6px rgba(30, 50, 75, 0.05), 0 12px 30px rgba(30, 50, 75, 0.08);
   --shadow-floating:
     0 6px 18px rgba(0, 0, 0, 0.1), 0 28px 70px rgba(0, 0, 0, 0.18);
   --shadow-modal: 0 18px 60px rgba(0, 0, 0, 0.22);
@@ -1076,11 +1076,11 @@
     border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
     border-radius: var(--appearance-radius-panel);
     background: color-mix(in oklch, var(--card) 92%, var(--background) 8%);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.04),
-      0 8px 22px rgba(0, 0, 0, 0.05);
+      0 6px 18px rgba(30, 50, 75, 0.045);
     transition:
       box-shadow 0.2s ease,
       border-color 0.2s ease;
@@ -1090,7 +1090,7 @@
     border-color: color-mix(in oklch, var(--border) 76%, var(--primary) 24%);
     box-shadow:
       0 2px 4px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(0, 0, 0, 0.08);
+      0 10px 24px rgba(30, 50, 75, 0.07);
   }
 
   .workspace-panel-subtle {
@@ -1221,9 +1221,9 @@
 
   .apple .workspace-panel {
     border-color: color-mix(in oklch, var(--border) 86%, transparent);
-    background: color-mix(in oklch, var(--card) 72%, transparent);
-    backdrop-filter: blur(24px) saturate(1.7);
-    -webkit-backdrop-filter: blur(24px) saturate(1.7);
+    background: color-mix(in oklch, var(--card) 88%, transparent);
+    backdrop-filter: blur(14px) saturate(1.35);
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
     box-shadow: var(--shadow-card);
     border-radius: var(--appearance-radius-panel);
   }
@@ -1235,9 +1235,9 @@
 
   .apple .workspace-panel-subtle {
     border-color: color-mix(in oklch, var(--border) 82%, transparent);
-    background: color-mix(in oklch, var(--card) 62%, transparent);
-    backdrop-filter: blur(22px) saturate(1.55);
-    -webkit-backdrop-filter: blur(22px) saturate(1.55);
+    background: color-mix(in oklch, var(--card) 78%, transparent);
+    backdrop-filter: blur(12px) saturate(1.25);
+    -webkit-backdrop-filter: blur(12px) saturate(1.25);
     border-radius: var(--appearance-radius-2xl);
   }
 

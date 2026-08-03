@@ -517,7 +517,7 @@ describe("agent phases", () => {
     ]);
   });
 
-  test("uses the observed target instead of a generic label for a single read", () => {
+  test("uses a generic preparation label for a single read to avoid duplicating the context list", () => {
     const state = deriveAgentPhases([
       event({
         id: "read-1",
@@ -528,8 +528,8 @@ describe("agent phases", () => {
     expect(state.phases).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          title: "react_public_updates.py",
-          titleKey: undefined,
+          title: "Gather context",
+          titleKey: "genericPrepare",
         }),
       ]),
     );

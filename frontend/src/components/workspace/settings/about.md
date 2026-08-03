@@ -1,4 +1,4 @@
-# 🐙 [About Octopus-Agent](https://github.com/octopus-agent/octopus-agent)
+# 🐙 [About Octopus-Agent](https://github.com/dengdenghua/octopus-agent)
 
 > **From Open Source, Back to Open Source**
 
@@ -10,7 +10,7 @@ different levels of tasks that could take minutes to hours.
 
 ## 🌟 GitHub Repository
 
-Explore Octopus-Agent on GitHub: [github.com/octopus-agent/octopus-agent](https://github.com/octopus-agent/octopus-agent)
+Explore Octopus-Agent on GitHub: [github.com/dengdenghua/octopus-agent](https://github.com/dengdenghua/octopus-agent)
 
 ## 🌐 Official Website
 

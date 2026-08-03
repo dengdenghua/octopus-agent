@@ -4891,7 +4891,6 @@ export interface Translations {
     reportLanguageBoth: string;
     // IntelligencePanel extras
     subscriptionsHeader: string;
-    topicPlaceholder: string;
     addButton: string;
     noSubscriptionsHint: (keywordExample: string) => string;
     exampleKeyword: string;
@@ -4930,6 +4929,38 @@ export interface Translations {
     deleteSubscriptionNamed: (name: string) => string;
     source: string;
     web: string;
+    // Automation tabs
+    configuredTip: string;
+    configuredTipToggle: string;
+    configuredEmptyTitle: string;
+    configuredEmptyDescription: string;
+    createCustomTask: string;
+    useTemplate: string;
+    // Create automation dialog
+    nameRequired: string;
+    topicRequired: string;
+    createTaskSuccess: string;
+    createTaskFailed: string;
+    createTaskTitle: string;
+    createTaskDescription: string;
+    taskNameLabel: string;
+    taskNamePlaceholder: string;
+    topicLabel: string;
+    topicPlaceholder: string;
+    cadenceLabel: string;
+    cadenceHourly: string;
+    scheduleTimeLabel: string;
+    scheduleDayLabel: string;
+    instructionsLabel: string;
+    instructionsPlaceholder: string;
+    createTask: string;
+    // Automation history
+    historyItemsAnalyzed: (n: number) => string;
+    historyErrors: (n: number) => string;
+    historyCollapse: string;
+    historyViewDetails: string;
+    historyEmptyTitle: string;
+    historyEmptyDescription: string;
   };
 
   intelligencePanel: {

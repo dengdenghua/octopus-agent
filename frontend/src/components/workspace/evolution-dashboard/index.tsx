@@ -270,7 +270,7 @@ function GrowthStoryHero({
         <GeneLockControlCard compact className="mt-3" />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-4">
+      <div className="grid h-fit gap-3 self-start sm:grid-cols-3 xl:grid-cols-3">
         <StoryMetric
           icon={BookOpenIcon}
           title={t.evolutionDashboard.autoExtractedSkills}
@@ -403,7 +403,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
   const { t } = useI18n();
   if (data.length === 0) {
     return (
-      <section className="rounded-lg border border-border-default bg-card p-4">
+      <section className="rounded-md border border-border-default bg-card p-3">
         <SectionTitle
           icon={TrendingUpIcon}
           title={t.evolutionDashboard.capabilityTrend}
@@ -426,7 +426,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
     ) / compact.length;
 
   return (
-    <section className="rounded-lg border border-border-default bg-card p-4">
+    <section className="rounded-md border border-border-default bg-card p-3">
       <div className="flex items-start justify-between gap-4">
         <SectionTitle
           icon={TrendingUpIcon}
@@ -517,7 +517,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
   const { t } = useI18n();
   if (data.length === 0) {
     return (
-      <section className="rounded-lg border border-border-default bg-card p-4">
+      <section className="rounded-md border border-border-default bg-card p-3">
         <SectionTitle
           icon={BrainCircuitIcon}
           title={t.evolutionDashboard.strongerSkills}
@@ -528,7 +528,7 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
   }
 
   return (
-    <section className="rounded-lg border border-border-default bg-card p-4">
+    <section className="rounded-md border border-border-default bg-card p-3">
       <SectionTitle
         icon={BrainCircuitIcon}
         title={t.evolutionDashboard.strongerSkills}
@@ -592,7 +592,7 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
   const { t } = useI18n();
   if (data.length === 0) {
     return (
-      <section className="rounded-lg border border-border-default bg-card p-4">
+      <section className="rounded-md border border-border-default bg-card p-3">
         <SectionTitle
           icon={LightbulbIcon}
           title={t.evolutionDashboard.howToImproveNext}
@@ -603,7 +603,7 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
   }
 
   return (
-    <section className="rounded-lg border border-border-default bg-card p-4">
+    <section className="rounded-md border border-border-default bg-card p-3">
       <SectionTitle
         icon={LightbulbIcon}
         title={t.evolutionDashboard.howToImproveNext}
@@ -649,7 +649,7 @@ function SectionTitle({
 
 function EmptyStory({ text }: { text: string }) {
   return (
-    <div className="mt-4 rounded-lg border border-dashed border-border-default bg-muted/20 px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">
+    <div className="mt-3 flex min-h-14 items-center rounded-md border border-dashed border-border-default bg-muted/20 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
       {text}
     </div>
   );

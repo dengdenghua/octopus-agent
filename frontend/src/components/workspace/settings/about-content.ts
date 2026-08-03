@@ -4,7 +4,7 @@
  * because the surrounding UI uses another supported locale.
  */
 const ABOUT_MARKDOWN = {
-  en: `# 🐙 [About Octopus-Agent](https://github.com/octopus-agent/octopus-agent)
+  en: `# 🐙 [About Octopus-Agent](https://github.com/dengdenghua/octopus-agent)
 
 > **From Open Source, Back to Open Source**
 
@@ -24,7 +24,7 @@ Octopus is an open-source **super-agent harness** that coordinates **agents**, *
 
 ## 🌟 Project links
 
-* [GitHub repository](https://github.com/octopus-agent/octopus-agent)
+* [GitHub repository](https://github.com/dengdenghua/octopus-agent)
 * [Official website](https://octopus.dev/)
 * [Support](mailto:support@octopus.dev)
 
@@ -40,7 +40,7 @@ Thank you to the open-source projects and contributors who make Octopus possible
 
 Special thanks to [Daniel Walnut](https://github.com/hetaoBackend/) and [Henry Li](https://github.com/magiccube/) for their vision and dedication.
 `,
-  zh: `# 🐙 [关于 Octopus-Agent](https://github.com/octopus-agent/octopus-agent)
+  zh: `# 🐙 [关于 Octopus-Agent](https://github.com/dengdenghua/octopus-agent)
 
 > **源于开源，回馈开源**
 
@@ -60,7 +60,7 @@ Octopus 是一个开源的**超级智能体框架**，通过协同**智能体、
 
 ## 🌟 项目链接
 
-* [GitHub 仓库](https://github.com/octopus-agent/octopus-agent)
+* [GitHub 仓库](https://github.com/dengdenghua/octopus-agent)
 * [官方网站](https://octopus.dev/)
 * [联系支持](mailto:support@octopus.dev)
 
@@ -76,7 +76,7 @@ Octopus 采用 **Apache License 2.0** 开源发布。
 
 特别感谢 [Daniel Walnut](https://github.com/hetaoBackend/) 与 [Henry Li](https://github.com/magiccube/) 的愿景、热情和长期投入。
 `,
-  ja: `# 🐙 [Octopus-Agent について](https://github.com/octopus-agent/octopus-agent)
+  ja: `# 🐙 [Octopus-Agent について](https://github.com/dengdenghua/octopus-agent)
 
 > **オープンソースから生まれ、オープンソースへ還元する**
 
@@ -96,7 +96,7 @@ Octopus は、**エージェント、メモリ、安全な実行環境**を連�
 
 ## 🌟 プロジェクトリンク
 
-* [GitHub リポジトリ](https://github.com/octopus-agent/octopus-agent)
+* [GitHub リポジトリ](https://github.com/dengdenghua/octopus-agent)
 * [公式サイト](https://octopus.dev/)
 * [サポート](mailto:support@octopus.dev)
 
@@ -112,7 +112,7 @@ Octopus を支えるすべてのオープンソースプロジェクトと貢献
 
 ビジョンと継続的な貢献を寄せてくださった [Daniel Walnut](https://github.com/hetaoBackend/) と [Henry Li](https://github.com/magiccube/) に、心より感謝します。
 `,
-  ko: `# 🐙 [Octopus-Agent 소개](https://github.com/octopus-agent/octopus-agent)
+  ko: `# 🐙 [Octopus-Agent 소개](https://github.com/dengdenghua/octopus-agent)
 
 > **오픈 소스에서 시작해 오픈 소스로 돌려드립니다**
 
@@ -132,7 +132,7 @@ Octopus는 **에이전트, 메모리, 안전한 실행 환경**을 조율하고 
 
 ## 🌟 프로젝트 링크
 
-* [GitHub 저장소](https://github.com/octopus-agent/octopus-agent)
+* [GitHub 저장소](https://github.com/dengdenghua/octopus-agent)
 * [공식 웹사이트](https://octopus.dev/)
 * [지원 문의](mailto:support@octopus.dev)
 

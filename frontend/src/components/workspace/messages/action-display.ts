@@ -252,7 +252,7 @@ function isCapabilityToolName(name: string): boolean {
   return CAPABILITY_TOOL_NAMES.has(name.toLowerCase());
 }
 
-function isTeammateToolName(name: string): boolean {
+export function isTeammateToolName(name: string): boolean {
   const n = name.toLowerCase();
   return (
     n.includes("teammate") ||

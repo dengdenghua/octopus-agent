@@ -272,7 +272,12 @@ export type ConversationEvent =
     }
   | {
       method: "turn/interrupted";
-      params: { threadId: string; turnId: string; completedAt?: string };
+      params: {
+        threadId: string;
+        turnId: string;
+        completedAt?: string;
+        reason?: string;
+      };
     }
   | {
       method: "turn/diff/updated";
@@ -600,7 +605,7 @@ export function reduce(
       interruptTimestamps.set(evt.params.turnId, Date.now());
       const changedItemIds: string[] = [];
       const completedAt = evt.params.completedAt ?? new Date().toISOString();
-      const interruptReason = (evt.params.reason as string | undefined) ?? null;
+      const interruptReason = evt.params.reason ?? null;
       const turns = state.turns.map((t) => {
         if (t.id !== evt.params.turnId) return t;
         const items = closeItemsForTurn(t.items, "interrupted");

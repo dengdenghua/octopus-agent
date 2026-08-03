@@ -66,6 +66,9 @@ const api = {
     getVersion: invoke("app:getVersion"),
     openExternal: invoke("app:openExternal"),
     getPlatform: invoke("app:getPlatform"),
+    // Auto-update (no-op when electron-updater is unavailable / non-packaged).
+    checkForUpdate: () => ipcRenderer.send("app:check-for-update"),
+    installUpdate: () => ipcRenderer.send("app:install-update"),
   },
 
   desktop: {

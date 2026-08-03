@@ -6,9 +6,40 @@ import type {
   FactPatchRequest,
   MemoryConfig,
   MemoryConfigPatch,
+  MemoryAssetList,
+  MemoryAssetQuery,
+  MemoryAssetTrace,
   MemoryData,
   MemorySearchResult,
 } from "./types";
+
+export async function listMemoryAssets(
+  query: MemoryAssetQuery = {},
+): Promise<MemoryAssetList> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  const suffix = params.size ? `?${params.toString()}` : "";
+  const res = await fetch(`${getBackendBaseURL()}/api/memory/assets${suffix}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok)
+    throw new Error(`Failed to list memory assets: ${res.statusText}`);
+  return (await res.json()) as MemoryAssetList;
+}
+
+export async function getMemoryAssetTrace(
+  assetId: string,
+): Promise<MemoryAssetTrace> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/memory/assets/${encodeURIComponent(assetId)}/trace`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok)
+    throw new Error(`Failed to load memory trace: ${res.statusText}`);
+  return (await res.json()) as MemoryAssetTrace;
+}
 
 export async function getMemory(): Promise<MemoryData> {
   const res = await fetch(`${getBackendBaseURL()}/api/memory`, {

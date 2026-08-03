@@ -1,6 +1,7 @@
 /// <reference types="vitest" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
 import path from "path";
@@ -130,6 +131,19 @@ export default defineConfig({
   plugins: [
     ...(process.env.OCTOPUS_BUILD_TRACE === "1" ? [buildTracePlugin()] : []),
     react(),
+    // Build-size audit capability. Gated behind an env var so ordinary
+    // `pnpm build` output is unaffected. Run a report with:
+    //   OCTOPUS_VISUALIZER=1 pnpm build
+    // and open `dist/stats.html` (or `--report` for rollup console output).
+    ...(process.env.OCTOPUS_VISUALIZER === "1"
+      ? [
+          visualizer({
+            filename: "dist/stats.html",
+            gzipSize: true,
+            brotliSize: true,
+          }),
+        ]
+      : []),
   ],
   resolve: {
     alias: {
@@ -266,11 +280,13 @@ export default defineConfig({
       // Ratchet thresholds — set slightly below current levels to prevent
       // regression while allowing incremental improvement over time.
       // Goal: ratchet up until we reach 80/75/80/80.
+      // Current actual (2026-08-03): lines 51.03 / branches 48.59 /
+      // functions 38.29 / statements 50.01.
       thresholds: {
-        lines: 48,
-        branches: 46,
-        functions: 36,
-        statements: 47,
+        lines: 51,
+        branches: 48,
+        functions: 38,
+        statements: 50,
       },
     },
   },

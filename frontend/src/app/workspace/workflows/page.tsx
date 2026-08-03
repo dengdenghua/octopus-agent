@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 
@@ -51,7 +50,6 @@ export default function WorkflowsPage() {
 
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody className="items-stretch">
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-4 py-10">
           <section className="overflow-hidden rounded-lg border border-border-default bg-card shadow-[var(--shadow-xs)]">

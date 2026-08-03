@@ -8,7 +8,6 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import {
   Empty,
@@ -116,7 +115,6 @@ export default function ArchitecturePage() {
 
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody className="p-0">
         <div className="flex flex-col md:flex-row w-full h-full min-h-0">
           {/* Implementation note. */}

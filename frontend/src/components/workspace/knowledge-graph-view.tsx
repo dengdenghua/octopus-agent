@@ -2,6 +2,8 @@ import {
   SearchIcon,
   RefreshCwIcon,
   Loader2Icon,
+  NetworkIcon,
+  PaletteIcon,
   SlidersHorizontalIcon,
   TagsIcon,
   EyeIcon,
@@ -324,7 +326,7 @@ function forceLayout3D(
     id: node.id,
     position:
       currentPositions.get(node.id)?.clone() ??
-      initialSpherePosition(node.id, index, nodes.length, settings),
+      initialGalaxyPosition(node.id, index, nodes.length, settings),
     velocity: new THREE.Vector3(),
   }));
   const byId = new Map(positions.map((item, index) => [item.id, index]));
@@ -393,6 +395,26 @@ function forceLayout3D(
   }
 
   return new Map(positions.map((item) => [item.id, item.position]));
+}
+
+function initialGalaxyPosition(
+  id: string,
+  index: number,
+  total: number,
+  settings: GraphDisplaySettings,
+): THREE.Vector3 {
+  const arms = 4;
+  const arm = index % arms;
+  const lane = Math.floor(index / arms);
+  const t = (lane + 1) / Math.max(Math.ceil(total / arms), 1);
+  const radius = 70 + Math.pow(t, 0.72) * 560 * settings.spread;
+  const angle = arm * (Math.PI * 2 / arms) + radius * 0.008 + seededUnit(`${id}:angle`) * 0.24;
+  const jitter = (seededUnit(`${id}:jitter`) - 0.5) * 34;
+  return new THREE.Vector3(
+    Math.cos(angle) * radius + jitter,
+    (seededUnit(`${id}:y`) - 0.5) * (80 + radius * 0.12),
+    Math.sin(angle) * radius + jitter,
+  );
 }
 
 function materializeGraph(
@@ -624,6 +646,8 @@ function KnowledgeGraph3DContent() {
   const [disabledTypes, setDisabledTypes] = useState<Set<string>>(new Set());
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(true);
+  const [graphTheme, setGraphTheme] = useState<"nebula" | "aurora">("nebula");
   const [displaySettings, setDisplaySettings] = useState(
     DEFAULT_DISPLAY_SETTINGS,
   );
@@ -863,9 +887,10 @@ function KnowledgeGraph3DContent() {
     scene.fog = new THREE.FogExp2(new THREE.Color(SPACE_BG), 0.00042);
     const camera = new THREE.PerspectiveCamera(48, 1, 1, 5000);
     camera.position.set(0, 160, 880);
-    renderer.setClearColor(SPACE_BG, 1);
+    renderer.setClearColor(graphTheme === "aurora" ? "#071a1d" : SPACE_BG, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // Cap supersampling so large Retina canvases do not multiply GPU work.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.domElement.dataset.knowledgeGraph3d = "true";
     renderer.domElement.className =
       "h-full w-full cursor-grab active:cursor-grabbing";
@@ -928,11 +953,15 @@ function KnowledgeGraph3DContent() {
       setHoverId(next);
     };
 
-    const handlePointerMove = (event: PointerEvent) => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointerRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      pointerRef.current.y =
-        -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    let hoverFrame = 0;
+    let pendingPointer: { x: number; y: number } | null = null;
+    const resolveHover = () => {
+      hoverFrame = 0;
+      if (!pendingPointer) return;
+      const nextPointer = pendingPointer;
+      pendingPointer = null;
+      pointerRef.current.x = nextPointer.x;
+      pointerRef.current.y = nextPointer.y;
       raycasterRef.current.setFromCamera(pointerRef.current, camera);
       const hits = raycasterRef.current.intersectObjects(
         [...nodeMeshesRef.current.values()],
@@ -940,6 +969,14 @@ function KnowledgeGraph3DContent() {
       );
       const hit = hits.find((item) => item.object.userData.nodeId);
       setHover((hit?.object.userData.nodeId as string | undefined) ?? null);
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pendingPointer = {
+        x: ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      };
+      if (!hoverFrame) hoverFrame = window.requestAnimationFrame(resolveHover);
     };
 
     const handlePointerLeave = () => setHover(null);
@@ -955,6 +992,7 @@ function KnowledgeGraph3DContent() {
     let animationFrame = 0;
     const animate = () => {
       animationFrame = window.requestAnimationFrame(animate);
+      if (document.hidden) return;
       if (displaySettingsRef.current.autoRotate) {
         graphGroup.rotation.y += 0.0017;
         graphGroup.rotation.x = Math.sin(performance.now() / 9000) * 0.035;
@@ -967,6 +1005,7 @@ function KnowledgeGraph3DContent() {
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
+      if (hoverFrame) window.cancelAnimationFrame(hoverFrame);
       observer.disconnect();
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
       renderer.domElement.removeEventListener(
@@ -989,7 +1028,7 @@ function KnowledgeGraph3DContent() {
       starFieldRef.current = null;
       nodeMeshesRef.current = new Map();
     };
-  }, [expandNode]);
+  }, [expandNode, graphTheme]);
 
   useEffect(() => {
     const group = graphGroupRef.current;
@@ -1065,6 +1104,7 @@ function KnowledgeGraph3DContent() {
 
     const glowTexture = glowTextureRef.current ?? makeGlowTexture();
     glowTextureRef.current = glowTexture;
+    const sphereDetail = renderedGraph.nodes.length > 160 ? 14 : 22;
     for (const node of renderedGraph.nodes) {
       const active = activeNeighbors.has(node.id);
       const isSelected = selectedId === node.id;
@@ -1076,7 +1116,7 @@ function KnowledgeGraph3DContent() {
         activeNodeId && !active ? "#475569" : node.color,
       );
       const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(size, 28, 18),
+        new THREE.SphereGeometry(size, sphereDetail, Math.max(10, sphereDetail - 4)),
         new THREE.MeshStandardMaterial({
           color,
           emissive: color,
@@ -1169,7 +1209,22 @@ function KnowledgeGraph3DContent() {
         data-knowledge-graph3d-container="true"
         data-knowledge-graph-3d-container
       />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,rgba(34,211,238,0.16),transparent_32%),radial-gradient(circle_at_74%_68%,rgba(163,230,53,0.12),transparent_34%),linear-gradient(180deg,rgba(2,6,23,0.16),rgba(2,6,23,0.52))]" />
+      <div className={cn(
+        "pointer-events-none absolute inset-0",
+        graphTheme === "aurora"
+          ? "bg-[radial-gradient(circle_at_18%_20%,rgba(45,212,191,0.24),transparent_32%),radial-gradient(circle_at_78%_72%,rgba(59,130,246,0.2),transparent_36%),linear-gradient(180deg,rgba(6,78,59,0.18),rgba(2,44,54,0.5))]"
+          : "bg-[radial-gradient(circle_at_24%_18%,rgba(34,211,238,0.16),transparent_32%),radial-gradient(circle_at_74%_68%,rgba(163,230,53,0.12),transparent_34%),linear-gradient(180deg,rgba(2,6,23,0.16),rgba(2,6,23,0.52))]",
+      )} />
+
+      {!loading && !webglError && renderedGraph.nodes.length === 0 && (
+        <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center px-6 text-center">
+          <div className="max-w-xs rounded-lg border border-white/10 bg-black/25 px-5 py-4 backdrop-blur-sm">
+            <NetworkIcon className="mx-auto size-6 text-white/45" />
+            <div className="mt-2 text-sm font-medium text-white/80">暂无图谱数据</div>
+            <div className="mt-1 text-xs leading-5 text-white/50">先扫描本地文档，生成实体与关系后会显示在这里。</div>
+          </div>
+        </div>
+      )}
 
       {(loading || webglError) && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#05070d]/80">
@@ -1210,9 +1265,28 @@ function KnowledgeGraph3DContent() {
           {selectedId && ` · ${selectedId.slice(0, 22)}`}
           {hoverId && ` · ${hoverId.slice(0, 18)}`}
         </div>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-9 border-border-default bg-background/90 text-foreground/90 hover:bg-muted hover:text-foreground"
+          onClick={() => setShowSettings((visible) => !visible)}
+          aria-label="图谱设置"
+          aria-pressed={showSettings}
+        >
+          <SlidersHorizontalIcon className="size-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-9 border-border-default bg-background/90 text-foreground/90 hover:bg-muted hover:text-foreground"
+          onClick={() => setGraphTheme((theme) => theme === "nebula" ? "aurora" : "nebula")}
+          aria-label="切换图谱主题"
+        >
+          <PaletteIcon className="size-4" />
+        </Button>
       </div>
 
-      <aside className="absolute bottom-3 left-3 right-3 z-10 max-h-[42vh] space-y-3 overflow-y-auto rounded-lg border border-border-default bg-background/90 p-3 text-foreground shadow-2xl backdrop-blur-md sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:max-h-[calc(100%-2rem)] sm:w-[270px]">
+      {showSettings && <aside className="absolute bottom-3 left-3 right-3 z-10 max-h-[42vh] space-y-3 overflow-y-auto rounded-lg border border-border-default bg-background/80 p-3 text-foreground shadow-2xl backdrop-blur-md sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:max-h-[calc(100%-2rem)] sm:w-[250px]">
         {focusNode && (
           <Section icon={InfoIcon} title={controls.focus}>
             <div className="space-y-2 rounded-md border border-white/10 bg-background/40 p-2">
@@ -1426,7 +1500,7 @@ function KnowledgeGraph3DContent() {
           <SlidersHorizontalIcon className="mr-1.5 size-3.5" />
           {controls.fitGraph}
         </Button>
-      </aside>
+      </aside>}
     </div>
   );
 }

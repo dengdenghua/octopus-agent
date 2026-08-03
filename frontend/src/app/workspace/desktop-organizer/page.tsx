@@ -15,7 +15,6 @@ import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 
@@ -83,7 +82,6 @@ export default function DesktopOrganizerPage() {
 
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody>
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 py-2">
           <section className="workspace-panel flex flex-col gap-5 p-4 md:p-6">

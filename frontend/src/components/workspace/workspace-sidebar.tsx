@@ -1126,9 +1126,9 @@ function LocalDatabaseSection({
               "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-sm",
               "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
               "data-[active=true]:opacity-100",
-              "data-[active=true]:border-primary/14 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_76%,transparent)]",
+              "data-[active=true]:border-sidebar-primary/18 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)]",
               "data-[active=true]:shadow-[var(--shadow-xs)]",
-              "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-primary/75",
+              "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-sidebar-primary/85",
               "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
             )}
           >
@@ -1136,7 +1136,7 @@ function LocalDatabaseSection({
               className={cn(
                 "flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors",
                 active
-                  ? "bg-primary/10 text-primary"
+                  ? "bg-sidebar-primary/12 text-sidebar-primary"
                   : "text-muted-foreground group-hover/nav:text-foreground",
               )}
             >
@@ -1204,7 +1204,7 @@ function StorageLibraryRow({
             className={cn(
               "flex size-5 shrink-0 items-center justify-center rounded-lg transition-colors",
               active
-                ? "text-primary"
+                ? "text-sidebar-primary"
                 : "text-muted-foreground group-hover/nav:text-foreground",
             )}
           >
@@ -1606,9 +1606,9 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
           "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-sm",
           "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
           "data-[active=true]:opacity-100",
-          "data-[active=true]:border-primary/14 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_76%,transparent)]",
+          "data-[active=true]:border-sidebar-primary/18 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)]",
           "data-[active=true]:shadow-[var(--shadow-xs)]",
-          "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-primary/75",
+          "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-sidebar-primary/85",
         )}
       >
         <Link
@@ -1620,7 +1620,7 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
             className={cn(
               "flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors",
               active
-                ? "bg-primary/10 text-primary"
+                ? "bg-sidebar-primary/12 text-sidebar-primary"
                 : "text-muted-foreground group-hover/nav:text-foreground",
             )}
           >
@@ -1855,7 +1855,7 @@ function OngoingThreadsSection({
                   "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_38%,transparent)] text-foreground/86",
                   "hover:border-border-subtle hover:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_60%,transparent)] hover:text-foreground",
                   active &&
-                    "border-primary/16 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_72%,transparent)] text-foreground",
+                    "border-sidebar-primary/18 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_78%,transparent)] text-foreground",
                 )}
               >
                 <Link

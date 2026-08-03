@@ -321,6 +321,9 @@ export function AgentsTab({
   onSelectAgent,
   onInstallChange,
   onRetry,
+  onCreateAgent,
+  onImportAgent,
+  onConnectLocalPartner,
 }: {
   agents: AgentWorldAgent[];
   filteredAgents: AgentWorldAgent[];
@@ -332,6 +335,9 @@ export function AgentsTab({
   onSelectAgent: (agent: AgentWorldAgent) => void;
   onInstallChange: () => void;
   onRetry: () => void;
+  onCreateAgent: () => void;
+  onImportAgent: () => void;
+  onConnectLocalPartner: () => void;
 }) {
   const { t } = useI18n();
   const [installingAll, setInstallingAll] = useState(false);
@@ -524,6 +530,29 @@ export function AgentsTab({
                 )
               : t.agentWorldUnified.installAllButton}
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" className="h-8 rounded-lg px-2.5 shadow-none">
+                <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+                {t.agentWorldUnified.addAgentButton}
+                <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onSelect={onCreateAgent}>
+                <PlusIcon className="h-4 w-4" />
+                {t.agentWorld.newAgent}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onImportAgent}>
+                <ImportIcon className="h-4 w-4" />
+                {t.agentWorld.importAgentPack}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onConnectLocalPartner}>
+                <BotIcon className="h-4 w-4" />
+                {t.agentWorldUnified.connectLocalPartner}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -1176,58 +1205,21 @@ export function AgentWorldUnified() {
         </div>
       ) : null}
       {!hudOnly && (
-        <div className="flex flex-col gap-3 rounded-lg border border-border-default bg-card/70 px-3 py-2.5 shadow-[var(--shadow-xs)] md:flex-row md:items-center md:justify-between">
-          <div className="hidden min-w-0 md:block">
-            <h1 className="truncate text-sm font-semibold text-foreground">
-              {t.agentWorldUnified.pageTitle}
-            </h1>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {t.agentWorldUnified.pageDescription}
-            </p>
-          </div>
-          <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
-            <div className="relative w-full md:max-w-[360px]">
-              <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-              <Input
-                data-testid="agents-search-input"
-                aria-label={
-                  searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
-                }
-                placeholder={
-                  searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
-                }
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 rounded-lg border-border-default bg-background/85 pl-8 text-xs shadow-none transition-colors hover:border-border-strong focus-visible:bg-background"
-              />
-            </div>
-            {activeTab === "agents" && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" className="h-9 rounded-lg px-3 shadow-none">
-                    <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-                    {t.agentWorldUnified.addAgentButton}
-                    <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem
-                    onSelect={() => navigate("/workspace/agents/new")}
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                    {t.agentWorld.newAgent}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setImportOpen(true)}>
-                    <ImportIcon className="h-4 w-4" />
-                    {t.agentWorld.importAgentPack}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
-                    <BotIcon className="h-4 w-4" />
-                    {t.agentWorldUnified.connectLocalPartner}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          <div className="relative w-full md:max-w-[360px]">
+            <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+            <Input
+              data-testid="agents-search-input"
+              aria-label={
+                searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
+              }
+              placeholder={
+                searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
+              }
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-9 rounded-lg border-border-default bg-background/85 pl-8 text-xs shadow-none transition-colors hover:border-border-strong focus-visible:bg-background"
+            />
           </div>
         </div>
       )}
@@ -1295,6 +1287,9 @@ export function AgentWorldUnified() {
                     onSelectAgent={handleSelectAgent}
                     onInstallChange={handleInstallChange}
                     onRetry={() => void fetchAgents()}
+                    onCreateAgent={() => navigate("/workspace/agents/new")}
+                    onImportAgent={() => setImportOpen(true)}
+                    onConnectLocalPartner={() => setConnectOpen(true)}
                   />
                 </TabsContent>
 

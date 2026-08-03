@@ -16,7 +16,6 @@ import {
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import {
   AgentTraceRequestError,
@@ -297,7 +296,6 @@ export default function ReplayPage() {
 
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
           <section className="workspace-panel px-4 py-4 sm:px-6 sm:py-5">

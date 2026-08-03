@@ -4,6 +4,7 @@ import {
   ArchiveIcon,
   BrainIcon,
   ChevronRightIcon,
+  CopyIcon,
   DatabaseIcon,
   ExternalLinkIcon,
   EyeIcon,
@@ -13,6 +14,7 @@ import {
   FileTextIcon,
   FolderIcon,
   FolderOpenIcon,
+  FolderSearchIcon,
   FolderPlusIcon,
   Grid3X3Icon,
   HardDriveIcon,
@@ -21,6 +23,7 @@ import {
   ListFilterIcon,
   LockKeyholeIcon,
   MessageSquarePlusIcon,
+  PlayIcon,
   RefreshCwIcon,
   SearchIcon,
   ServerIcon,
@@ -31,6 +34,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +46,7 @@ import {
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales";
+import { copyTextToClipboard } from "@/core/clipboard";
 import {
   createNASIndexJob,
   createNASSource,
@@ -50,11 +55,23 @@ import {
   getNASManifest,
   getNASPolicy,
   isNASAuthenticationError,
+  loadNASAssetURL,
+  listNASApps,
+  listNASAlbums,
+  listNASFiles,
+  listNASModels,
   listNASSources,
+  listNASDirectory,
+  openNASApp,
+  revealNASApp,
+  downloadNASModel,
   searchNAS,
   startNASService,
   updateNASPolicy,
   type NASManifest,
+  type NASApp,
+  type NASAlbum,
+  type NASFileAsset,
   type NASPolicy,
   type NASSearchHit,
   type NASSource,
@@ -82,12 +99,14 @@ interface TopicItem {
 }
 
 interface AppItem {
+  id: string;
   name: string;
   type: string;
   path: string;
   status: string;
   icon: LucideIcon;
   tone: string;
+  iconUrl?: string;
 }
 
 interface DiskItem {
@@ -97,6 +116,7 @@ interface DiskItem {
   size: string;
   icon: LucideIcon;
   active?: boolean;
+  isDirectory?: boolean;
 }
 
 interface FileItem {
@@ -168,13 +188,11 @@ const LIBRARY_KEYS = new Set<LibraryKey>([
   "sources",
 ]);
 
-function fill(
-  template: string,
-  vars: Record<string, string | number>,
-): string {
+const VISION_AUTO_DOWNLOAD_KEY = "octopus.storage.clip-autodownload.v1";
+
+function fill(template: string, vars: Record<string, string | number>): string {
   return Object.entries(vars).reduce(
-    (result, [key, value]) =>
-      result.replaceAll(`{${key}}`, String(value)),
+    (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
     template,
   );
 }
@@ -239,11 +257,7 @@ function buildDocTopics(copy: StorageCopy): TopicItem[] {
       copy.topics.docsRecentStatus,
       FileSearchIcon,
       "zinc",
-      [
-        copy.topics.coverToday,
-        copy.topics.cover7Days,
-        copy.topics.cover30Days,
-      ],
+      [copy.topics.coverToday, copy.topics.cover7Days, copy.topics.cover30Days],
     ),
   ];
 }
@@ -465,7 +479,161 @@ function app(
   icon: LucideIcon,
   tone: string,
 ): AppItem {
-  return { name, type, path, status, icon, tone };
+  return { id: name, name, type, path, status, icon, tone };
+}
+
+function mapNASApp(item: NASApp, copy: StorageCopy): AppItem {
+  const category =
+    item.category === "system"
+      ? copy.apps.typeSystemApp
+      : item.category === "office"
+        ? copy.apps.typeDocsSheets
+        : copy.apps.typeWebResources;
+  return {
+    id: item.app_id,
+    name: item.name,
+    type: category,
+    path: item.path,
+    status: copy.apps.statusRegistered,
+    icon: AppWindowIcon,
+    tone:
+      item.category === "system"
+        ? "blue"
+        : item.category === "office"
+          ? "amber"
+          : "violet",
+    iconUrl: item.icon_available
+      ? `/v1/apps/${encodeURIComponent(item.app_id)}/icon`
+      : undefined,
+  };
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 ** 2).toFixed(2)} MB`;
+}
+
+function formatModified(mtimeNs: number): string {
+  const date = new Date(mtimeNs / 1_000_000);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : new Intl.DateTimeFormat("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+        .format(date)
+        .replaceAll("/", "-");
+}
+
+function formatMonth(mtimeNs: number): string {
+  const date = new Date(mtimeNs / 1_000_000);
+  return Number.isNaN(date.getTime())
+    ? ""
+    : new Intl.DateTimeFormat("zh-CN", {
+        year: "numeric",
+        month: "long",
+      }).format(date);
+}
+
+type DocumentSmartFilter =
+  | "all"
+  | "recent"
+  | "pdf"
+  | "office"
+  | "sheet"
+  | "text";
+type ImageSmartFilter = "all" | "screenshot" | "receipt" | "document" | "photo";
+
+const DOCUMENT_SMART_FILTERS: Array<[DocumentSmartFilter, string]> = [
+  ["all", "全部"],
+  ["recent", "最近"],
+  ["pdf", "PDF"],
+  ["office", "Office"],
+  ["sheet", "表格"],
+  ["text", "文本"],
+];
+
+const IMAGE_SMART_FILTERS: Array<[ImageSmartFilter, string]> = [
+  ["all", "全部"],
+  ["screenshot", "截图"],
+  ["receipt", "票据"],
+  ["document", "文档图"],
+  ["photo", "照片"],
+];
+
+function assetSearchText(asset: NASFileAsset): string {
+  return `${asset.name} ${asset.path} ${asset.extension} ${(asset.ai_labels ?? []).join(" ")}`.toLocaleLowerCase();
+}
+
+function matchesDocumentFilter(
+  asset: NASFileAsset,
+  filter: DocumentSmartFilter,
+  newestMtime: number,
+): boolean {
+  const extension = asset.extension.replace(/^\./, "").toLowerCase();
+  if (filter === "all") return true;
+  if (filter === "recent")
+    return newestMtime - asset.mtime_ns <= 30 * 24 * 60 * 60 * 1_000_000_000;
+  if (filter === "pdf") return extension === "pdf";
+  if (filter === "office")
+    return ["doc", "docx", "ppt", "pptx", "xls", "xlsx"].includes(extension);
+  if (filter === "sheet")
+    return ["xls", "xlsx", "csv", "tsv"].includes(extension);
+  return ["md", "txt", "html", "htm", "rtf"].includes(extension);
+}
+
+function imageSmartCategory(
+  asset: NASFileAsset,
+): Exclude<ImageSmartFilter, "all"> {
+  const aiLabels = asset.ai_labels ?? [];
+  if (aiLabels.includes("screenshot")) return "screenshot";
+  if (aiLabels.includes("receipt")) return "receipt";
+  if (aiLabels.includes("document")) return "document";
+  const text = assetSearchText(asset);
+  const extension = asset.extension.replace(/^\./, "").toLowerCase();
+  if (/(截图|screen ?shot|截屏|capture)/i.test(text)) return "screenshot";
+  if (/(票据|收据|发票|报销|receipt|invoice)/i.test(text)) return "receipt";
+  if (/(文档|报告|表格|ppt|pdf|doc|xls|logo|slide)/i.test(text))
+    return "document";
+  if (["png", "webp"].includes(extension)) return "screenshot";
+  return "photo";
+}
+
+function fileAssetToItem(asset: NASFileAsset): FileItem {
+  const extension = asset.extension.replace(/^\./, "").toUpperCase() || "FILE";
+  return {
+    name: asset.name,
+    path: asset.path,
+    kind: extension,
+    updated: formatModified(asset.mtime_ns),
+    size: formatBytes(asset.size),
+    icon: asset.kind === "image" ? FileImageIcon : FileTextIcon,
+    tone: asset.kind === "image" ? "green" : "blue",
+  };
+}
+
+function useNASAsset(path: string | undefined): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!path) return;
+    let disposed = false;
+    let objectUrl: string | null = null;
+    void loadNASAssetURL(path)
+      .then((next) => {
+        objectUrl = next;
+        if (!disposed) setUrl(next);
+      })
+      .catch(() => setUrl(null));
+    return () => {
+      disposed = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [path]);
+  return url;
 }
 
 function disk(
@@ -498,7 +666,11 @@ export default function StoragePage() {
   const [manifest, setManifest] = useState<NASManifest | null>(null);
   const [policy, setPolicy] = useState<NASPolicy>(DEFAULT_POLICY);
   const [sources, setSources] = useState<NASSource[]>([]);
-  const [query, setQuery] = useState(() => copy.defaultQuery);
+  const [apps, setApps] = useState<NASApp[]>([]);
+  const [documents, setDocuments] = useState<NASFileAsset[]>([]);
+  const [images, setImages] = useState<NASFileAsset[]>([]);
+  const [albums, setAlbums] = useState<NASAlbum[]>([]);
+  const [query, setQuery] = useState("");
   const [hits, setHits] = useState<NASSearchHit[]>([]);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
@@ -523,18 +695,38 @@ export default function StoragePage() {
   const refreshNAS = useCallback(async () => {
     try {
       setServiceError(null);
-      const [nextManifest, nextPolicy, nextSources] = await Promise.all([
+      const [
+        nextManifest,
+        nextPolicy,
+        nextSources,
+        nextApps,
+        nextDocuments,
+        nextImages,
+        nextAlbums,
+      ] = await Promise.all([
         getNASManifest(),
         getNASPolicy(),
         listNASSources(),
+        listNASApps(),
+        listNASFiles("document"),
+        listNASFiles("image"),
+        listNASAlbums(),
       ]);
       setManifest(nextManifest);
       setPolicy(nextPolicy);
       setSources(nextSources);
+      setApps(nextApps);
+      setDocuments(nextDocuments);
+      setImages(nextImages);
+      setAlbums(nextAlbums);
       return true;
     } catch (error) {
       setManifest(null);
       setSources([]);
+      setApps([]);
+      setDocuments([]);
+      setImages([]);
+      setAlbums([]);
       setServiceError(
         isNASAuthenticationError(error)
           ? copy.service.credentialsExpired
@@ -545,6 +737,23 @@ export default function StoragePage() {
       return false;
     }
   }, [copy]);
+
+  const maybeAutoDownloadVision = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem(VISION_AUTO_DOWNLOAD_KEY)) return;
+    try {
+      const models = await listNASModels();
+      const vision = models.find((item) => item.model_id === "vision-default");
+      if (!vision || vision.provider === "local" || vision.status === "loading")
+        return;
+      const accepted = await downloadNASModel("vision-default");
+      if (accepted.status === "loading" || accepted.status === "running") {
+        window.localStorage.setItem(VISION_AUTO_DOWNLOAD_KEY, "started");
+      }
+    } catch {
+      // Model download is optional; settings keeps a manual retry path.
+    }
+  }, []);
 
   const ensureNASService = useCallback(async () => {
     const startResult = await startNASService();
@@ -560,21 +769,22 @@ export default function StoragePage() {
       setServiceError(copy.service.startFailed);
       return false;
     }
-    setServiceError(
-      fill(copy.service.notConnected, { url: getNASBaseURL() }),
-    );
+    setServiceError(fill(copy.service.notConnected, { url: getNASBaseURL() }));
     return false;
   }, [copy, refreshNAS]);
 
   useEffect(() => {
     const init = async () => {
-      if (await refreshNAS()) return;
+      if (await refreshNAS()) {
+        void maybeAutoDownloadVision();
+        return;
+      }
       if (didAutoStartRef.current) return;
       didAutoStartRef.current = true;
-      await ensureNASService();
+      if (await ensureNASService()) void maybeAutoDownloadVision();
     };
     void init();
-  }, [ensureNASService, refreshNAS]);
+  }, [ensureNASService, maybeAutoDownloadVision, refreshNAS]);
 
   useEffect(() => {
     const reconnect = () => {
@@ -673,10 +883,10 @@ export default function StoragePage() {
   };
 
   return (
-    <WorkspaceContainer>
-      <WorkspaceBody className="overflow-hidden">
-        <div className="flex size-full overflow-hidden p-2">
-          <section className="workspace-panel flex min-h-0 flex-1 overflow-hidden rounded-lg border border-border-default bg-white">
+    <WorkspaceContainer className="px-0 pb-0 md:px-0">
+      <WorkspaceBody className="overflow-hidden pt-0">
+        <div className="flex size-full overflow-hidden">
+          <section className="workspace-panel flex min-h-0 flex-1 overflow-hidden rounded-none border-0 bg-white">
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
               {serviceError && (
                 <div className="flex items-center justify-between gap-3 border-b border-amber-300/70 bg-amber-50 px-4 py-2 text-xs text-amber-900">
@@ -788,6 +998,7 @@ export default function StoragePage() {
                 />
               ) : activeLibrary === "apps" ? (
                 <AppsView
+                  apps={apps}
                   query={query}
                   setQuery={setQuery}
                   runSearch={runSearch}
@@ -796,6 +1007,9 @@ export default function StoragePage() {
                 />
               ) : (
                 <TopicCenterView
+                  documents={documents}
+                  images={images}
+                  albums={albums}
                   activeLibrary={activeLibrary}
                   activeMeta={activeMeta}
                   query={query}
@@ -868,6 +1082,9 @@ function ToolbarSearch({
 }
 
 function TopicCenterView({
+  documents,
+  images,
+  albums,
   activeLibrary,
   activeMeta,
   query,
@@ -877,6 +1094,9 @@ function TopicCenterView({
   manifest,
   searchMessage,
 }: {
+  documents: NASFileAsset[];
+  images: NASFileAsset[];
+  albums: NASAlbum[];
   activeLibrary: LibraryKey;
   activeMeta: LibraryMeta;
   query: string;
@@ -891,6 +1111,7 @@ function TopicCenterView({
   if (activeLibrary === "docs") {
     return (
       <DocumentLibraryView
+        files={documents}
         query={query}
         setQuery={setQuery}
         runSearch={runSearch}
@@ -904,11 +1125,13 @@ function TopicCenterView({
   if (activeLibrary === "images") {
     return (
       <ImageLibraryView
+        files={images}
         query={query}
         setQuery={setQuery}
         runSearch={runSearch}
         isSearching={isSearching}
         manifest={manifest}
+        albums={albums}
       />
     );
   }
@@ -1032,6 +1255,7 @@ function TopicCenterView({
 }
 
 function DocumentLibraryView({
+  files,
   query,
   setQuery,
   runSearch,
@@ -1039,6 +1263,7 @@ function DocumentLibraryView({
   manifest,
   searchMessage,
 }: {
+  files: NASFileAsset[];
   query: string;
   setQuery: (value: string) => void;
   runSearch: () => void;
@@ -1048,17 +1273,55 @@ function DocumentLibraryView({
 }) {
   const { t } = useI18n();
   const copy = t.storage;
-  const docFiles = buildDocFiles(copy);
+  const [smartFilter, setSmartFilter] = useState<DocumentSmartFilter>("all");
+  const docFiles = useMemo(() => files.map(fileAssetToItem), [files]);
+  const newestMtime = useMemo(
+    () => files.reduce((latest, file) => Math.max(latest, file.mtime_ns), 0),
+    [files],
+  );
+  const visibleDocFiles = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return files
+      .map((asset, index) => ({ asset, item: docFiles[index]! }))
+      .filter(
+        ({ asset }) =>
+          matchesDocumentFilter(asset, smartFilter, newestMtime) &&
+          (!normalizedQuery ||
+            assetSearchText(asset).includes(normalizedQuery)),
+      );
+  }, [docFiles, files, newestMtime, query, smartFilter]);
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{copy.docs.title}</div>
+          <div className="truncate text-sm font-semibold">
+            {copy.docs.title}
+          </div>
           <div className="truncate text-xs text-muted-foreground">
             {fill(copy.docs.subtitle, { count: docFiles.length })}
           </div>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+          <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+            {DOCUMENT_SMART_FILTERS.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={smartFilter === value}
+                onClick={() => setSmartFilter(value)}
+                className={cn(
+                  "shrink-0 rounded-md px-2 py-1 text-xs transition-colors",
+                  smartFilter === "all" && value === "all"
+                    ? "bg-foreground text-background"
+                    : smartFilter === value
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:bg-white",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <ToolbarSearch
             label={copy.docs.searchLabel}
             query={query}
@@ -1067,50 +1330,9 @@ function DocumentLibraryView({
             isSearching={isSearching}
             manifest={manifest}
           />
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={copy.toolbar.filterAria}
-            className="size-8 rounded-md"
-          >
-            <ListFilterIcon className="size-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={copy.toolbar.listViewAria}
-            className="size-8 rounded-md"
-          >
-            <LayoutListIcon className="size-4" />
-          </Button>
         </div>
       </div>
-
       <main className="min-h-0 flex-1 overflow-hidden bg-white">
-        <div className="flex h-12 items-center justify-between border-b border-border px-3">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">
-              {copy.docs.allDocs}
-            </div>
-            <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              {searchMessage || copy.docs.indexNote}
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Badge
-              variant="outline"
-              className="rounded-md border-black/10 bg-white"
-            >
-              {copy.docs.badgeRecent}
-            </Badge>
-            <Badge
-              variant="outline"
-              className="rounded-md border-black/10 bg-white"
-            >
-              {copy.docs.badgeLocalDocs}
-            </Badge>
-          </div>
-        </div>
         <div className="grid grid-cols-[minmax(240px,1fr)_minmax(180px,280px)_92px_120px_104px] items-center gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
           <span>{copy.docs.colName}</span>
           <span>{copy.docs.colLocation}</span>
@@ -1119,9 +1341,15 @@ function DocumentLibraryView({
           <span className="text-right">{copy.docs.colActions}</span>
         </div>
         <div className="min-h-0 overflow-y-auto">
-          {docFiles.map((item) => (
-            <FileManagerRow key={item.path} item={item} />
-          ))}
+          {visibleDocFiles.length > 0 ? (
+            visibleDocFiles.map(({ item }) => (
+              <FileManagerRow key={item.path} item={item} />
+            ))
+          ) : (
+            <div className="px-4 py-16 text-center text-sm text-muted-foreground">
+              没有符合条件的文档
+            </div>
+          )}
         </div>
         <div className="border-t border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           {copy.docs.footerNote}
@@ -1132,12 +1360,16 @@ function DocumentLibraryView({
 }
 
 function ImageLibraryView({
+  files,
+  albums,
   query,
   setQuery,
   runSearch,
   isSearching,
   manifest,
 }: {
+  files: NASFileAsset[];
+  albums: NASAlbum[];
   query: string;
   setQuery: (value: string) => void;
   runSearch: () => void;
@@ -1146,7 +1378,22 @@ function ImageLibraryView({
 }) {
   const { t } = useI18n();
   const copy = t.storage;
-  const imageFiles = buildImageFiles(copy);
+  const [smartFilter, setSmartFilter] = useState<string>("all");
+  const imageFiles = useMemo(() => files.map(fileAssetToItem), [files]);
+  const visibleImageFiles = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return files
+      .map((asset, index) => ({ asset, item: imageFiles[index]! }))
+      .filter(
+        ({ asset }) =>
+          (smartFilter === "all" ||
+            (smartFilter.startsWith("album:")
+              ? asset.ai_labels?.includes(smartFilter.slice("album:".length))
+              : imageSmartCategory(asset) === smartFilter)) &&
+          (!normalizedQuery ||
+            assetSearchText(asset).includes(normalizedQuery)),
+      );
+  }, [files, imageFiles, query, smartFilter]);
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
@@ -1191,35 +1438,85 @@ function ImageLibraryView({
           </Button>
         </div>
       </div>
-
-      <main className="min-h-0 flex-1 overflow-y-auto bg-muted/50 px-4 py-4 lg:px-6">
-        <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Badge
-            variant="outline"
-            className="rounded-md border-black/10 bg-white"
-          >
-            {fill(copy.images.filterAll, { count: imageFiles.length })}
-          </Badge>
-          <Badge
-            variant="outline"
-            className="rounded-md border-black/10 bg-white"
-          >
-            {copy.images.filterOcr}
-          </Badge>
-          <Badge
-            variant="outline"
-            className="rounded-md border-black/10 bg-white"
-          >
-            {copy.images.filterLocalLibrary}
-          </Badge>
-        </div>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-          {imageFiles.map((item) => (
-            <ImageAssetTile key={item.path} item={item} />
+      <main className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 lg:px-6">
+        <div className="mb-4 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          {IMAGE_SMART_FILTERS.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={smartFilter === value}
+              onClick={() => setSmartFilter(value)}
+              className={cn(
+                "rounded-md px-2.5 py-1 transition-colors",
+                smartFilter === value
+                  ? "bg-foreground text-background"
+                  : "border border-black/10 bg-white hover:bg-muted",
+              )}
+            >
+              {label}
+            </button>
           ))}
+          {albums.map((album) => (
+            <AlbumChip
+              key={album.label}
+              album={album}
+              active={smartFilter === `album:${album.label}`}
+              onClick={() => setSmartFilter(`album:${album.label}`)}
+            />
+          ))}
+          <span className="ml-1">
+            {visibleImageFiles.length} 项 · 本地智能分类
+          </span>
+        </div>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-1">
+          {visibleImageFiles.length > 0 ? (
+            visibleImageFiles.map(({ item, asset }) => (
+              <ImageAssetTile key={item.path} item={item} asset={asset} />
+            ))
+          ) : (
+            <div className="col-span-full px-4 py-16 text-center text-sm text-muted-foreground">
+              没有符合条件的图片
+            </div>
+          )}
         </div>
       </main>
     </>
+  );
+}
+
+function AlbumChip({
+  album,
+  active,
+  onClick,
+}: {
+  album: NASAlbum;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const coverUrl = useNASAsset(
+    album.cover_asset_id
+      ? `/v1/files/${encodeURIComponent(album.cover_asset_id)}/content`
+      : undefined,
+  );
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 rounded-md pr-2 text-xs transition-colors",
+        active
+          ? "bg-foreground text-background"
+          : "border border-black/10 bg-white hover:bg-muted",
+      )}
+    >
+      <span className="size-6 overflow-hidden rounded-l-md bg-muted">
+        {coverUrl ? (
+          <img src={coverUrl} alt="" className="size-full object-cover" />
+        ) : null}
+      </span>
+      {album.label} <span className="opacity-60">{album.count}</span>
+    </button>
   );
 }
 
@@ -1322,34 +1619,35 @@ function FileManagerRow({ item }: { item: FileItem }) {
   );
 }
 
-function ImageAssetTile({ item }: { item: FileItem }) {
-  const { t } = useI18n();
+function ImageAssetTile({
+  item,
+  asset,
+}: {
+  item: FileItem;
+  asset: NASFileAsset;
+}) {
   const Icon = item.icon;
+  const imageUrl = useNASAsset(
+    `/v1/files/${encodeURIComponent(asset.asset_id)}/content`,
+  );
   return (
-    <div className="group min-w-0 overflow-hidden rounded-lg border border-border bg-white text-left shadow-[var(--shadow-xs)] transition-colors hover:border-black/10 hover:bg-muted/30">
-      <span className="flex aspect-[4/3] w-full items-center justify-center bg-muted/50">
-        <span
-          className={cn(
-            "flex size-16 items-center justify-center rounded-lg",
-            toneClass(item.tone),
-          )}
-        >
-          <Icon className="size-7" />
-        </span>
+    <button
+      type="button"
+      title={`${item.name}\n${item.path}\n${item.size}\n${item.updated}`}
+      className="group min-w-0 overflow-hidden rounded-[8px] bg-muted/40 text-left"
+    >
+      <span className="flex aspect-square w-full items-center justify-center overflow-hidden">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={item.name}
+            className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+          />
+        ) : (
+          <Icon className="size-7 text-muted-foreground" />
+        )}
       </span>
-      <span className="mt-3 block truncate px-3 text-sm font-medium">
-        {item.name}
-      </span>
-      <span className="block truncate px-3 text-xs text-muted-foreground">
-        {item.updated} · {item.size}
-      </span>
-      <div className="mt-3 flex items-center justify-between gap-2 px-3 pb-3">
-        <span className="rounded-md bg-black/[0.04] px-2 py-1 text-xs text-muted-foreground">
-          {t.storage.images.ocrBadge}
-        </span>
-        <QuickFileActions compact />
-      </div>
-    </div>
+    </button>
   );
 }
 
@@ -1427,7 +1725,9 @@ function PreviewPanel({
       </div>
 
       <div className="mt-3 rounded-lg bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
-        <div className="text-sm font-semibold">{copy.preview.sourceLocation}</div>
+        <div className="text-sm font-semibold">
+          {copy.preview.sourceLocation}
+        </div>
         <div className="mt-3 space-y-2 text-xs text-muted-foreground">
           <div className="flex justify-between gap-3">
             <span>{copy.preview.typeLabel}</span>
@@ -1472,12 +1772,14 @@ function PreviewPanel({
 }
 
 function AppsView({
+  apps,
   query,
   setQuery,
   runSearch,
   isSearching,
   manifest,
 }: {
+  apps: NASApp[];
   query: string;
   setQuery: (value: string) => void;
   runSearch: () => void;
@@ -1486,12 +1788,87 @@ function AppsView({
 }) {
   const { t } = useI18n();
   const copy = t.storage;
-  const appItems = buildAppItems(copy);
+  const [category, setCategory] = useState<"all" | "office" | "system">("all");
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    item: AppItem;
+    x: number;
+    y: number;
+  } | null>(null);
+  const appItems = useMemo(
+    () =>
+      apps
+        .filter((item) => category === "all" || item.category === category)
+        .map((item) => mapNASApp(item, copy)),
+    [apps, category, copy],
+  );
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-app-context-menu]")
+      )
+        return;
+      setContextMenu(null);
+    };
+    const closeOnScroll = () => setContextMenu(null);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("resize", closeOnScroll);
+    window.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("scroll", closeOnScroll, true);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("resize", closeOnScroll);
+      window.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("scroll", closeOnScroll, true);
+    };
+  }, [contextMenu]);
+
+  const launchApp = useCallback(async (item: AppItem) => {
+    setSelectedAppId(item.id);
+    setContextMenu(null);
+    try {
+      await openNASApp(item.id);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : `无法打开 ${item.name}`,
+      );
+    }
+  }, []);
+
+  const revealApp = useCallback(async (item: AppItem) => {
+    setContextMenu(null);
+    try {
+      await revealNASApp(item.id);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : `无法定位 ${item.name}`,
+      );
+    }
+  }, []);
+
+  const copyAppPath = useCallback(async (item: AppItem) => {
+    setContextMenu(null);
+    try {
+      await copyTextToClipboard(item.path);
+      toast.success("应用路径已复制");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "复制失败");
+    }
+  }, []);
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{copy.apps.title}</div>
+          <div className="truncate text-sm font-semibold">
+            {copy.apps.title}
+          </div>
           <div className="truncate text-xs text-muted-foreground">
             {fill(copy.apps.subtitle, { count: appItems.length })}
           </div>
@@ -1523,85 +1900,154 @@ function AppsView({
           </Button>
         </div>
       </div>
-      <main className="min-h-0 flex-1 overflow-hidden bg-white">
-        <div className="flex h-12 items-center justify-between border-b border-border px-3">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">
-              {copy.apps.registeredTitle}
-            </div>
-            <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              {copy.apps.registeredSubtitle}
-            </div>
-          </div>
-          <Badge
-            variant="outline"
-            className="rounded-md border-black/10 bg-white"
-          >
-            {copy.apps.badgeList}
-          </Badge>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_140px_130px_120px] gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
-          <span>{copy.apps.colName}</span>
-          <span>{copy.apps.colType}</span>
-          <span>{copy.apps.colStatus}</span>
-          <span className="text-right">{copy.apps.colActions}</span>
-        </div>
-        <div className="min-h-0 overflow-y-auto">
-          {appItems.map((item) => (
-            <AppListRow key={item.name} item={item} />
+      <main
+        className="min-h-0 flex-1 overflow-y-auto bg-white px-5 py-5"
+        onPointerDown={() => setSelectedAppId(null)}
+        onContextMenu={(event) => {
+          if (event.target === event.currentTarget) event.preventDefault();
+        }}
+      >
+        <div className="mb-6 flex items-center gap-7 text-sm">
+          {(
+            [
+              ["all", "全部应用"],
+              ["office", "办公学习"],
+              ["system", "系统应用"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={category === value}
+              onClick={() => setCategory(value)}
+              className={cn(
+                "transition-colors hover:text-foreground",
+                category === value
+                  ? "font-semibold text-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              {label}
+            </button>
           ))}
         </div>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] gap-x-5 gap-y-10">
+          {appItems.length > 0 ? (
+            appItems.map((item) => (
+              <AppListRow
+                key={item.id}
+                item={item}
+                selected={selectedAppId === item.id}
+                onOpen={() => void launchApp(item)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSelectedAppId(item.id);
+                  setContextMenu({
+                    item,
+                    x: Math.min(event.clientX, window.innerWidth - 224),
+                    y: Math.min(event.clientY, window.innerHeight - 164),
+                  });
+                }}
+              />
+            ))
+          ) : (
+            <div className="col-span-full px-4 py-10 text-center text-sm text-muted-foreground">
+              {copy.apps.registeredSubtitle}
+            </div>
+          )}
+        </div>
       </main>
+      {contextMenu && (
+        <div
+          data-app-context-menu
+          role="menu"
+          aria-label={`${contextMenu.item.name} 操作`}
+          className="fixed z-50 w-52 overflow-hidden rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-[var(--shadow-floating)]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <div className="border-b border-border-subtle px-2.5 py-2">
+            <div className="truncate text-xs font-semibold">
+              {contextMenu.item.name}
+            </div>
+            <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              {contextMenu.item.path}
+            </div>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            className="mt-1 flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs hover:bg-accent"
+            onClick={() => void launchApp(contextMenu.item)}
+          >
+            <PlayIcon className="size-3.5" />
+            打开
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs hover:bg-accent"
+            onClick={() => void revealApp(contextMenu.item)}
+          >
+            <FolderSearchIcon className="size-3.5" />
+            在访达中显示
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs hover:bg-accent"
+            onClick={() => void copyAppPath(contextMenu.item)}
+          >
+            <CopyIcon className="size-3.5" />
+            复制路径
+          </button>
+        </div>
+      )}
     </>
   );
 }
 
-function AppListRow({ item }: { item: AppItem }) {
+function AppListRow({
+  item,
+  selected,
+  onOpen,
+  onContextMenu,
+}: {
+  item: AppItem;
+  selected: boolean;
+  onOpen: () => void;
+  onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
   const Icon = item.icon;
+  const iconUrl = useNASAsset(item.iconUrl);
   return (
-    <div className="grid w-full grid-cols-[minmax(0,1fr)_140px_130px_120px] items-center gap-3 border-b border-black/[0.035] px-3 py-2.5 text-left text-sm transition-colors hover:bg-black/[0.025]">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-md",
-            toneClass(item.tone),
-          )}
-        >
-          <Icon className="size-4" />
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate font-medium">{item.name}</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {item.path}
-          </span>
-        </span>
-      </div>
-      <span className="truncate text-xs text-muted-foreground">
-        {item.type}
+    <button
+      type="button"
+      title={`${item.path}\n单击打开，右键查看更多操作`}
+      aria-label={`打开 ${item.name}`}
+      aria-pressed={selected}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+      onContextMenu={onContextMenu}
+      className={cn(
+        "group flex min-w-0 flex-col items-center rounded-xl px-2 py-2 text-center outline-none transition-colors hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-ring/40",
+        selected && "bg-accent/70",
+      )}
+    >
+      <span className="flex size-14 items-center justify-center overflow-hidden rounded-[14px] bg-black/[0.025] transition-transform group-hover:-translate-y-0.5 group-active:scale-95">
+        {iconUrl ? (
+          <img src={iconUrl} alt="" className="size-14 object-contain" />
+        ) : (
+          <Icon className="size-7 text-muted-foreground" />
+        )}
       </span>
-      <span>
-        <Badge
-          variant="outline"
-          className="rounded-md border-black/10 bg-white text-xs"
-        >
-          {item.status}
-        </Badge>
+      <span className="mt-2 line-clamp-2 min-h-8 max-w-24 text-xs leading-4">
+        {item.name}
       </span>
-      <span className="flex justify-end gap-1">
-        <button
-          type="button"
-          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-black/[0.05] hover:text-foreground"
-        >
-          打开
-        </button>
-        <button
-          type="button"
-          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-black/[0.05] hover:text-foreground"
-        >
-          动作
-        </button>
-      </span>
-    </div>
+    </button>
   );
 }
 
@@ -1618,7 +2064,7 @@ function LocalDiskView({
   isSearching: boolean;
   manifest: NASManifest | null;
 }) {
-  const userFolders = [
+  const fallbackFolders = [
     disk("Applications", "/Applications", "文件夹", "142 项", AppWindowIcon),
     disk("Desktop", "~/Desktop", "文件夹", "12 项", FolderOpenIcon),
     disk("Documents", "~/Documents", "文件夹", "326 项", FileTextIcon),
@@ -1626,15 +2072,63 @@ function LocalDiskView({
     disk("Pictures", "~/Pictures", "文件夹", "8,426 项", FileImageIcon),
     disk("Public", "~/Public", "文件夹", "4 项", FolderIcon),
   ];
+  const [currentPath, setCurrentPath] = useState("/Users/dangbei");
+  const [entries, setEntries] = useState<DiskItem[]>(fallbackFolders);
+  const [isLoading, setIsLoading] = useState(false);
+  const [browseError, setBrowseError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setIsLoading(true);
+      setBrowseError(null);
+      try {
+        const body = await listNASDirectory(currentPath);
+        if (cancelled) return;
+        setEntries(
+          body.map((entry) => ({
+            name: entry.name,
+            path: entry.path,
+            type: entry.type === "dir" ? "文件夹" : "文件",
+            size: entry.type === "dir" ? "—" : formatBytes(entry.size ?? 0),
+            icon: entry.type === "dir" ? FolderIcon : FileTextIcon,
+            isDirectory: entry.type === "dir",
+          })),
+        );
+      } catch (error) {
+        if (!cancelled) {
+          setBrowseError(
+            error instanceof Error ? error.message : "目录读取失败",
+          );
+          if (currentPath === "/Users/dangbei") setEntries(fallbackFolders);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPath]);
+
+  const pathParts = currentPath.split("/").filter(Boolean);
+  const goUp = () => {
+    if (pathParts.length > 1)
+      setCurrentPath(`/${pathParts.slice(0, -1).join("/")}`);
+  };
 
   return (
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:px-3 lg:py-0">
         <div className="flex min-w-0 flex-wrap items-center text-sm">
-          {["Macintosh HD", "Users", "dangbei"].map((item, index, items) => (
+          {pathParts.map((item, index, items) => (
             <span key={item} className="flex min-w-0 items-center">
               <button
                 type="button"
+                onClick={() =>
+                  setCurrentPath(`/${pathParts.slice(0, index + 1).join("/")}`)
+                }
                 className={cn(
                   "max-w-32 truncate rounded px-1.5 py-1",
                   index === items.length - 1
@@ -1649,6 +2143,17 @@ function LocalDiskView({
               )}
             </span>
           ))}
+          <button
+            type="button"
+            onClick={goUp}
+            disabled={pathParts.length <= 1}
+            className="ml-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-black/[0.04] disabled:opacity-30"
+          >
+            返回上一级
+          </button>
+          <span className="ml-1 text-xs text-muted-foreground">
+            · {entries.length} 项
+          </span>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <ToolbarSearch
@@ -1659,44 +2164,11 @@ function LocalDiskView({
             isSearching={isSearching}
             manifest={manifest}
           />
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label="排序"
-            className="size-8 rounded-md"
-          >
-            <SlidersHorizontalIcon className="size-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label="列表视图"
-            className="size-8 rounded-md"
-          >
-            <LayoutListIcon className="size-4" />
-          </Button>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
-          <div className="flex h-12 items-center justify-between border-b border-border px-3">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">dangbei</div>
-              <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                /Users/dangbei · {userFolders.length} 项
-              </div>
-            </div>
-            <Badge
-              variant="outline"
-              className="rounded-md border-black/10 bg-white"
-            >
-              当前目录
-            </Badge>
-          </div>
-          <div className="border-b border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            默认停在当前用户目录，避免一进来就展开到深层项目路径。
-          </div>
           <div className="grid grid-cols-[minmax(0,1fr)_120px_96px_36px] gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
             <span>名称</span>
             <span>类型</span>
@@ -1704,14 +2176,33 @@ function LocalDiskView({
             <span />
           </div>
           <div className="min-h-0 overflow-y-auto">
-            {userFolders.map((item) => (
-              <LocalDiskEntryRow key={item.path} item={item} />
-            ))}
+            {isLoading ? (
+              <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+                正在读取目录…
+              </div>
+            ) : entries.length > 0 ? (
+              entries.map((item) => (
+                <LocalDiskEntryRow
+                  key={item.path}
+                  item={item}
+                  onOpen={
+                    item.isDirectory
+                      ? () => setCurrentPath(item.path)
+                      : undefined
+                  }
+                />
+              ))
+            ) : (
+              <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+                当前目录为空
+              </div>
+            )}
           </div>
           <div className="border-t border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            {manifest
-              ? "常用位置与 Octopus NAS 已接入。本地数据库只保存路径、缩略图、OCR 文本和向量索引。"
-              : "常用位置可直接浏览；Octopus NAS 正等待连接。本地数据库只保存路径、缩略图、OCR 文本和向量索引。"}
+            {browseError ||
+              (manifest
+                ? "本地路径与索引已连接。"
+                : "当前离线，可浏览常用位置。")}
           </div>
         </main>
       </div>
@@ -1719,11 +2210,19 @@ function LocalDiskView({
   );
 }
 
-function LocalDiskEntryRow({ item }: { item: DiskItem }) {
+function LocalDiskEntryRow({
+  item,
+  onOpen,
+}: {
+  item: DiskItem;
+  onOpen?: () => void;
+}) {
   const Icon = item.icon;
   return (
     <button
       type="button"
+      onClick={onOpen}
+      disabled={!onOpen}
       className="grid w-full grid-cols-[minmax(0,1fr)_120px_96px_36px] items-center gap-3 border-b border-black/[0.035] px-3 py-2.5 text-left text-sm transition-colors hover:bg-black/[0.025]"
     >
       <span className="flex min-w-0 items-center gap-2.5">

@@ -18,15 +18,108 @@ const fs = require("fs");
 const fsp = require("fs/promises");
 const os = require("os");
 const path = require("path");
+const { spawn } = require("child_process");
 
 const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
 const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
+
+// ── auto-update (electron-updater, packaged builds only) ───────
+// electron-updater is an optional dependency; guard the require so an
+// uninstalled package degrades to "auto-update disabled" instead of crashing.
+// To enable: `pnpm add -D electron-updater` and configure `publish` in
+// packaging/desktop/build.yml (see the commented feed examples there).
+let autoUpdater = null;
+if (app.isPackaged) {
+  try {
+    autoUpdater = require("electron-updater").autoUpdater;
+  } catch (err) {
+    console.warn("[octopus] electron-updater not installed; auto-update disabled:", err.message);
+  }
+}
+
+function setupAutoUpdater() {
+  if (!autoUpdater) return;
+  autoUpdater.autoDownload = false;
+  autoUpdater.on("update-downloaded", (info) => {
+    // Fires the "app:update-downloaded" channel that the renderer subscribes
+    // to via preload on() — this was previously marked "无触发源".
+    mainWindow?.webContents.send("app:update-downloaded", {
+      version: info?.version,
+      releaseName: info?.releaseName,
+    });
+  });
+  autoUpdater.on("error", (err) => {
+    console.warn("[octopus] auto-update error:", err?.message || err);
+  });
+  ipcMain.on("app:check-for-update", () => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.warn("[octopus] check-for-update failed:", err?.message || err);
+    });
+  });
+  ipcMain.on("app:install-update", () => {
+    autoUpdater.quitAndInstall();
+  });
+}
 
 let mainWindow = null;
 
 // ── backend URL ────────────────────────────────────────────────
 function resolveBackendBaseURL() {
   return process.env.OCTOPUS_BACKEND_URL || "http://127.0.0.1:8000";
+}
+
+// ── packaged backend hosting ───────────────────────────────────
+// In packaged mode the main process owns the Python backend child process
+// (`python -m runtime serve`). In dev mode the backend runs externally
+// (pnpm dev:full) and backend.restart degrades to {ok:false, reason}.
+let backendChild = null;
+
+function backendConfigPath() {
+  // ensureDesktopConfig() copies config.desktop.yaml into userData on first
+  // launch; the packaged backend reads that (user-editable) copy.
+  return path.join(app.getPath("userData"), "config.desktop.yaml");
+}
+
+function spawnBackend() {
+  if (backendChild) return backendChild;
+  const child = spawn(
+    "python",
+    [
+      "-m",
+      "runtime",
+      "serve",
+      "--config",
+      backendConfigPath(),
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8000",
+    ],
+    { stdio: "inherit", env: process.env },
+  );
+  backendChild = child;
+  child.on("exit", (code, signal) => {
+    console.warn(
+      `[octopus] backend exited (code=${code}, signal=${signal}); restart via backend.restart`,
+    );
+    if (backendChild === child) backendChild = null;
+  });
+  child.on("error", (err) => {
+    console.warn("[octopus] backend spawn failed:", err.message);
+    if (backendChild === child) backendChild = null;
+  });
+  return child;
+}
+
+function killBackend() {
+  if (!backendChild) return;
+  const child = backendChild;
+  backendChild = null;
+  try {
+    child.kill();
+  } catch (err) {
+    console.warn("[octopus] backend kill failed:", err.message);
+  }
 }
 
 // ── first-launch config (packaging/desktop/config.desktop.yaml) ──
@@ -329,11 +422,22 @@ function registerIpc() {
   ipcMain.on("backend:getBaseURLSync", (event) => {
     event.returnValue = resolveBackendBaseURL();
   });
-  handle("backend:restart", () => ({
-    ok: false,
-    reason:
-      "backend runs externally in dev (pnpm dev:full); packaged restart not reimplemented yet",
-  }));
+  handle("backend:restart", async () => {
+    if (!app.isPackaged) {
+      // dev mode: backend runs externally (pnpm dev:full); nothing to own here.
+      return {
+        ok: false,
+        reason: "backend runs externally in dev (pnpm dev:full); restart is only available in packaged builds",
+      };
+    }
+    try {
+      killBackend();
+      spawnBackend();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: err.message };
+    }
+  });
 
   // window
   handle("window:setDeviceBounds", (mode, width, height) => {
@@ -434,12 +538,51 @@ function registerIpc() {
     return { ok: true, undone };
   });
   handle("desktop:getSystemInfo", () => sampleSystemInfo());
-  handle("desktop:installContextMenu", () => ({
-    ok: false,
-    error:
-      "right-click menu integration was lost with the original shell; not reimplemented yet (Windows-only feature)",
-  }));
-  handle("desktop:removeContextMenu", () => ({ ok: true }));
+  handle("desktop:installContextMenu", () => {
+    // Windows-only shell integration: register "Open with Octopus" in the
+    // Explorer right-click menu (files + folders) via the current-user registry.
+    // Non-Windows platforms keep an honest degradation — there is no equivalent
+    // OS-level shell menu to hook into from this process.
+    if (process.platform !== "win32") {
+      return {
+        ok: false,
+        error:
+          "Windows-only feature: right-click shell menu integration is not supported on this platform",
+      };
+    }
+    try {
+      const { spawnSync } = require("child_process");
+      const exe = process.execPath; // path to the packaged Octopus.exe
+      const entries = [
+        ["HKCU\\Software\\Classes\\*\\shell\\Octopus", "Open with Octopus"],
+        ["HKCU\\Software\\Classes\\Directory\\shell\\Octopus", "Open with Octopus"],
+      ];
+      for (const [key, label] of entries) {
+        spawnSync("reg", ["add", key, "/d", label, "/f"], { stdio: "ignore" });
+        spawnSync("reg", ["add", `${key}\\command`, "/d", `"${exe}" "%1"`, "/f"], {
+          stdio: "ignore",
+        });
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  handle("desktop:removeContextMenu", () => {
+    if (process.platform !== "win32") return { ok: true };
+    try {
+      const { spawnSync } = require("child_process");
+      spawnSync("reg", ["delete", "HKCU\\Software\\Classes\\*\\shell\\Octopus", "/f"], {
+        stdio: "ignore",
+      });
+      spawnSync("reg", ["delete", "HKCU\\Software\\Classes\\Directory\\shell\\Octopus", "/f"], {
+        stdio: "ignore",
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
 
   // embedded browser
   handle("browser:setDevice", async (id, mode) => {
@@ -697,6 +840,8 @@ if (!app.requestSingleInstanceLock()) {
     if (!app.isPackaged) app.setAsDefaultProtocolClient("octopus");
     ensureDesktopConfig();
     registerIpc();
+    setupAutoUpdater();
+    if (app.isPackaged) spawnBackend();
     trackDownloads(session.defaultSession);
     await loadEnabledExtensions();
     mainWindow = createMainWindow();
@@ -722,4 +867,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
   });
+
+  // Clean up the packaged backend child process on quit (also covers
+  // window-all-closed → app.quit() on non-macOS).
+  app.on("before-quit", killBackend);
 }

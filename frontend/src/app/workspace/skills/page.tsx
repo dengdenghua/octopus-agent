@@ -26,7 +26,6 @@ import { CapabilityQualityStrip } from "@/components/workspace/capability-qualit
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -415,7 +414,6 @@ export default function SkillsPage() {
 
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody className="p-0">
         <div className="flex flex-col gap-4 p-4 w-full min-h-full">
           <CapabilityQualityStrip surface="skills" />

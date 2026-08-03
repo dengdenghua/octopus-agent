@@ -141,4 +141,4 @@ export function getOctopusBaseURL(_isMock?: boolean) {
 // deployments that fork to a different URL.
 export const GITHUB_URL: string =
   (import.meta.env.VITE_GITHUB_URL as string | undefined) ??
-  "https://github.com/octopus-agent/octopus-agent";
+  "https://github.com/dengdenghua/octopus-agent";

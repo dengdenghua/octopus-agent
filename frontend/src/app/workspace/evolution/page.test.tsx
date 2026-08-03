@@ -23,7 +23,6 @@ vi.mock("@/components/workspace/workspace-container", () => ({
   WorkspaceContainer: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
-  WorkspaceHeader: () => null,
   WorkspaceBody: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
@@ -37,14 +36,6 @@ describe("EvolutionPage", () => {
       initialRoute: "/workspace/evolution",
     });
 
-    expect(
-      screen.getByRole("heading", { name: "Self-Evolution", level: 1 }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Review recent learning, capability changes, and next optimization steps.",
-      ),
-    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Reflection rules" }),
     ).toHaveAttribute("href", "/workspace/reflex");

@@ -185,29 +185,13 @@ function buildGenericPhases(
   ];
   return buckets
     .filter((bucket) => bucket.blocks.length > 0)
-    .map((bucket) => {
-      // A generic preparation label such as "Gather context" is useful only
-      // when it summarizes several actions. For a one-read turn it hides the
-      // most useful information: the file or query being examined.
-      const specificTitle =
-        bucket.id === "generic:prepare"
-          ? phaseTitleFromSingleBlock(bucket.blocks)
-          : null;
-      return {
-        id: bucket.id,
-        title: specificTitle ?? bucket.title,
-        titleKey: specificTitle ? undefined : bucket.titleKey,
-        status: statusFromBlockList(bucket.blocks, options),
-        blockIds: bucket.blocks.map((block) => block.id),
-      };
-    });
-}
-
-function phaseTitleFromSingleBlock(blocks: WorkBlock[]): string | null {
-  if (blocks.length !== 1) return null;
-  const target = blocks[0]?.target.replace(/\s+/g, " ").trim();
-  if (!target || target.length > 120) return null;
-  return target;
+    .map((bucket) => ({
+      id: bucket.id,
+      title: bucket.title,
+      titleKey: bucket.titleKey,
+      status: statusFromBlockList(bucket.blocks, options),
+      blockIds: bucket.blocks.map((block) => block.id),
+    }));
 }
 
 function statusFromBlockList(

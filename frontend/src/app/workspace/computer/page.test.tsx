@@ -32,7 +32,6 @@ vi.mock("@/components/workspace/workspace-container", () => ({
   WorkspaceBody: ({ children }: { children: ReactNode }) => (
     <main>{children}</main>
   ),
-  WorkspaceHeader: () => <header />,
 }));
 
 import ComputerAutomationPage from "./page";

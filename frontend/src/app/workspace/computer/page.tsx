@@ -43,7 +43,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   WorkspaceBody,
   WorkspaceContainer,
-  WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import {
   askVisionModelForComputerActions,
@@ -995,7 +994,6 @@ export default function ComputerAutomationPage() {
 
   return (
     <WorkspaceContainer>
-      <WorkspaceHeader />
       <WorkspaceBody>
         <div className="mx-auto flex size-full max-w-7xl flex-col gap-4 py-2">
           <section className="workspace-panel flex flex-col gap-4 p-5">
