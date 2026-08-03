@@ -182,6 +182,7 @@ const DEVICE_PROFILES = {
 
 let mainWindow = null;
 let backendProcess = null;
+let storageProcess = null;
 let backendRestartCount = 0;
 const BACKEND_MAX_RESTARTS = 3;
 const BACKEND_DEFAULT_PORT = Number(process.env.OCTOPUS_BACKEND_PORT || 8000);
@@ -451,6 +452,79 @@ function backendBinaryPath() {
     "backend",
     `octopus-backend${ext}`
   );
+}
+
+function storageBinaryPath() {
+  const ext = process.platform === "win32" ? ".exe" : "";
+  return path.join(process.resourcesPath, "storage", `octopus-storage${ext}`);
+}
+
+function storageDataDir() {
+  return process.env.OCTOPUS_STORAGE_DATA_DIR || path.join(app.getPath("userData"), "storage");
+}
+
+function checkStorageHealth() {
+  return new Promise((resolve) => {
+    const req = http.get("http://127.0.0.1:8767/healthz", { timeout: 1500 }, (res) => {
+      res.resume();
+      resolve(res.statusCode >= 200 && res.statusCode < 500);
+    });
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on("error", () => resolve(false));
+  });
+}
+
+async function startStorage() {
+  if (isDev || (await checkStorageHealth())) return;
+  const bin = storageBinaryPath();
+  if (!fs.existsSync(bin)) {
+    console.warn(`[storage] bundled service not found: ${bin}`);
+    return;
+  }
+  fs.mkdirSync(storageDataDir(), { recursive: true });
+  storageProcess = spawn(bin, [
+    "serve",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "8767",
+  ], {
+    cwd: path.dirname(bin),
+    env: {
+      ...process.env,
+      OCTOPUS_STORAGE_PATH: path.join(storageDataDir(), "storage.sqlite3"),
+      OCTOPUS_STORAGE_AUTOSTART: "0",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  storageProcess.stdout.on("data", (chunk) => process.stdout.write(`[storage] ${chunk}`));
+  storageProcess.stderr.on("data", (chunk) => process.stderr.write(`[storage] ${chunk}`));
+  storageProcess.on("exit", () => {
+    storageProcess = null;
+  });
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    if (await checkStorageHealth()) {
+      console.log(`[storage] ready at http://127.0.0.1:8767`);
+      return;
+    }
+    await wait(350);
+  }
+  console.warn("[storage] health check timed out");
+}
+
+function stopStorage() {
+  if (!storageProcess) return;
+  try {
+    storageProcess.kill();
+  } catch (e) {
+    console.warn("storage kill failed", e?.message || e);
+  }
+  storageProcess = null;
 }
 
 function desktopDataDir() {
@@ -1181,6 +1255,7 @@ app.whenReady().then(async () => {
   void loadEnabledExtensionsIntoSession(session.defaultSession);
   buildMenu();
   await startBackend();
+  await startStorage();
   createMainWindow();
   setupAutoUpdater();
   startBridgeServer();
@@ -1189,6 +1264,7 @@ app.whenReady().then(async () => {
 app.on("before-quit", () => {
   app.isQuitting = true;
   stopBackend();
+  stopStorage();
   try {
     fs.unlinkSync(bridgeStatePath());
   } catch {

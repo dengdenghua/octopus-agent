@@ -60,10 +60,16 @@ evolve:
 # max_tokens:    单任务最大 token 消耗
 # max_usd:       单任务最大美元花费
 # max_latency_ms: 单任务最大耗时（毫秒），600_000 = 10 分钟
+# model_iteration_timeout_s: ReAct 单轮模型迭代（隐性思考）的墙钟超时（秒），
+#   10–900，默认 120。超时仅由本 config 控制，无环境变量覆盖。
+# convergence_max_tokens: 普通模式强制收敛的 max_tokens 上限，默认 2000；
+#   research/swarm 模式收敛固定为 5000。
 budget:
-  max_tokens: 50000
-  max_usd: 0.50
+  max_tokens: 100000
+  max_usd: 1.00
   max_latency_ms: 600000
+  model_iteration_timeout_s: 120
+  convergence_max_tokens: 2000
 
 # ─────────────── Immunity 免疫系统 ─────────────────
 # 三层信任模型：self_whitelist（无条件放行）→ trusted_sources（签名信任）
@@ -237,7 +243,7 @@ oct:
 # default_roles:        新用户默认角色
 local_auth:
   enabled: false
-  allow_any_username: true
+  allow_any_username: false
   allowed_usernames: []
   jwt_secret: null
   jwt_expire_seconds: 604800

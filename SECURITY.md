@@ -1,6 +1,6 @@
 # 安全策略 / Security Policy
 
-感谢你帮助 octopus-agent 变得更安全。本文档说明如何负责任地报告安全漏洞。
+感谢你帮助 octopus-agent 变得更安全。本文档说明如何负责任地报告漏洞（Report a vulnerability）。
 
 ## 漏洞披露流程
 
@@ -12,16 +12,14 @@
    - 建议的修复方向（可选）
 3. 维护团队在确认后会与你协同验证，并在修复发布后致谢（除非你希望匿名）。
 
-## 披露邮箱
+## 私密披露渠道
 
-- **邮箱**：`security@octopus-agent.local`
-  > ⚠️ 该邮箱为**占位地址**，正式发布前请替换为真实可接收的安全披露邮箱。
+请通过 GitHub 的 [Private vulnerability reporting](https://github.com/dengdenghua/octopus-agent/security/advisories/new)
+提交报告。该渠道只向仓库安全维护者公开，并支持在修复发布前协作验证与准备安全公告。
 
-## PGP 加密通信
-
-如需加密敏感报告，请使用以下 PGP key。
-
-> 🔑 **PGP key 待添加**（fingerprint 与公钥块将在正式发布前补全在此处）。
+本项目目前不发布 PGP 公钥，也不提供未经验证的占位邮箱；请勿通过公开 Issue
+发送漏洞细节。如果 GitHub 私密披露入口不可用，仅在不包含漏洞细节的情况下，
+通过维护者公开资料请求建立私密联系方式。
 
 ## 响应时间承诺
 

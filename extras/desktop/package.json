@@ -9,12 +9,13 @@
     "desktop:agents": "node prepare-desktop-agents.cjs",
     "backend:build:win": "node build-backend-win.cjs",
     "electron": "electron electron/main.cjs",
-    "electron:dev": "concurrently -k -n BACKEND,VITE,ELECTRON -c green,blue,magenta \"python -m runtime serve --config ../../config.local.yaml --port 8000\" \"pnpm --dir ../../frontend dev\" \"wait-on http-get://localhost:8000/api/health && wait-on http://localhost:3000 && cross-env NODE_ENV=development electron electron/main.cjs --no-sandbox\"",
+    "electron:dev": "concurrently -k -n BACKEND,VITE,ELECTRON -c green,blue,magenta \"cross-env OCTOPUS_STORAGE_AUTOSTART=1 python -m runtime serve --config ../../config.local.yaml --port 8000\" \"pnpm --dir ../../frontend dev\" \"wait-on http-get://localhost:8000/api/health && wait-on http://localhost:3000 && cross-env NODE_ENV=development electron electron/main.cjs --no-sandbox\"",
     "electron:prod": "cross-env NODE_ENV=production electron electron/main.cjs --no-sandbox",
-    "electron:build": "pnpm icons:generate && pnpm desktop:agents && pnpm --dir ../../frontend build && electron-builder",
-    "electron:build:win": "pnpm icons:generate && pnpm desktop:agents && pnpm backend:build:win && pnpm --dir ../../frontend build && electron-builder --win",
-    "electron:build:mac": "pnpm icons:generate && pnpm desktop:agents && pnpm --dir ../../frontend build && electron-builder --mac",
-    "electron:build:linux": "pnpm icons:generate && pnpm desktop:agents && pnpm --dir ../../frontend build && electron-builder --linux"
+    "storage:build": "node build-storage.cjs",
+    "electron:build": "pnpm icons:generate && pnpm desktop:agents && pnpm storage:build && pnpm --dir ../../frontend build && electron-builder",
+    "electron:build:win": "pnpm icons:generate && pnpm desktop:agents && pnpm backend:build:win && pnpm storage:build && pnpm --dir ../../frontend build && electron-builder --win",
+    "electron:build:mac": "pnpm icons:generate && pnpm desktop:agents && pnpm storage:build && pnpm --dir ../../frontend build && electron-builder --mac",
+    "electron:build:linux": "pnpm icons:generate && pnpm desktop:agents && pnpm storage:build && pnpm --dir ../../frontend build && electron-builder --linux"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
@@ -46,6 +47,14 @@
         "to": "backend",
         "filter": [
           "octopus-backend.exe"
+        ]
+      },
+      {
+        "from": "build/storage",
+        "to": "storage",
+        "filter": [
+          "octopus-storage",
+          "octopus-storage.exe"
         ]
       },
       {

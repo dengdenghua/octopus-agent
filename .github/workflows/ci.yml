@@ -31,10 +31,20 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
+      - name: Setup uv for dependency-lock validation
+        if: matrix.python-version == '3.11'
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.25"
+
+      - name: Dependency lock is reproducible
+        if: matrix.python-version == '3.11'
+        run: uv lock --check
+
       - name: Install package
         run: pip install -e ".[dev,web,serve,discord]"
 
-      - name: Invariant lint (LINT-01..10)
+      - name: Invariant lint (active rules)
         run: python -m tools.lint.invariant_check runtime/ tests/
 
       - name: Skill package dedup

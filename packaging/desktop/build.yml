@@ -1,0 +1,74 @@
+# Octopus desktop packaging config (electron-builder).
+#
+# ⚠️ electron-builder 尚未安装。打包前需在 frontend/ 下安装：
+#     pnpm add -D electron-builder
+#   以及（启用自动更新时）：
+#     pnpm add -D electron-updater
+#
+# 解析基准：electron-builder 在 REPO_ROOT/frontend 下执行（打包脚本位于
+# frontend/package.json），因此 files / extraResources 的相对路径均以
+# frontend/ 为基准。frontend 目录中已包含 dist/ 与 electron/。
+#
+# 约定：
+#   - main 入口指向 frontend/electron/main.cjs（frontend/package.json 的
+#     "main" 字段，electron-builder 据此打包入口）。
+#   - extraResources 把用户首次启动所需的 config.desktop.yaml 与 Python
+#     后端代码（repo 根 runtime/）放入 resources/，供 main.cjs 打包模式托管。
+
+appId: com.octopus.desktop
+productName: Octopus
+copyright: Octopus Authors
+
+# 说明：main 入口由 frontend/package.json 的 "main" 字段决定
+# （值：electron/main.cjs）。此处仅注释备忘，避免重复声明产生歧义。
+
+directories:
+  output: release
+  buildResources: ../packaging/desktop
+
+# 打包进 app 的文件（相对 frontend/）。dist 为 Vite 产物，electron 为主进程。
+# 注意：electron-builder 默认总会附带 package.json 与生产依赖 node_modules。
+files:
+  - dist/**/*
+  - electron/**/*
+  - "!**/*.map"
+
+# 额外资源：放入应用 resources/ 目录（打包后 process.resourcesPath 下一级）。
+# main.cjs 的 ensureDesktopConfig() 已按此约定从 resources 读取 config.desktop.yaml。
+extraResources:
+  - from: ../packaging/desktop/config.desktop.yaml
+    to: config.desktop.yaml
+  - from: ../runtime
+    to: runtime
+
+# 目标平台
+mac:
+  target:
+    - dmg
+  category: public.app-category.developer-tools
+
+win:
+  target:
+    - nsis
+
+linux:
+  target:
+    - AppImage
+  category: Development
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+# 自动更新源：启用 electron-updater 后在此配置发布源。
+# 可选：GitHub Releases（type: github）或自托管 generic。
+#   示例（GitHub）：
+#   publish:
+#     provider: github
+#     owner: octopus-agent
+#     repo: octopus-agent
+#   示例（自托管）：
+#   publish:
+#     provider: generic
+#     url: https://updates.example.com/octopus
+# 未配置则打包产物不包含 app-update.yml，checkForUpdates 会报“无更新源”。

@@ -1,9 +1,8 @@
-recursive-include runtime/sensing/siphon/agent_market_sources *
+recursive-include runtime/sensing/gateway/agent_market_sources *
 # all_skills: package only the __init__.py catalog + config, not the 175 SKILL.md dirs.
 # File-backed domain skills are discovered at runtime from skills/public/ (project root),
 # which is NOT inside the wheel. This keeps wheel size <1 MB instead of +20 MB.
 include runtime/execution/all_skills/__init__.py
 include runtime/execution/all_skills/*.json
-recursive-exclude runtime/sensing/siphon/agent_market_sources __pycache__ *.py[cod]
+recursive-exclude runtime/sensing/gateway/agent_market_sources __pycache__ *.py[cod]
 recursive-exclude runtime/execution/all_skills __pycache__ *.py[cod]
-

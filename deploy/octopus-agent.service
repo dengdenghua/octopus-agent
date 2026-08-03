@@ -30,7 +30,7 @@
 
 [Unit]
 Description=Octopus-Agent · biomimetic self-evolving agent OS
-Documentation=https://github.com/octopus-agent/octopus-agent
+Documentation=https://github.com/dengdenghua/octopus-agent
 After=network-online.target
 Wants=network-online.target
 

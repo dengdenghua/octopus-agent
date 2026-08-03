@@ -3,14 +3,13 @@ name = "octopus-agent"
 version = "0.2.0"
 description = "Biomimetic self-evolving agent OS."
 readme = "README.md"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
 requires-python = ">=3.11"
 authors = [{name = "octopus-agent contributors"}]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
     "pydantic>=2.12.0",
@@ -41,6 +40,10 @@ dev = [
     # newer mypy shifts messages/rules and drifts the ratchet red on
     # unrelated PRs. Bump deliberately, then --write-baseline.
     "mypy>=2.1,<2.2",
+    # mypy targets Python 3.11 below. NumPy 2.5's stubs use the Python 3.12
+    # `type` statement, so allowing 2.5+ makes the type gate abort before it
+    # checks our code when CI itself happens to run on Python 3.12.
+    "numpy>=1.26,<2.5",
 ]
 tracing = [
     "opentelemetry-api>=1.25",
@@ -63,15 +66,10 @@ web = [
 extract = [
     "trafilatura>=2.0",
 ]
-# ── File Agent / 数字资产管家 · the octopus-storage document KB ──
-# octopus-storage stays an INDEPENDENT package (it serves File Agent for the
-# whole family and carries heavy OCR / vision / embedding deps), but it ships
-# through the SAME index as a one-command pull: `pip install "octopus-agent[storage]"`.
-# Its console script then lands on PATH, so OCTOPUS_STORAGE_AUTOSTART can
-# co-launch it. For a source checkout: `pip install -e ../octopus-storage`.
-storage = [
-    "octopus-storage>=0.1.0",
-]
+# File Agent's octopus-storage backend is an independently deployed service,
+# not an import dependency of this package. Until it publishes a registry
+# release, install its sibling checkout separately (`pip install -e
+# ../octopus-storage`) or point OCTOPUS_STORAGE_CMD at its executable.
 # ── LLM provider adapters ────────────────────────────────
 anthropic = [
     "anthropic>=0.40,<1.0",
@@ -110,8 +108,9 @@ hearts-redis = [
     "redis>=5.0",
 ]
 hearts-etcd = [
-    # etcd3 包已停止维护,改用 etcd3-py(活跃维护,兼容 Python 3.12+)
-    "etcd3-py>=0.2",
+    # Legacy optional adapter. PyPI has no 0.2 release; 0.1.6 is the latest
+    # published version. Keep the constraint honest so every extra resolves.
+    "etcd3-py>=0.1.6,<0.2",
 ]
 skin = [
     "watchdog>=4.0",
@@ -162,15 +161,15 @@ all = [
     # web content extraction
     "trafilatura>=2.0",
     # hearts-etcd
-    "etcd3-py>=0.2",
+    "etcd3-py>=0.1.6,<0.2",
 ]
 
 [project.urls]
-Homepage = "https://github.com/octopus-agent/octopus-agent"
-Documentation = "https://github.com/octopus-agent/octopus-agent/blob/main/README.md"
-Repository = "https://github.com/octopus-agent/octopus-agent"
-Issues = "https://github.com/octopus-agent/octopus-agent/issues"
-Changelog = "https://github.com/octopus-agent/octopus-agent/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/dengdenghua/octopus-agent"
+Documentation = "https://github.com/dengdenghua/octopus-agent/blob/main/README.md"
+Repository = "https://github.com/dengdenghua/octopus-agent"
+Issues = "https://github.com/dengdenghua/octopus-agent/issues"
+Changelog = "https://github.com/dengdenghua/octopus-agent/blob/main/CHANGELOG.md"
 
 # ─── Single source of truth for the canonical repo URL ──────────
 # All other files (frontend/package.json, mkdocs.yml, install.sh,
@@ -179,7 +178,7 @@ Changelog = "https://github.com/octopus-agent/octopus-agent/blob/main/CHANGELOG.
 # tools/lint/repo_url_check.py. To move the project to a new home,
 # change this one line and re-run the linter.
 [tool.octopus]
-repo_url = "https://github.com/octopus-agent/octopus-agent"
+repo_url = "https://github.com/dengdenghua/octopus-agent"
 
 [project.scripts]
 octopus-lint = "tools.lint.invariant_check:main"

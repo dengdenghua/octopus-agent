@@ -1,7 +1,7 @@
 site_name: Octopus-Agent
 site_description: "Agent OS for planning, scheduling, memory, safety, and self-improving agents"
 site_url: https://octopus-agent.github.io/
-repo_url: https://github.com/octopus-agent/octopus-agent
+repo_url: https://github.com/dengdenghua/octopus-agent
 repo_name: octopus-agent/octopus-agent
 copyright: "Apache-2.0 · octopus-agent contributors"
 
@@ -133,6 +133,6 @@ plugins:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/octopus-agent/octopus-agent
+      link: https://github.com/dengdenghua/octopus-agent
   version:
     provider: mike

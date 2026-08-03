@@ -25,9 +25,10 @@ pnpm electron:build:win    # or :mac / :linux
 The build pipeline:
 1. Generates icons (`generate-icons.cjs`)
 2. Stages bundled agents (`prepare-desktop-agents.cjs`)
-3. (Windows only) PyInstaller-bundles the Python backend (`build-backend-win.cjs`)
-4. Builds the Vite frontend in `../../frontend/dist/`
-5. Wraps everything with electron-builder into `release/`
+3. PyInstaller-bundles the local Storage service (`build-storage.cjs`)
+4. (Windows only) PyInstaller-bundles the Python backend (`build-backend-win.cjs`)
+5. Builds the Vite frontend in `../../frontend/dist/`
+6. Wraps everything with electron-builder into `release/`
 
 ## Develop
 
@@ -46,6 +47,7 @@ pnpm electron:dev           # Backend + Vite + Electron, hot-reload
 | `generate-icons.cjs` | Generates `.ico` / `.icns` / `.png` from one source |
 | `prepare-desktop-agents.cjs` | Stages the bundled agent skill packs |
 | `build-backend-win.cjs` | Wraps the Python backend with PyInstaller (Windows) |
+| `build-storage.cjs` | Bundles the local `octopus-storage` service for desktop installers |
 | `package.json` | Desktop-only deps: `electron`, `electron-builder`, `electron-updater` |
 | `build/` | electron-builder build resources (icons, backend exe) |
 

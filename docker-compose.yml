@@ -23,7 +23,7 @@ services:
     container_name: octopus-agent
     restart: unless-stopped
     ports:
-      - "${PORT:-8000}:8000"
+      - "${OCTOPUS_BIND_IP:-127.0.0.1}:${PORT:-8000}:8000"
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}

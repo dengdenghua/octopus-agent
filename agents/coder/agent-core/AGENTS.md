@@ -1,5 +1,8 @@
 # Working rules (shared by all Octopus agents)
 
+This file is the `agent-core` instruction surface for the `coder` agent —
+the shared working rules that apply to every task.
+
 ## Project context discovery
 
 Before starting any task, automatically discover the project context:

@@ -8,9 +8,9 @@
 #   docker build -t octopus-agent .
 #
 # 快速启动（无持久化）:
-#   docker run --rm -p 8000:8000 octopus-agent
+#   docker run --rm -p 127.0.0.1:8000:8000 octopus-agent
 # 生产部署（持久化 + 配置):
-#   docker run --rm -p 8000:8000 \
+#   docker run --rm -p 127.0.0.1:8000:8000 \
 #     -v $(pwd)/data:/data \
 #     -v $(pwd)/config.yaml:/etc/octopus/config.yaml:ro \
 #     -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
