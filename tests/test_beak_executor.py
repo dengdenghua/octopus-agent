@@ -389,6 +389,8 @@ class TestExecutorApprovalGate:
         assert record.metadata["approval_required"] is True
         assert record.metadata["approval_tool_name"] == "exec_shell"
         assert record.metadata["executor_approval"]["risk"]["level"] == "high"
+        assert record.metadata["governance_decision"]["outcome"] == "hold"
+        assert record.metadata["governance_decision"]["instruction"]["tool_name"] == "exec_shell"
 
     def test_executor_approval_gate_respects_auto_approve(
         self,
@@ -480,6 +482,7 @@ class TestExecutorApprovalGate:
         assert record.metadata["approval_required"] is False
         assert record.metadata["approval_denied"] is True
         assert record.metadata["approval_action"] == "deny"
+        assert record.metadata["governance_decision"]["outcome"] == "deny"
         assert health["recommended_action"] == "approval_policy_denied"
 
 

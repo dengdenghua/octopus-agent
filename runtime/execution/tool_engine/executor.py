@@ -49,14 +49,16 @@ from runtime.platform.models import (
     ToolCall,
 )
 from runtime.platform.process.utils import safe_repr as _safe_repr
-from runtime.safety.approval.approval_gate import (
-    approval_action_for_tool,
-    injection_taint_block,
-)
 from runtime.safety.auth import (
     TrustEngine,
     check_file_write,
     strip_model_controlled_overrides,
+)
+from runtime.safety.governance import (
+    ExecutionPolicyContext,
+    GovernanceOutcome,
+    build_execution_instruction,
+    evaluate_execution_policy,
 )
 from runtime.safety.validation.prompt_injection import (
     is_untrusted_tool,
@@ -716,74 +718,76 @@ class ToolExecutor:
                 self.journal.write_step(task_id, arm_id, step, actor=actor)
                 return step
 
-            allowed_by_task_capability, task_capability_reason = _check_task_capability_permission(
-                sucker_id
+            governance = evaluate_execution_policy(
+                build_execution_instruction(
+                    instruction_id=f"{task_id}:{arm_id}:{step_id}:{sucker_id}",
+                    tool_name=str(sucker_id),
+                    caller=caller,
+                    args=args,
+                    rewritten_fields=tuple(_stripped_overrides),
+                ),
+                context=_current_execution_policy_context(),
+                task_capability=_check_task_capability_permission(sucker_id),
+                capability=_check_capability_permission(sucker_id),
             )
-            if not allowed_by_task_capability:
-                deny_reason = task_capability_reason or "task capability disabled"
-                return _reject_step(
-                    "immune_reject",
-                    deny_reason,
-                    immune_reason=deny_reason,
-                    span_attrs={"octopus.task_capability.blocked": deny_reason},
-                    waiting=(
-                        deny_reason,
+            governance_payload = governance.to_dict()
+            span.set_attribute("octopus.governance.outcome", governance.outcome.value)
+            span.set_attribute("octopus.governance.gate", governance.gate)
+            span.set_attribute("octopus.governance.risk", governance.instruction.risk.level)
+            span.set_attribute("octopus.governance.taint", governance.instruction.taint)
+
+            if not governance.may_execute:
+                reject_reason = governance.reason
+                if governance.gate == "injection_taint":
+                    reject_reason = f"injection_taint_block: {reject_reason}"
+
+                span_attrs: dict[str, Any] = {
+                    "octopus.governance.blocked": True,
+                    "octopus.governance.reason": governance.reason,
+                }
+                waiting: tuple[str, dict[str, Any]] | None = None
+                immune_reason: str | None = None
+
+                if governance.gate == "task_capability":
+                    immune_reason = governance.reason
+                    span_attrs["octopus.task_capability.blocked"] = governance.reason
+                    waiting = (
+                        governance.reason,
                         {
                             "approval_required": False,
                             "approval_denied": True,
                             "approval_action": "capability_denied",
                             "capability_denied": True,
-                            "capability_denial_reason": deny_reason,
+                            "capability_denial_reason": governance.reason,
+                            "governance_decision": governance_payload,
                         },
-                    ),
-                )
-
-            approval_block = _executor_approval_block(str(sucker_id), args)
-            if approval_block is not None:
-                return _reject_step(
-                    "immune_reject",
-                    approval_block["reason"],
-                    immune_reason=approval_block["reason"],
-                    span_attrs={
-                        "octopus.executor_approval.blocked": True,
-                        "octopus.executor_approval.action": str(approval_block["approval_action"]),
-                    },
-                    waiting=(
-                        approval_block["reason"],
+                    )
+                elif governance.gate == "approval":
+                    immune_reason = governance.reason
+                    span_attrs["octopus.executor_approval.blocked"] = True
+                    span_attrs["octopus.executor_approval.action"] = governance.approval_action
+                    waiting = (
+                        governance.reason,
                         {
-                            "approval_required": approval_block["approval_action"]
-                            in {"ask", "confirm"},
-                            "approval_denied": approval_block["approval_action"] == "deny",
-                            "approval_action": approval_block["approval_action"],
-                            "executor_approval": approval_block,
+                            "approval_required": governance.requires_approval,
+                            "approval_denied": governance.outcome is GovernanceOutcome.DENY,
+                            "approval_action": governance.approval_action,
+                            "executor_approval": governance_payload,
+                            "governance_decision": governance_payload,
                         },
-                    ),
-                )
+                    )
+                elif governance.gate == "capability":
+                    immune_reason = governance.reason
+                    span_attrs["octopus.capability.blocked"] = governance.reason
+                elif governance.gate == "injection_taint":
+                    span_attrs["octopus.injection.blocked"] = governance.reason
 
-            allowed_by_capability, capability_reason = _check_capability_permission(
-                sucker_id,
-            )
-            if not allowed_by_capability:
-                deny_reason = capability_reason or "capability disabled"
                 return _reject_step(
                     "immune_reject",
-                    deny_reason,
-                    immune_reason=deny_reason,
-                    span_attrs={"octopus.capability.blocked": deny_reason},
-                )
-
-            # Indirect prompt-injection taint gate (chokepoint). Every
-            # execution path crosses execute_step, so enforcing here closes
-            # the paths (parallel dispatch, agentic-fallback, subagents)
-            # that don't run their own approval gate: a risky tool can't
-            # run after untrusted content carried injection markers into the
-            # turn, unless an approval-capable loop already reviewed it.
-            _inj_block = injection_taint_block(str(sucker_id), str(args)[:500])
-            if _inj_block is not None:
-                return _reject_step(
-                    "immune_reject",
-                    f"injection_taint_block: {_inj_block}",
-                    span_attrs={"octopus.injection.blocked": _inj_block},
+                    reject_reason,
+                    immune_reason=immune_reason,
+                    span_attrs=span_attrs,
+                    waiting=waiting,
                 )
 
             report = self.immunity.check(call, sig)
@@ -1699,69 +1703,21 @@ def _check_task_capability_permission(skill_id: SkillId) -> tuple[bool, str | No
         return True, None
 
 
-def _executor_approval_block(
-    skill_id: str,
-    args: dict[str, Any],
-) -> dict[str, Any] | None:
+def _current_execution_policy_context() -> ExecutionPolicyContext:
+    """Resolve session policy once for the canonical governance evaluator.
+
+    Legacy execution paths without a process session keep the historical
+    permissive default.  If an explicitly enforced policy cannot be parsed,
+    the context constructor falls back to its safe risk matrix defaults.
+    """
     try:
         from runtime.platform.process.session import current_session
 
         session = current_session()
         metadata = session.metadata if session is not None else {}
-        if not bool(metadata.get("enforce_executor_approval")):
-            return None
-        if bool(metadata.get("auto_approve")):
-            return None
-        permission_mode = str(metadata.get("permission_mode") or "").strip().lower()
-        if permission_mode in {"bypasspermissions", "bypass-permissions"}:
-            return None
-        risk_policy = metadata.get("approval_risk_policy")
-        risk, action, policy = approval_action_for_tool(
-            skill_id,
-            _approval_args_preview(args),
-            policy=risk_policy,
-        )
-        if action in {"allow", "audit"}:
-            return None
-        reason = (
-            f"approval required before executing {skill_id} "
-            f"(risk={risk.level}: {risk.reason}; action={action})"
-        )
-        return {
-            "schema": "octopus.executor_approval_block.v1",
-            "tool_name": skill_id,
-            "reason": reason,
-            "approval_action": action,
-            "risk": risk.to_dict(),
-            "approval_policy": policy.to_dict(),
-            "args_preview": _approval_args_preview(args),
-        }
-    except (ImportError, AttributeError, TypeError, RuntimeError, ValueError) as exc:
-        try:
-            from runtime.platform.process.session import current_session
-
-            session = current_session()
-            metadata = session.metadata if session is not None else {}
-            if bool(metadata.get("enforce_executor_approval")):
-                return {
-                    "schema": "octopus.executor_approval_block.v1",
-                    "tool_name": skill_id,
-                    "reason": f"executor approval check failed closed: {exc}",
-                    "approval_action": "deny",
-                    "risk": {"level": "critical", "categories": ["approval_check_failed"]},
-                    "approval_policy": {},
-                    "args_preview": _approval_args_preview(args),
-                }
-        except (ImportError, AttributeError, TypeError, RuntimeError, ValueError):
-            return None
-    return None
-
-
-def _approval_args_preview(args: dict[str, Any]) -> str:
-    try:
-        return _safe_repr(args)[:500]
-    except Exception:  # noqa: BLE001
-        return str(args)[:500]
+        return ExecutionPolicyContext.from_metadata(metadata)
+    except (ImportError, AttributeError, TypeError, RuntimeError, ValueError):
+        return ExecutionPolicyContext()
 
 
 def _mark_task_waiting_approval(

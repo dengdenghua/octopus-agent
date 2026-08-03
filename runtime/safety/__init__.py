@@ -10,6 +10,7 @@
   gene_locks     → GeneLocks —— 防止盲目自修改
   invariants     → InvariantCheck —— 运行时数据结构约束
   hooks          → ToolLifecycleHooks —— pre/post + tool_edge_hooks
+  governance     → ExecutionInstruction + allow/deny/hold/rewrite 决策
   evolution      → Evolution —— 多策略 fitness/rollback/drift 引擎
   organization   → TopologyEvolver —— 团队拓扑演化
 
@@ -23,7 +24,8 @@
 from __future__ import annotations
 
 # Backward-compat shims: legacy code does ``from runtime.safety import X``
-# where X is the submodule name.
+# where X is the submodule name. Governance stays a direct subpackage import
+# to avoid pulling process models back into this compatibility initializer.
 from .approval import (  # noqa: F401
     approval_gate,
     approval_policy_store,
