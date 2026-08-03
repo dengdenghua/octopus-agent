@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generated_at": "2026-07-27T19:05:33+00:00",
-  "files_analyzed": 42,
+  "generated_at": "2026-08-03T20:20:02+00:00",
+  "files_analyzed": 44,
   "tree": [
     {
       "type": "doc",
@@ -228,6 +228,16 @@
             },
             {
               "type": "doc",
+              "title": "🌐 Claude Code 伙伴",
+              "path": "20-backend/26-agents/registry_local_claude_code.md"
+            },
+            {
+              "type": "doc",
+              "title": "🌐 Codex CLI 伙伴",
+              "path": "20-backend/26-agents/registry_local_codex_cli.md"
+            },
+            {
+              "type": "doc",
               "title": "✨ Luna",
               "path": "20-backend/26-agents/vibe_selling.md"
             }
@@ -306,11 +316,6 @@
     {
       "from": "20-backend/21-runtime/cerebrum.md",
       "to": "20-backend/23-memory/journal.md",
-      "type": "imports"
-    },
-    {
-      "from": "20-backend/21-runtime/cerebrum.md",
-      "to": "20-backend/24-sensing/model-router.md",
       "type": "imports"
     },
     {

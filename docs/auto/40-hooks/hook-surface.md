@@ -9,15 +9,14 @@ tier: "standard"
 
 > 每个 lifecycle-hook 的 dispatch 调用点 · 社区 handler 通过 `@register_hook(EventType)` 订阅。
 
-## `notification` · 11 处
+## `notification` · 10 处
 
 - `runtime/execution/suckers/plan_mode.py:205`
-- `runtime/execution/tool_engine/executor.py:784`
-- `runtime/execution/tool_engine/executor.py:787`
-- `runtime/execution/tool_engine/executor.py:822`
-- `runtime/execution/tool_engine/executor.py:825`
-- `runtime/execution/tool_engine/executor.py:1180`
-- `runtime/execution/tool_engine/executor.py:1184`
+- `runtime/execution/tool_engine/_executor_helpers.py:787`
+- `runtime/execution/tool_engine/executor.py:398`
+- `runtime/execution/tool_engine/executor.py:401`
+- `runtime/execution/tool_engine/executor.py:436`
+- `runtime/execution/tool_engine/executor.py:439`
 - `runtime/sensing/model_router/anthropic_router.py:218`
 - `runtime/sensing/model_router/anthropic_router.py:229`
 - `runtime/sensing/model_router/anthropic_router.py:516`
@@ -25,15 +24,15 @@ tier: "standard"
 
 ## `post_tool` · 1 处
 
-- `runtime/execution/tool_engine/executor.py:1220`
+- `runtime/execution/tool_engine/executor.py:808`
 
 ## `pre_tool` · 1 处
 
-- `runtime/execution/tool_engine/executor.py:893`
+- `runtime/execution/tool_engine/executor.py:507`
 
 ## `user_prompt` · 1 处
 
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:360`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:272`
 
 ## Defined but never dispatched
 

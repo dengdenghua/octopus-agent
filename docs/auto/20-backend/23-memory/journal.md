@@ -56,6 +56,9 @@ tier: "core"
 
 | Module | Summary |
 | --- | --- |
+| `_journal_base.py` | — |
+| `_journal_models.py` | — |
+| `_journal_parse.py` | — |
 | `journal.py` | — |
 | `journal_context.py` | — |
 | `progress.py` | — |
@@ -63,14 +66,99 @@ tier: "core"
 | `resume.py` | — |
 | `sqlite_index.py` | SQLite-backed query index over the JSONL journal. |
 
+## Key classes & functions
+
+> AST 自动提取 · 仅列公开顶层 class / function · 签名与真实代码一致。
+
+### `_journal_base.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class Journal` |  |
+
+### `_journal_models.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class JournalEvent(BaseModel)` |  |
+| class | `class StepEvent(JournalEvent)` |  |
+| class | `class TrajectoryEvent(JournalEvent)` |  |
+| class | `class ImmuneEvent(JournalEvent)` |  |
+| class | `class BudgetEvent(JournalEvent)` |  |
+| class | `class BudgetBreakerResetEvent(JournalEvent)` | Operator reset for a derived budget/circuit-breaker component. |
+| class | `class TaskStartedEvent(JournalEvent)` |  |
+| class | `class NodeStartedEvent(JournalEvent)` |  |
+| class | `class TaskCheckpointEvent(JournalEvent)` |  |
+| class | `class ReactCheckpointEvent(JournalEvent)` | ReAct iteration checkpoint · written after each completed thought→action→observation cycle so a crashed/refreshed session can resume from th |
+| class | `class ToolEffectIntentEvent(JournalEvent)` | Durable write-ahead marker for one tool invocation. |
+| class | `class ToolEffectReconciliationEvent(JournalEvent)` | Auditable operator decision for an indeterminate external effect. |
+| class | `class TaskPausedEvent(JournalEvent)` |  |
+| class | `class TaskResumedEvent(JournalEvent)` |  |
+| class | `class TokenUsageEvent(JournalEvent)` |  |
+| class | `class FileOpEvent(JournalEvent)` |  |
+| class | `class FileRollbackEvent(JournalEvent)` |  |
+| class | `class PreviewRefreshEvent(JournalEvent)` |  |
+| class | `class ReflexHitEvent(JournalEvent)` |  |
+| class | `class SkillProposalDecisionEvent(JournalEvent)` | Operator decision for a self-evolution skill proposal. |
+| class | `class CurriculumGoalDecisionEvent(JournalEvent)` | Operator decision for a journal-derived learning goal. |
+| class | `class McpProposalDecisionEvent(JournalEvent)` | Operator/vet decision for a suggested MCP capability. |
+| class | `class ProtocolDriftDecisionEvent(JournalEvent)` | Operator decision for a detected protocol drift event. |
+| class | `class SubToolStartEvent(JournalEvent)` | Emitted when a sub-agent begins a tool call. |
+| class | `class SubToolEndEvent(JournalEvent)` | Emitted when a sub-agent finishes a tool call. |
+| class | `class BrowserArtifactEvent(JournalEvent)` | A browser screenshot (or similar artifact) was produced. |
+
+### `journal.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class InMemoryJournal(Journal)` |  |
+| class | `class JSONLJournal(Journal)` |  |
+
+### `journal_context.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def current_agent_id()` |  |
+| func | `def current_conversation_id()` |  |
+| func | `def journal_context(agent_id, conversation_id)` |  |
+
+### `progress.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class TaskProgressSnapshot` |  |
+| func | `def task_progress_snapshot(journal, task_id)` |  |
+| func | `def all_task_progress(journal)` |  |
+
+### `progress_tracker.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class TaskProgressTracker` |  |
+
+### `resume.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class CompletedNode` |  |
+| class | `class ResumeInfo` |  |
+| func | `def resume_info(journal, task_id)` |  |
+
+### `sqlite_index.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class JournalIndex` | SQLite query index over a JSONL journal. |
+
+
 ## Who imports this
 
-**42** file(s) reference this package:
+**47** file(s) reference this package:
 
+- **`runtime/_cli_commands.py/`** · 1 file(s)
+  - `runtime/_cli_commands.py`
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/channels/manager.py`
-- **`runtime/cli.py/`** · 1 file(s)
-  - `runtime/cli.py`
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
 - **`runtime/cli_reflect.py/`** · 1 file(s)
@@ -81,10 +169,11 @@ tier: "core"
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/resume_cli.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 5 file(s)
+- **`runtime/execution/`** · 6 file(s)
+  - `runtime/execution/suckers/_ephemeral_events.py`
   - `runtime/execution/suckers/browser_act_skills.py`
-  - `runtime/execution/suckers/ephemeral_runner.py`
   - `runtime/execution/swarm/runtime.py`
+  - `runtime/execution/tool_engine/_executor_fileops.py`
   - `runtime/execution/tool_engine/effect_receipts.py`
   - `runtime/execution/tool_engine/executor.py`
 - **`runtime/memory/`** · 2 file(s)
@@ -101,13 +190,13 @@ tier: "core"
   - `runtime/safety/recovery/recipe_evaluator.py`
   - `runtime/safety/recovery/rule_extractor.py`
   - _… and 3 more_
-- **`runtime/sensing/`** · 15 file(s)
-  - `runtime/sensing/gateway/dag_debugger_router.py`
-  - `runtime/sensing/gateway/evolution_ops/budget.py`
-  - `runtime/sensing/gateway/evolution_ops/curriculum.py`
-  - `runtime/sensing/gateway/evolution_ops/mcp_ops.py`
-  - `runtime/sensing/gateway/evolution_ops/protocol_drift.py`
-  - _… and 10 more_
+- **`runtime/sensing/`** · 19 file(s)
+  - `runtime/sensing/gateway/_observability_journal.py`
+  - `runtime/sensing/gateway/_observability_progress_stream.py`
+  - `runtime/sensing/gateway/_observability_rollback_panels.py`
+  - `runtime/sensing/gateway/_realtime_react_stream_drive.py`
+  - `runtime/sensing/gateway/_realtime_react_stream_reflection.py`
+  - _… and 14 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

@@ -35,7 +35,7 @@ pip install -e ".[serve,anthropic,mcp,web,tracing]"
 ```bash
 docker build -t octopus-agent .
 
-docker run --rm -p 8000:8000 \
+docker run --rm -p 127.0.0.1:8000:8000 \
     -v $(pwd)/data:/data \
     -v $(pwd)/config.yaml:/etc/octopus/config.yaml:ro \
     -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \

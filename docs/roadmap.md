@@ -6,7 +6,7 @@
 
 ## 📍 当前现状（2026-06 快照）
 
-**8500+ tests 绿 · 0 lint-blocker · 0 新硬依赖**。
+**9800+ tests 绿 · 0 lint-blocker · 0 新硬依赖**。
 （活计数：`python tools/lint/count_tests.py`；CI 通过 `--check` 防止漂移。）
 
 ### ✅ 已闭合（原路线图 0-3 阶段 + 额外补齐）
