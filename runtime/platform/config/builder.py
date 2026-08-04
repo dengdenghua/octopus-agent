@@ -268,18 +268,37 @@ def _build_planner(
         else:
             from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter
             from runtime.sensing.model_router.dispatch_router import ModelDispatchRouter
-
-            # Wrap the anthropic router in a dispatcher so
-            # ``config_router._register`` can attach user-defined model
-            # aliases (``claude-mirror`` -> ``claude-sonnet-4-6``) on top.
-            # Without this wrap the alias hits the upstream proxy
-            # untranslated and gets a 403 "unsupported model type", which is
-            # exactly the bug the smoke logs surfaced.
-            _base_router = AnthropicModelRouter(
-                api_key=p.anthropic_api_key,
-                default_model=p.model,
+            from runtime.sensing.model_router.models import UnconfiguredModelRouter
+            from runtime.sensing.model_router.openai_router import (
+                build_fallback_router_from_custom_models,
             )
-            router = ModelDispatchRouter(fallback=_base_router)
+
+            # The packaged desktop app ships a keyless config on purpose. If no
+            # anthropic key is configured, fall back to a self-configured model
+            # (custom_models.json) or a clear "no model configured" router so the
+            # backend still boots offline — the user adds a key from the UI later.
+            _has_anthropic_key = bool(
+                p.anthropic_api_key
+                or os.environ.get("ANTHROPIC_API_KEY")
+                or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            )
+            if not _has_anthropic_key:
+                self_fallback = build_fallback_router_from_custom_models(p.model)
+                router = ModelDispatchRouter(
+                    fallback=self_fallback or UnconfiguredModelRouter()
+                )
+            else:
+                # Wrap the anthropic router in a dispatcher so
+                # ``config_router._register`` can attach user-defined model
+                # aliases (``claude-mirror`` -> ``claude-sonnet-4-6``) on top.
+                # Without this wrap the alias hits the upstream proxy
+                # untranslated and gets a 403 "unsupported model type", which is
+                # exactly the bug the smoke logs surfaced.
+                _base_router = AnthropicModelRouter(
+                    api_key=p.anthropic_api_key,
+                    default_model=p.model,
+                )
+                router = ModelDispatchRouter(fallback=_base_router)
         from runtime.core.hearts.gill_pump import GillCache, retrieval_gill_enabled
 
         gill_cache = None

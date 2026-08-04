@@ -10,13 +10,13 @@ import {
 import { AppRouter } from "./router";
 import { swallow } from "./core/utils/log";
 import { ThemeProvider } from "./components/theme-provider";
-import { MaterialThemeEffects } from "./components/material-theme-effects";
 import { I18nProvider } from "./core/i18n/context";
 import { getLocaleFromCookie } from "./core/i18n/cookies";
 import { detectLocale, normalizeLocale } from "./core/i18n/locale";
 import { loadTranslations } from "./core/i18n/translations";
 import { AuthProvider } from "./providers/AuthProvider";
 import { AppearanceBootstrap } from "./hooks/use-appearance";
+import { BackendBootstrapOverlay } from "./components/workspace/backend-bootstrap-overlay";
 import { installPageAgentBridge } from "./core/page-agent-bridge";
 import { installHashRouterShellUrlNormalizer } from "./core/router/hash-shell-url";
 import { normalizeLoopbackOrigin } from "./core/router/loopback-origin";
@@ -118,8 +118,8 @@ async function bootstrap() {
           >
             <AuthProvider>
               <AppearanceBootstrap />
-              <MaterialThemeEffects />
               <AppRouter />
+              <BackendBootstrapOverlay />
             </AuthProvider>
           </I18nProvider>
         </ThemeProvider>

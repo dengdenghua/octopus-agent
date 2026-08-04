@@ -1,9 +1,7 @@
 # Octopus desktop packaging config (electron-builder).
 #
-# ⚠️ electron-builder 尚未安装。打包前需在 frontend/ 下安装：
-#     pnpm add -D electron-builder
-#   以及（启用自动更新时）：
-#     pnpm add -D electron-updater
+# 打包依赖：electron-builder 与 electron-updater 已作为 frontend/ 的
+# devDependencies 安装（pnpm add -D electron-builder electron-updater）。
 #
 # 解析基准：electron-builder 在 REPO_ROOT/frontend 下执行（打包脚本位于
 # frontend/package.json），因此 files / extraResources 的相对路径均以
@@ -35,11 +33,24 @@ files:
 
 # 额外资源：放入应用 resources/ 目录（打包后 process.resourcesPath 下一级）。
 # main.cjs 的 ensureDesktopConfig() 已按此约定从 resources 读取 config.desktop.yaml。
+# uv/ 是 uv-managed 运行时引导器（backend-runtime.cjs 优先用它建 venv + 装依赖）。
+# runtime/ 是后端源码，pyproject.toml 供按需安装可选依赖时解析 extras。
 extraResources:
   - from: ../packaging/desktop/config.desktop.yaml
     to: config.desktop.yaml
   - from: ../runtime
     to: runtime
+  - from: ../pyproject.toml
+    to: pyproject.toml
+  # uv 二进制（按平台放入 frontend/uv_bin/${os}/ 后由打包脚本拷入）。
+  # electron-builder 的 ${os} 宏展开为 mac / win / linux，与 frontend/uv_bin 下的
+  # 目录名一一对应。未提供时 backend-runtime.cjs 回退到系统 PATH 上的 uv。
+  # 获取方式示例：
+  #   curl -LsSf https://astral.sh/uv/install.sh | sh      # 复制 CLI 到 uv_bin/${os}/
+  - from: uv_bin/${os}
+    to: uv
+    filter:
+      - "**/*"
 
 # 目标平台
 mac:

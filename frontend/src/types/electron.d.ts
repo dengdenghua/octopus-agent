@@ -213,6 +213,10 @@ export interface OctopusElectronAPI {
     getBaseURL: () => Promise<string>;
     /* Implementation note. */
     restart: () => Promise<{ ok: boolean; reason?: string }>;
+    /** Lazily install a heavy optional capability group (browser/vision/code-intel…). */
+    ensureOptionalDeps: (
+      group: string,
+    ) => Promise<{ ok: boolean; reason?: string }>;
   };
 
   window: {
@@ -252,7 +256,8 @@ export interface OctopusElectronAPI {
       | "browser:keyboard-shortcut"
       | "browser:download-event"
       | "desktop:organize-now"
-      | "desktop:items-changed",
+      | "desktop:items-changed"
+      | "backend:bootstrap-progress",
     listener: (...args: unknown[]) => void,
   ) => () => void;
 }

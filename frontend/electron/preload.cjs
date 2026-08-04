@@ -21,6 +21,7 @@ const EVENT_CHANNELS = [
   "browser:download-event",
   "desktop:organize-now",
   "desktop:items-changed",
+  "backend:bootstrap-progress",
 ];
 
 const api = {
@@ -86,6 +87,7 @@ const api = {
   backend: {
     getBaseURL: invoke("backend:getBaseURL"),
     restart: invoke("backend:restart"),
+    ensureOptionalDeps: invoke("backend:ensureOptionalDeps"),
   },
 
   window: {
