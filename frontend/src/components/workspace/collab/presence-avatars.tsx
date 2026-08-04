@@ -67,7 +67,7 @@ export function PresenceAvatars({
                     </span>
                   )}
                   {user.id === currentUser?.id && (
-                    <span className="absolute -bottom-0.5 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-emerald-500" />
+                    <span className="absolute -bottom-0.5 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-success" />
                   )}
                 </div>
               </TooltipTrigger>

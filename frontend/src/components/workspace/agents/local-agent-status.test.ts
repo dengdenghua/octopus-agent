@@ -106,18 +106,21 @@ describe("local-agent-status localPartnerBadge", () => {
   });
 
   it("keeps connected and blocked badges legible in dark mode", () => {
+    // Status badges now use color-scheme-aware semantic tokens
+    // (--success / --warning), which switch value per theme by design —
+    // dark-mode legibility comes from the token, not a dark: override.
     expect(
       localPartnerBadge(
         partner({ registered: true, effective_status: "registered" }),
         LABELS,
       ).className,
-    ).toContain("dark:bg-emerald");
+    ).toContain("bg-success");
     expect(
       localPartnerBadge(
         partner({ detected: true, effective_status: "model_unconfigured" }),
         LABELS,
       ).className,
-    ).toContain("dark:bg-amber");
+    ).toContain("bg-warning");
   });
 });
 

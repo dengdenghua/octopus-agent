@@ -88,7 +88,7 @@ export function PermissionIndicator({
             className={cn(
               "flex items-center gap-1.5 text-xs font-medium transition-all duration-200",
               isBypassMode
-                ? "h-8 px-1.5 text-amber-700 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
+                ? "h-8 px-1.5 text-warning hover:text-warning dark:hover:text-warning"
                 : compact
                   ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
                   : cn("h-8 rounded-lg px-2.5", PERMISSION_TRIGGER_TONE),
@@ -126,7 +126,7 @@ export function PermissionIndicator({
                   className={cn(
                     "items-start py-2 text-left",
                     option === "bypassPermissions" &&
-                      "text-amber-700 focus:bg-amber-500/10 focus:text-amber-800 dark:text-amber-300 dark:focus:text-amber-200",
+                      "text-warning focus:bg-warning/10 focus:text-warning dark:focus:text-warning",
                   )}
                   aria-label={`${item.label}: ${item.description}`}
                 >

@@ -108,12 +108,12 @@ export function RealtimeApprovalPrompt({
           <section
             key={String(approval.requestId)}
             aria-labelledby={labelId}
-            className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-amber-500/20 bg-background/95 px-3 py-2 shadow-[0_12px_32px_-24px_rgba(15,23,42,0.55)] backdrop-blur-xl"
+            className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-warning/20 bg-background/95 px-3 py-2 shadow-[0_12px_32px_-24px_rgba(15,23,42,0.55)] backdrop-blur-xl"
           >
             <div className="flex min-w-0 items-center gap-2.5">
               <ShieldAlertIcon
                 aria-hidden="true"
-                className="size-4 shrink-0 text-amber-500"
+                className="size-4 shrink-0 text-warning"
               />
               <div className="min-w-0">
                 <p
@@ -124,7 +124,7 @@ export function RealtimeApprovalPrompt({
                 </p>
                 {summary ? (
                   <code
-                    className="block truncate font-mono text-[11px] leading-4 text-muted-foreground"
+                    className="block truncate font-mono text-mini leading-4 text-muted-foreground"
                     title={summary}
                   >
                     {summary}

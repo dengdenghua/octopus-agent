@@ -533,7 +533,7 @@ export function TimelineView({
                 {formatDurationMs(tooltip.task.duration_ms)}
               </p>
               {tooltip.task.is_running && (
-                <p className="text-amber-500 font-medium">
+                <p className="text-warning font-medium">
                   {t.taskBoard.inProgress}
                 </p>
               )}

@@ -125,7 +125,7 @@ export function BrowserPluginPanel() {
                     <div className="mt-1 flex items-center gap-1.5">
                       <Badge
                         variant={plugin.enabled ? "secondary" : "outline"}
-                        className="h-5 px-1.5 text-[10px]"
+                        className="h-5 px-1.5 text-micro"
                       >
                         {plugin.enabled
                           ? t.unifiedStore.browserPlugins.enabled
@@ -134,7 +134,7 @@ export function BrowserPluginPanel() {
                       {plugin.version && (
                         <Badge
                           variant="outline"
-                          className="h-5 px-1.5 text-[10px]"
+                          className="h-5 px-1.5 text-micro"
                         >
                           v{plugin.version}
                         </Badge>

@@ -464,8 +464,8 @@ function SynthesisStrip({
         className={cn(
           "rounded-sm px-1.5 py-0.5 font-medium",
           synthesis.ready
-            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-            : "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+            ? "bg-success/10 text-success"
+            : "bg-warning/10 text-warning",
         )}
       >
         {status}
@@ -488,7 +488,7 @@ function SynthesisStrip({
         )}
       </span>
       {synthesis.retryCount > 0 && (
-        <span className="text-amber-700 dark:text-amber-300">
+        <span className="text-warning">
           {t.swarmPanel.deliveryRetry(synthesis.retryCount)}
         </span>
       )}
@@ -527,7 +527,7 @@ function SynthesisStrip({
         </div>
       )}
       {synthesis.retryCount > 0 && (
-        <span className="basis-full rounded-sm bg-amber-500/10 px-2 py-1 text-amber-800 dark:text-amber-200">
+        <span className="basis-full rounded-sm bg-warning/10 px-2 py-1 text-warning">
           {t.swarmPanel.deliveryRetryNote(synthesis.retryCount)}
         </span>
       )}

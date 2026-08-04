@@ -133,7 +133,7 @@ export function TeamRoster({
                   )}
                   dotClassName={
                     isOnline
-                      ? "bg-emerald-500"
+                      ? "bg-success"
                       : "bg-muted-foreground/35"
                   }
                   dotLabel={statusText}

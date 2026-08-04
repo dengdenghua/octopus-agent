@@ -136,7 +136,7 @@ export function UserMenu() {
               <span className="truncate">{accountName}</span>
               {remaining !== undefined && (
                 <span
-                  className="ml-auto inline-flex items-center gap-1 rounded-lg bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300"
+                  className="ml-auto inline-flex items-center gap-1 rounded-lg bg-warning/15 px-1.5 py-0.5 text-xs font-medium text-warning"
                   title={t.credits.remaining(remaining)}
                 >
                   <Coins className="size-3" />

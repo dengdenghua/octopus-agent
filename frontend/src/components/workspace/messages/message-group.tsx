@@ -699,7 +699,7 @@ export function MessageGroup({
             data-testid="collapsed-history-phase"
             data-phase-id={collapsedPhaseId}
           >
-            <span className="size-1 shrink-0 rounded-full bg-emerald-500/70" />
+            <span className="size-1 shrink-0 rounded-full bg-success/70" />
             <span className="truncate">{completedSummary}</span>
             <ChevronDownIcon className="size-3 shrink-0 opacity-60" />
           </button>
@@ -1069,7 +1069,7 @@ export function MessageGroup({
                 // hover target per spec §Design/Style.
                 isAggregatedGroup && "text-sm",
                 needsEffectReview
-                  ? "text-amber-700/80 hover:text-amber-800 dark:text-amber-300/80 dark:hover:text-amber-200"
+                  ? "text-warning/80 hover:text-warning/80 dark:hover:text-warning"
                   : isAggregatedGroup
                     ? "text-muted-foreground hover:text-foreground"
                     : "text-muted-foreground/60 hover:text-muted-foreground",
@@ -1103,7 +1103,7 @@ export function MessageGroup({
                       className={cn(
                         "absolute inline-flex size-1.5 rounded-full opacity-25",
                         needsEffectReview
-                          ? "bg-amber-500"
+                          ? "bg-warning"
                           : agentRunStatusLightClass(state),
                         needsEffectReview
                           ? "animate-pulse"
@@ -1114,7 +1114,7 @@ export function MessageGroup({
                       className={cn(
                         "relative inline-flex size-1 rounded-full",
                         needsEffectReview
-                          ? "bg-amber-500"
+                          ? "bg-warning"
                           : agentRunStatusLightClass(state),
                       )}
                     />
@@ -1125,14 +1125,14 @@ export function MessageGroup({
                   agentDisplayName={subagentIdentity.name}
                   icon={subagentIdentity.icon}
                   avatarUrl={subagentIdentity.avatarUrl}
-                  className="size-4 shrink-0 rounded-[4px] text-[10px]"
+                  className="size-4 shrink-0 rounded-[4px] text-micro"
                 />
               ) : owningSubagent?.name ? (
                 <AgentAvatar
                   agentDisplayName={owningSubagent.name}
                   icon={owningSubagent.icon}
                   avatarUrl={owningSubagent.avatarUrl}
-                  className="size-4 shrink-0 rounded-[4px] text-[10px]"
+                  className="size-4 shrink-0 rounded-[4px] text-micro"
                 />
               ) : (
                 <ActionIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1144,7 +1144,7 @@ export function MessageGroup({
                   ) : actionObject ? (
                     <>
                       <span className="text-foreground">{actionVerb}</span>
-                      <span className="ml-1.5 font-mono text-[11px] text-muted-foreground">
+                      <span className="ml-1.5 font-mono text-mini text-muted-foreground">
                         {" "}
                         {actionObject}
                       </span>
@@ -1163,7 +1163,7 @@ export function MessageGroup({
                   isLastOverall &&
                   isCurrentlyThinking &&
                   thinkingElapsedMs > 200 && (
-                    <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/40">
+                    <span className="shrink-0 tabular-nums text-micro text-muted-foreground/40">
                       {t.messageGrouping.thinkingDuration(
                         formatDuration(thinkingElapsedMs),
                       )}
@@ -1173,20 +1173,20 @@ export function MessageGroup({
                   hasStoredDuration &&
                   groupDurationMs > 0 &&
                   !(isLastOverall && isCurrentlyThinking) && (
-                    <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground/40">
+                    <span className="shrink-0 tabular-nums text-micro text-muted-foreground/40">
                       {t.messageGrouping.thinkingDuration(
                         formatDuration(groupDurationMs),
                       )}
                     </span>
                   )}
                 {count > 1 && !isAggregatedGroup && !groupedTargetSummary && (
-                  <span className="shrink-0 tabular-nums opacity-60">
-                    ×{count}
+                  <span className="shrink-0 tabular-nums whitespace-nowrap text-mini text-muted-foreground/50">
+                    {t.messageGrouping.countItems(count)}
                   </span>
                 )}
                 {needsEffectReview && (
                   <span
-                    className="shrink-0 rounded-full bg-amber-500/10 px-1.5 text-xs font-medium text-amber-700 dark:text-amber-300"
+                    className="shrink-0 rounded-full bg-warning/10 px-1.5 text-xs font-medium text-warning"
                     data-testid="tool-effect-review-badge"
                   >
                     {t.messageGrouping.effectNeedsReview}

@@ -1348,7 +1348,7 @@ export function MessageList({
                 {displayName}
               </span>
               {agentRole === "tl" && (
-                <span className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-1.5 py-0 text-xs leading-4 font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="rounded-md border border-success/50 bg-success/10 px-1.5 py-0 text-xs leading-4 font-medium text-success">
                   队长
                 </span>
               )}
@@ -1931,12 +1931,12 @@ export function MessageList({
               className={cn(
                 "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-[var(--shadow-xs)]",
                 isNetworkError
-                  ? "border-amber-200/70 bg-amber-50/90 text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/75 dark:text-amber-100"
+                  ? "border-warning/30/70 bg-warning/5 text-warning dark:border-warning/50"
                   : "border-destructive/25 bg-destructive/8 text-destructive dark:border-destructive/35 dark:bg-destructive/12",
               )}
             >
               {isNetworkError ? (
-                <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-300" />
+                <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-warning" />
               ) : (
                 <XCircleIcon className="mt-0.5 size-4 shrink-0" />
               )}
@@ -1981,15 +1981,15 @@ export function MessageList({
       </ConversationScrollButton>
 
       {showTimeoutWarning && !thread.error && (
-        <div className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-amber-300/70 bg-amber-50/95 px-4 py-2 text-xs text-amber-900 shadow-[var(--shadow-xs)] dark:border-amber-700/50 dark:bg-amber-950/90 dark:text-amber-200">
-          <AlertTriangleIcon className="size-4 shrink-0 text-amber-600" />
+        <div className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-warning/70 bg-warning/5 px-4 py-2 text-xs text-warning shadow-[var(--shadow-xs)] dark:border-warning/50">
+          <AlertTriangleIcon className="size-4 shrink-0 text-warning" />
           <span>
             {t.message.timeoutWarning(Math.floor(loadingAgeMs / 1000))}
           </span>
           <button
             type="button"
             onClick={() => void thread.stop()}
-            className="rounded-md border border-amber-300/80 px-2 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-700/60 dark:text-amber-200 dark:hover:bg-amber-900/70"
+            className="rounded-md border border-warning/80 px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10 dark:border-warning/60 dark:hover:bg-warning/70"
           >
             {t.common.stop}
           </button>

@@ -549,8 +549,8 @@ function LedProgress({ progress }: { progress?: number }) {
             className={cn(
               "inline-block rounded-sm transition-colors duration-200",
               isLit
-                ? "bg-emerald-500/90 dark:bg-emerald-400/90"
-                : "bg-emerald-500/15 dark:bg-emerald-400/15",
+                ? "bg-success/90 dark:bg-success/90"
+                : "bg-success/15 dark:bg-success/15",
               isPulsing && "animate-[pulse-soft_1.2s_ease-in-out_infinite]",
             )}
             style={{
@@ -567,7 +567,7 @@ function LedProgress({ progress }: { progress?: number }) {
 function StatusIndicator({ status, progress }: { status: InlineSubagentStatus; progress?: number }) {
   if (status === "done") {
     return (
-      <span className="flex size-4 items-center justify-center text-emerald-500 dark:text-emerald-400">
+      <span className="flex size-4 items-center justify-center text-success">
         <CheckIcon className="size-3.5" />
       </span>
     );
@@ -581,7 +581,7 @@ function StatusIndicator({ status, progress }: { status: InlineSubagentStatus; p
   }
   if (status === "waiting") {
     return (
-      <span className="flex size-4 items-center justify-center text-amber-500/80">
+      <span className="flex size-4 items-center justify-center text-warning/80">
         <Loader2Icon className="size-3.5 animate-spin" />
       </span>
     );

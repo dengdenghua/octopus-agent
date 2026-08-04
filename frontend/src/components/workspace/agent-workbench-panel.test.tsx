@@ -339,7 +339,7 @@ describe("<AgentWorkbenchPanel />", () => {
     const mainComputerButton = screen.getByRole("button", {
       name: "主电脑 · 等待中",
     });
-    expect(mainComputerButton).toHaveClass("border-amber-500/40");
+    expect(mainComputerButton).toHaveClass("border-warning/40");
 
     fireEvent.click(mainComputerButton);
 

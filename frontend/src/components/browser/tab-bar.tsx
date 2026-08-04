@@ -6,7 +6,6 @@ import { useState, type DragEvent, type MouseEvent } from "react";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
-import { liquidGlassClass } from "./liquid-glass";
 import { BROWSER_HOME_URL, useBrowserStore } from "./browser-store";
 
 export function TabBar() {
@@ -90,10 +89,10 @@ export function TabBar() {
             tabIndex={0}
             aria-label={tabLabel}
             className={cn(
-              "group relative flex h-7 min-w-[84px] max-w-[152px] cursor-pointer items-center gap-1 rounded-[12px] px-1.5 text-[11px] transition-[background-color,border-color,box-shadow,color,transform]",
+              "group relative flex h-7 min-w-[84px] max-w-[152px] cursor-pointer items-center gap-1 rounded-[12px] px-1.5 text-mini transition-[background-color,border-color,box-shadow,color,transform]",
               isHomeTab && "min-w-[68px] max-w-[96px]",
               active
-                ? cn(liquidGlassClass("thin", true), "text-foreground")
+                ? "text-foreground"
                 : "border border-transparent bg-background/18 text-muted-foreground hover:border-border-subtle hover:bg-background/42 hover:text-foreground",
               dragOver && "ring-2 ring-primary ring-offset-0",
             )}
@@ -140,7 +139,6 @@ export function TabBar() {
         onClick={() => openTab()}
         className={cn(
           "ml-0.5 grid size-7 shrink-0 place-items-center rounded-[12px] text-muted-foreground hover:text-foreground",
-          liquidGlassClass("thin", true),
         )}
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         title={tb.newTab}

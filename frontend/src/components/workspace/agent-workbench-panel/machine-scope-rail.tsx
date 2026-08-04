@@ -61,7 +61,7 @@ export function MachineScopeRail({
           onClick={onSelectMain}
           dotClassName={
             mainDockShowsPresence
-              ? "bg-emerald-500"
+              ? "bg-success"
               : agentRunDotClass(mainRunState)
           }
           dotLabel={
@@ -111,7 +111,7 @@ export function MachineScopeRail({
               avatarUrl={seat.avatarUrl ?? null}
               showBotBadge
               fallbackInitial={seat.name.charAt(0)}
-              dotClassName="bg-emerald-500"
+              dotClassName="bg-success"
               dotLabel={t.agentWorkbenchPanel.dockStatusPresent}
               title={`${seat.name} · ${roleLabel} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
               ariaLabel={`${seat.name} · ${roleLabel} · ${t.agentWorkbenchPanel.dockStatusPresent}`}

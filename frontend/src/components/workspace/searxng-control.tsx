@@ -99,9 +99,9 @@ export function SearxngControl() {
 
   const tone =
     state === "up"
-      ? "bg-emerald-500"
+      ? "bg-success"
       : state === "deploying" || state === "checking"
-        ? "bg-amber-500 animate-pulse"
+        ? "bg-warning animate-pulse"
         : "bg-muted-foreground/50";
 
   const toggle = async (checked: boolean) => {

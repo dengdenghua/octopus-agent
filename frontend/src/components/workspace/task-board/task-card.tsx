@@ -65,27 +65,27 @@ const STATUS_STYLE: Record<
     icon: <ClockIcon className="size-3" />,
   },
   running: {
-    dotColor: "bg-amber-500",
+    dotColor: "bg-warning",
     badgeClass:
-      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+      "bg-warning/10 text-warning border-warning/20",
     icon: <Loader2Icon className="size-3 animate-spin" />,
   },
   paused: {
-    dotColor: "bg-amber-400",
+    dotColor: "bg-warning",
     badgeClass:
-      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+      "bg-warning/10 text-warning border-warning/20",
     icon: <PauseIcon className="size-3" />,
   },
   completed: {
-    dotColor: "bg-emerald-500",
+    dotColor: "bg-success",
     badgeClass:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+      "bg-success/10 text-success border-success/20",
     icon: <CheckCircle2Icon className="size-3" />,
   },
   failed: {
-    dotColor: "bg-red-500",
+    dotColor: "bg-destructive",
     badgeClass:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+      "bg-destructive/10 text-destructive border-destructive/20",
     icon: <AlertCircleIcon className="size-3" />,
   },
   cancelled: {
@@ -196,9 +196,9 @@ export function TaskCard({
         className={cn(
           "ui-dense-row group relative cursor-pointer rounded-lg border bg-card transition-all duration-200",
           "hover:shadow-[var(--shadow-sm)] hover:border-border-strong hover:-translate-y-0.5",
-          isRunning && "border-amber-500/30 shadow-amber-500/5",
-          task.status === "failed" && "border-red-500/20",
-          task.status === "completed" && "border-emerald-500/20",
+          isRunning && "border-warning/30 shadow-warning/5",
+          task.status === "failed" && "border-destructive/20",
+          task.status === "completed" && "border-success/20",
         )}
         onClick={handleClick}
         onKeyDown={(event) => {
@@ -211,8 +211,8 @@ export function TaskCard({
         {/* Running indicator pulse */}
         {isRunning && (
           <div className="absolute -top-px -right-px size-2.5 rounded-lg">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-lg bg-amber-400 opacity-75" />
-            <span className="relative inline-flex size-2.5 rounded-lg bg-amber-500" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-lg bg-warning opacity-75" />
+            <span className="relative inline-flex size-2.5 rounded-lg bg-warning" />
           </div>
         )}
 
@@ -250,7 +250,7 @@ export function TaskCard({
               <span className="text-xs text-muted-foreground">
                 {t.taskBoard.progress}
               </span>
-              <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+              <span className="text-xs font-medium text-warning">
                 {Math.round(task.progress_pct)}%
               </span>
             </div>
@@ -318,7 +318,7 @@ export function TaskCard({
               </div>
             )}
             {task.error && (
-              <div className="mt-1 rounded bg-red-500/10 px-2 py-1 text-red-600 dark:text-red-400">
+              <div className="mt-1 rounded bg-destructive/10 px-2 py-1 text-destructive">
                 {task.error}
               </div>
             )}

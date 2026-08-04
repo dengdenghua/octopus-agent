@@ -1235,7 +1235,7 @@ export function IntelligencePanel() {
                           className={cn(
                             "h-7 rounded-lg px-2 text-xs",
                             enabled
-                              ? "border-emerald-500/30 text-emerald-600"
+                              ? "border-success/30 text-success"
                               : "text-muted-foreground",
                           )}
                           disabled={updateSubscription.isPending}

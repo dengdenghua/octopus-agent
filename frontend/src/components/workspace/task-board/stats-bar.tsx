@@ -156,8 +156,8 @@ export function StatsBar({
       />
 
       <StatCard
-        icon={<ActivityIcon className="size-4 text-amber-500" />}
-        iconColor="bg-amber-500/10"
+        icon={<ActivityIcon className="size-4 text-warning" />}
+        iconColor="bg-warning/10"
         label={t.taskBoard.running}
         value={stats.running_count}
         subValue={
@@ -166,12 +166,12 @@ export function StatsBar({
             : undefined
         }
         sparkline={statusSparkline}
-        sparklineColor="bg-amber-500/50"
+        sparklineColor="bg-warning/50"
       />
 
       <StatCard
-        icon={<TrendingUpIcon className="size-4 text-emerald-500" />}
-        iconColor="bg-emerald-500/10"
+        icon={<TrendingUpIcon className="size-4 text-success" />}
+        iconColor="bg-success/10"
         label={t.taskBoard.successRate}
         value={stats.total > 0 ? `${Math.round(stats.success_rate)}%` : "--"}
         subValue={

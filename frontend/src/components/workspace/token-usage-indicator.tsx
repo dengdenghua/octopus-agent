@@ -111,10 +111,10 @@ export const TokenUsageIndicator = memo(function TokenUsageIndicator({
                   className={cn(
                     "h-full rounded-lg transition-all",
                     usage.totalTokens > 80000
-                      ? "bg-red-500 dark:bg-red-400"
+                      ? "bg-destructive dark:bg-destructive"
                       : usage.totalTokens > 50000
-                        ? "bg-amber-500 dark:bg-amber-400"
-                        : "bg-green-500 dark:bg-green-400",
+                        ? "bg-warning dark:bg-warning"
+                        : "bg-success dark:bg-success",
                   )}
                   style={{
                     width: `${Math.min(100, (usage.totalTokens / 100000) * 100)}%`,

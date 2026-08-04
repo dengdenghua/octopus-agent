@@ -58,13 +58,12 @@
 @source inline("whitespace-pre-wrap");
 
 @source inline("text-{foreground,muted-foreground,primary,secondary,accent}");
-@source inline("text-{2xs,3xs}");
+@source inline("text-{2xs,3xs,micro,mini}");
 @source inline("bg-{background,muted,primary,secondary,accent}");
 @source inline("bg-{destructive,primary,accent,secondary,ring,chart-3}/10");
 @source inline("border-{border,input}");
 
 @custom-variant dark (&:is(.dark *));
-@custom-variant apple (&:is(.apple *));
 
 @theme {
   --font-sans:
@@ -197,10 +196,18 @@
 }
 
 @theme inline {
-  --font-size-2xs: 0.5625rem;
-  --font-size-3xs: 0.5rem;
-  --line-height-2xs: 0.75rem;
-  --line-height-3xs: 0.625rem;
+  /* Micro typography ladder. Font-size theme keys live in the
+     ``--text-*`` namespace in Tailwind v4 (``--font-size-*`` is silently
+     ignored — an earlier iteration of this block used it and the classes
+     never generated). The numeric xs-rungs (3xs=8px, 2xs=9px) can't
+     express 10px/11px, so they get semantic names instead — these
+     replace the old ``text-[10px]`` / ``text-[11px]`` arbitrary values.
+     No line-height is paired on purpose: the arbitrary values they
+     replace didn't set one either, so leading keeps inheriting. */
+  --text-micro: 0.625rem;
+  --text-mini: 0.6875rem;
+  --text-2xs: 0.5625rem;
+  --text-3xs: 0.5rem;
 
   --radius-sm: calc((var(--radius) - 4px) * var(--corner-radius-scale, 1));
   --radius-md: calc((var(--radius) - 2px) * var(--corner-radius-scale, 1));
@@ -233,6 +240,16 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+  /* Status colors — semantic states (success / warning / info). Errors
+     already have ``--color-destructive``. Values switch per color scheme,
+     so a single ``text-success`` replaces the old
+     ``text-emerald-700 dark:text-emerald-300`` pairs. */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -374,8 +391,8 @@
   --card-foreground: oklch(0.22 0.012 255);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.22 0.012 255);
-  --primary: oklch(0.6 0.15 253);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.24 0.006 255);
+  --primary-foreground: oklch(0.985 0.002 255);
   --secondary: oklch(0.96 0.006 255);
   --secondary-foreground: oklch(0.3 0.016 255);
   --muted: oklch(0.955 0.005 255);
@@ -385,20 +402,29 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.89 0.008 255);
   --input: oklch(0.91 0.008 255);
-  --ring: oklch(0.62 0.12 253);
+  --ring: oklch(0.6 0.01 255);
   --chart-1: oklch(0.55 0.2 264);
   --chart-2: oklch(0.6 0.15 180);
   --chart-3: oklch(0.55 0.2 330);
   --chart-4: oklch(0.65 0.18 80);
   --chart-5: oklch(0.6 0.22 20);
+  /* Extended categorical accents (azure / orange / green) for per-category
+     icon coloring such as the tool timeline. */
+  --chart-6: oklch(0.62 0.14 210);
+  --chart-7: oklch(0.62 0.17 50);
+  --chart-8: oklch(0.6 0.16 140);
+  /* Status colors (light scheme) */
+  --success: oklch(0.6 0.15 160);
+  --warning: oklch(0.63 0.15 60);
+  --info: oklch(0.56 0.16 250);
   --sidebar: oklch(0.972 0.006 255);
   --sidebar-foreground: oklch(0.22 0.012 255);
-  --sidebar-primary: oklch(0.56 0.1 250);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.24 0.006 255);
+  --sidebar-primary-foreground: oklch(0.985 0.002 255);
   --sidebar-accent: oklch(0.94 0.014 250);
   --sidebar-accent-foreground: oklch(0.33 0.04 250);
   --sidebar-border: oklch(0.89 0.008 255);
-  --sidebar-ring: oklch(0.6 0.11 250);
+  --sidebar-ring: oklch(0.6 0.01 255);
 
   --container-width-xs: calc(var(--spacing) * 72);
   --container-width-sm: calc(var(--spacing) * 144);
@@ -413,8 +439,8 @@
   --card-foreground: oklch(0.955 0.005 264);
   --popover: oklch(0.18 0.008 264);
   --popover-foreground: oklch(0.955 0.005 264);
-  --primary: oklch(0.72 0.18 264);
-  --primary-foreground: oklch(0.145 0.006 264);
+  --primary: oklch(0.94 0.004 264);
+  --primary-foreground: oklch(0.2 0.006 264);
   --secondary: oklch(0.245 0.011 264);
   --secondary-foreground: oklch(0.9 0.005 264);
   --muted: oklch(0.225 0.009 264);
@@ -424,20 +450,27 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(0.285 0.012 264);
   --input: oklch(0.265 0.011 264);
-  --ring: oklch(0.72 0.18 264);
+  --ring: oklch(0.6 0.012 264);
   --chart-1: oklch(0.65 0.22 264);
   --chart-2: oklch(0.6 0.17 180);
   --chart-3: oklch(0.65 0.2 330);
   --chart-4: oklch(0.7 0.18 80);
   --chart-5: oklch(0.65 0.22 20);
+  --chart-6: oklch(0.72 0.13 210);
+  --chart-7: oklch(0.72 0.15 50);
+  --chart-8: oklch(0.72 0.15 140);
+  /* Status colors (dark scheme) */
+  --success: oklch(0.74 0.15 160);
+  --warning: oklch(0.79 0.13 70);
+  --info: oklch(0.74 0.14 250);
   --sidebar: oklch(0.125 0.007 264);
   --sidebar-foreground: oklch(0.955 0.005 264);
-  --sidebar-primary: oklch(0.68 0.22 264);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.94 0.004 264);
+  --sidebar-primary-foreground: oklch(0.2 0.006 264);
   --sidebar-accent: oklch(0.21 0.015 264);
   --sidebar-accent-foreground: oklch(0.9 0.01 264);
   --sidebar-border: oklch(0.275 0.012 264);
-  --sidebar-ring: oklch(0.55 0.15 264);
+  --sidebar-ring: oklch(0.55 0.012 264);
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.2);
@@ -452,100 +485,6 @@
   --border-subtle: color-mix(in oklch, var(--border) 30%, transparent);
   --border-default: color-mix(in oklch, var(--border) 60%, transparent);
   --border-strong: color-mix(in oklch, var(--border) 85%, transparent);
-}
-
-.apple {
-  color-scheme: light;
-  --radius: 0.75rem;
-  --corner-radius-scale: 1;
-  --background: oklch(0.982 0.005 255);
-  --foreground: oklch(0.22 0.012 255);
-  --card: oklch(0.998 0.001 255);
-  --card-foreground: oklch(0.22 0.012 255);
-  --popover: oklch(0.998 0.001 255);
-  --popover-foreground: oklch(0.22 0.012 255);
-  --primary: oklch(0.61 0.15 253);
-  --primary-foreground: oklch(0.995 0 0);
-  --secondary: oklch(0.96 0.006 255);
-  --secondary-foreground: oklch(0.3 0.016 255);
-  --muted: oklch(0.95 0.005 255);
-  --muted-foreground: oklch(0.48 0.014 255);
-  --accent: oklch(0.94 0.014 250);
-  --accent-foreground: oklch(0.33 0.04 250);
-  --destructive: oklch(0.64 0.22 25);
-  --destructive-foreground: oklch(0.995 0 0);
-  --border: oklch(0.89 0.008 255);
-  --input: oklch(0.91 0.008 255);
-  --ring: oklch(0.62 0.12 253);
-  --chart-1: oklch(0.62 0.205 253);
-  --chart-2: oklch(0.72 0.17 155);
-  --chart-3: oklch(0.66 0.19 335);
-  --chart-4: oklch(0.78 0.16 85);
-  --chart-5: oklch(0.68 0.2 25);
-  --sidebar: oklch(0.97 0.006 255);
-  --sidebar-foreground: oklch(0.22 0.012 255);
-  --sidebar-primary: oklch(0.56 0.1 250);
-  --sidebar-primary-foreground: oklch(0.995 0 0);
-  --sidebar-accent: oklch(0.935 0.016 250);
-  --sidebar-accent-foreground: oklch(0.33 0.04 250);
-  --sidebar-border: oklch(0.885 0.008 255);
-  --sidebar-ring: oklch(0.6 0.11 250);
-  font-family:
-    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-    "Helvetica Neue", Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-  letter-spacing: 0;
-  --shadow-card:
-    0 1px 2px rgba(30, 50, 75, 0.035), 0 5px 16px rgba(30, 50, 75, 0.045);
-  --shadow-elevated:
-    0 2px 6px rgba(30, 50, 75, 0.05), 0 12px 30px rgba(30, 50, 75, 0.08);
-  --shadow-floating:
-    0 6px 18px rgba(0, 0, 0, 0.1), 0 28px 70px rgba(0, 0, 0, 0.18);
-  --shadow-modal: 0 18px 60px rgba(0, 0, 0, 0.22);
-}
-
-.dark.apple {
-  color-scheme: dark;
-  --background: oklch(0.1 0.006 255);
-  --foreground: oklch(0.94 0.004 255);
-  --card: oklch(0.18 0.007 255);
-  --card-foreground: oklch(0.94 0.004 255);
-  --popover: oklch(0.16 0.007 255);
-  --popover-foreground: oklch(0.94 0.004 255);
-  --primary: oklch(0.7 0.19 253);
-  --primary-foreground: oklch(0.1 0.006 255);
-  --secondary: oklch(0.24 0.009 255);
-  --secondary-foreground: oklch(0.88 0.005 255);
-  --muted: oklch(0.235 0.008 255);
-  --muted-foreground: oklch(0.67 0.014 255);
-  --accent: oklch(0.3 0.035 253);
-  --accent-foreground: oklch(0.9 0.01 253);
-  --destructive: oklch(0.7 0.2 25);
-  --destructive-foreground: oklch(0.1 0.006 255);
-  --border: oklch(0.28 0.01 255);
-  --input: oklch(0.255 0.01 255);
-  --ring: oklch(0.7 0.19 253);
-  --chart-1: oklch(0.7 0.19 253);
-  --chart-2: oklch(0.76 0.17 155);
-  --chart-3: oklch(0.68 0.19 335);
-  --chart-4: oklch(0.8 0.16 85);
-  --chart-5: oklch(0.7 0.2 25);
-  --sidebar: oklch(0.13 0.006 255);
-  --sidebar-foreground: oklch(0.94 0.004 255);
-  --sidebar-primary: oklch(0.7 0.19 253);
-  --sidebar-primary-foreground: oklch(0.995 0 0);
-  --sidebar-accent: oklch(0.29 0.032 253);
-  --sidebar-accent-foreground: oklch(0.9 0.01 253);
-  --sidebar-border: oklch(0.27 0.01 255);
-  --sidebar-ring: oklch(0.7 0.19 253);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.26), 0 12px 34px rgba(0, 0, 0, 0.36);
-  --shadow-elevated:
-    0 2px 8px rgba(0, 0, 0, 0.34), 0 22px 54px rgba(0, 0, 0, 0.42);
-  --shadow-floating:
-    0 8px 22px rgba(0, 0, 0, 0.42), 0 34px 78px rgba(0, 0, 0, 0.52);
-  --shadow-modal: 0 18px 64px rgba(0, 0, 0, 0.62);
 }
 
 @layer base {
@@ -591,9 +530,7 @@
     .workspace-panel,
     .workspace-panel-subtle,
     .dark .workspace-panel,
-    .dark .workspace-panel-subtle,
-    .apple .workspace-panel,
-    .apple .workspace-panel-subtle {
+    .dark .workspace-panel-subtle {
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
     }
@@ -806,8 +743,6 @@
     background-color: color-mix(in oklch, var(--popover) 90%, transparent);
     border: 1px solid color-mix(in oklch, var(--border) 75%, transparent);
     border-radius: var(--radius-3xl);
-    backdrop-filter: blur(14px) saturate(1.6);
-    -webkit-backdrop-filter: blur(14px) saturate(1.6);
     box-shadow:
       0 16px 32px -8px rgba(0, 0, 0, 0.28),
       0 2px 6px -2px rgba(0, 0, 0, 0.12);
@@ -817,32 +752,6 @@
     box-shadow:
       0 16px 40px -8px rgba(0, 0, 0, 0.55),
       0 2px 6px -2px rgba(0, 0, 0, 0.3);
-  }
-
-  .glass {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(20px) saturate(1.8);
-    -webkit-backdrop-filter: blur(20px) saturate(1.8);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-
-  .dark .glass {
-    background: rgba(10, 10, 20, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .apple .glass {
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(20px) saturate(1.8);
-    -webkit-backdrop-filter: blur(20px) saturate(1.8);
-    border: 1px solid rgba(0, 0, 0, 0.08);
-  }
-
-  .dark.apple .glass {
-    background: rgba(28, 28, 30, 0.72);
-    backdrop-filter: blur(20px) saturate(1.8);
-    -webkit-backdrop-filter: blur(20px) saturate(1.8);
-    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .gradient-text {
@@ -884,9 +793,6 @@
   }
   .dark .hover-lift:hover {
     box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.35);
-  }
-  .apple .hover-lift:hover {
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06);
   }
 
   .skeleton {
@@ -1062,7 +968,7 @@
       var(--background);
   }
 
-  .dark:not(.apple) .workspace-shell {
+  .dark .workspace-shell {
     background:
       linear-gradient(
         180deg,
@@ -1076,8 +982,6 @@
     border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
     border-radius: var(--appearance-radius-panel);
     background: color-mix(in oklch, var(--card) 92%, var(--background) 8%);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.04),
       0 6px 18px rgba(30, 50, 75, 0.045);
@@ -1097,8 +1001,6 @@
     border: 1px solid color-mix(in oklch, var(--border) 84%, transparent);
     border-radius: var(--appearance-radius-2xl);
     background: color-mix(in oklch, var(--card) 84%, var(--background) 16%);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     transition:
       background 0.2s ease,
       border-color 0.2s ease,
@@ -1113,8 +1015,6 @@
   .dark .workspace-panel {
     border-color: color-mix(in oklch, var(--border) 86%, transparent);
     background: color-mix(in oklch, var(--card) 90%, var(--background) 10%);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.28),
       0 10px 28px rgba(0, 0, 0, 0.22);
@@ -1133,8 +1033,6 @@
   .dark .workspace-panel-subtle {
     border-color: color-mix(in oklch, var(--border) 78%, transparent);
     background: color-mix(in oklch, var(--card) 80%, var(--background) 20%);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     transition:
       background 0.2s ease,
       border-color 0.2s ease,
@@ -1146,275 +1044,36 @@
     box-shadow: 0 1px 10px rgba(0, 0, 0, 0.24);
   }
 
-  :root:not(.apple) [data-slot="input"],
-  :root:not(.apple) [data-slot="textarea"],
-  :root:not(.apple) [data-slot="select-trigger"] {
+  :root [data-slot="input"],
+  :root [data-slot="textarea"],
+  :root [data-slot="select-trigger"] {
     background: color-mix(in oklch, var(--card) 82%, var(--background) 18%);
     border-color: color-mix(in oklch, var(--input) 88%, transparent);
   }
 
-  .dark:not(.apple) [data-slot="input"],
-  .dark:not(.apple) [data-slot="textarea"],
-  .dark:not(.apple) [data-slot="select-trigger"] {
+  .dark [data-slot="input"],
+  .dark [data-slot="textarea"],
+  .dark [data-slot="select-trigger"] {
     background: color-mix(in oklch, var(--input) 68%, transparent);
     border-color: color-mix(in oklch, var(--border) 92%, transparent);
   }
 
-  :root:not(.apple) [data-slot="input"]:focus,
-  :root:not(.apple) [data-slot="textarea"]:focus,
-  :root:not(.apple) [data-slot="select-trigger"]:focus {
+  :root [data-slot="input"]:focus,
+  :root [data-slot="textarea"]:focus,
+  :root [data-slot="select-trigger"]:focus {
     background: var(--card);
     border-color: color-mix(in oklch, var(--ring) 48%, var(--border) 52%);
   }
 
-  :root:not(.apple) [data-slot="button"][data-variant="default"] {
+  :root [data-slot="button"][data-variant="default"] {
     box-shadow: 0 1px 2px color-mix(in oklch, var(--primary) 14%, transparent);
   }
 
-  :root:not(.apple) [data-slot="button"][data-variant="outline"],
-  :root:not(.apple) [data-slot="button"][data-variant="secondary"] {
+  :root [data-slot="button"][data-variant="outline"],
+  :root [data-slot="button"][data-variant="secondary"] {
     border-color: color-mix(in oklch, var(--border) 88%, transparent);
   }
 
-  .apple body {
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, var(--background) 88%, white 12%),
-        var(--background) 34rem
-      ),
-      radial-gradient(
-        circle at 24% -10%,
-        color-mix(in oklch, var(--primary) 12%, transparent),
-        transparent 32rem
-      );
-  }
-
-  .apple .workspace-shell {
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, var(--background) 82%, white 18%),
-        var(--background) 38rem
-      ),
-      radial-gradient(
-        circle at 18% 0%,
-        color-mix(in oklch, var(--primary) 10%, transparent),
-        transparent 30rem
-      );
-  }
-
-  .dark.apple body,
-  .dark.apple .workspace-shell {
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, var(--background) 82%, white 3%),
-        var(--background) 36rem
-      ),
-      radial-gradient(
-        circle at 22% -8%,
-        color-mix(in oklch, var(--primary) 16%, transparent),
-        transparent 32rem
-      );
-  }
-
-  .apple .workspace-panel {
-    border-color: color-mix(in oklch, var(--border) 86%, transparent);
-    background: color-mix(in oklch, var(--card) 88%, transparent);
-    backdrop-filter: blur(14px) saturate(1.35);
-    -webkit-backdrop-filter: blur(14px) saturate(1.35);
-    box-shadow: var(--shadow-card);
-    border-radius: var(--appearance-radius-panel);
-  }
-
-  .apple .workspace-panel:hover {
-    border-color: color-mix(in oklch, var(--border) 72%, var(--primary) 28%);
-    box-shadow: var(--shadow-elevated);
-  }
-
-  .apple .workspace-panel-subtle {
-    border-color: color-mix(in oklch, var(--border) 82%, transparent);
-    background: color-mix(in oklch, var(--card) 78%, transparent);
-    backdrop-filter: blur(12px) saturate(1.25);
-    -webkit-backdrop-filter: blur(12px) saturate(1.25);
-    border-radius: var(--appearance-radius-2xl);
-  }
-
-  .dark.apple .workspace-panel {
-    border-color: color-mix(in oklch, var(--border) 74%, transparent);
-    background: color-mix(in oklch, var(--card) 68%, transparent);
-    backdrop-filter: blur(24px) saturate(1.55);
-    -webkit-backdrop-filter: blur(24px) saturate(1.55);
-    box-shadow: var(--shadow-card);
-  }
-
-  .dark.apple .workspace-panel:hover {
-    border-color: color-mix(in oklch, var(--border) 70%, var(--primary) 30%);
-    box-shadow: var(--shadow-elevated);
-  }
-
-  .dark.apple .workspace-panel-subtle {
-    border-color: color-mix(in oklch, var(--border) 68%, transparent);
-    background: color-mix(in oklch, var(--card) 58%, transparent);
-    backdrop-filter: blur(22px) saturate(1.45);
-    -webkit-backdrop-filter: blur(22px) saturate(1.45);
-  }
-
-  .apple .hover-lift:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-elevated);
-  }
-
-  .dark.apple .hover-lift:hover {
-    box-shadow: var(--shadow-elevated);
-  }
-
-  .apple button,
-  .apple [role="button"] {
-    border-radius: var(--appearance-radius-control);
-    transition:
-      transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-      box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-      background-color 0.15s ease,
-      border-color 0.15s ease;
-  }
-
-  .apple [data-slot="button"] {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  }
-
-  .apple [data-slot="button"][data-variant="default"] {
-    background: linear-gradient(
-      180deg,
-      color-mix(in oklch, var(--primary) 94%, white 6%),
-      var(--primary)
-    );
-    box-shadow:
-      0 1px 2px color-mix(in oklch, var(--primary) 22%, transparent),
-      0 8px 18px color-mix(in oklch, var(--primary) 16%, transparent);
-  }
-
-  .apple [data-slot="button"][data-variant="outline"],
-  .apple [data-slot="button"][data-variant="secondary"] {
-    background: color-mix(in oklch, var(--card) 72%, transparent);
-    border-color: color-mix(in oklch, var(--border) 80%, transparent);
-    backdrop-filter: blur(14px) saturate(1.4);
-    -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  }
-
-  .apple button:active,
-  .apple [role="button"]:active {
-    transform: scale(0.97);
-  }
-
-  .apple [data-slot="input"],
-  .apple [data-slot="textarea"],
-  .apple [data-slot="select-trigger"] {
-    border-color: color-mix(in oklch, var(--border) 82%, transparent);
-    background: color-mix(in oklch, var(--card) 62%, transparent);
-    border-radius: var(--appearance-radius-control);
-    box-shadow: inset 0 1px 0 color-mix(in oklch, white 70%, transparent);
-    backdrop-filter: blur(14px) saturate(1.35);
-    -webkit-backdrop-filter: blur(14px) saturate(1.35);
-    transition:
-      box-shadow 0.2s ease,
-      border-color 0.2s ease,
-      background-color 0.2s ease;
-  }
-
-  .dark.apple [data-slot="input"],
-  .dark.apple [data-slot="textarea"],
-  .dark.apple [data-slot="select-trigger"] {
-    box-shadow: inset 0 1px 0 color-mix(in oklch, white 7%, transparent);
-  }
-
-  .apple [data-slot="input"]:focus,
-  .apple [data-slot="textarea"]:focus,
-  .apple [data-slot="select-trigger"]:focus {
-    border-color: color-mix(in oklch, var(--ring) 62%, var(--border) 38%);
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 55%, transparent),
-      0 0 0 4px color-mix(in oklch, var(--ring) 18%, transparent);
-  }
-
-  .apple [data-slot="card"],
-  .apple [data-slot="dialog-content"],
-  .apple [data-slot="dropdown-menu-content"],
-  .apple [data-slot="select-content"],
-  .apple [data-slot="popover-content"] {
-    border-color: color-mix(in oklch, var(--border) 78%, transparent);
-    background: color-mix(in oklch, var(--card) 80%, transparent);
-    backdrop-filter: blur(24px) saturate(1.65);
-    -webkit-backdrop-filter: blur(24px) saturate(1.65);
-    border-radius: var(--appearance-radius-2xl);
-    box-shadow: var(--shadow-card);
-  }
-
-  .apple [data-slot="dialog-content"] {
-    box-shadow: var(--shadow-modal);
-  }
-
-  .apple [data-slot="dropdown-menu-content"],
-  .apple [data-slot="select-content"],
-  .apple [data-slot="popover-content"] {
-    box-shadow: var(--shadow-floating);
-  }
-
-  .apple [data-slot="dialog-overlay"] {
-    background: color-mix(in oklch, black 28%, transparent);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-
-  .apple .nav-bar {
-    background: color-mix(in oklch, var(--background) 68%, transparent);
-    backdrop-filter: blur(24px) saturate(1.75);
-    -webkit-backdrop-filter: blur(24px) saturate(1.75);
-    border-bottom: 0.5px solid
-      color-mix(in oklch, var(--border) 50%, transparent);
-  }
-
-  .dark.apple .nav-bar {
-    background: color-mix(in oklch, var(--background) 60%, transparent);
-    border-bottom: 0.5px solid
-      color-mix(in oklch, var(--border) 30%, transparent);
-  }
-
-  .apple [data-slot="segmented-control"] {
-    background: color-mix(in oklch, var(--muted) 86%, transparent);
-    border: 1px solid color-mix(in oklch, var(--border) 66%, transparent);
-    border-radius: var(--appearance-radius-control);
-    padding: 3px;
-  }
-
-  .apple [data-slot="segmented-control-item"][data-state="active"] {
-    background: color-mix(in oklch, var(--card) 88%, transparent);
-    box-shadow: var(--shadow-card);
-    border-radius: var(--appearance-radius-md);
-  }
-
-  .apple ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .apple ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .apple ::-webkit-scrollbar-thumb {
-    background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
-    border-radius: 10px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-
-  .apple ::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
 
   :root :is(.workspace-panel, .workspace-panel-subtle) {
     border-radius: var(--appearance-radius-panel) !important;
@@ -1431,7 +1090,7 @@
 
   /* Structural workspace chrome must keep hard edges. These are layout
      boundaries, not cards, so they should not inherit the global radius
-     slider or liquid-glass defaults. */
+     slider defaults. */
   :root
     :is(
       [data-slot="sidebar-container"],
@@ -1489,1005 +1148,6 @@
     ) {
     transition-duration: var(--motion-duration-fast) !important;
     transition-timing-function: var(--motion-ease-out) !important;
-  }
-
-  :root[data-material-theme="liquid"] {
-    --global-glass-blur: 16px;
-    --global-glass-saturate: 1.32;
-    --global-glass-contrast: 1.012;
-    --global-glass-depth: 0.5;
-    --global-glass-field-opacity: 0.22;
-    --global-glass-field-saturate: 1.12;
-    --global-glass-control-blur: 10px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 14%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 22%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 9%,
-      transparent
-    );
-    --global-glass-border: color-mix(in oklch, var(--border) 30%, white 14%);
-    --global-glass-highlight: color-mix(in oklch, white 34%, transparent);
-    --global-glass-shadow:
-      0 0.5px 0 color-mix(in oklch, white 32%, transparent) inset,
-      0 -0.5px 0 color-mix(in oklch, black 3%, transparent) inset,
-      0 12px 30px rgb(15 23 42 / 0.05);
-    --liquid-glass-bg: color-mix(in oklch, white 5%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 3%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 5%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 5%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 7%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 9%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 34%, transparent);
-    --liquid-glass-noise: 0;
-    --liquid-glass-displacement: 0.25px;
-    --liquid-glass-shadow: 0 12px 30px rgb(15 23 42 / 0.05);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="crystal"] {
-    --global-glass-blur: 13px;
-    --global-glass-saturate: 1.22;
-    --global-glass-contrast: 1.012;
-    --global-glass-depth: 0.58;
-    --global-glass-field-opacity: 0.16;
-    --global-glass-field-saturate: 0.92;
-    --global-glass-control-blur: 8px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 20%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 28%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 12%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 32%, transparent);
-    --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 24%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 5%, transparent) inset,
-      0 8px 22px rgb(15 23 42 / 0.055);
-    --liquid-glass-bg: color-mix(in oklch, white 8%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 6%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 8%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 10%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 12%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 16%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 42%, transparent);
-    --liquid-glass-noise: 0.004;
-    --liquid-glass-displacement: 0.7px;
-    --liquid-glass-shadow: 0 12px 34px rgb(15 23 42 / 0.07);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="clear"] {
-    --global-glass-blur: 17px;
-    --global-glass-saturate: 1.35;
-    --global-glass-contrast: 1.02;
-    --global-glass-depth: 0.76;
-    --global-glass-field-opacity: 0.26;
-    --global-glass-field-saturate: 1;
-    --global-glass-control-blur: 11px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 36%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 48%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 24%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 46%, transparent);
-    --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 34%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 8%, transparent) inset,
-      0 12px 30px rgb(15 23 42 / 0.08);
-    --liquid-glass-bg: color-mix(in oklch, white 14%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 10%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 14%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 16%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 18%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 22%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 52%, transparent);
-    --liquid-glass-noise: 0.008;
-    --liquid-glass-displacement: 1px;
-    --liquid-glass-shadow: 0 16px 42px rgb(15 23 42 / 0.09);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="deep"] {
-    --global-glass-blur: 34px;
-    --global-glass-saturate: 1.72;
-    --global-glass-contrast: 1.065;
-    --global-glass-depth: 1.2;
-    --global-glass-field-opacity: 0.56;
-    --global-glass-field-saturate: 1.2;
-    --global-glass-control-blur: 20px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 64%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 76%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 50%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 72%, transparent);
-    --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 52%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 16%, transparent) inset,
-      0 24px 64px rgb(15 23 42 / 0.16);
-    --liquid-glass-bg: color-mix(in oklch, white 30%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 25%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 31%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 30%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 35%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 42%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 76%, transparent);
-    --liquid-glass-noise: 0.018;
-    --liquid-glass-displacement: 2px;
-    --liquid-glass-shadow: 0 30px 90px rgb(15 23 42 / 0.18);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="frosted"] {
-    --global-glass-blur: 38px;
-    --global-glass-saturate: 1.42;
-    --global-glass-contrast: 1.06;
-    --global-glass-depth: 1.06;
-    --global-glass-field-opacity: 0.68;
-    --global-glass-field-saturate: 1.05;
-    --global-glass-control-blur: 24px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 82%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 90%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 68%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 58%, transparent);
-    --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 42%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 13%, transparent) inset,
-      0 22px 58px rgb(15 23 42 / 0.14);
-    --liquid-glass-bg: color-mix(in oklch, white 48%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 40%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 48%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 46%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 54%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 60%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 70%, transparent);
-    --liquid-glass-noise: 0.014;
-    --liquid-glass-displacement: 1.3px;
-    --liquid-glass-shadow: 0 24px 70px rgb(15 23 42 / 0.14);
-  }
-
-  :root[data-material-theme="liquid"].dark {
-    --global-glass-blur: 24px;
-    --global-glass-saturate: 1.38;
-    --global-glass-contrast: 1.08;
-    --global-glass-field-opacity: 0.38;
-    --global-glass-field-saturate: 0.95;
-    --global-glass-control-blur: 15px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 54%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 68%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 40%,
-      transparent
-    );
-    --global-glass-border: color-mix(in oklch, var(--border) 55%, white 8%);
-    --global-glass-highlight: color-mix(in oklch, white 18%, transparent);
-    --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 10%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 32%, transparent) inset,
-      0 22px 56px rgb(0 0 0 / 0.34);
-    --liquid-glass-bg: color-mix(in oklch, var(--background) 50%, transparent);
-    --liquid-glass-thin-bg: color-mix(
-      in oklch,
-      var(--background) 42%,
-      transparent
-    );
-    --liquid-glass-card-bg: color-mix(
-      in oklch,
-      var(--background) 52%,
-      transparent
-    );
-    --liquid-glass-dock-bg: color-mix(
-      in oklch,
-      var(--background) 50%,
-      transparent
-    );
-    --liquid-glass-sheet-bg: color-mix(
-      in oklch,
-      var(--background) 58%,
-      transparent
-    );
-    --liquid-glass-input-bg: color-mix(
-      in oklch,
-      var(--background) 64%,
-      transparent
-    );
-    --liquid-glass-border: color-mix(in oklch, white 20%, transparent);
-    --liquid-glass-noise: 0.014;
-    --liquid-glass-shadow: 0 26px 82px rgb(0 0 0 / 0.38);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="crystal"].dark {
-    --global-glass-blur: 12px;
-    --global-glass-saturate: 1.08;
-    --global-glass-contrast: 1.04;
-    --global-glass-field-opacity: 0.13;
-    --global-glass-field-saturate: 0.82;
-    --global-glass-control-blur: 8px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 26%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 34%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 18%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 8%, transparent);
-    --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 5%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 18%, transparent) inset,
-      0 10px 28px rgb(0 0 0 / 0.2);
-    --liquid-glass-bg: color-mix(in oklch, var(--background) 25%, transparent);
-    --liquid-glass-thin-bg: color-mix(
-      in oklch,
-      var(--background) 20%,
-      transparent
-    );
-    --liquid-glass-card-bg: color-mix(
-      in oklch,
-      var(--background) 25%,
-      transparent
-    );
-    --liquid-glass-dock-bg: color-mix(
-      in oklch,
-      var(--background) 28%,
-      transparent
-    );
-    --liquid-glass-sheet-bg: color-mix(
-      in oklch,
-      var(--background) 32%,
-      transparent
-    );
-    --liquid-glass-input-bg: color-mix(
-      in oklch,
-      var(--background) 38%,
-      transparent
-    );
-    --liquid-glass-border: color-mix(in oklch, white 12%, transparent);
-    --liquid-glass-noise: 0.004;
-    --liquid-glass-displacement: 0.7px;
-    --liquid-glass-shadow: 0 14px 42px rgb(0 0 0 / 0.26);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="clear"].dark {
-    --global-glass-blur: 17px;
-    --global-glass-saturate: 1.18;
-    --global-glass-contrast: 1.06;
-    --global-glass-field-opacity: 0.24;
-    --global-glass-field-saturate: 0.9;
-    --global-glass-control-blur: 10px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 42%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 52%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 30%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 12%, transparent);
-    --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 7%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 24%, transparent) inset,
-      0 16px 38px rgb(0 0 0 / 0.25);
-    --liquid-glass-bg: color-mix(in oklch, var(--background) 36%, transparent);
-    --liquid-glass-thin-bg: color-mix(
-      in oklch,
-      var(--background) 30%,
-      transparent
-    );
-    --liquid-glass-card-bg: color-mix(
-      in oklch,
-      var(--background) 36%,
-      transparent
-    );
-    --liquid-glass-dock-bg: color-mix(
-      in oklch,
-      var(--background) 38%,
-      transparent
-    );
-    --liquid-glass-sheet-bg: color-mix(
-      in oklch,
-      var(--background) 42%,
-      transparent
-    );
-    --liquid-glass-input-bg: color-mix(
-      in oklch,
-      var(--background) 48%,
-      transparent
-    );
-    --liquid-glass-border: color-mix(in oklch, white 16%, transparent);
-    --liquid-glass-noise: 0.008;
-    --liquid-glass-displacement: 1px;
-    --liquid-glass-shadow: 0 18px 52px rgb(0 0 0 / 0.3);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="deep"].dark {
-    --global-glass-blur: 32px;
-    --global-glass-saturate: 1.48;
-    --global-glass-contrast: 1.1;
-    --global-glass-field-opacity: 0.5;
-    --global-glass-field-saturate: 1.04;
-    --global-glass-control-blur: 20px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 45%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 60%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 34%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 24%, transparent);
-    --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 13%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 38%, transparent) inset,
-      0 28px 74px rgb(0 0 0 / 0.42);
-    --liquid-glass-bg: color-mix(in oklch, var(--background) 62%, transparent);
-    --liquid-glass-thin-bg: color-mix(
-      in oklch,
-      var(--background) 54%,
-      transparent
-    );
-    --liquid-glass-card-bg: color-mix(
-      in oklch,
-      var(--background) 64%,
-      transparent
-    );
-    --liquid-glass-dock-bg: color-mix(
-      in oklch,
-      var(--background) 62%,
-      transparent
-    );
-    --liquid-glass-sheet-bg: color-mix(
-      in oklch,
-      var(--background) 70%,
-      transparent
-    );
-    --liquid-glass-input-bg: color-mix(
-      in oklch,
-      var(--background) 76%,
-      transparent
-    );
-    --liquid-glass-border: color-mix(in oklch, white 24%, transparent);
-    --liquid-glass-noise: 0.018;
-    --liquid-glass-displacement: 2px;
-    --liquid-glass-shadow: 0 30px 90px rgb(0 0 0 / 0.44);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="frosted"].dark {
-    --global-glass-blur: 36px;
-    --global-glass-saturate: 1.28;
-    --global-glass-contrast: 1.1;
-    --global-glass-field-opacity: 0.58;
-    --global-glass-field-saturate: 0.96;
-    --global-glass-control-blur: 23px;
-    --global-glass-surface: color-mix(in oklch, var(--card) 76%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 86%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 62%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 17%, transparent);
-    --global-glass-shadow:
-      0 1px 1px color-mix(in oklch, white 10%, transparent) inset,
-      0 -1px 1px color-mix(in oklch, black 34%, transparent) inset,
-      0 26px 70px rgb(0 0 0 / 0.38);
-    --liquid-glass-bg: color-mix(in oklch, var(--background) 78%, transparent);
-    --liquid-glass-thin-bg: color-mix(
-      in oklch,
-      var(--background) 70%,
-      transparent
-    );
-    --liquid-glass-card-bg: color-mix(
-      in oklch,
-      var(--background) 78%,
-      transparent
-    );
-    --liquid-glass-dock-bg: color-mix(
-      in oklch,
-      var(--background) 76%,
-      transparent
-    );
-    --liquid-glass-sheet-bg: color-mix(
-      in oklch,
-      var(--background) 84%,
-      transparent
-    );
-    --liquid-glass-input-bg: color-mix(
-      in oklch,
-      var(--background) 88%,
-      transparent
-    );
-    --liquid-glass-border: color-mix(in oklch, white 22%, transparent);
-    --liquid-glass-noise: 0.014;
-    --liquid-glass-displacement: 1.4px;
-    --liquid-glass-shadow: 0 28px 82px rgb(0 0 0 / 0.4);
-  }
-
-  :root[data-material-theme="liquid"].apple {
-    --global-glass-blur: 15px;
-    --global-glass-saturate: 1.26;
-    --global-glass-contrast: 1.01;
-    --global-glass-field-opacity: 0.2;
-    --global-glass-field-saturate: 1.1;
-    --global-glass-surface: color-mix(in oklch, var(--card) 13%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 21%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 8%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 32%, transparent);
-    --liquid-glass-bg: color-mix(in oklch, white 4%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 2.5%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 4%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 4%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 6%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 8%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 32%, transparent);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="crystal"].apple {
-    --global-glass-blur: 12px;
-    --global-glass-saturate: 1.16;
-    --global-glass-field-opacity: 0.12;
-    --global-glass-surface: color-mix(in oklch, var(--card) 14%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 20%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 8%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 30%, transparent);
-    --liquid-glass-bg: color-mix(in oklch, white 6%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 4%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 6%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 8%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 10%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 14%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 42%, transparent);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="clear"].apple {
-    --global-glass-blur: 16px;
-    --global-glass-saturate: 1.26;
-    --global-glass-field-opacity: 0.2;
-    --global-glass-surface: color-mix(in oklch, var(--card) 30%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 40%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 20%,
-      transparent
-    );
-    --liquid-glass-bg: color-mix(in oklch, white 12%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 8%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 12%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 13%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 16%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 20%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 52%, transparent);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="deep"].apple {
-    --global-glass-blur: 30px;
-    --global-glass-saturate: 1.58;
-    --global-glass-field-opacity: 0.42;
-    --global-glass-surface: color-mix(in oklch, var(--card) 62%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 74%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 50%,
-      transparent
-    );
-    --liquid-glass-bg: color-mix(in oklch, white 28%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 22%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 28%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 28%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 34%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 40%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 74%, transparent);
-  }
-
-  :root[data-material-theme="liquid"][data-material-intensity="frosted"].apple {
-    --global-glass-blur: 36px;
-    --global-glass-saturate: 1.36;
-    --global-glass-field-opacity: 0.6;
-    --global-glass-surface: color-mix(in oklch, var(--card) 78%, transparent);
-    --global-glass-surface-strong: color-mix(
-      in oklch,
-      var(--card) 88%,
-      transparent
-    );
-    --global-glass-surface-soft: color-mix(
-      in oklch,
-      var(--card) 64%,
-      transparent
-    );
-    --global-glass-highlight: color-mix(in oklch, white 52%, transparent);
-    --liquid-glass-bg: color-mix(in oklch, white 44%, transparent);
-    --liquid-glass-thin-bg: color-mix(in oklch, white 36%, transparent);
-    --liquid-glass-card-bg: color-mix(in oklch, white 44%, transparent);
-    --liquid-glass-dock-bg: color-mix(in oklch, white 42%, transparent);
-    --liquid-glass-sheet-bg: color-mix(in oklch, white 50%, transparent);
-    --liquid-glass-input-bg: color-mix(in oklch, white 56%, transparent);
-    --liquid-glass-border: color-mix(in oklch, white 70%, transparent);
-  }
-
-  :root[data-material-theme="liquid"] body {
-    background:
-      radial-gradient(
-        circle at 18% -12%,
-        color-mix(in oklch, var(--primary) 12%, transparent),
-        transparent 30rem
-      ),
-      radial-gradient(
-        circle at 88% 4%,
-        color-mix(in oklch, var(--accent) 32%, transparent),
-        transparent 28rem
-      ),
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, var(--background) 92%, white 8%),
-        var(--background) 36rem
-      ),
-      var(--background);
-  }
-
-  :root[data-material-theme="liquid"].dark body {
-    background:
-      radial-gradient(
-        circle at 14% -10%,
-        color-mix(in oklch, var(--primary) 18%, transparent),
-        transparent 32rem
-      ),
-      radial-gradient(
-        circle at 88% 0%,
-        color-mix(in oklch, var(--accent) 18%, transparent),
-        transparent 30rem
-      ),
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, var(--background) 84%, white 4%),
-        var(--background) 34rem
-      ),
-      var(--background);
-  }
-
-  :root[data-material-theme="liquid"] .workspace-shell {
-    isolation: isolate;
-    background:
-      radial-gradient(
-        circle at 24% -14%,
-        color-mix(in oklch, var(--primary) 12%, transparent),
-        transparent 28rem
-      ),
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, var(--background) 82%, transparent),
-        color-mix(in oklch, var(--background) 94%, transparent) 42rem
-      );
-  }
-
-  :root[data-material-theme="liquid"] .workspace-panel,
-  :root[data-material-theme="liquid"] [data-slot="card"],
-  :root[data-material-theme="liquid"] [data-slot="dialog-content"],
-  :root[data-material-theme="liquid"] [data-slot="dropdown-menu-content"],
-  :root[data-material-theme="liquid"] [data-slot="select-content"],
-  :root[data-material-theme="liquid"] [data-slot="popover-content"],
-  :root[data-material-theme="liquid"] [data-slot="sidebar-inner"] {
-    border-color: var(--global-glass-border);
-    background:
-      linear-gradient(180deg, var(--global-glass-highlight), transparent 30%),
-      radial-gradient(
-        80% 140% at 12% -20%,
-        color-mix(in oklch, white 22%, transparent),
-        transparent 54%
-      ),
-      var(--global-glass-surface);
-    box-shadow: var(--global-glass-shadow);
-    backdrop-filter: blur(var(--global-glass-blur))
-      saturate(var(--global-glass-saturate))
-      contrast(var(--global-glass-contrast));
-    -webkit-backdrop-filter: blur(var(--global-glass-blur))
-      saturate(var(--global-glass-saturate))
-      contrast(var(--global-glass-contrast));
-  }
-
-  :root[data-material-theme="liquid"] .workspace-panel-subtle,
-  :root[data-material-theme="liquid"] [data-slot="sidebar-inset"],
-  :root[data-material-theme="liquid"] [data-slot="segmented-control"] {
-    border-color: color-mix(
-      in oklch,
-      var(--global-glass-border) 82%,
-      transparent
-    );
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, white 28%, transparent),
-        transparent 34%
-      ),
-      var(--global-glass-surface-soft);
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 38%, transparent),
-      0 10px 28px rgb(15 23 42 / 0.08);
-    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.78))
-      saturate(var(--global-glass-saturate));
-    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.78))
-      saturate(var(--global-glass-saturate));
-  }
-
-  :root[data-material-theme="liquid"].dark .workspace-panel-subtle,
-  :root[data-material-theme="liquid"].dark [data-slot="sidebar-inset"],
-  :root[data-material-theme="liquid"].dark [data-slot="segmented-control"] {
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 9%, transparent),
-      0 14px 34px rgb(0 0 0 / 0.26);
-  }
-
-  :root[data-material-theme="liquid"] .workspace-panel:hover,
-  :root[data-material-theme="liquid"] .workspace-panel-subtle:hover,
-  :root[data-material-theme="liquid"] [data-slot="card"]:hover {
-    border-color: color-mix(in oklch, var(--border) 54%, var(--primary) 46%);
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 50%, transparent),
-      0 22px 56px rgb(15 23 42 / 0.14);
-  }
-
-  :root[data-material-theme="liquid"].dark .workspace-panel:hover,
-  :root[data-material-theme="liquid"].dark .workspace-panel-subtle:hover,
-  :root[data-material-theme="liquid"].dark [data-slot="card"]:hover {
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 11%, transparent),
-      0 24px 62px rgb(0 0 0 / 0.38);
-  }
-
-  :root[data-material-theme="liquid"] [data-slot="dialog-content"] {
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 45%, transparent),
-      0 34px 100px rgb(15 23 42 / 0.28);
-  }
-
-  :root[data-material-theme="liquid"] [data-slot="dialog-overlay"] {
-    background: color-mix(in oklch, black 24%, transparent);
-    backdrop-filter: blur(12px) saturate(1.1);
-    -webkit-backdrop-filter: blur(12px) saturate(1.1);
-  }
-
-  :root[data-material-theme="liquid"]
-    :is(
-      [data-slot="dropdown-menu-content"],
-      [data-slot="select-content"],
-      [data-slot="popover-content"]
-    ) {
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 42%, transparent),
-      0 18px 50px rgb(15 23 42 / 0.18);
-  }
-
-  :root[data-material-theme="liquid"] [data-slot="sidebar-container"] {
-    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.7))
-      saturate(var(--global-glass-saturate));
-    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.7))
-      saturate(var(--global-glass-saturate));
-  }
-
-  :root[data-material-theme="liquid"] [data-slot="sidebar-inner"] {
-    overflow: hidden;
-  }
-
-  :root[data-material-theme="liquid"] [data-slot="sidebar-inner"]::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    background:
-      radial-gradient(
-        100% 42% at 0% 0%,
-        color-mix(in oklch, var(--primary) 10%, transparent),
-        transparent 62%
-      ),
-      linear-gradient(
-        90deg,
-        color-mix(in oklch, white 18%, transparent),
-        transparent 32%
-      );
-    mix-blend-mode: screen;
-    opacity: 0.7;
-  }
-
-  :root[data-material-theme="liquid"]:not(.dark):not(.apple)
-    [data-slot="sidebar-inner"] {
-    border-color: color-mix(in oklch, var(--sidebar-border) 72%, transparent);
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, white 42%, transparent),
-        transparent 32%
-      ),
-      radial-gradient(
-        110% 54% at 0% 0%,
-        color-mix(in oklch, var(--primary) 9%, transparent),
-        transparent 66%
-      ),
-      color-mix(in oklch, var(--global-glass-surface) 82%, transparent);
-    box-shadow:
-      inset -1px 0 0 color-mix(in oklch, white 34%, transparent),
-      0 14px 36px rgb(15 23 42 / 0.08);
-    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.78))
-      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.01);
-    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.78))
-      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.01);
-  }
-
-  :root[data-material-theme="liquid"]:not(.dark):not(.apple)
-    [data-slot="sidebar-inner"]::before {
-    background:
-      linear-gradient(
-        90deg,
-        color-mix(in oklch, white 16%, transparent),
-        transparent 34%
-      ),
-      radial-gradient(
-        110% 42% at 0% 0%,
-        color-mix(in oklch, var(--primary) 5%, transparent),
-        transparent 66%
-      );
-    opacity: 0.32;
-  }
-
-  :root[data-material-theme="liquid"].dark [data-slot="sidebar-inner"] {
-    border-color: color-mix(in oklch, var(--sidebar-border) 78%, white 8%);
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, white 7%, transparent),
-        transparent 34%
-      ),
-      radial-gradient(
-        120% 62% at 0% 0%,
-        color-mix(in oklch, var(--primary) 11%, transparent),
-        transparent 68%
-      ),
-      color-mix(in oklch, var(--global-glass-surface) 86%, transparent);
-    box-shadow:
-      inset -1px 0 0 color-mix(in oklch, white 8%, transparent),
-      0 18px 46px rgb(0 0 0 / 0.32);
-    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.82))
-      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.06);
-    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.82))
-      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.06);
-  }
-
-  :root[data-material-theme="liquid"].dark [data-slot="sidebar-inner"]::before {
-    background:
-      linear-gradient(
-        90deg,
-        color-mix(in oklch, white 6%, transparent),
-        transparent 34%
-      ),
-      radial-gradient(
-        110% 44% at 0% 0%,
-        color-mix(in oklch, var(--primary) 7%, transparent),
-        transparent 68%
-      );
-    opacity: 0.42;
-  }
-
-  :root[data-material-theme="liquid"].apple [data-slot="sidebar-inner"] {
-    border-color: color-mix(in oklch, var(--border) 52%, white 26%);
-    background-color: rgb(255 255 255 / 0.42);
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, white 42%, transparent),
-        transparent 32%
-      ),
-      radial-gradient(
-        112% 54% at 0% 7%,
-        color-mix(in oklch, oklch(0.92 0.045 218) 9%, transparent),
-        transparent 68%
-      ),
-      radial-gradient(
-        96% 54% at 100% 100%,
-        color-mix(in oklch, oklch(0.89 0.038 28) 7%, transparent),
-        transparent 72%
-      ),
-      color-mix(in oklch, var(--global-glass-surface) 84%, transparent);
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 46%, transparent),
-      inset -1px 0 0 color-mix(in oklch, white 28%, transparent),
-      0 18px 42px rgb(15 23 42 / 0.1);
-    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.86))
-      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.02);
-    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.86))
-      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.02);
-  }
-
-  :root[data-material-theme="liquid"].apple
-    [data-slot="sidebar-inner"]::before {
-    background:
-      linear-gradient(
-        90deg,
-        color-mix(in oklch, white 16%, transparent),
-        transparent 36%
-      ),
-      radial-gradient(
-        100% 44% at 0% 0%,
-        color-mix(in oklch, var(--primary) 3%, transparent),
-        transparent 64%
-      ),
-      radial-gradient(
-        90% 42% at 100% 100%,
-        color-mix(in oklch, oklch(0.82 0.055 42) 3%, transparent),
-        transparent 70%
-      );
-    mix-blend-mode: screen;
-    opacity: 0.28;
-  }
-
-  :root[data-material-theme="liquid"].apple [data-slot="sidebar-container"] {
-    backdrop-filter: blur(14px) saturate(1.18);
-    -webkit-backdrop-filter: blur(14px) saturate(1.18);
-  }
-
-  :root[data-material-theme="liquid"]
-    :is(
-      [data-slot="input"],
-      [data-slot="textarea"],
-      [data-slot="select-trigger"],
-      [data-slot="sidebar-input"]
-    ) {
-    border-color: color-mix(in oklch, var(--border) 62%, transparent);
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, white 22%, transparent),
-        transparent 70%
-      ),
-      var(--global-glass-surface-strong);
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 42%, transparent),
-      0 8px 22px rgb(15 23 42 / 0.07);
-    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.56))
-      saturate(calc(var(--global-glass-saturate) * 0.92));
-    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.56))
-      saturate(calc(var(--global-glass-saturate) * 0.92));
-  }
-
-  :root[data-material-theme="liquid"]
-    :is(
-      [data-slot="input"],
-      [data-slot="textarea"],
-      [data-slot="select-trigger"],
-      [data-slot="sidebar-input"]
-    ):focus {
-    border-color: color-mix(in oklch, var(--ring) 58%, var(--border) 42%);
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 48%, transparent),
-      0 0 0 4px color-mix(in oklch, var(--ring) 16%, transparent),
-      0 10px 26px rgb(15 23 42 / 0.1);
-  }
-
-  :root[data-material-theme="liquid"]
-    [data-slot="button"][data-variant="outline"],
-  :root[data-material-theme="liquid"]
-    [data-slot="button"][data-variant="secondary"],
-  :root[data-material-theme="liquid"]
-    [data-slot="segmented-control-item"][data-state="active"] {
-    border-color: color-mix(in oklch, var(--border) 62%, transparent);
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklch, white 26%, transparent),
-        transparent 72%
-      ),
-      color-mix(in oklch, var(--card) 66%, transparent);
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 46%, transparent),
-      0 8px 22px rgb(15 23 42 / 0.08);
-    backdrop-filter: blur(var(--global-glass-control-blur)) saturate(1.34);
-    -webkit-backdrop-filter: blur(var(--global-glass-control-blur))
-      saturate(1.34);
-  }
-
-  :root[data-material-theme="liquid"]
-    [data-slot="button"][data-variant="ghost"]:hover,
-  :root[data-material-theme="liquid"] [data-slot="dropdown-menu-item"]:focus,
-  :root[data-material-theme="liquid"] [data-slot="select-item"]:focus {
-    background: color-mix(in oklch, var(--accent) 62%, transparent);
-    backdrop-filter: blur(12px) saturate(1.22);
-    -webkit-backdrop-filter: blur(12px) saturate(1.22);
-  }
-
-  :root[data-material-theme="liquid"]
-    [data-slot="button"][data-variant="default"] {
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 24%, transparent),
-      0 12px 30px color-mix(in oklch, var(--primary) 22%, transparent);
-  }
-
-  :root[data-material-theme="liquid"] .octo-appearance-step-slider {
-    border-color: color-mix(in oklch, var(--border) 58%, transparent);
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 36%, transparent),
-      0 10px 26px rgb(15 23 42 / 0.08);
-    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.5))
-      saturate(var(--global-glass-saturate));
-    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.5))
-      saturate(var(--global-glass-saturate));
-  }
-
-  @supports not (backdrop-filter: blur(1px)) {
-    :root[data-material-theme="liquid"] .workspace-panel,
-    :root[data-material-theme="liquid"] .workspace-panel-subtle,
-    :root[data-material-theme="liquid"] [data-slot="card"],
-    :root[data-material-theme="liquid"] [data-slot="dialog-content"],
-    :root[data-material-theme="liquid"] [data-slot="dropdown-menu-content"],
-    :root[data-material-theme="liquid"] [data-slot="select-content"],
-    :root[data-material-theme="liquid"] [data-slot="popover-content"] {
-      background: color-mix(in oklch, var(--card) 92%, var(--background) 8%);
-    }
   }
 }
 
@@ -2592,250 +1252,7 @@
     }
   }
 
-  .octo-global-liquid-field {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    overflow: hidden;
-    opacity: var(--global-glass-field-opacity, 0.48);
-  }
 
-  .octo-global-liquid-field .octo-liquid-glass-field {
-    position: absolute;
-    inset: -8%;
-    width: 116%;
-    height: 116%;
-    opacity: 0.72;
-    mix-blend-mode: screen;
-    filter: blur(0.25px) saturate(var(--global-glass-field-saturate, 1.14));
-  }
-
-  .octo-liquid-glass-field {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    opacity: 0.68;
-    mix-blend-mode: soft-light;
-    filter: blur(0.15px) saturate(1.18);
-  }
-
-  .octo-liquid-glass {
-    --glass-x: 50%;
-    --glass-y: 28%;
-    --glass-blur: var(--global-glass-blur, 10px);
-    --glass-saturate: var(--global-glass-saturate, 1.08);
-    --glass-contrast: var(--global-glass-contrast, 1.006);
-    --glass-depth: var(--global-glass-depth, 0.42);
-    --glass-displacement: var(--liquid-glass-displacement, 0.25px);
-    --glass-shift-x: 0px;
-    --glass-shift-y: 0px;
-    --glass-noise: var(--liquid-glass-noise, 0);
-    --glass-bg: var(
-      --liquid-glass-bg,
-      color-mix(in oklch, white 22%, transparent)
-    );
-    --glass-border: var(
-      --liquid-glass-border,
-      color-mix(in oklch, white 64%, transparent)
-    );
-    --glass-top: color-mix(in oklch, white 28%, transparent);
-    --glass-bottom: color-mix(in oklch, black 3%, transparent);
-    --glass-shadow: var(
-      --liquid-glass-shadow,
-      0 24px 70px rgb(15 23 42 / 0.13)
-    );
-    position: relative;
-    isolation: isolate;
-    overflow: visible;
-    border: 1px solid color-mix(in oklch, var(--glass-border) 78%, transparent);
-    background:
-      linear-gradient(
-        180deg,
-        rgb(255 255 255 / calc(0.055 + var(--glass-depth) * 0.035)),
-        rgb(255 255 255 / 0.015) 48%,
-        rgb(0 0 0 / 0.012)
-      ),
-      var(--glass-bg);
-    box-shadow:
-      inset 0 0.5px 0 rgb(255 255 255 / 0.34),
-      inset 0 -0.5px 0 var(--glass-bottom),
-      var(--glass-shadow);
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
-      contrast(var(--glass-contrast));
-    -webkit-backdrop-filter: blur(var(--glass-blur))
-      saturate(var(--glass-saturate)) contrast(var(--glass-contrast));
-  }
-
-  .octo-liquid-glass::before,
-  .octo-liquid-glass::after,
-  .octo-liquid-glass__lens {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .octo-liquid-glass::before {
-    background:
-      linear-gradient(180deg, var(--glass-top), transparent 22%),
-      linear-gradient(105deg, rgb(255 255 255 / 0.055), transparent 34%);
-    opacity: 0.36;
-    mix-blend-mode: screen;
-  }
-
-  .octo-liquid-glass > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  .octo-liquid-glass::after {
-    inset: 0.5px;
-    border: 1px solid rgb(255 255 255 / calc(0.1 + var(--glass-depth) * 0.035));
-    background:
-      repeating-radial-gradient(
-        circle at 12% 18%,
-        rgb(255 255 255 / calc(var(--glass-noise) * 0.22)) 0 1px,
-        transparent 1px 10px
-      ),
-      repeating-linear-gradient(
-        112deg,
-        rgb(255 255 255 / calc(var(--glass-noise) * 0.12)) 0 1px,
-        transparent 1px 14px
-      ),
-      linear-gradient(180deg, transparent 62%, var(--glass-bottom));
-    opacity: 0.16;
-    box-shadow:
-      inset 0 0 0 0.5px rgb(255 255 255 / 0.18),
-      inset 0 0 calc(var(--glass-displacement) * 8) rgb(255 255 255 / 0.035);
-  }
-
-  .octo-liquid-glass__lens {
-    inset: -1px;
-    border-radius: inherit;
-    background:
-      linear-gradient(
-        90deg,
-        rgb(255 255 255 / 0.045),
-        transparent 18% 82%,
-        rgb(255 255 255 / 0.024)
-      ),
-      radial-gradient(
-        48% 100% at var(--glass-x) var(--glass-y),
-        rgb(255 255 255 / 0.055),
-        transparent 58%
-      );
-    filter: blur(calc(var(--glass-displacement) * 0.46));
-    opacity: calc(0.1 + var(--glass-depth) * 0.08);
-    transform: translate3d(var(--glass-shift-x), var(--glass-shift-y), 0);
-    mix-blend-mode: screen;
-  }
-
-  .octo-liquid-glass--thin {
-    --glass-blur: calc(var(--global-glass-blur, 10px) * 0.58);
-    --glass-depth: calc(var(--global-glass-depth, 0.42) * 0.66);
-    --glass-displacement: calc(var(--liquid-glass-displacement, 0.25px) * 0.8);
-    --glass-noise: calc(var(--liquid-glass-noise, 0.016) * 0.75);
-    --glass-bg: var(
-      --liquid-glass-thin-bg,
-      color-mix(in oklch, white 18%, transparent)
-    );
-    --glass-border: color-mix(in oklch, white 24%, transparent);
-    --glass-shadow: 0 4px 14px rgb(15 23 42 / 0.035);
-  }
-
-  .octo-liquid-glass--card {
-    --glass-blur: calc(var(--global-glass-blur, 10px) * 0.88);
-    --glass-depth: calc(var(--global-glass-depth, 0.42) * 0.9);
-    --glass-displacement: var(--liquid-glass-displacement, 0.25px);
-    --glass-noise: var(--liquid-glass-noise, 0);
-    --glass-bg: var(
-      --liquid-glass-card-bg,
-      color-mix(in oklch, white 22%, transparent)
-    );
-    --glass-border: color-mix(in oklch, white 12%, transparent);
-  }
-
-  .octo-liquid-glass--dock {
-    --glass-blur: var(--global-glass-blur, 10px);
-    --glass-depth: var(--global-glass-depth, 0.42);
-    --glass-displacement: calc(var(--liquid-glass-displacement, 0.25px) * 1.1);
-    --glass-noise: var(--liquid-glass-noise, 0);
-    --glass-bg: var(
-      --liquid-glass-dock-bg,
-      color-mix(in oklch, white 21%, transparent)
-    );
-    --glass-border: color-mix(in oklch, white 10%, transparent);
-    --glass-shadow: 0 14px 38px rgb(15 23 42 / 0.08), 0 1px 3px rgb(15 23 42 / 0.04);
-  }
-
-  .octo-liquid-glass--sheet {
-    --glass-blur: calc(var(--global-glass-blur, 10px) * 1.02);
-    --glass-depth: calc(var(--global-glass-depth, 0.42) * 1.04);
-    --glass-displacement: calc(var(--liquid-glass-displacement, 0.25px) * 1.1);
-    --glass-noise: var(--liquid-glass-noise, 0);
-    --glass-bg: var(
-      --liquid-glass-sheet-bg,
-      color-mix(in oklch, white 25%, transparent)
-    );
-    --glass-border: color-mix(in oklch, white 30%, transparent);
-    --glass-shadow: 0 10px 28px rgb(15 23 42 / 0.055);
-  }
-
-  .octo-liquid-glass--input {
-    --glass-blur: calc(var(--global-glass-blur, 10px) * 0.7);
-    --glass-depth: calc(var(--global-glass-depth, 0.42) * 0.76);
-    --glass-displacement: calc(var(--liquid-glass-displacement, 0.25px) * 0.72);
-    --glass-noise: 0;
-    --glass-bg: var(
-      --liquid-glass-input-bg,
-      color-mix(in oklch, white 30%, transparent)
-    );
-    --glass-border: color-mix(in oklch, white 26%, transparent);
-    --glass-shadow: 0 4px 14px rgb(15 23 42 / 0.035);
-  }
-
-  :root .octo-liquid-glass:not(.rounded-none) {
-    border-radius: var(--appearance-radius-2xl) !important;
-  }
-
-  :root .octo-liquid-glass--thin:not(.rounded-none) {
-    border-radius: var(--appearance-radius-lg) !important;
-  }
-
-  :root .octo-liquid-glass--dock:not(.rounded-none) {
-    border-radius: var(--appearance-radius-panel) !important;
-  }
-
-  :root .octo-liquid-glass--input:not(.rounded-none) {
-    border-radius: var(--appearance-radius-2xl) !important;
-  }
-
-  .octo-liquid-glass--interactive {
-    transform: translateZ(0);
-    will-change: transform, filter;
-    transition:
-      transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-      border-color 180ms ease,
-      box-shadow 180ms ease,
-      background 180ms ease,
-      filter 180ms ease;
-  }
-
-  .octo-liquid-glass--interactive:hover {
-    transform: translateY(-1px) scale(1.006);
-    border-color: color-mix(in oklch, white 72%, transparent);
-    filter: saturate(1.05) brightness(1.015);
-  }
-
-  .octo-liquid-glass--interactive:active {
-    transform: translateY(0) scale(0.986);
-  }
 
   .octo-appearance-step-slider {
     position: relative;
@@ -2905,75 +1322,6 @@
       0 10px 26px rgb(15 23 42 / 0.08);
   }
 
-  .dark .octo-liquid-glass {
-    --glass-bg: var(
-      --liquid-glass-bg,
-      color-mix(in oklch, var(--background) 58%, transparent)
-    );
-    --glass-border: var(
-      --liquid-glass-border,
-      color-mix(in oklch, white 20%, transparent)
-    );
-    --glass-top: color-mix(in oklch, white 24%, transparent);
-    --glass-bottom: color-mix(in oklch, black 44%, transparent);
-    --glass-shadow: var(--liquid-glass-shadow, 0 26px 82px rgb(0 0 0 / 0.38));
-  }
-
-  :root:not([data-material-theme="liquid"]) .octo-liquid-glass {
-    isolation: auto;
-    border-color: color-mix(
-      in oklch,
-      var(--border) 38%,
-      transparent
-    ) !important;
-    background: color-mix(in oklch, var(--card) 92%, transparent) !important;
-    box-shadow: 0 1px 1px rgb(15 23 42 / 0.045) !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-
-  :root:not([data-material-theme="liquid"]) .octo-liquid-glass::before,
-  :root:not([data-material-theme="liquid"]) .octo-liquid-glass::after,
-  :root:not([data-material-theme="liquid"]) .octo-liquid-glass__lens,
-  :root:not([data-material-theme="liquid"]) .octo-liquid-glass-field {
-    display: none;
-  }
-
-  :root:not([data-material-theme="liquid"])
-    .octo-liquid-glass--interactive:hover,
-  :root:not([data-material-theme="liquid"])
-    .octo-liquid-glass--interactive:active {
-    transform: none !important;
-    filter: none !important;
-  }
-
-  @supports not (backdrop-filter: blur(1px)) {
-    .octo-liquid-glass {
-      background:
-        linear-gradient(
-          135deg,
-          color-mix(in oklch, white 42%, transparent),
-          color-mix(in oklch, var(--background) 78%, transparent)
-        ),
-        var(--glass-bg);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .octo-liquid-glass-field {
-      display: none;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .octo-liquid-glass--interactive {
-      transition: none;
-    }
-    .octo-liquid-glass--interactive:hover,
-    .octo-liquid-glass--interactive:active {
-      transform: none;
-    }
-  }
 }
 
 @layer base {

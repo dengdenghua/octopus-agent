@@ -22,14 +22,14 @@ export function localPartnerBadge(
     return {
       label: labels.connected,
       className:
-        "bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/45 dark:text-emerald-300 dark:ring-emerald-900/70",
+        "bg-success/5 text-success ring-success/20 dark:text-success dark:ring-success/70",
     };
   }
   if (partner.registered && effectiveStatus !== "registered") {
     return {
       label: "已连接 · 需修复",
       className:
-        "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/45 dark:text-amber-300 dark:ring-amber-900/70",
+        "bg-warning/5 text-warning ring-warning/20 dark:text-warning dark:ring-warning/70",
     };
   }
   if (effectiveStatus === "ready") {
@@ -42,7 +42,7 @@ export function localPartnerBadge(
     return {
       label: "模型未配置",
       className:
-        "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/45 dark:text-amber-300 dark:ring-amber-900/70",
+        "bg-warning/5 text-warning ring-warning/20 dark:text-warning dark:ring-warning/70",
     };
   }
   if (
@@ -52,7 +52,7 @@ export function localPartnerBadge(
     return {
       label: "仅可手动",
       className:
-        "bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/45 dark:text-amber-300 dark:ring-amber-900/70",
+        "bg-warning/5 text-warning ring-warning/20 dark:text-warning dark:ring-warning/70",
     };
   }
   if (partner.detected) {

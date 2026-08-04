@@ -638,19 +638,19 @@ export function MessageOutputSummary({
           "flex min-w-0 flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs",
           isFailure
             ? isNetworkFailure
-              ? "border-amber-500/20 bg-amber-500/[0.04]"
+              ? "border-warning/20 bg-warning/50/[0.04]"
               : "border-destructive/20 bg-destructive/[0.035]"
-            : "border-emerald-500/20 bg-emerald-500/[0.055]",
+            : "border-success/20 bg-success/50/[0.055]",
         )}
       >
         {isFailure ? (
           isNetworkFailure ? (
-            <AlertTriangleIcon className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <AlertTriangleIcon className="size-4 shrink-0 text-warning" />
           ) : (
             <XCircleIcon className="size-4 shrink-0 text-destructive" />
           )
         ) : (
-          <CheckCircle2Icon className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle2Icon className="size-4 shrink-0 text-success" />
         )}
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium text-foreground/85">
@@ -675,11 +675,11 @@ export function MessageOutputSummary({
         </div>
         {reviewableChanges.length > 0 && (
           <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-xs shadow-[var(--shadow-xs)]">
-            <span className="text-emerald-600 dark:text-emerald-400">
+            <span className="text-success">
               +{totalAdded}
             </span>
             <span className="mx-1 text-muted-foreground"> </span>
-            <span className="text-red-600 dark:text-red-400">
+            <span className="text-destructive">
               -{totalRemoved}
             </span>
           </div>
@@ -769,9 +769,9 @@ export function MessageOutputSummary({
                   className="flex items-start gap-2 px-3 py-2 text-xs"
                 >
                   {passed ? (
-                    <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-success" />
                   ) : (
-                    <XCircleIcon className="mt-0.5 size-3.5 shrink-0 text-red-600 dark:text-red-400" />
+                    <XCircleIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -782,8 +782,8 @@ export function MessageOutputSummary({
                         className={cn(
                           "rounded px-1 py-0.5 text-xs font-mono font-medium",
                           passed
-                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                            : "bg-red-500/10 text-red-700 dark:text-red-300",
+                            ? "bg-success/10 text-success"
+                            : "bg-destructive/10 text-destructive",
                         )}
                       >
                         {passed
@@ -823,11 +823,11 @@ export function MessageOutputSummary({
                     {changeSummaryLabel}
                   </span>
                   <span className="mt-0.5 block font-mono text-xs leading-none">
-                    <span className="text-emerald-600 dark:text-emerald-400">
+                    <span className="text-success">
                       +{totalAdded}
                     </span>
                     <span className="mx-1 text-muted-foreground"> </span>
-                    <span className="text-red-600 dark:text-red-400">
+                    <span className="text-destructive">
                       -{totalRemoved}
                     </span>
                   </span>
@@ -839,11 +839,11 @@ export function MessageOutputSummary({
                       {changeSummaryLabel}
                     </span>
                     <span className="mt-0.5 block font-mono text-xs leading-none">
-                      <span className="text-emerald-600 dark:text-emerald-400">
+                      <span className="text-success">
                         +{totalAdded}
                       </span>
                       <span className="mx-1 text-muted-foreground"> </span>
-                      <span className="text-red-600 dark:text-red-400">
+                      <span className="text-destructive">
                         -{totalRemoved}
                       </span>
                     </span>
@@ -865,7 +865,7 @@ export function MessageOutputSummary({
                     type="button"
                     onClick={() => setChangesAccepted(true)}
                     disabled={changesAccepted}
-                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-transparent px-2 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/60 disabled:cursor-default disabled:text-emerald-600 disabled:opacity-100 dark:disabled:text-emerald-400"
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-transparent px-2 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/60 disabled:cursor-default disabled:text-success disabled:opacity-100 dark:disabled:text-success"
                   >
                     <CheckCircle2Icon className="size-3 text-muted-foreground/70" />
                     {changesAccepted ? t.message.accepted : t.message.accept}
@@ -1020,7 +1020,7 @@ function ChangeRow({
           className={cn(
             "shrink-0 rounded px-1.5 py-0.5 text-xs",
             change.created
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              ? "bg-success/10 text-success"
               : "bg-muted text-muted-foreground",
           )}
         >
@@ -1043,17 +1043,17 @@ function ChangeRow({
         {change.diffTruncated && (
           <span
             title={t.message.diffTruncatedTooltip}
-            className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-700 dark:text-amber-400"
+            className="shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-xs text-warning"
           >
             {t.message.diffTruncated}
           </span>
         )}
         <span className="shrink-0 font-mono text-xs">
-          <span className="text-emerald-600 dark:text-emerald-400">
+          <span className="text-success">
             +{change.added}
           </span>
           <span className="mx-1 text-muted-foreground"> </span>
-          <span className="text-red-600 dark:text-red-400">
+          <span className="text-destructive">
             -{change.removed}
           </span>
         </span>
@@ -1108,7 +1108,7 @@ function HunkDecisionRow({
               <button
                 type="button"
                 onClick={onAccept}
-                className="inline-flex h-6 items-center rounded-md border border-border-default px-2 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400"
+                className="inline-flex h-6 items-center rounded-md border border-border-default px-2 text-xs font-medium text-success transition-colors hover:bg-success/10 dark:text-success"
               >
                 {t.message.accept}
               </button>
@@ -1116,7 +1116,7 @@ function HunkDecisionRow({
                 type="button"
                 onClick={onReject}
                 disabled={rejecting}
-                className="inline-flex h-6 items-center gap-1 rounded-md border border-border-default px-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-55 dark:text-red-400"
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-border-default px-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-55 dark:text-destructive"
               >
                 {rejecting && (
                   <Loader2Icon className="size-3 animate-spin text-muted-foreground/70" />
@@ -1129,8 +1129,8 @@ function HunkDecisionRow({
               className={cn(
                 "rounded px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide",
                 decision === "accepted"
-                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                  : "bg-red-500/15 text-red-700 dark:text-red-400",
+                  ? "bg-success/15 text-success"
+                  : "bg-destructive/15 text-destructive",
               )}
             >
               {decision === "accepted"
@@ -1156,9 +1156,9 @@ function HunkDecisionRow({
 function hunkLineTone(line: string): string {
   if (line.startsWith("@@")) return "text-muted-foreground";
   if (line.startsWith("+"))
-    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+    return "bg-success/10 text-success";
   if (line.startsWith("-"))
-    return "bg-red-500/10 text-red-700 dark:text-red-400";
+    return "bg-destructive/10 text-destructive";
   return "text-foreground/80";
 }
 

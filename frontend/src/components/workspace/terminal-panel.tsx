@@ -162,7 +162,7 @@ export function TerminalPanel({
           <span
             className={cn(
               "size-1.5 rounded-full",
-              connected ? "bg-emerald-400" : "bg-rose-400",
+              connected ? "bg-success" : "bg-destructive",
             )}
           />
         </div>

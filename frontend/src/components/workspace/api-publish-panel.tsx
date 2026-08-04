@@ -329,7 +329,7 @@ function PublishForm({
         {t.apiPublish.publishAgentAsApi}
       </div>
 
-      {error && <div className="text-xs text-red-500">{error}</div>}
+      {error && <div className="text-xs text-destructive">{error}</div>}
 
       <div className="space-y-2">
         <label className="block text-xs font-medium">
@@ -664,7 +664,7 @@ while (true) {
               className={cn(
                 "rounded p-1 transition-colors",
                 api.enabled
-                  ? "text-green-500 hover:text-green-600"
+                  ? "text-success hover:text-success"
                   : "text-muted-foreground hover:text-foreground",
               )}
               onClick={handleToggle}
@@ -760,8 +760,8 @@ while (true) {
 
             {/* Show created key (once) */}
             {createdKey && showRawKey && (
-              <div className="rounded border border-yellow-500/30 bg-yellow-500/5 p-2">
-                <div className="mb-1 text-xs font-medium text-yellow-600">
+              <div className="rounded border border-warning/30 bg-warning/5 p-2">
+                <div className="mb-1 text-xs font-medium text-warning">
                   {t.apiPublish.copyKeyWarning}
                 </div>
                 <div className="flex items-center gap-1">
@@ -808,7 +808,7 @@ while (true) {
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          className="text-muted-foreground hover:text-red-500 rounded p-0.5"
+                          className="text-muted-foreground hover:text-destructive rounded p-0.5"
                           onClick={() => handleRevokeKey(k.key_id)}
                         >
                           <Trash2Icon className="size-3" />
@@ -961,10 +961,10 @@ function LogEntry({ log }: { log: CallLog }) {
   const [expanded, setExpanded] = useState(false);
   const statusColor =
     log.status === "success"
-      ? "text-green-500"
+      ? "text-success"
       : log.status === "rate_limited"
-        ? "text-yellow-500"
-        : "text-red-500";
+        ? "text-warning"
+        : "text-destructive";
 
   return (
     <div
@@ -1054,12 +1054,12 @@ function StatsView({ stats }: { stats: UsageStats }) {
         <StatCard
           label={t.apiPublish.success}
           value={stats.successful_calls.toLocaleString()}
-          color="text-green-500"
+          color="text-success"
         />
         <StatCard
           label={t.apiPublish.errors}
           value={stats.error_calls.toLocaleString()}
-          color="text-red-500"
+          color="text-destructive"
         />
       </div>
 
@@ -1142,7 +1142,7 @@ function APIListItem({
       <div
         className={cn(
           "size-2 shrink-0 rounded-lg",
-          api.enabled ? "bg-green-500" : "bg-muted-foreground/40",
+          api.enabled ? "bg-success" : "bg-muted-foreground/40",
         )}
       />
       <div className="flex-1 min-w-0">
@@ -1154,7 +1154,7 @@ function APIListItem({
       </div>
       <button
         type="button"
-        className="text-muted-foreground hover:text-red-500 rounded p-0.5 transition-colors"
+        className="text-muted-foreground hover:text-destructive rounded p-0.5 transition-colors"
         onClick={(e) => {
           e.stopPropagation();
           onDelete();
@@ -1296,7 +1296,7 @@ export function APIPublishPanel({ className }: { className?: string }) {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-2 border-b bg-red-500/5 px-4 py-2 text-xs text-red-500">
+        <div className="flex items-center gap-2 border-b bg-destructive/5 px-4 py-2 text-xs text-destructive">
           <AlertCircleIcon className="size-3.5 shrink-0" />
           <span className="truncate">{error}</span>
         </div>

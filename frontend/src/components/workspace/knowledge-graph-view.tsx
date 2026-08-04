@@ -1231,7 +1231,7 @@ function KnowledgeGraph3DContent() {
           {loading ? (
             <Loader2Icon className="size-6 animate-spin text-foreground/80" />
           ) : (
-            <div className="max-w-sm rounded-lg border border-red-300/30 bg-red-950/30 px-4 py-3 text-sm text-red-100">
+            <div className="max-w-sm rounded-lg border border-destructive/30 bg-destructive/20 px-4 py-3 text-sm text-destructive">
               {webglError}
             </div>
           )}

@@ -96,8 +96,8 @@ export default function LocalBrainSetup() {
               className={cn(
                 "shrink-0 rounded px-1.5 py-0.5 text-xs",
                 ready
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-amber-50 text-amber-700",
+                  ? "bg-success/5 text-success"
+                  : "bg-warning/5 text-warning",
               )}
             >
               {ready ? t.localBrain.ready : t.localBrain.pending(pending)}
@@ -147,7 +147,7 @@ export default function LocalBrainSetup() {
       {expanded && (
         <div className="space-y-1.5 border-t border-border-subtle px-3 py-2">
           {error && (
-            <p className="text-xs text-red-600">
+            <p className="text-xs text-destructive">
               {t.localBrain.checkFailed(error)}
             </p>
           )}
@@ -155,9 +155,9 @@ export default function LocalBrainSetup() {
             <div key={it.id} className="flex items-start gap-2.5">
               <span className="mt-0.5 shrink-0">
                 {it.ok ? (
-                  <CheckCircle2Icon className="size-3.5 text-emerald-600" />
+                  <CheckCircle2Icon className="size-3.5 text-success" />
                 ) : (
-                  <AlertCircleIcon className="size-3.5 text-amber-500" />
+                  <AlertCircleIcon className="size-3.5 text-warning" />
                 )}
               </span>
               <div className="min-w-0 flex-1">

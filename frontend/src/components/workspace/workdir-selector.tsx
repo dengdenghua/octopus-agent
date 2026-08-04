@@ -135,9 +135,9 @@ function parentDir(path: string): string | null {
 // Stable hash → palette index. Same folder name always lands on the
 // same color across reloads, so the avatar tiles act as a visual id.
 const AVATAR_PALETTE: Array<{ bg: string; fg: string }> = [
-  { bg: "bg-rose-500/15", fg: "text-rose-600 dark:text-rose-400" },
-  { bg: "bg-amber-500/15", fg: "text-amber-600 dark:text-amber-400" },
-  { bg: "bg-emerald-500/15", fg: "text-emerald-600 dark:text-emerald-400" },
+  { bg: "bg-destructive/15", fg: "text-destructive" },
+  { bg: "bg-warning/15", fg: "text-warning" },
+  { bg: "bg-success/15", fg: "text-success" },
   { bg: "bg-sky-500/15", fg: "text-sky-600 dark:text-sky-400" },
   { bg: "bg-violet-500/15", fg: "text-violet-600 dark:text-violet-400" },
   { bg: "bg-pink-500/15", fg: "text-pink-600 dark:text-pink-400" },

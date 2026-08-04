@@ -597,7 +597,7 @@ export function GepaPanel() {
               {t.recipeForge.addendumAppliedTitle}
             </div>
             {applied?.applied ? (
-              <Badge className="bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/15">
+              <Badge className="bg-success/15 text-success hover:bg-success/15">
                 <CheckCircleIcon className="mr-1 size-3" />
                 {t.recipeForge.addendumLive}
               </Badge>
@@ -698,7 +698,7 @@ export function GepaPanel() {
           <div className="space-y-3 rounded-lg border border-border-default bg-background/60 px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-medium">
-                <TrendingUpIcon className="size-4 text-emerald-400" />
+                <TrendingUpIcon className="size-4 text-success" />
                 {t.recipeForge.paretoFrontTitle(run.front_size ?? 0)}
               </div>
               <span className="text-xs text-muted-foreground">
@@ -1023,10 +1023,10 @@ function ConvergenceChart({
 function CanaryRow({ entry, t }: { entry: CanaryEntry; t: Translations }) {
   const phaseColor =
     entry.phase === "rolled_back"
-      ? "bg-rose-500/15 text-rose-300"
+      ? "bg-destructive/15 text-destructive"
       : entry.phase === "full"
-        ? "bg-emerald-500/15 text-emerald-300"
-        : "bg-amber-500/15 text-amber-300";
+        ? "bg-success/15 text-success"
+        : "bg-warning/15 text-warning";
   const dt = entry.entered_ts ? new Date(entry.entered_ts) : null;
   const shortSkill =
     entry.skill_name.length > 72
@@ -1037,7 +1037,7 @@ function CanaryRow({ entry, t }: { entry: CanaryEntry; t: Translations }) {
       className={cn(
         "rounded-md border px-3 py-2 text-xs",
         entry.phase === "rolled_back"
-          ? "border-rose-500/30 bg-rose-500/5"
+          ? "border-destructive/30 bg-destructive/5"
           : "border-border-default bg-background/40",
       )}
     >
@@ -1048,7 +1048,7 @@ function CanaryRow({ entry, t }: { entry: CanaryEntry; t: Translations }) {
         <span className="min-w-0 max-w-full truncate font-mono text-xs text-muted-foreground">
           {shortSkill}
         </span>
-        <span className="font-mono text-xs text-emerald-400">
+        <span className="font-mono text-xs text-success">
           {t.recipeForge.canaryRate(entry.current_rate ?? 0)}
         </span>
         <span className="text-muted-foreground">
@@ -1076,7 +1076,7 @@ function CanaryRow({ entry, t }: { entry: CanaryEntry; t: Translations }) {
           <span>{t.recipeForge.bestAvg(entry.avg_score)}</span>
         )}
         {entry.last_rollback_reason && (
-          <span className="basis-full text-rose-300">
+          <span className="basis-full text-destructive">
             {t.recipeForge.canaryRollbackReason(entry.last_rollback_reason)}
           </span>
         )}
@@ -1130,11 +1130,11 @@ function PastRunRow({
     null;
   const lifecycleColor =
     lifecyclePhase === "rolled_back"
-      ? "bg-rose-500/15 text-rose-300"
+      ? "bg-destructive/15 text-destructive"
       : lifecyclePhase === "full" || lifecyclePhase === "applied"
-        ? "bg-emerald-500/15 text-emerald-300"
+        ? "bg-success/15 text-success"
         : lifecyclePhase
-          ? "bg-amber-500/15 text-amber-300"
+          ? "bg-warning/15 text-warning"
           : "";
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -1181,9 +1181,9 @@ function PastRunRow({
       className={cn(
         "rounded-md border px-3 py-2 text-xs",
         lifecyclePhase === "rolled_back"
-          ? "border-rose-500/30 bg-rose-500/5"
+          ? "border-destructive/30 bg-destructive/5"
           : run.applied
-            ? "border-emerald-500/30 bg-emerald-500/5"
+            ? "border-success/30 bg-success/5"
             : "border-border-default",
       )}
     >
@@ -1221,13 +1221,13 @@ function PastRunRow({
         </span>
         <span className="text-muted-foreground">· front {run.front_size}</span>
         {run.best_avg_score !== null && (
-          <span className="font-mono text-emerald-400">
+          <span className="font-mono text-success">
             {t.recipeForge.bestAvg(run.best_avg_score)}
           </span>
         )}
         <div className="flex-1" />
         {run.applied && (
-          <Badge className="bg-emerald-500/15 text-xs text-emerald-300 hover:bg-emerald-500/15">
+          <Badge className="bg-success/15 text-xs text-success hover:bg-success/15">
             <CheckCircleIcon className="mr-1 size-3" />
             {t.recipeForge.addendumLive}
           </Badge>
@@ -1272,7 +1272,7 @@ function PastRunRow({
         )}
       </div>
       {run.winner_rollback_reason && (
-        <div className="mt-1 text-xs text-rose-300">
+        <div className="mt-1 text-xs text-destructive">
           {t.recipeForge.canaryRollbackReason(run.winner_rollback_reason)}
         </div>
       )}
@@ -1288,12 +1288,12 @@ function PastRunRow({
             aria-expanded={evidenceOpen}
             onClick={() => setEvidenceOpen((value) => !value)}
           >
-            <ShieldCheckIcon className="size-3 text-emerald-400" />
+            <ShieldCheckIcon className="size-3 text-success" />
             <span className="font-medium text-foreground">
               {t.recipeForge.nativeEvidenceTitle}
             </span>
             {nativeEvaluation?.verdict && (
-              <Badge className="bg-emerald-500/10 text-xs text-emerald-300 hover:bg-emerald-500/10">
+              <Badge className="bg-success/10 text-xs text-success hover:bg-success/10">
                 {nativeEvaluation.verdict}
               </Badge>
             )}
@@ -1385,7 +1385,7 @@ function PastRunRow({
                 )?.map((weakCase) => (
                   <div
                     key={weakCase.case_id ?? weakCase.reason}
-                    className="text-amber-300"
+                    className="text-warning"
                   >
                     {t.recipeForge.nativeEvidenceWeakCase(
                       weakCase.case_id ?? "case",
@@ -1402,7 +1402,7 @@ function PastRunRow({
                   </div>
                 ))
               ) : (
-                <div className="text-emerald-300">
+                <div className="text-success">
                   {t.recipeForge.nativeEvidenceNoWeakCases}
                 </div>
               )}
@@ -1437,7 +1437,7 @@ function PastRunRow({
               </div>
               <div>{detail.proposal.description}</div>
               {detail.proposal.rejection_reason && (
-                <div className="text-rose-300">
+                <div className="text-destructive">
                   {detail.proposal.rejection_reason}
                 </div>
               )}
@@ -1464,7 +1464,7 @@ function PastRunRow({
               {(detail.rollbacks?.length ?? 0) > 0 && (
                 <div className="space-y-1">
                   {detail.rollbacks?.map((r) => (
-                    <div key={r.id} className="font-mono text-rose-300">
+                    <div key={r.id} className="font-mono text-destructive">
                       {r.id} · {r.description}
                     </div>
                   ))}
@@ -1538,18 +1538,18 @@ function CandidateRow({
       className={cn(
         "rounded-lg border px-3 py-2",
         isBest
-          ? "border-emerald-500/30 bg-emerald-500/5"
+          ? "border-success/30 bg-success/5"
           : "border-border-default bg-background/40",
       )}
     >
       <div className="flex items-center gap-2">
         <span className="font-mono text-xs">{candidate.candidate_id}</span>
         {isBest && (
-          <Badge className="bg-emerald-500/15 text-xs text-emerald-300 hover:bg-emerald-500/15">
+          <Badge className="bg-success/15 text-xs text-success hover:bg-success/15">
             {t.recipeForge.bestBadge}
           </Badge>
         )}
-        <span className="font-mono text-sm tabular-nums text-emerald-400">
+        <span className="font-mono text-sm tabular-nums text-success">
           {candidate.avg_score.toFixed(3)}
         </span>
         <span className="font-mono text-xs text-muted-foreground">
@@ -1570,7 +1570,7 @@ function CandidateRow({
             {runRecipeId && (
               <Button
                 size="sm"
-                className="h-7 bg-emerald-600 text-xs hover:bg-emerald-700"
+                className="h-7 bg-success text-xs hover:bg-success"
                 onClick={() => {
                   onApply(candidate.prompt_preview, "per_recipe");
                   setConfirming(false);
@@ -1672,7 +1672,7 @@ function AddendumRow({
           <div className="flex items-center gap-1">
             <Button
               size="sm"
-              className="h-6 bg-rose-600 text-xs hover:bg-rose-700"
+              className="h-6 bg-destructive text-xs hover:bg-destructive"
               onClick={() => {
                 onDelete();
                 setConfirmDelete(false);
@@ -1706,7 +1706,7 @@ function AddendumRow({
 function HistoryRow({ entry, t }: { entry: HistoryEntry; t: Translations }) {
   if (entry.skipped) {
     return (
-      <div className="text-amber-300">
+      <div className="text-warning">
         {t.recipeForge.historySkipped(
           String(entry.iter ?? "0"),
           entry.reason ?? "",
@@ -1732,7 +1732,7 @@ function HistoryRow({ entry, t }: { entry: HistoryEntry; t: Translations }) {
     <div
       className={cn(
         "flex flex-wrap gap-2",
-        entry.improved ? "text-emerald-300" : "text-muted-foreground",
+        entry.improved ? "text-success" : "text-muted-foreground",
       )}
     >
       <span>{t.recipeForge.historyIter(String(entry.iter))}</span>

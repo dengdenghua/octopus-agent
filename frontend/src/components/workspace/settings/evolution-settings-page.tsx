@@ -20,8 +20,8 @@ import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 
 const SEVERITY_COLOR: Record<string, string> = {
-  high: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
-  mid: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+  high: "bg-destructive/15 text-destructive border-destructive/30",
+  mid: "bg-warning/15 text-warning border-warning/30",
   low: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
 };
 
@@ -163,8 +163,8 @@ export default function EvolutionSettingsPage() {
             <div
               className={
                 sched.running
-                  ? "mt-0.5 font-medium text-emerald-600 dark:text-emerald-400"
-                  : "mt-0.5 font-medium text-rose-600"
+                  ? "mt-0.5 font-medium text-success"
+                  : "mt-0.5 font-medium text-destructive"
               }
             >
               {sched.running ? e.runningYes : e.runningNo}
@@ -348,7 +348,7 @@ export default function EvolutionSettingsPage() {
               ))}
             </div>
             {!gepa.auto_apply && (
-              <div className="mt-3 rounded-md border border-amber-300/60 bg-amber-50/60 p-2.5 text-xs dark:border-amber-700/40 dark:bg-amber-950/30">
+              <div className="mt-3 rounded-md border border-warning/60 bg-warning/5 p-2.5 text-xs dark:border-warning/40">
                 {e.gepaDryRunHint}
               </div>
             )}
@@ -369,7 +369,7 @@ export default function EvolutionSettingsPage() {
             variant="outline"
             className={
               camouflage?.enabled
-                ? "ml-2 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+                ? "ml-2 text-xs border-success/40 text-success"
                 : "ml-2 text-xs text-muted-foreground"
             }
           >
@@ -382,7 +382,7 @@ export default function EvolutionSettingsPage() {
           {e.camouflageDescription}
         </p>
         {!camouflage?.enabled ? (
-          <div className="mt-3 rounded-md border border-amber-300/60 bg-amber-50/60 p-2.5 text-xs dark:border-amber-700/40 dark:bg-amber-950/30">
+          <div className="mt-3 rounded-md border border-warning/60 bg-warning/5 p-2.5 text-xs dark:border-warning/40">
             {e.camouflageDisabledHint}
             {camouflage?.last_error ? (
               <div className="mt-1 font-mono text-xs opacity-70">

@@ -516,7 +516,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               <div className="flex min-w-0 items-center gap-2.5">
                 <div className="relative flex size-7 items-center justify-center border border-border-default bg-background text-muted-foreground shadow-[var(--shadow-xs)]">
                   <UserIcon className="size-3.5" />
-                  <span className="absolute -right-0.5 -bottom-0.5 size-2 rounded-full border border-background bg-emerald-500" />
+                  <span className="absolute -right-0.5 -bottom-0.5 size-2 rounded-full border border-background bg-success" />
                 </div>
                 <div className="min-w-0 leading-tight">
                   <p className="text-sm font-medium">

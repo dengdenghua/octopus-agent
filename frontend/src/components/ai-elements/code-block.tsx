@@ -175,13 +175,13 @@ export const CodeBlock = ({
       >
         <div className="flex h-8 items-center justify-between gap-2 border-b bg-muted/40 px-3">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground font-mono uppercase">
+            <span className="text-micro text-muted-foreground font-mono uppercase">
               {language}
             </span>
             {streamingHeader && (
               <>
-                <span className="text-[10px] text-muted-foreground">·</span>
-                <span className="text-[10px] text-muted-foreground animate-pulse">
+                <span className="text-micro text-muted-foreground">·</span>
+                <span className="text-micro text-muted-foreground animate-pulse">
                   {t.streaming.generating}
                 </span>
               </>

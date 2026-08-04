@@ -46,7 +46,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { usePromptDialog } from "@/components/ui/prompt-dialog";
 
-import { liquidGlassClass } from "./liquid-glass";
+
 import { useBrowserStore, type BrowserTab } from "./browser-store";
 
 type DesktopPanelId =
@@ -145,7 +145,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     url: "https://notebooklm.google.com/",
     icon: BookOpenIcon,
     logoUrl: "https://cdn.simpleicons.org/notebooklm",
-    color: "from-amber-500 to-orange-400",
+    color: "from-warning to-orange-400",
     description: "Library, citations, document research",
     category: "ai",
   },
@@ -154,7 +154,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     url: "https://www.doubao.com/chat/",
     icon: MessageCircleIcon,
     logoUrl: "https://www.google.com/s2/favicons?domain=www.doubao.com&sz=128",
-    color: "from-emerald-500 to-teal-400",
+    color: "from-success to-teal-400",
     description: "Chinese research, Chinese rewriting",
     category: "ai",
   },
@@ -218,7 +218,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     url: "https://claude.ai/",
     icon: BrainCircuitIcon,
     logoUrl: "https://cdn.simpleicons.org/claude",
-    color: "from-stone-600 to-rose-400",
+    color: "from-stone-600 to-destructive",
     description: "Long-text analysis, writing organization",
     category: "ai",
   },
@@ -237,7 +237,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: ImageIcon,
     logoUrl:
       "https://www.google.com/s2/favicons?domain=app.agnes-ai.com&sz=128",
-    color: "from-pink-500 to-rose-400",
+    color: "from-pink-500 to-destructive",
     description: "AI gateway, image/video generation",
     category: "ai",
   },
@@ -246,7 +246,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     url: "https://www.youtube.com/",
     icon: ImageIcon,
     logoUrl: "https://cdn.simpleicons.org/youtube",
-    color: "from-red-600 to-red-500",
+    color: "from-destructive to-destructive",
     description: "Videos, channels, live streams",
     category: "video",
   },
@@ -273,7 +273,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     url: "https://stackoverflow.com/",
     icon: BrainCircuitIcon,
     logoUrl: "https://cdn.simpleicons.org/stackoverflow",
-    color: "from-orange-500 to-amber-400",
+    color: "from-orange-500 to-warning",
     description: "Programming Q&A, troubleshooting",
     category: "dev",
   },
@@ -439,7 +439,7 @@ function SearchEngineLogo({
       {failed ? (
         <span
           className={cn(
-            "grid size-full place-items-center text-[10px] font-black leading-none",
+            "grid size-full place-items-center text-micro font-black leading-none",
             engine.accent,
           )}
         >
@@ -492,7 +492,7 @@ const DESKTOP_BACKDROPS: Record<
     className:
       "bg-[radial-gradient(circle_at_16%_10%,rgba(236,253,245,0.72),transparent_27%),radial-gradient(circle_at_78%_6%,rgba(125,211,252,0.42),transparent_25%),radial-gradient(circle_at_88%_70%,rgba(251,207,232,0.38),transparent_31%),radial-gradient(circle_at_34%_88%,rgba(253,230,138,0.24),transparent_30%),linear-gradient(145deg,#5f8c91_0%,#8ea7bd_34%,#bba8b8_68%,#d1ad8f_100%)]",
     swatchClassName:
-      "bg-gradient-to-br from-muted-foreground via-zinc-300 to-rose-300",
+      "bg-gradient-to-br from-muted-foreground via-zinc-300 to-destructive",
   },
   "theme-focus": {
     imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/focus-nocturne.png`,
@@ -522,13 +522,13 @@ const DESKTOP_BACKDROPS: Record<
     imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/forest-calm.png`,
     className:
       "bg-[radial-gradient(circle_at_18%_12%,rgba(187,247,208,0.56),transparent_30%),radial-gradient(circle_at_78%_70%,rgba(45,212,191,0.28),transparent_34%),linear-gradient(145deg,#134e4a_0%,#3f6212_46%,#a7f3d0_100%)]",
-    swatchClassName: "bg-gradient-to-br from-emerald-300 via-teal-500 to-lime-700",
+    swatchClassName: "bg-gradient-to-br from-success via-teal-500 to-lime-700",
   },
   "wallpaper-ember": {
     imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/ember-dusk.png`,
     className:
       "bg-[radial-gradient(circle_at_20%_16%,rgba(254,215,170,0.66),transparent_30%),radial-gradient(circle_at_84%_76%,rgba(251,113,133,0.36),transparent_32%),linear-gradient(145deg,#44403c_0%,#a16207_50%,#fed7aa_100%)]",
-    swatchClassName: "bg-gradient-to-br from-stone-600 via-amber-500 to-orange-200",
+    swatchClassName: "bg-gradient-to-br from-stone-600 via-warning to-orange-200",
   },
 };
 
@@ -651,7 +651,7 @@ function MenuItem({
         active
           ? "bg-sky-400/20 text-sky-400"
           : "text-muted-foreground hover:bg-white/50 hover:text-foreground",
-        danger && "text-red-500 hover:bg-red-400/10",
+        danger && "text-destructive hover:bg-destructive/10",
       )}
     >
       <Icon className="w-4 h-4 flex-shrink-0" />
@@ -1038,7 +1038,7 @@ export function BrowserHome({
             <span className="block truncate text-xs font-semibold text-foreground">
               {item.title}
             </span>
-            <span className="block truncate text-[10px] text-muted-foreground">
+            <span className="block truncate text-micro text-muted-foreground">
               {item.meta}
             </span>
           </span>
@@ -1579,7 +1579,7 @@ export function BrowserHome({
       <div
         className={cn(
           "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-[24px] py-4",
-          liquidGlassClass("dock"),
+          "bg-white/10",
           compactDesktop && "left-3 top-4 h-[calc(100%-2rem)]",
           mobileDesktop && "left-2 w-11",
         )}
@@ -1587,7 +1587,7 @@ export function BrowserHome({
         <div
           className={cn(
             "grid size-8 place-items-center rounded-2xl text-foreground",
-            liquidGlassClass("thin"),
+            "bg-white/10",
           )}
         >
           <BotIcon className="size-5" />
@@ -1609,7 +1609,7 @@ export function BrowserHome({
                 }}
                 className={cn(
                   "grid size-9 place-items-center rounded-2xl text-muted-foreground/90 transition hover:text-foreground",
-                  liquidGlassClass("thin", true),
+                  "bg-white/10",
                   selected && "text-foreground",
                 )}
                 title={sideNavLabelMap[item.id]}
@@ -1625,7 +1625,7 @@ export function BrowserHome({
             onClick={() => setActivePanel("add")}
             className={cn(
               "grid size-9 place-items-center rounded-2xl text-muted-foreground/90 transition hover:text-foreground",
-              liquidGlassClass("thin", true),
+              "bg-white/10",
               activePanel === "add" && "text-foreground",
             )}
             title={wt.addTitle}
@@ -1637,7 +1637,7 @@ export function BrowserHome({
             onClick={() => setActivePanel("settings")}
             className={cn(
               "grid size-9 place-items-center rounded-2xl text-muted-foreground/90 transition hover:text-foreground",
-              liquidGlassClass("thin", true),
+              "bg-white/10",
               activePanel === "settings" && "text-foreground",
             )}
             title={wt.settingsTitle}
@@ -1666,7 +1666,7 @@ export function BrowserHome({
           <div
             className={cn(
               "flex h-14 items-center gap-3 rounded-[22px] px-3 text-muted-foreground",
-              liquidGlassClass("input", true),
+              "bg-white/10",
               mobileDesktop && "h-12 rounded-2xl px-2.5",
             )}
           >
@@ -1711,7 +1711,7 @@ export function BrowserHome({
               role="menu"
               className={cn(
                 "absolute left-2 top-[calc(100%+10px)] z-30 w-56 rounded-2xl p-1.5 text-foreground",
-                liquidGlassClass("sheet"),
+                "bg-white/16",
               )}
             >
               {engines.map((engine, index) => {
@@ -1837,7 +1837,7 @@ export function BrowserHome({
               <div
                 className={cn(
                   "flex overflow-hidden rounded-[22px] text-foreground",
-                  liquidGlassClass("card"),
+                  "bg-white/10",
                 )}
               >
                 <div
@@ -1848,13 +1848,13 @@ export function BrowserHome({
                 >
                   <div
                     className={cn(
-                      "text-4xl font-semibold text-rose-500",
+                      "text-4xl font-semibold text-destructive",
                       mobileDesktop && "text-3xl",
                     )}
                   >
                     {day}
                   </div>
-                  <div className="text-sm font-medium text-rose-500">
+                  <div className="text-sm font-medium text-destructive">
                     {week}
                   </div>
                 </div>
@@ -1883,7 +1883,7 @@ export function BrowserHome({
               <div
                 className={cn(
                   "grid grid-cols-2 gap-5 rounded-[26px] p-5",
-                  liquidGlassClass("card"),
+                  "bg-white/10",
                   mobileDesktop && "gap-3 rounded-[20px] p-4",
                 )}
               >
@@ -1902,7 +1902,7 @@ export function BrowserHome({
                     <span
                       className={cn(
                         "grid size-20 grid-cols-2 gap-1.5 rounded-[22px] p-2 transition",
-                        liquidGlassClass("thin", true),
+                        "bg-white/10",
                       )}
                     >
                       {group.apps.slice(0, 4).map((app) => (
@@ -1930,7 +1930,7 @@ export function BrowserHome({
                     key={group.id}
                     className={cn(
                       "absolute left-1/2 top-[calc(100%+10px)] z-20 w-72 -translate-x-1/2 rounded-[24px] p-3 text-foreground",
-                      liquidGlassClass("sheet"),
+                      "bg-white/16",
                     )}
                   >
                     <div className="mb-2 flex items-center justify-between px-1">
@@ -1970,7 +1970,7 @@ export function BrowserHome({
                             <span className="block truncate text-sm font-semibold">
                               {getAppName(app.name)}
                             </span>
-                            <span className="block truncate text-[11px] text-muted-foreground">
+                            <span className="block truncate text-mini text-muted-foreground">
                               {getAppDesc(app.description)}
                             </span>
                           </span>
@@ -1987,7 +1987,7 @@ export function BrowserHome({
             <section
               className={cn(
                 "w-[360px] max-w-[calc(100vw-1rem)] self-end rounded-[26px] p-4 text-foreground",
-                liquidGlassClass("card"),
+                "bg-white/10",
                 compactDesktop && "w-full self-stretch",
                 mobileDesktop && "rounded-[22px] p-3",
               )}
@@ -2006,7 +2006,7 @@ export function BrowserHome({
                 <div
                   className={cn(
                     "grid size-8 place-items-center rounded-full text-muted-foreground",
-                    liquidGlassClass("thin"),
+                    "bg-white/10",
                   )}
                   title={bt.historyOnly}
                 >
@@ -2035,7 +2035,7 @@ export function BrowserHome({
                       key={widget.id}
                       className={cn(
                         "rounded-[24px] p-5 transition-all",
-                        liquidGlassClass("card", true),
+                        "bg-white/10",
                         widget.size === "large" && "col-span-2",
                         widget.size === "small" && "p-4",
                         isDragging && "opacity-40 scale-95",
@@ -2187,7 +2187,7 @@ export function BrowserHome({
                         {editMode && (
                           <button
                             onClick={() => handleDelete(link.id)}
-                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-400 rounded-full flex items-center justify-center shadow-[var(--shadow-md)]"
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-destructive rounded-full flex items-center justify-center shadow-[var(--shadow-md)]"
                           >
                             <X className="w-3 h-3 text-white" />
                           </button>
@@ -2234,7 +2234,7 @@ export function BrowserHome({
                           ) : (
                             <Folder className="w-6 h-6 text-white/60" />
                           )}
-                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-400 rounded-full flex items-center justify-center text-[10px] text-white font-bold">
+                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-400 rounded-full flex items-center justify-center text-micro text-white font-bold">
                             {links.length}
                           </span>
                         </div>
@@ -2266,7 +2266,7 @@ export function BrowserHome({
                                 <span className="text-lg font-bold text-muted-foreground">
                                   {link.name[0]}
                                 </span>
-                                <span className="text-[10px] text-muted-foreground truncate w-full text-center">
+                                <span className="text-micro text-muted-foreground truncate w-full text-center">
                                   {link.name}
                                 </span>
                               </button>
@@ -2285,7 +2285,7 @@ export function BrowserHome({
         <div
           className={cn(
             "mx-auto mb-7 flex h-20 max-w-[780px] items-center gap-4 overflow-hidden rounded-[28px] px-4 py-2",
-            liquidGlassClass("dock"),
+            "bg-white/10",
             compactDesktop &&
               "absolute bottom-5 left-20 right-5 z-10 mx-0 mb-0 justify-start gap-3 overflow-x-auto rounded-[22px] px-4 py-3",
             tabletDesktop &&
@@ -2310,7 +2310,7 @@ export function BrowserHome({
                 onDragEnd={() => setDraggingUrl(null)}
                 className={cn(
                   "group grid size-14 place-items-center rounded-[18px] transition hover:-translate-y-0.5",
-                  liquidGlassClass("thin", true),
+                  "bg-white/10",
                   compactDesktop && "size-13 shrink-0 rounded-2xl",
                   tabletDesktop && "size-13",
                   mobileDesktop && "size-11 rounded-[15px]",
@@ -2334,7 +2334,7 @@ export function BrowserHome({
                 <button
                   type="button"
                   onClick={() => removeAppFromDock(app.url)}
-                  className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-rose-500 text-white shadow-[var(--shadow-md)] transition hover:bg-rose-600"
+                  className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-destructive text-white shadow-[var(--shadow-md)] transition hover:bg-destructive"
                   title={bt.removeFromDock}
                 >
                   <X className="size-3" />
@@ -2348,7 +2348,7 @@ export function BrowserHome({
               onClick={() => setActivePanel("add")}
               className={cn(
                 "grid size-14 shrink-0 place-items-center rounded-[18px] border-dashed text-muted-foreground transition hover:-translate-y-0.5",
-                liquidGlassClass("thin", true),
+                "bg-white/10",
                 compactDesktop && "size-13 rounded-2xl",
                 tabletDesktop && "size-13",
                 mobileDesktop && "size-11 rounded-[15px]",
@@ -2584,7 +2584,7 @@ function DesktopControlPanel({
     <div
       className={cn(
         "absolute bottom-7 left-24 top-24 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[30px] text-foreground",
-        liquidGlassClass("sheet"),
+        "bg-white/16",
       )}
     >
       <div className="flex items-center justify-between border-b border-white/38 bg-white/16 px-5 py-4">
@@ -2669,7 +2669,7 @@ function DesktopControlPanel({
                         {wt.widgetPanelDescs[index]}
                       </div>
                     </div>
-                    <span className="rounded-full bg-emerald-500/14 px-2 py-1 text-[10px] font-medium text-emerald-700">
+                    <span className="rounded-full bg-success/14 px-2 py-1 text-micro font-medium text-success">
                       {count > 0 ? `${wt.widgetEnabled} ${count}` : bt.add}
                     </span>
                   </button>

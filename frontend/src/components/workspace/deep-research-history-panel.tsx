@@ -138,7 +138,7 @@ export function DeepResearchHistoryPanel({
                     </div>
                   </div>
                   {job.final_report ? (
-                    <CheckCircle2Icon className="size-4 shrink-0 text-green-500" />
+                    <CheckCircle2Icon className="size-4 shrink-0 text-success" />
                   ) : (
                     <TelescopeIcon className="size-4 shrink-0 text-muted-foreground" />
                   )}

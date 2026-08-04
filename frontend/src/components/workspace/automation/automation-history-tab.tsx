@@ -125,14 +125,14 @@ function HistoryItem({
           <span className="text-sm font-medium">{title}</span>
           <Badge
             variant="outline"
-            className="rounded px-1.5 py-0 text-[10px] font-normal"
+            className="rounded px-1.5 py-0 text-micro font-normal"
           >
             {t.intelligence.historyItemsAnalyzed(report.items_analyzed)}
           </Badge>
           {hasErrors && (
             <Badge
               variant="destructive"
-              className="rounded px-1.5 py-0 text-[10px] font-normal"
+              className="rounded px-1.5 py-0 text-micro font-normal"
             >
               {t.intelligence.historyErrors(report.source_errors.length)}
             </Badge>

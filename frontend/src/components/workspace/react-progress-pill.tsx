@@ -58,7 +58,7 @@ export const ReactProgressPill = memo(function ReactProgressPill({
       className={cn(
         "flex items-center gap-1.5 rounded-full border border-border-default bg-card/50 px-2 py-0.5 text-xs",
         hot
-          ? "border-amber-300/60 bg-amber-50/60 dark:border-amber-700/40 dark:bg-amber-950/30"
+          ? "border-warning/60 bg-warning/5 dark:border-warning/40"
           : "border-blue-300/60 bg-blue-50/60 dark:border-blue-700/40 dark:bg-blue-950/30",
         className,
       )}
@@ -66,7 +66,7 @@ export const ReactProgressPill = memo(function ReactProgressPill({
       <LoaderIcon
         className={cn(
           "h-3 w-3 animate-spin",
-          hot ? "text-amber-600" : "text-blue-600",
+          hot ? "text-warning" : "text-blue-600",
         )}
       />
       {active.max_iterations > 0 && (

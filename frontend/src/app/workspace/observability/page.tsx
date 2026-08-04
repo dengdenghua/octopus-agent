@@ -408,7 +408,7 @@ function SwarmPanel() {
             <div
               className={cn(
                 "size-2 rounded-full",
-                connected ? "bg-emerald-500 animate-pulse" : "bg-muted",
+                connected ? "bg-success animate-pulse" : "bg-muted",
               )}
             />
             <span className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -460,10 +460,10 @@ function SwarmPanel() {
                     className={cn(
                       "size-1.5 rounded-full",
                       s.status === "running"
-                        ? "bg-amber-500 animate-pulse"
+                        ? "bg-warning animate-pulse"
                         : s.status === "error"
                           ? "bg-destructive"
-                          : "bg-emerald-500",
+                          : "bg-success",
                     )}
                   />
                   {s.sub_agent_role && (
@@ -724,7 +724,7 @@ function JournalPanel() {
             <div
               className={cn(
                 "size-2 rounded-full",
-                connected ? "bg-emerald-500 animate-pulse" : "bg-muted",
+                connected ? "bg-success animate-pulse" : "bg-muted",
               )}
             />
             <Button
@@ -820,7 +820,7 @@ function JournalPanel() {
                         <span
                           className={cn(
                             "text-xs",
-                            e.is_error ? "text-destructive" : "text-emerald-500",
+                            e.is_error ? "text-destructive" : "text-success",
                           )}
                         >
                           {e.is_error
@@ -960,7 +960,7 @@ export function ToolEffectsPanel() {
         <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
-              <ShieldAlertIcon className="size-4 text-amber-500" />
+              <ShieldAlertIcon className="size-4 text-warning" />
               外部动作回执
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -1029,7 +1029,7 @@ export function ToolEffectsPanel() {
                       {receipt.step_id} · token {receipt.fencing_token}
                     </div>
                     {receipt.reason && (
-                      <p className="mt-1 line-clamp-2 text-xs text-amber-700 dark:text-amber-300">
+                      <p className="mt-1 line-clamp-2 text-xs text-warning">
                         {receipt.reason}
                       </p>
                     )}
@@ -1075,7 +1075,7 @@ export function ToolEffectsPanel() {
               fencing token，页面过期时不会误操作新回执。
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+          <div className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
             {selected?.sucker_id} · token {selected?.fencing_token}
           </div>
           <Textarea
@@ -1306,10 +1306,10 @@ function HemolymphPanel() {
   const latest = data.snapshots[data.snapshots.length - 1];
   const buckets = ["system", "suckers", "memory", "history"] as const;
   const bucketColors: Record<string, string> = {
-    system: "bg-sky-500",
-    suckers: "bg-emerald-500",
-    memory: "bg-amber-500",
-    history: "bg-violet-500",
+    system: "bg-chart-6",
+    suckers: "bg-chart-8",
+    memory: "bg-chart-4",
+    history: "bg-chart-1",
   };
   const bucketLabels: Record<string, string> = {
     system: t.observabilityPage.hemolymphBuckets.system,
@@ -1602,9 +1602,9 @@ function StatusDot({ status }: { status: string }) {
   const { t } = useI18n();
   const cls =
     status === "ready"
-      ? "bg-emerald-500"
+      ? "bg-success"
       : status === "warming"
-        ? "bg-amber-500"
+        ? "bg-warning"
         : "bg-muted";
   const label =
     status === "ready"
@@ -1651,7 +1651,7 @@ function shortTs(ts: string): string {
 
 function eventRowColor(kind: string): string {
   if (kind === "immune" || kind === "immune_reject") return "bg-destructive/5";
-  if (kind.startsWith("budget")) return "bg-amber-500/5";
+  if (kind.startsWith("budget")) return "bg-warning/5";
   if (kind === "file_op") return "bg-primary/5";
   if (kind === "browser_artifact") return "bg-violet-500/5";
   if (kind === "sub_tool_start" || kind === "sub_tool_end")

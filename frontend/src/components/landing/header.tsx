@@ -124,7 +124,7 @@ function StarCounter() {
   return (
     <>
       <StarFilledIcon
-        className="size-4 transition-colors duration-300 group-hover:text-yellow-500"
+        className="size-4 transition-colors duration-300 group-hover:text-warning"
         fill="currentColor"
       />
       {stars > 0 && (

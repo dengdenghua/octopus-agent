@@ -306,7 +306,7 @@ export function TeamMembersDialog({
                       {participant.muted && (
                         <Badge
                           variant="outline"
-                          className="border-amber-500/40 text-amber-600 dark:text-amber-400"
+                          className="border-warning/40 text-warning"
                         >
                           {t.teamMembers.mutedBadge}
                         </Badge>
@@ -315,7 +315,7 @@ export function TeamMembersDialog({
                         className={cn(
                           "size-2 rounded-full",
                           participant.status === "active"
-                            ? "bg-emerald-500"
+                            ? "bg-success"
                             : "bg-muted-foreground/35",
                         )}
                       />
@@ -450,7 +450,7 @@ export function TeamMembersDialog({
                       className={cn(
                         "size-8 rounded-lg",
                         participant.muted
-                          ? "text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                          ? "text-warning hover:bg-warning/10 dark:text-warning"
                           : "text-muted-foreground hover:bg-muted",
                       )}
                       disabled={isBusy}

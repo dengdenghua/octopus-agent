@@ -61,7 +61,7 @@ export function PresenceDots({
             title={`${seatNames[m.member_id] ?? m.member_id}${m.online ? ` · ${t.coworkCollab.online}` : ""}`}
             className={cn(
               "relative inline-flex size-2.5 rounded-full ring-2 ring-background",
-              m.online ? "bg-emerald-500" : "bg-muted-foreground/35",
+              m.online ? "bg-success" : "bg-muted-foreground/35",
             )}
           />
         ))}

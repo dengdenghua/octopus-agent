@@ -230,7 +230,7 @@ function TeamMachineRail({
               name={participant.display_name}
               fallbackInitial={participant.display_name.charAt(0)}
               dotClassName={
-                isOnline ? "bg-emerald-500" : "bg-muted-foreground/35"
+                isOnline ? "bg-success" : "bg-muted-foreground/35"
               }
               dotLabel={statusText}
               title={`${participant.display_name} · ${statusText} · ${participant.role}`}

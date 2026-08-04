@@ -129,7 +129,7 @@ export default function DesktopOrganizerPage() {
             </div>
 
             {!isElectron && (
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.08] px-4 py-3 text-sm text-muted-foreground">
+              <div className="rounded-lg border border-warning/20 bg-warning/50/[0.08] px-4 py-3 text-sm text-muted-foreground">
                 {t.desktopOrganizerPage.webEnvNotice}
               </div>
             )}

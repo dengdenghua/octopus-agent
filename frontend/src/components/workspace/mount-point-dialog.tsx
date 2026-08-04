@@ -598,7 +598,7 @@ export function MountPointDialog({
               className={cn(
                 "rounded-md px-2 py-1.5 text-xs",
                 testResult.ok
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  ? "bg-success/10 text-success"
                   : "bg-destructive/10 text-destructive",
               )}
             >

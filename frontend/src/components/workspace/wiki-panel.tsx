@@ -172,18 +172,18 @@ export function WikiPanel() {
           </div>
           <div>
             <div className="text-sm font-semibold">项目 Wiki</div>
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-mini text-muted-foreground">
               {entries.length} 篇知识页 · {status.data?.files_analyzed ?? 0}{" "}
               个文件
             </div>
             {projectRoot && (
-              <div className="max-w-80 truncate text-[10px] text-muted-foreground/75">
+              <div className="max-w-80 truncate text-micro text-muted-foreground/75">
                 {projectRoot}
               </div>
             )}
           </div>
         </div>
-        <Badge variant="outline" className="ml-1 h-5 text-[10px]">
+        <Badge variant="outline" className="ml-1 h-5 text-micro">
           {status.data?.status === "current" ? "已同步" : "需要更新"}
         </Badge>
         <div className="ml-auto flex items-center gap-1.5">
@@ -269,7 +269,7 @@ export function WikiPanel() {
                       </span>
                       <span
                         className={cn(
-                          "mt-0.5 block truncate text-[10px]",
+                          "mt-0.5 block truncate text-micro",
                           selectedPath === entry.path
                             ? "text-background/65"
                             : "text-muted-foreground",

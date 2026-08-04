@@ -275,7 +275,7 @@ function PluginListItem({
           <span
             title={statusTitle}
             className={cn(
-              "shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+              "shrink-0 rounded-md border px-1.5 py-0.5 text-micro font-medium",
               plugin.error
                 ? "border-destructive/20 bg-destructive/10 text-destructive"
                 : plugin.enabled
@@ -299,7 +299,7 @@ function PluginListItem({
               <Badge
                 key={badge}
                 variant="outline"
-                className="h-5 rounded-md px-1.5 text-[10px] font-normal"
+                className="h-5 rounded-md px-1.5 text-micro font-normal"
               >
                 {badge}
               </Badge>
@@ -307,7 +307,7 @@ function PluginListItem({
             {hiddenBadgeCount > 0 && (
               <Badge
                 variant="outline"
-                className="h-5 rounded-md px-1.5 text-[10px] font-normal text-muted-foreground"
+                className="h-5 rounded-md px-1.5 text-micro font-normal text-muted-foreground"
               >
                 +{hiddenBadgeCount}
               </Badge>

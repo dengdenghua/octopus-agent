@@ -90,14 +90,14 @@ function batchStatusDotClass(status: string): string {
     case "running":
       return "bg-blue-500";
     case "completed":
-      return "bg-green-500";
+      return "bg-success";
     case "failed":
     case "timed_out":
-      return "bg-red-500";
+      return "bg-destructive";
     case "cancelled":
-      return "bg-yellow-500";
+      return "bg-warning";
     case "partial":
-      return "bg-amber-500";
+      return "bg-warning";
     default:
       return "bg-muted-foreground";
   }
@@ -177,8 +177,8 @@ function CoordinationSummaryNotice({
           className={cn(
             "font-medium",
             summary.ready
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-amber-600 dark:text-amber-400",
+              ? "text-success"
+              : "text-warning",
           )}
         >
           {labels.coordinationAction(
@@ -191,22 +191,22 @@ function CoordinationSummaryNotice({
           </span>
         )}
         {failedTaskIds.length > 0 && (
-          <span className="text-red-500">
+          <span className="text-destructive">
             {labels.failedTasks(failedTaskIds.length)}
           </span>
         )}
         {cancelledTaskIds.length > 0 && (
-          <span className="text-yellow-600 dark:text-yellow-400">
+          <span className="text-warning">
             {labels.cancelledTasks(cancelledTaskIds.length)}
           </span>
         )}
         {dependencyBlockedTaskIds.length > 0 && (
-          <span className="text-yellow-600 dark:text-yellow-400">
+          <span className="text-warning">
             {labels.dependencyBlocked(dependencyBlockedTaskIds.length)}
           </span>
         )}
         {warningCount > 0 && (
-          <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+          <span className="inline-flex items-center gap-1 text-warning">
             <AlertTriangleIcon className="size-3" />
             {labels.coordinationWarnings(warningCount)}
           </span>
@@ -248,9 +248,9 @@ function RecoverySnapshotNotice({
   }
 
   return (
-    <div className="border-b bg-amber-500/5 px-4 py-2">
+    <div className="border-b bg-warning/5 px-4 py-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400">
+        <span className="inline-flex items-center gap-1 font-medium text-warning">
           <RotateCcwIcon className="size-3.5" />
           {labels.recoveryReady}
         </span>
@@ -260,12 +260,12 @@ function RecoverySnapshotNotice({
           </span>
         )}
         {failed.length > 0 && (
-          <span className="text-red-500">
+          <span className="text-destructive">
             {labels.failedTasks(failed.length)}
           </span>
         )}
         {blocked.length > 0 && (
-          <span className="text-yellow-600 dark:text-yellow-400">
+          <span className="text-warning">
             {labels.dependencyBlocked(blocked.length)}
           </span>
         )}
@@ -278,8 +278,8 @@ function RecoverySnapshotNotice({
           className={cn(
             "inline-flex items-center gap-1",
             rawOutputsIncluded
-              ? "text-red-500"
-              : "text-emerald-600 dark:text-emerald-400",
+              ? "text-destructive"
+              : "text-success",
           )}
         >
           <ShieldCheckIcon className="size-3" />
@@ -333,7 +333,7 @@ function ProgressRing({
         strokeDasharray={circumference}
         strokeDashoffset={circumference * (1 - successPct)}
         strokeLinecap="round"
-        className="text-green-500 transition-colors duration-500"
+        className="text-success transition-colors duration-500"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
       {/* Failed arc */}
@@ -348,7 +348,7 @@ function ProgressRing({
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - failPct)}
           strokeLinecap="round"
-          className="text-red-500 transition-colors duration-500"
+          className="text-destructive transition-colors duration-500"
           transform={`rotate(${-90 + successPct * 360} ${size / 2} ${size / 2})`}
         />
       )}
@@ -443,7 +443,7 @@ function AgentCard({
           >
             <BotIcon className="text-muted-foreground size-5" />
           </div>
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-lg bg-foreground text-[10px] font-bold text-background">
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-lg bg-foreground text-micro font-bold text-background">
             {String(index).padStart(2, "0")}
           </span>
         </div>
@@ -487,7 +487,7 @@ function AgentCard({
             </p>
           )}
           {task.error && (
-            <p className="mt-1.5 line-clamp-2 text-xs text-red-500">
+            <p className="mt-1.5 line-clamp-2 text-xs text-destructive">
               {task.error}
             </p>
           )}
@@ -517,7 +517,7 @@ function AgentCard({
               e.stopPropagation();
               onCancel(task.task_id);
             }}
-            className="text-muted-foreground hover:text-red-500 shrink-0 rounded p-1 transition-colors"
+            className="text-muted-foreground hover:text-destructive shrink-0 rounded p-1 transition-colors"
           >
             <XIcon className="size-3.5" />
           </button>
@@ -578,8 +578,8 @@ function AggregatedResultsView({
 
       {/* Conflicts banner */}
       {batch.conflicts.length > 0 && (
-        <div className="border-b bg-amber-500/5 px-4 py-2">
-          <div className="flex items-center gap-1.5 text-amber-600">
+        <div className="border-b bg-warning/5 px-4 py-2">
+          <div className="flex items-center gap-1.5 text-warning">
             <AlertTriangleIcon className="size-3.5" />
             <span className="text-xs font-medium">
               {t.parallelAgents.conflictsDetected(batch.conflicts.length)}
@@ -722,7 +722,7 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <ZapIcon className="size-4 text-amber-500" />
+          <ZapIcon className="size-4 text-warning" />
           {t.parallelAgents.title}
         </div>
         <div className="flex items-center gap-2">
@@ -790,16 +790,16 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
             <div className="min-w-0 flex-1">
               {status && (
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-                  <span className="text-green-500">
+                  <span className="text-success">
                     {status.completed_count} {t.parallelAgents.completed}
                   </span>
                   {status.failed_count > 0 && (
-                    <span className="text-red-500">
+                    <span className="text-destructive">
                       {status.failed_count} {t.parallelAgents.failed}
                     </span>
                   )}
                   {status.cancelled_count > 0 && (
-                    <span className="text-yellow-500">
+                    <span className="text-warning">
                       {status.cancelled_count} {t.parallelAgents.cancelled}
                     </span>
                   )}
@@ -857,7 +857,7 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
                 <button
                   type="button"
                   onClick={cancelAll}
-                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
+                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                 >
                   <SquareIcon className="size-3.5" />
                 </button>

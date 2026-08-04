@@ -59,14 +59,14 @@ import { cn } from "@/lib/utils";
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     completed:
-      "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+      "bg-success/10 text-success dark:bg-success/30 dark:text-success",
     adapted:
-      "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+      "bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning",
     failed: "bg-destructive/10 text-destructive dark:bg-destructive/30 dark:text-destructive",
     running: "bg-primary/10 text-primary dark:bg-primary/30 dark:text-primary",
     pending: "bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground/70",
     success:
-      "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+      "bg-success/10 text-success dark:bg-success/30 dark:text-success",
     skipped: "bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground/70",
   };
 
@@ -85,9 +85,9 @@ function StatusBadge({ status }: { status: string }) {
 function StepResultIcon({ status }: { status: string }) {
   switch (status) {
     case "success":
-      return <CheckCircle2Icon className="size-3.5 text-emerald-500" />;
+      return <CheckCircle2Icon className="size-3.5 text-success" />;
     case "adapted":
-      return <WrenchIcon className="size-3.5 text-amber-500" />;
+      return <WrenchIcon className="size-3.5 text-warning" />;
     case "failed":
       return <XCircleIcon className="size-3.5 text-destructive" />;
     case "skipped":
@@ -424,7 +424,7 @@ function ReplayResultsView({
                 )}
                 {sr.error && <p className="text-destructive">{sr.error}</p>}
                 {sr.adaptation_note && (
-                  <p className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <p className="text-warning flex items-center gap-1">
                     <AlertTriangleIcon className="size-3" />
                     {sr.adaptation_note}
                   </p>

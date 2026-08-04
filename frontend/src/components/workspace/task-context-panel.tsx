@@ -129,7 +129,7 @@ export function TaskContextPanel({
 
       {commands.length > 0 && (
         <Section
-          icon={<TerminalIcon className="size-3 text-green-500" />}
+          icon={<TerminalIcon className="size-3 text-success" />}
           label={`Commands (${commands.length})`}
         >
           {commands.slice(-8).map((c, i) => (
@@ -138,9 +138,9 @@ export function TaskContextPanel({
                 className={cn(
                   "size-1.5 rounded-full shrink-0",
                   c.status === "done"
-                    ? "bg-emerald-400"
+                    ? "bg-success"
                     : c.status === "error"
-                      ? "bg-rose-400"
+                      ? "bg-destructive"
                       : "bg-blue-400 animate-pulse",
                 )}
               />

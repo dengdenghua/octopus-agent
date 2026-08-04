@@ -167,7 +167,7 @@ function EmailLoginForm() {
         {submitting ? t.auth.loggingIn : t.auth.login}
         {!submitting && <ArrowRightIcon className="size-4" />}
       </Button>
-      <p className="px-2 text-center text-[11px] leading-5 text-muted-foreground">
+      <p className="px-2 text-center text-mini leading-5 text-muted-foreground">
         {t.auth.terms.emailAutoRegister}
         {t.auth.terms.agreeTo}{" "}
         <Link

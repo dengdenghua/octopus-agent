@@ -154,7 +154,7 @@ export default function AccountSettingsPage() {
       {(profileError || privacyError) && (
         <div
           role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300/70 bg-amber-50/95 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/90 dark:text-amber-200"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/70 bg-warning/5 px-4 py-2.5 text-xs text-warning dark:border-warning/50"
         >
           <span>{t.accountSettings.dataUnavailable}</span>
           <Button
@@ -511,7 +511,7 @@ function OfficialCreditsCard() {
         {tokenInvalid && (
           <div
             role="alert"
-            className="flex items-start gap-2 border-b border-amber-300/60 bg-amber-50/95 px-5 py-3 text-xs text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/90 dark:text-amber-200"
+            className="flex items-start gap-2 border-b border-warning/60 bg-warning/5 px-5 py-3 text-xs text-warning dark:border-warning/40"
           >
             <AlertTriangleIcon className="size-3.5 shrink-0 mt-0.5" />
             <div className="flex-1">

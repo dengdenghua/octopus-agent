@@ -91,16 +91,16 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
 const CATEGORY_COLORS: Record<string, string> = {
   file: "text-blue-500",
   symbol: "text-purple-500",
-  folder: "text-amber-500",
+  folder: "text-warning",
   git: "text-orange-500",
-  docs: "text-green-500",
+  docs: "text-success",
   web: "text-cyan-500",
   terminal: "text-muted-foreground",
   agent: "text-indigo-500",
   plugin: "text-fuchsia-500",
-  skill: "text-yellow-500",
+  skill: "text-warning",
   pack: "text-pink-500",
-  database: "text-emerald-600",
+  database: "text-success",
 };
 
 const LOCAL_FILE_AGENT_MENTION: MentionItem = {

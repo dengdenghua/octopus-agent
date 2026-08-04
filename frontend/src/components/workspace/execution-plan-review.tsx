@@ -67,13 +67,13 @@ interface ExecutionPlanReviewProps {
 const RISK_CONFIG = {
   low: {
     color:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+      "bg-success/10 text-success border-success/20",
     icon: ShieldCheckIcon,
     label: "Low Risk",
   },
   medium: {
     color:
-      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+      "bg-warning/10 text-warning border-warning/20",
     icon: AlertTriangleIcon,
     label: "Medium Risk",
   },
@@ -94,8 +94,8 @@ const STATUS_CONFIG = {
   pending: { color: "text-muted-foreground", bgColor: "bg-muted/30" },
   in_progress: { color: "text-primary", bgColor: "bg-primary/5" },
   completed: {
-    color: "text-emerald-600 dark:text-emerald-400",
-    bgColor: "bg-emerald-500/5",
+    color: "text-success",
+    bgColor: "bg-success/5",
   },
   skipped: { color: "text-muted-foreground/50", bgColor: "bg-muted/10" },
 } as const;
@@ -221,7 +221,7 @@ function PlanStepRow({
         statusCfg.bgColor,
         step.status === "in_progress" &&
           "border-primary/30 shadow-[var(--shadow-xs)] shadow-primary/5",
-        step.status === "completed" && "border-emerald-500/20",
+        step.status === "completed" && "border-success/20",
         step.status === "skipped" && "border-border-subtle opacity-60",
         step.status === "pending" && "border-border-subtle",
       )}
@@ -234,7 +234,7 @@ function PlanStepRow({
         {/* Status icon */}
         <div className="mt-0.5 shrink-0">
           {step.status === "completed" ? (
-            <CheckCircle2Icon className="size-3.5 text-emerald-500" />
+            <CheckCircle2Icon className="size-3.5 text-success" />
           ) : step.status === "in_progress" ? (
             <Loader2Icon className="size-3.5 animate-spin text-primary" />
           ) : step.status === "skipped" ? (
@@ -560,14 +560,14 @@ export function ExecutionPlanReview({
     if (isReviewable)
       return {
         text: t.executionPlan.awaitingReview,
-        color: "text-amber-600 dark:text-amber-400",
+        color: "text-warning",
       };
     if (isApproved || isExecuting)
       return { text: t.executionPlan.executing, color: "text-primary" };
     if (isCompleted)
       return {
         text: t.executionPlan.completed,
-        color: "text-emerald-600 dark:text-emerald-400",
+        color: "text-success",
       };
     if (isRejected)
       return {
@@ -589,9 +589,9 @@ export function ExecutionPlanReview({
     <div
       className={cn(
         "w-full rounded-lg border transition-colors transition-shadow duration-300",
-        isReviewable && "border-amber-500/30 bg-amber-500/[0.02] shadow-[var(--shadow-xs)]",
+        isReviewable && "border-warning/30 bg-warning/50/[0.02] shadow-[var(--shadow-xs)]",
         (isExecuting || isApproved) && "border-primary/20 bg-primary/[0.02]",
-        isCompleted && "border-emerald-500/20 bg-emerald-500/[0.02]",
+        isCompleted && "border-success/20 bg-success/50/[0.02]",
         isRejected && "border-destructive/20 bg-destructive/[0.02] opacity-75",
         className,
       )}
@@ -650,7 +650,7 @@ export function ExecutionPlanReview({
             <div
               className={cn(
                 "h-full rounded-lg transition-all duration-700 ease-out",
-                isCompleted ? "bg-emerald-500" : "bg-primary",
+                isCompleted ? "bg-success" : "bg-primary",
               )}
               style={{ width: `${progressPct}%` }}
             />

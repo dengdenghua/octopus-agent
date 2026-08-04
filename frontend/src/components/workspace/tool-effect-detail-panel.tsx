@@ -99,11 +99,11 @@ export function ToolEffectDetailPanel({
           </p>
         ) : (
           <div className="mx-auto max-w-xl space-y-5">
-            <div className="flex items-start gap-3 border-l-2 border-amber-500/70 pl-3">
+            <div className="flex items-start gap-3 border-l-2 border-warning/70 pl-3">
               {receipt.state === "indeterminate" ? (
-                <ShieldAlertIcon className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                <ShieldAlertIcon className="mt-0.5 size-4 shrink-0 text-warning" />
               ) : (
-                <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-success" />
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">

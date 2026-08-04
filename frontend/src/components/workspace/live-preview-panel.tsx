@@ -356,7 +356,7 @@ ${jsContent || "// No JavaScript"}
               className={cn(
                 "relative p-1.5 rounded-md transition-all",
                 browserRegressionEnabled
-                  ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300"
+                  ? "bg-success/10 text-success hover:bg-success/15 dark:text-success"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted",
               )}
               title={
@@ -370,7 +370,7 @@ ${jsContent || "// No JavaScript"}
                 className={cn(
                   "absolute right-1 top-1 size-1.5 rounded-full",
                   browserRegressionEnabled
-                    ? "bg-emerald-500"
+                    ? "bg-success"
                     : "bg-muted-foreground/35",
                 )}
               />

@@ -183,11 +183,11 @@ export function ProcessTrace({
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm"
               >
                 {phase.status === "running" ? (
-                  <Loader2Icon className="size-3.5 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
+                  <Loader2Icon className="size-3.5 shrink-0 animate-spin text-success" />
                 ) : phase.status === "waiting_approval" ? (
-                  <CircleIcon className="size-3.5 shrink-0 text-amber-500" />
+                  <CircleIcon className="size-3.5 shrink-0 text-warning" />
                 ) : phase.status === "done" ? (
-                  <CheckCircle2Icon className="size-3.5 shrink-0 text-emerald-500" />
+                  <CheckCircle2Icon className="size-3.5 shrink-0 text-success" />
                 ) : (
                   <CircleIcon className="size-3.5 shrink-0 text-muted-foreground/45" />
                 )}
@@ -421,13 +421,13 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         className="flex w-full items-center gap-2 text-left"
       >
         {status === "running" ? (
-          <Loader2Icon className="size-4 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
+          <Loader2Icon className="size-4 shrink-0 animate-spin text-success" />
         ) : status === "waiting" ? (
-          <CircleIcon className="size-4 shrink-0 text-amber-500" />
+          <CircleIcon className="size-4 shrink-0 text-warning" />
         ) : status === "error" ? (
           <XCircleIcon className="size-4 shrink-0 text-destructive" />
         ) : (
-          <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />
+          <CheckCircle2Icon className="size-4 shrink-0 text-success" />
         )}
         <Icon className="size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
@@ -489,13 +489,13 @@ function TraceEventLine({ event }: { event: LiveToolEvent }) {
   return (
     <div className="flex items-start gap-2 text-xs text-muted-foreground">
       {event.status === "running" ? (
-        <Loader2Icon className="mt-0.5 size-3.5 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
+        <Loader2Icon className="mt-0.5 size-3.5 shrink-0 animate-spin text-success" />
       ) : event.status === "waiting_approval" ? (
-        <CircleIcon className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+        <CircleIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
       ) : event.status === "error" ? (
         <XCircleIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
       ) : (
-        <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
+        <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-success" />
       )}
       <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">

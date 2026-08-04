@@ -48,7 +48,7 @@ import {
   type BrowserControlOptions,
 } from "./agentic-actions";
 import { useBrowserStore } from "./browser-store";
-import { liquidGlassClass } from "./liquid-glass";
+
 import type { WebviewTabHandle } from "./webview-tab";
 
 interface Props {
@@ -765,7 +765,6 @@ export function CopilotPanel({ webviewHandle }: Props) {
       // Implementation note.
       className={cn(
         "relative flex h-full w-full min-w-[280px] flex-1 flex-col border-r border-white/24 bg-transparent",
-        liquidGlassClass("sheet"),
       )}
     >
       {/* Implementation note. */}
@@ -783,7 +782,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
         />
         {activeTab?.title && (
           <span
-            className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
+            className="min-w-0 flex-1 truncate text-mini text-muted-foreground"
             title={activeTab.title}
           >
             · {activeTab.title}
@@ -793,7 +792,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
         {agentLoopActive && (
           <button
             onClick={stopAgentLoop}
-            className="flex shrink-0 items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 transition-colors hover:bg-rose-500/20 dark:text-rose-400"
+            className="flex shrink-0 items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-micro font-medium text-destructive transition-colors hover:bg-destructive/20 dark:text-destructive"
             title={t.browser.copilot.stopAgentTooltip}
           >
             <StopCircleIcon className="size-3" />
@@ -804,7 +803,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
         <button
           onClick={() => setAutoBrowse((v) => !v)}
           className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+            "shrink-0 rounded px-1.5 py-0.5 text-micro font-medium transition-colors",
             autoBrowse
               ? "bg-primary/10 text-primary"
               : "border border-white/28 text-muted-foreground hover:bg-white/18",
@@ -820,9 +819,9 @@ export function CopilotPanel({ webviewHandle }: Props) {
         <button
           onClick={() => setRecorderMode((v) => !v)}
           className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+            "shrink-0 rounded px-1.5 py-0.5 text-micro font-medium transition-colors",
             recorderMode
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              ? "bg-success/10 text-success"
               : "border border-white/28 text-muted-foreground hover:bg-white/18",
           )}
           title={t.browser.copilot.recorderTitle}
@@ -863,13 +862,13 @@ export function CopilotPanel({ webviewHandle }: Props) {
       </div>
 
       {recorderMode && (
-        <div className="shrink-0 border-b border-white/20 bg-emerald-500/[0.04] px-3 py-2">
+        <div className="shrink-0 border-b border-white/20 bg-success/50/[0.04] px-3 py-2">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+              <div className="text-mini font-medium text-success">
                 {t.browser.copilot.recorderTitle}
               </div>
-              <div className="truncate text-[10px] text-muted-foreground">
+              <div className="truncate text-micro text-muted-foreground">
                 {t.browser.copilot.recorderDesc}
               </div>
             </div>
@@ -881,8 +880,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
               placeholder={t.browser.copilot.researchGoalPlaceholder}
               aria-label={t.browser.copilot.researchGoalPlaceholder}
               className={cn(
-                "min-w-0 flex-1 rounded px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-500/40",
-                liquidGlassClass("input", true),
+                "min-w-0 flex-1 rounded px-2 py-1 text-mini outline-none focus:ring-1 focus:ring-success/40",
+                "bg-white/10",
               )}
             />
             <button
@@ -893,7 +892,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
                 thread.isLoading ||
                 (!researchGoal.trim() && !input.trim())
               }
-              className="rounded bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
+              className="rounded bg-success px-2 py-1 text-mini font-medium text-white hover:bg-success disabled:opacity-40"
             >
               {t.browser.copilot.start}
             </button>
@@ -904,8 +903,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
               onClick={() => void addPageToResearchLog()}
               disabled={busy}
               className={cn(
-                "rounded px-2 py-1 text-[10px] text-muted-foreground disabled:opacity-40",
-                liquidGlassClass("thin", true),
+                "rounded px-2 py-1 text-micro text-muted-foreground disabled:opacity-40",
+                "bg-white/10",
               )}
             >
               {t.browser.copilot.recordCurrentPage}
@@ -914,7 +913,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
               <button
                 type="button"
                 onClick={() => setResearchLog([])}
-                className="text-[10px] text-muted-foreground hover:text-foreground"
+                className="text-micro text-muted-foreground hover:text-foreground"
               >
                 {t.browser.copilot.clearLog}
               </button>
@@ -926,8 +925,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
                 type="button"
                 onClick={() => void copyResearchBrief()}
                 className={cn(
-                  "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-muted-foreground",
-                  liquidGlassClass("thin", true),
+                  "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-micro font-medium text-muted-foreground",
+                  "bg-white/10",
                 )}
               >
                 <ClipboardCheckIcon className="size-3" />
@@ -939,8 +938,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
                 type="button"
                 onClick={downloadResearchBrief}
                 className={cn(
-                  "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-muted-foreground",
-                  liquidGlassClass("thin", true),
+                  "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-micro font-medium text-muted-foreground",
+                  "bg-white/10",
                 )}
               >
                 <DownloadIcon className="size-3" />
@@ -952,20 +951,20 @@ export function CopilotPanel({ webviewHandle }: Props) {
             <div
               className={cn(
                 "mt-2 max-h-28 space-y-1 overflow-y-auto rounded p-1.5",
-                liquidGlassClass("card"),
+                "bg-white/10",
               )}
             >
               {researchLog.slice(0, 5).map((entry) => (
                 <div key={entry.id} className="rounded bg-white/18 px-2 py-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[10px] font-medium">
+                    <span className="truncate text-micro font-medium">
                       {entry.platform} · {entry.title}
                     </span>
                     <span className="shrink-0 text-[9px] text-muted-foreground">
                       {new Date(entry.createdAt).toLocaleTimeString()}
                     </span>
                   </div>
-                  <div className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
+                  <div className="mt-0.5 line-clamp-2 text-micro text-muted-foreground">
                     {entry.note}
                   </div>
                 </div>
@@ -976,29 +975,29 @@ export function CopilotPanel({ webviewHandle }: Props) {
       )}
 
       {errorMsg && (
-        <div className="shrink-0 border-b border-white/20 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
+        <div className="shrink-0 border-b border-white/20 bg-destructive/10 px-3 py-1.5 text-mini text-destructive">
           {errorMsg}
         </div>
       )}
 
       {pendingConfirmations.length > 0 && (
-        <div className="shrink-0 space-y-2 border-b border-white/20 bg-amber-500/10 px-3 py-2">
+        <div className="shrink-0 space-y-2 border-b border-white/20 bg-warning/10 px-3 py-2">
           {pendingConfirmations.map((pending) => (
             <div
               key={pending.id}
               className={cn(
-                "rounded-md border-amber-500/30 p-2 text-[11px]",
-                liquidGlassClass("card"),
+                "rounded-md border-warning/30 p-2 text-mini",
+                "bg-white/10",
               )}
             >
-              <div className="font-medium text-amber-700 dark:text-amber-300">
+              <div className="font-medium text-warning">
                 {t.browser.copilot.needsUserConfirmationTitle}
               </div>
               <div className="mt-1 text-muted-foreground">
                 {describePendingAction(pending)}
               </div>
               {pending.error && (
-                <div className="mt-1 break-words text-amber-700 dark:text-amber-300">
+                <div className="mt-1 break-words text-warning">
                   {pending.error}
                 </div>
               )}
@@ -1006,7 +1005,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
                 <button
                   onClick={() => void confirmPendingAction(pending)}
                   disabled={busy}
-                  className="rounded bg-amber-600 px-2 py-1 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                  className="rounded bg-warning px-2 py-1 font-medium text-white hover:bg-warning disabled:opacity-50"
                 >
                   {t.browser.copilot.confirmExecute}
                 </button>
@@ -1054,8 +1053,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
               className={cn(
                 "rounded-lg px-3 py-2 text-[13px] leading-relaxed",
                 isUser
-                  ? cn("ml-6 text-foreground", liquidGlassClass("input"))
-                  : cn("mr-6 text-foreground", liquidGlassClass("thin")),
+                  ? cn("ml-6 text-foreground", "bg-white/10")
+                  : cn("mr-6 text-foreground", "bg-white/10"),
               )}
             >
               {/* Implementation note. */}
@@ -1069,7 +1068,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
           <div
             className={cn(
               "mr-6 flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-muted-foreground",
-              liquidGlassClass("thin"),
+              "bg-white/10",
             )}
           >
             <Loader2Icon className="size-3.5 animate-spin" />
@@ -1083,7 +1082,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
         <div
           className={cn(
             "flex items-end gap-2 p-2 focus-within:ring-2 focus-within:ring-primary/30",
-            liquidGlassClass("input", true),
+            "bg-white/10",
           )}
         >
           <textarea
@@ -1225,8 +1224,8 @@ function QuickAction({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] text-foreground disabled:opacity-50",
-        liquidGlassClass("thin", true),
+        "flex items-center gap-1 rounded-full px-2.5 py-1 text-mini text-foreground disabled:opacity-50",
+        "bg-white/10",
       )}
     >
       <Icon className="size-3" />
@@ -1364,8 +1363,7 @@ function AgentPicker({
       {open && (
         <div
           className={cn(
-            "absolute left-0 top-full z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-md p-1",
-            liquidGlassClass("sheet"),
+            "absolute left-0 top-full z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-md bg-popover p-1 text-popover-foreground shadow-lg",
           )}
         >
           {agents.length === 0 ? (
@@ -1395,7 +1393,7 @@ function AgentPicker({
                     {a.display_name || a.name}
                   </span>
                   {active && (
-                    <span className="text-[10px] text-primary">●</span>
+                    <span className="text-micro text-primary">●</span>
                   )}
                 </button>
               );

@@ -31,18 +31,18 @@ import {
 
 function getStatusIcon(status: SubtaskStatus) {
   if (status === "completed")
-    return <CheckCircleIcon className="size-3 text-emerald-500" />;
+    return <CheckCircleIcon className="size-3 text-success" />;
   if (status === "failed")
     return <XCircleIcon className="size-3 text-destructive" />;
   if (status === "cancelled")
-    return <BanIcon className="size-3 text-amber-500" />;
+    return <BanIcon className="size-3 text-warning" />;
   if (status === "timed_out")
     return <ClockIcon className="size-3 text-destructive" />;
   if (status === "pending")
-    return <PauseCircleIcon className="size-3 text-amber-500" />;
+    return <PauseCircleIcon className="size-3 text-warning" />;
   if (isSubtaskActive(status))
     return (
-      <Loader2Icon className="size-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+      <Loader2Icon className="size-3 animate-spin text-success" />
     );
   return null;
 }
@@ -153,13 +153,13 @@ function MiniSubtaskRow({
                 className={cn(
                   "h-full rounded-full transition-all duration-500",
                   isFailedLike
-                    ? "bg-red-500 dark:bg-red-400"
+                    ? "bg-destructive dark:bg-destructive"
                     : task.status === "cancelled"
-                      ? "bg-amber-500 dark:bg-amber-400"
+                      ? "bg-warning dark:bg-warning"
                       : task.status === "completed"
-                        ? "bg-emerald-500 dark:bg-emerald-400"
+                        ? "bg-success dark:bg-success"
                         : isActive
-                          ? "bg-emerald-600 dark:bg-emerald-400"
+                          ? "bg-success dark:bg-success"
                           : "bg-muted-foreground/40",
                   isActive && percent === null && "w-2/5 animate-pulse",
                 )}
@@ -167,7 +167,7 @@ function MiniSubtaskRow({
               />
             </div>
             {percent !== null ? (
-              <span className="shrink-0 font-mono text-xs leading-none tabular-nums text-emerald-600 dark:text-emerald-400">
+              <span className="shrink-0 font-mono text-xs leading-none tabular-nums text-success">
                 {percent}%
               </span>
             ) : isTerminal && task.status !== "completed" ? (
@@ -175,8 +175,8 @@ function MiniSubtaskRow({
                 className={cn(
                   "shrink-0 text-xs leading-none",
                   task.status === "cancelled"
-                    ? "text-amber-500 dark:text-amber-400"
-                    : "text-red-500 dark:text-red-400",
+                    ? "text-warning"
+                    : "text-destructive",
                 )}
               >
                 {statusLabel}
@@ -310,21 +310,21 @@ export function SubtaskHoverPreview({
                   className={cn(
                     "h-full rounded-full transition-all duration-500",
                     isFailedLike
-                      ? "bg-red-500 dark:bg-red-400"
+                      ? "bg-destructive dark:bg-destructive"
                       : task.status === "cancelled"
-                        ? "bg-amber-500 dark:bg-amber-400"
+                        ? "bg-warning dark:bg-warning"
                         : isCompleted
-                          ? "bg-emerald-500 dark:bg-emerald-400"
+                          ? "bg-success dark:bg-success"
                           : task.status === "pending"
                             ? "bg-muted-foreground/40"
-                            : "bg-emerald-600 dark:bg-emerald-400",
+                            : "bg-success dark:bg-success",
                     isActive && percent === null && "w-2/5 animate-pulse",
                   )}
                   style={barWidth ? { width: barWidth } : undefined}
                 />
               </div>
               {percent !== null && (
-                <span className="shrink-0 font-mono text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                <span className="shrink-0 font-mono text-xs font-medium tabular-nums text-success">
                   {percent}%
                 </span>
               )}
@@ -529,7 +529,7 @@ export function ParallelSubtasksGrid({
         <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
           <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
             <div
-              className="h-full rounded-full bg-emerald-500 transition-all duration-500 dark:bg-emerald-400"
+              className="h-full rounded-full bg-success transition-all duration-500 dark:bg-success"
               style={{ width: `${overallPercent}%` }}
             />
           </div>
@@ -537,12 +537,12 @@ export function ParallelSubtasksGrid({
             {stats.done}/{stats.total}
           </span>
           {stats.running > 0 && (
-            <span className="shrink-0 text-emerald-600 dark:text-emerald-400">
+            <span className="shrink-0 text-success">
               · {t.agentWorkbenchPages.subagentsRunning(stats.running)}
             </span>
           )}
           {stats.failed > 0 && (
-            <span className="shrink-0 text-red-500 dark:text-red-400">
+            <span className="shrink-0 text-destructive">
               · {t.agentWorkbenchPages.subagentsFailed(stats.failed)}
             </span>
           )}

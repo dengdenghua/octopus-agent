@@ -186,11 +186,11 @@ function PlanStepItem({
       className={cn(
         "rounded-lg border px-3 py-2 transition-colors",
         step.status === "completed" &&
-          "border-green-200/60 bg-green-50/50 dark:border-green-900/30 dark:bg-green-950/20",
+          "border-success/30/60 bg-success/5 dark:border-success/30",
         step.status === "in_progress" &&
           "border-primary/30 bg-primary/5 shadow-[var(--shadow-xs)] shadow-primary/5",
         step.status === "failed" &&
-          "border-red-200/60 bg-red-50/50 dark:border-red-900/30 dark:bg-red-950/20",
+          "border-destructive/30/60 bg-destructive/5 dark:border-destructive/30",
         step.status === "pending" &&
           "border-border-default bg-muted/20 hover:bg-muted/30",
       )}
@@ -202,11 +202,11 @@ function PlanStepItem({
         {/* Status icon */}
         <div className="mt-0.5 shrink-0">
           {step.status === "completed" ? (
-            <CheckCircle2Icon className="size-3.5 text-green-500" />
+            <CheckCircle2Icon className="size-3.5 text-success" />
           ) : step.status === "in_progress" ? (
             <Loader2Icon className="size-3.5 animate-spin text-primary" />
           ) : step.status === "failed" ? (
-            <XIcon className="size-3.5 text-red-500" />
+            <XIcon className="size-3.5 text-destructive" />
           ) : (
             <CircleDotIcon className="size-3.5 text-muted-foreground/40" />
           )}

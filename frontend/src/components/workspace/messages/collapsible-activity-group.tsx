@@ -111,10 +111,10 @@ function StatusIcon({ status }: { status?: ActivityItem["status"] }) {
       <Loader2Icon className="size-3.5 animate-spin text-muted-foreground" />
     );
   if (status === "error")
-    return <XCircleIcon className="size-3.5 text-red-500" />;
+    return <XCircleIcon className="size-3.5 text-destructive" />;
   if (status === "done")
     return (
-      <CheckCircle2Icon className="size-3.5 text-green-500 dark:text-green-400" />
+      <CheckCircle2Icon className="size-3.5 text-success" />
     );
   return <span className="size-3.5" />;
 }
@@ -195,7 +195,7 @@ export function CollapsibleActivityGroup({
                   className={cn(
                     "truncate",
                     item.status === "error"
-                      ? "text-red-500"
+                      ? "text-destructive"
                       : "text-foreground",
                   )}
                 >

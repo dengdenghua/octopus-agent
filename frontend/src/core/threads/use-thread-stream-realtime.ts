@@ -840,6 +840,15 @@ export function useThreadStreamRealtime(
   const [isUploading, setIsUploading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const { t } = useI18n();
+
+  // A thread change (e.g. starting a new conversation) must purge any stale
+  // send-failure from the previous thread. `useRealtimeThread` resets its own
+  // state (including `realtimeError`) when `threadId` changes, but `sendError`
+  // lives here and would otherwise keep the red failure banner alive in the
+  // fresh workspace until the next send.
+  useEffect(() => {
+    setSendError(null);
+  }, [threadId]);
   const permissionRuntime = useMemo(
     () =>
       permissionRuntimeConfig(

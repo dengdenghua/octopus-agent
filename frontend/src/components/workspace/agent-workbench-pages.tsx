@@ -67,11 +67,11 @@ export function StatusGlyph({
       className={cn(
         "size-4 shrink-0",
         status === "running" && "animate-spin text-foreground",
-        status === "done" && "text-emerald-500",
-        status === "warning" && "text-amber-500",
+        status === "done" && "text-success",
+        status === "warning" && "text-warning",
         status === "error" && "text-destructive",
         status === "pending" && "text-muted-foreground/45",
-        status === "waiting_approval" && "text-amber-500",
+        status === "waiting_approval" && "text-warning",
         className,
       )}
     />
@@ -205,9 +205,9 @@ const OBSERVED_REFERENCE_META: Record<
   },
   memory: {
     Icon: BrainCircuitIcon,
-    barClassName: "bg-amber-400",
-    dotClassName: "bg-amber-400",
-    iconClassName: "text-amber-500",
+    barClassName: "bg-warning",
+    dotClassName: "bg-warning",
+    iconClassName: "text-warning",
   },
   other: {
     Icon: MoreHorizontalIcon,
@@ -773,9 +773,9 @@ function SummaryAgentRow({ tile }: { tile: AgentTile }) {
               tile.status === "error"
                 ? "bg-destructive"
                 : tile.status === "running"
-                  ? "bg-emerald-500"
+                  ? "bg-success"
                   : tile.status === "waiting_approval"
-                    ? "bg-amber-500"
+                    ? "bg-warning"
                     : tile.status === "done"
                       ? "bg-muted-foreground/45"
                       : "bg-muted-foreground/35",
@@ -1159,7 +1159,7 @@ export function AgentSummaryPage({
                   className={cn(
                     "h-full transition-all",
                     terminalState === "interrupted"
-                      ? "bg-amber-500/45"
+                      ? "bg-warning/45"
                       : terminalState === "failed"
                         ? "bg-destructive/45"
                         : "bg-muted-foreground/35",
@@ -1179,7 +1179,7 @@ export function AgentSummaryPage({
                       className="flex min-h-7 items-center gap-2"
                     >
                       <StatusGlyph status={phase.status} className="size-3.5" />
-                      <span className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-4 text-muted-foreground">
+                      <span className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 font-mono text-micro font-medium leading-4 text-muted-foreground">
                         P{index + 1}
                       </span>
                       <span
@@ -1188,7 +1188,7 @@ export function AgentSummaryPage({
                       >
                         {agentPhaseDisplayTitle(phase, t.agentPhases)}
                       </span>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                      <span className="shrink-0 text-mini text-muted-foreground">
                         {phaseStatusText(phase.status)}
                       </span>
                     </li>
@@ -1202,7 +1202,7 @@ export function AgentSummaryPage({
                       className="flex min-h-7 items-center gap-2"
                     >
                       <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/45" />
-                      <span className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 font-mono text-[10px] font-medium leading-4 text-muted-foreground">
+                      <span className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 font-mono text-micro font-medium leading-4 text-muted-foreground">
                         T{round.iteration}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
@@ -1332,7 +1332,7 @@ export function AgentSummaryPage({
                         "size-3.5 shrink-0",
                         agentHealth.failed > 0
                           ? "text-destructive"
-                          : "text-emerald-600",
+                          : "text-success",
                       )}
                     />
                     <span className="font-medium text-foreground">
@@ -1698,9 +1698,9 @@ export function AgentCreationCard({
                       "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium",
                       agentStatusClass(agent.status),
                       active
-                        ? "bg-emerald-500/10"
+                        ? "bg-success/10"
                         : waiting
-                          ? "bg-amber-500/10"
+                          ? "bg-warning/10"
                           : "bg-muted",
                     )}
                   >
@@ -1820,7 +1820,7 @@ export function DiffText({ text }: { text: string }) {
             "block min-h-5",
             line.startsWith("+") &&
               !line.startsWith("+++") &&
-              "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+              "bg-success/10 text-success",
             line.startsWith("-") &&
               !line.startsWith("---") &&
               "bg-destructive/10 text-destructive",

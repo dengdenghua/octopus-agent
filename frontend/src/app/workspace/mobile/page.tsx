@@ -573,7 +573,7 @@ function TopBar({
             <span
               className={cn(
                 "size-1.5 rounded-full",
-                activeDevice.online ? "bg-green-500" : "bg-muted-foreground/30",
+                activeDevice.online ? "bg-success" : "bg-muted-foreground/30",
               )}
             />
             <DeviceIcon className="size-3" />
@@ -590,7 +590,7 @@ function TopBar({
       >
         <MonitorSmartphoneIcon className="size-5" />
         {activeDevice.kind === "pc" && (
-          <span className="absolute right-0.5 top-0.5 size-2 animate-pulse rounded-full bg-green-500" />
+          <span className="absolute right-0.5 top-0.5 size-2 animate-pulse rounded-full bg-success" />
         )}
       </button>
     </div>
@@ -738,7 +738,7 @@ function Drawer({
                     {c.source === "local" && (
                       <button
                         onClick={(e) => onDeleteConversation(c.id, e)}
-                        className="opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                        className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                         title="删除对话"
                       >
                         <Trash2Icon className="size-3 text-muted-foreground/70" />
@@ -919,7 +919,7 @@ function DeviceItem({
         <span
           className={cn(
             "size-1.5 rounded-full",
-            online ? "bg-green-500" : "bg-muted-foreground/30",
+            online ? "bg-success" : "bg-muted-foreground/30",
           )}
         />
         {active && <CheckCircle2Icon className="size-3.5 text-blue-500" />}
@@ -1051,7 +1051,7 @@ function PreviewCard({
           <span
             className={cn(
               "absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-white dark:border-border",
-              online ? "bg-green-500" : "bg-muted-foreground/30",
+              online ? "bg-success" : "bg-muted-foreground/30",
             )}
           />
         )}
@@ -1353,9 +1353,9 @@ function TasksTab({
                 >
                   <div className="flex items-start gap-3">
                     {task.success ? (
-                      <CheckCircle2Icon className="size-5 shrink-0 text-green-500" />
+                      <CheckCircle2Icon className="size-5 shrink-0 text-success" />
                     ) : (
-                      <XCircleIcon className="size-5 shrink-0 text-red-500" />
+                      <XCircleIcon className="size-5 shrink-0 text-destructive" />
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{task.task}</div>
@@ -1364,7 +1364,7 @@ function TasksTab({
                         {task.duration_ms}ms
                       </div>
                       {task.error && (
-                        <div className="mt-1 text-xs text-red-500">
+                        <div className="mt-1 text-xs text-destructive">
                           {task.error}
                         </div>
                       )}
@@ -1549,7 +1549,7 @@ function MeTab({
                 onClick={onOpenDevicePreview}
               />
               <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2.5 text-xs dark:bg-muted">
-                <span className="size-1.5 rounded-full bg-green-500" />
+                <span className="size-1.5 rounded-full bg-success" />
                 <span className="text-muted-foreground">当前:</span>
                 <span className="font-medium">{activeDevice.name}</span>
               </div>
@@ -1566,7 +1566,7 @@ function MeTab({
                 className={cn(
                   "text-xs",
                   pcScreenStats?.running
-                    ? "text-green-500"
+                    ? "text-success"
                     : "text-muted-foreground/70",
                 )}
               >
@@ -1620,7 +1620,7 @@ function MeTab({
           <button
             type="button"
             onClick={() => void onLogout()}
-            className="w-full rounded-2xl bg-white py-3.5 text-sm font-medium text-red-500 hover:bg-red-50 dark:bg-card dark:hover:bg-red-500/10"
+            className="w-full rounded-2xl bg-white py-3.5 text-sm font-medium text-destructive hover:bg-destructive/5 dark:bg-card dark:hover:bg-destructive/10"
           >
             退出登录
           </button>

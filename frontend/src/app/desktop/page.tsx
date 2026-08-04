@@ -187,7 +187,7 @@ export default function DesktopShellPage() {
         subtitle: t.desktop.apps.localFiles.subtitle,
         route: "/workspace/knowledge",
         icon: FolderIcon,
-        color: "from-amber-400 to-orange-500",
+        color: "from-warning to-orange-500",
       },
       {
         name: t.desktop.apps.localApps.name,
@@ -711,7 +711,7 @@ export default function DesktopShellPage() {
         </header>
 
         <div className="relative min-h-0 flex-1 px-8 pb-28 pt-7">
-          <div className="pointer-events-none absolute right-8 top-8 rounded-[22px] bg-black/20 px-5 py-4 text-right shadow-2xl shadow-black/14 backdrop-blur-2xl">
+          <div className="pointer-events-none absolute right-8 top-8 rounded-[22px] bg-black/20 px-5 py-4 text-right shadow-2xl shadow-black/14 ">
             <div className="text-xs font-semibold text-white/78">
               {t.desktop.widget.today}
             </div>
@@ -731,7 +731,7 @@ export default function DesktopShellPage() {
           <div className="mx-auto flex h-full max-w-[760px] flex-col items-center justify-center pb-12">
             <div
               data-desktop-interactive
-              className="flex h-12 w-full max-w-[620px] items-center gap-3 rounded-2xl border border-white/36 bg-card/70 px-4 text-foreground shadow-2xl shadow-black/12 backdrop-blur-2xl"
+              className="flex h-12 w-full max-w-[620px] items-center gap-3 rounded-2xl border border-white/36 bg-card/70 px-4 text-foreground shadow-2xl shadow-black/12 "
             >
               <SearchIcon className="size-5 shrink-0 text-blue-600" />
               <input
@@ -745,7 +745,7 @@ export default function DesktopShellPage() {
               <button
                 type="button"
                 onClick={submit}
-                className="rounded-full bg-foreground px-3 py-1.5 text-[11px] font-semibold text-background transition hover:bg-muted-foreground"
+                className="rounded-full bg-foreground px-3 py-1.5 text-mini font-semibold text-background transition hover:bg-muted-foreground"
               >
                 {t.desktop.open}
               </button>
@@ -772,7 +772,7 @@ export default function DesktopShellPage() {
           <section
             ref={drawerRef}
             className={cn(
-              "absolute inset-x-8 bottom-28 top-14 mx-auto max-w-[760px] rounded-[28px] border border-white/34 bg-card/70 p-5 text-foreground shadow-2xl shadow-black/24 backdrop-blur-2xl transition-all duration-300 ease-out",
+              "absolute inset-x-8 bottom-28 top-14 mx-auto max-w-[760px] rounded-[28px] border border-white/34 bg-card/70 p-5 text-foreground shadow-2xl shadow-black/24  transition-all duration-300 ease-out",
               desktopDrawerOpen
                 ? "translate-y-0 opacity-100"
                 : "translate-y-4 opacity-0",
@@ -795,7 +795,7 @@ export default function DesktopShellPage() {
               </div>
               <div className="flex items-center gap-1.5">
                 {archiveResult && !itemsError && (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                  <span className="rounded-full bg-success/10 px-2 py-0.5 text-micro font-medium text-success">
                     {t.desktop.drawer.archiveBadge(archiveResult.moved)}
                   </span>
                 )}
@@ -804,7 +804,7 @@ export default function DesktopShellPage() {
                     type="button"
                     onClick={handleAutoArchive}
                     disabled={archiving || loadingItems}
-                    className="inline-flex h-7 items-center gap-1 bg-blue-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+                    className="inline-flex h-7 items-center gap-1 bg-blue-600 px-2.5 text-mini font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
                     title={t.desktop.drawer.autoArchiveTooltip}
                   >
                     <ArchiveIcon className="size-3" />
@@ -818,7 +818,7 @@ export default function DesktopShellPage() {
                     type="button"
                     onClick={handleUndo}
                     disabled={undoing || loadingItems}
-                    className="inline-flex h-7 items-center gap-1 border border-border bg-card px-2.5 text-[11px] font-medium text-muted-foreground transition hover:bg-muted/50 disabled:opacity-50"
+                    className="inline-flex h-7 items-center gap-1 border border-border bg-card px-2.5 text-mini font-medium text-muted-foreground transition hover:bg-muted/50 disabled:opacity-50"
                     title={t.desktop.drawer.undoTooltip}
                   >
                     <RotateCcwIcon className="size-3" />
@@ -838,7 +838,7 @@ export default function DesktopShellPage() {
             </div>
 
             {itemsError && (
-              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+              <div className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">
                     {t.desktop.drawer.readFailed}
@@ -846,7 +846,7 @@ export default function DesktopShellPage() {
                   <button
                     type="button"
                     onClick={refreshDesktopItems}
-                    className="ml-auto rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 transition hover:bg-red-200"
+                    className="ml-auto rounded-md bg-destructive/10 px-2 py-0.5 text-micro font-medium text-destructive transition hover:bg-destructive/15"
                   >
                     {t.desktop.drawer.retry}
                   </button>
@@ -1006,7 +1006,7 @@ export default function DesktopShellPage() {
                                     className={cn(
                                       "grid size-12 place-items-center rounded-[14px] text-white shadow-[var(--shadow-md)] shadow-black/12 ring-1 ring-white/35 transition-transform duration-150 group-hover:scale-105",
                                       category === "folder"
-                                        ? "bg-gradient-to-br from-amber-400 to-orange-500"
+                                        ? "bg-gradient-to-br from-warning to-orange-500"
                                         : category === "app"
                                           ? "bg-gradient-to-br from-violet-500 to-fuchsia-500"
                                           : category === "image"
@@ -1014,13 +1014,13 @@ export default function DesktopShellPage() {
                                             : category === "document"
                                               ? "bg-gradient-to-br from-blue-500 to-indigo-500"
                                               : category === "package"
-                                                ? "bg-gradient-to-br from-rose-500 to-orange-500"
+                                                ? "bg-gradient-to-br from-destructive to-orange-500"
                                                 : "bg-gradient-to-br from-muted-foreground to-muted-foreground/70",
                                     )}
                                   >
                                     <Icon className="size-6" />
                                   </span>
-                                  <span className="line-clamp-2 max-w-24 text-[11px] font-medium leading-tight text-foreground">
+                                  <span className="line-clamp-2 max-w-24 text-mini font-medium leading-tight text-foreground">
                                     {item.name}
                                   </span>
                                 </button>
@@ -1088,7 +1088,7 @@ export default function DesktopShellPage() {
               onClick={() =>
                 handleContextMenuAction("delete", contextMenu.item)
               }
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 transition hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-destructive transition hover:bg-destructive/5 disabled:cursor-wait disabled:opacity-60"
             >
               <Trash2Icon className="size-3.5" />
               {deletingItemId === contextMenu.item.id
@@ -1100,7 +1100,7 @@ export default function DesktopShellPage() {
 
         <nav
           data-desktop-interactive
-          className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-end gap-2.5 rounded-[24px] border border-white/38 bg-card/50 px-3.5 py-2.5 shadow-2xl shadow-black/22 backdrop-blur-2xl"
+          className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-end gap-2.5 rounded-[24px] border border-white/38 bg-card/50 px-3.5 py-2.5 shadow-2xl shadow-black/22 "
         >
           {dockApps.map((app) => {
             const Icon = app.icon;
@@ -1171,7 +1171,7 @@ export default function DesktopShellPage() {
         {showWidget && systemInfo && (
           <div
             data-desktop-interactive
-            className="absolute bottom-24 right-8 z-20 w-64 rounded-2xl border border-white/34 bg-card/80 p-4 text-foreground shadow-2xl shadow-black/24 backdrop-blur-2xl"
+            className="absolute bottom-24 right-8 z-20 w-64 rounded-2xl border border-white/34 bg-card/80 p-4 text-foreground shadow-2xl shadow-black/24 "
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground">
@@ -1198,15 +1198,15 @@ export default function DesktopShellPage() {
                     className={cn(
                       "h-full rounded-full transition-all",
                       systemInfo.cpu.usage > 80
-                        ? "bg-red-500"
+                        ? "bg-destructive"
                         : systemInfo.cpu.usage > 50
-                          ? "bg-amber-500"
-                          : "bg-emerald-500",
+                          ? "bg-warning"
+                          : "bg-success",
                     )}
                     style={{ width: `${systemInfo.cpu.usage}%` }}
                   />
                 </div>
-                <div className="mt-0.5 text-[10px] text-muted-foreground/70">
+                <div className="mt-0.5 text-micro text-muted-foreground/70">
                   {systemInfo.cpu.model.split(" ").slice(0, 3).join(" ")} ·{" "}
                   {systemInfo.cpu.cores} {t.desktop.systemWidget.cores}
                 </div>
@@ -1226,19 +1226,19 @@ export default function DesktopShellPage() {
                     className={cn(
                       "h-full rounded-full transition-all",
                       systemInfo.memory.percent > 80
-                        ? "bg-red-500"
+                        ? "bg-destructive"
                         : systemInfo.memory.percent > 50
-                          ? "bg-amber-500"
+                          ? "bg-warning"
                           : "bg-blue-500",
                     )}
                     style={{ width: `${systemInfo.memory.percent}%` }}
                   />
                 </div>
-                <div className="mt-0.5 text-[10px] text-muted-foreground/70">
+                <div className="mt-0.5 text-micro text-muted-foreground/70">
                   {systemInfo.memory.used} / {systemInfo.memory.total} GB
                 </div>
               </div>
-              <div className="text-[10px] text-muted-foreground/70">
+              <div className="text-micro text-muted-foreground/70">
                 {t.desktop.systemWidget.uptime(
                   Math.floor(systemInfo.uptime / 60),
                   systemInfo.uptime % 60,

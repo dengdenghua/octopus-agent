@@ -37,7 +37,7 @@ export function Hero({ className }: { className?: string }) {
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
       <div className="container-md relative z-10 mx-auto flex h-screen flex-col items-center justify-center">
         <div className="mb-6 flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/60 backdrop-blur-sm">
-          <span className="size-1.5 rounded-lg bg-emerald-400 animate-pulse-soft" />
+          <span className="size-1.5 rounded-lg bg-success animate-pulse-soft" />
           {t.hero.releaseBadge}
         </div>
         <h1 className="flex items-center gap-2 text-4xl font-bold md:text-6xl">

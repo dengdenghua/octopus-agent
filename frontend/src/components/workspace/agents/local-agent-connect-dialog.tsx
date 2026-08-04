@@ -308,10 +308,10 @@ export function LocalAgentConnectDialog({
                     <span className="font-medium text-foreground">
                       本机 CLI Doctor
                     </span>
-                    <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300">
+                    <span className="rounded bg-success/5 px-1.5 py-0.5 text-success dark:text-success">
                       可派工 {doctorSummary.ready}
                     </span>
-                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700 dark:bg-amber-950/45 dark:text-amber-300">
+                    <span className="rounded bg-warning/5 px-1.5 py-0.5 text-warning dark:text-warning">
                       需处理 {doctorSummary.needs_attention}
                     </span>
                     <span className="rounded bg-background px-1.5 py-0.5 text-muted-foreground">
@@ -322,7 +322,7 @@ export function LocalAgentConnectDialog({
                     {doctorSummary.summary}
                   </div>
                   {doctorSummary.next_actions.length > 0 ? (
-                    <div className="mt-1 line-clamp-2 text-amber-700 dark:text-amber-300">
+                    <div className="mt-1 line-clamp-2 text-warning">
                       下一步：
                       {doctorSummary.next_actions.slice(0, 2).join("；")}
                     </div>
@@ -493,8 +493,8 @@ export function LocalAgentConnectDialog({
                             className={cn(
                               "mt-1 text-xs",
                               partner.ready
-                                ? "text-emerald-700 dark:text-emerald-300"
-                                : "text-amber-700 dark:text-amber-300",
+                                ? "text-success"
+                                : "text-warning",
                             )}
                           >
                             {partner.readiness_message}
@@ -531,9 +531,9 @@ export function LocalAgentConnectDialog({
                                   className={cn(
                                     "flex gap-2 rounded border px-2 py-1 text-xs",
                                     step.tone === "ready"
-                                      ? "border-emerald-100 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-200"
+                                      ? "border-success/20 bg-success/5 text-success dark:border-success/70"
                                       : step.tone === "blocked"
-                                        ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-200"
+                                        ? "border-warning/30 bg-warning/5 text-warning dark:border-warning/70"
                                         : "border-border-default/60 bg-background/70 text-muted-foreground",
                                   )}
                                 >
@@ -570,11 +570,11 @@ export function LocalAgentConnectDialog({
                                   className={cn(
                                     "rounded border px-2 py-1 text-xs",
                                     item.tone === "ready"
-                                      ? "border-emerald-100 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-200"
+                                      ? "border-success/20 bg-success/5 text-success dark:border-success/70"
                                       : item.tone === "blocked"
-                                        ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-200"
+                                        ? "border-warning/30 bg-warning/5 text-warning dark:border-warning/70"
                                         : item.tone === "warning"
-                                          ? "border-amber-100 bg-amber-50/70 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-200"
+                                          ? "border-warning/20 bg-warning/5 text-warning dark:border-warning/60"
                                           : "border-border-default/60 bg-background/70 text-muted-foreground",
                                   )}
                                 >
@@ -671,8 +671,8 @@ export function LocalAgentConnectDialog({
                               className={cn(
                                 "mt-1 block rounded border px-2 py-1 text-xs",
                                 probeResult.ok
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-200"
-                                  : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-200",
+                                  ? "border-success/30 bg-success/5 text-success dark:border-success/70"
+                                  : "border-warning/30 bg-warning/5 text-warning dark:border-warning/70",
                               )}
                             >
                               <span className="block font-medium">

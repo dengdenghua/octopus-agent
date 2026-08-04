@@ -22,6 +22,12 @@ import { installHashRouterShellUrlNormalizer } from "./core/router/hash-shell-ur
 import { normalizeLoopbackOrigin } from "./core/router/loopback-origin";
 import { installAuthFetchInterceptor } from "./core/auth/fetch-interceptor";
 
+// Self-hosted Inter (fontsource) — replaces the render-blocking Google
+// Fonts CDN link so first paint is local-only and Electron/offline works.
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
 import "./styles/globals.css";
 
 // Auth-failure handling for the FE↔BE link. Two distinct cases:

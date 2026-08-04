@@ -157,14 +157,14 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     name: "NotebookLM",
     url: "https://notebooklm.google.com/",
     icon: BookOpenIcon,
-    color: "from-amber-500 to-orange-400",
+    color: "from-warning to-orange-400",
     description: "researchDocs",
   },
   {
     name: "Doubao",
     url: "https://www.doubao.com/chat/",
     icon: MessageCircleIcon,
-    color: "from-emerald-500 to-teal-400",
+    color: "from-success to-teal-400",
     description: "chineseResearch",
   },
   {
@@ -185,7 +185,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     name: "Claude",
     url: "https://claude.ai/",
     icon: BrainCircuitIcon,
-    color: "from-stone-600 to-rose-400",
+    color: "from-stone-600 to-destructive",
     description: "longTextAnalysis",
   },
   {
@@ -624,14 +624,14 @@ function BackendBrowserTab({
       }
       className="relative flex-col overflow-auto bg-muted/20"
     >
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border bg-background/90 p-1 text-[11px] shadow-[var(--shadow-xs)] backdrop-blur">
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border bg-background/90 p-1 text-mini shadow-[var(--shadow-xs)] backdrop-blur">
         <button
           type="button"
           onClick={() => setExtensionGuideOpen((v) => !v)}
           className={cn(
             "flex h-7 items-center gap-1.5 rounded-full px-2.5 font-medium transition-colors",
             relayStatus?.connected
-              ? "bg-emerald-500/10 text-emerald-700"
+              ? "bg-success/10 text-success"
               : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >
@@ -666,7 +666,7 @@ function BackendBrowserTab({
                   <div className="text-xs font-semibold text-foreground">
                     {wt.dragToBookmarks}
                   </div>
-                  <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                  <div className="mt-1 text-mini leading-4 text-muted-foreground">
                     {wt.dragToBookmarksDesc}
                   </div>
                 </div>
@@ -694,10 +694,10 @@ function BackendBrowserTab({
             </div>
             {extensionPath && (
               <div className="mt-3 rounded-xl border bg-muted/25 px-3 py-2">
-                <div className="text-[11px] text-muted-foreground">
+                <div className="text-mini text-muted-foreground">
                   {wt.pluginDirectory}
                 </div>
-                <div className="mt-1 break-all font-mono text-[11px] text-foreground">
+                <div className="mt-1 break-all font-mono text-mini text-foreground">
                   {extensionPath}
                 </div>
               </div>
@@ -1061,13 +1061,13 @@ function BrowserDesktopHome({
                 >
                   <div
                     className={cn(
-                      "text-4xl font-semibold text-rose-500",
+                      "text-4xl font-semibold text-destructive",
                       mobileDesktop && "text-3xl",
                     )}
                   >
                     {day}
                   </div>
-                  <div className="text-sm font-medium text-rose-500">
+                  <div className="text-sm font-medium text-destructive">
                     {week}
                   </div>
                 </div>
@@ -1340,7 +1340,7 @@ function DesktopControlPanel({
               : wt.panelTitleDesktopSettings;
 
   return (
-    <div className="absolute bottom-7 left-24 top-24 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[28px] border border-white/38 bg-white/70 text-foreground shadow-xl shadow-black/15 backdrop-blur-2xl">
+    <div className="absolute bottom-7 left-24 top-24 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[28px] border border-white/38 bg-white/70 text-foreground shadow-xl shadow-black/15 ">
       <div className="flex items-center justify-between border-b border-white/32 px-5 py-4">
         <div>
           <div className="text-base font-semibold">{title}</div>
@@ -1369,7 +1369,7 @@ function DesktopControlPanel({
                     : "border-white/42 bg-white/38",
                 )}
               >
-                <span className="size-10 rounded-2xl bg-gradient-to-br from-muted-foreground via-zinc-300 to-rose-300 shadow-inner" />
+                <span className="size-10 rounded-2xl bg-gradient-to-br from-muted-foreground via-zinc-300 to-destructive shadow-inner" />
                 <span>
                   <span className="block text-sm font-semibold">{name}</span>
                   <span className="block text-xs text-muted-foreground">
@@ -1401,7 +1401,7 @@ function DesktopControlPanel({
                         {wt.widgetPanelDescs[index]}
                       </div>
                     </div>
-                    <span className="rounded-full bg-emerald-500/14 px-2 py-1 text-[10px] font-medium text-emerald-700">
+                    <span className="rounded-full bg-success/14 px-2 py-1 text-micro font-medium text-success">
                       {wt.widgetEnabled}
                     </span>
                   </div>
@@ -1414,9 +1414,9 @@ function DesktopControlPanel({
         {panel === "wallpaper" && (
           <div className="grid grid-cols-2 gap-3">
             {[
-              "from-muted-foreground via-zinc-300 to-rose-300",
+              "from-muted-foreground via-zinc-300 to-destructive",
               "from-sky-300 via-indigo-300 to-muted-foreground",
-              "from-emerald-300 via-teal-400 to-muted-foreground/80",
+              "from-success via-teal-400 to-muted-foreground/80",
               "from-stone-500 via-neutral-400 to-orange-200",
             ].map((gradient, index) => (
               <button
@@ -1569,7 +1569,7 @@ function DesktopAppIcon({
         {displayName}
       </span>
       {!compact && (
-        <span className="line-clamp-1 w-28 text-[11px] text-white/72">
+        <span className="line-clamp-1 w-28 text-mini text-white/72">
           {displayDesc}
         </span>
       )}

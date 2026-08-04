@@ -170,7 +170,7 @@ function ChatModesStep() {
       icon: CodeIcon,
       title: t.onboarding.modeCode,
       desc: t.onboarding.modeCodeDesc,
-      color: "text-green-500 bg-green-500/10",
+      color: "text-success bg-success/10",
     },
     {
       icon: UsersIcon,
@@ -231,7 +231,7 @@ function KeyFeaturesStep() {
       icon: ClipboardListIcon,
       title: t.onboarding.featureTaskBoard,
       desc: t.onboarding.featureTaskBoardDesc,
-      color: "text-emerald-500 bg-emerald-500/10",
+      color: "text-success bg-success/10",
     },
   ];
 

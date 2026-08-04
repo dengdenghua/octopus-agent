@@ -33,9 +33,9 @@ interface QuickTemplatesProps {
 const categoryColors: Record<string, string> = {
   website: "bg-sky-500/10 text-sky-600",
   app: "bg-violet-500/10 text-violet-600",
-  tool: "bg-emerald-500/10 text-emerald-600",
-  game: "bg-amber-500/10 text-amber-600",
-  data: "bg-rose-500/10 text-rose-600",
+  tool: "bg-success/10 text-success",
+  game: "bg-warning/10 text-warning",
+  data: "bg-destructive/10 text-destructive",
 };
 
 export function QuickTemplates({ onSelect, className }: QuickTemplatesProps) {

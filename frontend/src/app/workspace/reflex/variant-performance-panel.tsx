@@ -214,7 +214,7 @@ export function VariantPerformancePanel() {
       </CardHeader>
       <CardContent className="space-y-3">
         {err && (
-          <div className="rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+          <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {err}
           </div>
         )}
@@ -392,7 +392,7 @@ function RecipeRow({
         {promote?.proposal && !confirmApply && (
           <Button
             size="sm"
-            className="h-7 bg-emerald-600 text-xs hover:bg-emerald-700"
+            className="h-7 bg-success text-xs hover:bg-success"
             onClick={() => setConfirmApply(true)}
           >
             <TrophyIcon className="mr-1 size-3" />
@@ -403,7 +403,7 @@ function RecipeRow({
           <div className="flex items-center gap-1">
             <Button
               size="sm"
-              className="h-7 bg-emerald-600 text-xs hover:bg-emerald-700"
+              className="h-7 bg-success text-xs hover:bg-success"
               onClick={applyPromote}
               disabled={promoting}
             >
@@ -428,12 +428,12 @@ function RecipeRow({
           className={cn(
             "mt-2 rounded-md px-3 py-2 text-xs",
             promote.applied
-              ? "bg-emerald-500/10 text-emerald-300"
+              ? "bg-success/10 text-success"
               : promote.skipped
                 ? "bg-muted-foreground/10 text-muted-foreground"
                 : promote.ok
-                  ? "bg-amber-500/10 text-amber-200"
-                  : "bg-rose-500/10 text-rose-300",
+                  ? "bg-warning/10 text-warning"
+                  : "bg-destructive/10 text-destructive",
           )}
         >
           {promote.error && <div>✗ {promote.error}</div>}
@@ -500,7 +500,7 @@ function AutoTickBar({
       className={cn(
         "rounded-lg border px-4 py-3",
         status.enabled
-          ? "border-emerald-500/30 bg-emerald-500/5"
+          ? "border-success/30 bg-success/5"
           : "border-border-default bg-background/60",
       )}
     >
@@ -508,7 +508,7 @@ function AutoTickBar({
         <TimerIcon
           className={cn(
             "size-4",
-            status.enabled ? "text-emerald-400" : "text-muted-foreground",
+            status.enabled ? "text-success" : "text-muted-foreground",
           )}
         />
         <span className="font-medium">Auto-promote daemon:</span>
@@ -516,10 +516,10 @@ function AutoTickBar({
           className={cn(
             "text-xs",
             status.enabled
-              ? "bg-emerald-500/15 text-emerald-300"
+              ? "bg-success/15 text-success"
               : "bg-muted-foreground/15 text-muted-foreground",
             "hover:" +
-              (status.enabled ? "bg-emerald-500/15" : "bg-muted-foreground/15"),
+              (status.enabled ? "bg-success/15" : "bg-muted-foreground/15"),
           )}
         >
           {status.enabled ? "ON" : "OFF"}
@@ -568,7 +568,7 @@ function AutoTickBar({
             <>
               last ran {lastStr} · scanned {last.recipes_scanned} recipe
               {last.recipes_scanned !== 1 ? "s" : ""} · promoted{" "}
-              <span className="text-emerald-400">{last.recipes_promoted}</span>
+              <span className="text-success">{last.recipes_promoted}</span>
               {last.elapsed_s > 0 && ` · ${last.elapsed_s.toFixed(2)}s`}
               {" · "}
             </>
@@ -588,12 +588,12 @@ function AutoTickBar({
                 className={cn(
                   "truncate",
                   r.applied
-                    ? "text-emerald-300"
+                    ? "text-success"
                     : r.skipped
                       ? "text-muted-foreground"
                       : r.error
-                        ? "text-rose-300"
-                        : "text-amber-300",
+                        ? "text-destructive"
+                        : "text-warning",
                 )}
               >
                 {r.applied && "✓ "}
@@ -633,12 +633,12 @@ function VariantStatRow({
     <tr
       className={cn(
         "border-b border-border-subtle",
-        isLeader && "bg-emerald-500/5",
+        isLeader && "bg-success/5",
       )}
     >
       <td className="py-1 font-mono">
         {isLeader && (
-          <TrophyIcon className="mr-1 inline size-3 text-emerald-400" />
+          <TrophyIcon className="mr-1 inline size-3 text-success" />
         )}
         {label}
       </td>
@@ -648,10 +648,10 @@ function VariantStatRow({
         className={cn(
           "py-1 text-right font-mono",
           row.success_rate >= 0.7
-            ? "text-emerald-400"
+            ? "text-success"
             : row.success_rate >= 0.4
-              ? "text-amber-400"
-              : "text-rose-400",
+              ? "text-warning"
+              : "text-destructive",
         )}
       >
         {(row.success_rate * 100).toFixed(0)}%

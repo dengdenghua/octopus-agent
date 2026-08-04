@@ -86,7 +86,7 @@ export function TeamTasksPanel({
       pending: {
         label: t.teamTasksPanel.statusPending,
         Icon: ClipboardListIcon,
-        className: "border-amber-500/25 bg-amber-500/10 text-amber-700",
+        className: "border-warning/25 bg-warning/10 text-warning",
       },
       running: {
         label: t.taskBoard.running,
@@ -96,7 +96,7 @@ export function TeamTasksPanel({
       done: {
         label: t.agentWorkbenchPages.statusDone,
         Icon: CheckCircle2Icon,
-        className: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700",
+        className: "border-success/25 bg-success/10 text-success",
       },
       failed: {
         label: t.agentWorkbenchPages.statusError,
@@ -392,7 +392,7 @@ export function TeamTasksPanel({
                 <button
                   type="button"
                   onClick={() => setShowArtifacts((v) => !v)}
-                  className="flex items-center gap-0.5 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700 transition-colors hover:bg-emerald-500/20"
+                  className="flex items-center gap-0.5 rounded-md bg-success/10 px-1.5 py-0.5 text-success transition-colors hover:bg-success/20"
                 >
                   {showArtifacts ? (
                     <ChevronDownIcon className="size-3" />
@@ -418,28 +418,28 @@ export function TeamTasksPanel({
               )}
             </div>
             {recoveryGroups.length > 0 && (
-              <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-xs text-amber-900">
+              <div className="mt-2 rounded-md border border-warning/30 bg-warning/5 px-2 py-1.5 text-xs text-warning">
                 <div className="font-medium">CLI 恢复分组</div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {recoveryGroups.map((group) => (
                     <span
                       key={group.key}
-                      className="inline-flex max-w-full flex-col items-start gap-0.5 rounded border border-amber-200 bg-background/75 px-1.5 py-0.5"
+                      className="inline-flex max-w-full flex-col items-start gap-0.5 rounded border border-warning/30 bg-background/75 px-1.5 py-0.5"
                       title={group.hints.join("；")}
                     >
                       <span className="flex max-w-full items-center gap-1">
                         <span className="shrink-0 font-medium">
                           {group.label}
                         </span>
-                        <span className="min-w-0 truncate text-amber-800/80">
+                        <span className="min-w-0 truncate text-warning/80">
                           {group.members.join("、")}
                         </span>
-                        <span className="shrink-0 rounded bg-amber-100 px-1 font-mono text-xs">
+                        <span className="shrink-0 rounded bg-warning/10 px-1 font-mono text-xs">
                           {group.count}
                         </span>
                       </span>
                       {group.hints[0] && (
-                        <span className="max-w-full truncate text-amber-800/80">
+                        <span className="max-w-full truncate text-warning/80">
                           建议：{group.hints[0]}
                         </span>
                       )}
@@ -468,14 +468,14 @@ export function TeamTasksPanel({
                 >
                   <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium">
                     {ok === true && (
-                      <CheckCircle2Icon className="size-3 shrink-0 text-emerald-600" />
+                      <CheckCircle2Icon className="size-3 shrink-0 text-success" />
                     )}
                     {ok === false && (
-                      <XCircleIcon className="size-3 shrink-0 text-amber-500" />
+                      <XCircleIcon className="size-3 shrink-0 text-warning" />
                     )}
                     <span className="truncate">{title}</span>
                     {failureLabel && ok === false && (
-                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                      <span className="shrink-0 rounded bg-warning/10 px-1.5 py-0.5 text-xs text-warning">
                         {failureLabel}
                       </span>
                     )}
@@ -623,7 +623,7 @@ function TimelineNodeRow({ node }: { node: TeamTaskProcessTimelineNode }) {
         node.severity === "high"
           ? "border-destructive/25 bg-destructive/10"
           : node.lane === "artifact"
-            ? "border-emerald-500/20 bg-emerald-500/10"
+            ? "border-success/20 bg-success/10"
             : "border-border-default bg-muted/15",
       )}
     >

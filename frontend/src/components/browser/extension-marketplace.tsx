@@ -77,7 +77,7 @@ const catalog: ExtensionListing[] = [
     tagline: "Collect web snippets, sources, and screenshots",
     category: "research",
     icon: BookOpen,
-    accent: "from-emerald-400 to-teal-600",
+    accent: "from-success to-teal-600",
     rating: "4.8",
     installs: "8.4K",
     tags: ["Library", "Citation", "Screenshot"],
@@ -88,7 +88,7 @@ const catalog: ExtensionListing[] = [
     tagline: "Lightweight blocking of intrusive elements and tracking scripts",
     category: "security",
     icon: ShieldCheck,
-    accent: "from-rose-400 to-red-600",
+    accent: "from-destructive to-destructive",
     rating: "4.7",
     installs: "18K",
     tags: ["Privacy", "Blocking", "Security"],
@@ -99,7 +99,7 @@ const catalog: ExtensionListing[] = [
     tagline: "Save isolated sessions for test accounts",
     category: "security",
     icon: LockKeyhole,
-    accent: "from-amber-300 to-orange-500",
+    accent: "from-warning to-orange-500",
     rating: "4.6",
     installs: "5.2K",
     tags: ["Session", "Testing", "Isolation"],
@@ -598,7 +598,7 @@ export function ExtensionMarketplace({
                     {em.rating}
                   </div>
                   <div className="mt-2 flex items-center gap-2 text-xl font-semibold">
-                    <Star className="size-4 fill-current text-amber-500" />
+                    <Star className="size-4 fill-current text-warning" />
                     {selected.rating}
                   </div>
                 </div>

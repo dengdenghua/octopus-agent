@@ -47,7 +47,7 @@ export function AgentWelcome({
           )}
         </div>
         <span className="absolute -right-1.5 -bottom-1.5 flex h-5.5 items-center gap-1 rounded-lg border border-border bg-background px-2 text-xs font-semibold tracking-wide text-muted-foreground/90">
-          <span className="size-1.5 rounded-full bg-emerald-500" />
+          <span className="size-1.5 rounded-full bg-success" />
           {typeBadge}
         </span>
       </div>

@@ -74,7 +74,7 @@ export function ParallelTasksPanel({
                   <span className="truncate text-sm font-medium">
                     {task.description || task.task_id}
                   </span>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                  <Badge variant="outline" className="shrink-0 text-micro">
                     {task.subagent_name}
                   </Badge>
                 </div>
@@ -88,7 +88,7 @@ export function ParallelTasksPanel({
                   </p>
                 ) : null}
                 {task.duration_seconds !== null && (
-                  <p className="mt-1 text-[10px] text-muted-foreground">
+                  <p className="mt-1 text-micro text-muted-foreground">
                     {task.duration_seconds}s
                   </p>
                 )}

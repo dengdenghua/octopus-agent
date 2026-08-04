@@ -18,9 +18,9 @@ export function MacWindowControls({ className }: { className?: string }) {
         className,
       )}
     >
-      <span className="block h-3 w-3 shrink-0 rounded-full border border-red-500/45 bg-red-400 shadow-[inset_0_0.5px_0_rgba(255,255,255,0.55)]" />
-      <span className="block h-3 w-3 shrink-0 rounded-full border border-amber-500/45 bg-amber-400 shadow-[inset_0_0.5px_0_rgba(255,255,255,0.55)]" />
-      <span className="block h-3 w-3 shrink-0 rounded-full border border-emerald-500/45 bg-emerald-400 shadow-[inset_0_0.5px_0_rgba(255,255,255,0.55)]" />
+      <span className="block h-3 w-3 shrink-0 rounded-full border border-destructive/45 bg-destructive shadow-[inset_0_0.5px_0_rgba(255,255,255,0.55)]" />
+      <span className="block h-3 w-3 shrink-0 rounded-full border border-warning/45 bg-warning shadow-[inset_0_0.5px_0_rgba(255,255,255,0.55)]" />
+      <span className="block h-3 w-3 shrink-0 rounded-full border border-success/45 bg-success shadow-[inset_0_0.5px_0_rgba(255,255,255,0.55)]" />
     </div>
   );
 }

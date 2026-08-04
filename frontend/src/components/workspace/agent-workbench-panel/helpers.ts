@@ -93,8 +93,8 @@ export function workBlockLabelsFromI18n(t: unknown) {
 export function agentStatusTextClass(status: AgentTile["status"]): string {
   if (status === "running") return "text-primary";
   if (status === "waiting_approval")
-    return "text-amber-600 dark:text-amber-300";
+    return "text-warning";
   if (status === "error") return "text-destructive";
-  if (status === "done") return "text-emerald-600 dark:text-emerald-300";
+  if (status === "done") return "text-success";
   return "text-muted-foreground";
 }

@@ -837,7 +837,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                             className={cn(
                               "rounded-sm text-xs",
                               !permission.agentGranted &&
-                                "border-amber-500/30 text-amber-600 dark:text-amber-300",
+                                "border-warning/30 text-warning",
                             )}
                           >
                             {permission.defaultGranted

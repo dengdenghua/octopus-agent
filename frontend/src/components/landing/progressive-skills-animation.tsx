@@ -401,7 +401,7 @@ export default function ProgressiveSkillsAnimation() {
                 key={`${item.name}-${index}`}
                 className={`flex items-center gap-3 text-lg font-medium transition-all duration-300 ${
                   item.done
-                    ? "text-green-500"
+                    ? "text-success"
                     : item.dragging
                       ? "translate-x-8 scale-105 text-blue-400"
                       : item.active
@@ -425,7 +425,7 @@ export default function ProgressiveSkillsAnimation() {
                     size={20}
                     className={
                       item.done
-                        ? "text-green-500"
+                        ? "text-success"
                         : item.highlight
                           ? "text-purple-400"
                           : ""
@@ -436,7 +436,7 @@ export default function ProgressiveSkillsAnimation() {
                     size={20}
                     className={
                       item.done
-                        ? "text-green-500"
+                        ? "text-success"
                         : item.highlight
                           ? "text-purple-400"
                           : ""
@@ -444,7 +444,7 @@ export default function ProgressiveSkillsAnimation() {
                   />
                 )}
                 <span>{item.name}</span>
-                {item.done && <Check size={16} className="text-green-500" />}
+                {item.done && <Check size={16} className="text-success" />}
                 {item.highlight && !item.done && (
                   <Sparkles size={16} className="text-purple-400" />
                 )}
@@ -458,7 +458,7 @@ export default function ProgressiveSkillsAnimation() {
           {/* Chat Header */}
           <div className="border-b border-zinc-800 p-4">
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-lg bg-green-500" />
+              <div className="h-3 w-3 rounded-lg bg-success" />
               <span className="text-sm text-zinc-400">Octopus Agent</span>
             </div>
           </div>
@@ -576,7 +576,7 @@ export default function ProgressiveSkillsAnimation() {
                               {step.type === "search" ? (
                                 <Search size={14} className="text-blue-400" />
                               ) : (
-                                <Globe size={14} className="text-green-400" />
+                                <Globe size={14} className="text-success" />
                               )}
                               <span className="truncate">{step.text}</span>
                             </motion.div>
@@ -601,7 +601,7 @@ export default function ProgressiveSkillsAnimation() {
                               {step.type === "search" ? (
                                 <Search size={14} className="text-blue-400" />
                               ) : (
-                                <Globe size={14} className="text-green-400" />
+                                <Globe size={14} className="text-success" />
                               )}
                               <span className="truncate">{step.text}</span>
                             </motion.div>
@@ -632,7 +632,7 @@ export default function ProgressiveSkillsAnimation() {
                             key={file}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
-                            className="flex items-center gap-2 text-sm text-green-500"
+                            className="flex items-center gap-2 text-sm text-success"
                           >
                             <FileText size={14} />
                             <span>Generating {file}...</span>
@@ -672,9 +672,9 @@ export default function ProgressiveSkillsAnimation() {
                         <motion.div
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          className="mt-4 rounded-lg border border-green-500/30 bg-green-500/10 p-4"
+                          className="mt-4 rounded-lg border border-success/30 bg-success/10 p-4"
                         >
-                          <div className="text-lg font-medium text-green-500">
+                          <div className="text-lg font-medium text-success">
                             ✅ Live at biotech-startup.vercel.app
                           </div>
                         </motion.div>

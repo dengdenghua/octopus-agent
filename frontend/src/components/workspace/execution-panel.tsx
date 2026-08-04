@@ -26,14 +26,14 @@ const TOOL_COLORS: Record<string, string> = {
   create_file: "text-primary",
   git_commit: "text-primary",
   notebook_edit: "text-primary",
-  bash: "text-amber-500",
-  execute: "text-amber-500",
-  task: "text-amber-500",
-  route_agents: "text-amber-500",
-  run: "text-amber-500",
-  web_search: "text-cyan-500",
-  browse: "text-cyan-500",
-  fetch: "text-cyan-500",
+  bash: "text-chart-8",
+  execute: "text-chart-8",
+  task: "text-chart-6",
+  route_agents: "text-chart-6",
+  run: "text-chart-8",
+  web_search: "text-chart-7",
+  browse: "text-chart-7",
+  fetch: "text-chart-7",
 };
 
 function getToolLabels(t: {
@@ -107,7 +107,7 @@ export function ExecutionPanel({
       {isLoading ? (
         <Loader2Icon className="size-3 animate-spin shrink-0" />
       ) : (
-        <CheckCircle2Icon className="size-3 text-green-500 shrink-0" />
+        <CheckCircle2Icon className="size-3 text-success shrink-0" />
       )}
 
       <div className="flex items-center gap-2">

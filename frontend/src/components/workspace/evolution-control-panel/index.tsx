@@ -226,9 +226,9 @@ function Pill({
 }) {
   const tones: Record<string, string> = {
     muted: "bg-muted text-muted-foreground",
-    ok: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
-    warn: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-    bad: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+    ok: "bg-success/10 text-success dark:bg-success/15 dark:text-success",
+    warn: "bg-warning/10 text-warning dark:bg-warning/15 dark:text-warning",
+    bad: "bg-destructive/10 text-destructive dark:bg-destructive/15 dark:text-destructive",
     info: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
   };
   return (
@@ -254,10 +254,10 @@ function Bar({
 }) {
   const color =
     tone === "bad"
-      ? "bg-red-500"
+      ? "bg-destructive"
       : tone === "warn"
-        ? "bg-amber-500"
-        : "bg-emerald-500";
+        ? "bg-warning"
+        : "bg-success";
   return (
     <div
       className="h-1.5 w-full rounded-lg bg-muted"
@@ -568,7 +568,7 @@ function SkillProposalsSection() {
                 type="button"
                 disabled={busy === p.name}
                 onClick={() => decide(p.name, true)}
-                className="rounded-lg bg-emerald-500/10 px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-500/20 disabled:opacity-50 dark:text-emerald-300"
+                className="rounded-lg bg-success/10 px-3 py-1 text-xs text-success hover:bg-success/20 disabled:opacity-50 dark:text-success"
               >
                 {t.evolutionControl.skillProposals.approve}
               </button>
@@ -576,7 +576,7 @@ function SkillProposalsSection() {
                 type="button"
                 disabled={busy === p.name}
                 onClick={() => decide(p.name, false)}
-                className="rounded-lg bg-red-500/10 px-3 py-1 text-xs text-red-700 hover:bg-red-500/20 disabled:opacity-50 dark:text-red-300"
+                className="rounded-lg bg-destructive/10 px-3 py-1 text-xs text-destructive hover:bg-destructive/20 disabled:opacity-50 dark:text-destructive"
               >
                 {t.evolutionControl.skillProposals.reject}
               </button>
@@ -1141,7 +1141,7 @@ function ProtocolDriftSection() {
           >
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <AlertTriangleIcon className="size-3.5 text-amber-500" />
+                <AlertTriangleIcon className="size-3.5 text-warning" />
                 <span className="font-mono text-xs">{ev.protocol_id}</span>
                 <span className="text-xs text-muted-foreground">
                   {ev.detected_at}
@@ -1345,7 +1345,7 @@ function Card({
         </div>
       </div>
       {error && (
-        <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
           <XCircleIcon className="size-3.5" />
           {error}
         </div>

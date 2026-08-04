@@ -60,9 +60,9 @@ const TOOL_COLORS: Record<string, string> = {
   bash: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
   write_file: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
   str_replace: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
-  git_commit: "bg-green-500/10 text-green-600 dark:text-green-400",
-  schedule_cron: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
-  remote_trigger: "bg-red-500/10 text-red-600 dark:text-red-400",
+  git_commit: "bg-success/10 text-success",
+  schedule_cron: "bg-warning/10 text-warning",
+  remote_trigger: "bg-destructive/10 text-destructive",
 };
 
 export function ToolApprovalCard({
@@ -111,13 +111,13 @@ export function ToolApprovalCard({
     <div
       className={cn(
         "border rounded-lg p-3 space-y-3 transition-colors",
-        status === "approved" && "border-green-500/30 bg-green-500/5",
-        status === "rejected" && "border-red-500/30 bg-red-500/5",
-        status === "pending" && "border-yellow-500/30 bg-yellow-500/5",
+        status === "approved" && "border-success/30 bg-success/5",
+        status === "rejected" && "border-destructive/30 bg-destructive/5",
+        status === "pending" && "border-warning/30 bg-warning/5",
       )}
     >
       <div className="flex items-center gap-2">
-        <ShieldAlertIcon className="size-4 text-yellow-600 dark:text-yellow-400" />
+        <ShieldAlertIcon className="size-4 text-warning" />
         <span
           className={cn(
             "text-xs font-medium px-2 py-0.5 rounded-lg",
@@ -165,8 +165,8 @@ export function ToolApprovalCard({
         <div
           className={cn(
             "flex items-center gap-1.5 text-xs font-medium",
-            status === "approved" && "text-green-600 dark:text-green-400",
-            status === "rejected" && "text-red-600 dark:text-red-400",
+            status === "approved" && "text-success",
+            status === "rejected" && "text-destructive",
           )}
         >
           {status === "approved" ? (

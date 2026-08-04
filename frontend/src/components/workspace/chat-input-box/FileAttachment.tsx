@@ -251,7 +251,7 @@ export function FileAttachment({
               <span className="block truncate text-[13px] font-medium leading-tight text-foreground">
                 {displayName}
               </span>
-              <span className="block truncate text-[11px] leading-tight text-muted-foreground">
+              <span className="block truncate text-mini leading-tight text-muted-foreground">
                 {meta}
               </span>
             </span>

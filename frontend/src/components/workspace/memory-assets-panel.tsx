@@ -76,10 +76,10 @@ function LayerMark({ layer }: { layer: MemoryLayer }) {
   return (
     <div
       className={cn(
-        "grid size-9 shrink-0 place-items-center rounded-lg border text-[11px] font-semibold",
+        "grid size-9 shrink-0 place-items-center rounded-lg border text-mini font-semibold",
         layer === "L0" && "border-slate-200 bg-slate-50 text-slate-600",
         layer === "L1" && "border-sky-200 bg-sky-50 text-sky-700",
-        layer === "L2" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+        layer === "L2" && "border-success/30 bg-success/5 text-success",
         layer === "L3" && "border-violet-200 bg-violet-50 text-violet-700",
       )}
     >
@@ -153,7 +153,7 @@ function AssetDetail({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <section className="rounded-xl border border-border bg-muted/20 p-3">
-            <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+            <div className="mb-1 text-mini font-medium text-muted-foreground">
               记忆内容
             </div>
             <p className="whitespace-pre-wrap text-sm leading-6">
@@ -298,7 +298,7 @@ export function MemoryAssetsPanel() {
             </div>
             <div>
               <div className="text-lg font-semibold tabular-nums">{value}</div>
-              <div className="text-[11px] text-muted-foreground">{label}</div>
+              <div className="text-mini text-muted-foreground">{label}</div>
             </div>
           </div>
         ))}
@@ -364,7 +364,7 @@ export function MemoryAssetsPanel() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="grid grid-cols-[minmax(0,1fr)_110px_110px_36px] border-b border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+        <div className="grid grid-cols-[minmax(0,1fr)_110px_110px_36px] border-b border-border bg-muted/40 px-3 py-2 text-mini text-muted-foreground">
           <span>记忆资产</span>
           <span>来源</span>
           <span>访问范围</span>
@@ -413,7 +413,7 @@ export function MemoryAssetsPanel() {
                       </span>
                       <Badge
                         variant="outline"
-                        className="h-5 px-1.5 text-[10px]"
+                        className="h-5 px-1.5 text-micro"
                       >
                         {TYPE_LABELS[asset.asset_type]}
                       </Badge>

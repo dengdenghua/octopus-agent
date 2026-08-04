@@ -79,7 +79,7 @@ export default function SubscriptionSettingsPage() {
       {subscriptionError && !subscription && (
         <div
           role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm text-warning"
         >
           <span>{t.subscriptionSettings.subscriptionUnavailable}</span>
           <Button

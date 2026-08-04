@@ -91,7 +91,7 @@ export default function NotificationSettingsPage() {
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
               {permission === "granted" ? (
-                <CheckCircle2Icon className="size-4 text-emerald-600" />
+                <CheckCircle2Icon className="size-4 text-success" />
               ) : (
                 <BellIcon className="size-4 text-muted-foreground" />
               )}
@@ -138,7 +138,7 @@ export default function NotificationSettingsPage() {
           <div
             id="notification-denied-hint"
             role="alert"
-            className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100"
+            className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
           >
             <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
             <p>{t.settings.notification.deniedHint}</p>

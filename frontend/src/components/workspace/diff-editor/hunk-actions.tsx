@@ -55,8 +55,8 @@ export function HunkActions({
           className={cn(
             "flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium",
             hunk.accepted
-              ? "bg-green-500/15 text-green-600 dark:text-green-400"
-              : "bg-red-500/15 text-red-600 dark:text-red-400",
+              ? "bg-success/15 text-success"
+              : "bg-destructive/15 text-destructive",
           )}
         >
           {hunk.accepted ? (
@@ -75,7 +75,7 @@ export function HunkActions({
         <>
           <button
             onClick={handleAccept}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-green-600 transition-colors hover:bg-green-500/15 dark:text-green-400"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-success transition-colors hover:bg-success/15 dark:text-success"
             title={t.diffEditor.hunkAccept}
           >
             <CheckIcon className="size-3" />
@@ -83,7 +83,7 @@ export function HunkActions({
           </button>
           <button
             onClick={handleReject}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/15 dark:text-red-400"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/15 dark:text-destructive"
             title={t.diffEditor.hunkReject}
           >
             <XIcon className="size-3" />

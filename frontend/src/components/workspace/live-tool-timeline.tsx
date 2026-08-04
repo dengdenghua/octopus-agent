@@ -38,44 +38,44 @@ type TimelineT = Pick<
 >;
 
 const TOOL_ICONS: Record<string, { icon: React.ElementType; color: string }> = {
-  bash: { icon: TerminalIcon, color: "text-green-500" },
-  exec_shell: { icon: TerminalIcon, color: "text-green-500" },
-  shell_command: { icon: TerminalIcon, color: "text-green-500" },
-  write_file: { icon: FileEditIcon, color: "text-blue-500" },
-  write_text_file: { icon: FileEditIcon, color: "text-blue-500" },
-  create_file: { icon: FileEditIcon, color: "text-blue-500" },
-  edit_code: { icon: FileEditIcon, color: "text-blue-500" },
-  edit_text_file: { icon: FileEditIcon, color: "text-blue-500" },
-  str_replace: { icon: FileEditIcon, color: "text-blue-500" },
-  read_file: { icon: EyeIcon, color: "text-cyan-500" },
-  read_text_file: { icon: EyeIcon, color: "text-cyan-500" },
-  fetch_url: { icon: GlobeIcon, color: "text-orange-500" },
-  list_cwd: { icon: SearchIcon, color: "text-purple-500" },
-  glob: { icon: SearchIcon, color: "text-purple-500" },
-  grep: { icon: SearchIcon, color: "text-purple-500" },
-  todo_write: { icon: ListChecksIcon, color: "text-violet-500" },
-  call_agent: { icon: BrainCircuitIcon, color: "text-sky-500" },
-  call_agent_parallel: { icon: BrainCircuitIcon, color: "text-sky-500" },
-  bb_read: { icon: BrainCircuitIcon, color: "text-sky-500" },
-  bb_write: { icon: BrainCircuitIcon, color: "text-sky-500" },
-  bb_keys: { icon: BrainCircuitIcon, color: "text-sky-500" },
-  "deep-research-swarm": { icon: BrainCircuitIcon, color: "text-violet-500" },
-  "report-writing": { icon: FileEditIcon, color: "text-blue-500" },
-  docx: { icon: FileEditIcon, color: "text-blue-500" },
-  web_search: { icon: GlobeIcon, color: "text-orange-500" },
-  apply_skill: { icon: BrainCircuitIcon, color: "text-violet-500" },
-  list_learned_skills: { icon: BrainCircuitIcon, color: "text-violet-500" },
-  learn_skill_from_text: { icon: BrainCircuitIcon, color: "text-violet-500" },
-  planning: { icon: BrainCircuitIcon, color: "text-sky-500" },
-  agent_thought: { icon: BrainCircuitIcon, color: "text-violet-500" },
-  team_swarm: { icon: BrainCircuitIcon, color: "text-sky-500" },
-  team_routing: { icon: BrainCircuitIcon, color: "text-sky-500" },
-  git_status: { icon: GitBranchIcon, color: "text-amber-500" },
-  git_commit: { icon: GitBranchIcon, color: "text-amber-500" },
-  git_diff: { icon: GitBranchIcon, color: "text-amber-500" },
-  stream_recovery: { icon: RefreshCwIcon, color: "text-sky-500" },
-  model_gateway: { icon: BrainCircuitIcon, color: "text-sky-500" },
-  model_reasoning: { icon: BrainCircuitIcon, color: "text-violet-500" },
+  bash: { icon: TerminalIcon, color: "text-chart-8" },
+  exec_shell: { icon: TerminalIcon, color: "text-chart-8" },
+  shell_command: { icon: TerminalIcon, color: "text-chart-8" },
+  write_file: { icon: FileEditIcon, color: "text-chart-6" },
+  write_text_file: { icon: FileEditIcon, color: "text-chart-6" },
+  create_file: { icon: FileEditIcon, color: "text-chart-6" },
+  edit_code: { icon: FileEditIcon, color: "text-chart-6" },
+  edit_text_file: { icon: FileEditIcon, color: "text-chart-6" },
+  str_replace: { icon: FileEditIcon, color: "text-chart-6" },
+  read_file: { icon: EyeIcon, color: "text-chart-2" },
+  read_text_file: { icon: EyeIcon, color: "text-chart-2" },
+  fetch_url: { icon: GlobeIcon, color: "text-chart-7" },
+  list_cwd: { icon: SearchIcon, color: "text-chart-1" },
+  glob: { icon: SearchIcon, color: "text-chart-1" },
+  grep: { icon: SearchIcon, color: "text-chart-1" },
+  todo_write: { icon: ListChecksIcon, color: "text-chart-1" },
+  call_agent: { icon: BrainCircuitIcon, color: "text-chart-6" },
+  call_agent_parallel: { icon: BrainCircuitIcon, color: "text-chart-6" },
+  bb_read: { icon: BrainCircuitIcon, color: "text-chart-6" },
+  bb_write: { icon: BrainCircuitIcon, color: "text-chart-6" },
+  bb_keys: { icon: BrainCircuitIcon, color: "text-chart-6" },
+  "deep-research-swarm": { icon: BrainCircuitIcon, color: "text-chart-1" },
+  "report-writing": { icon: FileEditIcon, color: "text-chart-6" },
+  docx: { icon: FileEditIcon, color: "text-chart-6" },
+  web_search: { icon: GlobeIcon, color: "text-chart-7" },
+  apply_skill: { icon: BrainCircuitIcon, color: "text-chart-1" },
+  list_learned_skills: { icon: BrainCircuitIcon, color: "text-chart-1" },
+  learn_skill_from_text: { icon: BrainCircuitIcon, color: "text-chart-1" },
+  planning: { icon: BrainCircuitIcon, color: "text-chart-6" },
+  agent_thought: { icon: BrainCircuitIcon, color: "text-chart-1" },
+  team_swarm: { icon: BrainCircuitIcon, color: "text-chart-6" },
+  team_routing: { icon: BrainCircuitIcon, color: "text-chart-6" },
+  git_status: { icon: GitBranchIcon, color: "text-chart-4" },
+  git_commit: { icon: GitBranchIcon, color: "text-chart-4" },
+  git_diff: { icon: GitBranchIcon, color: "text-chart-4" },
+  stream_recovery: { icon: RefreshCwIcon, color: "text-chart-6" },
+  model_gateway: { icon: BrainCircuitIcon, color: "text-chart-6" },
+  model_reasoning: { icon: BrainCircuitIcon, color: "text-chart-1" },
 };
 
 function getToolLabels(t: TimelineT): Record<string, string> {
@@ -1105,7 +1105,7 @@ function InlineSummaryRow({
       className={cn(
         "mt-1 ml-5 flex min-w-0 items-start gap-2 border-l pl-2 text-xs leading-4",
         tone === "result"
-          ? "border-emerald-500/25 text-emerald-700/85 dark:text-emerald-400/85"
+          ? "border-success/25 text-success/85"
           : "border-border-default text-muted-foreground/85",
       )}
     >
@@ -1215,13 +1215,13 @@ function ToolEventRow({
     >
       <div className="flex items-center gap-2">
         {event.status === "running" ? (
-          <Loader2Icon className="size-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <Loader2Icon className="size-3.5 animate-spin text-success shrink-0" />
         ) : event.status === "waiting_approval" ? (
-          <ShieldAlertIcon className="size-3.5 text-amber-500 shrink-0 animate-pulse" />
+          <ShieldAlertIcon className="size-3.5 text-warning shrink-0 animate-pulse" />
         ) : event.status === "error" ? (
           <XCircleIcon className="size-3.5 text-destructive shrink-0" />
         ) : (
-          <CheckCircle2Icon className="size-3.5 text-emerald-500 shrink-0" />
+          <CheckCircle2Icon className="size-3.5 text-success shrink-0" />
         )}
 
         <Icon className={cn("size-3.5 shrink-0", iconCfg.color)} />
@@ -1308,7 +1308,7 @@ function ToolEventRow({
       )}
 
       {swarmLog?.detail && (
-        <div className="mt-2 ml-5 border-l border-sky-500/25 pl-3 text-sm leading-6 text-foreground/80">
+        <div className="mt-2 ml-5 border-l border-chart-6/25 pl-3 text-sm leading-6 text-foreground/80">
           {swarmLog.detail}
         </div>
       )}
@@ -1320,14 +1320,14 @@ function ToolEventRow({
       )}
 
       {thoughtDetail && event.name !== "agent_thought" && (
-        <div className="mt-1 ml-5 border-l border-violet-500/25 pl-2 text-xs leading-5 text-violet-700 dark:text-violet-300">
+        <div className="mt-1 ml-5 border-l border-chart-1/25 pl-2 text-xs leading-5 text-chart-1">
           <span className="font-medium">{detailTitle(t, "thought")}: </span>
           {compactMiddle(thoughtDetail, 260)}
         </div>
       )}
 
       {observationDetail && (
-        <div className="mt-1 ml-5 border-l border-emerald-500/25 pl-2 text-xs leading-5 text-emerald-700 dark:text-emerald-300">
+        <div className="mt-1 ml-5 border-l border-success/25 pl-2 text-xs leading-5 text-success">
           <span className="font-medium">{detailTitle(t, "observation")}: </span>
           {compactMiddle(observationDetail, 260)}
         </div>
@@ -1349,7 +1349,7 @@ function ToolEventRow({
       )}
 
       {researchSummary && !researchLog && (
-        <div className="mt-1 ml-5 border-l border-sky-500/25 pl-2 text-xs leading-4 text-sky-700 dark:text-sky-300">
+        <div className="mt-1 ml-5 border-l border-chart-6/25 pl-2 text-xs leading-4 text-chart-6">
           {researchSummary}
         </div>
       )}
@@ -1366,11 +1366,11 @@ function ToolEventRow({
       )}
 
       {open && thoughtDetail && (
-        <div className="mt-2 ml-5 overflow-hidden border-l border-violet-500/25 pl-2">
+        <div className="mt-2 ml-5 overflow-hidden border-l border-chart-1/25 pl-2">
           <div className="pb-1 text-xs font-medium text-muted-foreground">
             {detailTitle(t, "thought")}
           </div>
-          <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-violet-500/5 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
+          <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-chart-1/5 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
             {thoughtDetail}
           </pre>
         </div>
@@ -1379,24 +1379,24 @@ function ToolEventRow({
       {open &&
         outputDetail &&
         (event.status !== "running" || event.name === "model_reasoning") && (
-          <div className="mt-2 ml-5 overflow-hidden border-l border-emerald-500/25 pl-2">
+          <div className="mt-2 ml-5 overflow-hidden border-l border-success/25 pl-2">
             <div className="pb-1 text-xs font-medium text-muted-foreground">
               {event.name === "model_reasoning"
                 ? detailTitle(t, "publicReasoning")
                 : detailTitle(t, "result")}
             </div>
-            <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-500/5 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
+            <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-success/5 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
               {outputDetail}
             </pre>
           </div>
         )}
 
       {open && observationDetail && (
-        <div className="mt-2 ml-5 overflow-hidden border-l border-emerald-500/25 pl-2">
+        <div className="mt-2 ml-5 overflow-hidden border-l border-success/25 pl-2">
           <div className="pb-1 text-xs font-medium text-muted-foreground">
             {detailTitle(t, "observation")}
           </div>
-          <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-500/5 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
+          <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-success/5 px-2 py-1.5 font-mono text-xs leading-4 text-foreground/80">
             {observationDetail}
           </pre>
         </div>
@@ -1526,7 +1526,7 @@ function GroupedTimeline({
                     ? "bg-destructive"
                     : group.events.some((event) => event.status === "running")
                       ? "animate-pulse bg-primary"
-                      : "bg-emerald-500",
+                      : "bg-success",
                 )}
               />
               {group.name}

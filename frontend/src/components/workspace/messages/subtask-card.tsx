@@ -54,14 +54,14 @@ function getStatusIcon(status: SubtaskStatus) {
   if (status === "failed")
     return <XCircleIcon className="size-3 text-destructive" />;
   if (status === "cancelled")
-    return <XCircleIcon className="size-3 text-amber-500" />;
+    return <XCircleIcon className="size-3 text-warning" />;
   if (status === "timed_out")
     return <XCircleIcon className="size-3 text-destructive" />;
   if (status === "pending")
-    return <PauseCircleIcon className="size-3 text-amber-500" />;
+    return <PauseCircleIcon className="size-3 text-warning" />;
   if (isSubtaskActive(status))
     return (
-      <Loader2Icon className="size-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+      <Loader2Icon className="size-3 animate-spin text-success" />
     );
   return <ClipboardListIcon className="size-3" />;
 }
@@ -164,7 +164,7 @@ export function SubtaskCard({
                     className={cn(
                       "text-muted-foreground flex items-center gap-1 text-xs font-normal",
                       task.status === "failed"
-                        ? "text-red-500 dark:text-red-400 opacity-60"
+                        ? "text-destructive opacity-60"
                         : "",
                     )}
                   >
@@ -231,9 +231,9 @@ export function SubtaskCard({
                       label={explainLastToolCall(msg, t)}
                       icon={
                         idx === task.messages!.length - 1 && isActive ? (
-                          <Loader2Icon className="size-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+                          <Loader2Icon className="size-4 animate-spin text-success" />
                         ) : (
-                          <CheckCircleIcon className="size-4 text-emerald-500 dark:text-emerald-400" />
+                          <CheckCircleIcon className="size-4 text-success" />
                         )
                       }
                     />
@@ -295,18 +295,18 @@ export function SubtaskCard({
           )}
           {task.status === "failed" && (
             <ChainOfThoughtStep
-              label={<div className="text-red-500">{task.error}</div>}
-              icon={<XCircleIcon className="size-4 text-red-500" />}
+              label={<div className="text-destructive">{task.error}</div>}
+              icon={<XCircleIcon className="size-4 text-destructive" />}
             ></ChainOfThoughtStep>
           )}
           {task.status === "cancelled" && (
             <ChainOfThoughtStep
               label={
-                <div className="text-yellow-600 dark:text-yellow-400">
+                <div className="text-warning">
                   {task.error ?? t.subtask.cancelled}
                 </div>
               }
-              icon={<XCircleIcon className="size-4 text-yellow-500" />}
+              icon={<XCircleIcon className="size-4 text-warning" />}
             ></ChainOfThoughtStep>
           )}
           {task.status === "timed_out" && (

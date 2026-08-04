@@ -60,8 +60,8 @@ const getPhaseConfig = (t: {
   },
   verify: {
     label: t.workingSet?.verify,
-    color: "text-emerald-600 dark:text-emerald-400",
-    bg: "bg-emerald-500/10",
+    color: "text-success",
+    bg: "bg-success/10",
     icon: FileCodeIcon,
   },
 });
@@ -110,7 +110,7 @@ function FileItem({ file }: { file: WorkingSetFile }) {
 function ThinkingStepIcon({ status }: { status?: ThinkingPlanStepStatus }) {
   if (status === "completed") {
     return (
-      <CheckCircle2Icon className="mt-0.5 size-3 shrink-0 text-emerald-500" />
+      <CheckCircle2Icon className="mt-0.5 size-3 shrink-0 text-success" />
     );
   }
   if (status === "in_progress") {

@@ -1131,7 +1131,7 @@ export function AgentOperatorPanel() {
         />
       )}
       {lastApplyResult && (
-        <div className="mb-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+        <div className="mb-3 rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-xs text-success">
           {lastApplyResult}
         </div>
       )}
@@ -1426,8 +1426,8 @@ function TaskRecoveryQueueCard({
       className={cn(
         "mt-3 rounded-lg border px-3 py-2",
         healthy
-          ? "border-emerald-500/25 bg-emerald-500/10"
-          : "border-amber-500/30 bg-amber-500/10",
+          ? "border-success/25 bg-success/10"
+          : "border-warning/30 bg-warning/10",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -1437,8 +1437,8 @@ function TaskRecoveryQueueCard({
               className={cn(
                 "size-4",
                 healthy
-                  ? "text-emerald-700 dark:text-emerald-300"
-                  : "text-amber-700 dark:text-amber-300",
+                  ? "text-success"
+                  : "text-warning",
               )}
             />
             {to("Task recovery queue")}
@@ -1630,10 +1630,10 @@ function CompetitorScorecardCard({
       className={cn(
         "mt-3 rounded-lg border px-3 py-2",
         error
-          ? "border-amber-500/30 bg-amber-500/10"
+          ? "border-warning/30 bg-warning/10"
           : healthy
-            ? "border-emerald-500/25 bg-emerald-500/10"
-            : "border-amber-500/30 bg-amber-500/10",
+            ? "border-success/25 bg-success/10"
+            : "border-warning/30 bg-warning/10",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -1643,8 +1643,8 @@ function CompetitorScorecardCard({
               className={cn(
                 "size-4",
                 !error && healthy
-                  ? "text-emerald-700 dark:text-emerald-300"
-                  : "text-amber-700 dark:text-amber-300",
+                  ? "text-success"
+                  : "text-warning",
               )}
             />
             {to("Competitor scorecard")}
@@ -1745,8 +1745,8 @@ function CompetitorScorecardCard({
                     className={cn(
                       "text-xs",
                       certification.ready
-                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                        : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                        ? "border-success/25 bg-success/10 text-success"
+                        : "border-warning/30 bg-warning/10 text-warning",
                     )}
                   >
                     {to("certified")} {certification.passed}/
@@ -1762,10 +1762,10 @@ function CompetitorScorecardCard({
                   aria-controls="scorecard-gap-drilldown"
                   aria-pressed={selectedGap?.id === dimension.id}
                   className={cn(
-                    "rounded-full border px-2 py-0.5 text-xs text-amber-700 transition-colors hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60 dark:text-amber-300",
+                    "rounded-full border px-2 py-0.5 text-xs text-warning transition-colors hover:bg-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning/60",
                     selectedGap?.id === dimension.id
-                      ? "border-amber-500/60 bg-amber-500/20"
-                      : "border-amber-500/30 bg-amber-500/10",
+                      ? "border-warning/60 bg-warning/20"
+                      : "border-warning/30 bg-warning/10",
                   )}
                   onClick={() => setSelectedGapId(dimension.id)}
                 >
@@ -1802,7 +1802,7 @@ function CompetitorScorecardCard({
           <Badge
             key={dimension.id}
             variant="outline"
-            className="border-emerald-500/25 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-300"
+            className="border-success/25 bg-success/10 text-xs text-success"
           >
             {to("leads")} {dimension.title} {dimension.scores.octopus}
           </Badge>
@@ -1851,17 +1851,17 @@ function E2ESurpassCertificationCard({
       className={cn(
         "mt-3 rounded-lg border px-3 py-2",
         ready
-          ? "border-emerald-500/25 bg-emerald-500/10"
-          : "border-amber-500/30 bg-amber-500/10",
+          ? "border-success/25 bg-success/10"
+          : "border-warning/30 bg-warning/10",
       )}
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             {ready ? (
-              <CheckCircle2Icon className="size-4 text-emerald-700 dark:text-emerald-300" />
+              <CheckCircle2Icon className="size-4 text-success" />
             ) : (
-              <XCircleIcon className="size-4 text-amber-700 dark:text-amber-300" />
+              <XCircleIcon className="size-4 text-warning" />
             )}
             {to("E2E surpass certification")}
             <Badge
@@ -1869,8 +1869,8 @@ function E2ESurpassCertificationCard({
               className={cn(
                 "text-xs",
                 ready
-                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                  ? "border-success/25 bg-success/10 text-success"
+                  : "border-warning/30 bg-warning/10 text-warning",
               )}
             >
               {error
@@ -1885,8 +1885,8 @@ function E2ESurpassCertificationCard({
               className={cn(
                 "text-xs",
                 behavioralReady
-                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                  ? "border-success/25 bg-success/10 text-success"
+                  : "border-warning/30 bg-warning/10 text-warning",
               )}
             >
               {to("behavior")}{" "}
@@ -1956,7 +1956,7 @@ function E2ESurpassCertificationCard({
             {failedChecks.length === 0 && certification.checks.length > 0 ? (
               <Badge
                 variant="outline"
-                className="border-emerald-500/25 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-300"
+                className="border-success/25 bg-success/10 text-xs text-success"
               >
                 {to("all checks passed")}
               </Badge>
@@ -1965,7 +1965,7 @@ function E2ESurpassCertificationCard({
                 <Badge
                   key={check.id}
                   variant="outline"
-                  className="border-amber-500/30 bg-amber-500/10 text-xs text-amber-700 dark:text-amber-300"
+                  className="border-warning/30 bg-warning/10 text-xs text-warning"
                 >
                   {check.title} {check.score}/{check.target}
                 </Badge>
@@ -1989,7 +1989,7 @@ function E2ESurpassCertificationCard({
               className={cn(
                 "text-xs",
                 summary.all_dimensions_surpassed &&
-                  "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                  "border-success/25 bg-success/10 text-success",
               )}
             >
               {to("dimensions")}{" "}
@@ -2052,7 +2052,7 @@ function ScorecardGapDrilldown({
           {queueItem ? (
             <Badge
               variant="outline"
-              className="border-blue-500/25 bg-blue-500/10 text-xs text-blue-700 dark:text-blue-300"
+              className="border-info/25 bg-info/10 text-xs text-info"
             >
               {to("queued")} {queueItem.priority}
             </Badge>
@@ -2133,7 +2133,7 @@ function ScorecardGapDrilldown({
           {nextActions.slice(0, 2).map((action) => (
             <div
               key={action}
-              className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-200"
+              className="rounded-md border border-warning/20 bg-warning/10 px-2 py-1.5 text-xs text-warning"
             >
               {action}
             </div>
@@ -2215,7 +2215,7 @@ function ScorecardGapDrilldown({
                   {item.implementation.missing_count +
                     item.tests.missing_count >
                     0 && (
-                    <span className="text-amber-700 dark:text-amber-300">
+                    <span className="text-warning">
                       {item.implementation.missing_count +
                         item.tests.missing_count}{" "}
                       {to("missing")}
@@ -2258,14 +2258,14 @@ function AutomationRadarCard({
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <ShieldAlertIcon className="size-4 text-blue-700 dark:text-blue-300" />
+            <ShieldAlertIcon className="size-4 text-info" />
             {to("Automation radar")}
             <Badge
               variant="outline"
               className={cn(
                 "text-xs",
                 radar.verdict === "leading" &&
-                  "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                  "border-success/25 bg-success/10 text-success",
               )}
             >
               {radar.verdict.replaceAll("_", " ")}
@@ -2275,8 +2275,8 @@ function AutomationRadarCard({
               className={cn(
                 "text-xs",
                 readyDrafts
-                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                  ? "border-success/25 bg-success/10 text-success"
+                  : "border-warning/30 bg-warning/10 text-warning",
               )}
             >
               {to("policy drafts")} {radar.policy_rule_drafts.verified}/
@@ -2465,7 +2465,7 @@ function PromotionAuditSummaryCard({
       className={cn(
         "mt-3 rounded-lg border px-3 py-2",
         risky
-          ? "border-amber-500/30 bg-amber-500/10"
+          ? "border-warning/30 bg-warning/10"
           : "border-border-default bg-muted/15",
       )}
     >
@@ -2516,9 +2516,9 @@ function MemoryQualityCard({
       className={cn(
         "mt-3 rounded-lg border px-3 py-2",
         risky
-          ? "border-amber-500/30 bg-amber-500/10"
+          ? "border-warning/30 bg-warning/10"
           : summary.total > 0
-            ? "border-emerald-500/25 bg-emerald-500/10"
+            ? "border-success/25 bg-success/10"
             : "border-border-default bg-muted/15",
       )}
     >
@@ -2581,9 +2581,9 @@ function AutoVerifierCard({
         alerts.length > 0
           ? "border-destructive/30 bg-destructive/10"
           : report.fail_count > 0
-            ? "border-amber-500/30 bg-amber-500/10"
+            ? "border-warning/30 bg-warning/10"
             : hasSignal
-              ? "border-emerald-500/25 bg-emerald-500/10"
+              ? "border-success/25 bg-success/10"
               : "border-border-default bg-muted/15",
       )}
     >
@@ -2719,7 +2719,7 @@ function PluginHealthCard({
         summary.failed_count > 0
           ? "border-destructive/30 bg-destructive/10"
           : risky
-            ? "border-amber-500/30 bg-amber-500/10"
+            ? "border-warning/30 bg-warning/10"
             : "border-border-default bg-muted/15",
       )}
     >
@@ -2739,8 +2739,8 @@ function PluginHealthCard({
                   compatibility.verdict === "fail"
                     ? "border-destructive/30 bg-destructive/10 text-destructive"
                     : compatibility.verdict === "review"
-                      ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                      : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                      ? "border-warning/30 bg-warning/10 text-warning"
+                      : "border-success/25 bg-success/10 text-success",
                 )}
               >
                 {to("compat")} {compatibility.verdict}
@@ -2795,7 +2795,7 @@ function PluginHealthCard({
                 "max-w-full text-xs",
                 summary.failed_count > 0
                   ? "border-destructive/30 bg-destructive/10 text-destructive"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                  : "border-warning/30 bg-warning/10 text-warning",
               )}
             >
               <span className="truncate">
@@ -2876,7 +2876,7 @@ function PublisherTrustCard({
         "mt-3 rounded-lg border px-3 py-2",
         report.ready
           ? "border-border-default bg-muted/15"
-          : "border-amber-500/30 bg-amber-500/10",
+          : "border-warning/30 bg-warning/10",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -2890,7 +2890,7 @@ function PublisherTrustCard({
             {report.rotation_due_count > 0 && (
               <Badge
                 variant="outline"
-                className="border-amber-500/30 text-xs text-amber-700 dark:text-amber-300"
+                className="border-warning/30 text-xs text-warning"
               >
                 {report.rotation_due_count} {to("due")}
               </Badge>
@@ -3078,7 +3078,7 @@ function ToolSafetyCard({
       className={cn(
         "mt-3 rounded-lg border px-3 py-2",
         summary.total > 0
-          ? "border-amber-500/30 bg-amber-500/10"
+          ? "border-warning/30 bg-warning/10"
           : "border-border-default bg-muted/15",
       )}
     >
@@ -3089,7 +3089,7 @@ function ToolSafetyCard({
               className={cn(
                 "size-4",
                 summary.total > 0
-                  ? "text-amber-600 dark:text-amber-300"
+                  ? "text-warning"
                   : "text-muted-foreground",
               )}
             />
@@ -3169,7 +3169,7 @@ function PolicyReviewRuleDraftCard({
       className={cn(
         "mt-3 rounded-lg border px-3 py-2",
         hasDrafts
-          ? "border-emerald-500/25 bg-emerald-500/10"
+          ? "border-success/25 bg-success/10"
           : "border-border-default bg-muted/15",
       )}
     >
@@ -3180,7 +3180,7 @@ function PolicyReviewRuleDraftCard({
               className={cn(
                 "size-4",
                 hasDrafts
-                  ? "text-emerald-700 dark:text-emerald-300"
+                  ? "text-success"
                   : "text-muted-foreground",
               )}
             />
@@ -3266,7 +3266,7 @@ function SubagentRiskCard({
       className={cn(
         "mt-3 rounded-lg border px-3 py-2",
         hasRisks
-          ? "border-amber-500/30 bg-amber-500/10"
+          ? "border-warning/30 bg-warning/10"
           : "border-border-default bg-muted/15",
       )}
     >
@@ -3277,7 +3277,7 @@ function SubagentRiskCard({
               className={cn(
                 "size-4",
                 hasRisks
-                  ? "text-amber-600 dark:text-amber-300"
+                  ? "text-warning"
                   : "text-muted-foreground",
               )}
             />
@@ -3324,7 +3324,7 @@ function SubagentRiskCard({
                     "shrink-0 text-xs",
                     item.verdict === "retire_candidate"
                       ? "border-destructive/30 bg-destructive/10 text-destructive"
-                      : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                      : "border-warning/30 bg-warning/10 text-warning",
                   )}
                 >
                   {item.verdict}
@@ -3406,7 +3406,7 @@ function TopologyPolicyCard({
         blocked.length > 0
           ? "border-destructive/30 bg-destructive/10"
           : impacted.length > 0
-            ? "border-amber-500/30 bg-amber-500/10"
+            ? "border-warning/30 bg-warning/10"
             : "border-border-default bg-muted/15",
       )}
     >
@@ -3452,7 +3452,7 @@ function TopologyPolicyCard({
                     "shrink-0 text-xs",
                     topology.subagent_policy?.blocked
                       ? "border-destructive/30 bg-destructive/10 text-destructive"
-                      : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                      : "border-warning/30 bg-warning/10 text-warning",
                   )}
                 >
                   {topology.subagent_policy?.status ?? to("clear")}
@@ -3506,7 +3506,7 @@ function TopologyPromotionCard({
         regressed > 0
           ? "border-destructive/30 bg-destructive/10"
           : hasSignal
-            ? "border-emerald-500/25 bg-emerald-500/10"
+            ? "border-success/25 bg-success/10"
             : "border-border-default bg-muted/15",
       )}
     >
@@ -3554,7 +3554,7 @@ function TopologyPromotionCard({
                 </Badge>
               </div>
               {proposal.detail.historical_lift ? (
-                <div className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                <div className="mt-1 text-xs text-success">
                   lift +{proposal.detail.historical_lift.improved_count}/-
                   {proposal.detail.historical_lift.regressed_count}
                 </div>
@@ -3694,10 +3694,10 @@ function Metric({
   tone: "amber" | "emerald" | "rose" | "blue";
 }) {
   const tones = {
-    amber: "border-amber-500/25 bg-amber-500/10",
-    emerald: "border-emerald-500/25 bg-emerald-500/10",
-    rose: "border-rose-500/25 bg-rose-500/10",
-    blue: "border-blue-500/25 bg-blue-500/10",
+    amber: "border-warning/25 bg-warning/10",
+    emerald: "border-success/25 bg-success/10",
+    rose: "border-destructive/25 bg-destructive/10",
+    blue: "border-info/25 bg-info/10",
   };
   return (
     <div className={cn("rounded-lg border px-3 py-2", tones[tone])}>

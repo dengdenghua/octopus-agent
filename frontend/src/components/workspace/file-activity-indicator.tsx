@@ -143,10 +143,10 @@ function DiffBlock({ diff }: { diff: string }) {
             "block",
             line.startsWith("+") &&
               !line.startsWith("+++") &&
-              "text-emerald-600 dark:text-emerald-400",
+              "text-success",
             line.startsWith("-") &&
               !line.startsWith("---") &&
-              "text-rose-600 dark:text-rose-400",
+              "text-destructive",
             line.startsWith("@@") && "text-sky-600 dark:text-sky-400",
             line.startsWith("+++") && "text-muted-foreground",
             line.startsWith("---") && "text-muted-foreground",

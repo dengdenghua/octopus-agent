@@ -146,25 +146,48 @@ export default defineConfig({
       : []),
   ],
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-      "motion/react": fileURLToPath(
-        new URL("./src/lib/motion-shim.tsx", import.meta.url),
-      ),
-      "mermaid-real": fileURLToPath(
-        new URL(
-          "./node_modules/mermaid/dist/mermaid.esm.min.mjs",
-          import.meta.url,
+    alias: [
+      {
+        find: "@",
+        replacement: fileURLToPath(new URL("./src", import.meta.url)),
+      },
+      {
+        find: "motion/react",
+        replacement: fileURLToPath(
+          new URL("./src/lib/motion-shim.tsx", import.meta.url),
         ),
-      ),
+      },
+      {
+        find: "mermaid-real",
+        replacement: fileURLToPath(
+          new URL(
+            "./node_modules/mermaid/dist/mermaid.esm.min.mjs",
+            import.meta.url,
+          ),
+        ),
+      },
       // ``mermaid`` is aliased to a local shim because the upstream
       // package ships a large ESM bundle with worker-based parsing
       // we don't need in the workspace UI. ``resolve.alias`` covers
       // both dev and build; no pre-resolve plugin required.
-      mermaid: fileURLToPath(
-        new URL("./src/lib/mermaid-shim.ts", import.meta.url),
-      ),
-    },
+      {
+        find: "mermaid",
+        replacement: fileURLToPath(
+          new URL("./src/lib/mermaid-shim.ts", import.meta.url),
+        ),
+      },
+      // ``shiki`` (bare specifier only — subpaths like "shiki/langs/*"
+      // must keep resolving to the real package) is aliased to a local
+      // shim that swaps the full bundle (~200 language chunks + the
+      // Oniguruma WASM engine) for a JS-regex-engine core highlighter
+      // with a curated language whitelist. See src/lib/shiki-shim.ts.
+      {
+        find: /^shiki$/,
+        replacement: fileURLToPath(
+          new URL("./src/lib/shiki-shim.ts", import.meta.url),
+        ),
+      },
+    ],
   },
   server: {
     port: parseInt(process.env.FRONTEND_PORT || "3000"),
@@ -259,9 +282,6 @@ export default defineConfig({
           }
           if (pkg === "mermaid") {
             return "mermaid";
-          }
-          if (id.includes("node_modules/@xyflow/")) {
-            return "xyflow";
           }
           if (id.includes("node_modules/katex/")) {
             return "katex";

@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 export function StatusDot({ status }: { status?: string | null }) {
   const cls =
     status === "completed"
-      ? "bg-emerald-500"
+      ? "bg-success"
       : status === "failed"
         ? "bg-destructive"
         : status === "running"
@@ -40,7 +40,7 @@ export function StatusDot({ status }: { status?: string | null }) {
 
 export function priorityClass(priority: string) {
   if (priority === "P0") return "bg-destructive text-destructive-foreground";
-  if (priority === "P1") return "bg-amber-500 text-white";
+  if (priority === "P1") return "bg-warning text-white";
   return "bg-muted text-muted-foreground";
 }
 
@@ -106,7 +106,7 @@ export function ReplayGateCard({
       className={cn(
         "mt-3 rounded-lg border px-3 py-2",
         gate?.passed
-          ? "border-emerald-500/25 bg-emerald-500/10"
+          ? "border-success/25 bg-success/10"
           : blocked
             ? "border-destructive/30 bg-destructive/10"
             : "border-border-default bg-muted/15",
@@ -229,8 +229,8 @@ export function BrowserDesktopReplayReviewCard({
             className={cn(
               "text-xs",
               total > 0
-                ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                ? "border-warning/30 bg-warning/10 text-warning"
+                : "border-success/25 bg-success/10 text-success",
             )}
           >
             {total > 0 ? "operator action needed" : "clear"}

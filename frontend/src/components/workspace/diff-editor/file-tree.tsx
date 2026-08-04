@@ -30,20 +30,20 @@ import { getFileName, groupFilesByDirectory, sortFiles } from "./utils";
 const STATUS_CONFIG = {
   added: {
     icon: FilePlusIcon,
-    color: "text-green-500",
-    bg: "bg-green-500/10",
+    color: "text-success",
+    bg: "bg-success/10",
     label: "A",
   },
   modified: {
     icon: FileEditIcon,
-    color: "text-yellow-500",
-    bg: "bg-yellow-500/10",
+    color: "text-warning",
+    bg: "bg-warning/10",
     label: "M",
   },
   deleted: {
     icon: FileMinusIcon,
-    color: "text-red-500",
-    bg: "bg-red-500/10",
+    color: "text-destructive",
+    bg: "bg-destructive/10",
     label: "D",
   },
 } as const;
@@ -55,8 +55,8 @@ function AcceptedBadge({ accepted }: { accepted: boolean | null }) {
       className={cn(
         "ml-auto shrink-0 rounded px-1 py-px text-xs font-semibold uppercase leading-tight",
         accepted
-          ? "bg-green-500/15 text-green-600 dark:text-green-400"
-          : "bg-red-500/15 text-red-600 dark:text-red-400",
+          ? "bg-success/15 text-success"
+          : "bg-destructive/15 text-destructive",
       )}
     >
       {accepted ? "ok" : "rej"}
@@ -147,8 +147,8 @@ export function DiffFileTree({
           </span>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="text-green-500">+{totalAdditions}</span>
-          <span className="text-red-500">-{totalDeletions}</span>
+          <span className="text-success">+{totalAdditions}</span>
+          <span className="text-destructive">-{totalDeletions}</span>
         </div>
       </div>
 
@@ -197,7 +197,7 @@ export function DiffFileTree({
                   ) : (
                     <ChevronDownIcon className="size-3 shrink-0" />
                   )}
-                  <FolderIcon className="size-3 shrink-0 text-amber-400" />
+                  <FolderIcon className="size-3 shrink-0 text-warning" />
                   <span className="truncate font-mono text-xs">
                     {group.directory}
                   </span>
@@ -236,12 +236,12 @@ export function DiffFileTree({
 
                       <span className="ml-auto flex shrink-0 items-center gap-1 text-xs">
                         {file.additions > 0 && (
-                          <span className="text-green-500">
+                          <span className="text-success">
                             +{file.additions}
                           </span>
                         )}
                         {file.deletions > 0 && (
-                          <span className="text-red-500">
+                          <span className="text-destructive">
                             -{file.deletions}
                           </span>
                         )}

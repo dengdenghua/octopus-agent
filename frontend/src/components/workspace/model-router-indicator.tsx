@@ -67,8 +67,8 @@ const TASK_TYPE_ICONS: Record<
   coding: { icon: CodeIcon, color: "text-blue-500" },
   reasoning: { icon: BrainCircuitIcon, color: "text-purple-500" },
   creative: { icon: PaletteIcon, color: "text-pink-500" },
-  simple: { icon: ZapIcon, color: "text-green-500" },
-  math: { icon: CalculatorIcon, color: "text-amber-500" },
+  simple: { icon: ZapIcon, color: "text-success" },
+  math: { icon: CalculatorIcon, color: "text-warning" },
 };
 
 // ---------------------------------------------------------------------------

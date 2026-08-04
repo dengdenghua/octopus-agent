@@ -164,7 +164,7 @@ export function PublicThinkingStatus({
         className={cn(
           "inline-block size-1 shrink-0 rounded-full",
           phase === "slow"
-            ? "bg-amber-500/50"
+            ? "bg-warning/50"
             : phase === "disconnected"
               ? "bg-destructive/50"
               : "bg-muted-foreground/40",

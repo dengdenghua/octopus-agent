@@ -220,7 +220,7 @@ export function A2AAgentsPanel({ className }: { className?: string }) {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-2 border-b bg-red-500/5 px-4 py-2 text-xs text-red-500">
+        <div className="flex items-center gap-2 border-b bg-destructive/5 px-4 py-2 text-xs text-destructive">
           <AlertCircleIcon className="size-3.5 shrink-0" />
           <span className="truncate">{error}</span>
         </div>
@@ -322,7 +322,7 @@ function RegisterForm({
           {t.a2a.connect}
         </button>
       </div>
-      {error && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
+      {error && <p className="mt-1.5 text-xs text-destructive">{error}</p>}
     </form>
   );
 }
@@ -374,13 +374,13 @@ function AgentCard({
           <div
             className={cn(
               "flex size-9 shrink-0 items-center justify-center rounded-lg",
-              isActive ? "bg-green-500/10" : "bg-red-500/10",
+              isActive ? "bg-success/10" : "bg-destructive/10",
             )}
           >
             {isActive ? (
-              <WifiIcon className="size-4 text-green-500" />
+              <WifiIcon className="size-4 text-success" />
             ) : (
-              <WifiOffIcon className="size-4 text-red-400" />
+              <WifiOffIcon className="size-4 text-destructive" />
             )}
           </div>
 
@@ -517,13 +517,13 @@ function AgentDetailView({
         <div
           className={cn(
             "flex size-7 items-center justify-center rounded-lg",
-            isActive ? "bg-green-500/10" : "bg-red-500/10",
+            isActive ? "bg-success/10" : "bg-destructive/10",
           )}
         >
           {isActive ? (
-            <WifiIcon className="size-3.5 text-green-500" />
+            <WifiIcon className="size-3.5 text-success" />
           ) : (
-            <WifiOffIcon className="size-3.5 text-red-400" />
+            <WifiOffIcon className="size-3.5 text-destructive" />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -626,7 +626,7 @@ function AgentDetailView({
             type="button"
             onClick={handleDelete}
             disabled={deleting}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:hover:bg-red-950"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/5 disabled:opacity-50 dark:hover:bg-destructive/20"
           >
             {deleting ? (
               <Loader2Icon className="size-3 animate-spin" />
@@ -643,8 +643,8 @@ function AgentDetailView({
             className={cn(
               "mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs",
               healthResult.healthy
-                ? "bg-green-500/10 text-green-600"
-                : "bg-red-500/10 text-red-500",
+                ? "bg-success/10 text-success"
+                : "bg-destructive/10 text-destructive",
             )}
           >
             {healthResult.healthy ? (
@@ -689,7 +689,7 @@ function AgentDetailView({
 
         {/* Task error */}
         {taskError && (
-          <div className="mt-2 flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-500">
+          <div className="mt-2 flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
             <AlertCircleIcon className="size-3.5 shrink-0" />
             {taskError}
           </div>
@@ -703,9 +703,9 @@ function AgentDetailView({
                 className={cn(
                   "inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-medium",
                   taskResult.status.state === "completed"
-                    ? "bg-green-500/10 text-green-600"
+                    ? "bg-success/10 text-success"
                     : taskResult.status.state === "failed"
-                      ? "bg-red-500/10 text-red-500"
+                      ? "bg-destructive/10 text-destructive"
                       : "bg-blue-500/10 text-blue-500",
                 )}
               >
@@ -778,14 +778,14 @@ function CapabilityBadge({
       className={cn(
         "inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-medium",
         enabled
-          ? "bg-green-500/10 text-green-600"
+          ? "bg-success/10 text-success"
           : "bg-muted text-muted-foreground",
       )}
     >
       <span
         className={cn(
           "size-1.5 rounded-lg",
-          enabled ? "bg-green-500" : "bg-muted-foreground/30",
+          enabled ? "bg-success" : "bg-muted-foreground/30",
         )}
       />
       {label}

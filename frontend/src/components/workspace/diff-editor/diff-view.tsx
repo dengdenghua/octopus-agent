@@ -45,15 +45,15 @@ function DiffLine({ part, index }: { part: Change; index: number }) {
   });
 
   const bgColor = part.added
-    ? "bg-green-500/10"
+    ? "bg-success/10"
     : part.removed
-      ? "bg-red-500/10"
+      ? "bg-destructive/10"
       : "bg-transparent";
 
   const textColor = part.added
-    ? "text-green-700 dark:text-green-300"
+    ? "text-success"
     : part.removed
-      ? "text-red-700 dark:text-red-300"
+      ? "text-destructive"
       : "text-foreground";
 
   const prefix = part.added ? "+" : part.removed ? "-" : " ";

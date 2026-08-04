@@ -265,9 +265,9 @@ export function PausedTasksBanner({ className }: Props) {
       {entries.map((req) => (
         <div
           key={req.task_id}
-          className="flex items-start gap-3 rounded-lg border border-amber-300/60 bg-amber-50 p-3 shadow-[var(--shadow-sm)] dark:border-amber-700/40 dark:bg-amber-950/40"
+          className="flex items-start gap-3 rounded-lg border border-warning/60 bg-warning/5 p-3 shadow-[var(--shadow-sm)] dark:border-warning/40"
         >
-          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-200/70 text-amber-900 dark:bg-amber-800/50 dark:text-amber-200">
+          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning dark:bg-warning/50">
             <PauseIcon className="h-3.5 w-3.5" />
           </div>
           <div className="min-w-0 flex-1">

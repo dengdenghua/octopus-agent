@@ -662,7 +662,7 @@ export function ChannelCredentialDialog({
                     <label className="text-xs font-medium">
                       {f.label}
                       {f.required && (
-                        <span className="ml-1 text-rose-500">*</span>
+                        <span className="ml-1 text-destructive">*</span>
                       )}
                     </label>
                     <div className="relative">
@@ -886,7 +886,7 @@ function WeChatQRForm({
             ? t.channelCredential.requesting
             : t.channelCredential.getQrCode}
         </Button>
-        {errMsg && <p className="mt-3 text-xs text-rose-600">{errMsg}</p>}
+        {errMsg && <p className="mt-3 text-xs text-destructive">{errMsg}</p>}
       </div>
     );
   }
@@ -923,11 +923,11 @@ function WeChatQRForm({
       <div
         className={cn(
           "mt-3 text-xs tabular-nums",
-          status === "confirmed" && "text-emerald-600",
+          status === "confirmed" && "text-success",
           (status === "expired" ||
             status === "rejected" ||
             status === "error") &&
-            "text-rose-600",
+            "text-destructive",
         )}
       >
         {statusLabel[status]}
@@ -950,7 +950,7 @@ function WeChatQRForm({
           {t.channelCredential.refreshQr}
         </Button>
       )}
-      {errMsg && <p className="mt-2 text-xs text-rose-600">{errMsg}</p>}
+      {errMsg && <p className="mt-2 text-xs text-destructive">{errMsg}</p>}
     </div>
   );
 }

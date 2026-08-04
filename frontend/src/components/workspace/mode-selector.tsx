@@ -435,12 +435,12 @@ export function ModeSelector({
         )}
         {codeModeUnlocked ? (
           <span
-            className="size-1.5 rounded-full bg-emerald-500/90 shadow-[0_0_6px_rgba(16,185,129,0.28)] transition-all duration-200"
+            className="size-1.5 rounded-full bg-success/90 shadow-[0_0_6px_rgba(16,185,129,0.28)] transition-all duration-200"
             aria-hidden="true"
           />
         ) : (
           <span
-            className="inline-flex shrink-0 text-amber-600 dark:text-amber-400"
+            className="inline-flex shrink-0 text-warning"
             title={readOnlyHint}
             aria-label={readOnlyHint}
           >
@@ -599,10 +599,10 @@ function getModeOptions(t: ReturnType<typeof useI18n>["t"]): ModeOption[] {
     {
       name: "audit",
       icon: ShieldCheckIcon,
-      tone: "bg-rose-500/15 text-rose-700 hover:bg-rose-500/25 dark:bg-rose-900/30 dark:text-rose-400",
+      tone: "bg-destructive/15 text-destructive hover:bg-destructive/25 dark:bg-destructive/30 dark:text-destructive",
       activeTone:
-        "bg-rose-500/15 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300 ring-1 ring-rose-500/20",
-      ring: "ring-rose-500/20",
+        "bg-destructive/15 text-destructive dark:bg-destructive/40 dark:text-destructive ring-1 ring-destructive/20",
+      ring: "ring-destructive/20",
       label: t.modes.audit,
       desc: t.modes.auditDesc,
       effect: t.modes.auditEffect,

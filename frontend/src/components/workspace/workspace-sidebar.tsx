@@ -110,7 +110,6 @@ import { useTasks } from "@/core/tasks/hooks";
 import { useTeamTasks } from "@/core/team-tasks";
 import { useActiveAgentId } from "@/core/agents/active";
 import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
-import { useAppearance } from "@/hooks/use-appearance";
 import { basename, isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 import { WorkspaceSurfaceHeader } from "@/components/workspace/workspace-surface-header";
@@ -342,7 +341,6 @@ export function syncedSidebarPathname(
 export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { pathname, search } = useLocation();
   const { t } = useI18n();
-  const { materialTheme } = useAppearance();
   const { isMobile, openMobile, setOpenMobile } = useSidebar();
   const queryClient = useQueryClient();
   const apiClient = useMemo(() => getAPIClient(), []);
@@ -962,11 +960,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       <Sidebar
         variant="sidebar"
         collapsible="icon"
-        className={cn(
-          materialTheme === "liquid"
-            ? "border-r-0 bg-transparent"
-            : "border-r bg-sidebar",
-        )}
+        className={cn("border-r bg-sidebar")}
         {...props}
       >
         {/* Implementation note. */}
@@ -1472,7 +1466,6 @@ export function WorkspaceSurfaceSwitch({
   active: WorkspaceSurfaceMode;
 }) {
   const { t } = useI18n();
-  const { materialTheme } = useAppearance();
   const items = [
     {
       to: PRIMARY_WORKSPACE_ROUTE,
@@ -1497,9 +1490,7 @@ export function WorkspaceSurfaceSwitch({
       className={cn(
         "relative grid h-8 items-center gap-0 p-0.5",
         "w-[96px] grid-cols-[minmax(0,1fr)_28px]",
-        materialTheme === "liquid"
-          ? "octo-liquid-glass octo-liquid-glass--thin"
-          : "border border-border-default bg-muted/40",
+        "border border-border-default bg-muted/40",
         "group-data-[collapsible=icon]:hidden",
       )}
       style={{ borderRadius: radiusVar }}
@@ -1784,7 +1775,7 @@ function AvatarCell({
     return (
       <span
         className={cn(
-          "flex items-center justify-center bg-muted text-[10px] font-semibold uppercase text-muted-foreground",
+          "flex items-center justify-center bg-muted text-micro font-semibold uppercase text-muted-foreground",
           className,
         )}
         title={agentId}
@@ -1832,10 +1823,10 @@ function OngoingThreadsSection({
 
   return (
     <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:hidden">
-      <div className="mb-1 flex items-center gap-1.5 px-2 text-[11px] font-medium text-muted-foreground/72">
+      <div className="mb-1 flex items-center gap-1.5 px-2 text-mini font-medium text-muted-foreground/72">
         <ListTodoIcon className="size-3.5" />
         <span>{t.sidebar.sectionOngoing}</span>
-        <span className="ml-auto font-mono text-[10px] text-muted-foreground/55">
+        <span className="ml-auto font-mono text-micro text-muted-foreground/55">
           {threads.length}
         </span>
       </div>
@@ -1886,7 +1877,7 @@ function OngoingThreadsSection({
                     <span className="block truncate text-xs leading-tight">
                       {thread.title}
                     </span>
-                    <span className="mt-0.5 flex min-w-0 items-center gap-1 text-[10px] leading-none text-muted-foreground/72">
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1 text-micro leading-none text-muted-foreground/72">
                       <span className="truncate">{statusLabel}</span>
                       <span aria-hidden="true">·</span>
                       <span className="shrink-0 font-mono">
@@ -2083,7 +2074,7 @@ function ProjectGroup({
                     </span>
                     <span
                       className={cn(
-                        "overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground transition-[width,opacity,color] duration-150 group-hover/thread:text-muted-foreground/90",
+                        "overflow-hidden whitespace-nowrap text-mini text-muted-foreground transition-[width,opacity,color] duration-150 group-hover/thread:text-muted-foreground/90",
                         active
                           ? "w-0 opacity-0"
                           : "w-10 opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0",
@@ -2639,7 +2630,7 @@ function ChatsSection({
                       <span className="min-w-0 flex-1 truncate leading-tight">
                         {t.title}
                       </span>
-                      <span className="w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-[11px] text-muted-foreground transition-[width,opacity,color] group-hover/thread:w-0 group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0">
+                      <span className="w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-mini text-muted-foreground transition-[width,opacity,color] group-hover/thread:w-0 group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0">
                         {formatCompactRelativeTimestamp(t.updatedAt)}
                       </span>
                     </Link>

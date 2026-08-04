@@ -31,9 +31,9 @@ import { Button } from "@/components/ui/button";
 import { SparklineChart } from "./sparkline-chart";
 
 function scoreColor(value: number): string {
-  if (value >= 0.7) return "text-emerald-500";
-  if (value >= 0.4) return "text-amber-500";
-  return "text-red-500";
+  if (value >= 0.7) return "text-success";
+  if (value >= 0.4) return "text-warning";
+  return "text-destructive";
 }
 
 function numberOrZero(value: unknown): number {
@@ -45,9 +45,9 @@ function fixed(value: unknown, digits: number): string {
 }
 
 function successRateClass(rate: number): string {
-  if (rate >= 0.8) return "text-emerald-600 dark:text-emerald-400";
-  if (rate >= 0.5) return "text-amber-600 dark:text-amber-400";
-  return "text-red-600 dark:text-red-400";
+  if (rate >= 0.8) return "text-success";
+  if (rate >= 0.5) return "text-warning";
+  return "text-destructive";
 }
 
 export function EvolutionDashboard({ className }: { className?: string }) {
@@ -104,14 +104,14 @@ export function EvolutionDashboard({ className }: { className?: string }) {
       <div className={cn("space-y-4", className)}>
         <div
           role="alert"
-          className="flex flex-col items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400 sm:flex-row sm:items-center"
+          className="flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive dark:text-destructive sm:flex-row sm:items-center"
         >
           <span>{t.evolutionDashboard.connectionFailed}</span>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="w-full border-red-300 bg-background/70 text-foreground sm:w-auto"
+            className="w-full border-destructive/40 bg-background/70 text-foreground sm:w-auto"
             onClick={retryAll}
           >
             <RefreshCwIcon className="mr-1.5 size-3.5" aria-hidden="true" />
@@ -437,8 +437,8 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
             className={cn(
               "text-sm font-semibold tabular-nums",
               delta >= 0
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-red-600 dark:text-red-400",
+                ? "text-success"
+                : "text-destructive",
             )}
           >
             {delta >= 0 ? "+" : ""}
@@ -494,10 +494,10 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
                   className={cn(
                     "w-full max-w-8 rounded-t-md",
                     rate >= 0.8
-                      ? "bg-emerald-500"
+                      ? "bg-success"
                       : rate >= 0.5
-                        ? "bg-amber-500"
-                        : "bg-red-500",
+                        ? "bg-warning"
+                        : "bg-destructive",
                   )}
                   style={{ height: `${Math.max(ratePct, 6)}%` }}
                 />
@@ -564,10 +564,10 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
                   className={cn(
                     "h-full rounded-full",
                     rate >= 0.8
-                      ? "bg-emerald-500"
+                      ? "bg-success"
                       : rate >= 0.5
-                        ? "bg-amber-500"
-                        : "bg-red-500",
+                        ? "bg-warning"
+                        : "bg-destructive",
                   )}
                   style={{ width: `${Math.max(ratePct, 4)}%` }}
                 />

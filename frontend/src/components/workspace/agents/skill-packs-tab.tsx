@@ -183,7 +183,7 @@ function PackCard({
           <div className="flex flex-wrap items-center gap-2">
             <div
               className={cn(
-                "flex items-center justify-center bg-emerald-500/10 text-emerald-500",
+                "flex items-center justify-center bg-success/10 text-success",
                 compact ? "size-8 rounded-lg" : "size-6 rounded-md",
               )}
             >
@@ -312,7 +312,7 @@ function PackCard({
               </div>
             )}
             {err && !loading && (
-              <div className="flex items-center gap-2 py-3 text-xs text-rose-400">
+              <div className="flex items-center gap-2 py-3 text-xs text-destructive">
                 <XCircleIcon className="size-3.5" />
                 {t.metaSkills.diagramFailed(err)}
               </div>
@@ -387,7 +387,7 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
               "flex shrink-0 items-center gap-1.5 whitespace-nowrap text-muted-foreground",
           )}
         >
-          {compact && <SparklesIcon className="size-3.5 text-emerald-500" />}
+          {compact && <SparklesIcon className="size-3.5 text-success" />}
           {t.metaSkills.matchLabel}
         </div>
         <div className="relative flex-1">
@@ -415,7 +415,7 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
             "h-9 shrink-0",
             compact
               ? "rounded-full px-3"
-              : "bg-gradient-to-r from-emerald-500 to-blue-500 text-white",
+              : "bg-gradient-to-r from-success to-blue-500 text-white",
           )}
           onClick={() => void submit()}
           disabled={busy || !query.trim()}
@@ -425,8 +425,8 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
         </Button>
       </div>
       {result && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs">
-          <div className="font-medium text-emerald-700 dark:text-emerald-300">
+        <div className="rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-xs">
+          <div className="font-medium text-success">
             {t.metaSkills.matchResult(result.query, result.matched)}
           </div>
           {result.description && (
@@ -449,7 +449,7 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
         </div>
       )}
       {err && !result && (
-        <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-600 dark:text-rose-300">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
           {err}
         </div>
       )}
@@ -567,8 +567,8 @@ export function SkillPacksTab({
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <div className="flex size-6 items-center justify-center rounded bg-emerald-500/10">
-                <BoxesIcon className="size-4 text-emerald-500" />
+              <div className="flex size-6 items-center justify-center rounded bg-success/10">
+                <BoxesIcon className="size-4 text-success" />
               </div>
               <h2 className="text-base font-bold">{t.metaSkills.title}</h2>
               {packs && (
@@ -618,7 +618,7 @@ export function SkillPacksTab({
 
       {/* Pack list */}
       {err && (
-        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {t.metaSkills.loadFailed(err)}
         </div>
       )}

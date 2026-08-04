@@ -39,8 +39,8 @@ export const CATEGORY_STYLES: Record<
     icon: "🤖",
   },
   coder: {
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-600 dark:text-emerald-400",
+    bg: "bg-success/10",
+    text: "text-success",
     icon: "💻",
   },
   researcher: {
@@ -49,13 +49,13 @@ export const CATEGORY_STYLES: Record<
     icon: "🔬",
   },
   creative: {
-    bg: "bg-amber-500/10",
-    text: "text-amber-600 dark:text-amber-400",
+    bg: "bg-warning/10",
+    text: "text-warning",
     icon: "🎨",
   },
   automation: {
-    bg: "bg-rose-500/10",
-    text: "text-rose-600 dark:text-rose-400",
+    bg: "bg-destructive/10",
+    text: "text-destructive",
     icon: "⚡",
   },
   specialist: {
@@ -95,7 +95,7 @@ function StarRating({
               className={cn(
                 "h-3 w-3",
                 filled
-                  ? "fill-amber-400 text-amber-400"
+                  ? "fill-chart-4 text-chart-4"
                   : "fill-muted text-muted",
               )}
             />
@@ -229,7 +229,7 @@ export function AgentWorldCard({
                   {agent.display_name}
                 </CardTitle>
                 {agent.is_featured && (
-                  <SparklesIcon className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <SparklesIcon className="h-3.5 w-3.5 shrink-0 text-warning" />
                 )}
               </div>
               <p className="text-muted-foreground mt-0.5 truncate text-xs">

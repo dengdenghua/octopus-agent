@@ -411,7 +411,7 @@ function SkillCard({
         )}
       </div>
       <Switch
-        className="shrink-0 data-[state=checked]:bg-green-500"
+        className="shrink-0 data-[state=checked]:bg-success"
         checked={skill.enabled}
         disabled={env.STATIC_WEBSITE_ONLY}
         onCheckedChange={onToggle}

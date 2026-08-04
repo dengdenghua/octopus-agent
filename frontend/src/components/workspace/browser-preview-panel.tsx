@@ -501,7 +501,7 @@ function ActionIcon({ action }: { action: string }) {
     case "double_click_at":
       return <MousePointerClickIcon className="size-3 text-orange-500" />;
     case "type":
-      return <TypeIcon className="size-3 text-green-500" />;
+      return <TypeIcon className="size-3 text-success" />;
     case "screenshot":
       return <ImageIcon className="size-3 text-purple-500" />;
     case "viewport":
@@ -524,7 +524,7 @@ function actionStatusLabel(
 }
 
 function actionStatusClass(entry: ActionLogEntry): string {
-  if (entry.status === "ok") return "bg-emerald-500/10 text-emerald-600";
+  if (entry.status === "ok") return "bg-success/10 text-success";
   if (entry.status && entry.status !== "ok") {
     return "bg-destructive/10 text-destructive";
   }
@@ -1429,7 +1429,7 @@ export function BrowserPreviewPanel({
           <span
             className={cn(
               "size-1.5 rounded-full",
-              sessionHealthy ? "bg-emerald-500" : "bg-destructive",
+              sessionHealthy ? "bg-success" : "bg-destructive",
             )}
           />
         </span>
@@ -1481,7 +1481,7 @@ export function BrowserPreviewPanel({
                 bp.semanticSnapshotFallback}
             </span>
             {semanticSnapshot.truncated && (
-              <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-600">
+              <span className="rounded-full bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
                 {bp.truncatedBadge}
               </span>
             )}
@@ -1623,7 +1623,7 @@ export function BrowserPreviewPanel({
                   }}
                 >
                   <span className="absolute size-9 rounded-full border border-primary/40 bg-primary/10 animate-ping" />
-                  <span className="grid size-5 place-items-center rounded-full border border-primary/55 bg-background/90 text-[10px] font-bold text-primary shadow-[var(--shadow-xs)]">
+                  <span className="grid size-5 place-items-center rounded-full border border-primary/55 bg-background/90 text-micro font-bold text-primary shadow-[var(--shadow-xs)]">
                     {clickMarker.mode === "double" ? "2x" : "1x"}
                   </span>
                 </div>
@@ -1668,7 +1668,7 @@ export function BrowserPreviewPanel({
                           svc.type === "frontend"
                             ? "bg-blue-500/10 text-blue-600"
                             : svc.type === "backend"
-                              ? "bg-emerald-500/10 text-emerald-600"
+                              ? "bg-success/10 text-success"
                               : "bg-muted text-muted-foreground",
                         )}
                       >
@@ -1688,7 +1688,7 @@ export function BrowserPreviewPanel({
                           svc.type === "frontend"
                             ? "bg-blue-500/10 text-blue-600"
                             : svc.type === "backend"
-                              ? "bg-emerald-500/10 text-emerald-600"
+                              ? "bg-success/10 text-success"
                               : "bg-muted text-muted-foreground",
                         )}
                       >

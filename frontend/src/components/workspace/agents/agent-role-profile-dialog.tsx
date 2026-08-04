@@ -1332,7 +1332,7 @@ export function AgentRoleProfileDialog({
                     <span
                       className={cn(
                         "h-1.5 w-1.5 rounded-full",
-                        isDirty ? "bg-amber-500" : "bg-emerald-500",
+                        isDirty ? "bg-warning" : "bg-success",
                       )}
                     />
                     {isDirty ? t.agentConfig.unsaved : "CHARACTER FILE"}

@@ -72,8 +72,8 @@ function hardwareLine(
 
 function verdictTone(verdict: string): string {
   return verdict === "fits"
-    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-    : "bg-amber-500/15 text-amber-600 dark:text-amber-400";
+    ? "bg-success/15 text-success"
+    : "bg-warning/15 text-warning";
 }
 
 function RecRow({
@@ -122,7 +122,7 @@ function RecRow({
         </div>
       </div>
       {rec.installed ? (
-        <span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+        <span className="shrink-0 text-xs font-medium text-success">
           {t.installed}
         </span>
       ) : (
@@ -171,7 +171,7 @@ export function ModelCookbook() {
       ) : (
         <>
           {ollamaDown && (
-            <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
               {t.noOllama}
             </div>
           )}

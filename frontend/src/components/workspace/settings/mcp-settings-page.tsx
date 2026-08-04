@@ -320,7 +320,7 @@ export function McpSettingsPage() {
             {trustLoadState === "error" && (
               <div
                 role="alert"
-                className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300"
+                className="rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-xs text-warning"
               >
                 {copy.trustLoadFailed}
               </div>
@@ -346,12 +346,12 @@ export function McpSettingsPage() {
                             {copy.trustUnknown}
                           </span>
                         ) : trusted ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          <span className="inline-flex items-center gap-1 rounded bg-success/10 px-1.5 py-0.5 text-xs text-success dark:bg-success/40 dark:text-success">
                             <ShieldCheckIcon className="size-3" />{" "}
                             {t.mcpSettings.trustedTag}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                          <span className="inline-flex items-center gap-1 rounded bg-warning/10 px-1.5 py-0.5 text-xs text-warning dark:bg-warning/40 dark:text-warning">
                             <ShieldAlertIcon className="size-3" />{" "}
                             {t.mcpSettings.untrustedTag}
                           </span>
@@ -379,7 +379,7 @@ export function McpSettingsPage() {
                         </div>
                       )}
                       {trustKnown && !trusted && server.enabled && (
-                        <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        <div className="text-xs text-warning mt-1">
                           {t.mcpSettings.unapprovedHint}
                         </div>
                       )}

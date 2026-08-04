@@ -356,19 +356,19 @@ export default function ChannelsPage() {
                     {rows.length}
                   </div>
                 </div>
-                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2">
-                  <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                <div className="rounded-lg border border-success/20 bg-success/50/[0.06] px-3 py-2">
+                  <div className="flex items-center gap-1 text-xs text-success">
                     <span
                       className={cn(
                         "inline-block size-1.5 rounded-full",
                         connectedCount > 0
-                          ? "bg-emerald-500"
+                          ? "bg-success"
                           : "bg-muted-foreground/40",
                       )}
                     />
                     {t.channels.connectedCount(connectedCount)}
                   </div>
-                  <div className="mt-1 text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+                  <div className="mt-1 text-lg font-semibold text-success">
                     {connectedCount}
                   </div>
                 </div>
@@ -640,13 +640,13 @@ function ChannelCard({
       className={cn(
         "workspace-panel ui-density-panel group relative overflow-hidden rounded-lg border bg-background/60",
         "transition-colors hover:border-border-strong",
-        row.connected ? "border-emerald-500/20" : "border-border-default",
+        row.connected ? "border-success/20" : "border-border-default",
       )}
     >
       <div
         className={cn(
           "absolute inset-x-0 top-0 h-1",
-          row.connected ? "bg-emerald-500/55" : "bg-muted",
+          row.connected ? "bg-success/55" : "bg-muted",
         )}
       />
       {/* Implementation note. */}

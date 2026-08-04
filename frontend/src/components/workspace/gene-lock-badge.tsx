@@ -140,12 +140,12 @@ export function GeneLockBadge() {
   const lvl = status.maturity_level;
   const panic = status.panic.active;
   const levelColor = panic
-    ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+    ? "bg-destructive/20 text-destructive border-destructive/40"
     : lvl === 0
       ? "bg-muted-foreground/20 text-muted-foreground border-muted-foreground/40"
       : lvl <= 2
-        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-        : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
+        ? "bg-warning/20 text-warning border-warning/40"
+        : "bg-success/20 text-success border-success/40";
 
   return (
     <div className="relative">
@@ -202,7 +202,7 @@ export function GeneLockBadge() {
               </span>
             </div>
             {panic && (
-              <div className="rounded bg-rose-500/10 px-2 py-1 text-rose-300">
+              <div className="rounded bg-destructive/10 px-2 py-1 text-destructive">
                 <div className="font-medium">{g.panicActive}</div>
                 <div className="text-xs">
                   {g.panicStartedAt}{" "}
@@ -240,7 +240,7 @@ export function GeneLockBadge() {
             {panic ? (
               <Button
                 size="sm"
-                className="h-7 bg-emerald-600 text-xs hover:bg-emerald-700"
+                className="h-7 bg-success text-xs hover:bg-success"
                 onClick={clearPanic}
                 disabled={busy}
               >

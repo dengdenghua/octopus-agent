@@ -320,13 +320,13 @@ export function ApplicationRegistryPanel() {
                       {primaryApp?.schema_version && (
                         <Badge
                           variant="outline"
-                          className="h-5 rounded-full px-1.5 text-[10px]"
+                          className="h-5 rounded-full px-1.5 text-micro"
                         >
                           v{primaryApp.schema_version}
                         </Badge>
                       )}
                     </div>
-                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    <p className="mt-0.5 truncate text-mini text-muted-foreground">
                       {subtitle}
                     </p>
                   </div>
@@ -343,14 +343,14 @@ export function ApplicationRegistryPanel() {
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <Badge
                     variant="secondary"
-                    className="h-5 rounded-full px-2 text-[10px]"
+                    className="h-5 rounded-full px-2 text-micro"
                   >
                     {appCategoryLabel(item.localCategory)}
                   </Badge>
                   {plugin && (
                     <Badge
                       variant={plugin.enabled ? "secondary" : "outline"}
-                      className="h-5 rounded-full px-2 text-[10px]"
+                      className="h-5 rounded-full px-2 text-micro"
                     >
                       {plugin.enabled
                         ? t.applicationRegistry.enabledStatus
@@ -360,7 +360,7 @@ export function ApplicationRegistryPanel() {
                   {item.apps.length > 0 && (
                     <Badge
                       variant="outline"
-                      className="h-5 rounded-full px-2 text-[10px]"
+                      className="h-5 rounded-full px-2 text-micro"
                     >
                       {item.apps.length} {t.applicationRegistry.entries}
                     </Badge>
@@ -368,7 +368,7 @@ export function ApplicationRegistryPanel() {
                   {itemActionCount > 0 && (
                     <Badge
                       variant="outline"
-                      className="h-5 rounded-full px-2 text-[10px]"
+                      className="h-5 rounded-full px-2 text-micro"
                     >
                       {itemActionCount} {t.applicationRegistry.actions}
                     </Badge>
@@ -376,7 +376,7 @@ export function ApplicationRegistryPanel() {
                   {plugin && plugin.capabilities.length > 0 && (
                     <Badge
                       variant="outline"
-                      className="h-5 rounded-full px-2 text-[10px]"
+                      className="h-5 rounded-full px-2 text-micro"
                     >
                       {plugin.capabilities.length}{" "}
                       {t.applicationRegistry.capabilities}
@@ -385,7 +385,7 @@ export function ApplicationRegistryPanel() {
                   {primaryApp && (primaryApp.permissions?.length ?? 0) > 0 && (
                     <Badge
                       variant="outline"
-                      className="h-5 rounded-full px-2 text-[10px]"
+                      className="h-5 rounded-full px-2 text-micro"
                     >
                       {primaryApp!.permissions!.length}{" "}
                       {t.applicationRegistry.permissions}

@@ -79,7 +79,7 @@ export function SegmentedControl<T extends string | number>({
             {opt.icon}
             <span>{opt.label}</span>
             {opt.preview && (
-              <span className="text-[10px] font-normal opacity-60">
+              <span className="text-micro font-normal opacity-60">
                 {opt.preview}
               </span>
             )}

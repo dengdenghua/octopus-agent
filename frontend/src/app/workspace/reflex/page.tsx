@@ -209,7 +209,7 @@ export default function ReflexMonitorPage() {
           {/* Hero / actions */}
           <section className="workspace-panel px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex flex-col items-start gap-4 md:flex-row md:items-center">
-              <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-emerald-500/20">
+              <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-success to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-success/20">
                 <ZapIcon className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
@@ -257,12 +257,12 @@ export default function ReflexMonitorPage() {
             {(reloadMsg || error) && (
               <div className="mt-3 text-xs">
                 {reloadMsg && (
-                  <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-300">
+                  <span className="rounded-md bg-success/10 px-2 py-1 text-success">
                     {reloadMsg}
                   </span>
                 )}
                 {error && (
-                  <span className="ml-2 rounded-md bg-rose-500/10 px-2 py-1 text-rose-300">
+                  <span className="ml-2 rounded-md bg-destructive/10 px-2 py-1 text-destructive">
                     {error}
                   </span>
                 )}
@@ -447,8 +447,8 @@ function StatCard({
       <div
         className={cn(
           "mt-1 text-2xl font-semibold tabular-nums",
-          tone === "good" && "text-emerald-400",
-          tone === "warn" && "text-amber-400",
+          tone === "good" && "text-success",
+          tone === "warn" && "text-warning",
         )}
       >
         {value}
@@ -529,7 +529,7 @@ function TierCard({ tier }: { tier: TierInfo }) {
         {tier.hits !== undefined && (
           <span>
             {t.reflexPage.tierHits}:{" "}
-            <span className="text-emerald-400">{tier.hits}</span>{" "}
+            <span className="text-success">{tier.hits}</span>{" "}
             <span className="text-muted-foreground">
               / {t.reflexPage.tierMisses} {tier.misses ?? 0}
             </span>
@@ -538,7 +538,7 @@ function TierCard({ tier }: { tier: TierInfo }) {
         {tier.hit_rate !== undefined && (
           <span>
             {t.reflexPage.tierRate}:{" "}
-            <span className="text-emerald-400">
+            <span className="text-success">
               {(tier.hit_rate * 100).toFixed(0)}%
             </span>
           </span>
@@ -589,7 +589,7 @@ function RuleRow({
             </Badge>
           ))}
           {rule.variants && rule.variants.length > 1 && (
-            <Badge className="bg-amber-500/15 text-amber-300 hover:bg-amber-500/15">
+            <Badge className="bg-warning/15 text-warning hover:bg-warning/15">
               {t.reflexPage.badgeAB(rule.variants.length)}
             </Badge>
           )}
@@ -599,7 +599,7 @@ function RuleRow({
             </Badge>
           )}
           {stale && (
-            <Badge className="bg-rose-500/15 text-rose-300 hover:bg-rose-500/15">
+            <Badge className="bg-destructive/15 text-destructive hover:bg-destructive/15">
               {t.reflexPage.badgeStale}
             </Badge>
           )}
@@ -613,11 +613,11 @@ function RuleRow({
           <div className="mt-1 space-y-0.5 pl-2 text-xs text-muted-foreground">
             {rule.variants!.map((v) => (
               <div key={v.variant_id} className="flex items-center gap-2">
-                <span className="w-16 font-mono text-amber-400">
+                <span className="w-16 font-mono text-warning">
                   {v.variant_id}
                 </span>
                 <span className="flex-1 truncate">{v.preview}</span>
-                <span className="text-emerald-400">
+                <span className="text-success">
                   {v.hits}× (w={v.weight})
                 </span>
               </div>
@@ -641,13 +641,13 @@ function RuleRow({
       </td>
       <td className="py-2 pr-3 text-right font-mono">{rule.priority}</td>
       <td className="py-2 pr-3 text-right font-mono">{stats.tries}</td>
-      <td className="py-2 pr-3 text-right font-mono text-emerald-400">
+      <td className="py-2 pr-3 text-right font-mono text-success">
         {stats.hits}
       </td>
       <td
         className={cn(
           "py-2 pr-3 text-right font-mono",
-          stats.hits > 0 ? "text-emerald-400" : "text-muted-foreground",
+          stats.hits > 0 ? "text-success" : "text-muted-foreground",
         )}
       >
         {ratePct}%

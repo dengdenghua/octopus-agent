@@ -408,12 +408,12 @@ function KnowledgeRelationMap({
   const typeLabelFor = (type: string) => ({ object: "对象", subject: "主题" }[type] ?? type);
   return (
     <div className="relative overflow-hidden rounded-md border border-border bg-[#07101c]">
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-md border border-white/10 bg-black/35 p-1 text-[11px] text-white/60 backdrop-blur-md">
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-md border border-white/10 bg-black/35 p-1 text-mini text-white/60 backdrop-blur-md">
         <select
           aria-label="按实体类型筛选"
           value={entityType}
           onChange={(event) => setEntityType(event.target.value)}
-          className="h-6 max-w-28 rounded border-0 bg-white/10 px-1.5 text-[11px] text-white outline-none"
+          className="h-6 max-w-28 rounded border-0 bg-white/10 px-1.5 text-mini text-white outline-none"
         >
           <option value="all">全部类型</option>
           {entityTypes.map((type) => <option key={type} value={type}>{typeLabelFor(type)}</option>)}
@@ -478,8 +478,8 @@ function KnowledgeRelationMap({
       {selectedNode && (
         <div className="absolute bottom-3 left-3 max-w-[320px] rounded-md border border-white/10 bg-black/45 px-3 py-2 text-white backdrop-blur-md">
           <div className="truncate text-xs font-semibold">{labelFor(selectedNode.name)}</div>
-          <div className="mt-1 text-[11px] text-white/55">{typeLabelFor(selectedNode.entity_type)} · {degree.get(selectedNode.name) ?? 0} 条关系</div>
-          {selectedNode.description && <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-white/65">{selectedNode.description}</div>}
+          <div className="mt-1 text-mini text-white/55">{typeLabelFor(selectedNode.entity_type)} · {degree.get(selectedNode.name) ?? 0} 条关系</div>
+          {selectedNode.description && <div className="mt-1 line-clamp-2 text-mini leading-4 text-white/65">{selectedNode.description}</div>}
         </div>
       )}
     </div>

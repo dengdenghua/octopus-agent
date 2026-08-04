@@ -143,7 +143,7 @@ export function CapabilityQualityStrip({
             className={cn(
               "flex size-7 items-center justify-center rounded-lg",
               ready
-                ? "bg-emerald-500/10 text-emerald-600"
+                ? "bg-success/10 text-success"
                 : "bg-primary/10 text-primary",
             )}
           >
@@ -242,9 +242,9 @@ function QualityPill({
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium",
         tone === "good" &&
-          "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+          "border-success/25 bg-success/10 text-success",
         tone === "warn" &&
-          "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+          "border-warning/25 bg-warning/10 text-warning",
         tone === "muted" &&
           "border-border-default bg-muted/40 text-muted-foreground",
       )}

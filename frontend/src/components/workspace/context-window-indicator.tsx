@@ -54,7 +54,7 @@ function BucketBar({
           className={cn(
             "text-xs font-mono tabular-nums",
             overflow
-              ? "text-amber-600 dark:text-amber-400"
+              ? "text-warning"
               : "text-muted-foreground/50",
           )}
         >
@@ -65,7 +65,7 @@ function BucketBar({
         <div
           className={cn(
             "h-full rounded-full transition-all duration-300",
-            overflow ? "bg-amber-500" : bucket.color.replace("text-", "bg-"),
+            overflow ? "bg-warning" : bucket.color.replace("text-", "bg-"),
           )}
           style={{ width: `${usedPct}%` }}
         />
@@ -112,7 +112,7 @@ export function ContextWindowIndicator({
       used: buckets.history.used,
       allocated: buckets.history.allocated,
       icon: HistoryIcon,
-      color: "text-emerald-500",
+      color: "text-success",
     },
   ];
 
@@ -126,9 +126,9 @@ export function ContextWindowIndicator({
           className={cn(
             "text-xs font-mono tabular-nums",
             isHigh
-              ? "text-red-500"
+              ? "text-destructive"
               : isMedium
-                ? "text-amber-500"
+                ? "text-warning"
                 : "text-muted-foreground/50",
           )}
         >
@@ -139,7 +139,7 @@ export function ContextWindowIndicator({
         <div
           className={cn(
             "h-full rounded-full transition-all duration-500",
-            isHigh ? "bg-red-500" : isMedium ? "bg-amber-500" : "bg-primary/60",
+            isHigh ? "bg-destructive" : isMedium ? "bg-warning" : "bg-primary/60",
           )}
           style={{ width: `${Math.min(100, utilization * 100)}%` }}
         />

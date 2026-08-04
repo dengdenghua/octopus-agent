@@ -465,23 +465,23 @@ function FinalArtifactCompletionNotice({
     <button
       type="button"
       onClick={onOpen}
-      className="my-2 ml-11 flex max-w-full items-center gap-2 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-left text-xs text-emerald-800 transition-colors hover:bg-emerald-500/15 dark:text-emerald-200"
+      className="my-2 ml-11 flex max-w-full items-center gap-2 rounded-md border border-success/25 bg-success/10 px-3 py-2 text-left text-xs text-success transition-colors hover:bg-success/15"
     >
       <FileTextIcon className="size-4 shrink-0" />
       <span className="min-w-0 flex-1">
         <span className="font-medium">
           {t.realtime.finalArtifact.generated}
         </span>
-        <span className="ml-2 font-mono text-xs text-emerald-700/80 dark:text-emerald-200/80">
+        <span className="ml-2 font-mono text-xs text-success/80">
           {first.path || first.title}
         </span>
         {extraCount > 0 && (
-          <span className="ml-2 text-emerald-700/80 dark:text-emerald-200/80">
+          <span className="ml-2 text-success/80">
             +{extraCount}
           </span>
         )}
       </span>
-      <span className="shrink-0 text-xs text-emerald-700/75 dark:text-emerald-200/75">
+      <span className="shrink-0 text-xs text-success/75">
         {t.realtime.finalArtifact.view}
       </span>
     </button>
@@ -607,7 +607,7 @@ function ChatHeaderRecButton({
         "inline-flex h-[42px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold shadow-none transition-all duration-200 sm:h-8 sm:px-2.5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         recording
-          ? "border-red-500/25 bg-red-500/10 text-red-600 hover:bg-red-500/16 dark:text-red-400"
+          ? "border-destructive/25 bg-destructive/10 text-destructive hover:bg-destructive/16 dark:text-destructive"
           : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
       )}
     >
@@ -808,12 +808,12 @@ function TaskCollaboratorControl({
               isTeamDraft
                 ? "bg-primary-foreground/80 text-primary font-semibold"
                 : hasOnlineMembers
-                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  ? "bg-success/10 text-success"
                   : "bg-transparent text-muted-foreground group-hover:bg-background/75 group-hover:text-foreground",
             )}
           >
             {hasOnlineMembers && (
-              <span className="size-1.5 rounded-full bg-emerald-500" />
+              <span className="size-1.5 rounded-full bg-success" />
             )}
             {hasOnlineMembers ? `${onlineCount}/${totalCount}` : countLabel}
           </span>

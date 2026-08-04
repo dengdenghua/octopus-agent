@@ -55,7 +55,7 @@ describe("WorkstationSeat", () => {
       <WorkstationSeat
         name="coder"
         badge={<span>队长</span>}
-        dotClassName="bg-emerald-500"
+        dotClassName="bg-success"
         dotLabel="在线"
       />,
     );

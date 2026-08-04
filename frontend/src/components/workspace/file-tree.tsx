@@ -42,16 +42,16 @@ export interface FileTreeEvent {
 const FILE_ICONS: Record<string, string> = {
   ts: "text-blue-500 dark:text-blue-400",
   tsx: "text-blue-500 dark:text-blue-400",
-  js: "text-yellow-500 dark:text-yellow-400",
-  jsx: "text-yellow-500 dark:text-yellow-400",
-  py: "text-green-500 dark:text-green-400",
-  json: "text-yellow-600 dark:text-yellow-500",
+  js: "text-warning",
+  jsx: "text-warning",
+  py: "text-success",
+  json: "text-warning dark:text-warning",
   md: "text-muted-foreground",
   css: "text-purple-500 dark:text-purple-400",
   html: "text-orange-500 dark:text-orange-400",
-  yaml: "text-red-400 dark:text-red-300",
-  yml: "text-red-400 dark:text-red-300",
-  toml: "text-red-400 dark:text-red-300",
+  yaml: "text-destructive dark:text-destructive",
+  yml: "text-destructive dark:text-destructive",
+  toml: "text-destructive dark:text-destructive",
 };
 
 const treeCache = new Map<
@@ -401,9 +401,9 @@ export function FileTree({
                   <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground" />
                 )}
                 {isOpen ? (
-                  <FolderOpenIcon className="size-3.5 shrink-0 text-amber-400" />
+                  <FolderOpenIcon className="size-3.5 shrink-0 text-warning" />
                 ) : (
-                  <FolderIcon className="size-3.5 shrink-0 text-amber-400" />
+                  <FolderIcon className="size-3.5 shrink-0 text-warning" />
                 )}
               </>
             ) : (
@@ -428,11 +428,11 @@ export function FileTree({
                 className={cn(
                   "ml-auto shrink-0 rounded px-1 py-0.5 text-xs font-semibold",
                   gitStatus === "M" &&
-                    "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                    "bg-warning/10 text-warning",
                   gitStatus === "A" &&
-                    "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                    "bg-success/10 text-success",
                   gitStatus === "D" &&
-                    "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+                    "bg-destructive/10 text-destructive",
                   gitStatus === "R" &&
                     "bg-sky-500/10 text-sky-600 dark:text-sky-400",
                 )}

@@ -182,9 +182,9 @@ function SearchResultCard({
   const [expanded, setExpanded] = useState(false);
   const similarityColor =
     result.similarity >= 0.7
-      ? "text-emerald-500"
+      ? "text-success"
       : result.similarity >= 0.4
-        ? "text-amber-500"
+        ? "text-warning"
         : "text-muted-foreground";
 
   return (
@@ -535,7 +535,7 @@ export default function CodebaseIndexPanel({
           <DatabaseIcon className="size-4 text-primary" />
           <span className="text-sm font-medium">{t.codebaseIndex.title}</span>
           {isIndexed && !isRunning && (
-            <CheckCircle2Icon className="size-3.5 text-emerald-500" />
+            <CheckCircle2Icon className="size-3.5 text-success" />
           )}
           {isRunning && (
             <Loader2Icon className="size-3.5 animate-spin text-primary" />
@@ -747,7 +747,7 @@ export default function CodebaseIndexPanel({
               </>
             ) : status?.status === "complete" ? (
               <div className="flex flex-col items-center gap-2 py-4">
-                <CheckCircle2Icon className="size-8 text-emerald-500" />
+                <CheckCircle2Icon className="size-8 text-success" />
                 <div className="text-center">
                   <div className="font-medium text-foreground">
                     {t.codebaseIndex.indexingComplete}

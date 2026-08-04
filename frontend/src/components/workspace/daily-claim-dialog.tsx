@@ -121,11 +121,11 @@ export function DailyClaimDialog({
           {/* Gift illustration — lucide icon inside a soft disk */}
           <div className="absolute right-6 top-6 flex size-24 items-center justify-center">
             <div className="absolute inset-0 rounded-full bg-white/10 blur-sm" />
-            <div className="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-pink-200 to-rose-300 shadow-[var(--shadow-md)]">
-              <Gift className="size-10 text-rose-600" strokeWidth={2.2} />
+            <div className="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-pink-200 to-destructive shadow-[var(--shadow-md)]">
+              <Gift className="size-10 text-destructive" strokeWidth={2.2} />
             </div>
-            <Sparkles className="absolute -top-1 -left-1 size-4 text-yellow-200" />
-            <Sparkles className="absolute bottom-2 left-0 size-3 text-yellow-100" />
+            <Sparkles className="absolute -top-1 -left-1 size-4 text-warning" />
+            <Sparkles className="absolute bottom-2 left-0 size-3 text-warning" />
           </div>
         </div>
 
@@ -142,7 +142,7 @@ export function DailyClaimDialog({
           {/* Primary: spin for the draw */}
           <div className="relative mb-3">
             {canClaim && !info.isLoading && (
-              <span className="absolute -top-2 right-3 z-10 rounded-full bg-rose-500 px-2 py-0.5 text-xs font-semibold text-white shadow">
+              <span className="absolute -top-2 right-3 z-10 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-white shadow">
                 {t.dailyClaim.drawHint(max)}
               </span>
             )}

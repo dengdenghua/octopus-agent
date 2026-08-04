@@ -262,7 +262,7 @@ export function DeepResearchPanel({
           </div>
         )}
         {streamError && (
-          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-300">
+          <div className="mb-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
             {streamError}
           </div>
         )}
@@ -480,7 +480,7 @@ export function DeepResearchPanel({
                 </div>
                 <div className="flex items-center gap-1.5">
                   {currentJob.memory_written_at && (
-                    <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-600 dark:text-emerald-400">
+                    <span className="rounded-md bg-success/10 px-2 py-0.5 text-xs text-success">
                       {t.deepResearchPanel.savedToLeadMemory}
                     </span>
                   )}
@@ -500,7 +500,7 @@ export function DeepResearchPanel({
                     }
                   >
                     {copied ? (
-                      <CheckCircle2Icon className="size-3.5 text-emerald-500" />
+                      <CheckCircle2Icon className="size-3.5 text-success" />
                     ) : (
                       <ClipboardIcon className="size-3.5" />
                     )}
@@ -545,7 +545,7 @@ function PrefetchLogRow({ item }: { item: ResearchPrefetchLog }) {
       ? "border-destructive/30 bg-destructive/10 text-destructive"
       : item.status === "skipped"
         ? "border-border-default bg-muted/30 text-muted-foreground"
-        : "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+        : "border-success/25 bg-success/10 text-success";
 
   return (
     <div className="rounded-lg border border-border-default bg-background/70 p-2">
@@ -661,7 +661,7 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
         isError
           ? "border-destructive/30 bg-destructive/10"
           : isDone
-            ? "border-emerald-500/25 bg-emerald-500/10"
+            ? "border-success/25 bg-success/10"
             : "border-primary/25 bg-primary/10",
       )}
     >
@@ -672,7 +672,7 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
               <Loader2Icon className="size-3 animate-spin" />
             )}
             {isDone && !isError && (
-              <CheckCircle2Icon className="size-3 text-emerald-500" />
+              <CheckCircle2Icon className="size-3 text-success" />
             )}
             {isError && <CircleAlertIcon className="size-3 text-destructive" />}
             <span className="truncate">{title}</span>
@@ -718,8 +718,8 @@ function RouteDecisionSummary({
             blocked
               ? "border-destructive/30 bg-destructive/10 text-destructive"
               : warning
-                ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                : "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                ? "border-warning/30 bg-warning/10 text-warning"
+                : "border-success/25 bg-success/10 text-success",
           )}
         >
           {blocked || warning ? (
@@ -801,7 +801,7 @@ function StepRow({
         {isRunning ? (
           <Loader2Icon className="size-3 animate-spin" />
         ) : isCompleted ? (
-          <CheckCircle2Icon className="size-3 text-emerald-500" />
+          <CheckCircle2Icon className="size-3 text-success" />
         ) : isFailed ? (
           <CircleAlertIcon className="size-3 text-destructive" />
         ) : status === "pending" ? (

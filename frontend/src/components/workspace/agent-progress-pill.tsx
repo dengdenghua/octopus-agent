@@ -97,7 +97,7 @@ function StatusIcon({
   status: LiveToolEvent["status"] | "pending";
 }) {
   if (status === "waiting_approval") {
-    return <CircleIcon className="size-4 shrink-0 text-amber-500" />;
+    return <CircleIcon className="size-4 shrink-0 text-warning" />;
   }
   if (status === "running") {
     return (
@@ -110,7 +110,7 @@ function StatusIcon({
   if (status === "error") {
     return <XCircleIcon className="size-4 shrink-0 text-destructive" />;
   }
-  return <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />;
+  return <CheckCircle2Icon className="size-4 shrink-0 text-success" />;
 }
 
 function phaseWindow<T>(
@@ -321,19 +321,19 @@ export function AgentProgressPill({
         )}
       >
         {disconnected ? (
-          <WifiOffIcon className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <WifiOffIcon className="size-3.5 shrink-0 text-warning" />
         ) : (
           <Loader2Icon
             className={cn(
               "size-3.5 shrink-0 animate-spin",
-              stalled ? "text-amber-500" : "text-primary",
+              stalled ? "text-warning" : "text-primary",
             )}
           />
         )}
         <span
           className={cn(
             "min-w-0 flex-1 truncate font-medium",
-            stalled ? "text-amber-600 dark:text-amber-400" : "text-foreground",
+            stalled ? "text-warning" : "text-foreground",
           )}
         >
           {fallbackLabel}
@@ -446,8 +446,8 @@ export function AgentProgressPill({
                     : currentBlock.status === "error"
                       ? "bg-destructive"
                       : currentBlock.status === "waiting_approval"
-                        ? "bg-amber-500"
-                        : "bg-emerald-500",
+                        ? "bg-warning"
+                        : "bg-success",
                 )}
               />
               <span className="min-w-0 flex-1 truncate text-foreground/85">
@@ -461,8 +461,8 @@ export function AgentProgressPill({
                     : currentBlock.status === "running"
                       ? "bg-primary/10 text-primary"
                       : currentBlock.status === "waiting_approval"
-                        ? "bg-amber-500/10 text-amber-600"
-                        : "bg-emerald-500/10 text-emerald-600",
+                        ? "bg-warning/10 text-warning"
+                        : "bg-success/10 text-success",
                 )}
               >
                 {activeStatus}
@@ -517,8 +517,8 @@ export function AgentProgressPill({
                       : currentBlock.status === "error"
                         ? "bg-destructive"
                         : currentBlock.status === "waiting_approval"
-                          ? "bg-amber-500"
-                          : "bg-emerald-500",
+                          ? "bg-warning"
+                          : "bg-success",
                   )}
                 />
                 <span className="min-w-0 flex-1 truncate">
@@ -527,7 +527,7 @@ export function AgentProgressPill({
               </div>
             ) : null}
             {capabilityDisabledInfo ? (
-              <div className="mt-1.5 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700">
+              <div className="mt-1.5 flex items-center gap-1.5 rounded-md bg-warning/10 px-2 py-1 text-xs text-warning">
                 <WifiOffIcon className="size-3 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">
                   {t.messageGrouping.capabilityDisabled(
@@ -538,7 +538,7 @@ export function AgentProgressPill({
                   type="button"
                   onClick={handleEnableCapability}
                   disabled={enablingCapability}
-                  className="shrink-0 rounded bg-amber-600 px-1.5 py-0.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
+                  className="shrink-0 rounded bg-warning px-1.5 py-0.5 text-xs font-medium text-white transition-colors hover:bg-warning disabled:opacity-50"
                 >
                   {enablingCapability
                     ? t.messageGrouping.enablingCapability
@@ -554,7 +554,7 @@ export function AgentProgressPill({
                     ? "bg-destructive"
                     : displayPhase.status === "running"
                       ? "bg-primary"
-                      : "bg-emerald-500",
+                      : "bg-success",
                 )}
                 style={{ width: `${percent}%` }}
               />

@@ -38,8 +38,8 @@ export function RosterComputerPlaceholder({
               <div className="mt-0.5 text-xs text-muted-foreground">
                 {roleLabel}
               </div>
-              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                <span className="size-1 rounded-full bg-emerald-500" />
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                <span className="size-1 rounded-full bg-success" />
                 {t.agentWorkbenchPanel.dockStatusPresent}
               </span>
             </div>

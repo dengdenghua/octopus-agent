@@ -172,7 +172,7 @@ export function RecRecorderOverlay({
           <CircleDotIcon
             className={cn(
               "size-3.5",
-              phase === "recording" && "animate-pulse text-red-500",
+              phase === "recording" && "animate-pulse text-destructive",
             )}
           />
           {t.recorder.title}
@@ -211,7 +211,7 @@ export function RecRecorderOverlay({
             }}
             className={cn(
               "flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors",
-              "bg-red-500/12 text-red-600 hover:bg-red-500/18 dark:text-red-400",
+              "bg-destructive/12 text-destructive hover:bg-destructive/18 dark:text-destructive",
               !canRecord && "opacity-50",
             )}
           >
@@ -226,7 +226,7 @@ export function RecRecorderOverlay({
 
       {phase === "countdown" && (
         <div className="flex flex-col items-center justify-center gap-2 py-4">
-          <div className="flex size-16 items-center justify-center rounded-full border-2 border-red-500/60 text-3xl font-semibold text-red-600 dark:text-red-400">
+          <div className="flex size-16 items-center justify-center rounded-full border-2 border-destructive/60 text-3xl font-semibold text-destructive">
             {countdown > 0 ? countdown : "·"}
           </div>
           <span className="text-xs text-muted-foreground">准备录制…</span>
@@ -235,8 +235,8 @@ export function RecRecorderOverlay({
 
       {phase === "recording" && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2.5 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2">
-            <span className="size-2.5 animate-pulse rounded-full bg-red-500" />
+          <div className="flex items-center gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+            <span className="size-2.5 animate-pulse rounded-full bg-destructive" />
             <span className="font-mono text-sm font-semibold text-foreground">
               {formatElapsed(elapsed)}
             </span>
@@ -247,7 +247,7 @@ export function RecRecorderOverlay({
           <button
             type="button"
             onClick={() => void handleStop()}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-500/12 px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/18 dark:text-red-400"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-destructive/12 px-3 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/18 dark:text-destructive"
           >
             <SquareIcon className="size-3.5" />
             停止并提炼技能
@@ -286,8 +286,8 @@ function DoneSummary({ result }: { result: StopRecordingResponse | null }) {
 
   if (status === "promoted" && forged.length) {
     return (
-      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-        <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+      <div className="rounded-lg border border-success/30 bg-success/5 p-3">
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-success">
           <SparklesIcon className="size-3.5" />
           已学会技能
         </div>
@@ -300,7 +300,7 @@ function DoneSummary({ result }: { result: StopRecordingResponse | null }) {
   }
   if (status === "quarantined") {
     return (
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">
+      <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
         已生成技能候选,含敏感操作,已隔离待人工审批。
       </div>
     );

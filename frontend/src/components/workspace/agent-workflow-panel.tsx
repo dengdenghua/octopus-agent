@@ -77,11 +77,11 @@ function StepItem({
             className={cn(
               "flex size-6 items-center justify-center rounded-full border-2 transition-colors duration-300",
               step.status === "completed" &&
-                "border-emerald-500 bg-emerald-500/10 text-emerald-600",
+                "border-success/50 bg-success/10 text-success",
               step.status === "running" &&
                 "border-violet-500 bg-violet-500/10 text-violet-600",
               step.status === "error" &&
-                "border-rose-500 bg-rose-500/10 text-rose-600",
+                "border-destructive/50 bg-destructive/10 text-destructive",
               step.status === "pending" &&
                 "border-muted-foreground/30 text-muted-foreground/50",
             )}
@@ -101,7 +101,7 @@ function StepItem({
               className={cn(
                 "mt-1 h-full min-h-[20px] w-px transition-colors duration-300",
                 step.status === "completed"
-                  ? "bg-emerald-500/30"
+                  ? "bg-success/30"
                   : "bg-border/50",
               )}
             />
@@ -116,8 +116,8 @@ function StepItem({
                   className={cn(
                     "size-3.5 shrink-0",
                     step.status === "running" && "text-violet-500",
-                    step.status === "completed" && "text-emerald-500",
-                    step.status === "error" && "text-rose-500",
+                    step.status === "completed" && "text-success",
+                    step.status === "error" && "text-destructive",
                     step.status === "pending" && "text-muted-foreground/50",
                   )}
                 />
@@ -127,9 +127,9 @@ function StepItem({
                     step.status === "running" &&
                       "text-violet-700 dark:text-violet-400",
                     step.status === "completed" &&
-                      "text-emerald-700 dark:text-emerald-400",
+                      "text-success",
                     step.status === "error" &&
-                      "text-rose-700 dark:text-rose-400",
+                      "text-destructive",
                     step.status === "pending" && "text-muted-foreground",
                   )}
                 >
@@ -147,7 +147,7 @@ function StepItem({
                 </p>
               )}
               {!expanded && step.outputText && (
-                <p className="mt-1 break-all text-xs text-emerald-700/80 line-clamp-2 dark:text-emerald-400/80">
+                <p className="mt-1 break-all text-xs text-success/80 line-clamp-2 dark:text-success/80">
                   {step.outputText}
                 </p>
               )}
@@ -189,7 +189,7 @@ function StepItem({
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
                     {t.agentWorkflow.result}
                   </div>
-                  <pre className="whitespace-pre-wrap break-all font-mono text-xs text-emerald-700/85 dark:text-emerald-400/85">
+                  <pre className="whitespace-pre-wrap break-all font-mono text-xs text-success/85 dark:text-success/85">
                     {step.outputText}
                   </pre>
                 </div>
@@ -253,7 +253,7 @@ export function AgentWorkflowPanel({
           <div
             className={cn(
               "h-full rounded-full transition-colors duration-500",
-              isRunning ? "bg-violet-500" : "bg-emerald-500",
+              isRunning ? "bg-violet-500" : "bg-success",
             )}
             style={{ width: `${progress}%` }}
           />

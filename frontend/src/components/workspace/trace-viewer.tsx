@@ -69,10 +69,10 @@ function statusColor(status: string): string {
   switch (status) {
     case "ok":
     case "completed":
-      return "text-green-500";
+      return "text-success";
     case "error":
     case "failed":
-      return "text-red-500";
+      return "text-destructive";
     case "running":
       return "text-blue-500";
     default:
@@ -84,10 +84,10 @@ function statusBg(status: string): string {
   switch (status) {
     case "ok":
     case "completed":
-      return "bg-green-500";
+      return "bg-success";
     case "error":
     case "failed":
-      return "bg-red-500";
+      return "bg-destructive";
     case "running":
       return "bg-blue-500";
     default:
@@ -99,10 +99,10 @@ function statusBarBg(status: string): string {
   switch (status) {
     case "ok":
     case "completed":
-      return "bg-green-500/70";
+      return "bg-success/70";
     case "error":
     case "failed":
-      return "bg-red-500/70";
+      return "bg-destructive/70";
     case "running":
       return "bg-blue-500/70";
     default:
@@ -181,7 +181,7 @@ function TraceListItem({
       <div
         className={cn(
           "size-1.5 shrink-0 rounded-lg",
-          hasError ? "bg-red-500" : "bg-green-500",
+          hasError ? "bg-destructive" : "bg-success",
         )}
       />
       <div className="min-w-0 flex-1">
@@ -492,7 +492,7 @@ export function TraceViewer({ className }: { className?: string }) {
 
       {/* Error */}
       {error && (
-        <div className="mx-3 mb-2 flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-1 text-xs text-red-500">
+        <div className="mx-3 mb-2 flex items-center gap-1.5 rounded-lg border border-destructive/20 bg-destructive/5 px-2 py-1 text-xs text-destructive">
           <AlertCircleIcon className="size-3 shrink-0" />
           <span className="truncate">{error}</span>
         </div>

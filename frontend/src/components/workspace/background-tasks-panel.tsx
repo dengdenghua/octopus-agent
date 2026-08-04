@@ -65,15 +65,15 @@ const STATUS_CONFIG: Record<
     icon: <Loader2Icon className="size-3 animate-spin" />,
   },
   paused: {
-    color: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+    color: "bg-warning/15 text-warning",
     icon: <PauseIcon className="size-3" />,
   },
   completed: {
-    color: "bg-green-500/15 text-green-600 dark:text-green-400",
+    color: "bg-success/15 text-success",
     icon: <CheckCircle2Icon className="size-3" />,
   },
   failed: {
-    color: "bg-red-500/15 text-red-600 dark:text-red-400",
+    color: "bg-destructive/15 text-destructive",
     icon: <AlertCircleIcon className="size-3" />,
   },
   cancelled: {
@@ -401,9 +401,9 @@ function TaskDetailView({
         {done && doneStatus && (
           <div className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs">
             {doneStatus === "completed" ? (
-              <CheckCircle2Icon className="size-4 text-green-500" />
+              <CheckCircle2Icon className="size-4 text-success" />
             ) : (
-              <AlertCircleIcon className="size-4 text-red-500" />
+              <AlertCircleIcon className="size-4 text-destructive" />
             )}
             <span>
               {t.backgroundTasks.taskFinished(

@@ -398,7 +398,7 @@ export const MessageListItem = memo(function MessageListItem({
                 onClick={() => {
                   void submitFeedback("liked");
                 }}
-                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
+                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-success/10 hover:text-success dark:hover:text-success"
                 title={t.conversation.goodResponse}
                 aria-label={t.conversation.goodResponse}
               >
@@ -408,7 +408,7 @@ export const MessageListItem = memo(function MessageListItem({
                 onClick={() => {
                   void submitFeedback("disliked");
                 }}
-                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400"
+                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-destructive/10 hover:text-destructive dark:hover:text-destructive"
                 title={t.conversation.badResponse}
                 aria-label={t.conversation.badResponse}
               >

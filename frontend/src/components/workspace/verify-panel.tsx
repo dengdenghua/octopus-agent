@@ -126,8 +126,8 @@ export function VerifyPanel({
               className={cn(
                 "rounded-full px-1.5 py-0.5 text-xs font-medium",
                 result.passed
-                  ? "bg-emerald-500/10 text-emerald-600"
-                  : "bg-rose-500/10 text-rose-600",
+                  ? "bg-success/10 text-success"
+                  : "bg-destructive/10 text-destructive",
               )}
             >
               {passedCount}/{totalCount}
@@ -160,10 +160,10 @@ export function VerifyPanel({
             className={cn(
               "mb-2 rounded-md border px-2.5 py-2 text-xs",
               autoSummary.exhausted
-                ? "border-rose-500/25 bg-rose-500/8 text-rose-700 dark:text-rose-300"
+                ? "border-destructive/25 bg-destructive/8 text-destructive"
                 : autoSummary.autoFixQueued
-                  ? "border-amber-500/25 bg-amber-500/8 text-amber-700 dark:text-amber-300"
-                  : "border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300",
+                  ? "border-warning/25 bg-warning/8 text-warning"
+                  : "border-success/25 bg-success/8 text-success",
             )}
           >
             <div className="font-medium">
@@ -245,9 +245,9 @@ export function VerifyPanel({
                   className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-muted/50"
                 >
                   {check.passed ? (
-                    <CheckCircle2Icon className="size-3.5 text-emerald-500 shrink-0" />
+                    <CheckCircle2Icon className="size-3.5 text-success shrink-0" />
                   ) : (
-                    <XCircleIcon className="size-3.5 text-rose-500 shrink-0" />
+                    <XCircleIcon className="size-3.5 text-destructive shrink-0" />
                   )}
                   <span className="text-xs font-medium flex-1">
                     {check.name}
@@ -307,7 +307,7 @@ export function VerifyPanel({
                       </pre>
                     )}
                     {check.stderr && (
-                      <pre className="text-xs font-mono leading-snug whitespace-pre-wrap break-all max-h-[200px] overflow-auto text-rose-600/80 dark:text-rose-400/80 mt-1">
+                      <pre className="text-xs font-mono leading-snug whitespace-pre-wrap break-all max-h-[200px] overflow-auto text-destructive/80 dark:text-destructive/80 mt-1">
                         {check.stderr}
                       </pre>
                     )}

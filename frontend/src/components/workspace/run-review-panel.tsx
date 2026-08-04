@@ -263,8 +263,8 @@ function StatusBadge({ status }: { status: RunReview["status"] }) {
       className={cn(
         "text-xs",
         status === "running" && "border-blue-500/30 text-blue-600",
-        status === "error" && "border-red-500/30 text-red-600",
-        status === "done" && "border-emerald-500/30 text-emerald-600",
+        status === "error" && "border-destructive/30 text-destructive",
+        status === "done" && "border-success/30 text-success",
       )}
     >
       {status === "running" ? (
@@ -353,7 +353,7 @@ export function RunReviewPanel() {
                 <span
                   className={cn(
                     "size-2 rounded-full",
-                    connected ? "bg-emerald-500" : "bg-muted",
+                    connected ? "bg-success" : "bg-muted",
                   )}
                 />
                 {connected
@@ -511,8 +511,8 @@ export function RunReviewPanel() {
                 )}
 
                 {run.risks.length > 0 && (
-                  <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2">
-                    <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                  <div className="rounded-lg border border-warning/25 bg-warning/5 px-3 py-2">
+                    <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-warning">
                       <AlertTriangleIcon className="size-3" />
                       {t.observabilityPage.runReviewLearningSignals}
                     </div>
@@ -521,7 +521,7 @@ export function RunReviewPanel() {
                         <Badge
                           key={risk}
                           variant="outline"
-                          className="border-amber-500/30 text-xs text-amber-700 dark:text-amber-300"
+                          className="border-warning/30 text-xs text-warning"
                         >
                           {risk}
                         </Badge>

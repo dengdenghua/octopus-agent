@@ -109,10 +109,10 @@ export function FileLeaseIndicator({
           )}
           aria-label={holderLabel}
         >
-          <LockIcon className="size-2.5 text-amber-500 dark:text-amber-400" />
+          <LockIcon className="size-2.5 text-warning" />
           {!compact && (
             <Avatar className="size-3.5 rounded-full">
-              <AvatarFallback className="rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+              <AvatarFallback className="rounded-full bg-muted text-micro font-semibold text-muted-foreground">
                 {avatarLetter(lease.holder_id)}
               </AvatarFallback>
             </Avatar>
@@ -182,7 +182,7 @@ export function FileLeaseBadge({
       )}
       aria-label={t.remoteWorkspace.lease.locked}
     >
-      <LockIcon className="size-2.5 text-amber-500 dark:text-amber-400" />
+      <LockIcon className="size-2.5 text-warning" />
       <span className="max-w-[60px] truncate">{lease.holder_id}</span>
     </Badge>
   );

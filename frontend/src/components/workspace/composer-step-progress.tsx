@@ -84,7 +84,7 @@ export function ComposerStepProgress({
         ) : currentPhase.status === "waiting_approval" ? (
           <CircleIcon
             aria-hidden="true"
-            className="size-4 shrink-0 text-amber-400"
+            className="size-4 shrink-0 text-warning"
           />
         ) : currentPhase.status === "error" ? (
           <AlertCircleIcon
@@ -94,7 +94,7 @@ export function ComposerStepProgress({
         ) : currentPhase.status === "done" ? (
           <CheckCircle2Icon
             aria-hidden="true"
-            className="size-4 shrink-0 text-emerald-500"
+            className="size-4 shrink-0 text-success"
           />
         ) : (
           <CircleIcon

@@ -499,8 +499,8 @@ export default function PrivacySettingsPage() {
               className={cn(
                 "rounded px-1.5 py-0.5 font-medium",
                 locked
-                  ? "bg-emerald-500/10 text-emerald-600"
-                  : "bg-amber-500/10 text-amber-600",
+                  ? "bg-success/10 text-success"
+                  : "bg-warning/10 text-warning",
               )}
             >
               {locked ? copy.identityOn : copy.identityOff}
@@ -606,7 +606,7 @@ export default function PrivacySettingsPage() {
                         <span className="text-sm font-medium">{label}</span>
                         <div className="flex items-center gap-1.5">
                           {recommended && (
-                            <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                            <span className="rounded bg-success/10 px-1.5 py-0.5 text-xs font-medium text-success">
                               {t.privacySettings.recommendedTag}
                             </span>
                           )}
@@ -770,7 +770,7 @@ export default function PrivacySettingsPage() {
                 <div className="text-xs text-muted-foreground leading-snug">
                   {copy.judgeDescription}
                   {judgeLoadState === "ready" && judge && !judge.available && (
-                    <span className="mt-1 block text-amber-600 dark:text-amber-400">
+                    <span className="mt-1 block text-warning">
                       {copy.judgeUnavailable}
                     </span>
                   )}

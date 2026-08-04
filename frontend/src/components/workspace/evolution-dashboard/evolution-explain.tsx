@@ -18,27 +18,27 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 function l1ScoreColor(score: number): string {
-  if (score >= 0.8) return "text-emerald-500";
-  if (score >= 0.5) return "text-amber-500";
-  return "text-red-500";
+  if (score >= 0.8) return "text-success";
+  if (score >= 0.5) return "text-warning";
+  return "text-destructive";
 }
 
 function l1BarColor(score: number): string {
-  if (score >= 0.8) return "text-emerald-500";
-  if (score >= 0.5) return "text-amber-500";
-  return "text-red-500";
+  if (score >= 0.8) return "text-success";
+  if (score >= 0.5) return "text-warning";
+  return "text-destructive";
 }
 
 function verdictStyle(verdict: string): string {
   switch (verdict) {
     case "healthy":
-      return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30";
+      return "bg-success/15 text-success border-success/30";
     case "degraded":
-      return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
+      return "bg-warning/15 text-warning border-warning/30";
     case "unhealthy":
       return "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30";
     case "critical":
-      return "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30";
+      return "bg-destructive/15 text-destructive border-destructive/30";
     default:
       return "bg-muted text-muted-foreground border-border";
   }
@@ -47,9 +47,9 @@ function verdictStyle(verdict: string): string {
 function trendIcon(trend: string): React.ReactElement {
   switch (trend) {
     case "improving":
-      return <TrendingUpIcon className="size-3.5 text-emerald-500" />;
+      return <TrendingUpIcon className="size-3.5 text-success" />;
     case "regressing":
-      return <TrendingDownIcon className="size-3.5 text-red-500" />;
+      return <TrendingDownIcon className="size-3.5 text-destructive" />;
     default:
       return <MinusIcon className="size-3.5 text-muted-foreground" />;
   }
@@ -60,11 +60,11 @@ function actionBadgeStyle(action: string): string {
     case "evolve":
       return "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30";
     case "revert":
-      return "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30";
+      return "bg-destructive/15 text-destructive border-destructive/30";
     case "hold":
       return "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30";
     case "explore":
-      return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
+      return "bg-warning/15 text-warning border-warning/30";
     default:
       return "bg-muted text-muted-foreground border-border";
   }
@@ -75,9 +75,9 @@ function severityDotColor(severity: string): string {
     case "info":
       return "bg-blue-500";
     case "warning":
-      return "bg-amber-500";
+      return "bg-warning";
     case "critical":
-      return "bg-red-500";
+      return "bg-destructive";
     default:
       return "bg-muted-foreground";
   }
@@ -90,7 +90,7 @@ function kindBadgeStyle(kind: string): string {
     case "genome_change":
       return "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30";
     case "score_regression":
-      return "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30";
+      return "bg-destructive/15 text-destructive border-destructive/30";
     default:
       return "bg-muted text-muted-foreground border-border";
   }
@@ -105,19 +105,19 @@ function statusLabel(rate: number): string {
 
 function statusStyle(rate: number): string {
   if (rate >= 0.8)
-    return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30";
+    return "bg-success/15 text-success border-success/30";
   if (rate >= 0.6)
     return "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30";
   if (rate >= 0.4)
-    return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
-  return "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30";
+    return "bg-warning/15 text-warning border-warning/30";
+  return "bg-destructive/15 text-destructive border-destructive/30";
 }
 
 function successRateBarColor(rate: number): string {
-  if (rate >= 0.8) return "bg-emerald-500";
+  if (rate >= 0.8) return "bg-success";
   if (rate >= 0.6) return "bg-sky-500";
-  if (rate >= 0.4) return "bg-amber-500";
-  return "bg-red-500";
+  if (rate >= 0.4) return "bg-warning";
+  return "bg-destructive";
 }
 
 function numberOrZero(value: unknown): number {
@@ -338,7 +338,7 @@ export function DriftExplainCard({ agentId }: { agentId?: string }) {
             {t.evolutionExplain.driftTitle}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+        <div className="flex items-center gap-2 text-success">
           <ShieldIcon className="size-4" />
           <span className="text-xs font-medium">
             {t.evolutionExplain.noDriftDetected}
@@ -351,9 +351,9 @@ export function DriftExplainCard({ agentId }: { agentId?: string }) {
   const maxSeverity = data.max_severity;
   const bannerStyle =
     maxSeverity === "critical"
-      ? "bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30"
+      ? "bg-destructive/10 text-destructive border-destructive/30"
       : maxSeverity === "warning"
-        ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+        ? "bg-warning/10 text-warning border-warning/30"
         : "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30";
 
   return (

@@ -125,8 +125,8 @@ export function EvolutionPanel({ status, trigger }: EvolutionPanelProps) {
                   className={cn(
                     "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
                     reactFails > 0
-                      ? "border-amber-300/70 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300"
-                      : "border-emerald-300/70 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300",
+                      ? "border-warning/70 bg-warning/5 text-warning dark:border-warning/30 dark:bg-warning/10 dark:text-warning"
+                      : "border-success/70 bg-success/5 text-success dark:border-success/30 dark:bg-success/10 dark:text-success",
                   )}
                 >
                   <CheckCircle2Icon className="size-3" />
@@ -446,7 +446,7 @@ function LearningList({
                 isDeletingIndex === i && "opacity-40",
               )}
             >
-              <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+              <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-success" />
               <div className="min-w-0 flex-1">
                 <div className="break-words text-sm leading-6">
                   {friendlyLearningLine(line, learningCopy)}

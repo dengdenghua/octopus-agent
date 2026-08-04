@@ -320,7 +320,7 @@ export default function ReflexEditorPage() {
               </CardHeader>
               <CardContent>
                 {test.error ? (
-                  <div className="text-sm text-rose-400">
+                  <div className="text-sm text-destructive">
                     {t.reflexEditor.errorPrefix(test.error)}
                   </div>
                 ) : test.note ? (
@@ -333,8 +333,8 @@ export default function ReflexEditorPage() {
                       className={cn(
                         "font-medium",
                         test.failed === 0
-                          ? "text-emerald-400"
-                          : "text-rose-400",
+                          ? "text-success"
+                          : "text-destructive",
                       )}
                     >
                       {t.reflexEditor.testSummary(
@@ -346,7 +346,7 @@ export default function ReflexEditorPage() {
                     {test.failures.map((f, i) => (
                       <div
                         key={`${f.source_rule_id}-${i}`}
-                        className="font-mono text-xs text-rose-300"
+                        className="font-mono text-xs text-destructive"
                       >
                         {t.reflexEditor.testFailureRow(
                           f.source_rule_id,
@@ -364,7 +364,7 @@ export default function ReflexEditorPage() {
           {initialLoadFailed ? (
             <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
               <CardContent className="flex flex-col items-center gap-3 px-4 py-12 text-center">
-                <FileWarningIcon className="size-8 text-rose-400" />
+                <FileWarningIcon className="size-8 text-destructive" />
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button variant="outline" size="sm" onClick={loadFile}>
                     {t.reflexEditor.reloadFromDisk}
@@ -414,9 +414,9 @@ export default function ReflexEditorPage() {
 function StatusBadge({ msg, kind }: { msg: string; kind: StatusKind }) {
   const cls = {
     idle: "bg-muted/40 text-muted-foreground",
-    ok: "bg-emerald-500/15 text-emerald-300",
-    warn: "bg-amber-500/15 text-amber-300",
-    err: "bg-rose-500/15 text-rose-300",
+    ok: "bg-success/15 text-success",
+    warn: "bg-warning/15 text-warning",
+    err: "bg-destructive/15 text-destructive",
   }[kind];
   return (
     <span

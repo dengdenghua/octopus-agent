@@ -57,7 +57,6 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 import type { DevicePreset } from "../workspace/embedded-browser/browser-context";
-import { LiquidGlass } from "./liquid-glass";
 import {
   BROWSER_HOME_URL,
   SEARCH_ENGINE_URLS,
@@ -510,8 +509,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   }, [addressSuggestions.length, draft]);
 
   return (
-    <LiquidGlass
-      material="dock"
+    <div
       className="flex h-14 min-w-0 items-center gap-1 rounded-none border-x-0 border-border-subtle px-2 sm:gap-2 sm:px-3"
       style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
     >
@@ -557,11 +555,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         <HouseIcon className="size-4" />
       </button>
       <div ref={addressBarRef} className="relative ml-1 min-w-0 flex-1">
-        <LiquidGlass
-          material="input"
-          interactive
-          className="flex h-10 items-center gap-1 rounded-[18px] border-border-subtle px-3 transition-colors focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-primary/12"
-        >
+        <div className="flex h-10 items-center gap-1 rounded-[18px] border-border-subtle px-3 transition-colors focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-primary/12">
           <input
             type="text"
             value={draft}
@@ -596,7 +590,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
               {siteInfoOpen && (
                 <div
                   ref={siteInfoPanelRef}
-                  className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-2 w-[320px] max-w-[calc(100vw-1rem)] rounded-xl p-3 text-popover-foreground"
+                  className="absolute right-0 top-full z-50 mt-2 w-[320px] max-w-[calc(100vw-1rem)] rounded-xl bg-popover p-3 text-popover-foreground shadow-lg"
                 >
                   <div className="flex items-start gap-2.5">
                     <div className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
@@ -647,19 +641,19 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
                 className={cn(
                   "grid size-7 place-items-center rounded-full transition-colors",
                   bookmarked
-                    ? "text-amber-500 hover:bg-amber-500/10"
+                    ? "text-warning hover:bg-warning/10"
                     : "text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
                 )}
                 title={bookmarked ? ub.removeBookmark : ub.addBookmark}
               >
                 <StarIcon
-                  className={cn("size-3.5", bookmarked && "fill-amber-500")}
+                  className={cn("size-3.5", bookmarked && "fill-chart-4")}
                 />
               </button>
             )}
-        </LiquidGlass>
+        </div>
         {suggestionsOpen && addressSuggestions.length > 0 && (
-          <div className="octo-liquid-glass octo-liquid-glass--sheet absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-xl py-1.5 text-popover-foreground">
+          <div className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-xl bg-popover py-1.5 text-popover-foreground shadow-lg">
             {addressSuggestions.map((item, index) => {
               const active = index === suggestionIndex;
               const Icon = item.source === "bookmark" ? StarIcon : ClockIcon;
@@ -688,11 +682,11 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
                     <div className="truncate text-xs font-medium">
                       {item.title || item.url}
                     </div>
-                    <div className="truncate text-[11px] text-muted-foreground">
+                    <div className="truncate text-mini text-muted-foreground">
                       {item.url}
                     </div>
                   </div>
-                  <div className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                  <div className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-micro text-muted-foreground">
                     {item.source === "bookmark"
                       ? ub.bookmarkLabel
                       : ub.historyLabel}
@@ -833,7 +827,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </LiquidGlass>
+    </div>
   );
 }
 
@@ -891,9 +885,9 @@ function BrowserActionsMenu({
   return (
     <div
       ref={ref}
-      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[292px] overflow-hidden rounded-xl p-2 text-popover-foreground"
+      className="absolute right-0 top-full z-50 mt-1 w-[292px] overflow-hidden rounded-xl bg-popover p-2 text-popover-foreground shadow-lg"
     >
-      <div className="px-1.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      <div className="px-1.5 pb-1.5 text-mini font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         {ub.pageActions}
       </div>
       <button
@@ -960,7 +954,7 @@ function BrowserActionsMenu({
       </div>
 
       <div className="mt-2 rounded-xl bg-background/35 p-1">
-        <div className="px-1.5 pb-1.5 text-[11px] font-medium text-muted-foreground">
+        <div className="px-1.5 pb-1.5 text-mini font-medium text-muted-foreground">
           {ub.devicePreview}
         </div>
         <div className="grid grid-cols-3 gap-1">
@@ -1015,7 +1009,7 @@ function BrowserActionsMenu({
         {ub.clearData}
       </button>
       {siteDataStatus && (
-        <div className="mt-1 rounded-lg border border-border-default px-2.5 py-2 text-[11px] text-muted-foreground">
+        <div className="mt-1 rounded-lg border border-border-default px-2.5 py-2 text-mini text-muted-foreground">
           {siteDataStatus}
         </div>
       )}
@@ -1070,14 +1064,14 @@ function DownloadDropdown({
   return (
     <div
       ref={ref}
-      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl text-popover-foreground"
+      className="absolute right-0 top-full z-50 mt-1 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-lg"
     >
       <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <DownloadIcon className="size-4" />
           {title}
         </div>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-mini text-muted-foreground">
           {downloads.length > 0
             ? ub.downloadCount(downloads.length)
             : ub.noDownloads}
@@ -1110,7 +1104,7 @@ function DownloadDropdown({
                     className={cn(
                       "mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg",
                       completed
-                        ? "bg-emerald-500/10 text-emerald-600"
+                        ? "bg-success/10 text-success"
                         : failed
                           ? "bg-destructive/10 text-destructive"
                           : "bg-primary/10 text-primary",
@@ -1128,7 +1122,7 @@ function DownloadDropdown({
                     <div className="truncate text-xs font-medium">
                       {item.filename || ub.unnamedDownload}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    <div className="mt-0.5 truncate text-mini text-muted-foreground">
                       {completed
                         ? ub.downloadCompleted
                         : failed
@@ -1155,7 +1149,7 @@ function DownloadDropdown({
                       onClick={() =>
                         void window.octopus?.browser.openDownload(item.id)
                       }
-                      className="rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                      className="rounded-md px-2 py-1 text-mini text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                     >
                       {ub.openFile}
                     </button>
@@ -1165,7 +1159,7 @@ function DownloadDropdown({
                           item.id,
                         )
                       }
-                      className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-mini text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                     >
                       <FolderOpenIcon className="size-3" />
                       {ub.openFolder}
@@ -1211,7 +1205,7 @@ function HistoryDropdown({
   return (
     <div
       ref={ref}
-      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[420px] max-w-[calc(100vw-1rem)] rounded-lg"
+      className="absolute right-0 top-full z-50 mt-1 w-[420px] max-w-[calc(100vw-1rem)] rounded-lg bg-popover text-popover-foreground shadow-lg"
     >
       <div className="flex items-center justify-between border-b">
         <div className="flex">
@@ -1243,7 +1237,7 @@ function HistoryDropdown({
         {tab === "history" && history.length > 0 && (
           <button
             onClick={onClearHistory}
-            className="mr-2 flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-destructive"
+            className="mr-2 flex items-center gap-1 rounded px-2 py-0.5 text-micro text-muted-foreground hover:bg-muted hover:text-destructive"
             title={ub.clearHistoryTitle}
           >
             <Trash2Icon className="size-3" />
@@ -1282,7 +1276,7 @@ function HistoryDropdown({
                   <div className="truncate text-xs font-medium">
                     {item.title || item.url}
                   </div>
-                  <div className="truncate text-[10px] text-muted-foreground">
+                  <div className="truncate text-micro text-muted-foreground">
                     {item.url}
                   </div>
                 </button>

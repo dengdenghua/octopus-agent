@@ -339,7 +339,7 @@ export default function ReplayPage() {
               </div>
             </div>
             {lastApplyResult && (
-              <div className="mt-3 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+              <div className="mt-3 rounded-md border border-success/25 bg-success/10 px-3 py-2 text-xs text-success">
                 {lastApplyResult}
               </div>
             )}
@@ -477,7 +477,7 @@ function ReplayCasesTable({
                   className={cn(
                     "text-xs",
                     item.replay.replayable
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      ? "border-success/30 bg-success/10 text-success"
                       : "border-muted bg-muted/20 text-muted-foreground",
                   )}
                 >
@@ -558,7 +558,7 @@ function ReplayEvaluationsTable({
                   className={cn(
                     "text-xs",
                     item.passed
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      ? "border-success/30 bg-success/10 text-success"
                       : "border-destructive/30 bg-destructive/10 text-destructive",
                   )}
                 >
@@ -577,7 +577,7 @@ function ReplayEvaluationsTable({
                       className={cn(
                         "text-xs",
                         check.passed
-                          ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300"
+                          ? "border-success/25 bg-success/5 text-success"
                           : "border-destructive/25 bg-destructive/5 text-destructive",
                       )}
                       title={check.description}

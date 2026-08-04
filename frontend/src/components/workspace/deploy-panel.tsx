@@ -163,7 +163,7 @@ const PROVIDER_META: Record<
 > = {
   vercel: { icon: CloudIcon, label: "Vercel", color: "text-blue-500" },
   docker: { icon: ContainerIcon, label: "Docker", color: "text-cyan-500" },
-  static: { icon: GlobeIcon, label: "Static Preview", color: "text-green-500" },
+  static: { icon: GlobeIcon, label: "Static Preview", color: "text-success" },
 };
 
 const STATE_DISPLAY: Record<
@@ -177,7 +177,7 @@ const STATE_DISPLAY: Record<
   },
   detecting: {
     label: "Detecting...",
-    color: "text-yellow-500",
+    color: "text-warning",
     icon: Loader2Icon,
   },
   building: { label: "Building...", color: "text-blue-500", icon: Loader2Icon },
@@ -186,8 +186,8 @@ const STATE_DISPLAY: Record<
     color: "text-blue-500",
     icon: Loader2Icon,
   },
-  ready: { label: "Ready", color: "text-green-500", icon: CheckCircle2Icon },
-  error: { label: "Error", color: "text-red-500", icon: AlertTriangleIcon },
+  ready: { label: "Ready", color: "text-success", icon: CheckCircle2Icon },
+  error: { label: "Error", color: "text-destructive", icon: AlertTriangleIcon },
   cancelled: {
     label: "Cancelled",
     color: "text-muted-foreground",
@@ -588,7 +588,7 @@ export function DeployPanel({
       <div className="flex-1 overflow-auto px-4 py-3">
         {/* Error banner */}
         {error && (
-          <div className="text-destructive mb-3 flex items-start gap-2 rounded-lg border border-red-200/60 bg-red-50/80 p-2 text-xs dark:border-red-800/60 dark:bg-red-950/80">
+          <div className="text-destructive mb-3 flex items-start gap-2 rounded-lg border border-destructive/30/60 bg-destructive/5 p-2 text-xs dark:border-destructive/60">
             <AlertTriangleIcon className="size-3.5 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -763,19 +763,19 @@ export function DeployPanel({
 
                 {/* Deployment URL */}
                 {currentDeploy.url && (
-                  <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
-                    <GlobeIcon className="size-4 shrink-0 text-green-600" />
+                  <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/5 p-3">
+                    <GlobeIcon className="size-4 shrink-0 text-success" />
                     <a
                       href={currentDeploy.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 truncate text-xs font-medium text-green-700 underline decoration-green-400 dark:text-green-400"
+                      className="flex-1 truncate text-xs font-medium text-success underline decoration-green-400 dark:text-success"
                     >
                       {currentDeploy.url}
                     </a>
                     <button
                       onClick={handleCopyUrl}
-                      className="shrink-0 rounded p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900"
+                      className="shrink-0 rounded p-1 text-success hover:bg-success/10 dark:hover:bg-success"
                       title="Copy URL"
                     >
                       <CopyIcon className="size-3.5" />
@@ -784,7 +784,7 @@ export function DeployPanel({
                       href={currentDeploy.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 rounded p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900"
+                      className="shrink-0 rounded p-1 text-success hover:bg-success/10 dark:hover:bg-success"
                       title="Open in browser"
                     >
                       <ExternalLinkIcon className="size-3.5" />
@@ -794,7 +794,7 @@ export function DeployPanel({
 
                 {/* Error message */}
                 {currentDeploy.error && (
-                  <div className="text-destructive rounded-lg border border-red-200/60 bg-red-50/80 p-2 text-xs dark:border-red-800/60 dark:bg-red-950/80">
+                  <div className="text-destructive rounded-lg border border-destructive/30/60 bg-destructive/5 p-2 text-xs dark:border-destructive/60">
                     {currentDeploy.error}
                   </div>
                 )}

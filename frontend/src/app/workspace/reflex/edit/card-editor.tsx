@@ -336,8 +336,8 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
           <span
             className={cn(
               "ml-auto rounded-md px-2.5 py-1 font-mono text-xs",
-              status.kind === "ok" && "bg-emerald-500/15 text-emerald-300",
-              status.kind === "err" && "bg-rose-500/15 text-rose-300",
+              status.kind === "ok" && "bg-success/15 text-success",
+              status.kind === "err" && "bg-destructive/15 text-destructive",
               status.kind === "idle" && "bg-muted/40 text-muted-foreground",
             )}
           >
@@ -447,7 +447,7 @@ function RuleCard({
             className="flex-1 rounded-md border border-border-default bg-background px-3 py-1.5 font-mono text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
           />
           {readOnly && (
-            <span className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-300">
+            <span className="flex items-center gap-1 rounded-md bg-warning/15 px-2 py-0.5 text-xs text-warning">
               <LockIcon className="size-3" />
               {t.reflexEditor.cardAdvancedBadge}
             </span>
@@ -457,7 +457,7 @@ function RuleCard({
             variant="ghost"
             onClick={onDelete}
             disabled={readOnly}
-            className="text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
           >
             <Trash2Icon className="size-4" />
           </Button>
@@ -522,7 +522,7 @@ function RuleCard({
               ))}
             </div>
             {card.reply_source === "workflow" && (
-              <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs text-amber-300">
+              <span className="rounded-md bg-warning/15 px-2 py-0.5 text-xs text-warning">
                 {t.reflexEditor.replySource_slowHint}
               </span>
             )}
@@ -795,7 +795,7 @@ function WebhookFields({
                   onChange({ headers: next });
                 }}
                 aria-label="Delete header"
-                className="rounded-md px-2 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 disabled:cursor-not-allowed"
+                className="rounded-md px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed"
               >
                 ×
               </Button>

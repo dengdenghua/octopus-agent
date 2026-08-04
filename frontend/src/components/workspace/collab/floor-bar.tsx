@@ -35,7 +35,7 @@ export function FloorBar() {
         className={cn(
           "font-medium",
           isMyTurn
-            ? "text-emerald-600 dark:text-emerald-400"
+            ? "text-success"
             : "text-muted-foreground",
         )}
       >

@@ -19,22 +19,22 @@ import { cn } from "@/lib/utils";
 import type { LedgerRecord } from "@/core/evolution/api";
 
 const STATUS_DOT_COLOR: Record<string, string> = {
-  applied: "bg-emerald-500",
-  pending: "bg-amber-500",
-  rolled_back: "bg-red-500",
+  applied: "bg-success",
+  pending: "bg-warning",
+  rolled_back: "bg-destructive",
   rejected: "bg-muted-foreground",
 };
 
 const CANARY_PHASE_STYLE: Record<string, string> = {
   shadow: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
   canary_5:
-    "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+    "bg-warning/15 text-warning border-warning/30",
   canary_25:
-    "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+    "bg-warning/15 text-warning border-warning/30",
   canary_50:
-    "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
-  full: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-  rolled_back: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
+    "bg-warning/15 text-warning border-warning/30",
+  full: "bg-success/15 text-success border-success/30",
+  rolled_back: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 function canaryPhaseStyle(phase: string): string {
@@ -93,7 +93,7 @@ function FitnessDiffCard({ before, after }: { before: number; after: number }) {
             <div
               className={cn(
                 "h-full rounded-full",
-                improved ? "bg-emerald-500" : "bg-red-500",
+                improved ? "bg-success" : "bg-destructive",
               )}
               style={{ width: `${Math.max((safeAfter / maxVal) * 100, 2)}%` }}
             />
@@ -155,7 +155,7 @@ function TimelineNode({
             </span>
             {canaryPhase && <CanaryStatusBadge phase={canaryPhase} />}
             {record.status === "rolled_back" && (
-              <AlertTriangleIcon className="size-3 text-red-500" />
+              <AlertTriangleIcon className="size-3 text-destructive" />
             )}
             <span className="ml-auto text-xs text-muted-foreground tabular-nums">
               {new Date(record.ts).toLocaleString()}
@@ -198,8 +198,8 @@ function TimelineNode({
           className={cn(
             "shrink-0 flex items-center gap-0.5 text-xs font-medium tabular-nums pt-2",
             improved
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-red-600 dark:text-red-400",
+              ? "text-success"
+              : "text-destructive",
           )}
         >
           {improved ? (

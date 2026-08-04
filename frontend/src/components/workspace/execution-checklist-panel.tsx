@@ -185,7 +185,7 @@ function buildSteps(
 
 function StepIcon({ status }: { status: StepStatus }) {
   if (status === "completed") {
-    return <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />;
+    return <CheckCircle2Icon className="size-4 shrink-0 text-success" />;
   }
   if (status === "in_progress") {
     return (

@@ -35,10 +35,10 @@ type LevelFilter = "all" | "error" | "warning" | "info";
 
 function levelIcon(level: PreviewDiagnostic["level"]): React.ReactNode {
   if (level === "error") {
-    return <AlertCircleIcon className="size-3.5 text-rose-500" />;
+    return <AlertCircleIcon className="size-3.5 text-destructive" />;
   }
   if (level === "warning") {
-    return <AlertTriangleIcon className="size-3.5 text-amber-500" />;
+    return <AlertTriangleIcon className="size-3.5 text-warning" />;
   }
   return <InfoIcon className="size-3.5 text-muted-foreground" />;
 }
@@ -82,8 +82,8 @@ export function PreviewConsole({
           disabled={!hasEntries}
           className={cn(
             "flex items-center gap-1 text-xs font-medium transition-colors",
-            hasError && "text-rose-600 dark:text-rose-400",
-            !hasError && hasEntries && "text-amber-600 dark:text-amber-400",
+            hasError && "text-destructive",
+            !hasError && hasEntries && "text-warning",
             !hasEntries && "text-muted-foreground",
             hasEntries && "hover:text-foreground cursor-pointer",
             !hasEntries && "cursor-default",

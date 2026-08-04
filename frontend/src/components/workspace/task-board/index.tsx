@@ -86,18 +86,18 @@ const COLUMN_CONFIG: Record<
     icon: <ClockIcon className="size-3.5" />,
   },
   running: {
-    color: "text-amber-600 dark:text-amber-400",
-    bgColor: "bg-amber-500/5 border-amber-500/20",
+    color: "text-warning",
+    bgColor: "bg-warning/5 border-warning/20",
     icon: <Loader2Icon className="size-3.5 animate-spin" />,
   },
   completed: {
-    color: "text-emerald-600 dark:text-emerald-400",
-    bgColor: "bg-emerald-500/5 border-emerald-500/20",
+    color: "text-success",
+    bgColor: "bg-success/5 border-success/20",
     icon: <CheckCircle2Icon className="size-3.5" />,
   },
   failed: {
-    color: "text-red-600 dark:text-red-400",
-    bgColor: "bg-red-500/5 border-red-500/20",
+    color: "text-destructive",
+    bgColor: "bg-destructive/5 border-destructive/20",
     icon: <AlertCircleIcon className="size-3.5" />,
   },
 };
@@ -585,7 +585,7 @@ export function TaskBoard({
       {tasksError && viewMode !== "schedules" && (
         <div
           role="alert"
-          className="ui-density-panel flex flex-col items-start justify-between gap-3 rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-600 dark:text-red-400 sm:flex-row sm:items-center"
+          className="ui-density-panel flex flex-col items-start justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 text-sm text-destructive sm:flex-row sm:items-center"
         >
           <span className="flex items-center gap-2">
             <AlertCircleIcon className="size-4 shrink-0" />

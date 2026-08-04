@@ -108,7 +108,7 @@ function TodoRow({ item, live }: { item: TodoItem; live: boolean }) {
     item.status !== "completed" && !live ? "interrupted" : item.status;
   const icon =
     displayStatus === "completed" ? (
-      <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />
+      <CheckCircle2Icon className="size-4 shrink-0 text-success" />
     ) : displayStatus === "interrupted" ? (
       <XCircleIcon className="size-4 shrink-0 text-destructive" />
     ) : displayStatus === "in_progress" ? (
@@ -235,7 +235,7 @@ export function TodoPanel({
       >
         <div className="h-1 overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full bg-emerald-500 transition-all duration-300"
+            className="h-full bg-success transition-all duration-300"
             style={{ width: `${percent}%` }}
           />
         </div>

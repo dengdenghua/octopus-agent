@@ -347,7 +347,7 @@ function SkillCard({
           <div className="truncate text-sm font-medium">{skill.name}</div>
           {tested && (
             <span title={t.skillsPage.testedDotTitle}>
-              <CheckCircle2Icon className="size-3.5 shrink-0 text-emerald-500" />
+              <CheckCircle2Icon className="size-3.5 shrink-0 text-success" />
             </span>
           )}
           {(skill.market_visibility ?? "market") !== "market" && (
@@ -387,7 +387,7 @@ function SkillCard({
           title={isEnabled ? "点击禁用" : "点击启用"}
         >
           {isEnabled ? (
-            <ToggleRightIcon className="size-5 text-emerald-500" />
+            <ToggleRightIcon className="size-5 text-success" />
           ) : (
             <ToggleLeftIcon className="size-5 text-muted-foreground" />
           )}

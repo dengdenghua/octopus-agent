@@ -25,8 +25,8 @@ const CATEGORY_STYLE_MAP: Record<
     icon: "🤖",
   },
   coder: {
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-600 dark:text-emerald-400",
+    bg: "bg-success/10",
+    text: "text-success",
     icon: "💻",
   },
   researcher: {
@@ -35,13 +35,13 @@ const CATEGORY_STYLE_MAP: Record<
     icon: "🔬",
   },
   creative: {
-    bg: "bg-amber-500/10",
-    text: "text-amber-600 dark:text-amber-400",
+    bg: "bg-warning/10",
+    text: "text-warning",
     icon: "🎨",
   },
   automation: {
-    bg: "bg-rose-500/10",
-    text: "text-rose-600 dark:text-rose-400",
+    bg: "bg-destructive/10",
+    text: "text-destructive",
     icon: "⚡",
   },
   specialist: {
@@ -141,7 +141,7 @@ export function RegistryAssetCard({
       )}
     >
       {featured && (
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500/60 via-primary/40 to-violet-500/60" />
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-warning/60 via-primary/40 to-violet-500/60" />
       )}
       <CardHeader className="flex flex-1 flex-col px-3 pb-2 pt-3">
         <div className="flex items-start gap-2">
@@ -169,7 +169,7 @@ export function RegistryAssetCard({
           <div className="mt-2">
             <Badge
               variant="secondary"
-              className={cn("text-[10px] font-medium", style.bg, style.text)}
+              className={cn("text-micro font-medium", style.bg, style.text)}
             >
               {categoryLabel}
             </Badge>

@@ -905,11 +905,11 @@ function ModelSettingsOverview({
             className={cn(
               "mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
               gatewayStatus === "connected" &&
-                "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+                "bg-success/10 text-success dark:bg-success/20 dark:text-success",
               gatewayStatus === "checking" &&
                 "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
               gatewayStatus === "disconnected" &&
-                "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+                "bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive",
             )}
           >
             {gatewayLabel}
@@ -1517,7 +1517,7 @@ export default function ModelSettingsPage() {
                       key={modelId}
                       className={cn(
                         "flex flex-col items-stretch justify-between gap-4 px-4 py-4 sm:flex-row sm:items-start sm:px-5",
-                        isDefault && "bg-emerald-500/[0.035]",
+                        isDefault && "bg-success/50/[0.035]",
                       )}
                     >
                       <div className="min-w-0 flex-1">
@@ -1565,7 +1565,7 @@ export default function ModelSettingsPage() {
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center justify-start gap-x-3 gap-y-2 sm:max-w-64 sm:justify-end">
                         {isDefault ? (
-                          <span className="inline-flex items-center rounded-lg bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-500/20 dark:text-green-400">
+                          <span className="inline-flex items-center rounded-lg bg-success/10 px-3 py-1 text-xs font-medium text-success dark:bg-success/20 dark:text-success">
                             {t.settings.model.systemDefault}
                           </span>
                         ) : (
@@ -1743,7 +1743,7 @@ export default function ModelSettingsPage() {
                 : ""}
             </DialogDescription>
             {deletingCurrentDefault && (
-              <div className="mt-2 flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs leading-5 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
+              <div className="mt-2 flex gap-2 rounded-md border border-warning/30 bg-warning/5 p-2.5 text-xs leading-5 text-warning dark:border-warning/25 dark:bg-warning/10 dark:text-warning">
                 <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
                 <span>{pageCopy.deletingDefault(deleteReplacement)}</span>
               </div>
@@ -1847,7 +1847,7 @@ function LocalVisionSection() {
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-card/40 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <span className={cn("size-2 rounded-full", enabled ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+            <span className={cn("size-2 rounded-full", enabled ? "bg-success" : "bg-muted-foreground/40")} />
             {enabled ? "已启用" : downloaded ? "已下载，未启用" : "尚未下载"}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -1941,9 +1941,9 @@ function GatewayDiagnosticsSection({
               className={cn(
                 "inline-flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-medium",
                 gatewayStatus === "connected" &&
-                  "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",
+                  "bg-success/10 text-success dark:bg-success/20 dark:text-success",
                 gatewayStatus === "disconnected" &&
-                  "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+                  "bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive",
                 gatewayStatus === "checking" &&
                   "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
               )}
@@ -2075,7 +2075,7 @@ function BuiltInCompatProfilesCard({
           </div>
         ) : catalog.status === "error" && catalog.items.length === 0 ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <AlertTriangleIcon className="size-4 text-amber-500" />
+            <AlertTriangleIcon className="size-4 text-warning" />
             {copy.compatProfilesUnavailable}
           </div>
         ) : (
@@ -2178,7 +2178,7 @@ function CompatDiagnosticSummary({
   if (!diagnostic) {
     return status === "error" ? (
       <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-        <AlertTriangleIcon className="size-3.5 text-amber-500" />
+        <AlertTriangleIcon className="size-3.5 text-warning" />
         {t.settings.model.compatDiagnostics.unavailable}
       </div>
     ) : null;
@@ -2229,7 +2229,7 @@ function CompatDiagnosticSummary({
     <div className="mt-3 min-w-0 max-w-full space-y-2 overflow-hidden border-l border-border pl-3 text-xs text-muted-foreground">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center gap-1 font-medium text-foreground/80">
-          <CheckCircle2Icon className="size-3.5 text-emerald-500" />
+          <CheckCircle2Icon className="size-3.5 text-success" />
           {t.settings.model.compatDiagnostics.title}
         </span>
         {profiles.length > 0 && (
@@ -2422,7 +2422,7 @@ function OfficialModelsSection() {
                   {upstream.display_name || upstream.id}
                 </span>
                 {upstream.recommended && (
-                  <span className="rounded border border-emerald-500/40 px-1.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="rounded border border-success/40 px-1.5 py-0.5 text-xs font-medium text-success">
                     {t.modelPicker.recommended}
                   </span>
                 )}
@@ -2924,8 +2924,8 @@ function EditModelForm({
               )}
               {testStatus === "success" && (
                 <>
-                  <CheckCircle2Icon className="h-4 w-4 text-green-500" />
-                  <span className="text-green-500">
+                  <CheckCircle2Icon className="h-4 w-4 text-success" />
+                  <span className="text-success">
                     {testMessage}
                     {testLatency != null ? ` (${testLatency}ms)` : ""}
                   </span>
@@ -3165,7 +3165,7 @@ function AddModelForm({
         void handleSave();
       }}
     >
-      <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
+      <div className="flex items-center gap-2 rounded-lg bg-warning/10 border border-warning/30 px-3 py-2 text-sm text-warning">
         <AlertTriangleIcon className="h-4 w-4 shrink-0" />
         <span>{t.settings.model.externalModelRisk}</span>
       </div>
@@ -3473,8 +3473,8 @@ function AddModelForm({
           )}
           {testStatus === "success" && (
             <>
-              <CheckCircle2Icon className="h-4 w-4 text-green-500" />
-              <span className="text-green-500">
+              <CheckCircle2Icon className="h-4 w-4 text-success" />
+              <span className="text-success">
                 {testMessage}
                 {testLatency != null ? ` (${testLatency}ms)` : ""}
               </span>
@@ -3654,7 +3654,7 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
               <Loader2Icon className="size-3.5 animate-spin text-blue-500" />
             )}
             {scanStatus === "done" && services.length > 0 && (
-              <span className="inline-flex items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-400">
+              <span className="inline-flex items-center rounded-md border border-success/30 bg-success/5 px-1.5 py-0.5 text-xs font-medium text-success dark:border-success/40 dark:bg-success/10 dark:text-success">
                 {t.settings.model.localModels.modelsCount(services.length)}
               </span>
             )}
@@ -3711,12 +3711,12 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
                           {svc.base_url}
                         </code>
                         {svc.status === "ok" && (
-                          <span className="inline-flex shrink-0 items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-400">
+                          <span className="inline-flex shrink-0 items-center rounded-md border border-success/30 bg-success/5 px-1.5 py-0.5 text-xs font-medium text-success dark:border-success/40 dark:bg-success/10 dark:text-success">
                             {t.settings.model.localModels.serviceStatus.ok}
                           </span>
                         )}
                         {svc.status === "empty" && (
-                          <span className="inline-flex shrink-0 items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
+                          <span className="inline-flex shrink-0 items-center rounded-md border border-warning/30 bg-warning/5 px-1.5 py-0.5 text-xs font-medium text-warning dark:border-warning/40 dark:bg-warning/10 dark:text-warning">
                             {t.settings.model.localModels.serviceStatus.empty}
                           </span>
                         )}

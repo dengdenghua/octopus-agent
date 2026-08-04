@@ -67,16 +67,16 @@ const EVENT_STYLE: Record<string, { icon: React.ReactNode; color: string }> = {
   },
   react_checkpoint: {
     icon: <CpuIcon className="size-3.5" />,
-    color: "bg-amber-500",
+    color: "bg-warning",
   },
-  immune: { icon: <ZapIcon className="size-3.5" />, color: "bg-rose-500" },
+  immune: { icon: <ZapIcon className="size-3.5" />, color: "bg-destructive" },
   budget_squirt: {
     icon: <ClockIcon className="size-3.5" />,
     color: "bg-orange-500",
   },
   reflex_hit: {
     icon: <ZapIcon className="size-3.5" />,
-    color: "bg-emerald-500",
+    color: "bg-success",
   },
 };
 
@@ -317,7 +317,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.final_answer && (
-                              <div className="mt-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-400">
+                              <div className="mt-1 rounded-lg bg-success/10 px-2.5 py-1.5 text-xs text-success">
                                 {stripTraceLabelPrefixes(ev.final_answer).slice(
                                   0,
                                   200,
@@ -325,7 +325,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.error && (
-                              <div className="mt-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs text-rose-400">
+                              <div className="mt-1 rounded-lg bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
                                 {ev.error.slice(0, 200)}
                               </div>
                             )}

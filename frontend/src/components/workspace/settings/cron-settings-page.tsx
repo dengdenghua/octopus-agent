@@ -237,7 +237,7 @@ export function CronSettingsPage() {
           ) : needsAuth ? (
             <div
               role="alert"
-              className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-3 text-sm text-amber-700 dark:text-amber-300"
+              className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/5 px-3 py-3 text-sm text-warning"
             >
               <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
               {t.cronSettings.needsAuth}
@@ -287,7 +287,7 @@ export function CronSettingsPage() {
                     </div>
                   )}
                   {job.last_output && (
-                    <div className="mt-0.5 line-clamp-3 break-all pl-6 font-mono text-[11px] text-muted-foreground/70">
+                    <div className="mt-0.5 line-clamp-3 break-all pl-6 font-mono text-mini text-muted-foreground/70">
                       {job.last_output}
                     </div>
                   )}

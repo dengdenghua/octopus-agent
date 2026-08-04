@@ -16,7 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CopilotPanel } from "@/components/browser/copilot-panel";
-import { LiquidGlass } from "@/components/browser/liquid-glass";
+
 import { TabBar } from "@/components/browser/tab-bar";
 import { UrlBar } from "@/components/browser/url-bar";
 import {
@@ -377,8 +377,7 @@ function BrowserShell() {
       {/* Implementation note. */}
       <div className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="relative z-[80] shrink-0">
-          <LiquidGlass
-            material="dock"
+          <div
             className="flex h-11 shrink-0 items-center gap-0.5 rounded-none border-x-0 border-t-0 border-border-subtle px-1.5"
             style={
               {
@@ -435,7 +434,7 @@ function BrowserShell() {
             >
               <MenuIcon className="size-3.5" />
             </button>
-          </LiquidGlass>
+          </div>
 
           {/* URL bar */}
           <UrlBar
@@ -610,12 +609,11 @@ function BrowserSidePanel({
   }, [activeTab, closeTab, state.tabs]);
 
   return (
-    <LiquidGlass
-      material="sheet"
+    <div
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        "absolute right-3 top-[6.75rem] z-[40] hidden h-[calc(100vh-7.5rem)] w-[280px] flex-col rounded-2xl px-3 py-3 transition-[opacity,transform] duration-160 md:flex",
+        "absolute right-3 top-[6.75rem] z-[40] hidden h-[calc(100vh-7.5rem)] w-[280px] flex-col rounded-2xl bg-popover px-3 py-3 text-popover-foreground shadow-lg transition-[opacity,transform] duration-160 md:flex",
         open ? "pointer-events-auto" : "pointer-events-none",
       )}
       style={{
@@ -631,18 +629,18 @@ function BrowserSidePanel({
           } as React.CSSProperties
         }
       >
-        <div className="octo-liquid-glass octo-liquid-glass--thin grid size-7 place-items-center text-foreground">
+        <div className="grid size-7 place-items-center bg-muted text-foreground">
           <MenuIcon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">{t.browser.pageTitle}</div>
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-mini text-muted-foreground">
             {t.browser.pageSubtitle(pinned)}
           </div>
         </div>
       </div>
 
-      <div className="octo-liquid-glass octo-liquid-glass--input mt-4 flex h-9 items-center gap-2 rounded-full px-3 text-xs text-muted-foreground">
+      <div className="mt-4 flex h-9 items-center gap-2 rounded-full bg-muted px-3 text-xs text-muted-foreground">
         <SearchIcon className="size-4 shrink-0" />
         <input
           value={query}
@@ -654,7 +652,7 @@ function BrowserSidePanel({
       </div>
 
       {activeTab && (
-        <div className="octo-liquid-glass octo-liquid-glass--card mt-3 rounded-2xl p-2.5">
+        <div className="mt-3 rounded-2xl bg-card p-2.5">
           <div className="flex items-start gap-2">
             {activeTab.favicon ? (
               <img
@@ -672,7 +670,7 @@ function BrowserSidePanel({
               <div className="truncate text-xs font-semibold text-foreground">
                 {activeTabLabel}
               </div>
-              <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              <div className="mt-0.5 truncate text-mini text-muted-foreground">
                 {activeTabUrl}
               </div>
             </div>
@@ -682,7 +680,7 @@ function BrowserSidePanel({
               type="button"
               disabled={!canCopyActiveUrl}
               onClick={() => copyText(activeTabUrl, "url")}
-              className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+              className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-mini font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
             >
               <CopyIcon className="size-3.5" />
               {copiedField === "url"
@@ -692,7 +690,7 @@ function BrowserSidePanel({
             <button
               type="button"
               onClick={() => copyText(activeTabLabel, "title")}
-              className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-mini font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <CopyIcon className="size-3.5" />
               {copiedField === "title"
@@ -702,7 +700,7 @@ function BrowserSidePanel({
             <button
               type="button"
               onClick={() => openTab(activeTabUrl)}
-              className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-mini font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <PlusIcon className="size-3.5" />
               {t.browser.copy.tabMenuItem}
@@ -711,7 +709,7 @@ function BrowserSidePanel({
               type="button"
               disabled={state.tabs.length <= 1}
               onClick={closeOtherTabs}
-              className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+              className="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-muted/60 px-2 text-mini font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
             >
               <XIcon className="size-3.5" />
               {t.browser.menu.closeOtherTabs}
@@ -720,7 +718,7 @@ function BrowserSidePanel({
         </div>
       )}
 
-      <div className="octo-liquid-glass octo-liquid-glass--thin mt-3 grid grid-cols-3 rounded-xl p-1 text-[11px] font-medium text-muted-foreground">
+      <div className="mt-3 grid grid-cols-3 rounded-xl bg-muted p-1 text-mini font-medium text-muted-foreground">
         {[
           { id: "tabs", label: t.browser.tabs.label, icon: MenuIcon },
           { id: "history", label: t.browser.tabs.recent, icon: ClockIcon },
@@ -744,7 +742,7 @@ function BrowserSidePanel({
             >
               <Icon className="size-3.5" />
               <span>{item.label}</span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-micro text-muted-foreground">
                 {panelCounts[item.id as keyof typeof panelCounts]}
               </span>
             </button>
@@ -801,7 +799,7 @@ function BrowserSidePanel({
                   {tab.title || tab.url}
                 </span>
                 {tab.device !== "desktop" && (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-micro uppercase text-muted-foreground">
                     {tab.device}
                   </span>
                 )}
@@ -845,7 +843,7 @@ function BrowserSidePanel({
                 <span className="block truncate text-xs font-medium text-foreground">
                   {item.title || item.url}
                 </span>
-                <span className="block truncate text-[11px]">{item.url}</span>
+                <span className="block truncate text-mini">{item.url}</span>
               </span>
             </button>
           ))}
@@ -868,13 +866,13 @@ function BrowserSidePanel({
                   }}
                 />
               ) : (
-                <StarIcon className="size-4 shrink-0 text-amber-500" />
+                <StarIcon className="size-4 shrink-0 text-warning" />
               )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-medium text-foreground">
                   {item.title || item.url}
                 </span>
-                <span className="block truncate text-[11px]">{item.url}</span>
+                <span className="block truncate text-mini">{item.url}</span>
               </span>
             </button>
           ))}
@@ -888,12 +886,12 @@ function BrowserSidePanel({
       <button
         type="button"
         onClick={() => openTab()}
-        className="octo-liquid-glass octo-liquid-glass--thin octo-liquid-glass--interactive mt-3 flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-medium text-foreground"
+        className="mt-3 flex h-10 items-center justify-center gap-2 rounded-xl bg-muted text-sm font-medium text-foreground"
       >
         <PlusIcon className="size-4" />
         {t.browser.newTabPage}
       </button>
-    </LiquidGlass>
+    </div>
   );
 }
 

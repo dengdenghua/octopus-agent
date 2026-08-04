@@ -27,7 +27,7 @@ export function getChecklistPlanFromMessage(message: {
 function StepIcon({ status }: { status: ExecutionPlanStep["status"] }) {
   switch (status) {
     case "completed":
-      return <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />;
+      return <CheckCircle2Icon className="size-4 shrink-0 text-success" />;
     case "in_progress":
       return (
         <Loader2Icon className="size-4 shrink-0 animate-spin text-primary" />

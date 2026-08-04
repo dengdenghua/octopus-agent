@@ -999,7 +999,7 @@ export default function ComputerAutomationPage() {
           <section className="workspace-panel flex flex-col gap-4 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex size-11 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-[var(--shadow-xs)]">
+                <div className="flex size-11 items-center justify-center rounded-lg bg-success text-white shadow-[var(--shadow-xs)]">
                   <MonitorCheckIcon className="size-5" />
                 </div>
                 <div>
@@ -1094,7 +1094,7 @@ export default function ComputerAutomationPage() {
             {status && <RuntimeReadinessPanel status={status} />}
 
             {computerUnavailable && status && (
-              <div className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
+              <div className="rounded-lg border border-warning/70 bg-warning/5 px-4 py-3 text-sm leading-6 text-warning dark:border-warning/60">
                 <div className="flex items-start gap-2">
                   <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" />
                   <div>
@@ -1112,7 +1112,7 @@ export default function ComputerAutomationPage() {
                         {runtimeState.actions.map((action) => (
                           <span
                             key={action}
-                            className="rounded-md border border-amber-300/80 px-2 py-0.5 font-mono text-xs dark:border-amber-800"
+                            className="rounded-md border border-warning/80 px-2 py-0.5 font-mono text-xs"
                           >
                             {action}
                           </span>
@@ -1263,10 +1263,10 @@ export default function ComputerAutomationPage() {
                         className={cn(
                           "size-1.5 rounded-full",
                           pcStream.isConnected
-                            ? "bg-emerald-500"
+                            ? "bg-success"
                             : pcScreenError
                               ? "bg-destructive"
-                              : "bg-amber-500",
+                              : "bg-warning",
                         )}
                       />
                       <span>{liveScreenDetail}</span>
@@ -1380,7 +1380,7 @@ export default function ComputerAutomationPage() {
                           className={cn(
                             "rounded-lg border border-border bg-background/70 p-3 transition-colors",
                             highlightedAction === item.action &&
-                              "border-emerald-300 bg-emerald-50/60 dark:border-emerald-900/70 dark:bg-emerald-950/20",
+                              "border-success/40 bg-success/5 dark:border-success/70",
                           )}
                           onMouseEnter={() => setHighlightedAction(item.action)}
                           onMouseLeave={() => setHighlightedAction(null)}
@@ -1490,7 +1490,7 @@ export default function ComputerAutomationPage() {
                       </span>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs leading-5 text-warning dark:border-warning/60">
                       <span>
                         {modelsError
                           ? tc("Could not load the model list. You can enter a model ID manually.")
@@ -1613,7 +1613,7 @@ export default function ComputerAutomationPage() {
                       className={cn(
                         "rounded-lg border p-3 text-sm",
                         preview.risk.level === "high"
-                          ? "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"
+                          ? "border-warning/40 bg-warning/5 text-warning"
                           : "border-border bg-background",
                       )}
                     >
@@ -1627,7 +1627,7 @@ export default function ComputerAutomationPage() {
                       </pre>
                       <MatchedControlSummary action={preview.action} />
                       {leaseBlocked ? (
-                        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
+                        <div className="mt-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-xs leading-5 text-warning dark:border-warning/60">
                           {leaseState.detail}
                         </div>
                       ) : null}
@@ -1677,8 +1677,8 @@ export default function ComputerAutomationPage() {
                           <CheckCircle2Icon
                             className={cn(
                               "size-4",
-                              item.tone === "ok" && "text-emerald-500",
-                              item.tone === "warn" && "text-amber-500",
+                              item.tone === "ok" && "text-success",
+                              item.tone === "warn" && "text-warning",
                               item.tone === "error" && "text-destructive",
                             )}
                           />
@@ -1725,8 +1725,8 @@ function RuntimeReadinessPanel({ status }: { status: ComputerStatus }) {
           .filter((item) => item.critical)
           .slice(0, 3);
   const toneClass = {
-    ok: "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100",
-    warn: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100",
+    ok: "border-success/30 bg-success/5 text-success dark:border-success/60",
+    warn: "border-warning/30 bg-warning/5 text-warning dark:border-warning/60",
     error: "border-destructive/30 bg-destructive/10 text-destructive",
     loading: "border-border bg-background/70 text-foreground",
   }[state.tone];
@@ -1768,10 +1768,10 @@ function RuntimeReadinessPanel({ status }: { status: ComputerStatus }) {
                   className={cn(
                     "shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-xs",
                     item.available
-                      ? "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-200"
+                      ? "border-success/40 text-success"
                       : item.critical
                         ? "border-destructive/40 text-destructive"
-                        : "border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-200",
+                        : "border-warning/40 text-warning",
                   )}
                 >
                   {item.available
@@ -2169,8 +2169,8 @@ function ScreenshotActionOverlay({
               target.tone === "preview"
                 ? "border-blue-400/80"
                 : target.tone === "candidate"
-                  ? "border-emerald-400/80"
-                  : "border-amber-400/80",
+                  ? "border-success/80"
+                  : "border-warning/80",
             )}
           />
           <span
@@ -2179,8 +2179,8 @@ function ScreenshotActionOverlay({
               target.tone === "preview"
                 ? "bg-blue-600"
                 : target.tone === "candidate"
-                  ? "bg-emerald-600"
-                  : "bg-amber-500",
+                  ? "bg-success"
+                  : "bg-warning",
             )}
           >
             <MousePointerClickIcon className="size-4" />
@@ -2322,7 +2322,7 @@ function MatchedControlSummary({
       : null;
 
   return (
-    <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/70 p-2.5 text-xs leading-5 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100">
+    <div className="mt-2 rounded-lg border border-success/30 bg-success/5 p-2.5 text-xs leading-5 text-success dark:border-success/60">
       <div className="flex items-start gap-2">
         <ScanSearchIcon className="mt-0.5 size-3.5 shrink-0" />
         <div className="min-w-0 flex-1">
@@ -2332,12 +2332,12 @@ function MatchedControlSummary({
               {identity}
             </span>
             {scoreText !== null ? (
-              <span className="rounded-md border border-emerald-300/80 px-1.5 py-0.5 font-mono text-xs dark:border-emerald-700">
+              <span className="rounded-md border border-success/80 px-1.5 py-0.5 font-mono text-xs">
                 {scoreText}
               </span>
             ) : null}
           </div>
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-emerald-900/80 dark:text-emerald-100/80">
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-success/80">
             {typeText ? <span>{typeText}</span> : null}
             {centerText ? (
               <span>
@@ -2398,8 +2398,8 @@ function DeviceStatePanel({ state }: { state: DeviceState }) {
   const { t } = useI18n();
   const tc = (source: string) => t.workspaceComputer[source] ?? source;
   const toneClass = {
-    ok: "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100",
-    warn: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100",
+    ok: "border-success/30 bg-success/5 text-success dark:border-success/60",
+    warn: "border-warning/30 bg-warning/5 text-warning dark:border-warning/60",
     error: "border-destructive/30 bg-destructive/10 text-destructive",
     loading: "border-border bg-background text-foreground",
   }[state.tone];
@@ -2460,7 +2460,7 @@ function PermissionGuardPanel({
     <div className="rounded-lg border border-border bg-background/70 p-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <ShieldCheckIcon className="size-4 text-emerald-600" />
+          <ShieldCheckIcon className="size-4 text-success" />
           {tc("Permission guard")}
         </div>
         {leaseState.canRelease ? (
@@ -2496,8 +2496,8 @@ function CurrentActionPanel({ action }: { action: ActiveAction }) {
     idle: "border-border bg-background/70",
     active:
       "border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-100",
-    warn: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100",
-    ok: "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100",
+    warn: "border-warning/30 bg-warning/5 text-warning dark:border-warning/60",
+    ok: "border-success/30 bg-success/5 text-success dark:border-success/60",
   }[action.tone];
   return (
     <div className={cn("rounded-lg border p-4", toneClass)}>
@@ -2530,7 +2530,7 @@ function ControlSessionPanel({
     action:
       "border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-100",
     paused:
-      "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100",
+      "border-warning/30 bg-warning/5 text-warning dark:border-warning/60",
   }[indicator.mode];
   const action =
     typeof indicator.detail?.action === "string"
@@ -2581,7 +2581,7 @@ function ControlSessionPanel({
                     item.ok === false
                       ? "text-destructive"
                       : item.ok === true
-                        ? "text-emerald-600"
+                        ? "text-success"
                         : "text-muted-foreground",
                   )}
                 >
@@ -2626,7 +2626,7 @@ function CountdownChip({ secondsLeft }: { secondsLeft: number }) {
     secondsLeft === 0
       ? "border-destructive/40 bg-destructive/10 text-destructive"
       : secondsLeft <= 15
-        ? "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"
+        ? "border-warning/40 bg-warning/5 text-warning"
         : "border-border bg-background text-muted-foreground";
   const label = secondsLeft === 0 ? tc("Expired") : `${secondsLeft}s`;
   return (

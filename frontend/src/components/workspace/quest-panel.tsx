@@ -367,7 +367,7 @@ function PhaseStepper({ currentPhase }: { currentPhase: QuestPhase }) {
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-300",
                 isActive && "bg-primary/10 text-primary ring-1 ring-primary/30",
-                isComplete && "text-emerald-600 dark:text-emerald-400",
+                isComplete && "text-success",
                 isFuture && "text-muted-foreground/40",
               )}
             >
@@ -387,7 +387,7 @@ function PhaseStepper({ currentPhase }: { currentPhase: QuestPhase }) {
                 className={cn(
                   "mx-1 h-px w-4 transition-colors duration-300",
                   isComplete
-                    ? "bg-emerald-400 dark:bg-emerald-600"
+                    ? "bg-success dark:bg-success"
                     : "bg-border",
                 )}
               />
@@ -432,9 +432,9 @@ function PlanReview({
           className={cn(
             "rounded-lg px-2 py-0.5 text-xs font-medium",
             plan.total_estimated_complexity === "small" &&
-              "bg-emerald-500/10 text-emerald-600",
+              "bg-success/10 text-success",
             plan.total_estimated_complexity === "medium" &&
-              "bg-amber-500/10 text-amber-600",
+              "bg-warning/10 text-warning",
             plan.total_estimated_complexity === "large" &&
               "bg-destructive/10 text-destructive",
           )}
@@ -473,9 +473,9 @@ function PlanReview({
                   className={cn(
                     "rounded px-1.5 py-0.5 text-xs",
                     step.estimated_complexity === "low" &&
-                      "bg-emerald-500/10 text-emerald-600",
+                      "bg-success/10 text-success",
                     step.estimated_complexity === "medium" &&
-                      "bg-amber-500/10 text-amber-600",
+                      "bg-warning/10 text-warning",
                     step.estimated_complexity === "high" &&
                       "bg-destructive/10 text-destructive",
                   )}
@@ -583,7 +583,7 @@ function ExecutionProgress({
               {isRunning ? (
                 <Loader2Icon className="text-primary mt-0.5 size-3.5 animate-spin" />
               ) : isComplete ? (
-                <CheckCircle2Icon className="mt-0.5 size-3.5 text-emerald-500" />
+                <CheckCircle2Icon className="mt-0.5 size-3.5 text-success" />
               ) : isFailed ? (
                 <XCircleIcon className="mt-0.5 size-3.5 text-destructive" />
               ) : (
@@ -639,9 +639,9 @@ function VerificationResults({
     <div className="space-y-2 px-4 py-3">
       <div className="flex items-center gap-2">
         {verification.passed ? (
-          <CheckCircle2Icon className="size-4 text-emerald-500" />
+          <CheckCircle2Icon className="size-4 text-success" />
         ) : (
-          <AlertTriangleIcon className="size-4 text-amber-500" />
+          <AlertTriangleIcon className="size-4 text-warning" />
         )}
         <h4 className="text-sm font-semibold">
           {verification.passed
@@ -667,8 +667,8 @@ function VerificationResults({
           </div>
         )}
         {verification.lint_errors > 0 && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-center">
-            <div className="text-sm font-bold text-amber-500">
+          <div className="rounded-lg border border-warning/30 bg-warning/5 p-2 text-center">
+            <div className="text-sm font-bold text-warning">
               {verification.lint_errors}
             </div>
             <div className="text-muted-foreground text-xs">
@@ -696,7 +696,7 @@ function VerificationResults({
           {verification.requirement_checks.map((check, i) => (
             <div key={i} className="flex items-start gap-1.5 text-xs">
               {check.passed ? (
-                <CheckCircle2Icon className="mt-0.5 size-3 text-emerald-500" />
+                <CheckCircle2Icon className="mt-0.5 size-3 text-success" />
               ) : (
                 <XCircleIcon className="mt-0.5 size-3 text-destructive" />
               )}
@@ -714,7 +714,7 @@ function VerificationResults({
           {verification.issues_found.map((issue, i) => (
             <div
               key={i}
-              className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400"
+              className="flex items-start gap-1.5 text-xs text-warning"
             >
               <AlertTriangleIcon className="mt-0.5 size-3" />
               <span>{issue}</span>
@@ -738,7 +738,7 @@ function ReportCard({ report }: { report: QuestReport }) {
     <div className="space-y-3 px-4 py-3">
       <div className="flex items-center gap-2">
         {isSuccess ? (
-          <CheckCircle2Icon className="size-5 text-emerald-500" />
+          <CheckCircle2Icon className="size-5 text-success" />
         ) : (
           <XCircleIcon className="size-5 text-destructive" />
         )}
@@ -796,7 +796,7 @@ function ReportCard({ report }: { report: QuestReport }) {
               key={i}
               className="text-muted-foreground flex items-start gap-1.5 text-xs"
             >
-              <span className="text-amber-500">-</span>
+              <span className="text-warning">-</span>
               <span>{todo}</span>
             </div>
           ))}

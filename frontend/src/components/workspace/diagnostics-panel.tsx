@@ -108,7 +108,7 @@ export function DiagnosticsPanel({
           <>
             <Section title={t.diagnosticsPanel.sections.preview}>
               {previewDiagnostics.length === 0 ? (
-                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                <div className="flex items-center gap-1.5 text-xs text-success">
                   <CheckCircle2Icon className="size-3 shrink-0" />
                   {t.diagnosticsPanel.noPreviewIssues}
                 </div>
@@ -184,7 +184,7 @@ export function DiagnosticsPanel({
             {info.write_scope && (
               <Section title={t.diagnosticsPanel.sections.writeScope}>
                 {info.write_scope.error ? (
-                  <div className="text-xs text-rose-500">
+                  <div className="text-xs text-destructive">
                     {info.write_scope.error}
                   </div>
                 ) : (
@@ -223,7 +223,7 @@ export function DiagnosticsPanel({
                 value={info.python_executable}
               />
               {info.server_cwd !== info.workspace_path && (
-                <div className="flex items-center gap-1.5 mt-1 text-xs text-amber-600 dark:text-amber-400">
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-warning">
                   <AlertTriangleIcon className="size-3 shrink-0" />
                   {t.diagnosticsPanel.serverCwdDiffers}
                 </div>
@@ -260,23 +260,23 @@ function PreviewDiagnosticRow({ item }: { item: PreviewDiagnostic }) {
       className={cn(
         "rounded border px-2 py-1.5 text-xs",
         isError
-          ? "border-rose-500/25 bg-rose-500/8"
-          : "border-amber-500/25 bg-amber-500/8",
+          ? "border-destructive/25 bg-destructive/8"
+          : "border-warning/25 bg-warning/8",
       )}
     >
       <div className="flex items-center gap-1.5">
         <AlertTriangleIcon
           className={cn(
             "size-3 shrink-0",
-            isError ? "text-rose-500" : "text-amber-500",
+            isError ? "text-destructive" : "text-warning",
           )}
         />
         <span
           className={cn(
             "font-medium uppercase",
             isError
-              ? "text-rose-600 dark:text-rose-400"
-              : "text-amber-600 dark:text-amber-400",
+              ? "text-destructive"
+              : "text-warning",
           )}
         >
           {item.source}
@@ -312,11 +312,11 @@ function StatusRow({ label, ok }: { label: string; ok: boolean }) {
     <div className="flex items-center gap-2 text-xs">
       <span className="text-muted-foreground shrink-0 w-20">{label}</span>
       {ok ? (
-        <CheckCircle2Icon className="size-3 text-emerald-500" />
+        <CheckCircle2Icon className="size-3 text-success" />
       ) : (
-        <AlertTriangleIcon className="size-3 text-amber-500" />
+        <AlertTriangleIcon className="size-3 text-warning" />
       )}
-      <span className={ok ? "text-emerald-600" : "text-amber-600"}>
+      <span className={ok ? "text-success" : "text-warning"}>
         {ok ? t.diagnosticsPanel.status.yes : t.diagnosticsPanel.status.no}
       </span>
     </div>

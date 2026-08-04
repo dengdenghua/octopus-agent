@@ -407,13 +407,13 @@ export function LiveRunFeedbackPanel({
             {entry.kind === "progress" ? (
               <ActivityIcon className="mt-0.5 size-3.5 shrink-0 text-sky-500" />
             ) : (
-              <MessageSquareTextIcon className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
+              <MessageSquareTextIcon className="mt-0.5 size-3.5 shrink-0 text-success" />
             )}
             <p
               className={cn(
                 "min-w-0 leading-5",
                 entry.kind === "feedback"
-                  ? "text-emerald-700 dark:text-emerald-300"
+                  ? "text-success"
                   : "text-foreground/85",
               )}
             >
@@ -430,7 +430,7 @@ export function LiveRunFeedbackPanel({
         )}
 
         {fallbackFeedback && (
-          <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5 text-xs leading-5 text-emerald-700 dark:text-emerald-300">
+          <div className="rounded-md border border-success/20 bg-success/5 px-2 py-1.5 text-xs leading-5 text-success">
             {fallbackFeedback}
           </div>
         )}

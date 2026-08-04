@@ -133,10 +133,10 @@ export function CodeStatusBar({
                 "flex items-center gap-1 font-semibold tabular-nums",
                 isLoading
                   ? fastElapsedSec > 60
-                    ? "text-amber-600 dark:text-amber-400"
+                    ? "text-warning"
                     : "text-primary"
                   : fastElapsedSec <= 60
-                    ? "text-emerald-600 dark:text-emerald-400"
+                    ? "text-success"
                     : "text-muted-foreground",
               )}
               title={
@@ -166,7 +166,7 @@ export function CodeStatusBar({
                 className={cn(
                   "flex items-center justify-center rounded-md p-0.5 transition-colors",
                   fastHardTimeout
-                    ? "text-red-600 hover:text-red-700 dark:text-red-400"
+                    ? "text-destructive hover:text-destructive"
                     : "text-muted-foreground/60 hover:text-foreground",
                 )}
               >

@@ -64,7 +64,7 @@ export function RateLimitBar({ className }: { className?: string }) {
       </div>
       <div className="flex items-center gap-2">
         {limits && limits.requests_used / limits.requests_limit > 0.8 && (
-          <span className="flex items-center gap-0.5 text-amber-500">
+          <span className="flex items-center gap-0.5 text-warning">
             <AlertTriangleIcon className="size-2.5" />
             Rate limit warning
           </span>

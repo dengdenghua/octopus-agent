@@ -211,7 +211,7 @@ function ChangeRow({
             void handleRevert();
           }}
           disabled={reverting}
-          className="shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-rose-500/10 hover:text-rose-500"
+          className="shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
           title={t.codeMode.revertToLastCommit}
         >
           <RotateCcwIcon
@@ -283,8 +283,8 @@ function HunkBlock({
               <tr
                 key={`${hunk.id}-${index}`}
                 className={cn(
-                  line.type === "add" && "bg-emerald-500/8",
-                  line.type === "remove" && "bg-rose-500/8",
+                  line.type === "add" && "bg-success/8",
+                  line.type === "remove" && "bg-destructive/8",
                 )}
               >
                 <td className="w-10 select-none border-r border-border-subtle px-2 py-0.5 text-right text-muted-foreground/60">
@@ -297,9 +297,9 @@ function HunkBlock({
                   className={cn(
                     "px-2 py-0.5 whitespace-pre",
                     line.type === "add" &&
-                      "text-emerald-700 dark:text-emerald-400",
+                      "text-success",
                     line.type === "remove" &&
-                      "text-rose-700 dark:text-rose-400",
+                      "text-destructive",
                   )}
                 >
                   <span className="mr-2 inline-block w-2 text-muted-foreground/60">

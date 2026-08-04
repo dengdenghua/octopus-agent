@@ -58,7 +58,7 @@ export default function WorkflowsPage() {
                 <div className="flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <WorkflowIcon className="size-5" />
                 </div>
-                <div className="mt-5 inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                <div className="mt-5 inline-flex items-center gap-1.5 rounded-md border border-warning/25 bg-warning/10 px-2 py-1 text-xs font-medium text-warning">
                   <WrenchIcon className="size-3.5" />
                   {t.workflows.maintenanceBadge}
                 </div>

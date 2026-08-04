@@ -190,7 +190,7 @@ export function AnnotationThread({
 
       {/* Resolved badge */}
       {annotation.resolved && (
-        <div className="mb-2 flex items-center gap-1 text-xs text-emerald-600">
+        <div className="mb-2 flex items-center gap-1 text-xs text-success">
           <Check size={12} />
           <span>{t.annotations.resolved}</span>
         </div>

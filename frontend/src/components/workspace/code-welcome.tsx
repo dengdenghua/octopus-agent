@@ -29,13 +29,13 @@ export function CodeWelcome({
       icon: BugIcon,
       label: t.codeWelcome.fixBug,
       prompt: t.codeWelcome.fixBugPrompt,
-      color: "text-rose-500",
+      color: "text-destructive",
     },
     {
       icon: PlusIcon,
       label: t.codeWelcome.addFeature,
       prompt: t.codeWelcome.addFeaturePrompt,
-      color: "text-emerald-500",
+      color: "text-success",
     },
     {
       icon: RefreshCwIcon,
@@ -47,7 +47,7 @@ export function CodeWelcome({
       icon: TestTubeIcon,
       label: t.codeWelcome.writeTests,
       prompt: t.codeWelcome.writeTestsPrompt,
-      color: "text-amber-500",
+      color: "text-warning",
     },
     {
       icon: SearchIcon,
