@@ -686,6 +686,22 @@ def register_all(registry: SkillRegistry) -> int:
     from .storage_skills import register_storage_skills
 
     storage_count = register_storage_skills(registry)
+    # 本地图片语义检索 + 人脸分组 · CLIP 双塔 + insightface · 2026-08-04
+    # 对标 NAS AI 相册:文→图 / 图→图 / 人脸以图搜人 / 人脸分组。self-gating,
+    # 模型不可用时自动降级为文件列表,不阻断启动。
+    from .image_semantic_skills import register_image_semantic_skills
+
+    image_semantic_count = register_image_semantic_skills(registry)
+    # 本地 AI 相册能力:图像分类 / OCR / 重复 / 模糊 / 敏感 / 组合筛选 / few-shot 训练
+    # 对标 NAS AI 相册。self-gating,依赖缺失时优雅降级,不阻断启动。2026-08-04
+    from .image_album_skills import register_image_album_skills
+
+    image_album_count = register_image_album_skills(registry)
+    # 本地视频理解 + AI 检索:关键帧抽取 / 文图人脸语音检索 / 摘要分类 / 人脸分组
+    # 对标 NAS AI 检索。self-gating,av/CLIP/whisper 缺失时优雅降级,不阻断启动。2026-08-04
+    from .video_album_skills import register_video_album_skills
+
+    video_album_count = register_video_album_skills(registry)
     # 扩展点:消费者经 OCTOPUS_SKILL_EXTENSIONS 注册自定义技能(如 os 的企业版 PM
     # 工具),无需 fork agent。未配置则 0。见 runtime/platform/extensions.py。
     from runtime.platform.extensions import load_skill_extensions
@@ -706,5 +722,8 @@ def register_all(registry: SkillRegistry) -> int:
         + lsp_count
         + quality_count
         + storage_count
+        + image_semantic_count
+        + image_album_count
+        + video_album_count
         + extension_count
     )

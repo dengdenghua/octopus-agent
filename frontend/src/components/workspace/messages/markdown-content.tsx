@@ -188,6 +188,10 @@ export const MarkdownContent = memo(
     // than wrapping in an outer <div>. MessageResponse forwards the class
     // onto Streamdown's root prose container, so the cascade inside — h1/h2/
     // p/ul/blockquote — stays relative to prose's baseline.
+    // `key` forces a clean remount on the stream→settled transition so the
+    // settled state (data-is-animating="false", no aria-busy) is signaled even
+    // when Streamdown memoizes parsed blocks by content. Removing it left the
+    // busy attributes stuck after completion (regression; see spec fallback).
     return (
       <MessageResponse
         key={isLoading ? "streaming" : "settled"}

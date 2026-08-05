@@ -8,10 +8,6 @@ import { useCallback, useEffect, useState } from "react";
  *       0.5 = crisp, 1 = default, 1.5 = pill / friendly.
  *   - density: global base font size and spacing scale for information
  *       density, from relaxed to ultra-dense.
- *   - materialTheme: "standard" or "liquid". This layers a glass material
- *       over the active color theme instead of replacing light/dark/apple.
- *   - materialIntensity: liquid-only tuning for blur, translucency,
- *       field strength, edge highlights, and optical depth.
  *
  * Persisted to localStorage and applied as data-* attributes on <html>
  * so any Tailwind/CSS rule can react via data attributes.
@@ -24,24 +20,18 @@ export type Density =
   | "compact"
   | "dense"
   | "ultradense";
-export type MaterialTheme = "standard" | "liquid";
-export type MaterialIntensity =
-  | "crystal"
-  | "clear"
-  | "balanced"
-  | "deep"
-  | "frosted";
+
+/** 配色主题：rouge = 小红书粉调（默认），steel = 冷钢蓝（男性风格）。 */
+export type Palette = "rouge" | "steel";
 
 const CORNER_KEY = "octopus-corner-scale";
 const DENSITY_KEY = "octopus-density";
-const MATERIAL_THEME_KEY = "octopus-material-theme";
-const MATERIAL_INTENSITY_KEY = "octopus-material-intensity";
+const PALETTE_KEY = "octopus-palette";
 const APPEARANCE_CHANGE_EVENT = "octopus:appearance-change";
 
 const DEFAULT_CORNER: CornerScale = 1;
 const DEFAULT_DENSITY: Density = "comfortable";
-const DEFAULT_MATERIAL_THEME: MaterialTheme = "standard";
-const DEFAULT_MATERIAL_INTENSITY: MaterialIntensity = "balanced";
+const DEFAULT_PALETTE: Palette = "rouge";
 const DENSITY_TOKENS: Record<
   Density,
   {
@@ -138,26 +128,20 @@ function isDensity(value: string | null): value is Density {
   );
 }
 
-function readMaterialTheme(): MaterialTheme {
-  if (typeof window === "undefined") return DEFAULT_MATERIAL_THEME;
-  const raw = window.localStorage.getItem(MATERIAL_THEME_KEY);
-  return raw === "liquid" ? "liquid" : DEFAULT_MATERIAL_THEME;
+function isPalette(value: string | null): value is Palette {
+  return value === "rouge" || value === "steel";
 }
 
-function readMaterialIntensity(): MaterialIntensity {
-  if (typeof window === "undefined") return DEFAULT_MATERIAL_INTENSITY;
-  const raw = window.localStorage.getItem(MATERIAL_INTENSITY_KEY);
-  return isMaterialIntensity(raw) ? raw : DEFAULT_MATERIAL_INTENSITY;
+function readPalette(): Palette {
+  if (typeof window === "undefined") return DEFAULT_PALETTE;
+  const raw = window.localStorage.getItem(PALETTE_KEY);
+  return isPalette(raw) ? raw : DEFAULT_PALETTE;
 }
 
-function isMaterialIntensity(value: string | null): value is MaterialIntensity {
-  return (
-    value === "crystal" ||
-    value === "clear" ||
-    value === "balanced" ||
-    value === "deep" ||
-    value === "frosted"
-  );
+function applyPalette(palette: Palette) {
+  const root = document.documentElement;
+  if (palette === DEFAULT_PALETTE) delete root.dataset.theme;
+  else root.dataset.theme = palette;
 }
 
 function applyCorner(scale: CornerScale) {
@@ -182,20 +166,6 @@ function applyDensity(density: Density) {
   else root.dataset.density = density;
 }
 
-function applyMaterialTheme(
-  theme: MaterialTheme,
-  intensity: MaterialIntensity,
-) {
-  const root = document.documentElement;
-  if (theme === "liquid") {
-    root.dataset.materialTheme = "liquid";
-    root.dataset.materialIntensity = intensity;
-  } else {
-    delete root.dataset.materialTheme;
-    delete root.dataset.materialIntensity;
-  }
-}
-
 function emitAppearanceChange() {
   window.dispatchEvent(new Event(APPEARANCE_CHANGE_EVENT));
 }
@@ -204,25 +174,19 @@ export function useAppearance() {
   const [cornerScale, setCornerScaleState] =
     useState<CornerScale>(DEFAULT_CORNER);
   const [density, setDensityState] = useState<Density>(DEFAULT_DENSITY);
-  const [materialTheme, setMaterialThemeState] = useState<MaterialTheme>(
-    DEFAULT_MATERIAL_THEME,
-  );
-  const [materialIntensity, setMaterialIntensityState] =
-    useState<MaterialIntensity>(DEFAULT_MATERIAL_INTENSITY);
+  const [palette, setPaletteState] = useState<Palette>(DEFAULT_PALETTE);
 
   useEffect(() => {
     const syncFromStorage = () => {
       const c = readCorner();
       const d = readDensity();
-      const m = readMaterialTheme();
-      const i = readMaterialIntensity();
+      const p = readPalette();
       setCornerScaleState(c);
       setDensityState(d);
-      setMaterialThemeState(m);
-      setMaterialIntensityState(i);
+      setPaletteState(p);
       applyCorner(c);
       applyDensity(d);
-      applyMaterialTheme(m, i);
+      applyPalette(p);
     };
 
     syncFromStorage();
@@ -256,25 +220,11 @@ export function useAppearance() {
     emitAppearanceChange();
   }, []);
 
-  const setMaterialTheme = useCallback((theme: MaterialTheme) => {
-    setMaterialThemeState(theme);
-    const intensity = readMaterialIntensity();
-    setMaterialIntensityState(intensity);
-    applyMaterialTheme(theme, intensity);
+  const setPalette = useCallback((p: Palette) => {
+    setPaletteState(p);
+    applyPalette(p);
     try {
-      window.localStorage.setItem(MATERIAL_THEME_KEY, theme);
-    } catch (e) {
-      swallow(e, "storage");
-    }
-    emitAppearanceChange();
-  }, []);
-
-  const setMaterialIntensity = useCallback((intensity: MaterialIntensity) => {
-    setMaterialIntensityState(intensity);
-    const theme = readMaterialTheme();
-    applyMaterialTheme(theme, intensity);
-    try {
-      window.localStorage.setItem(MATERIAL_INTENSITY_KEY, intensity);
+      window.localStorage.setItem(PALETTE_KEY, p);
     } catch (e) {
       swallow(e, "storage");
     }
@@ -284,12 +234,10 @@ export function useAppearance() {
   return {
     cornerScale,
     density,
-    materialTheme,
-    materialIntensity,
+    palette,
     setCornerScale,
     setDensity,
-    setMaterialTheme,
-    setMaterialIntensity,
+    setPalette,
   };
 }
 

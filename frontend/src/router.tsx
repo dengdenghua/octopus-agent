@@ -33,6 +33,7 @@ const McpPage = lazy(() => import("./app/workspace/mcp/page"));
 const AgentsPage = lazy(() => import("./app/workspace/agents/page"));
 const AgentsNewPage = lazy(() => import("./app/workspace/agents/new/page"));
 const SkillsPage = lazy(() => import("./app/workspace/skills/page"));
+const CommunityPage = lazy(() => import("./app/workspace/community/page"));
 const ChannelsPage = lazy(() => import("./app/workspace/channels/page"));
 const ArchitecturePage = lazy(
   () => import("./app/workspace/architecture/page"),
@@ -153,6 +154,7 @@ export function AppRouter() {
               <Route path="agents" element={<AgentsPage />} />
               <Route path="agents/new" element={<AgentsNewPage />} />
               <Route path="skills" element={<SkillsPage />} />
+              <Route path="community" element={<CommunityPage />} />
               <Route path="plugins" element={<PluginsPage />} />
               <Route
                 path="store"

@@ -249,6 +249,57 @@ jobs:
         working-directory: frontend
         run: pnpm build
 
+  pr-scale-guard:
+    # Warns (and hard-fails beyond a larger threshold) when a PR touches
+    # too many files / lines. Aligns with the "收紧提交粒度" (commit
+    # granularity) goal in .trae/specs/scale-focus-control/spec.md Delta 2.
+    name: PR scale guard (files / lines)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check PR size against base
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const pr = context.payload.pull_request;
+            const base = pr.base.sha;
+            const head = pr.head.sha;
+            const out = execSync(`git diff --numstat ${base} ${head}`, { encoding: 'utf8' });
+            const entries = out.split('\n').filter((l) => l.trim());
+            const numFiles = entries.length;
+            let insertions = 0;
+            let deletions = 0;
+            for (const e of entries) {
+              const [a, d] = e.split('\t');
+              if (a !== '-') insertions += parseInt(a, 10) || 0;
+              if (d !== '-') deletions += parseInt(d, 10) || 0;
+            }
+            const totalLines = insertions + deletions;
+            const warnFiles = 200;
+            const failFiles = 500;
+            const warnLines = 5000;
+            if (numFiles > failFiles) {
+              core.setFailed(
+                `PR touches ${numFiles} files (hard limit ${failFiles}) — too large to review; please split into focused PRs.`
+              );
+            } else if (numFiles > warnFiles) {
+              core.warning(
+                `PR touches ${numFiles} files (soft limit ${warnFiles}) — keep an eye on reviewability.`
+              );
+            }
+            if (totalLines > warnLines) {
+              core.warning(
+                `PR changes ${totalLines} lines (${insertions}+ / ${deletions}-) — soft limit ${warnLines}; consider splitting.`
+              );
+            }
+            core.info(
+              `PR scale: ${numFiles} files, ${totalLines} lines (${insertions} insertions, ${deletions} deletions).`
+            );
+
   full-stack-smoke:
     name: Full-stack browser smoke
     runs-on: ubuntu-latest

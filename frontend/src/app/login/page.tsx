@@ -5,9 +5,9 @@ import {
   KeyRoundIcon,
   MailIcon,
   SparklesIcon,
-  TargetIcon,
-  ListChecksIcon,
-  PlayCircleIcon,
+  ZapIcon,
+  GitBranchIcon,
+  BoxesIcon,
   UserCircle2Icon,
 } from "lucide-react";
 
@@ -60,8 +60,6 @@ function EmailLoginForm() {
       setCooldown((s) => Math.max(0, s - 1));
     }, 1000);
     return () => clearInterval(id);
-    // cooldown only gates whether the interval runs; the tick itself uses the
-    // functional updater so it never depends on the current value.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cooldown > 0]);
 
@@ -116,11 +114,13 @@ function EmailLoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">{t.auth.emailLabel}</Label>
+    <form onSubmit={onSubmit} className="space-y-5">
+      <div className="space-y-2.5">
+        <Label htmlFor="email" className="text-sm font-medium">
+          {t.auth.emailLabel}
+        </Label>
         <div className="relative">
-          <MailIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
+          <MailIcon className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/50" />
           <Input
             id="email"
             type="email"
@@ -129,15 +129,17 @@ function EmailLoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
             autoFocus
-            className="pl-9"
+            className="h-12 rounded-xl border-border/60 bg-card/50 pl-11 text-base transition-colors focus:border-primary/40 focus:bg-card"
           />
         </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="email-code">{t.auth.verificationCode}</Label>
-        <div className="flex gap-2">
+      <div className="space-y-2.5">
+        <Label htmlFor="email-code" className="text-sm font-medium">
+          {t.auth.verificationCode}
+        </Label>
+        <div className="flex gap-3">
           <div className="relative flex-1">
-            <KeyRoundIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
+            <KeyRoundIcon className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/50" />
             <Input
               id="email-code"
               type="text"
@@ -145,7 +147,7 @@ function EmailLoginForm() {
               placeholder={t.auth.placeholders.code}
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              className="pl-9"
+              className="h-12 rounded-xl border-border/60 bg-card/50 pl-11 text-base transition-colors focus:border-primary/40 focus:bg-card"
             />
           </div>
           <Button
@@ -153,7 +155,7 @@ function EmailLoginForm() {
             variant="outline"
             onClick={sendCode}
             disabled={sending || cooldown > 0}
-            className="shrink-0"
+            className="h-12 shrink-0 rounded-xl px-5"
           >
             {cooldown > 0
               ? `${cooldown}s`
@@ -163,16 +165,20 @@ function EmailLoginForm() {
           </Button>
         </div>
       </div>
-      <Button type="submit" className="w-full" disabled={submitting}>
+      <Button
+        type="submit"
+        className="h-12 w-full rounded-xl text-base font-medium shadow-lg shadow-primary/10 transition-all hover:shadow-xl hover:shadow-primary/15"
+        disabled={submitting}
+      >
         {submitting ? t.auth.loggingIn : t.auth.login}
-        {!submitting && <ArrowRightIcon className="size-4" />}
+        {!submitting && <ArrowRightIcon className="ml-1 size-4" />}
       </Button>
-      <p className="px-2 text-center text-mini leading-5 text-muted-foreground">
+      <p className="px-1 text-center text-xs leading-relaxed text-muted-foreground/70">
         {t.auth.terms.emailAutoRegister}
         {t.auth.terms.agreeTo}{" "}
         <Link
           to="/terms"
-          className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
+          className="text-primary/80 underline-offset-2 transition-colors hover:text-primary hover:underline"
         >
           {t.auth.terms.userAgreement}
         </Link>
@@ -181,7 +187,7 @@ function EmailLoginForm() {
         {" "}
         <Link
           to="/privacy"
-          className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
+          className="text-primary/80 underline-offset-2 transition-colors hover:text-primary hover:underline"
         >
           {t.auth.terms.privacyPolicy}
         </Link>
@@ -227,29 +233,33 @@ function LocalLoginForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+    <form onSubmit={onSubmit} className="space-y-5">
+      <div className="rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-xs text-muted-foreground/80">
         {t.loginPage.localBanner}
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="local-username">{t.registerPage.usernameLabel}</Label>
+      <div className="space-y-2.5">
+        <Label htmlFor="local-username" className="text-sm font-medium">
+          {t.registerPage.usernameLabel}
+        </Label>
         <div className="relative">
-          <UserCircle2Icon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
+          <UserCircle2Icon className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/50" />
           <Input
             id="local-username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder={t.registerPage.usernamePlaceholder}
             autoComplete="username"
-            className="pl-9"
+            className="h-12 rounded-xl border-border/60 bg-card/50 pl-11 text-base transition-colors focus:border-primary/40 focus:bg-card"
           />
         </div>
       </div>
       {passwordRequired && (
-        <div className="space-y-2">
-          <Label htmlFor="local-password">{t.registerPage.passwordLabel}</Label>
+        <div className="space-y-2.5">
+          <Label htmlFor="local-password" className="text-sm font-medium">
+            {t.registerPage.passwordLabel}
+          </Label>
           <div className="relative">
-            <KeyRoundIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
+            <KeyRoundIcon className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/50" />
             <Input
               id="local-password"
               type="password"
@@ -257,20 +267,45 @@ function LocalLoginForm({
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t.registerPage.passwordPlaceholder}
               autoComplete="current-password"
-              className="pl-9"
+              className="h-12 rounded-xl border-border/60 bg-card/50 pl-11 text-base transition-colors focus:border-primary/40 focus:bg-card"
             />
           </div>
         </div>
       )}
       <Button
         type="submit"
-        className="w-full"
+        className="h-12 w-full rounded-xl text-base font-medium shadow-lg shadow-primary/10 transition-all hover:shadow-xl hover:shadow-primary/15"
         disabled={submitting}
       >
         {submitting ? t.auth.loggingIn : t.auth.login}
-        {!submitting && <ArrowRightIcon className="size-4" />}
+        {!submitting && <ArrowRightIcon className="ml-1 size-4" />}
       </Button>
     </form>
+  );
+}
+
+function FloatingOrb({
+  className,
+  color,
+  size,
+  blur,
+}: {
+  className?: string;
+  color: string;
+  size: number;
+  blur: number;
+}) {
+  return (
+    <div
+      className={`pointer-events-none absolute rounded-full ${className}`}
+      style={{
+        width: size,
+        height: size,
+        background: color,
+        filter: `blur(${blur}px)`,
+        opacity: 0.6,
+      }}
+    />
   );
 }
 
@@ -331,98 +366,152 @@ export default function LoginPage() {
     return null;
   }
 
-  const loopIcons = [TargetIcon, ListChecksIcon, PlayCircleIcon];
-  const loopSteps = [
-    t.workspace.landing.systemLoop.goal,
-    t.workspace.landing.systemLoop.plan,
-    t.workspace.landing.systemLoop.execute,
+  const features = [
+    {
+      icon: ZapIcon,
+      title: "极速响应",
+      desc: "多智能体并行协作，任务秒级启动",
+    },
+    {
+      icon: GitBranchIcon,
+      title: "灵活编排",
+      desc: "可视化工作流，自由组合 Agent 能力",
+    },
+    {
+      icon: BoxesIcon,
+      title: "万物连接",
+      desc: "打通微信、钉钉、飞书，消息无缝流转",
+    },
   ];
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background text-foreground">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `radial-gradient(ellipse at top, color-mix(in oklch, var(--primary) 10%, transparent), transparent 55%), radial-gradient(ellipse at bottom right, color-mix(in oklch, var(--primary) 8%, transparent), transparent 50%)`,
-        }}
-      />
-      <div className="pointer-events-none absolute -top-40 left-1/2 size-[36rem] -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background">
+      {/* 背景渐变装饰 */}
+      <div className="pointer-events-none absolute inset-0">
+        <FloatingOrb
+          className="-top-32 -left-32"
+          color="linear-gradient(135deg, oklch(0.85 0.15 15), oklch(0.75 0.18 350))"
+          size={500}
+          blur={100}
+        />
+        <FloatingOrb
+          className="top-1/3 -right-40"
+          color="linear-gradient(135deg, oklch(0.8 0.12 260), oklch(0.75 0.15 220))"
+          size={450}
+          blur={120}
+        />
+        <FloatingOrb
+          className="-bottom-40 left-1/4"
+          color="linear-gradient(135deg, oklch(0.88 0.1 140), oklch(0.8 0.12 180))"
+          size={400}
+          blur={100}
+        />
+        {/* 细密网格纹理 */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, var(--foreground) 1px, transparent 0)`,
+            backgroundSize: "32px 32px",
+          }}
+        />
+      </div>
 
-      <div className="relative z-10 grid w-full max-w-6xl items-center gap-12 px-6 py-12 md:grid-cols-2 lg:gap-16">
-        <div className="hidden flex-col justify-center space-y-8 md:flex">
-          <div className="inline-flex items-center gap-2.5">
-            <OctopusBrandMark />
-            <span className="text-base font-semibold tracking-tight text-foreground">
-              Octopus Agent OS
+      <div className="relative z-10 grid w-full max-w-6xl items-center gap-16 px-8 py-12 lg:grid-cols-[1.2fr_1fr] lg:gap-20">
+        {/* 左侧品牌区 */}
+        <div className="hidden flex-col justify-center space-y-10 lg:flex">
+          {/* Logo + 品牌名 */}
+          <div className="inline-flex items-center gap-3">
+            <OctopusBrandMark size="lg" />
+            <span className="text-xl font-semibold tracking-tight">
+              Octopus Agent
             </span>
           </div>
 
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-              <SparklesIcon className="size-3" />
-              {t.workspace.landing.badge}
+          {/* 大标题 */}
+          <div className="space-y-5">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary">
+              <SparklesIcon className="size-3.5" />
+              新一代多智能体操作系统
             </div>
-            <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight text-foreground lg:text-[2.75rem]">
-              {t.workspace.landing.headline}
+            <h1 className="text-5xl font-bold leading-[1.1] tracking-tight lg:text-[3.5rem]">
+              你的 AI
+              <br />
+              <span className="bg-gradient-to-r from-primary via-[oklch(0.65_0.18_20)] to-[oklch(0.6_0.16_320)] bg-clip-text text-transparent">
+                私人助理
+              </span>
             </h1>
-            <p className="max-w-md text-base leading-relaxed text-muted-foreground">
-              {t.workspace.landing.description}
+            <p className="max-w-md text-lg leading-relaxed text-muted-foreground">
+              一个输入框，解决所有问题。委派任务、管理项目、连接万物，Octopus 为你代劳。
             </p>
           </div>
 
-          <ul className="space-y-3.5">
-            {loopSteps.map((step, index) => {
-              const Icon = loopIcons[index] ?? SparklesIcon;
+          {/* 特性列表 */}
+          <ul className="space-y-5">
+            {features.map((feature) => {
+              const Icon = feature.icon;
               return (
-                <li key={step} className="flex items-center gap-3">
-                  <span className="flex size-7 shrink-0 items-center justify-center border border-border bg-card text-foreground shadow-[var(--shadow-xs)]">
-                    <Icon className="size-3.5" />
-                  </span>
-                  <span className="text-sm font-medium text-foreground/90">
-                    {step}
-                  </span>
+                <li key={feature.title} className="flex items-start gap-4">
+                  <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card/60 backdrop-blur-sm transition-colors group-hover:border-primary/20 group-hover:bg-primary/5">
+                    <Icon className="size-5 text-primary/80" strokeWidth={1.8} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[15px] font-semibold">{feature.title}</p>
+                    <p className="text-sm text-muted-foreground/80">
+                      {feature.desc}
+                    </p>
+                  </div>
                 </li>
               );
             })}
           </ul>
         </div>
 
-        <div className="mx-auto w-full max-w-sm">
-          <div className="mb-6 flex items-center justify-center gap-2 md:hidden">
-            <OctopusBrandMark />
-            <span className="text-sm font-semibold tracking-tight text-foreground">
-              Octopus Agent OS
+        {/* 右侧登录表单 */}
+        <div className="mx-auto w-full max-w-md">
+          {/* 移动端 Logo */}
+          <div className="mb-8 flex items-center justify-center gap-2.5 lg:hidden">
+            <OctopusBrandMark size="md" />
+            <span className="text-lg font-semibold tracking-tight">
+              Octopus Agent
             </span>
           </div>
 
-          <Card>
-            <CardHeader className="space-y-1.5 pb-4 text-center">
-              <CardTitle className="text-xl font-semibold tracking-tight text-foreground">
-                {t.auth.page.title}
+          <Card className="overflow-hidden rounded-2xl border-border/50 bg-card/80 shadow-2xl shadow-black/[0.03] backdrop-blur-xl">
+            <CardHeader className="space-y-2.5 pb-6 pt-8 text-center">
+              <CardTitle className="text-2xl font-semibold tracking-tight">
+                欢迎回来
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-[15px] text-muted-foreground/80">
                 {hasOct
-                  ? t.auth.page.emailCardDescription
-                  : t.auth.page.cardDescription}
+                  ? "输入邮箱，一键登录开始使用"
+                  : "登录你的 Octopus 账户"}
               </CardDescription>
             </CardHeader>
-            <CardContent className="pt-2">
+            <CardContent className="px-8 pb-8 pt-0">
               {!providersReady ? (
                 <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
                   {t.common.loading}
                 </div>
               ) : hasOct && localProvider ? (
                 <Tabs defaultValue="email" className="w-full">
-                  <TabsList className="mb-5 grid w-full grid-cols-2">
-                    <TabsTrigger value="email">{t.auth.tabEmail}</TabsTrigger>
-                    <TabsTrigger value="local">
-                      {localProvider.label ?? t.registerPage.usernameLabel}
+                  <TabsList className="mb-6 grid h-11 w-full grid-cols-2 rounded-xl bg-muted/50 p-1">
+                    <TabsTrigger
+                      value="email"
+                      className="rounded-lg text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm"
+                    >
+                      邮箱登录
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="local"
+                      className="rounded-lg text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm"
+                    >
+                      {localProvider.label ?? "本地账户"}
                     </TabsTrigger>
                   </TabsList>
-                  <TabsContent value="email">
+                  <TabsContent value="email" className="mt-0">
                     <EmailLoginForm />
                   </TabsContent>
-                  <TabsContent value="local">
+                  <TabsContent value="local" className="mt-0">
                     <LocalLoginForm
                       passwordRequired={localProvider.password_required === true}
                     />
@@ -435,24 +524,28 @@ export default function LoginPage() {
                   passwordRequired={localProvider.password_required === true}
                 />
               ) : (
-                <div className="rounded-lg border border-border bg-muted px-3 py-4 text-center text-sm text-muted-foreground">
+                <div className="rounded-xl border border-border/50 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
                   {t.loginPage.errorServiceDisabled}
                 </div>
               )}
 
               {authStatus?.allow_registration && (
-                <div className="mt-4 text-center text-sm text-muted-foreground">
-                  {t.auth.terms.emailAutoRegister}
+                <div className="mt-6 text-center text-sm text-muted-foreground/80">
+                  还没有账户？{" "}
                   <Link
                     to="/register"
-                    className="text-primary hover:text-primary/80"
+                    className="font-medium text-primary transition-colors hover:text-primary/80"
                   >
-                    {t.auth.login}
+                    立即注册
                   </Link>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          <p className="mt-6 text-center text-xs text-muted-foreground/50">
+            © {new Date().getFullYear()} Octopus Agent. All rights reserved.
+          </p>
         </div>
       </div>
     </div>

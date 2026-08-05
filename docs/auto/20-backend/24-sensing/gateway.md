@@ -178,6 +178,7 @@ tier: "standard"
 | `openai_gateway/synthesis.py` | Final-answer synthesis for completed non-streaming gateway runs. |
 | `openai_gateway/tool_converter.py` | — |
 | `openai_gateway_router.py` | — |
+| `org_router.py` | Organization API router (阶段一 企业协作 · 组织 API 路由). |
 | `organizations_router.py` | REST endpoints for team-topology management. |
 | `parallel_agents_router.py` | — |
 | `plugin_hub_router.py` | PluginHub management REST API. |
@@ -787,6 +788,12 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def create_openai_router(stack, default_arm, reflex_router, prompt_optimizer, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, jwt_leeway_seconds, agent_registry, max_concurrent_completions_per_actor, max_completions_per_minute_per_actor)` |  |
+
+### `org_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def create_org_router(org_store, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, audit_chain_path, audit_chain_secret)` |  |
 
 ### `organizations_router.py`
 

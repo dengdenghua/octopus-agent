@@ -11,7 +11,11 @@ tier: "standard"
 
 ## 后端（Python）
 
+- `fastembed>=0.8.0`
+- `insightface>=1.0.1`
+- `opencv-python-headless>=5.0.0.93`
 - `pydantic>=2.12.0`
+- `rapidocr-onnxruntime>=1.3.0`
 
 ## 前端（React / Vite）
 

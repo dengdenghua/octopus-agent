@@ -25,6 +25,7 @@ tier: "core"
 | `code_index.py` | Auto-retrieve relevant *source* chunks for planner grounding. |
 | `composer.py` | — |
 | `embedding_backend.py` | Unified, configurable text embedder for octopus's code index. |
+| `image_semantic_index.py` | Local image semantic search + face grouping over a persisted index. |
 | `repo_context.py` | Auto-retrieve relevant codebase context from the project wiki. |
 | `semantic_code_index.py` | Read-only semantic search over the work-mode KB's persisted code index. |
 | `semantic_rank.py` | Generic semantic ranking — order candidate texts by relevance to a query. |
@@ -62,6 +63,24 @@ tier: "core"
 | func | `def embed_texts(texts)` | Embed ``texts`` via the configured backend (remote endpoint preferred, else in-process). ``None`` when no backend is available; ``[]`` for n |
 | func | `def get_encoder()` | Return an ``.encode``-compatible encoder for the configured backend, or ``None`` when nothing is available. |
 
+### `image_semantic_index.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def face_capable()` | True when a face detector is loaded (face grouping is available). |
+| func | `def build_index(root, db_path, include_faces, max_files)` | Scan ``root`` for images and (re)build the persisted index. Returns a summary dict. Face embedding is optional — skipped when the detector i |
+| func | `def search_by_text(query, top_k, db_path)` | Top-k images semantically closest to a text description. ``None`` when the semantic layer is unavailable (no index / no text tower). |
+| func | `def search_by_image(image_path, top_k, db_path)` | Top-k images visually closest to a given image file. ``None`` when the semantic layer is unavailable. |
+| func | `def group_faces(db_path, threshold)` | Cluster face embeddings into person groups. Returns ``None`` when face capability is off or no faces are indexed. Each group lists image pat |
+| func | `def search_face(image_path, top_k, db_path)` | Find indexed images that contain the same face(s) as a given image. ``None`` when face capability is off. |
+| func | `def classify_image(image_path, labels, db_path, top_k)` | Zero-shot classify an image with the CLIP text tower. |
+| func | `def ocr_image(image_path, db_path)` | OCR an image via ``rapidocr_onnxruntime`` and persist the text. |
+| func | `def find_duplicates(db_path, hash_threshold)` | Group near-duplicate images by dHash Hamming distance. |
+| func | `def find_blurry(db_path, threshold)` | List images whose Laplacian sharpness is below ``threshold``. |
+| func | `def sensitive_scan(db_path, top_k)` | Zero-shot score all indexed images against NSFW semantic labels. |
+| func | `def filter_meta(db_path, year, month, file_type, location, min_width, min_height, person, scene)` | Filter the image library by metadata (all conditions must match). |
+| func | `def train_category(name, image_paths, db_path)` | Few-shot train a custom category from example images. |
+
 ### `repo_context.py`
 
 | Kind | Symbol | Doc |
@@ -87,15 +106,17 @@ tier: "core"
 
 ## Who imports this
 
-**10** file(s) reference this package:
+**12** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
 - **`runtime/core/`** · 2 file(s)
   - `runtime/core/cerebrum/_react_prompt_assembly_sections.py`
   - `runtime/core/cerebrum/llm_planner.py`
-- **`runtime/execution/`** · 1 file(s)
+- **`runtime/execution/`** · 3 file(s)
   - `runtime/execution/suckers/code_intelligence_skills.py`
+  - `runtime/execution/suckers/image_album_skills.py`
+  - `runtime/execution/suckers/image_semantic_skills.py`
 - **`runtime/platform/`** · 1 file(s)
   - `runtime/platform/config/builder.py`
 - **`runtime/sensing/`** · 4 file(s)

@@ -939,6 +939,44 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("sleep tech")).not.toBeInTheDocument();
   });
 
+  test("counts user-fed context files (uploaded + attachments) in context stats", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "read-context-1",
+            name: "read_file",
+            input: { path: "src/app.ts" },
+            output: "const app = 1;",
+          }),
+        ]}
+        userInput={{
+          text: "分析这些文件",
+          uploadedFiles: [
+            { filename: "report.pdf", path: "uploads/report.pdf" },
+            { filename: "data.csv", path: "uploads/data.csv" },
+          ],
+          attachments: [{ filename: "spec.md" }],
+        }}
+      />,
+    );
+
+    expandSummarySection(/上下文/);
+
+    // 喂入的上下文文件应出现在 files 分类中
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    expect(screen.getByText("data.csv")).toBeInTheDocument();
+    expect(screen.getByText("spec.md")).toBeInTheDocument();
+
+    // 上传文件/附件 + 过程件 read_file 应合计为 4 条文件来源
+    expect(
+      screen.getByRole("button", {
+        name: /\u6587\u4ef6 4 \u6761\u6765\u6e90/,
+      }),
+    ).toBeInTheDocument();
+  });
+
   test("surfaces real sub-agents as task cards", () => {
     renderWorkbench(
       <AgentWorkbenchPanel

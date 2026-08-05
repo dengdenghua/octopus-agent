@@ -526,43 +526,74 @@ function injectPreviewDiagnostics(html: string): string {
 (() => {
   if (window.__octopusPreviewBridgeInstalled) return;
   window.__octopusPreviewBridgeInstalled = true;
-  const format = (value) => {
+  const __swallow = (e) => { try { /* noop */ } catch (_) {} };
+  const __safeStr = (v) => {
+    // 保证任何值最终都返回非空字符串（不含 undefined / null 原生值混入 join）
+    if (v === null) return "null";
+    if (v === undefined) return "undefined";
     try {
-      if (value instanceof Error) return value.stack || value.message;
-      if (typeof value === "string") return value;
-      return JSON.stringify(value);
+      if (v instanceof Error) return v.stack || v.message || String(v);
+    } catch (_) {}
+    try {
+      const t = typeof v;
+      if (t === "string") return v;
+      if (t === "bigint") return v.toString() + "n";
+      if (t === "symbol") return v.toString();
+      // JSON.stringify 对 undefined / function / symbol 会返回 undefined 原生值，需兜底
+      const s = JSON.stringify(v);
+      if (s !== undefined) return s;
+      if (t === "function") return "function " + (v.name || "anonymous");
+      return String(v);
     } catch (e) {
-      swallow(e);
-      return String(value);
+      __swallow(e);
+      try { return String(v); } catch (_) { return "?"; }
     }
   };
   const send = (level, source, message, stack) => {
     try {
+      let m = message;
+      if (typeof m !== "string") m = __safeStr(m);
+      if (!m || !m.trim()) m = "Preview diagnostic";
       window.parent.postMessage({
         type: "octopus-preview-diagnostic",
         level,
         source,
-        message: String(message || "Preview diagnostic"),
+        message: m,
         stack: stack ? String(stack) : undefined,
       }, "*");
-    } catch (e) { swallow(e); }
+    } catch (e) { __swallow(e); }
   };
-  const originalError = console.error;
-  console.error = (...args) => {
-    send("error", "console", args.map(format).join(" "));
-    originalError.apply(console, args);
+  const __wrapConsole = (level, sendLevel) => {
+    const orig = console[level];
+    if (typeof orig !== "function") return;
+    console[level] = (...args) => {
+      try {
+        if (args.length === 0) {
+          send(sendLevel, "console", "");
+        } else {
+          // 先用空格分隔，format 每个元素确保不是原生 undefined/null
+          const parts = new Array(args.length);
+          for (let i = 0; i < args.length; i++) parts[i] = __safeStr(args[i]);
+          send(sendLevel, "console", parts.join(" "));
+        }
+      } catch (e) { __swallow(e); }
+      orig.apply(console, args);
+    };
   };
-  const originalWarn = console.warn;
-  console.warn = (...args) => {
-    send("warning", "console", args.map(format).join(" "));
-    originalWarn.apply(console, args);
-  };
+  __wrapConsole("error",   "error");
+  __wrapConsole("warn",    "warning");
+  __wrapConsole("info",    "info");
+  __wrapConsole("log",     "info");
+  __wrapConsole("debug",   "info");
   window.addEventListener("error", (event) => {
     send("error", "runtime", event.message || "Runtime error", event.error && event.error.stack);
   });
   window.addEventListener("unhandledrejection", (event) => {
     const reason = event.reason;
-    send("error", "runtime", format(reason || "Unhandled promise rejection"), reason && reason.stack);
+    const msg = (reason === undefined || reason === null)
+      ? "Unhandled promise rejection"
+      : __safeStr(reason);
+    send("error", "runtime", msg, reason && reason.stack);
   });
   window.addEventListener("load", () => {
     window.setTimeout(() => {

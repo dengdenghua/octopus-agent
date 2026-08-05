@@ -2,12 +2,11 @@
 
 This module is now a thin re-export hub. The responsibility-cohesive
 clusters live in the ``_react_parsing_*`` submodules:
-``tools`` (action/XML parsing), ``core`` (text parsing + streaming),
-``steps`` (todo/step extraction), ``payload`` (payload anti-patterns),
-``verification`` (verification trail), ``codequality`` (code-quality
-guards), ``testquality`` (test-correctness guards), and
-``testquality2`` (production-hygiene guards). The security+quality
-detectors live in ``react_security_detectors``.
+``tools`` (action/XML parsing), ``core`` (text parsing + streaming +
+todo/step extraction), ``codequality`` (code-quality + payload
+anti-pattern guards), ``verification`` (verification trail), and
+``testquality`` (test-correctness + production-hygiene guards). The
+security+quality detectors live in ``react_security_detectors``.
 
 The public API surface is unchanged: every predicate is re-exported
 here so consumers (``react_guards.py``, ``react_phase_6c.py``, the
@@ -25,9 +24,18 @@ from runtime.core.cerebrum._react_parsing_codequality import (
     _load_tsconfig,
     _matches_tsconfig_pattern,
     _normalize_frontend_path,
+    _payload_has_ambiguous_inflight_leader_election,
     _payload_has_broad_except_suppression,
+    _payload_has_destructive_waiter_result_pop,
     _payload_has_executable_python,
+    _payload_has_inflight_identity_comparison,
+    _payload_has_loader_barrier_deadlock,
+    _payload_has_single_pass_url_decode,
     _payload_has_sleep_call,
+    _payload_has_stale_immutable_waiter_snapshot,
+    _payload_has_terminal_pending_entry_leak,
+    _payload_has_wait_while_lock_held,
+    _payload_looks_like_path_boundary,
     _step_edits_frontend_outside_tsconfig,
     _step_introduces_broad_except_suppression,
     _step_introduces_destructive_call,
@@ -46,8 +54,16 @@ from runtime.core.cerebrum._react_parsing_core import (
     _FINAL_RE,
     _THOUGHT_RE,
     THOUGHT_STREAM_TAIL_MARGIN,
+    _coerce_todo_action_items,
     _escape_md_brackets,
     _extract_final_answer,
+    _extract_step_path,
+    _extract_step_payloads,
+    _has_code_write,
+    _has_verification_requiring_code_write,
+    _is_code_write_step,
+    _is_verification_requiring_code_write_step,
+    _latest_todo_items,
     _looks_like_special_tool_envelope,
     _looks_like_unfinished_work,
     _parse_reasoning_action_fallback,
@@ -57,62 +73,39 @@ from runtime.core.cerebrum._react_parsing_core import (
     _summarize_observation,
     extract_streamable_thought,
 )
-from runtime.core.cerebrum._react_parsing_payload import (
-    _payload_has_ambiguous_inflight_leader_election,
-    _payload_has_destructive_waiter_result_pop,
-    _payload_has_inflight_identity_comparison,
-    _payload_has_loader_barrier_deadlock,
-    _payload_has_single_pass_url_decode,
-    _payload_has_stale_immutable_waiter_snapshot,
-    _payload_has_terminal_pending_entry_leak,
-    _payload_has_wait_while_lock_held,
-    _payload_looks_like_path_boundary,
-)
-from runtime.core.cerebrum._react_parsing_steps import (
-    _coerce_todo_action_items,
-    _extract_step_path,
-    _extract_step_payloads,
-    _has_code_write,
-    _has_verification_requiring_code_write,
-    _is_code_write_step,
-    _is_verification_requiring_code_write_step,
-    _latest_todo_items,
-)
 from runtime.core.cerebrum._react_parsing_testquality import (
     _TEST_FUNC_RE,
+    _async_body_uses_await,
     _classify_mock_only_test_body,
     _classify_test_body,
+    _count_function_body_lines,
+    _detect_async_without_await_in_payload,
     _detect_generic_test_names_in_payload,
+    _detect_hardcoded_paths_in_payload,
+    _detect_long_functions_in_payload,
     _detect_mock_only_tests_in_payload,
     _detect_no_assertion_tests_in_payload,
     _detect_weak_tests_in_payload,
+    _is_abstract_or_stub_body,
     _is_generic_test_name,
     _is_meaningful_skip_reason,
+    _path_is_print_exempt,
+    _payload_has_log_swallow,
+    _payload_has_print_call,
     _payload_has_undocumented_skip,
     _step_deleted_test_functions,
+    _step_introduces_async_without_await,
     _step_introduces_generic_test_name,
+    _step_introduces_hardcoded_path,
+    _step_introduces_log_swallow,
+    _step_introduces_long_function,
     _step_introduces_mock_only_test,
     _step_introduces_no_assertion_test,
+    _step_introduces_print,
     _step_introduces_undocumented_skip,
     _step_introduces_weak_test,
     _test_body_has_assertion,
     _test_function_names,
-)
-from runtime.core.cerebrum._react_parsing_testquality2 import (
-    _async_body_uses_await,
-    _count_function_body_lines,
-    _detect_async_without_await_in_payload,
-    _detect_hardcoded_paths_in_payload,
-    _detect_long_functions_in_payload,
-    _is_abstract_or_stub_body,
-    _path_is_print_exempt,
-    _payload_has_log_swallow,
-    _payload_has_print_call,
-    _step_introduces_async_without_await,
-    _step_introduces_hardcoded_path,
-    _step_introduces_log_swallow,
-    _step_introduces_long_function,
-    _step_introduces_print,
 )
 from runtime.core.cerebrum._react_parsing_tools import (
     _coerce_xml_arg_value,

@@ -516,7 +516,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={() => webviewHandle?.goBack()}
         disabled={!canBack}
-        className="grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:size-9"
+        className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:size-9"
         title={ub.back}
       >
         <ArrowLeftIcon className="size-4" />
@@ -524,7 +524,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={() => webviewHandle?.goForward()}
         disabled={!canForward}
-        className="grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:size-9"
+        className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:size-9"
         title={ub.forward}
       >
         <ArrowRightIcon className="size-4" />
@@ -532,7 +532,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={() => webviewHandle?.reload()}
         disabled={activeTab?.url === BROWSER_HOME_URL}
-        className="hidden size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
+        className="hidden size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
         title={ub.refresh}
       >
         <RefreshCwIcon className="size-4" />
@@ -541,7 +541,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         type="button"
         onClick={() => void attachScreenshotToNextComposer()}
         disabled={!webviewHandle || activeTab?.url === BROWSER_HOME_URL}
-        className="hidden size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
+        className="hidden size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
         title={bp.attachScreenshotToComposer}
       >
         <ImageIcon className="size-4" />
@@ -549,13 +549,13 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={goHome}
         disabled={!activeTab || activeTab.url === BROWSER_HOME_URL}
-        className="hidden size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
+        className="hidden size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
         title={ub.backToHome}
       >
         <HouseIcon className="size-4" />
       </button>
       <div ref={addressBarRef} className="relative ml-1 min-w-0 flex-1">
-        <div className="flex h-10 items-center gap-1 rounded-[18px] border-border-subtle px-3 transition-colors focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-primary/12">
+        <div className="flex h-10 items-center gap-1 rounded-lg border border-border-subtle bg-card/80 px-3 backdrop-blur-sm transition-colors focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-primary/12">
           <input
             type="text"
             value={draft}
@@ -577,10 +577,10 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
                 ref={siteInfoBtnRef}
                 onClick={() => setSiteInfoOpen((v) => !v)}
                 className={cn(
-                  "grid size-7 place-items-center rounded-full transition-colors",
+                  "grid size-7 place-items-center rounded-md transition-colors",
                   siteInfoOpen
                     ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
+                    : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
                 )}
                 title={ub.siteInfo}
                 aria-label={ub.siteInfo}
@@ -712,7 +712,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
           ref={downloadsBtnRef}
           onClick={() => setDownloadsOpen((v) => !v)}
           className={cn(
-            "ml-1 grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground sm:size-9",
+            "ml-1 grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground sm:size-9",
             activeDownloadCount > 0 && "text-primary",
           )}
           title={ub.downloads}
@@ -737,7 +737,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         <button
           ref={historyBtnRef}
           onClick={() => setHistoryOpen((v) => !v)}
-          className="grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground sm:size-9"
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground sm:size-9"
           title={ub.historyAndBookmarks}
         >
           <ClockIcon className="size-4" />
@@ -759,10 +759,10 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={toggleCopilot}
         className={cn(
-          "ml-1 hidden h-10 items-center gap-1.5 rounded-[18px] border px-3 text-xs font-semibold shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_4px_14px_rgba(15,23,42,0.04)] transition-colors sm:flex",
+          "ml-1 hidden h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold transition-colors sm:flex",
           state.copilotOpen
-            ? "border-primary/35 bg-primary/12 text-primary"
-            : "border-border-subtle bg-background/50 text-muted-foreground hover:bg-background/70 hover:text-foreground",
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
         )}
         title={ub.aiAssistant}
       >
@@ -774,7 +774,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         <button
           ref={actionsBtnRef}
           onClick={() => setActionsOpen((v) => !v)}
-          className="ml-1 grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground sm:size-9"
+          className="ml-1 grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground sm:size-9"
           title={ub.moreActions}
           aria-label={ub.moreActions}
         >

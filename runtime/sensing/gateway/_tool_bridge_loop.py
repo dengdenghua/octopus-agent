@@ -30,7 +30,13 @@ from runtime.core.cerebrum.todo_protocol import (
 )
 from runtime.execution.tool_spec_builder import build_anthropic_tool_specs
 from runtime.platform.models import ParsedIntent
-from runtime.sensing.model_router.models import Message, ModelRequest, ToolCall
+from runtime.platform.models.llm import model_supports_thinking
+from runtime.sensing.model_router.models import (
+    Message,
+    ModelRequest,
+    ToolCall,
+    thinking_budget_for_effort,
+)
 
 from ._tool_bridge_exec import _execute_tool_call, _recover_named_xml_tool_calls
 from ._tool_bridge_native import (
@@ -940,11 +946,23 @@ def stream_agentic_fallback(
             _active_tool_specs = []
         else:
             _active_tool_specs = _round_tool_specs
+        # Streaming thinking for the native loop: without this the request
+        # keeps ModelRequest.enable_thinking=False (the default), so a
+        # thinking-capable model (deepseek-v4, kimi-thinking, o-series, …)
+        # never emits a reasoning channel and the UI shows no thinking
+        # surface — the "思考不流式" the realtime workbench reports. The
+        # native streamer already passes thinking_delta through verbatim.
+        _native_wants_thinking = model_supports_thinking(effective_model)
         req = ModelRequest(
             model=effective_model,
             messages=messages,
             max_tokens=4096,
             temperature=1.0,
+            enable_thinking=_native_wants_thinking,
+            thinking_budget=thinking_budget_for_effort(
+                _intent_user_context.get("reasoning_effort"),
+                4096,
+            ),
             tools=_active_tool_specs,
             require_tool_use=(
                 True

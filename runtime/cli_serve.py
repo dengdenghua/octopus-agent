@@ -174,7 +174,7 @@ def register_memory_distill_task(runner: Any, stack: Any) -> int:
     return 1
 
 
-def register_cron_executor_task(runner: Any) -> int:
+def register_cron_executor_task(runner: Any, channel_manager_holder: list | None = None) -> int:
     """Fire persisted cron jobs (settings-UI shell jobs + schedule_task prompts).
 
     The store/router/skill only *register* jobs — without this periodic
@@ -182,6 +182,11 @@ def register_cron_executor_task(runner: Any) -> int:
     ``OCTOPUS_CRON_EXECUTOR=0`` disables outright;
     ``OCTOPUS_CRON_EXECUTOR_POLL_SECONDS`` retunes the poll (default 30s,
     finer than the 1-minute cron resolution so jobs fire ≤30s late).
+
+    ``channel_manager_holder`` is an optional one-element list that gets
+    populated with the live ``ChannelManager`` *after* startup wiring, so
+    agent-scheduled jobs recorded with a ``channel_id`` / ``thread_id``
+    (章鱼助手订阅推送) can push their result back over IM.
     """
     if os.environ.get("OCTOPUS_CRON_EXECUTOR", "1").lower() in ("0", "false", "no"):
         return 0
@@ -192,10 +197,32 @@ def register_cron_executor_task(runner: Any) -> int:
     if interval_s <= 0:
         return 0
 
+    def _deliver(record: dict) -> None:
+        """Push a finished cron run back to its recorded IM conversation."""
+        if not channel_manager_holder:
+            return
+        cm = channel_manager_holder[0] if isinstance(channel_manager_holder, list) and channel_manager_holder else None
+        if cm is None:
+            return
+        channel_id = str(record.get("channel_id") or "")
+        thread_id = str(record.get("thread_id") or "")
+        if not channel_id or not cm.has(channel_id):
+            return
+        name = str(record.get("name") or "定时任务")
+        excerpt = str(record.get("output_excerpt") or "(无输出)")
+        status = str(record.get("status") or "")
+        text = f"[章鱼助手 · 定时订阅] {name}\n状态：{status}\n{excerpt}"
+        try:
+            cm.deliver_cron_result(channel_id, thread_id, text)
+        except Exception:  # noqa: BLE001 — delivery must never break the cron tick
+            logging.getLogger(__name__).exception(
+                "cron delivery failed for %r", name
+            )
+
     def _tick() -> None:
         from runtime.execution.cron_executor import run_due_cron_jobs
 
-        run_due_cron_jobs()
+        run_due_cron_jobs(deliver=_deliver)
 
     runner.add_periodic(
         "cron_job_executor",
@@ -430,10 +457,12 @@ def run_serve(
     try:
         from runtime.adapters.channels import ChannelManager
 
+        # 章鱼助手（octopus）是 Octopus 本体 · 用户的私人助手。远程 IM（钉钉 /
+        # 微信等）、订阅推送与项目进度消息默认都汇聚到这里，由它接住、委派与汇报。
         channel_manager = ChannelManager(
             stack=stack,
             agent_registry=agent_registry,
-            default_agent_id="general",
+            default_agent_id="octopus",
         )
     except Exception as exc:
         logging.getLogger(__name__).debug("channel manager init failed: %s", exc)

@@ -1,0 +1,40 @@
+// arms reference factories in runtime/execution/arms/presets.py.
+// extra_affinity keywords boost agent matching by topic.
+// private_skills whitelist individual skills for the private arm.
+// "*" = all skills; delegation skills let 章鱼助手 delegate to other agents.
+
+{
+  "arms": [
+    "web_read",
+    "fs_writer",
+    "git",
+    "shell"
+  ],
+  "extra_affinity": [
+    "assistant",
+    "secretary",
+    "help",
+    "question",
+    "summary",
+    "progress",
+    "delegate",
+    "delegation",
+    "subscribe",
+    "subscription",
+    "report",
+    "status",
+    "overview",
+    "project"
+  ],
+  "private_skills": [
+    "*",
+    "call_agent",
+    "call_agent_parallel",
+    "call_agent_vote",
+    "run_orchestration",
+    "verdict_repair",
+    "tournament",
+    "cli_team",
+    "run_pipeline"
+  ]
+}

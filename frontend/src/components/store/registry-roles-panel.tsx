@@ -74,6 +74,8 @@ export function RegistryRolesPanel() {
 
   const q = query.trim().toLowerCase();
   const filtered = roles.filter((r) => {
+    // 排除 registry_local_ 前缀的第三方 CLI 伙伴,避免商城展示本地重复角色
+    if (r.id.startsWith("registry_local_")) return false;
     if (
       activeCategory !== "all" &&
       (r.category || "specialist") !== activeCategory

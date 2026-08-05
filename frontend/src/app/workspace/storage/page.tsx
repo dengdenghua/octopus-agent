@@ -12,6 +12,7 @@ import {
   FileImageIcon,
   FileSearchIcon,
   FileTextIcon,
+  FilmIcon,
   FolderIcon,
   FolderOpenIcon,
   FolderSearchIcon,
@@ -31,6 +32,9 @@ import {
   SlidersHorizontalIcon,
   SparklesIcon,
   TablePropertiesIcon,
+  TagIcon,
+  UserIcon,
+  UsersIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -38,6 +42,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -54,11 +59,16 @@ import {
   getNASBaseURL,
   getNASManifest,
   getNASPolicy,
+  getVideoCoverURL,
   isNASAuthenticationError,
   loadNASAssetURL,
   listNASApps,
   listNASAlbums,
   listNASFiles,
+  listVideoFaceGroups,
+  classifyVideoTags,
+  searchVideoByText,
+  ocrVideoKeyframes,
   listNASModels,
   listNASSources,
   listNASDirectory,
@@ -68,6 +78,7 @@ import {
   searchNAS,
   startNASService,
   updateNASPolicy,
+  triggerVideoIndex,
   type NASManifest,
   type NASApp,
   type NASAlbum,
@@ -75,6 +86,10 @@ import {
   type NASPolicy,
   type NASSearchHit,
   type NASSource,
+  type NASVideoSearchHit,
+  type NASVideoFaceGroup,
+  type NASVideoClassifyResult,
+  type NASVideoOcrHit,
 } from "@/core/storage/api";
 import { pickLocalDirectory } from "@/core/workspace/pick-local-directory";
 import { basename, isAbsolutePath } from "@/lib/path-utils";
@@ -85,6 +100,7 @@ type LibraryKey =
   | "apps"
   | "docs"
   | "images"
+  | "videos"
   | "computer"
   | "sources";
 
@@ -165,6 +181,12 @@ function buildLibraries(copy: StorageCopy): LibraryMeta[] {
       icon: FileImageIcon,
     },
     {
+      key: "videos",
+      label: copy.libraries.videosLabel,
+      detail: copy.libraries.videosDetail,
+      icon: PlayIcon,
+    },
+    {
       key: "computer",
       label: copy.libraries.computerLabel,
       detail: copy.libraries.computerDetail,
@@ -184,6 +206,7 @@ const LIBRARY_KEYS = new Set<LibraryKey>([
   "apps",
   "docs",
   "images",
+  "videos",
   "computer",
   "sources",
 ]);
@@ -539,6 +562,24 @@ function formatMonth(mtimeNs: number): string {
       }).format(date);
 }
 
+function formatSeconds(sec: number): string {
+  const total = Math.max(0, Math.floor(sec));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+type VideoPlayerHit = {
+  videoPath: string;
+  timeSec: number;
+};
+
+type VideoPlayerTarget = {
+  video: NASFileAsset;
+  hits: VideoPlayerHit[];
+  index: number;
+};
+
 type DocumentSmartFilter =
   | "all"
   | "recent"
@@ -669,6 +710,7 @@ export default function StoragePage() {
   const [apps, setApps] = useState<NASApp[]>([]);
   const [documents, setDocuments] = useState<NASFileAsset[]>([]);
   const [images, setImages] = useState<NASFileAsset[]>([]);
+  const [videos, setVideos] = useState<NASFileAsset[]>([]);
   const [albums, setAlbums] = useState<NASAlbum[]>([]);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<NASSearchHit[]>([]);
@@ -702,6 +744,7 @@ export default function StoragePage() {
         nextApps,
         nextDocuments,
         nextImages,
+        nextVideos,
         nextAlbums,
       ] = await Promise.all([
         getNASManifest(),
@@ -710,6 +753,7 @@ export default function StoragePage() {
         listNASApps(),
         listNASFiles("document"),
         listNASFiles("image"),
+        listNASFiles("video"),
         listNASAlbums(),
       ]);
       setManifest(nextManifest);
@@ -718,6 +762,7 @@ export default function StoragePage() {
       setApps(nextApps);
       setDocuments(nextDocuments);
       setImages(nextImages);
+      setVideos(nextVideos);
       setAlbums(nextAlbums);
       return true;
     } catch (error) {
@@ -726,6 +771,7 @@ export default function StoragePage() {
       setApps([]);
       setDocuments([]);
       setImages([]);
+      setVideos([]);
       setAlbums([]);
       setServiceError(
         isNASAuthenticationError(error)
@@ -889,12 +935,12 @@ export default function StoragePage() {
           <section className="workspace-panel flex min-h-0 flex-1 overflow-hidden rounded-none border-0 bg-white">
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
               {serviceError && (
-                <div className="flex items-center justify-between gap-3 border-b border-amber-300/70 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+                <div className="flex items-center justify-between gap-3 border-b border-warning/70 bg-warning/5 px-4 py-2 text-xs text-warning">
                   <span className="min-w-0 truncate">{serviceError}</span>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 shrink-0 rounded-md border-amber-300 bg-white px-3 text-amber-900 hover:bg-amber-100"
+                    className="h-7 shrink-0 rounded-md border-warning/40 bg-white px-3 text-warning hover:bg-warning/10"
                     onClick={() => void reconnectNAS()}
                     disabled={isReconnecting}
                   >
@@ -954,7 +1000,7 @@ export default function StoragePage() {
                     <span
                       className={cn(
                         "size-1.5 rounded-full",
-                        manifest ? "bg-emerald-500" : "bg-amber-500",
+                        manifest ? "bg-success" : "bg-warning",
                       )}
                     />
                     <span>
@@ -1009,6 +1055,7 @@ export default function StoragePage() {
                 <TopicCenterView
                   documents={documents}
                   images={images}
+                  videos={videos}
                   albums={albums}
                   activeLibrary={activeLibrary}
                   activeMeta={activeMeta}
@@ -1084,6 +1131,7 @@ function ToolbarSearch({
 function TopicCenterView({
   documents,
   images,
+  videos,
   albums,
   activeLibrary,
   activeMeta,
@@ -1096,6 +1144,7 @@ function TopicCenterView({
 }: {
   documents: NASFileAsset[];
   images: NASFileAsset[];
+  videos: NASFileAsset[];
   albums: NASAlbum[];
   activeLibrary: LibraryKey;
   activeMeta: LibraryMeta;
@@ -1132,6 +1181,19 @@ function TopicCenterView({
         isSearching={isSearching}
         manifest={manifest}
         albums={albums}
+      />
+    );
+  }
+
+  if (activeLibrary === "videos") {
+    return (
+      <VideoLibraryView
+        files={videos}
+        query={query}
+        setQuery={setQuery}
+        runSearch={runSearch}
+        isSearching={isSearching}
+        manifest={manifest}
       />
     );
   }
@@ -1517,6 +1579,683 @@ function AlbumChip({
       </span>
       {album.label} <span className="opacity-60">{album.count}</span>
     </button>
+  );
+}
+
+type VideoTab = "videos" | "people" | "tags";
+
+function VideoLibraryView({
+  files,
+  query,
+  setQuery,
+  runSearch,
+  isSearching,
+  manifest,
+}: {
+  files: NASFileAsset[];
+  query: string;
+  setQuery: (value: string) => void;
+  runSearch: () => void;
+  isSearching: boolean;
+  manifest: NASManifest | null;
+}) {
+  const { t } = useI18n();
+  const copy = t.storage;
+  const [activeTab, setActiveTab] = useState<VideoTab>("videos");
+  const [isIndexing, setIsIndexing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+  const [isVideoSearching, setIsVideoSearching] = useState(false);
+  const [searchHits, setSearchHits] = useState<NASVideoSearchHit[]>([]);
+  const [ocrHits, setOcrHits] = useState<NASVideoOcrHit[]>([]);
+  const [faceGroups, setFaceGroups] = useState<NASVideoFaceGroup[]>([]);
+  const [classifyResults, setClassifyResults] = useState<
+    NASVideoClassifyResult[]
+  >([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [playerTarget, setPlayerTarget] = useState<VideoPlayerTarget | null>(
+    null,
+  );
+
+  const videoFiles = useMemo(() => files.map(fileAssetToItem), [files]);
+
+  const assetByVideoPath = useMemo(() => {
+    const map = new Map<string, NASFileAsset>();
+    for (const asset of files) {
+      map.set(asset.path, asset);
+      map.set(basename(asset.path), asset);
+    }
+    return map;
+  }, [files]);
+
+  const resolveAsset = useCallback(
+    (videoPath: string): NASFileAsset | null => {
+      const byExact = assetByVideoPath.get(videoPath);
+      if (byExact) return byExact;
+      const byBase = assetByVideoPath.get(basename(videoPath));
+      if (byBase) return byBase;
+      const lower = videoPath.toLowerCase();
+      return (
+        files.find(
+          (asset) =>
+            asset.path.toLowerCase().endsWith(lower) ||
+            lower.endsWith(asset.path.toLowerCase()),
+        ) ?? null
+      );
+    },
+    [assetByVideoPath, files],
+  );
+
+  const loadFaces = useCallback(async () => {
+    try {
+      const res = await listVideoFaceGroups();
+      setFaceGroups(res.groups);
+    } catch {
+      setFaceGroups([]);
+    }
+  }, []);
+
+  const loadTags = useCallback(async () => {
+    try {
+      const res = await classifyVideoTags();
+      setClassifyResults(res.results);
+    } catch {
+      setClassifyResults([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "people") void loadFaces();
+  }, [activeTab, loadFaces]);
+
+  useEffect(() => {
+    if (activeTab === "tags") void loadTags();
+  }, [activeTab, loadTags]);
+
+  const rebuildIndex = async () => {
+    if (isIndexing) return;
+    setIsIndexing(true);
+    try {
+      await triggerVideoIndex();
+      await delay(1500);
+      void loadFaces();
+      void loadTags();
+    } finally {
+      setIsIndexing(false);
+    }
+  };
+
+  const runVideoSearch = async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setIsVideoSearching(true);
+    try {
+      const [semantic, ocr] = await Promise.all([
+        searchVideoByText(q),
+        ocrVideoKeyframes(q),
+      ]);
+      setSearchHits(semantic.hits);
+      setOcrHits(ocr.hits);
+    } catch {
+      setSearchHits([]);
+      setOcrHits([]);
+    } finally {
+      setHasSearched(true);
+      setIsVideoSearching(false);
+    }
+  };
+
+  const openPlayer = useCallback(
+    (video: NASFileAsset, hits: VideoPlayerHit[], index: number) => {
+      setPlayerTarget({ video, hits, index });
+    },
+    [],
+  );
+
+  const openAsset = useCallback(
+    (video: NASFileAsset) => {
+      openPlayer(video, [{ videoPath: video.path, timeSec: 0 }], 0);
+    },
+    [openPlayer],
+  );
+
+  const openSearchHit = useCallback(
+    (hit: NASVideoSearchHit, video: NASFileAsset) => {
+      const hits = searchHits
+        .filter((item) => item.video_path === hit.video_path)
+        .map((item) => ({ videoPath: item.video_path, timeSec: item.time_sec }));
+      const index = Math.max(
+        0,
+        hits.findIndex((item) => item.timeSec === hit.time_sec),
+      );
+      openPlayer(video, hits, index);
+    },
+    [openPlayer, searchHits],
+  );
+
+  const allTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const result of classifyResults) {
+      const top = result.tags[0];
+      if (top) counts.set(top.label, (counts.get(top.label) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).map(([label, count]) => ({
+      label,
+      count,
+    }));
+  }, [classifyResults]);
+
+  const taggedVideos = useMemo(
+    () =>
+      selectedTag
+        ? classifyResults
+            .filter((result) => result.tags[0]?.label === selectedTag)
+            .map((result) => resolveAsset(result.video_path))
+            .filter((asset): asset is NASFileAsset => asset !== null)
+        : [],
+    [classifyResults, resolveAsset, selectedTag],
+  );
+
+  const renderVideoGrid = (assets: NASFileAsset[]) => (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2">
+      {assets.length > 0 ? (
+        assets.map((asset) => (
+          <VideoAssetTile
+            key={asset.asset_id}
+            asset={asset}
+            copy={copy}
+            onOpen={() => openAsset(asset)}
+          />
+        ))
+      ) : (
+        <div className="col-span-full px-4 py-12 text-center text-sm text-muted-foreground">
+          {copy.videos.noResults}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">
+            {copy.videos.title}
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            {fill(copy.videos.subtitle, { count: videoFiles.length })}
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <ToolbarSearch
+            label={copy.videos.searchLabel}
+            query={query}
+            setQuery={setQuery}
+            runSearch={runSearch}
+            isSearching={isSearching}
+            manifest={manifest}
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8 rounded-md bg-white px-2 text-xs shadow-[var(--shadow-xs)]"
+            onClick={rebuildIndex}
+            disabled={isIndexing || !manifest}
+          >
+            <RefreshCwIcon
+              className={cn("size-3.5", isIndexing && "animate-spin")}
+            />
+            {isIndexing ? copy.videos.indexing : copy.videos.indexAction}
+          </Button>
+          <Badge
+            variant="outline"
+            className="h-8 rounded-md border-black/10 bg-white px-2.5 text-xs"
+          >
+            {copy.videos.badgeAllVideos}
+          </Badge>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1 border-b border-border bg-muted/50 px-3 py-2">
+        {(
+          [
+            ["videos", copy.videos.tabVideos, FilmIcon],
+            ["people", copy.videos.tabPeople, UsersIcon],
+            ["tags", copy.videos.tabTags, TagIcon],
+          ] as const
+        ).map(([value, label, Icon]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={activeTab === value}
+            onClick={() => setActiveTab(value)}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
+              activeTab === value
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-white",
+            )}
+          >
+            <Icon className="size-3.5" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <main className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 lg:px-6">
+        {activeTab === "videos" && (
+          <>
+            <div className="mb-2 flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-black/10 bg-white px-2 shadow-[var(--shadow-xs)]">
+                <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void runVideoSearch();
+                  }}
+                  placeholder={copy.videos.searchPlaceholder}
+                  className="h-8 min-w-36 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 shrink-0 rounded-md px-2"
+                  onClick={() => void runVideoSearch()}
+                  disabled={isVideoSearching || !searchQuery.trim()}
+                >
+                  {isVideoSearching ? (
+                    <RefreshCwIcon className="size-3.5 animate-spin" />
+                  ) : (
+                    <SearchIcon className="size-3.5" />
+                  )}
+                </Button>
+              </div>
+            </div>
+            <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+              <SparklesIcon className="size-3.5" />
+              <span>{copy.videos.searchHint}</span>
+            </div>
+            {files.length === 0 && !hasSearched ? (
+              <div className="rounded-lg border border-border bg-white px-4 py-12 text-center text-sm text-muted-foreground">
+                {copy.videos.noIndex}
+              </div>
+            ) : hasSearched ? (
+              <div className="space-y-4">
+                {searchHits.length > 0 && (
+                  <div>
+                    <div className="mb-2 text-xs font-semibold text-muted-foreground">
+                      {copy.videos.summary}
+                    </div>
+                    <div className="overflow-hidden rounded-lg border border-border bg-white shadow-[var(--shadow-xs)]">
+                      {searchHits.map((hit, index) => {
+                        const video = resolveAsset(hit.video_path);
+                        return (
+                          <button
+                            key={`${hit.video_path}-${hit.time_sec}`}
+                            type="button"
+                            onClick={() =>
+                              video && openSearchHit(hit, video)
+                            }
+                            className="flex w-full items-center gap-3 border-b border-black/[0.04] px-3 py-2.5 text-left last:border-b-0 hover:bg-black/[0.025]"
+                          >
+                            <PlayIcon className="size-4 shrink-0 text-primary" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                              {video
+                                ? video.name
+                                : basename(hit.video_path)}
+                            </span>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {formatSeconds(hit.time_sec)}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-black/10"
+                            >
+                              {Math.round(hit.score * 100)}%
+                            </Badge>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {ocrHits.length > 0 && (
+                  <div>
+                    <div className="mb-2 text-xs font-semibold text-muted-foreground">
+                      {copy.videos.ocr.label}
+                    </div>
+                    <div className="overflow-hidden rounded-lg border border-border bg-white shadow-[var(--shadow-xs)]">
+                      {ocrHits.map((hit, index) => {
+                        const video = resolveAsset(hit.video_path);
+                        return (
+                          <button
+                            key={`${hit.video_path}-${hit.time_sec}-${index}`}
+                            type="button"
+                            onClick={() =>
+                              video &&
+                              openPlayer(
+                                video,
+                                [
+                                  {
+                                    videoPath: hit.video_path,
+                                    timeSec: hit.time_sec,
+                                  },
+                                ],
+                                0,
+                              )
+                            }
+                            className="flex w-full items-start gap-3 border-b border-black/[0.04] px-3 py-2.5 text-left last:border-b-0 hover:bg-black/[0.025]"
+                          >
+                            <FileSearchIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium">
+                                {video
+                                  ? video.name
+                                  : basename(hit.video_path)}{" "}
+                                · {formatSeconds(hit.time_sec)}
+                              </span>
+                              <span className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                                {hit.text}
+                              </span>
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-black/10"
+                            >
+                              {Math.round(hit.score * 100)}%
+                            </Badge>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {searchHits.length === 0 && ocrHits.length === 0 && (
+                  <div className="rounded-lg border border-border bg-white px-4 py-10 text-center text-sm text-muted-foreground">
+                    {copy.videos.noOcr}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {renderVideoGrid(files)}
+                <div className="mt-6 text-xs text-muted-foreground">
+                  {copy.videos.footerNote}
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {activeTab === "people" && (
+          <div className="space-y-3">
+            {faceGroups.length > 0 ? (
+              faceGroups.map((group) => (
+                <div
+                  key={group.person}
+                  className="overflow-hidden rounded-lg border border-border bg-white shadow-[var(--shadow-xs)]"
+                >
+                  <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-3 py-2.5">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-black/[0.04] text-muted-foreground">
+                      <UserIcon className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">
+                        {copy.videos.peopleCount(group.person)}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {copy.videos.faceCount(group.count_faces)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-black/[0.04]">
+                    {group.appearances.map((appearance, index) => {
+                      const video = resolveAsset(appearance.video_path);
+                      return (
+                        <button
+                          key={`${appearance.video_path}-${appearance.time_sec}-${index}`}
+                          type="button"
+                          onClick={() =>
+                            video &&
+                            openPlayer(
+                              video,
+                              group.appearances.map((item) => ({
+                                videoPath: item.video_path,
+                                timeSec: item.time_sec,
+                              })),
+                              index,
+                            )
+                          }
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-black/[0.025]"
+                        >
+                          <PlayIcon className="size-4 shrink-0 text-primary" />
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                            {video
+                              ? video.name
+                              : basename(appearance.video_path)}
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {formatSeconds(appearance.time_sec)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-lg border border-border bg-white px-4 py-12 text-center text-sm text-muted-foreground">
+                {copy.videos.noFaces}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "tags" && (
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-1.5">
+              {allTags.length > 0 ? (
+                allTags.map((tag) => (
+                  <button
+                    key={tag.label}
+                    type="button"
+                    aria-pressed={selectedTag === tag.label}
+                    onClick={() =>
+                      setSelectedTag(
+                        selectedTag === tag.label ? null : tag.label,
+                      )
+                    }
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-xs transition-colors",
+                      selectedTag === tag.label
+                        ? "bg-foreground text-background"
+                        : "border border-black/10 bg-white hover:bg-muted",
+                    )}
+                  >
+                    {tag.label}
+                    <span className="ml-1 opacity-60">{tag.count}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="w-full rounded-lg border border-border bg-white px-4 py-12 text-center text-sm text-muted-foreground">
+                  {copy.videos.noTags}
+                </div>
+              )}
+            </div>
+            {selectedTag && renderVideoGrid(taggedVideos)}
+          </>
+        )}
+      </main>
+
+      {playerTarget && (
+        <VideoPlayerDialog
+          target={playerTarget}
+          onClose={() => setPlayerTarget(null)}
+          onPrev={() =>
+            setPlayerTarget((target) =>
+              target
+                ? { ...target, index: Math.max(0, target.index - 1) }
+                : target,
+            )
+          }
+          onNext={() =>
+            setPlayerTarget((target) =>
+              target
+                ? {
+                    ...target,
+                    index: Math.min(target.hits.length - 1, target.index + 1),
+                  }
+                : target,
+            )
+          }
+          copy={copy}
+        />
+      )}
+    </>
+  );
+}
+
+function VideoAssetTile({
+  asset,
+  copy,
+  onOpen,
+}: {
+  asset: NASFileAsset;
+  copy: StorageCopy;
+  onOpen: () => void;
+}) {
+  const coverUrl = getVideoCoverURL(asset.path, 0);
+  const videoUrl = useNASAsset(
+    `/v1/files/${encodeURIComponent(asset.asset_id)}/content`,
+  );
+  const [coverFailed, setCoverFailed] = useState(false);
+  const showCover = !coverFailed && coverUrl;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={`${asset.name}\n${asset.path}`}
+      className="group min-w-0 overflow-hidden rounded-[8px] bg-muted/40 text-left"
+    >
+      <span className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-black">
+        {showCover ? (
+          <img
+            src={coverUrl}
+            alt={asset.name}
+            onError={() => setCoverFailed(true)}
+            className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+          />
+        ) : videoUrl ? (
+          <video
+            src={videoUrl}
+            preload="metadata"
+            muted
+            playsInline
+            className="size-full object-cover"
+          />
+        ) : (
+          <FilmIcon className="size-7 text-muted-foreground" />
+        )}
+        <span className="absolute inset-0 grid place-items-center bg-black/0 transition-colors group-hover:bg-black/20">
+          <span className="grid size-8 place-items-center rounded-full bg-white/90 text-foreground opacity-0 shadow-[var(--shadow-xs)] transition-opacity group-hover:opacity-100">
+            <PlayIcon className="size-4" />
+          </span>
+        </span>
+        <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-mini text-white">
+          {copy.videos.duration}
+        </span>
+      </span>
+      <div className="space-y-0.5 px-2 py-1.5">
+        <div className="truncate text-xs font-medium">{asset.name}</div>
+        <div className="truncate text-mini text-muted-foreground">
+          {formatBytes(asset.size)}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function VideoPlayerDialog({
+  target,
+  onClose,
+  onPrev,
+  onNext,
+  copy,
+}: {
+  target: VideoPlayerTarget;
+  onClose: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  copy: StorageCopy;
+}) {
+  const videoUrl = useNASAsset(
+    `/v1/files/${encodeURIComponent(target.video.asset_id)}/content`,
+  );
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const current = target.hits[target.index];
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el && current) el.currentTime = current.timeSec;
+  }, [target.index, current?.timeSec]);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="max-w-3xl border-border-default bg-white p-0 sm:max-w-3xl"
+        showCloseButton={false}
+      >
+        <div className="p-4">
+          <video
+            key={target.video.asset_id}
+            ref={videoRef}
+            src={videoUrl ?? undefined}
+            controls
+            autoPlay
+            muted
+            playsInline
+            className="aspect-video w-full rounded-lg bg-black"
+          />
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">
+                {target.video.name}
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                {copy.videos.player.atTime(
+                  formatSeconds(current?.timeSec ?? 0),
+                )}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="rounded-md bg-black/[0.04]"
+                onClick={onPrev}
+                disabled={target.index <= 0}
+              >
+                {copy.videos.player.prev}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="rounded-md bg-black/[0.04]"
+                onClick={onNext}
+                disabled={target.index >= target.hits.length - 1}
+              >
+                {copy.videos.player.next}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={onClose}>
+                {copy.videos.player.close}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1971,7 +2710,7 @@ function AppsView({
             <div className="truncate text-xs font-semibold">
               {contextMenu.item.name}
             </div>
-            <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+            <div className="mt-0.5 truncate text-mini text-muted-foreground">
               {contextMenu.item.path}
             </div>
           </div>
@@ -2313,17 +3052,17 @@ function SourcesView({
       </div>
 
       {!manifest && (
-        <div className="flex shrink-0 flex-col gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="font-medium">下一步：重新连接本地知识库服务</div>
-            <div className="mt-0.5 truncate text-amber-900/80">
+            <div className="mt-0.5 truncate text-warning/80">
               {serviceError || `当前未连接 ${getNASBaseURL()}`}
             </div>
           </div>
           <Button
             size="sm"
             variant="outline"
-            className="h-8 shrink-0 rounded-md border-amber-300 bg-white px-3 text-amber-950 hover:bg-amber-100"
+            className="h-8 shrink-0 rounded-md border-warning/40 bg-white px-3 text-warning hover:bg-warning/10"
             onClick={onReconnect}
             disabled={isReconnecting}
           >
@@ -2534,7 +3273,7 @@ function SearchResultsView({
           </div>
         ) : (
           <div className="flex min-h-[340px] flex-col items-center justify-center rounded-lg bg-white px-6 text-center shadow-[var(--shadow-xs)] ring-1 ring-border">
-            <div className="grid size-14 place-items-center rounded-lg bg-amber-50 text-amber-700">
+            <div className="grid size-14 place-items-center rounded-lg bg-warning/5 text-warning">
               <FileSearchIcon className="size-6" />
             </div>
             <div className="mt-4 text-base font-semibold">
@@ -2615,8 +3354,8 @@ function SourceRow({
           className={cn(
             "h-5 px-1.5 text-xs",
             isReady
-              ? "border-emerald-300/55 bg-emerald-50 text-emerald-800"
-              : "border-amber-300/55 bg-amber-50 text-amber-800",
+              ? "border-success/55 bg-success/5 text-success"
+              : "border-warning/55 bg-warning/5 text-warning",
           )}
         >
           {isReady ? "已就绪" : "待索引"}
@@ -2647,10 +3386,10 @@ function SourceRow({
 function toneClass(tone: string) {
   const classes: Record<string, string> = {
     blue: "bg-sky-50 text-sky-700",
-    green: "bg-emerald-50 text-emerald-700",
+    green: "bg-success/5 text-success",
     violet: "bg-violet-50 text-violet-700",
-    amber: "bg-amber-50 text-amber-700",
-    rose: "bg-rose-50 text-rose-700",
+    amber: "bg-warning/5 text-warning",
+    rose: "bg-destructive/5 text-destructive",
     zinc: "bg-muted text-muted-foreground",
   };
   return classes[tone] ?? tone;

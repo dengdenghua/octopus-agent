@@ -18,7 +18,11 @@ const fs = require("fs");
 const fsp = require("fs/promises");
 const os = require("os");
 const path = require("path");
-const { spawn } = require("child_process");
+const {
+  spawnBackend,
+  killBackend,
+  ensureOptionalDeps,
+} = require("./backend-runtime.cjs");
 
 const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
 const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
@@ -69,10 +73,11 @@ function resolveBackendBaseURL() {
 }
 
 // ── packaged backend hosting ───────────────────────────────────
-// In packaged mode the main process owns the Python backend child process
-// (`python -m runtime serve`). In dev mode the backend runs externally
-// (pnpm dev:full) and backend.restart degrades to {ok:false, reason}.
-let backendChild = null;
+// In packaged mode the main process owns the Python backend child process via
+// the uv-managed runtime (see backend-runtime.cjs). On first launch it creates
+// a venv + installs a lean core; heavy optional deps install on demand. In dev
+// mode the backend runs externally (pnpm dev:full) and backend.restart
+// degrades to {ok:false, reason}.
 
 function backendConfigPath() {
   // ensureDesktopConfig() copies config.desktop.yaml into userData on first
@@ -80,45 +85,11 @@ function backendConfigPath() {
   return path.join(app.getPath("userData"), "config.desktop.yaml");
 }
 
-function spawnBackend() {
-  if (backendChild) return backendChild;
-  const child = spawn(
-    "python",
-    [
-      "-m",
-      "runtime",
-      "serve",
-      "--config",
-      backendConfigPath(),
-      "--host",
-      "127.0.0.1",
-      "--port",
-      "8000",
-    ],
-    { stdio: "inherit", env: process.env },
-  );
-  backendChild = child;
-  child.on("exit", (code, signal) => {
-    console.warn(
-      `[octopus] backend exited (code=${code}, signal=${signal}); restart via backend.restart`,
-    );
-    if (backendChild === child) backendChild = null;
-  });
-  child.on("error", (err) => {
-    console.warn("[octopus] backend spawn failed:", err.message);
-    if (backendChild === child) backendChild = null;
-  });
-  return child;
-}
-
-function killBackend() {
-  if (!backendChild) return;
-  const child = backendChild;
-  backendChild = null;
+function backendProgress({ stage, message }) {
   try {
-    child.kill();
-  } catch (err) {
-    console.warn("[octopus] backend kill failed:", err.message);
+    mainWindow?.webContents.send("backend:bootstrap-progress", { stage, message });
+  } catch {
+    /* window may not exist yet */
   }
 }
 
@@ -432,7 +403,18 @@ function registerIpc() {
     }
     try {
       killBackend();
-      spawnBackend();
+      await spawnBackend(backendConfigPath(), backendProgress);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: err.message };
+    }
+  });
+  handle("backend:ensureOptionalDeps", async (_e, group) => {
+    if (!app.isPackaged) {
+      return { ok: false, reason: "optional deps are managed by dev tooling in dev mode" };
+    }
+    try {
+      await ensureOptionalDeps(group, backendProgress);
       return { ok: true };
     } catch (err) {
       return { ok: false, reason: err.message };
@@ -841,10 +823,16 @@ if (!app.requestSingleInstanceLock()) {
     ensureDesktopConfig();
     registerIpc();
     setupAutoUpdater();
-    if (app.isPackaged) spawnBackend();
     trackDownloads(session.defaultSession);
-    await loadEnabledExtensions();
     mainWindow = createMainWindow();
+    // Create the window before bootstrapping the backend so the renderer can
+    // show first-launch progress (uv downloads the Python runtime once).
+    if (app.isPackaged) {
+      spawnBackend(backendConfigPath(), backendProgress).catch((err) => {
+        console.error("[octopus] backend bootstrap failed:", err.message);
+      });
+    }
+    await loadEnabledExtensions();
     watchDesktop();
 
     if (process.env.OCTOPUS_SMOKE === "1") {

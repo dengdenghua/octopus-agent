@@ -207,3 +207,26 @@ def test_pre_emit_still_buffers_executable_risk() -> None:
         "通过 subprocess.run 删除该目录。",
         is_code_mode=False,
     )
+
+
+def test_pre_emit_ignores_dynamic_exec_inside_fenced_code_block() -> None:
+    """Regression: a code deliverable that quotes eval/exec inside a markdown
+    fence must stream instead of buffering the whole report. The display-only
+    token is not a runtime call the agent is about to run; the terminal guard
+    still vets the full text."""
+    fence = "```"
+    report = (
+        "## 实现方案\n\n"
+        "核心逻辑如下：\n\n"
+        f"{fence}python\n"
+        "data = eval(f'{{x}}')\n"
+        "exec('print(1)')\n"
+        f"{fence}\n\n"
+        "综上，建议采用该方案。"
+    )
+    assert not _final_answer_needs_pre_emit_guard(report, is_code_mode=True)
+    # The same dynamic-exec call in prose (outside any fence) still buffers.
+    assert _final_answer_needs_pre_emit_guard(
+        "我准备执行 exec('print(1)') 来验证。",
+        is_code_mode=True,
+    )

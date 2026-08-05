@@ -99,7 +99,9 @@ Suckers = skill pool.
 | `forged_persistence.py` | — |
 | `fs_search_skills.py` | — |
 | `hub/installer.py` | — |
+| `image_album_skills.py` | Image album skills (local AI photo library). |
 | `image_search_backends.py` | Image-search provider backends for the kimi-compat skill group. |
+| `image_semantic_skills.py` | Image semantic-search skills (local image library). |
 | `kg_skill.py` | — |
 | `kimi_compat_skills.py` | — |
 | `layers.py` | — |
@@ -407,12 +409,24 @@ Suckers = skill pool.
 | func | `def safe_extract_zip(archive_bytes, dest_dir, max_entry_bytes, max_total_bytes)` |  |
 | func | `def install_from_archive(archive_bytes, dest_dir, overwrite, max_entry_bytes, max_total_bytes)` |  |
 
+### `image_album_skills.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def register_image_album_skills(registry)` |  |
+
 ### `image_search_backends.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def search_image_by_text(query, max_results, backend, **_)` |  |
 | func | `def search_image_by_image(image_url, image_path, **_)` |  |
+
+### `image_semantic_skills.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def register_image_semantic_skills(registry)` |  |
 
 ### `kg_skill.py`
 
@@ -579,10 +593,10 @@ Suckers = skill pool.
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
 - **`runtime/core/`** · 7 file(s)
+  - `runtime/core/cerebrum/_react_context_helpers.py`
   - `runtime/core/cerebrum/_react_context_project.py`
-  - `runtime/core/cerebrum/_react_context_skill_catalog.py`
   - `runtime/core/cerebrum/_react_execution_dispatch.py`
-  - `runtime/core/cerebrum/_react_prompt_assembly_tools.py`
+  - `runtime/core/cerebrum/_react_prompt_assembly_guidance.py`
   - `runtime/core/cerebrum/capability_router.py`
   - _… and 2 more_
 - **`runtime/execution/`** · 9 file(s)

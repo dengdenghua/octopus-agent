@@ -99,6 +99,10 @@ const proxyConfig = {
     changeOrigin: true,
     ws: true,
   },
+  "/media": {
+    target: gatewayTarget,
+    changeOrigin: true,
+  },
   "/.well-known": {
     target: gatewayTarget,
     changeOrigin: true,

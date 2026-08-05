@@ -737,6 +737,7 @@ export interface Translations {
     previewConsoleEmpty: string;
     previewConsoleClear: string;
     previewConsoleAddToChat: string;
+    previewConsoleCount: (n: number) => string;
     previewDevTools: string;
     previewDevToolsUnavailable: string;
     // Tool panel (realtime)
@@ -835,6 +836,7 @@ export interface Translations {
     composer: {
       placeholderCode: string;
       placeholderNew: string;
+      placeholderOctopus: string;
     };
     recorder: {
       defaultName: string;
@@ -1578,6 +1580,7 @@ export interface Translations {
     libraryApps: string;
     libraryDocs: string;
     libraryImages: string;
+    libraryVideos: string;
     libraryComputer: string;
     libraryAuthorizedDirs: string;
     // Chats drawer
@@ -2369,6 +2372,10 @@ export interface Translations {
     noArtifactSelected: string;
     selectArtifactToView: string;
     artifactsTitle: string;
+    artifactsTabChanges: string;
+    artifactsTabPreview: string;
+    noChangesArtifacts: string;
+    noPreviewArtifacts: string;
     retry: string;
     editResend: string;
     regenerateResponse: string;
@@ -2849,28 +2856,15 @@ export interface Translations {
       system: string;
       light: string;
       dark: string;
-      apple: string;
       systemDescription: string;
       lightDescription: string;
       darkDescription: string;
-      appleDescription: string;
-      materialTitle: string;
-      materialDescription: string;
-      materialStandard: string;
-      materialStandardDescription: string;
-      materialLiquid: string;
-      materialLiquidDescription: string;
-      materialIntensityTitle: string;
-      materialIntensityCrystal: string;
-      materialIntensityCrystalDescription: string;
-      materialIntensityClear: string;
-      materialIntensityClearDescription: string;
-      materialIntensityBalanced: string;
-      materialIntensityBalancedDescription: string;
-      materialIntensityDeep: string;
-      materialIntensityDeepDescription: string;
-      materialIntensityFrosted: string;
-      materialIntensityFrostedDescription: string;
+      paletteTitle: string;
+      paletteDescription: string;
+      paletteRouge: string;
+      paletteRougeDescription: string;
+      paletteSteel: string;
+      paletteSteelDescription: string;
       languageTitle: string;
       languageDescription: string;
       languageEnglish: string;
@@ -4060,6 +4054,7 @@ export interface Translations {
     appDescGemini: string;
     appDescNotebookLM: string;
     appDescDoubao: string;
+    appDescDeepSeek: string;
     appDescTongyiQianwen: string;
     appDescWenxinYiyan: string;
     appDescTencentYuanbao: string;
@@ -4196,6 +4191,14 @@ export interface Translations {
     signalCommits: (count: number) => string;
     signalReadme: string;
     signalSummaryEmpty: string;
+  };
+
+  // Intent-based mode auto-switch
+  modeIntent: {
+    suggestSwitch: (modeLabel: string) => string;
+    switch: string;
+    ignore: string;
+    autoSwitched: (modeLabel: string) => string;
   };
 
   // Code page tabs
@@ -5784,6 +5787,28 @@ export interface Translations {
     credits: string;
     refreshed: string;
     refreshFailed: string;
+  };
+
+  // Community credits ledger (本地积分账本 / 积分中心)
+  creditsCenter: {
+    title: string;
+    totalBalance: string;
+    accountBalance: string;
+    communityBalance: string;
+    signIn: string;
+    signInDone: string;
+    signInSuccess: (n: number) => string;
+    signInFailed: string;
+    earned: string;
+    spent: string;
+    ledger: string;
+    emptyLedger: string;
+    earnHints: string;
+    earnHintSignIn: (n: number) => string;
+    earnHintPublish: (n: number) => string;
+    earnHintFork: (n: number) => string;
+    earnHintLike: (n: number) => string;
+    spendNoBalance: string;
   };
 
   // Daily credits claim
@@ -7820,6 +7845,8 @@ export interface Translations {
       docsDetail: string;
       imagesLabel: string;
       imagesDetail: string;
+      videosLabel: string;
+      videosDetail: string;
       computerLabel: string;
       computerDetail: string;
       sourcesLabel: string;
@@ -7886,6 +7913,48 @@ export interface Translations {
       filterOcr: string;
       filterLocalLibrary: string;
       ocrBadge: string;
+    };
+    videos: {
+      title: string;
+      subtitle: string;
+      searchLabel: string;
+      badgeAllVideos: string;
+      indexNote: string;
+      indexAction: string;
+      indexing: string;
+      noResults: string;
+      colName: string;
+      colLocation: string;
+      colSize: string;
+      colDuration: string;
+      colModified: string;
+      colActions: string;
+      footerNote: string;
+      tabVideos: string;
+      tabPeople: string;
+      tabTags: string;
+      searchPlaceholder: string;
+      searchHint: string;
+      noIndex: string;
+      noFaces: string;
+      noTags: string;
+      noOcr: string;
+      summary: string;
+      cover: string;
+      duration: string;
+      peopleCount: (n: number) => string;
+      faceCount: (n: number) => string;
+      player: {
+        open: string;
+        close: string;
+        prev: string;
+        next: string;
+        atTime: (t: string) => string;
+      };
+      ocr: {
+        label: string;
+        hint: string;
+      };
     };
     apps: {
       title: string;

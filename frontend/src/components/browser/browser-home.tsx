@@ -37,8 +37,11 @@ import {
   Plus,
   Minimize2,
   Maximize2,
+  CompassIcon,
   type LucideIcon,
 } from "lucide-react";
+
+import { useNavigate } from "react-router-dom";
 
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
@@ -93,6 +96,7 @@ interface Widget {
 }
 
 type DesktopBackdropId =
+  | "palette"
   | "theme-mist"
   | "theme-focus"
   | "theme-clear"
@@ -107,12 +111,6 @@ interface ContextMenuState {
   y: number;
   targetId: string | null;
   targetType: "icon" | "widget" | "folder" | "background";
-}
-
-interface AddMenuState {
-  visible: boolean;
-  x: number;
-  y: number;
 }
 
 interface DragState {
@@ -345,7 +343,6 @@ const DESKTOP_SIDE_NAV: Array<{
   id: DesktopPanelId;
   icon: LucideIcon;
 }> = [
-  { id: "home", icon: HomeIcon },
   { id: "theme", icon: PaletteIcon },
   { id: "widgets", icon: PanelLeftIcon },
   { id: "wallpaper", icon: ImageIcon },
@@ -400,7 +397,7 @@ function DesktopAppLogo({
   return (
     <span
       className={cn(
-        "grid place-items-center overflow-hidden rounded-[18px] text-foreground transition",
+        "grid place-items-center overflow-hidden rounded-md text-foreground transition",
         className,
         failed && "bg-gradient-to-br text-white",
         failed && app.color,
@@ -432,14 +429,14 @@ function SearchEngineLogo({
   return (
     <span
       className={cn(
-        "grid place-items-center overflow-hidden rounded-full bg-white shadow-[var(--shadow-xs)] ring-1 ring-black/5",
+        "grid place-items-center overflow-hidden rounded-md",
         className,
       )}
     >
       {failed ? (
         <span
           className={cn(
-            "grid size-full place-items-center text-micro font-black leading-none",
+            "grid size-full place-items-center text-micro font-black leading-none rounded-md",
             engine.accent,
           )}
         >
@@ -449,7 +446,7 @@ function SearchEngineLogo({
         <img
           src={engine.logoUrl}
           alt=""
-          className="size-[68%] object-contain"
+          className="size-full object-contain"
           onError={() => setFailed(true)}
         />
       )}
@@ -475,8 +472,7 @@ const DEFAULT_DOCK_APP_URLS = [
   "https://github.com/",
   "https://www.perplexity.ai/",
 ];
-const DEFAULT_DESKTOP_BACKDROP: DesktopBackdropId = "theme-mist";
-const BROWSER_WALLPAPER_IMAGE_BASE = "/images/browser-wallpapers";
+const DEFAULT_DESKTOP_BACKDROP: DesktopBackdropId = "palette";
 interface DesktopBackdropConfig {
   className: string;
   swatchClassName: string;
@@ -487,45 +483,56 @@ const DESKTOP_BACKDROPS: Record<
   DesktopBackdropId,
   DesktopBackdropConfig
 > = {
+  palette: {
+    className: "browser-backdrop-palette",
+    swatchClassName: "browser-backdrop-palette-swatch",
+  },
   "theme-mist": {
-    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/mist-glass.png`,
+    imageUrl:
+      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1920&q=80",
     className:
       "bg-[radial-gradient(circle_at_16%_10%,rgba(236,253,245,0.72),transparent_27%),radial-gradient(circle_at_78%_6%,rgba(125,211,252,0.42),transparent_25%),radial-gradient(circle_at_88%_70%,rgba(251,207,232,0.38),transparent_31%),radial-gradient(circle_at_34%_88%,rgba(253,230,138,0.24),transparent_30%),linear-gradient(145deg,#5f8c91_0%,#8ea7bd_34%,#bba8b8_68%,#d1ad8f_100%)]",
     swatchClassName:
       "bg-gradient-to-br from-muted-foreground via-zinc-300 to-destructive",
   },
   "theme-focus": {
-    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/focus-nocturne.png`,
+    imageUrl:
+      "https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?auto=format&fit=crop&w=1920&q=80",
     className:
       "bg-[radial-gradient(circle_at_18%_10%,rgba(59,130,246,0.34),transparent_28%),radial-gradient(circle_at_82%_14%,rgba(168,85,247,0.24),transparent_30%),radial-gradient(circle_at_76%_82%,rgba(14,165,233,0.18),transparent_32%),linear-gradient(145deg,#0f172a_0%,#1e293b_42%,#111827_100%)]",
     swatchClassName: "bg-gradient-to-br from-background via-muted-foreground/30 to-primary",
   },
   "theme-clear": {
-    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/clear-productivity.png`,
+    imageUrl:
+      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80",
     className:
       "bg-[radial-gradient(circle_at_18%_12%,rgba(191,219,254,0.86),transparent_28%),radial-gradient(circle_at_78%_18%,rgba(125,211,252,0.48),transparent_28%),radial-gradient(circle_at_82%_82%,rgba(224,242,254,0.82),transparent_34%),linear-gradient(145deg,#eff6ff_0%,#dbeafe_36%,#f8fafc_72%,#e0f2fe_100%)]",
     swatchClassName: "bg-gradient-to-br from-sky-200 via-white to-blue-300",
   },
   "wallpaper-sky": {
-    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/sky-studio.png`,
+    imageUrl:
+      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1920&q=80",
     className:
       "bg-[radial-gradient(circle_at_22%_14%,rgba(219,234,254,0.92),transparent_26%),radial-gradient(circle_at_72%_16%,rgba(103,232,249,0.44),transparent_28%),linear-gradient(145deg,#60a5fa_0%,#93c5fd_45%,#f8fafc_100%)]",
     swatchClassName: "bg-gradient-to-br from-sky-300 via-blue-300 to-white",
   },
   "wallpaper-clear-sky": {
-    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/clear-productivity.png`,
+    imageUrl:
+      "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1920&q=80",
     className:
       "bg-[radial-gradient(circle_at_24%_16%,rgba(219,234,254,0.72),transparent_30%),radial-gradient(circle_at_76%_28%,rgba(226,232,240,0.52),transparent_32%),linear-gradient(145deg,#dbeafe_0%,#f8fafc_52%,#e0f2fe_100%)]",
     swatchClassName: "bg-gradient-to-br from-blue-100 via-white to-sky-200",
   },
   "wallpaper-forest": {
-    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/forest-calm.png`,
+    imageUrl:
+      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1920&q=80",
     className:
       "bg-[radial-gradient(circle_at_18%_12%,rgba(187,247,208,0.56),transparent_30%),radial-gradient(circle_at_78%_70%,rgba(45,212,191,0.28),transparent_34%),linear-gradient(145deg,#134e4a_0%,#3f6212_46%,#a7f3d0_100%)]",
     swatchClassName: "bg-gradient-to-br from-success via-teal-500 to-lime-700",
   },
   "wallpaper-ember": {
-    imageUrl: `${BROWSER_WALLPAPER_IMAGE_BASE}/ember-dusk.png`,
+    imageUrl:
+      "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1920&q=80",
     className:
       "bg-[radial-gradient(circle_at_20%_16%,rgba(254,215,170,0.66),transparent_30%),radial-gradient(circle_at_84%_76%,rgba(251,113,133,0.36),transparent_32%),linear-gradient(145deg,#44403c_0%,#a16207_50%,#fed7aa_100%)]",
     swatchClassName: "bg-gradient-to-br from-stone-600 via-warning to-orange-200",
@@ -545,6 +552,7 @@ function getBackdropImageStyle(
   };
 }
 const DESKTOP_THEME_BACKDROPS: DesktopBackdropId[] = [
+  "palette",
   "theme-mist",
   "theme-focus",
   "theme-clear",
@@ -614,6 +622,17 @@ function loadDesktopBackdrop(): DesktopBackdropId {
     : DEFAULT_DESKTOP_BACKDROP;
 }
 
+function faviconForUrl(url: string): string {
+  try {
+    return `https://www.google.com/s2/favicons?domain=${
+      new URL(url).hostname
+    }&sz=64`;
+  } catch (e) {
+    swallow(e);
+    return "";
+  }
+}
+
 function moveDesktopApp(
   order: string[],
   fromUrl: string,
@@ -649,8 +668,8 @@ function MenuItem({
       className={cn(
         "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors",
         active
-          ? "bg-sky-400/20 text-sky-400"
-          : "text-muted-foreground hover:bg-white/50 hover:text-foreground",
+          ? "bg-accent text-accent-foreground"
+          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
         danger && "text-destructive hover:bg-destructive/10",
       )}
     >
@@ -697,7 +716,7 @@ function ContextMenu({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
       <div
-        className="fixed z-50 bg-white/95 backdrop-blur-xl border border-white/30 rounded-2xl py-2 min-w-[160px] shadow-2xl"
+        className="fixed z-50 bg-popover text-popover-foreground border border-border-subtle rounded-lg py-2 min-w-[160px] shadow-[var(--shadow-md)]"
         style={{ left: state.x, top: state.y }}
       >
         {isIcon && (
@@ -846,6 +865,7 @@ export function BrowserHome({
   const wt = t.browser.webviewTab;
   const bt = t.browserHome;
   const { history } = useBrowserStore();
+  const navigate = useNavigate();
 
   const appNameMap = useMemo<Record<string, string>>(
     () => ({
@@ -863,9 +883,10 @@ export function BrowserHome({
       "Comprehensive search, multi-turn analysis": bt.appDescGemini,
       "Library, citations, document research": bt.appDescNotebookLM,
       "Chinese research, Chinese rewriting": bt.appDescDoubao,
-      "Reasoning, coding, Chinese Q&A": bt.appDescTongyiQianwen,
-      "Tongyi models, multimodal chat": bt.appDescWenxinYiyan,
-      "Baidu agents, Chinese creation": bt.appDescTencentYuanbao,
+      "Reasoning, coding, Chinese Q&A": bt.appDescDeepSeek,
+      "Tongyi models, multimodal chat": bt.appDescTongyiQianwen,
+      "Baidu agents, Chinese creation": bt.appDescWenxinYiyan,
+      "Chinese search, material summary": bt.appDescTencentYuanbao,
       "Web search, source leads": bt.appDescPerplexity,
       "General chat, coding assistance": bt.appDescChatGPT,
       "Long-text analysis, writing organization": bt.appDescClaude,
@@ -910,7 +931,6 @@ export function BrowserHome({
     () => loadDesktopBackdrop(),
   );
   const [draggingUrl, setDraggingUrl] = useState<string | null>(null);
-  const [searchFilter] = useState("");
   const [quickLinks, setQuickLinks] = useState<QuickLink[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -947,11 +967,6 @@ export function BrowserHome({
     y: 0,
     targetId: null,
     targetType: "background",
-  });
-  const [, setAddMenu] = useState<AddMenuState>({
-    visible: false,
-    x: 0,
-    y: 0,
   });
   const [dragState, setDragState] = useState<DragState>({
     draggedId: null,
@@ -1017,28 +1032,28 @@ export function BrowserHome({
           key={item.url}
           type="button"
           onClick={() => onOpen(item.url)}
-          className="group flex min-w-0 items-center gap-2 rounded-2xl border border-white/28 bg-white/20 p-2 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)] transition hover:border-white/45 hover:bg-white/34"
+          className="group flex min-w-0 items-center gap-2 rounded-xl p-1.5 text-left transition hover:bg-white/10"
           title={item.title}
         >
-          <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/55 bg-white/62 shadow-[var(--shadow-xs)]">
+          <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg liquid-glass-icon">
             {item.favicon || fallbackIcon ? (
               <img
                 src={item.favicon || fallbackIcon}
                 alt=""
-                className="size-[68%] object-contain"
+                className="size-[65%] object-contain"
                 onError={(event) => {
                   event.currentTarget.style.display = "none";
                 }}
               />
             ) : (
-              <BookOpenIcon className="size-4 text-muted-foreground" />
+              <BookOpenIcon className="size-3.5 text-muted-foreground" />
             )}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-semibold text-foreground">
+            <span className="block truncate text-[11px] font-semibold text-foreground">
               {item.title}
             </span>
-            <span className="block truncate text-micro text-muted-foreground">
+            <span className="block truncate text-[10px] text-muted-foreground/80">
               {item.meta}
             </span>
           </span>
@@ -1142,7 +1157,6 @@ export function BrowserHome({
       }
       if (e.key === "Escape") {
         setContextMenu((prev) => ({ ...prev, visible: false }));
-        setAddMenu((prev) => ({ ...prev, visible: false }));
         setEnginePickerOpen(false);
         setEditMode(false);
       }
@@ -1571,28 +1585,38 @@ export function BrowserHome({
             }
       }
       className={cn(
-        "relative min-h-0 flex-col overflow-hidden text-white",
+        "relative min-h-0 flex-col overflow-hidden",
         activeBackdrop.className,
       )}
       onContextMenu={handleBackgroundContext}
     >
       <div
         className={cn(
-          "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-[24px] py-4",
-          "bg-white/10",
-          compactDesktop && "left-3 top-4 h-[calc(100%-2rem)]",
-          mobileDesktop && "left-2 w-11",
+          "absolute left-3 top-5 z-10 flex h-[calc(100%-2.5rem)] w-10 flex-col items-center rounded-2xl py-2.5 liquid-glass",
+          compactDesktop && "left-2 top-4 h-[calc(100%-2rem)]",
+          mobileDesktop && "left-1.5 w-9",
         )}
       >
-        <div
+        <button
+          type="button"
+          onClick={focusSearchFromPanel}
           className={cn(
-            "grid size-8 place-items-center rounded-2xl text-foreground",
-            "bg-white/10",
+            "grid size-8 place-items-center rounded-xl text-foreground/80 transition-colors hover:bg-white/12 hover:text-foreground",
+            activePanel === "home" && "bg-white/15 text-primary",
           )}
+          title={wt.navHome}
         >
-          <BotIcon className="size-5" />
-        </div>
-        <div className="mt-8 flex flex-col gap-4">
+          <BotIcon className="size-[18px]" />
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/workspace/community")}
+          className="mt-1 grid size-8 place-items-center rounded-xl text-foreground/60 transition-colors hover:bg-white/12 hover:text-foreground"
+          title="发现社区"
+        >
+          <CompassIcon className="size-[18px]" />
+        </button>
+        <div className="mt-4 flex flex-col gap-1">
           {DESKTOP_SIDE_NAV.map((item) => {
             const Icon = item.icon;
             const selected = activePanel === item.id;
@@ -1601,58 +1625,51 @@ export function BrowserHome({
                 key={item.id}
                 type="button"
                 onClick={() => {
-                  if (item.id === "home") {
-                    focusSearchFromPanel();
-                    return;
-                  }
                   setActivePanel(item.id);
                 }}
                 className={cn(
-                  "grid size-9 place-items-center rounded-2xl text-muted-foreground/90 transition hover:text-foreground",
-                  "bg-white/10",
-                  selected && "text-foreground",
+                  "grid size-8 place-items-center rounded-xl text-foreground/60 transition-colors hover:bg-white/12 hover:text-foreground",
+                  selected && "bg-white/15 text-primary",
                 )}
                 title={sideNavLabelMap[item.id]}
               >
-                <Icon className="size-5" />
+                <Icon className="size-[18px]" />
               </button>
             );
           })}
         </div>
-        <div className="mt-auto flex flex-col gap-4">
+        <div className="mt-auto flex flex-col gap-1">
           <button
             type="button"
             onClick={() => setActivePanel("add")}
             className={cn(
-              "grid size-9 place-items-center rounded-2xl text-muted-foreground/90 transition hover:text-foreground",
-              "bg-white/10",
-              activePanel === "add" && "text-foreground",
+              "grid size-8 place-items-center rounded-xl text-foreground/60 transition-colors hover:bg-white/12 hover:text-foreground",
+              activePanel === "add" && "bg-white/15 text-primary",
             )}
             title={wt.addTitle}
           >
-            <CirclePlusIcon className="size-5" />
+            <CirclePlusIcon className="size-[18px]" />
           </button>
           <button
             type="button"
             onClick={() => setActivePanel("settings")}
             className={cn(
-              "grid size-9 place-items-center rounded-2xl text-muted-foreground/90 transition hover:text-foreground",
-              "bg-white/10",
-              activePanel === "settings" && "text-foreground",
+              "grid size-8 place-items-center rounded-xl text-foreground/60 transition-colors hover:bg-white/12 hover:text-foreground",
+              activePanel === "settings" && "bg-white/15 text-primary",
             )}
             title={wt.settingsTitle}
           >
-            <SettingsIcon className="size-5" />
+            <SettingsIcon className="size-[18px]" />
           </button>
         </div>
       </div>
 
       <div
         className={cn(
-          "flex h-full min-h-0 flex-col pl-24 pr-12 pt-8",
-          compactDesktop && "pl-20 pr-5 pt-6 pb-28",
-          tabletDesktop && "pl-24 pr-8",
-          mobileDesktop && "pl-16 pr-4 pt-5 pb-24",
+          "flex h-full min-h-0 flex-col pl-16 pr-10 pt-7",
+          compactDesktop && "pl-14 pr-5 pt-5 pb-28",
+          tabletDesktop && "pl-16 pr-8",
+          mobileDesktop && "pl-12 pr-4 pt-4 pb-24",
         )}
       >
         <div
@@ -1665,9 +1682,8 @@ export function BrowserHome({
         >
           <div
             className={cn(
-              "flex h-14 items-center gap-3 rounded-[22px] px-3 text-muted-foreground",
-              "bg-white/10",
-              mobileDesktop && "h-12 rounded-2xl px-2.5",
+              "flex h-12 items-center gap-2 rounded-2xl px-3 text-muted-foreground liquid-glass-subtle",
+              mobileDesktop && "h-11 rounded-xl px-2.5",
             )}
           >
             <button
@@ -1677,23 +1693,23 @@ export function BrowserHome({
               aria-expanded={enginePickerOpen}
               title={bt.switchSearchEngine}
               className={cn(
-                "group flex h-10 shrink-0 items-center gap-1 rounded-xl px-2 transition-colors hover:bg-muted/50",
-                mobileDesktop && "h-9 px-1.5",
+                "group flex h-8 shrink-0 items-center gap-1 rounded-lg px-1.5 transition-colors hover:bg-foreground/5",
+                mobileDesktop && "h-7 px-1",
               )}
             >
               <SearchEngineLogo
                 engine={selectedSearchEngine}
-                className="size-7"
+                className="size-5"
               />
               <ChevronDownIcon
                 className={cn(
-                  "size-3.5 text-muted-foreground/70 transition-transform group-hover:text-muted-foreground",
+                  "size-3 text-muted-foreground/60 transition-transform group-hover:text-muted-foreground",
                   enginePickerOpen && "rotate-180 text-foreground",
                 )}
               />
             </button>
-            <div className="h-7 w-px bg-border/60" />
-            <SearchIcon className="size-5 shrink-0 text-blue-600/80" />
+            <div className="h-4 w-px bg-white/20" />
+            <SearchIcon className="size-4 shrink-0 text-muted-foreground/80" />
             <input
               ref={searchInputRef}
               value={query}
@@ -1702,7 +1718,7 @@ export function BrowserHome({
               placeholder={wt.searchPlaceholderFormat(
                 selectedSearchEngine?.name ?? wt.searchEngineFallback,
               )}
-              className="min-w-0 flex-1 bg-transparent text-lg font-medium text-foreground outline-none placeholder:text-muted-foreground/70"
+              className="min-w-0 flex-1 bg-transparent text-[15px] font-medium text-foreground outline-none placeholder:text-muted-foreground/60"
             />
           </div>
 
@@ -1710,8 +1726,7 @@ export function BrowserHome({
             <div
               role="menu"
               className={cn(
-                "absolute left-2 top-[calc(100%+10px)] z-30 w-56 rounded-2xl p-1.5 text-foreground",
-                "bg-white/16",
+                "absolute left-1 top-[calc(100%+8px)] z-30 w-52 rounded-2xl p-1.5 text-foreground liquid-glass",
               )}
             >
               {engines.map((engine, index) => {
@@ -1728,13 +1743,13 @@ export function BrowserHome({
                       searchInputRef.current?.focus();
                     }}
                     className={cn(
-                      "flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition-colors",
+                      "flex h-10 w-full items-center gap-2.5 rounded-xl px-2.5 text-left text-sm font-medium transition-colors",
                       active
-                        ? "bg-foreground text-white"
-                        : "hover:bg-muted/50",
+                        ? "bg-white/15 text-primary"
+                        : "hover:bg-white/10",
                     )}
                   >
-                    <SearchEngineLogo engine={engine} className="size-7" />
+                    <SearchEngineLogo engine={engine} className="size-5" />
                     <span className="min-w-0 flex-1 truncate">
                       {engine.name}
                     </span>
@@ -1748,10 +1763,10 @@ export function BrowserHome({
 
         <div
           className={cn(
-            "absolute right-12 top-8 flex items-center gap-2",
-            compactDesktop && "right-6 top-7",
+            "absolute right-10 top-7 flex items-center gap-1",
+            compactDesktop && "right-5 top-6",
             tabletDesktop && "right-8",
-            mobileDesktop && "right-5 top-6",
+            mobileDesktop && "right-4 top-5",
           )}
         >
           {editMode && (
@@ -1759,32 +1774,32 @@ export function BrowserHome({
               <button
                 type="button"
                 onClick={resetDesktopLayout}
-                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
+                className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
               >
                 {wt.resetLayout}
               </button>
               <button
                 type="button"
                 onClick={handleCreateFolder}
-                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
+                className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
               >
-                <Folder className="w-3 h-3 inline mr-1" />
+                <Folder className="w-3 h-3 inline mr-0.5" />
                 {wt.newFolder}
               </button>
               <button
                 type="button"
                 onClick={handleAddIcon}
-                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
+                className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
               >
-                <Plus className="w-3 h-3 inline mr-1" />
+                <Plus className="w-3 h-3 inline mr-0.5" />
                 {wt.addIconBtn}
               </button>
               <button
                 type="button"
                 onClick={() => handleAddWidget()}
-                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
+                className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
               >
-                <PanelLeftIcon className="w-3 h-3 inline mr-1" />
+                <PanelLeftIcon className="w-3 h-3 inline mr-0.5" />
                 {wt.addWidgetBtn}
               </button>
             </>
@@ -1793,10 +1808,10 @@ export function BrowserHome({
             type="button"
             onClick={() => setEditMode((value) => !value)}
             className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-md)] shadow-black/10 backdrop-blur-xl transition",
+              "rounded-lg px-2 py-1 text-[11px] font-medium transition liquid-glass-subtle",
               editMode
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "border border-white/50 bg-white/34 text-foreground hover:bg-white/52",
+                ? "bg-primary/90 text-primary-foreground hover:bg-primary"
+                : "text-foreground hover:bg-white/10",
             )}
           >
             {editMode ? wt.finishEditing : wt.editDesktop}
@@ -1806,10 +1821,10 @@ export function BrowserHome({
         {editMode && (
           <div
             className={cn(
-              "absolute left-24 top-8 rounded-full bg-black/22 px-3 py-1.5 text-xs font-medium text-white shadow-[var(--shadow-md)] backdrop-blur",
-              compactDesktop && "left-20 top-24",
-              tabletDesktop && "left-24",
-              mobileDesktop && "left-16 right-4 text-center",
+              "absolute left-16 top-7 rounded-xl px-2 py-1 text-[11px] font-medium text-foreground/80 liquid-glass-subtle",
+              compactDesktop && "left-14 top-[88px]",
+              tabletDesktop && "left-16",
+              mobileDesktop && "left-12 right-4 text-center",
             )}
           >
             {wt.dragHint}
@@ -1818,61 +1833,60 @@ export function BrowserHome({
 
         <div
           className={cn(
-            "grid min-h-0 flex-1 grid-cols-[360px_minmax(420px,1fr)] gap-12 py-14",
+            "grid min-h-0 flex-1 grid-cols-[320px_minmax(380px,1fr)] gap-8 py-10",
             compactDesktop &&
-              "grid-cols-1 gap-8 overflow-y-auto pb-8 pt-8 pr-1",
+              "grid-cols-1 gap-5 overflow-y-auto pb-8 pt-5 pr-1",
             tabletDesktop &&
-              "grid-cols-[300px_minmax(360px,1fr)] gap-8 pb-32 pr-2",
-            mobileDesktop && "gap-6 pb-6 pt-6",
+              "grid-cols-[260px_minmax(320px,1fr)] gap-5 pb-28 pr-2",
+            mobileDesktop && "gap-4 pb-6 pt-4",
           )}
         >
           <div
             className={cn(
-              "flex flex-col items-center gap-8",
-              compactDesktop && "gap-6",
+              "flex flex-col items-center gap-7",
+              compactDesktop && "gap-5",
               tabletDesktop && "justify-start",
             )}
           >
             <div className="text-center">
               <div
                 className={cn(
-                  "flex overflow-hidden rounded-[22px] text-foreground",
-                  "bg-white/10",
+                  "flex overflow-hidden rounded-2xl text-foreground liquid-glass-subtle",
                 )}
               >
                 <div
                   className={cn(
-                    "grid w-24 place-items-center border-r border-white/20 px-4 py-3 text-center",
-                    mobileDesktop && "w-20 px-3 py-2",
+                    "grid w-[72px] place-items-center border-r border-white/20 px-2.5 py-2 text-center",
+                    mobileDesktop && "w-16 px-2 py-2",
                   )}
                 >
                   <div
                     className={cn(
-                      "text-4xl font-semibold text-destructive",
-                      mobileDesktop && "text-3xl",
+                      "text-[28px] font-semibold text-foreground leading-none",
+                      mobileDesktop && "text-2xl",
                     )}
                   >
                     {day}
                   </div>
-                  <div className="text-sm font-medium text-destructive">
+                  <div className="mt-1 text-[11px] font-medium text-muted-foreground">
                     {week}
                   </div>
                 </div>
                 <div
                   className={cn(
-                    "flex min-w-40 flex-col justify-center px-5 text-left",
-                    mobileDesktop && "min-w-32 px-4",
+                    "flex min-w-32 flex-col justify-center px-3.5 text-left",
+                    mobileDesktop && "min-w-28 px-3",
                   )}
                 >
                   <div
                     className={cn(
-                      "text-lg font-semibold",
-                      mobileDesktop && "text-base",
+                      "text-[14px] font-semibold leading-tight",
+                      mobileDesktop && "text-sm",
                     )}
                   >
                     {month}
                   </div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
                     {wt.aiBrowserDesktop}
                   </div>
                 </div>
@@ -1882,9 +1896,8 @@ export function BrowserHome({
             <div className="relative">
               <div
                 className={cn(
-                  "grid grid-cols-2 gap-5 rounded-[26px] p-5",
-                  "bg-white/10",
-                  mobileDesktop && "gap-3 rounded-[20px] p-4",
+                  "grid grid-cols-2 gap-2.5 p-0.5",
+                  mobileDesktop && "gap-2",
                 )}
               >
                 {desktopAppGroups.map((group) => (
@@ -1896,31 +1909,31 @@ export function BrowserHome({
                         current === group.id ? null : group.id,
                       )
                     }
-                    className="group flex min-w-0 flex-col items-center gap-2 rounded-2xl p-1 text-center transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40"
+                    className="group flex min-w-0 flex-col items-center gap-1.5 rounded-2xl p-2 text-center transition hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/30"
                     title={`${group.title} · ${group.subtitle}`}
                   >
                     <span
                       className={cn(
-                        "grid size-20 grid-cols-2 gap-1.5 rounded-[22px] p-2 transition",
-                        "bg-white/10",
+                        "grid size-[68px] grid-cols-2 gap-1 rounded-[18px] p-1.5 transition liquid-glass-icon",
+                        mobileDesktop && "size-16",
                       )}
                     >
                       {group.apps.slice(0, 4).map((app) => (
                         <DesktopAppLogo
                           key={app.url}
                           app={app}
-                          className="size-full rounded-[12px] shadow-[var(--shadow-xs)]"
-                          iconClassName="size-[82%]"
+                          className="size-full rounded-lg"
+                          iconClassName="size-[80%]"
                         />
                       ))}
                     </span>
-                    <span className="w-28 truncate text-sm font-semibold text-foreground">
+                    <span className="w-24 truncate text-[12px] font-semibold text-foreground">
                       {group.title}
                     </span>
                   </button>
                 ))}
               </div>
-              <div className="mt-3 text-center text-sm font-medium text-white/88">
+              <div className="mt-1.5 text-center text-[11px] font-medium text-muted-foreground/70">
                 {bt.commonCategories}
               </div>
 
@@ -1929,11 +1942,10 @@ export function BrowserHome({
                   <div
                     key={group.id}
                     className={cn(
-                      "absolute left-1/2 top-[calc(100%+10px)] z-20 w-72 -translate-x-1/2 rounded-[24px] p-3 text-foreground",
-                      "bg-white/16",
+                      "absolute left-1/2 top-[calc(100%+8px)] z-20 w-72 -translate-x-1/2 rounded-2xl p-2.5 text-foreground liquid-glass",
                     )}
                   >
-                    <div className="mb-2 flex items-center justify-between px-1">
+                    <div className="mb-1.5 flex items-center justify-between px-1">
                       <div>
                         <div className="text-sm font-semibold">
                           {group.title}
@@ -1945,12 +1957,12 @@ export function BrowserHome({
                       <button
                         type="button"
                         onClick={() => setOpenAppGroupId(null)}
-                        className="grid size-7 place-items-center rounded-full text-muted-foreground/70 transition hover:bg-muted/50 hover:text-foreground"
+                        className="grid size-7 place-items-center rounded-lg text-muted-foreground/70 transition hover:bg-foreground/5 hover:text-foreground"
                       >
                         <X className="size-4" />
                       </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       {group.apps.map((app) => (
                         <button
                           key={app.url}
@@ -1959,18 +1971,18 @@ export function BrowserHome({
                             setOpenAppGroupId(null);
                             onOpen(app.url);
                           }}
-                          className="group flex items-center gap-2 rounded-2xl border border-transparent p-2 text-left transition hover:border-white/45 hover:bg-white/34"
+                          className="group flex items-center gap-2 rounded-lg p-2 text-left transition hover:bg-foreground/5"
                           title={`${getAppName(app.name)} · ${getAppDesc(app.description)}`}
                         >
                           <DesktopAppLogo
                             app={app}
-                            className="size-9 rounded-xl shadow-[var(--shadow-xs)]"
+                            className="size-8 rounded-lg"
                           />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-semibold">
                               {getAppName(app.name)}
                             </span>
-                            <span className="block truncate text-mini text-muted-foreground">
+                            <span className="block truncate text-[11px] text-muted-foreground">
                               {getAppDesc(app.description)}
                             </span>
                           </span>
@@ -1983,21 +1995,20 @@ export function BrowserHome({
             </div>
           </div>
 
-          <div className={cn("flex flex-col gap-9", compactDesktop && "gap-7")}>
+          <div className={cn("flex flex-col gap-7", compactDesktop && "gap-5")}>
             <section
               className={cn(
-                "w-[360px] max-w-[calc(100vw-1rem)] self-end rounded-[26px] p-4 text-foreground",
-                "bg-white/10",
+                "w-[340px] max-w-[calc(100vw-1rem)] self-end rounded-2xl p-3.5 text-foreground liquid-glass",
                 compactDesktop && "w-full self-stretch",
-                mobileDesktop && "rounded-[22px] p-3",
+                mobileDesktop && "p-3",
               )}
             >
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-2.5 flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-semibold text-foreground">
+                  <div className="text-[13px] font-semibold text-foreground">
                     {bt.recentVisits}
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-[11px] text-muted-foreground">
                     {recentPanelItems.length > 0
                       ? bt.recentVisitCount(recentPanelItems.length)
                       : bt.noRecentVisits}
@@ -2005,28 +2016,27 @@ export function BrowserHome({
                 </div>
                 <div
                   className={cn(
-                    "grid size-8 place-items-center rounded-full text-muted-foreground",
-                    "bg-white/10",
+                    "grid size-7 place-items-center rounded-lg text-muted-foreground/70",
                   )}
                   title={bt.historyOnly}
                 >
-                  <Clock3Icon className="size-4" />
+                  <Clock3Icon className="size-[15px]" />
                 </div>
               </div>
               {recentPanelItems.length > 0 && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {recentPanelItems.map(renderCompactLink)}
                 </div>
               )}
               {recentPanelItems.length === 0 && (
-                <div className="rounded-2xl border border-white/28 bg-white/18 px-3 py-5 text-center text-xs text-muted-foreground">
+                <div className="rounded-lg border border-border-subtle/60 px-3 py-4 text-center text-[11px] text-muted-foreground/70">
                   {bt.noRecentVisits}
                 </div>
               )}
             </section>
 
             {widgets.length > 0 && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 {widgets.map((widget) => {
                   const isDragging = dragState.draggedId === widget.id;
                   const isDropTarget = dragState.dropTargetId === widget.id;
@@ -2034,12 +2044,11 @@ export function BrowserHome({
                     <div
                       key={widget.id}
                       className={cn(
-                        "rounded-[24px] p-5 transition-all",
-                        "bg-white/10",
+                        "rounded-2xl p-4 transition-all liquid-glass-subtle",
                         widget.size === "large" && "col-span-2",
-                        widget.size === "small" && "p-4",
+                        widget.size === "small" && "p-3",
                         isDragging && "opacity-40 scale-95",
-                        isDropTarget && "ring-2 ring-blue-400",
+                        isDropTarget && "ring-2 ring-primary",
                       )}
                       draggable
                       onDragStart={() => handleWidgetDragStart(widget.id)}
@@ -2050,24 +2059,24 @@ export function BrowserHome({
                         handleContext(e, widget.id, "widget")
                       }
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-lg font-semibold text-foreground">
+                      <div className="flex items-center justify-between mb-2.5">
+                        <span className="text-[15px] font-semibold text-foreground">
                           {widget.title}
                         </span>
                         {editMode && (
                           <button
                             onClick={() => handleEdit(widget.id)}
-                            className="text-muted-foreground/70 hover:text-muted-foreground"
+                            className="text-muted-foreground/60 hover:text-muted-foreground"
                           >
-                            <Edit3 className="w-4 h-4" />
+                            <Edit3 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {widget.type === "notes" && (
-                          <div className="space-y-2">
-                            <div className="rounded-xl border border-white/25 p-2">
-                              <p className="text-xs text-muted-foreground">
+                          <div className="space-y-1.5">
+                            <div className="rounded-lg border border-border-subtle/60 p-2">
+                              <p className="text-[11px] text-muted-foreground/80">
                                 {bt.todoPlaceholder}
                               </p>
                             </div>
@@ -2075,26 +2084,26 @@ export function BrowserHome({
                         )}
                         {widget.type === "weather" && (
                           <div className="flex items-center gap-2">
-                            <span className="text-2xl">☀️</span>
-                            <span className="text-xl text-muted-foreground">26°C</span>
+                            <span className="text-xl">☀️</span>
+                            <span className="text-lg text-muted-foreground">26°C</span>
                           </div>
                         )}
                         {widget.type === "system" && (
-                          <div className="space-y-2">
-                            <div className="h-2 rounded-full bg-white/16">
-                              <div className="h-full bg-blue-500 rounded-full w-[23%]" />
+                          <div className="space-y-1.5">
+                            <div className="h-1.5 rounded-full bg-muted-foreground/12">
+                              <div className="h-full bg-primary rounded-full w-[23%]" />
                             </div>
-                            <div className="h-2 rounded-full bg-white/16">
-                              <div className="h-full bg-violet-500 rounded-full w-[45%]" />
+                            <div className="h-1.5 rounded-full bg-muted-foreground/12">
+                              <div className="h-full bg-accent-foreground/60 rounded-full w-[45%]" />
                             </div>
                           </div>
                         )}
                         {widget.type === "ai-tools" && (
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-3 gap-1.5">
                             {["ChatGPT", "Claude", "Gemini"].map((name) => (
                               <div
                                 key={name}
-                                className="rounded-xl border border-white/40 bg-white/34 p-2 text-center text-xs text-muted-foreground"
+                                className="rounded-lg border border-border-subtle/60 p-1.5 text-center text-[11px] text-muted-foreground/80"
                               >
                                 {name}
                               </div>
@@ -2103,10 +2112,10 @@ export function BrowserHome({
                         )}
                         {widget.type === "calendar" && (
                           <div className="text-center">
-                            <div className="text-3xl font-semibold text-foreground">
+                            <div className="text-2xl font-semibold text-foreground">
                               {day}
                             </div>
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-[12px] text-muted-foreground">
                               {month}
                             </div>
                           </div>
@@ -2116,7 +2125,7 @@ export function BrowserHome({
                             {["GitHub", "StackOverflow", "MDN"].map((name) => (
                               <div
                                 key={name}
-                                className="rounded-lg border border-white/40 bg-white/34 p-1 text-xs text-muted-foreground"
+                                className="rounded-lg border border-border-subtle/60 p-1 text-[11px] text-muted-foreground/80"
                               >
                                 {name}
                               </div>
@@ -2133,20 +2142,12 @@ export function BrowserHome({
             <div>
               <div
                 className={cn(
-                  "grid grid-cols-4 gap-6",
+                  "grid grid-cols-4 gap-5",
                   compactDesktop && "grid-cols-3 gap-4",
-                  mobileDesktop && "grid-cols-2 gap-4",
+                  mobileDesktop && "grid-cols-2 gap-3",
                 )}
               >
-                {standaloneLinks
-                  .filter(
-                    (link) =>
-                      !searchFilter ||
-                      link.name
-                        .toLowerCase()
-                        .includes(searchFilter.toLowerCase()),
-                  )
-                  .map((link) => {
+                {standaloneLinks.map((link) => {
                     const isDragging = dragState.draggedId === link.id;
                     const isDropTarget = dragState.dropTargetId === link.id;
                     return (
@@ -2161,11 +2162,11 @@ export function BrowserHome({
                           draggable
                           onClick={() => onOpen(link.url)}
                           className={cn(
-                            "w-full flex flex-col items-center gap-2 p-3 rounded-2xl transition-all",
+                            "w-full flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all",
                             editMode
-                              ? "hover:bg-white/10 cursor-move"
-                              : "hover:bg-white/10",
-                            isDropTarget && "ring-2 ring-blue-400",
+                              ? "hover:bg-card/70 cursor-move"
+                              : "hover:bg-card/70",
+                            isDropTarget && "ring-2 ring-primary",
                           )}
                           onDragStart={() => handleIconDragStart(link.id)}
                           onDragOver={(e) => handleIconDragOver(e, link.id)}
@@ -2175,21 +2176,31 @@ export function BrowserHome({
                             handleContext(e, link.id, "icon")
                           }
                         >
-                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-400 to-violet-400 flex items-center justify-center shadow-[var(--shadow-md)]">
-                            <span className="text-white text-xl font-bold">
+                          <div className="relative w-12 h-12 rounded-[14px] liquid-glass-icon flex items-center justify-center text-muted-foreground overflow-hidden">
+                            <span className="text-lg font-bold">
                               {link.name[0]}
                             </span>
+                            {faviconForUrl(link.url) && (
+                              <img
+                                src={faviconForUrl(link.url)}
+                                alt=""
+                                className="absolute inset-0 m-auto size-[60%] object-contain"
+                                onError={(event) => {
+                                  event.currentTarget.style.display = "none";
+                                }}
+                              />
+                            )}
                           </div>
-                          <span className="text-xs text-white/80 truncate w-full text-center">
+                          <span className="text-[11px] text-muted-foreground/80 truncate w-full text-center">
                             {link.name}
                           </span>
                         </button>
                         {editMode && (
                           <button
                             onClick={() => handleDelete(link.id)}
-                            className="absolute -top-1 -right-1 w-5 h-5 bg-destructive rounded-full flex items-center justify-center shadow-[var(--shadow-md)]"
+                            className="absolute -top-1 -right-1 size-[18px] bg-destructive rounded-full flex items-center justify-center shadow-[var(--shadow-md)]"
                           >
-                            <X className="w-3 h-3 text-white" />
+                            <X className="size-2.5 text-white" />
                           </button>
                         )}
                       </div>
@@ -2203,9 +2214,9 @@ export function BrowserHome({
                     <div key={folder.id} className="group relative">
                       <button
                         className={cn(
-                          "w-full flex flex-col items-center gap-2 p-3 rounded-2xl transition-all hover:bg-white/10",
+                          "w-full flex flex-col items-center gap-1.5 p-2 rounded-2xl transition-all hover:bg-white/5",
                           isDropTarget &&
-                            "ring-2 ring-violet-400 bg-violet-400/20",
+                            "ring-2 ring-primary",
                         )}
                         onContextMenu={(e) =>
                           handleContext(e, folder.id, "folder")
@@ -2228,24 +2239,24 @@ export function BrowserHome({
                         }}
                         onClick={() => toggleFolder(folder.id)}
                       >
-                        <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center shadow-[var(--shadow-md)] relative">
+                        <div className="w-12 h-12 rounded-[14px] liquid-glass-icon flex items-center justify-center relative">
                           {isOpen ? (
-                            <FolderOpen className="w-6 h-6 text-white" />
+                            <FolderOpen className="w-5 h-5 text-foreground" />
                           ) : (
-                            <Folder className="w-6 h-6 text-white/60" />
+                            <Folder className="w-5 h-5 text-muted-foreground" />
                           )}
-                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-400 rounded-full flex items-center justify-center text-micro text-white font-bold">
+                          <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-primary rounded-full flex items-center justify-center text-[9px] text-primary-foreground font-bold">
                             {links.length}
                           </span>
                         </div>
-                        <span className="text-xs text-white/80 truncate w-full text-center">
+                        <span className="text-[11px] text-muted-foreground/80 truncate w-full text-center">
                           {folder.name}
                         </span>
                       </button>
                       {isOpen && (
-                        <div className="absolute z-10 mt-2 p-3 bg-white/90 backdrop-blur-xl border border-white/30 rounded-2xl shadow-2xl min-w-[200px]">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-foreground">
+                        <div className="absolute z-10 mt-1.5 p-2.5 text-foreground rounded-2xl liquid-glass min-w-[190px]">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[13px] font-medium text-foreground">
                               {folder.name}
                             </span>
                             <button
@@ -2253,20 +2264,33 @@ export function BrowserHome({
                               aria-label={t.browser.closeFolderAria(folder.name)}
                               onClick={() => toggleFolder(folder.id)}
                             >
-                              <X className="w-4 h-4 text-muted-foreground/70 hover:text-muted-foreground" />
+                              <X className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground" />
                             </button>
                           </div>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-3 gap-1.5">
                             {links.map((link) => (
                               <button
                                 key={link.id}
                                 onClick={() => onOpen(link.url)}
-                                className="flex flex-col items-center gap-1 p-2 rounded-xl bg-muted hover:bg-muted transition-colors"
+                                className="flex flex-col items-center gap-1 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
                               >
-                                <span className="text-lg font-bold text-muted-foreground">
-                                  {link.name[0]}
+                                <span className="relative grid size-6 place-items-center">
+                                  <span className="text-base font-bold text-muted-foreground">
+                                    {link.name[0]}
+                                  </span>
+                                  {faviconForUrl(link.url) && (
+                                    <img
+                                      src={faviconForUrl(link.url)}
+                                      alt=""
+                                      className="absolute inset-0 m-auto size-[18px] object-contain"
+                                      onError={(event) => {
+                                        event.currentTarget.style.display =
+                                          "none";
+                                      }}
+                                    />
+                                  )}
                                 </span>
-                                <span className="text-micro text-muted-foreground truncate w-full text-center">
+                                <span className="text-[10px] text-muted-foreground/80 truncate w-full text-center">
                                   {link.name}
                                 </span>
                               </button>
@@ -2284,13 +2308,12 @@ export function BrowserHome({
 
         <div
           className={cn(
-            "mx-auto mb-7 flex h-20 max-w-[780px] items-center gap-4 overflow-hidden rounded-[28px] px-4 py-2",
-            "bg-white/10",
+            "mx-auto mb-6 flex h-16 max-w-[760px] items-center gap-3 overflow-hidden rounded-2xl px-3 py-1.5 liquid-glass-dock",
             compactDesktop &&
-              "absolute bottom-5 left-20 right-5 z-10 mx-0 mb-0 justify-start gap-3 overflow-x-auto rounded-[22px] px-4 py-3",
+              "absolute bottom-5 left-14 right-5 z-10 mx-0 mb-0 h-14 justify-start gap-2.5 overflow-x-auto rounded-2xl px-3 py-2",
             tabletDesktop &&
-              "left-24 right-8 justify-center gap-4 rounded-[26px] px-5",
-            mobileDesktop && "bottom-4 left-16 right-4 gap-2 px-3",
+              "left-16 right-8 justify-center gap-3 rounded-2xl px-4",
+            mobileDesktop && "bottom-4 left-12 right-4 gap-2 h-12 px-2.5",
           )}
         >
           {visibleDockApps.map((app) => (
@@ -2309,24 +2332,23 @@ export function BrowserHome({
                 onDrop={(event) => dropDockApp(event, app.url)}
                 onDragEnd={() => setDraggingUrl(null)}
                 className={cn(
-                  "group grid size-14 place-items-center rounded-[18px] transition hover:-translate-y-0.5",
-                  "bg-white/10",
-                  compactDesktop && "size-13 shrink-0 rounded-2xl",
-                  tabletDesktop && "size-13",
-                  mobileDesktop && "size-11 rounded-[15px]",
+                  "group grid size-12 place-items-center rounded-[14px] transition liquid-glass-icon hover:bg-white/10",
+                  compactDesktop && "size-11 shrink-0 rounded-xl",
+                  tabletDesktop && "size-11",
+                  mobileDesktop && "size-10 rounded-xl",
                   editMode &&
-                    "cursor-move ring-2 ring-white/35 hover:translate-y-0",
+                    "cursor-move ring-2 ring-primary/50",
                   draggingUrl === app.url && "scale-95 opacity-45",
                 )}
                 title={`${getAppName(app.name)} · ${getAppDesc(app.description)}`}
               >
                 <DesktopAppLogo
                   app={app}
-                  className="size-full rounded-[18px]"
+                  className="size-full rounded-[14px]"
                   iconClassName={cn(
-                    "size-[60%]",
-                    compactDesktop && "size-[58%]",
-                    mobileDesktop && "size-[56%]",
+                    "size-[58%]",
+                    compactDesktop && "size-[56%]",
+                    mobileDesktop && "size-[54%]",
                   )}
                 />
               </button>
@@ -2347,15 +2369,15 @@ export function BrowserHome({
               type="button"
               onClick={() => setActivePanel("add")}
               className={cn(
-                "grid size-14 shrink-0 place-items-center rounded-[18px] border-dashed text-muted-foreground transition hover:-translate-y-0.5",
-                "bg-white/10",
-                compactDesktop && "size-13 rounded-2xl",
-                tabletDesktop && "size-13",
-                mobileDesktop && "size-11 rounded-[15px]",
+                "grid size-12 shrink-0 place-items-center rounded-lg border-dashed border border-border-subtle/70 text-muted-foreground/70 transition",
+                "bg-card/50 hover:bg-card/70 hover:text-muted-foreground",
+                compactDesktop && "size-11 rounded-lg",
+                tabletDesktop && "size-11",
+                mobileDesktop && "size-10 rounded-lg",
               )}
               title={bt.addToDock}
             >
-              <Plus className="size-6" />
+              <Plus className="size-5" />
             </button>
           )}
         </div>
@@ -2382,8 +2404,8 @@ export function BrowserHome({
       {promptDialog}
 
       {editWidgetState.visible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="rounded-2xl p-6 w-full max-w-sm liquid-glass">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-medium text-foreground">
                 {wt.editWidgetDialogTitle}
@@ -2416,7 +2438,7 @@ export function BrowserHome({
                       title: e.target.value,
                     }))
                   }
-                  className="w-full bg-muted border border-border rounded-xl px-4 py-2 text-foreground focus:outline-none focus:border-blue-400"
+                  className="w-full bg-input border border-border-subtle rounded-md px-4 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder={wt.editWidgetTitlePlaceholder}
                 />
               </div>
@@ -2451,10 +2473,10 @@ export function BrowserHome({
                         setEditWidgetState((prev) => ({ ...prev, type }))
                       }
                       className={cn(
-                        "flex flex-col items-center gap-1 p-2 rounded-xl border transition-all",
+                        "flex flex-col items-center gap-1 p-2 rounded-md border transition-all",
                         editWidgetState.type === type
-                          ? "bg-blue-50 border-blue-400 text-blue-600"
-                          : "bg-muted/50 border-border text-muted-foreground hover:bg-muted",
+                          ? "bg-accent border-primary text-foreground"
+                          : "bg-card/60 border-border-subtle text-muted-foreground hover:bg-card",
                       )}
                     >
                       <span className="text-xs">{label}</span>
@@ -2464,7 +2486,7 @@ export function BrowserHome({
               </div>
               <button
                 onClick={handleSaveWidget}
-                className="w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium"
+                className="w-full py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
               >
                 {wt.editWidgetSave}
               </button>
@@ -2583,11 +2605,10 @@ function DesktopControlPanel({
   return (
     <div
       className={cn(
-        "absolute bottom-7 left-24 top-24 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[30px] text-foreground",
-        "bg-white/16",
+        "absolute bottom-7 left-16 top-8 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl text-foreground liquid-glass",
       )}
     >
-      <div className="flex items-center justify-between border-b border-white/38 bg-white/16 px-5 py-4">
+      <div className="flex items-center justify-between border-b border-white/15 px-5 py-4">
         <div>
           <div className="text-base font-semibold">{title}</div>
           <div className="text-xs text-muted-foreground">{wt.panelSubtitle}</div>
@@ -2595,7 +2616,7 @@ function DesktopControlPanel({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full border border-white/45 bg-white/30 px-3 py-1 text-xs font-medium text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_20px_rgba(15,23,42,0.10)] transition hover:bg-white/48"
+          className="rounded-lg px-3 py-1 text-xs font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
         >
           {wt.panelClose}
         </button>
@@ -2613,10 +2634,10 @@ function DesktopControlPanel({
                   onClick={() => onSelectBackdrop(backdropId)}
                   aria-pressed={active}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-2xl border p-3 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl transition hover:bg-white/46",
+                    "flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-white/8",
                     active
-                      ? "border-blue-400/70 bg-white/48"
-                      : "border-white/42 bg-white/24",
+                      ? "bg-white/12 ring-1 ring-primary/40"
+                      : "",
                   )}
                 >
                   <span
@@ -2625,7 +2646,7 @@ function DesktopControlPanel({
                       "linear-gradient(180deg,rgba(15,23,42,0.04),rgba(15,23,42,0.1))",
                     )}
                     className={cn(
-                      "size-10 rounded-xl shadow-inner",
+                      "size-10 rounded-lg shadow-inner",
                       backdrop.swatchClassName,
                     )}
                   />
@@ -2637,7 +2658,7 @@ function DesktopControlPanel({
                       {wt.themeDescs[index]}
                     </span>
                   </span>
-                  {active && <CheckIcon className="size-4 text-blue-600" />}
+                  {active && <CheckIcon className="size-4 text-primary" />}
                 </button>
               );
             })}
@@ -2656,9 +2677,9 @@ function DesktopControlPanel({
                     onClick={() =>
                       onAddWidget(widgetType, wt.widgetPanelNames[index])
                     }
-                    className="flex items-center gap-3 rounded-2xl border border-white/38 bg-white/24 p-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl"
+                    className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-white/8"
                   >
-                    <span className="grid size-10 place-items-center rounded-2xl bg-blue-500 text-white">
+                    <span className="grid size-10 place-items-center rounded-xl bg-primary/90 text-primary-foreground">
                       <Icon className="size-5" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -2669,7 +2690,7 @@ function DesktopControlPanel({
                         {wt.widgetPanelDescs[index]}
                       </div>
                     </div>
-                    <span className="rounded-full bg-success/14 px-2 py-1 text-micro font-medium text-success">
+                    <span className="rounded-lg bg-primary/15 px-2 py-1 text-micro font-medium text-primary">
                       {count > 0 ? `${wt.widgetEnabled} ${count}` : bt.add}
                     </span>
                   </button>
@@ -2693,15 +2714,15 @@ function DesktopControlPanel({
                     "linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.12))",
                   )}
                   className={cn(
-                    "relative h-24 rounded-xl border border-white/40 shadow-[inset_0_1px_2px_rgba(255,255,255,0.42),0_10px_28px_rgba(15,23,42,0.12)] transition hover:scale-[1.01]",
+                    "relative h-24 rounded-xl border border-white/20 transition overflow-hidden",
                     backdrop.swatchClassName,
                     selectedBackdrop === backdropId &&
-                      "ring-2 ring-blue-500 ring-offset-2 ring-offset-white/40",
+                      "ring-2 ring-primary ring-offset-2 ring-offset-transparent",
                   )}
                   title={wt.wallpaperTitle(index + 1)}
                 >
                   {selectedBackdrop === backdropId && (
-                    <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-md bg-white/82 text-blue-600 shadow-[var(--shadow-xs)]">
+                    <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-white/90 text-primary shadow-lg">
                       <CheckIcon className="size-3.5" />
                     </span>
                   )}
@@ -2719,10 +2740,10 @@ function DesktopControlPanel({
                 <button
                   key={name}
                   type="button"
-                  className="flex w-full items-center gap-3 rounded-2xl border border-white/38 bg-white/24 p-3 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl transition hover:bg-white/46"
+                  className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-white/8"
                   onClick={() => onOpen(url)}
                 >
-                  <span className="grid size-10 place-items-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 text-white">
+                  <span className="grid size-10 place-items-center rounded-xl bg-primary/90 text-primary-foreground">
                     <Icon className="size-5" />
                   </span>
                   <span className="text-sm font-semibold">{name}</span>
@@ -2738,14 +2759,14 @@ function DesktopControlPanel({
               return (
                 <div
                   key={app.url}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-white/38 bg-white/24 p-3 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl transition hover:bg-white/46"
+                  className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-white/8"
                 >
                   <button
                     type="button"
                     onClick={() => onOpen(app.url)}
                     className="flex min-w-0 flex-1 items-center gap-3 text-left"
                   >
-                    <DesktopAppLogo app={app} className="size-10 rounded-2xl" />
+                    <DesktopAppLogo app={app} className="size-10 rounded-xl" />
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold">
                         {getAppName(app.name)}
@@ -2760,10 +2781,10 @@ function DesktopControlPanel({
                     disabled={inDock}
                     onClick={() => onAddToDock(app.url)}
                     className={cn(
-                      "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition",
+                      "shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition liquid-glass-subtle",
                       inDock
-                        ? "border border-white/30 bg-white/18 text-muted-foreground/70"
-                        : "bg-foreground/90 text-white shadow-[var(--shadow-md)] shadow-black/15 hover:bg-muted-foreground",
+                        ? "opacity-50"
+                        : "bg-primary/90 text-primary-foreground hover:bg-primary",
                     )}
                   >
                     {inDock ? bt.alreadyInDock : bt.add}
@@ -2780,10 +2801,10 @@ function DesktopControlPanel({
                 key={name}
                 type="button"
                 onClick={() => runSettingAction(index)}
-                className="rounded-2xl border border-white/38 bg-white/24 p-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl"
+                className="w-full rounded-xl p-3 text-left transition hover:bg-white/8"
               >
                 <div className="flex items-start gap-3 text-left">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-foreground/85 text-white">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/90 text-primary-foreground">
                     {index === 0 ? (
                       <SearchIcon className="size-4" />
                     ) : index === 1 ? (

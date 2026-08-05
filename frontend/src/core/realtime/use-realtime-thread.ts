@@ -54,11 +54,17 @@ import {
 // Item types that represent the agent actively doing work — a running one
 // keeps a silent turn out of the "slow / maybe-stuck" bucket (a 60s command
 // or a busy subagent produces no deltas yet is plainly still working).
+// Also covers long internal reasoning / plan generation where the backend
+// does not stream intermediate deltas to the client — without these, the
+// status strip flips to "still going, a bit slow" the moment the model
+// spends >10s thinking before producing its first text token.
 const WORK_ITEM_TYPES = new Set<string>([
   "commandExecution",
   "fileChange",
   "mcpToolCall",
   "subagent",
+  "reasoning",
+  "plan",
 ]);
 
 export interface UseRealtimeThreadArgs {

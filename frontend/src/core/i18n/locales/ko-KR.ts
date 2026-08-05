@@ -127,8 +127,7 @@ export const koKR: Translations = {
     reasoningEffortLow: "낮음",
     reasoningEffortLowDescription: "단순 논리 검사 + 얕은 추론",
     reasoningEffortMedium: "중간",
-    reasoningEffortMediumDescription:
-      "다층 논리 분석 + 기본 검증",
+    reasoningEffortMediumDescription: "다층 논리 분석 + 기본 검증",
     reasoningEffortHigh: "높음",
     reasoningEffortHighDescription:
       "전차원 논리 추론 + 다중 경로 검증 + 역방향 확인",
@@ -152,8 +151,7 @@ export const koKR: Translations = {
       },
       {
         suggestion: "리서치",
-        prompt:
-          "[주제]를 심층 조사하고 결과를 요약",
+        prompt: "[주제]를 심층 조사하고 결과를 요약",
         icon: MicroscopeIcon,
       },
       {
@@ -316,20 +314,17 @@ export const koKR: Translations = {
   executionChecklist: {
     title: "진행 체크리스트",
     clarifyGoal: "작업 목표 명확화",
-    clarifyGoalDetail:
-      "사용자 요청을 실행 가능한 출력 목표로 수렴합니다.",
+    clarifyGoalDetail: "사용자 요청을 실행 가능한 출력 목표로 수렴합니다.",
     searchRound: (round: number, query: string) =>
       `제${round}회 검색: ${query}`,
-    adjustKeywords: (round: number) =>
-      `제${round}회 결과에 따라 키워드 조정`,
+    adjustKeywords: (round: number) => `제${round}회 결과에 따라 키워드 조정`,
     adjustKeywordsDetail:
       "결과를 읽은 뒤 범위를 좁히고, 누락된 시장·경쟁사·수요 증거를 계속 보충합니다.",
     webSearch: (count: number) => `자료 검색 ${count}회`,
     readContext: "컨텍스트 읽기",
     writeFile: "파일 쓰기/수정",
     runCommand: "검사 실행",
-    callTool: (count: number) =>
-      `${count}개 작업 조율`,
+    callTool: (count: number) => `${count}개 작업 조율`,
     toolCallDetail:
       "공개 진행 신호입니다. 상세 작업은 워크벤치에서 확인하세요.",
     analyzeAndAlign: "데이터 분석 및 정렬",
@@ -344,8 +339,7 @@ export const koKR: Translations = {
     consumerDemand: "소비자 수요와 시나리오 보충",
     evidenceRound: (round: number) => `제${round}그룹 증거 보충`,
     queryPrefix: "조회: ",
-    continueFromPrevious:
-      "이전 라운드 정보를 바탕으로 증거를 계속 보충합니다.",
+    continueFromPrevious: "이전 라운드 정보를 바탕으로 증거를 계속 보충합니다.",
   },
 
   // Chat Input Box
@@ -387,7 +381,8 @@ export const koKR: Translations = {
     removeRole: "역할 제거",
     toggleMaterial: "자료 전환",
     removeMaterial: "자료 제거",
-    startThreadBeforeUpload: "파일을 업로드하기 전에 스레드를 시작하거나 여세요.",
+    startThreadBeforeUpload:
+      "파일을 업로드하기 전에 스레드를 시작하거나 여세요.",
     uploadFailed: "업로드 실패",
     attachmentReadFailed: "첨부 파일을 읽지 못했습니다. 다시 시도해 주세요.",
     maxSubagents: "최대 하위 에이전트 수",
@@ -762,10 +757,8 @@ export const koKR: Translations = {
     capabilityAuto: "자동",
     capabilityCollabTitle:
       "AI가 제안하고 사용자가 확인 — Q&A / 계획 / 위험 작업 모두 승인 필요",
-    capabilityAutoTitle:
-      "Agent 전면 위임 — 계획 + 도구 호출 + 자동 승인",
-    capabilitySwarmsTitle:
-      "멀티 Agent 병렬 — 디스패치 + 역할 분담 + 동시 실행",
+    capabilityAutoTitle: "Agent 전면 위임 — 계획 + 도구 호출 + 자동 승인",
+    capabilitySwarmsTitle: "멀티 Agent 병렬 — 디스패치 + 역할 분담 + 동시 실행",
     advanced: "고급",
     architectLevelTooltip:
       "Architect 권한 등급: L0 읽기 전용 / L1 skills만 / L2 격리 모듈 쓰기 / L3 메인에 머지 가능",
@@ -798,8 +791,7 @@ export const koKR: Translations = {
       `${attempt}번째 시도 완료${count > 0 ? `, ${count}개 파일` : ""}`,
     autoFixLimitReached: (attempt: number, max: number) =>
       `${attempt}번째 시도. 자동 수정 한도 도달(${max}/${max})`,
-    failedChecks: (count: number, singular: boolean) =>
-      `${count}건 검사 실패`,
+    failedChecks: (count: number, singular: boolean) => `${count}건 검사 실패`,
     changedFilesPending: (count: number, singular: boolean) =>
       `${count}개 변경 파일 검사 대기 중`,
     runningProjectChecks: "프로젝트 검사 실행 중",
@@ -816,8 +808,7 @@ export const koKR: Translations = {
     goToLinePrompt: "줄로 이동",
     goToLineDefault: "1",
     workbenchLayoutPanels: "워크벤치 레이아웃 패널",
-    verificationFailedNoDetails:
-      "검증에 실패했으며 상세 검사 출력이 없습니다.",
+    verificationFailedNoDetails: "검증에 실패했으며 상세 검사 출력이 없습니다.",
     // Terminal input
     terminalPlaceholder: "질문, 계획 또는 코드...",
     terminalRestart: "셸 다시 시작",
@@ -837,8 +828,10 @@ export const koKR: Translations = {
     previewConsoleEmpty: "아직 로그 항목이 없습니다",
     previewConsoleClear: "지우기",
     previewConsoleAddToChat: "채팅에 추가",
+    previewConsoleCount: (n: number) => `${n}개`,
     previewDevTools: "개발자 도구",
-    previewDevToolsUnavailable: "DevTools는 데스크톱 앱에서만 사용할 수 있습니다",
+    previewDevToolsUnavailable:
+      "DevTools는 데스크톱 앱에서만 사용할 수 있습니다",
     // Tool panel (realtime)
     toolPanelPreview: "미리보기",
     toolPanelTerminal: "터미널",
@@ -855,7 +848,7 @@ export const koKR: Translations = {
     latestTurnPassed: "최근 편집 턴이 검증을 통과했습니다",
     noAutoFixQueued: "자동 수정이 큐에 추가되지 않았습니다",
     moreFiles: (count: number) => `+${count} 더 보기`,
-    clickRunChecksToVerify: "\"검사 실행\"을 눌러 검증",
+    clickRunChecksToVerify: '"검사 실행"을 눌러 검증',
     runningVerification: "검증 실행 중...",
     projectLabel: "프로젝트",
     sendErrorToAI: "AI에게 오류 보하기",
@@ -909,7 +902,7 @@ export const koKR: Translations = {
     loadError: (error) =>
       `스레드 목록을 로드할 수 없습니다: ${error}. 위에서 새 스레드를 시작하세요.`,
     loading: "로드 중…",
-    empty: "아직 스레드가 없습니다 — \"새 스레드\"를 클릭하여 시작하세요.",
+    empty: '아직 스레드가 없습니다 — "새 스레드"를 클릭하여 시작하세요.',
     turns: (count) => `${count}턴`,
     lastStatus: (status) => `마지막 상태: ${status}`,
     updated: (date) => `업데이트: ${date}`,
@@ -953,10 +946,9 @@ export const koKR: Translations = {
       footer: "자체 포함 오프라인 리플레이",
     },
     composer: {
-      placeholderCode:
-        "수정, 디버그 또는 검증할 프로젝트 작업을 설명하세요...",
-      placeholderNew:
-        "구현, 생성, 디버그 또는 검증할 작업을 설명하세요...",
+      placeholderCode: "수정, 디버그 또는 검증할 프로젝트 작업을 설명하세요...",
+      placeholderNew: "구현, 생성, 디버그 또는 검증할 작업을 설명하세요...",
+      placeholderOctopus: "그냥 말하세요: 진행 확인, 작업 위임, 구독 요약...",
     },
     recorder: {
       defaultName: "대화 리플레이 학습",
@@ -1000,8 +992,7 @@ export const koKR: Translations = {
       running: "running",
       exitCode: (code) => `종료 코드 ${code}`,
       relatedFiles: (count) => `${count}개 관련 파일`,
-      relatedChanges: (count) =>
-        `${count}개 관련 변경`,
+      relatedChanges: (count) => `${count}개 관련 변경`,
     },
     plan: {
       label: "Plan",
@@ -1127,14 +1118,10 @@ export const koKR: Translations = {
     waitingToStart: "시작 대기 중",
     waitingForPhase: "이 단계가 시작되기를 기다리는 중",
     phaseCompleted: "이 단계가 완료되었습니다",
-    webSearchActions: (count: number) =>
-      `${count}개 웹/검색 작업`,
-    fileActions: (count: number) =>
-      `${count}개 파일 작업`,
-    terminalActions: (count: number) =>
-      `${count}개 터미널 작업`,
-    executionActions: (count: number) =>
-      `${count}개 실행 작업`,
+    webSearchActions: (count: number) => `${count}개 웹/검색 작업`,
+    fileActions: (count: number) => `${count}개 파일 작업`,
+    terminalActions: (count: number) => `${count}개 터미널 작업`,
+    executionActions: (count: number) => `${count}개 실행 작업`,
     listSeparator: ", ",
     statusProcessing: "처리 중",
     statusCompleted: "완료됨",
@@ -1187,8 +1174,7 @@ export const koKR: Translations = {
       `작업 집합 파일 ${count}개를 재구성하고 원본 메시지 스냅샷은 무시합니다.`,
     useLastProgressSummary: (progress: string) =>
       `최근 진행 요약 사용: ${progress}`,
-    reviewLatestProgressSummary:
-      "재개하기 전에 최근 진행 요약을 확인하세요.",
+    reviewLatestProgressSummary: "재개하기 전에 최근 진행 요약을 확인하세요.",
     checkpointLabel: (type: string, id: number) => `체크포인트: ${type} #${id}`,
     taskLabel: (taskId: string) => `작업: ${taskId}`,
     continueFromIterationLabel: (iteration: number) =>
@@ -1197,13 +1183,11 @@ export const koKR: Translations = {
     workingSetFilesLabel: (count: number) => `작업 집합 파일: ${count}`,
     rawCheckpointExcluded:
       "원시 체크포인트 상태와 메시지 스냅샷은 의도적으로 제외되었습니다.",
-    resumeDraftIntro:
-      "선택한 영구 체크포인트에서 이 Agent 실행을 재개합니다.",
+    resumeDraftIntro: "선택한 영구 체크포인트에서 이 Agent 실행을 재개합니다.",
     resumeTitleLabel: (title: string) => `재개 제목: ${title}`,
     progressLabel: (progress: string) => `진행: ${progress}`,
     safetyRequirements: "안전 요구 사항:",
-    useOnlySanitizedRecovery:
-      "- 위에 정리된 복구 방안만 사용하세요.",
+    useOnlySanitizedRecovery: "- 위에 정리된 복구 방안만 사용하세요.",
     doNotAssumeRawSnapshots:
       "- 원시 체크포인트 상태나 메시지 스냅샷을 사용할 수 있다고 가정하지 마세요.",
     reconfirmBeforeDestructive:
@@ -1363,8 +1347,7 @@ export const koKR: Translations = {
     noTaskDescription: "작업 설명이 없습니다.",
     waitingForSubagentOutput: "서브 에이전트 출력 대기 중",
     processReplay: "프로세스 다시 보기",
-    processRecords: (count) =>
-      `${count}건 과정 기록`,
+    processRecords: (count) => `${count}건 과정 기록`,
     iterationRounds: (count) => `${count}회`,
     computerViewSubtitle: "서브에이전트를 선택하여 컴퓨터 보기",
     computerViewSelectHint:
@@ -1558,7 +1541,8 @@ export const koKR: Translations = {
     filterPlaceholder: "규칙 ID 또는 실행자로 필터링...",
     filterAria: "불변량 필터",
     loading: "로드 중...",
-    emptyFiltered: (filter) => `규칙 ${JSON.stringify(filter)}와 일치하는 항목이 없습니다.`,
+    emptyFiltered: (filter) =>
+      `규칙 ${JSON.stringify(filter)}와 일치하는 항목이 없습니다.`,
     empty:
       "아직 선언된 규칙이 없습니다. @enforces(...) 데코레이터를 추가하면 여기에 표시됩니다.",
     enforcerCountLabel: (count) => `${count}개 실행자`,
@@ -1597,8 +1581,7 @@ export const koKR: Translations = {
     noMatches: "일치하는 플러그인 없음",
     tryDifferentQuery: "다른 키워드나 필터를 시도해보세요",
     configureTitle: (name: string) => `${name} 구성`,
-    configureDescription: (name: string) =>
-      `${name}의 런타임 매개변수 구성`,
+    configureDescription: (name: string) => `${name}의 런타임 매개변수 구성`,
     configureNoConfig: "이 플러그인은 구성이 필요하지 않습니다",
     configureCancel: "Cancel",
     configureSave: "Save",
@@ -1803,6 +1786,7 @@ export const koKR: Translations = {
     libraryApps: "앱",
     libraryDocs: "문서",
     libraryImages: "이미지",
+    libraryVideos: "동영상",
     libraryComputer: "컴퓨터",
     libraryAuthorizedDirs: "승인된 디렉터리",
     // Chats drawer
@@ -1844,8 +1828,7 @@ export const koKR: Translations = {
     emptyFilter: "일치하는 작업 없음",
     autoMatch: "자동 매칭",
     artifactCount: (count) => `${count}개 산출물`,
-    rolesCompleted: (completed, total) =>
-      ` · ${completed}/${total} 역할 완료`,
+    rolesCompleted: (completed, total) => ` · ${completed}/${total} 역할 완료`,
     statusPending: "Pending",
     timeline: {
       evidenceToggle: "프로세스 증거",
@@ -1869,8 +1852,7 @@ export const koKR: Translations = {
     events: {
       runStarted: "작업 시작됨",
       roleStarted: (role) => (role ? `${role} 시작됨` : "역할 시작됨"),
-      roleCompleted: (role) =>
-        role ? `${role} 완료됨` : "하나의 역할 완료됨",
+      roleCompleted: (role) => (role ? `${role} 완료됨` : "하나의 역할 완료됨"),
       runDone: "작업 완료, 산출물이 작성됨",
       runFailed: "작업 실패",
       runCancelled: "작업 취소됨",
@@ -1914,13 +1896,11 @@ export const koKR: Translations = {
     saveConfig: "구성 저장",
     configSaved: "구성이 저장되었습니다",
     installExtensionTitle: "Octopus Browser Relay 설치",
-    installExtensionDesc:
-      "확장을 설치해 브라우저를 Octopus에 연결하세요.",
+    installExtensionDesc: "확장을 설치해 브라우저를 Octopus에 연결하세요.",
     step1Title: "Chrome 확장 페이지를 열고 개발자 모드 활성화",
     step1Desc: "브라우저에서 확장 관리 페이지 열기",
     step1Action: "chrome://extensions 열기",
-    step1Hint:
-      "그런 다음 오른쪽 상단의 개발자 모드 스위치를 켜세요.",
+    step1Hint: "그런 다음 오른쪽 상단의 개발자 모드 스위치를 켜세요.",
     step2Title: "확장 폴더 열기",
     step2Desc: "브라우저 확장 파일이 있는 폴더 열기:",
     step2OpenFolder: "폴더 열기",
@@ -1942,7 +1922,7 @@ export const koKR: Translations = {
     compareSetupCdp: "chrome://inspect에서 활성화",
     compareReconnect: "재시작 후 재연결",
     compareReconnectExt: "자동",
-    compareReconnectCdp: "수동(\"허용\" 클릭)",
+    compareReconnectCdp: '수동("허용" 클릭)',
     compareChromeVersion: "Chrome 버전",
     compareChromeVersionExt: "모든 버전",
     compareChromeVersionCdp: "144+",
@@ -2005,8 +1985,7 @@ export const koKR: Translations = {
     systemArchitecture: "아키텍처",
     step3DragHint:
       "octopus-browser-relay 폴더를 chrome://extensions 페이지로 드래그하면 Chrome이 즉시 설치합니다.",
-    extProInstallOnce:
-      "한 번 설치하면 자동 연결되며 재인증이 필요 없습니다.",
+    extProInstallOnce: "한 번 설치하면 자동 연결되며 재인증이 필요 없습니다.",
     extProNoManualAuth: "수동 인증 클릭이 필요 없습니다.",
     extProAllVersions: "모든 Chrome 버전을 지원합니다.",
     extConNeedExtension: "Chrome 확장을 설치해야 합니다.",
@@ -2037,8 +2016,7 @@ export const koKR: Translations = {
     description:
       "자동 구독, 예약 작업, 백그라운드 스캔을 관리하여 시스템이 규칙에 따라 추적, 실행, 결과 저장을 계속 수행합니다.",
     discoverChanges: "고가치 변화를 지속적으로 발견",
-    pageSubtitle:
-      "구독 추적, 예약 스캔, 자동 생성 보고서를 관리합니다.",
+    pageSubtitle: "구독 추적, 예약 스캔, 자동 생성 보고서를 관리합니다.",
     pageBadge: "구독 및 예약 작업",
   },
 
@@ -2087,8 +2065,7 @@ export const koKR: Translations = {
     wechatScanTitle: "WeChat으로 스캔",
     wechatScanHint: "WeChat 열기 → 스캔 → 아래 QR 코드를 스캔해 인증",
     wechatWaiting: "스캔 대기 중...",
-    wechatConnectHint:
-      "연결 후 자신에게 메시지를 본내 페어링을 완료하세요",
+    wechatConnectHint: "연결 후 자신에게 메시지를 본내 페어링을 완료하세요",
     channelCount: (n: number) => `${n}개 채널`,
     dingtalkName: "DingTalk",
     wechatName: "WeChat",
@@ -2107,17 +2084,14 @@ export const koKR: Translations = {
     dingtalkStep4: "권한 관리에서 필요한 권한 신청",
     dingtalkStep5:
       "DingTalk 그룹에 봇을 추가하거나 봇과 직접 대화해 페어링 완료",
-    dingtalkClientIdPlaceholder:
-      "개발자 콘솔의 Client ID (AppKey) 입력",
+    dingtalkClientIdPlaceholder: "개발자 콘솔의 Client ID (AppKey) 입력",
     dingtalkClientSecretPlaceholder:
       "개발자 콘솔의 Client Secret (AppSecret) 입력",
     feishuStep1:
       "Feishu Open Platform에서 기업 앱을 만들고 봇 기능을 추가하세요",
     feishuStep2: "Credentials 페이지에서 App ID와 App Secret 복사",
-    feishuStep3:
-      "이벤트 및 콜백 → 이벤트 구독으로 이동해 롱 커넥션 모드 사용",
-    feishuStep4:
-      "Feishu 그룹에 봇을 추가하거나 봇과 직접 대화해 페어링 완료",
+    feishuStep3: "이벤트 및 콜백 → 이벤트 구독으로 이동해 롱 커넥션 모드 사용",
+    feishuStep4: "Feishu 그룹에 봇을 추가하거나 봇과 직접 대화해 페어링 완료",
     feishuAppIdPlaceholder: "Credentials에서 복사, 예: cli_xxxxxxxx",
     feishuAppSecretPlaceholder: "Credentials에서 App Secret 복사",
     telegramStep1:
@@ -2134,7 +2108,8 @@ export const koKR: Translations = {
     channelBot: "봇",
     pageDescription:
       "AI 에이전트가 사용자와 상호작용할 메시징 플랫폼을 구성합니다.",
-    localDataNote: "모든 연결 데이터는 로컬에 저장되며 클라우드를 거치지 않습니다.",
+    localDataNote:
+      "모든 연결 데이터는 로컬에 저장되며 클라우드를 거치지 않습니다.",
     connectedCount: (n: number) => `${n}개 연결됨`,
     loading: "채널 로딩 중...",
     loadFailed: "채널 로드 실패",
@@ -2174,7 +2149,8 @@ export const koKR: Translations = {
   // Pairing Authorization
   pairing: {
     title: "페어링 인증",
-    description: "IM 채널을 통해 Agent와 상호작용할 수 있는 사용자를 관리합니다",
+    description:
+      "IM 채널을 통해 Agent와 상호작용할 수 있는 사용자를 관리합니다",
     filterChannel: "Channel",
     filterStatus: "Status",
     clearFilters: "필터 지우기",
@@ -2345,8 +2321,18 @@ export const koKR: Translations = {
     characterSkillHiddenHint:
       "스킬과 권한은 하단 구성 작업에 유지됩니다. 이 패널에는 아트워크 생성에 유용한 캐릭터 설정만 남깁니다.",
     capabilityPackLabel: "기능 팩",
-    characterBackground: (name, role, type, faction, description) => `${name}은(는) ${faction} 출신의 ${type}으로, ${role} 역할을 중심으로 설계되었습니다. ${description || "배경은 기본 프로필에서 다듬을 수 있습니다."} 아트워크는 그 역할, 경험, 신뢰할 수 있는 존재감을 표현해야 합니다.`,
-    characterIntro: (name, role, type, faction, origin, personality, temperament) => `${name}은(는) ${faction}이(가) 배치한 ${type}으로, 보통 ${role} 포지션에 배정됩니다. ${origin} 임무에 투입되면 ${name}은(는) 먼저 현장을 파악한 뒤, 흩어진 신호를 명확한 다음 행동으로 모읍니다. 성격 바탕은 ${personality} 시각적 분위기는 ${temperament} 느낌으로 한눈에 읽혀야 합니다.`,
+    characterBackground: (name, role, type, faction, description) =>
+      `${name}은(는) ${faction} 출신의 ${type}으로, ${role} 역할을 중심으로 설계되었습니다. ${description || "배경은 기본 프로필에서 다듬을 수 있습니다."} 아트워크는 그 역할, 경험, 신뢰할 수 있는 존재감을 표현해야 합니다.`,
+    characterIntro: (
+      name,
+      role,
+      type,
+      faction,
+      origin,
+      personality,
+      temperament,
+    ) =>
+      `${name}은(는) ${faction}이(가) 배치한 ${type}으로, 보통 ${role} 포지션에 배정됩니다. ${origin} 임무에 투입되면 ${name}은(는) 먼저 현장을 파악한 뒤, 흩어진 신호를 명확한 다음 행동으로 모읍니다. 성격 바탕은 ${personality} 시각적 분위기는 ${temperament} 느낌으로 한눈에 읽혀야 합니다.`,
     characterDefaultOrigin:
       "아카이브에 아직 완전한 출신 기록은 없지만, 복잡한 상황 속에서도 흐름을 유지하는 역할이라는 점은 이미 드러나 있습니다.",
     characterEpithets: {
@@ -2379,13 +2365,15 @@ export const koKR: Translations = {
     characterPersonalities: {
       assistant:
         "따뜻하고 믿음직하며 반응이 빠르고, 복잡한 문제를 명쾌하게 정리하는 데 능합니다.",
-      automation: "침착하고 규율이 있으며 직접적이고, 현장 작업 리더 같은 면이 있습니다.",
+      automation:
+        "침착하고 규율이 있으며 직접적이고, 현장 작업 리더 같은 면이 있습니다.",
       coder:
         "집중력 있고 예리하며 조용한 자신감이 있고, 가벼운 엔지니어 느낌입니다.",
       creative: "호기심 많고 표현력이 풍부하며 시각적으로 예민하고 활기찹니다.",
       researcher:
         "신중하고 인내심 있으며 관찰력이 뛰어나고, 실험실과 노트북이 어울리는 분위기입니다.",
-      specialist: "차분하고 전문적이며 경계가 분명하고, 깊이 있는 역량을 갖췄습니다.",
+      specialist:
+        "차분하고 전문적이며 경계가 분명하고, 깊이 있는 역량을 갖췄습니다.",
       financial:
         "이성적이고 절제되어 있으며 판단이 안정적이고, 애널리스트·어드바이저 톤입니다.",
     },
@@ -2412,12 +2400,7 @@ export const koKR: Translations = {
         "인더스트리얼 디테일",
       ],
       coder: ["검은 후드티", "네온 블루 라인", "픽셀 배지", "집중하는 눈빛"],
-      creative: [
-        "비대칭 컷",
-        "밝은 포인트 컬러",
-        "아트 도구",
-        "경쾌한 포즈",
-      ],
+      creative: ["비대칭 컷", "밝은 포인트 컬러", "아트 도구", "경쾌한 포즈"],
       researcher: ["롱 코트", "서류철", "차분한 눈빛", "연구실 요소"],
       specialist: [
         "프리미엄 유니폼",
@@ -2435,7 +2418,8 @@ export const koKR: Translations = {
     keySkillsLabel: "핵심 스킬",
     browseSkillWhitelist: "스킬 화이트리스트 보기",
     availableSkillPoolLabel: "전체 스킬 풀",
-    availableSkillPoolCount: (selected, total) => `${selected}/${total}개 기본 장착됨`,
+    availableSkillPoolCount: (selected, total) =>
+      `${selected}/${total}개 기본 장착됨`,
     availableSkillPoolHint:
       "이 스킬들은 소스 팩에서 제공되며, 나중에 화이트리스트에 추가할 수 있습니다.",
     skillSlotHint: "장착된 스킬 슬롯",
@@ -2454,11 +2438,11 @@ export const koKR: Translations = {
     checkNoArms: "활성화된 ARM이 없어 Agent에 기능 소스가 없습니다",
     checkNoPrivateSkills:
       "Skill 화이트리스트가 비어 있습니다. ARM 기본 skill에만 의존합니다",
-    checkBlockedSkills: (count) =>
-      `${count}개 Skill이 권한 그룹에 의해 차단됨`,
+    checkBlockedSkills: (count) => `${count}개 Skill이 권한 그룹에 의해 차단됨`,
     checkNoExecutableSkills:
       "실행 가능한 Skill이 0개입니다. 이 Agent는 사실상 사용할 수 없습니다",
-    checkUnsavedChanges: "저장되지 않은 변경 사항이 있습니다. 저장해야 적용됩니다",
+    checkUnsavedChanges:
+      "저장되지 않은 변경 사항이 있습니다. 저장해야 적용됩니다",
     configDockTitle: "기능 구성",
     configureProfileAction: "기본 정보 및 Prompt 편집",
     configureProfileHint: "설명, 모델, Soul Prompt",
@@ -2522,29 +2506,17 @@ export const koKR: Translations = {
       "상위 진입 스위치입니다. 켜야 코드 모드 진입과 추가 작업 공간 권한 부여가 허용됩니다.",
     toggleCodeMode: "코드 모드 전환",
     saveCodeMode: "코드 모드 저장",
-    coderBestFor: [
-      "코드 리뷰와 수정",
-      "리팩터링 계획",
-      "테스트와 엣지 케이스",
-    ],
+    coderBestFor: ["코드 리뷰와 수정", "리팩터링 계획", "테스트와 엣지 케이스"],
     coderBoundaries: [
       "코드를 변경하기 전에 재현 경로부터 파악",
       "고위험 대량 수정은 확인 필요",
     ],
-    researcherBestFor: [
-      "시장 조사",
-      "경쟁 구도",
-      "기회와 리스크 평가",
-    ],
+    researcherBestFor: ["시장 조사", "경쟁 구도", "기회와 리스크 평가"],
     researcherBoundaries: [
       "결론에는 반드시 출처 표기",
       "추측을 사실처럼 포장하지 않음",
     ],
-    growthBestFor: [
-      "캠페인 카피",
-      "그로스 실험",
-      "제품 셀링 포인트 정리",
-    ],
+    growthBestFor: ["캠페인 카피", "그로스 실험", "제품 셀링 포인트 정리"],
     growthBoundaries: [
       "크리에이티브는 전환 액션으로 이어져야 함",
       "법률 또는 컴플라이언스 약속을 대신하지 않음",
@@ -2558,20 +2530,12 @@ export const koKR: Translations = {
       "전략은 이행 능력과 일치해야 함",
       "가격 및 계약 사항은 검토 필요",
     ],
-    aoiBestFor: [
-      "캐릭터 인터랙션",
-      "세계관 구축",
-      "창의적 서사와 분위기 설정",
-    ],
+    aoiBestFor: ["캐릭터 인터랙션", "세계관 구축", "창의적 서사와 분위기 설정"],
     aoiBoundaries: [
       "위험한 의뢰는 먼저 확인",
       "캐릭터 말투는 유지하되 사용자 의도를 넘어서지 않음",
     ],
-    defaultBestFor: [
-      "글쓰기와 요약",
-      "계획 분해",
-      "정보 정리와 Q&A",
-    ],
+    defaultBestFor: ["글쓰기와 요약", "계획 분해", "정보 정리와 Q&A"],
     defaultBoundaries: [
       "외부 작업 전에 먼저 확인",
       "불확실한 내용은 빠진 부분을 명시",
@@ -2610,7 +2574,8 @@ export const koKR: Translations = {
     nameStepAlreadyExistsError: "이 이름의 에이전트가 이미 있습니다",
     nameStepNetworkError:
       "네트워크 요청에 실패했습니다. 네트워크 또는 백엔드 연결을 확인하세요",
-    nameStepCheckError: "이름 사용 가능 여부를 확인할 수 없습니다. 다시 시도하세요",
+    nameStepCheckError:
+      "이름 사용 가능 여부를 확인할 수 없습니다. 다시 시도하세요",
     nameStepBootstrapMessage:
       "새 커스텀 에이전트 이름은 {name}입니다. 이제 **SOUL**을 부트스트랩해 볼까요?",
     save: "에이전트 저장",
@@ -2688,8 +2653,7 @@ export const koKR: Translations = {
         {
           id: "research",
           label: "딥 리서치",
-          brief:
-            "웹 검색, 출처 비교, 근거 체인 정리와 판단이 필요합니다.",
+          brief: "웹 검색, 출처 비교, 근거 체인 정리와 판단이 필요합니다.",
           permissions: [
             "웹 검색 허용",
             "출처 표기 필수",
@@ -2725,24 +2689,21 @@ export const koKR: Translations = {
           label: "지식 베이스",
           arms: ["knowledge", "files"],
           skills: ["read_knowledge", "summarize_docs", "cite_sources"],
-          brief:
-            "지식 베이스, 파일, 히스토리 컨텍스트를 읽고 종합합니다.",
+          brief: "지식 베이스, 파일, 히스토리 컨텍스트를 읽고 종합합니다.",
         },
         {
           id: "web",
           label: "웹 리서치",
           arms: ["browser", "search"],
           skills: ["web_search", "open_url", "extract_evidence"],
-          brief:
-            "웹을 검색하고 페이지를 열어 출처와 사실 근거를 추출합니다.",
+          brief: "웹을 검색하고 페이지를 열어 출처와 사실 근거를 추출합니다.",
         },
         {
           id: "workspace-tools",
           label: "워크스페이스 도구",
           arms: ["tasks", "calendar", "team"],
           skills: ["create_task", "read_calendar", "draft_update"],
-          brief:
-            "작업, 일정, 팀 메시지, 프로젝트 업데이트를 처리합니다.",
+          brief: "작업, 일정, 팀 메시지, 프로젝트 업데이트를 처리합니다.",
         },
         {
           id: "local",
@@ -2906,8 +2867,7 @@ export const koKR: Translations = {
       primaryRoutes: {
         agentTask: {
           title: "에이전트 작업 실행",
-          description:
-            "목표로 시작한 다음 계획, 작업, 결과를 검토하세요.",
+          description: "목표로 시작한 다음 계획, 작업, 결과를 검토하세요.",
         },
         codeWork: {
           title: "코드 작업",
@@ -2916,8 +2876,7 @@ export const koKR: Translations = {
         },
         inspectRuntime: {
           title: "런타임 검사",
-          description:
-            "상태, 실행 추적, 예산, 최근 이벤트를 확인하세요.",
+          description: "상태, 실행 추적, 예산, 최근 이벤트를 확인하세요.",
         },
       },
       conceptMap: {
@@ -2965,6 +2924,10 @@ export const koKR: Translations = {
     noArtifactSelected: "선택된 아티팩트 없음",
     selectArtifactToView: "세부 정보를 볼 아티팩트를 선택하세요",
     artifactsTitle: "아티팩트",
+    artifactsTabChanges: "변경",
+    artifactsTabPreview: "미리보기",
+    noChangesArtifacts: "변경된 아티팩트 없음",
+    noPreviewArtifacts: "미리볼 내용 없음",
     retry: "다시 시도",
     editResend: "편집 후 보내기",
     regenerateResponse: "응답 다시 생성",
@@ -3042,7 +3005,8 @@ export const koKR: Translations = {
   streaming: {
     thinking: "AI가 생각하는 중",
     thoughtProcess: "실시간 작업 로그",
-    connectionLost: "이번 답변이 중단되었습니다. 대화를 계속하거나 재시도하세요.",
+    connectionLost:
+      "이번 답변이 중단되었습니다. 대화를 계속하거나 재시도하세요.",
     networkLost:
       "네트워크 연결이 끊겼습니다. 작업이 자동으로 일시정지되었습니다 — 메시지를 보내 체크포인트에서 재개하세요.",
     turnFailed:
@@ -3480,29 +3444,15 @@ export const koKR: Translations = {
       system: "시스템",
       light: "라이트",
       dark: "다크",
-      apple: "Apple",
       systemDescription: "운영 체제 설정을 자동으로 따릅니다.",
       lightDescription: "낮에 사용하기 좋은 밝고 대비가 높은 팔레트입니다.",
       darkDescription: "눈부심을 줄여 집중에 도움이 되는 어두운 팔레트입니다.",
-      appleDescription: "현대적이고 깔끔하며 선명한 Apple 스타일 디자인입니다.",
-      materialTitle: "인터페이스 재질",
-      materialDescription:
-        "현재 테마의 색상 체계를 유지하면서 재질 효과를 덧입힙니다.",
-      materialStandard: "표준",
-      materialStandardDescription: "기존 표면 처리 유지",
-      materialLiquid: "리퀴드 글라스",
-      materialLiquidDescription: "전역 블러, 깊이, 동적 굴절",
-      materialIntensityTitle: "재질 강도",
-      materialIntensityCrystal: "크리스탈",
-      materialIntensityCrystalDescription: "가장 투명하고 은은한 광택",
-      materialIntensityClear: "클리어",
-      materialIntensityClearDescription: "가벼운 글라스, 배경이 더 잘 보임",
-      materialIntensityBalanced: "균형",
-      materialIntensityBalancedDescription: "일상 사용에 적합한 레이어감",
-      materialIntensityDeep: "딥",
-      materialIntensityDeepDescription: "더 강한 깊이감과 하이라이트",
-      materialIntensityFrosted: "프로스티드",
-      materialIntensityFrostedDescription: "더 차분하고 강한 커버",
+      paletteTitle: "색상 팔레트",
+      paletteDescription: "전체 색상 팔레트를 선택해 강조색과 배경 분위기를 결정합니다.",
+      paletteRouge: "루즈 핑크",
+      paletteRougeDescription: "따뜻하고 산뜻한 핑크, 가볍고 부드러운 느낌.",
+      paletteSteel: "콜드 스틸 블루",
+      paletteSteelDescription: "차분하고 이지적인 차가운 블루, 깔끔하고 간결한 느낌.",
       languageTitle: "언어",
       languageDescription: "언어를 전환합니다.",
       languageEnglish: "English",
@@ -3536,8 +3486,7 @@ export const koKR: Translations = {
     },
     skills: {
       title: "에이전트 스킬",
-      description:
-        "에이전트 스킬의 구성과 활성화 상태를 관리합니다.",
+      description: "에이전트 스킬의 구성과 활성화 상태를 관리합니다.",
       createSkill: "스킬 만들기",
       emptyTitle: "아직 에이전트 스킬이 없습니다",
       emptyDescription:
@@ -3587,8 +3536,7 @@ export const koKR: Translations = {
     },
     account: {
       title: "계정 설정",
-      description:
-        "프로필, 연결된 계정, 개인정보 기본 설정을 관리합니다",
+      description: "프로필, 연결된 계정, 개인정보 기본 설정을 관리합니다",
       profile: {
         title: "프로필 정보",
         description: "프로필과 아바타를 업데이트합니다",
@@ -3623,8 +3571,7 @@ export const koKR: Translations = {
         title: "위험 구역",
         description: "되돌릴 수 없는 작업",
         deleteAccount: "계정 삭제",
-        deleteAccountDescription:
-          "계정과 모든 데이터를 영구적으로 삭제합니다",
+        deleteAccountDescription: "계정과 모든 데이터를 영구적으로 삭제합니다",
         deleteAccountConfirm:
           "계정을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
       },
@@ -3722,7 +3669,8 @@ export const koKR: Translations = {
       diagnoseIssues: (issues: string) => `진단에서 문제 발견: ${issues}`,
       deleteConfirm: (name: string) => `모델 "${name}"이(가) 영구 삭제됩니다.`,
       deleteModelTitle: "모델 삭제",
-      gatewayReturned: (status: number) => `게이트웨이가 ${status}을(를) 반환했습니다`,
+      gatewayReturned: (status: number) =>
+        `게이트웨이가 ${status}을(를) 반환했습니다`,
       cannotReachGateway: "게이트웨이 API에 연결할 수 없습니다",
       gatewayUrl: "게이트웨이 URL",
       connected: "연결됨",
@@ -3773,8 +3721,7 @@ export const koKR: Translations = {
         loading: "호환성 진단 로드 중",
         unavailable: "호환성 진단을 사용할 수 없습니다",
         notApplicable: "OpenAI 호환 엔드포인트가 아닙니다",
-        fallbacks: (count: number) =>
-          `fallback ${count}개`,
+        fallbacks: (count: number) => `fallback ${count}개`,
         headers: (names: string) => `헤더: ${names}`,
         removedFields: (fields: string, count: number) =>
           `${count > 5 ? `${fields}…` : fields} 제거`,
@@ -4016,8 +3963,7 @@ export const koKR: Translations = {
     queryPlaceholder: "지식 그래프에 대해 질문하기...",
     deleteEntity: "엔터티 삭제",
     searchEntities: "엔터티 검색...",
-    entitiesExtracted:
-      "엔터티는 대화에서 자동 추출됩니다",
+    entitiesExtracted: "엔터티는 대화에서 자동 추출됩니다",
     detect: "Detect",
     noCommunities: "커뮤니티 없음",
     clickDetect: "감지를 클릭하여 커뮤니티를 발견하세요",
@@ -4103,9 +4049,9 @@ export const koKR: Translations = {
       title: "Plugins",
       electronBadge: "Electron",
       webPreviewBadge: "웹 미리보기",
-      descElectron: "로컬에서 압축을 푼 Chromium 확장 프로그램 폴더를 설치합니다.",
-      descWeb:
-        "서드파티 플러그인 설치에는 Electron 데스크톱 앱이 필요합니다.",
+      descElectron:
+        "로컬에서 압축을 푼 Chromium 확장 프로그램 폴더를 설치합니다.",
+      descWeb: "서드파티 플러그인 설치에는 Electron 데스크톱 앱이 필요합니다.",
       installLocal: "로컬 플러그인 설치",
       refreshAria: "플러그인 새로고침",
       listFailed: "플러그인 목록 읽기 실패",
@@ -4120,7 +4066,8 @@ export const koKR: Translations = {
       emptyElectron: "아직 설치된 플러그인이 없습니다.",
       emptyElectronHint:
         "로컬에서 압축을 푼 플러그인 폴더를 설치하면 여기에 표시됩니다.",
-      emptyWeb: "localhost 미리보기는 Electron 플러그인 API에 접근할 수 없습니다.",
+      emptyWeb:
+        "localhost 미리보기는 Electron 플러그인 API에 접근할 수 없습니다.",
       placeholderTitle: "플러그인 카탈로그 자리표시자",
       placeholderDesc:
         "로컬 플러그인을 설치하고 관리하려면 데스크톱 앱을 실행하세요. 미리보기에서는 Octopus가 지원하는 플러그인 카테고리가 표시됩니다.",
@@ -4307,11 +4254,9 @@ export const koKR: Translations = {
     statusNotDetected: "감지되지 않음",
     availableCount: (count: number) => `${count}개 사용 가능`,
     cancel: "Cancel",
-    connectSelected: (count: number) =>
-      `${count}개 Agent 연결`,
+    connectSelected: (count: number) => `${count}개 Agent 연결`,
     noPartnerSelected: "감지된 로컬 파트너를 선택하세요",
-    registerSuccess: (count: number) =>
-      `${count}개 로컬 파트너 연결됨`,
+    registerSuccess: (count: number) => `${count}개 로컬 파트너 연결됨`,
     alreadyExists: "이러한 로컬 파트너는 이미 Hub에 있습니다",
     noPartnersAvailable:
       "연결 가능한 로컬 파트너가 없습니다; 먼저 해당 로컬 도구를 설치하세요",
@@ -4374,7 +4319,8 @@ export const koKR: Translations = {
     copilot: {
       stopAgent: "중지",
       stopAgentTooltip: "agent 자동 조작 중지",
-      autoBrowseOnTooltip: "AI가 현재 페이지를 조작할 수 있음 · 클릭해 비활성화",
+      autoBrowseOnTooltip:
+        "AI가 현재 페이지를 조작할 수 있음 · 클릭해 비활성화",
       autoBrowseOffTooltip: "AI 답변만 · 클릭해 조작 활성화",
       summarizePage: "페이지 요약",
       extractKeyPoints: "요점 추출",
@@ -4404,7 +4350,8 @@ export const koKR: Translations = {
       webviewNotReadyError:
         "[실행 실패: webview가 준비되지 않았습니다(브라우저에서 실행 중일 수 있음, Electron 아님)]",
       confirmedRiskyOperation: "[사용자가 고위험 작업을 확인함]",
-      recorderProtocol: "[외부 AI 리서치 · 기록자 모드]\n목표: 로컬 모델 토큰 사용을 최소화합니다. 당신은 브라우저 디스패처이자 기록자이지, 메인 리서치 모델이 아닙니다.\n전략:\n1. 무거운 추론은 외부 AI 플랫폼(예: Gemini, NotebookLM, Doubao, Perplexity)을 열고 제어하는 것을 우선합니다.\n2. 로컬에서는 짧은 단계의 계획, 페이지 조작, 결과 대기, 핵심 결론 추출, 증거 로그 저장만 수행합니다.\n3. 전체 페이지 긴 텍스트를 로컬 모델에 다시 넣지 마세요. 제목, URL, 3~8개 핵심 결론, 명확한 인용, 검증할 점만 추출하세요.\n4. 각 플랫폼 출력 후 기록: 플랫폼, 사용한 프롬프트, 결과 요약, URL, 시간, 증거/스크린샷 단서.\n5. 로그인, 파일 업로드, 민감 데이터 전송, 게시/양식 제출/결제 작업을 만나면 반드시 멈추고 사용자 확인을 요청하세요.\n6. 최종 보고서는 각 플랫폼 결과를 병합, 중복 제거, 충돌 표시, 다음 단계 제안만 수행합니다.",
+      recorderProtocol:
+        "[외부 AI 리서치 · 기록자 모드]\n목표: 로컬 모델 토큰 사용을 최소화합니다. 당신은 브라우저 디스패처이자 기록자이지, 메인 리서치 모델이 아닙니다.\n전략:\n1. 무거운 추론은 외부 AI 플랫폼(예: Gemini, NotebookLM, Doubao, Perplexity)을 열고 제어하는 것을 우선합니다.\n2. 로컬에서는 짧은 단계의 계획, 페이지 조작, 결과 대기, 핵심 결론 추출, 증거 로그 저장만 수행합니다.\n3. 전체 페이지 긴 텍스트를 로컬 모델에 다시 넣지 마세요. 제목, URL, 3~8개 핵심 결론, 명확한 인용, 검증할 점만 추출하세요.\n4. 각 플랫폼 출력 후 기록: 플랫폼, 사용한 프롬프트, 결과 요약, URL, 시간, 증거/스크린샷 단서.\n5. 로그인, 파일 업로드, 민감 데이터 전송, 게시/양식 제출/결제 작업을 만나면 반드시 멈추고 사용자 확인을 요청하세요.\n6. 최종 보고서는 각 플랫폼 결과를 병합, 중복 제거, 충돌 표시, 다음 단계 제안만 수행합니다.",
       researchMissionLabel: "[이번 리서치 임무]",
       researchPlatformDivisionLabel: "[외부 플랫폼 분담]",
       researchExecutionRequirementsLabel: "[실행 요구 사항]",
@@ -4418,15 +4365,12 @@ export const koKR: Translations = {
         "- 각 플랫폼 완료 후 짧은 리서치 로그로 보고하세요: 플랫폼 / URL / 5개 이내 요점 / 확인 대기.",
       researchRequirementPauseForSensitive:
         "- 로그인, 파일 업로드, 민감 정보 제출이 필요하면 멈추고 사용자에게 확인하세요.",
-      researchPlatformHintGemini:
-        "종합 검색, 긴 질문, 멀티턴 분석",
-      researchPlatformHintNotebookLM:
-        "자료 라이브러리, 인용, 문서 내 리서치",
+      researchPlatformHintGemini: "종합 검색, 긴 질문, 멀티턴 분석",
+      researchPlatformHintNotebookLM: "자료 라이브러리, 인용, 문서 내 리서치",
       researchPlatformNameDoubao: "Doubao",
       researchPlatformHintDoubao:
         "중국어 리서치, 중국어 리라이팅, 중국 로컬 맥락",
-      researchPlatformHintPerplexity:
-        "웹 검색, 소스 단서, 팩트 체크",
+      researchPlatformHintPerplexity: "웹 검색, 소스 단서, 팩트 체크",
       researchLogDispatchLabel: "디스패치",
       researchStartTitle: "외부 AI 리서치 시작",
       researchPlatformsPrefix: "플랫폼:",
@@ -4471,10 +4415,8 @@ export const koKR: Translations = {
       closeAriaLabel: "확장 닫기",
       searchPlaceholder: "확장 검색",
       installedExtensions: "설치된 확장",
-      electronSupported:
-        "로컬에 압축 해제된 Chromium 확장 디렉터리 지원",
-      webPreviewOnly:
-        "서드파티 확장 설치에는 데스크톱 Electron이 필요합니다",
+      electronSupported: "로컬에 압축 해제된 Chromium 확장 디렉터리 지원",
+      webPreviewOnly: "서드파티 확장 설치에는 데스크톱 Electron이 필요합니다",
       webPreview: "웹 미리보기",
       enabled: "활성화됨",
       disabled: "비활성화됨",
@@ -4504,12 +4446,10 @@ export const koKR: Translations = {
       categoryComingSoon: "출시 예정",
       taglinePageAgent: "현재 페이지를 실행 가능한 작업 컨텍스트로 전환",
       taglineResearchClipper: "웹 스니펫, 소스, 스크린샷 수집",
-      taglineShieldLite:
-        "방해 요소와 추적 스크립트를 가볍게 차단",
+      taglineShieldLite: "방해 요소와 추적 스크립트를 가볍게 차단",
       taglineCookieVault: "테스트 계정용 격리 세션 저장",
       taglineTranslatorLens: "선택한 텍스트와 페이지 영역을 호버 번역",
-      taglineDomInspector:
-        "요소, 셀렉터, 접근성 트리 직접 검사",
+      taglineDomInspector: "요소, 셀렉터, 접근성 트리 직접 검사",
       taglineVisualRecorder: "클릭 경로를 녹화해 자동화 단계 생성",
       tagsPageAgent: ["자동화", "웹 조작", "AI"],
       tagsResearchClipper: ["라이브러리", "인용", "스크린샷"],
@@ -4588,9 +4528,10 @@ export const koKR: Translations = {
       panelTitleDesktopSettings: "데스크톱 설정",
       panelSubtitle: "브라우저 데스크톱 제어 패널",
       panelClose: "닫기",
-      themeNames: ["아침 안개 글라스", "다크 포커스", "산뜻한 블루 화이트"],
+      themeNames: ["팔레트 연동", "아침 안개 글라스", "다크 포커스", "산뜻한 블루 화이트"],
       themeDescs: [
-        "현재 테마 · 부드러운 그레이-핑크 그라데이션",
+        "전역 색상 팔레트에 자동 동기화",
+        "부드러운 그레이-핑크 그라데이션",
         "야간 리서치와 장시간 읽기에 적합",
         "생산성 브라우저 홈에 가까운 스타일",
       ],
@@ -4819,8 +4760,7 @@ export const koKR: Translations = {
     selectDevicePreset: "기기 프리셋 선택",
     continueInFullBrowser: "전체 브라우저에서 계속",
     takeoverButton: "인계받기",
-    sessionNeedsAttention: (issues) =>
-      `브라우저 세션 확인 필요: ${issues}`,
+    sessionNeedsAttention: (issues) => `브라우저 세션 확인 필요: ${issues}`,
     reconnectButton: "다시 연결",
     semanticSnapshotFallback: "페이지 시맨틱 스냅샷",
     truncatedBadge: "잘림",
@@ -4858,8 +4798,9 @@ export const koKR: Translations = {
     appDescGemini: "종합 검색, 멀티턴 분석",
     appDescNotebookLM: "라이브러리, 인용, 문서 리서치",
     appDescDoubao: "중국어 리서치, 중국어 리라이팅",
-    appDescTongyiQianwen: "추론, 코딩, 중국어 Q&A",
-    appDescWenxinYiyan: "Tongyi 모델, 멀티모달 대화",
+    appDescDeepSeek: "추론, 코딩, 중국어 Q&A",
+    appDescTongyiQianwen: "Tongyi 모델, 멀티모달 대화",
+    appDescWenxinYiyan: "Baidu 에이전트, 중국어 창작",
     appDescTencentYuanbao: "중국어 검색, 자료 요약",
     appDescPerplexity: "웹 검색, 소스 단서",
     appDescChatGPT: "범용 대화, 코딩 지원",
@@ -4891,8 +4832,7 @@ export const koKR: Translations = {
     switchSearchEngine: "검색 엔진 전환",
     commonCategories: "자주 쓰는 분류",
     recentVisits: "최근 방문",
-    recentVisitCount: (count: number) =>
-      `${count}건 최근 방문`,
+    recentVisitCount: (count: number) => `${count}건 최근 방문`,
     historyOnly: "기록에서",
     noRecentVisits: "최근 방문 기록이 없습니다",
     commonEntries: "자주 쓰는 진입점",
@@ -4947,21 +4887,16 @@ export const koKR: Translations = {
     standard: "표준",
     teamCoder: "Programmer",
     admin: "Admin",
-    builderTooltip:
-      "새 프로젝트/빈 폴더: 먼저 실행 가능한 슬라이스를 구축",
+    builderTooltip: "새 프로젝트/빈 폴더: 먼저 실행 가능한 슬라이스를 구축",
     coderTooltip: "기존 코드베이스: 구조 검사, 작은 수정, 검증",
-    developTooltip:
-      "자동 신규/기존 프로젝트 처리를 통한 개발 구현",
+    developTooltip: "자동 신규/기존 프로젝트 처리를 통한 개발 구현",
     auditTooltip: "증거, 위험, 우선순위가 있는 품질 감사",
     uxuiTooltip: "UX/UI: 흐름, 레이아웃, 시각, 회귀 검토",
-    architectTooltip:
-      "아키텍처/마이그레이션: 영향 평가 및 단계별 작업",
+    architectTooltip: "아키텍처/마이그레이션: 영향 평가 및 단계별 작업",
     ultraTooltip:
       "감사 · 최고 오케스트레이션: UltraCode 스타일의 다단계 워크플로 스케줄링, 검증, 검토",
-    teamCoderTooltip:
-      "시니어 프로그래머 모드 — 제한된 권한으로 코딩 작업 실행",
-    adminTooltip:
-      "시스템 관리자 — 최고 권한, 모든 Agent와 설정을 관리",
+    teamCoderTooltip: "시니어 프로그래머 모드 — 제한된 권한으로 코딩 작업 실행",
+    adminTooltip: "시스템 관리자 — 최고 권한, 모든 Agent와 설정을 관리",
     builderDesc: "새 프로젝트",
     coderDesc: "기존 코드베이스",
     developDesc: "빌드, 수정, 반복",
@@ -5011,6 +4946,14 @@ export const koKR: Translations = {
     signalCommits: (count: number) => `${count}개 커밋`,
     signalReadme: "README 발견됨",
     signalSummaryEmpty: "추가 프로젝트 신호 없음",
+  },
+
+  modeIntent: {
+    suggestSwitch: (modeLabel: string) => `「${modeLabel}」 모드로 전환할까요?`,
+    switch: "전환",
+    ignore: "무시",
+    autoSwitched: (modeLabel: string) =>
+      `「${modeLabel}」 모드로 자동 전환했습니다`,
   },
 
   // Code page tabs
@@ -5070,7 +5013,8 @@ export const koKR: Translations = {
     createCustomSkillDesc:
       "시스템 프롬프트가 포함된 재사용 가능한 스킬 패키지를 정의하세요.",
     importSkill: "스킬 가져오기",
-    importSkillDesc: "URL, GitHub Gist에서 가져오거나, JSON/YAML을 직접 붙여넣으세요.",
+    importSkillDesc:
+      "URL, GitHub Gist에서 가져오거나, JSON/YAML을 직접 붙여넣으세요.",
     name: "Name",
     category: "Category",
     tags: "태그 (쉼표로 구분)",
@@ -5163,8 +5107,7 @@ export const koKR: Translations = {
     unknown: "Unknown",
     details: "Details",
     deployAgain: "다시 배포",
-    noActiveDeployment:
-      "활성 배포가 없습니다. 설정 탭에서 설정 후 배포하세요.",
+    noActiveDeployment: "활성 배포가 없습니다. 설정 탭에서 설정 후 배포하세요.",
     noActiveDeploymentHint: "활성 배포가 없습니다.",
     noDeployments: "아직 배포 기록이 없습니다. 첫 프로젝트를 배포해 보세요!",
     noDeploymentsHint: "아직 배포 기록이 없습니다.",
@@ -5190,7 +5133,8 @@ export const koKR: Translations = {
     rebuildFull: "재구축(전체 재인덱싱)",
     clearIndex: "인덱스 삭제",
     notIndexed: "코드베이스 미인덱싱",
-    notIndexedHint: "코드베이스를 인덱싱하면 의미 기반 코드 검색을 사용할 수 있습니다.",
+    notIndexedHint:
+      "코드베이스를 인덱싱하면 의미 기반 코드 검색을 사용할 수 있습니다.",
     startIndexing: "인덱싱 시작",
     noMatchingCode: "일치하는 코드가 없습니다.",
     indexingInProgress: "인덱싱 진행 중",
@@ -5245,7 +5189,8 @@ export const koKR: Translations = {
     newRecording: "새 녹화",
     backToLibrary: "목록으로 돌아가기",
     searchWorkflows: "워크플로 검색...",
-    noWorkflows: "아직 녹화된 워크플로가 없습니다. /record를 사용하여 시작하세요.",
+    noWorkflows:
+      "아직 녹화된 워크플로가 없습니다. /record를 사용하여 시작하세요.",
     noWorkflowsHint: "아직 녹화된 워크플로가 없습니다.",
     noMatchingWorkflows: "검색과 일치하는 워크플로가 없습니다.",
     replay: "Replay",
@@ -5402,7 +5347,8 @@ export const koKR: Translations = {
       aiMemberDefault: "AI 멤버",
       standby: "대기 중",
       collaboratorsGroup: "Collaborators",
-      emptyHint: "아직 다른 사람이 없습니다 · 위 초대 버튼으로 사람을 초대하세요",
+      emptyHint:
+        "아직 다른 사람이 없습니다 · 위 초대 버튼으로 사람을 초대하세요",
       statusWithRole: (status, role) => `${status} · ${role}`,
     },
     createTask: {
@@ -5416,8 +5362,7 @@ export const koKR: Translations = {
       sopLabel: "역량 팩 / SOP",
       assigneeLabel: "에이전트 지정",
       titlePlaceholder: "예: 진입할 만한 틈새 시장 조사",
-      descriptionPlaceholder:
-        "범위, 출력 형식, 제약, 기존 자료...",
+      descriptionPlaceholder: "범위, 출력 형식, 제약, 기존 자료...",
       autoMatchFreeform: "자동 매칭 또는 자유 실행",
       loadingPacks: "역량 팩 로딩 중",
       cancel: "Cancel",
@@ -5800,7 +5745,8 @@ export const koKR: Translations = {
     configuredTip: "자동화 작업은 설정된 주기로 실행되며 크레딧을 소비합니다.",
     configuredTipToggle: "다시 보지 않기",
     configuredEmptyTitle: "자동화 작업이 없습니다",
-    configuredEmptyDescription: "템플릿을 선택하거나 대화에서 Agent에게 생성하도록 요청하세요.",
+    configuredEmptyDescription:
+      "템플릿을 선택하거나 대화에서 Agent에게 생성하도록 요청하세요.",
     createCustomTask: "사용자 정의 작업",
     useTemplate: "템플릿 사용",
     // Create automation dialog
@@ -5983,8 +5929,7 @@ export const koKR: Translations = {
       "아직 학습 데이터가 없습니다. 스킬 사용 과정에서 곡선이 만들어집니다.",
     noMemoryData: "아직 메모리 데이터가 없습니다.",
     noSkillExtractionEvents: "아직 스킬 추출 이벤트가 없습니다.",
-    continuousLearningDesc:
-      "지속 학습 지표, 스킬 성과, 개선 추적",
+    continuousLearningDesc: "지속 학습 지표, 스킬 성과, 개선 추적",
     viewInTaskBoard: "작업 보드에서 보기",
     active: "Active",
     disabled: "Disabled",
@@ -6049,14 +5994,14 @@ export const koKR: Translations = {
     generatingWiki: "Wiki 생성 중...",
     generateConfirmTitle: "저장소 Wiki를 생성하시겠습니까?",
     generateConfirmBody:
-      "이 작업은 LLM을 사용하여 프로젝트 코드를 분석하고 구조화된 문서를 생성합니다.\n\" +\n      \"\\u2022 대형 프로젝트는 몇 분 정도 걸릴 수 있습니다\n\" +\n      \"\\u2022 API 토큰을 소비합니다 (예상 비용은 프로젝트 크기에 따라 다름)\n\" +\n      \"\\u2022 결과는 .octopus/repowiki/에 저장됩니다\n\n\" +\n      \"계속하시겠습니까?",
+      '이 작업은 LLM을 사용하여 프로젝트 코드를 분석하고 구조화된 문서를 생성합니다.\n" +\n      "\\u2022 대형 프로젝트는 몇 분 정도 걸릴 수 있습니다\n" +\n      "\\u2022 API 토큰을 소비합니다 (예상 비용은 프로젝트 크기에 따라 다름)\n" +\n      "\\u2022 결과는 .octopus/repowiki/에 저장됩니다\n\n" +\n      "계속하시겠습니까?',
     generateStarted: "Wiki 생성이 시작되었습니다",
     generateComplete: "Wiki 생성 완료",
     generateFailed: "Wiki 생성 시작 실패",
     update: "Update",
     updateConfirmTitle: "저장소 Wiki를 업데이트하시겠습니까?",
     updateConfirmBody:
-      "이 작업은 LLM을 사용하여 변경된 파일을 재분석하고 관련 문서를 업데이트합니다.\n\" +\n      \"변경된 모듈에 대해서만 API 토큰을 소비합니다.\n\n\" +\n      \"계속하시겠습니까?",
+      '이 작업은 LLM을 사용하여 변경된 파일을 재분석하고 관련 문서를 업데이트합니다.\n" +\n      "변경된 모듈에 대해서만 API 토큰을 소비합니다.\n\n" +\n      "계속하시겠습니까?',
     updateUpToDate: "Wiki가 이미 최신입니다",
     updatedFiles: (count: number) => `${count}개 파일 업데이트됨`,
     updateFailed: "Wiki 업데이트 실패",
@@ -6236,8 +6181,7 @@ export const koKR: Translations = {
       "제공자가 요청을 거부했거나, 계정을 사용할 수 없거나, 렌더링 가능한 콘텐츠가 반환되지 않았습니다.",
     modelOutputReceived: "답변 내용을 받았습니다",
     modelStartedReturning: "내용이 돌아오기 시작했습니다.",
-    readFileToUnderstand:
-      "현재 구현을 이해하기 위해 파일 내용을 읽는 중.",
+    readFileToUnderstand: "현재 구현을 이해하기 위해 파일 내용을 읽는 중.",
     viewDirectoryStructure:
       "다음에 읽을 파일을 찾기 위해 디렉터리 구조를 확인하는 중.",
     writeFileContent: "파일 내용 작성 중.",
@@ -6292,9 +6236,9 @@ export const koKR: Translations = {
     readingFile: (running) => (running ? "읽는 중" : "읽기 완료"),
     browsingDirectory: (running) =>
       running ? "디렉터리 탐색 중" : "디렉터리 탐색 완료",
-    searchingFiles: (running) =>
-      running ? "파일 검색 중" : "파일 검색 완료",
-    searchingText: (running) => (running ? "텍스트 검색 중" : "텍스트 검색 완료"),
+    searchingFiles: (running) => (running ? "파일 검색 중" : "파일 검색 완료"),
+    searchingText: (running) =>
+      running ? "텍스트 검색 중" : "텍스트 검색 완료",
     runningCommand: (running) => (running ? "명령 실행 중" : "명령 실행 완료"),
     creatingFile: (running) => (running ? "파일 생성 중" : "파일 생성 완료"),
     writingFile: (running) => (running ? "파일 쓰는 중" : "파일 쓰기 완료"),
@@ -6358,8 +6302,7 @@ export const koKR: Translations = {
     cancel: "취소",
     noAnnotations: "아직 주석이 없습니다",
     noAnnotationsHint: "메시지 옆의 댓글 아이콘을 클릭해 주석을 추가하세요.",
-    annotation: (count: number) =>
-      `${count}개 주석`,
+    annotation: (count: number) => `${count}개 주석`,
     showResolved: (count: number) => `해결됨 표시 (${count})`,
     hideResolved: (count: number) => `해결됨 숨기기 (${count})`,
     anonymous: "익명",
@@ -6409,8 +6352,7 @@ export const koKR: Translations = {
     definitionFound: (symbol, file, line) => `${symbol} -> ${file}:${line}`,
     definitionNotFound: (symbol) => `정의를 찾을 수 없음: ${symbol}`,
     definitionLookupFailed: "정의 조회 실패",
-    referencesFound: (count, symbol) =>
-      `${symbol}에 ${count}개 참조`,
+    referencesFound: (count, symbol) => `${symbol}에 ${count}개 참조`,
     referencesNotFound: (symbol) => `참조를 찾을 수 없음: ${symbol}`,
     referencesLookupFailed: "참조 조회 실패",
   },
@@ -6456,7 +6398,8 @@ export const koKR: Translations = {
       "작업을 설명하거나, @로 로컬 파일 Agent를 호출해 로컬 자료를 검색하세요...",
     assigneeAll: "All",
     assigneeCount: (count: number) => `${count}명`,
-    assigneeHint: "이 작업을 시작할 사람을 선택하세요; 멤버는 나중에 추가할 수 있습니다",
+    assigneeHint:
+      "이 작업을 시작할 사람을 선택하세요; 멤버는 나중에 추가할 수 있습니다",
     assigneeMenuTitle: "이 작업을 누가 시작할까요",
     clearAssignee: "선택 지우기 후 전체 팀에게 맡기기",
     localFileAgent: "로컬 파일 Agent",
@@ -6511,7 +6454,8 @@ export const koKR: Translations = {
     clickToEnable: "비활성화됨 · 클릭하여 활성화",
     recommended: "Recommended",
     bindAccountFirst: "먼저 로그인하세요",
-    bindAccountDesc: "로그인 페이지에서 전화번호로 로그인 후 공식 모델을 활성화할 수 있습니다.",
+    bindAccountDesc:
+      "로그인 페이지에서 전화번호로 로그인 후 공식 모델을 활성화할 수 있습니다.",
     modelEnabled: (name: string) => `${name} 활성화됨`,
     enableFailed: "활성화 실패",
     enableFailedWithMessage: (msg: string) => `활성화 실패: ${msg}`,
@@ -6561,13 +6505,13 @@ export const koKR: Translations = {
     factoryResetPending: "삭제 중…",
     factoryResetConfirm: "초기화 확인",
     avatarTooLarge: "아바타는 5MB 미만이어야 합니다",
-    sessionExpired: (reason: string) => `계정 세션이 만료되었습니다 (${reason})`,
+    sessionExpired: (reason: string) =>
+      `계정 세션이 만료되었습니다 (${reason})`,
     sessionExpiredDefaultReason: "다른 기기에서 로그인됨",
     sessionCacheHint:
       "아래에 표시된 크레딧은 캐시된 값입니다. 로그아웃 후 전화번호로 다시 로그인하여 새로고침하세요.",
     cachedSuffix: " (캐시됨)",
-    expiredTooltip:
-      "명목 잔액과 사용 가능 잔액의 차이 (만료 또는 동결됨)",
+    expiredTooltip: "명목 잔액과 사용 가능 잔액의 차이 (만료 또는 동결됨)",
     profileUpdated: "프로필을 업데이트했습니다",
     avatarUploaded: "아바타를 업데이트했습니다",
     accountUnlinked: "계정 연결을 해제했습니다",
@@ -6765,6 +6709,29 @@ export const koKR: Translations = {
     refreshFailed: "새로고침 실패",
   },
 
+  // 로컬 크레딧 원장 / 크레딧 센터
+  creditsCenter: {
+    title: "크레딧 센터",
+    totalBalance: "총 크레딧",
+    accountBalance: "계정 크레딧",
+    communityBalance: "커뮤니티 크레딧",
+    signIn: "매일 출석 체크",
+    signInDone: "오늘 이미 출석",
+    signInSuccess: (n: number) => `출석 성공! ${n} 크레딧 획득`,
+    signInFailed: "출석 실패",
+    earned: "누적 획득",
+    spent: "누적 소비",
+    ledger: "거래 내역",
+    emptyLedger: "거래 내역이 아직 없습니다. 커뮤니티를 둘러보세요",
+    earnHints: "크레딧 모으는 방법",
+    earnHintSignIn: (n: number) => `매일 출석 +${n}`,
+    earnHintPublish: (n: number) => `아이디어 게시 +${n}`,
+    earnHintFork: (n: number) => `콘텐츠가 포크됨 +${n}/회`,
+    earnHintLike: (n: number) => `콘텐츠가 좋아요됨 +${n}/회`,
+    spendNoBalance:
+      "커뮤니티 크레딧이 부족합니다. 출석하거나 창작해서 크레딧을 모으세요",
+  },
+
   // Daily credits claim
   dailyClaim: {
     title: "일일 로그인 보너스",
@@ -6854,8 +6821,7 @@ export const koKR: Translations = {
     browserStatusWaiting: "로그인 대기 중...",
     browserStep1: "1. 열린 브라우저 창에서 로그인",
     browserStep2: "2. 로그인 후 창이 자동으로 닫힙니다",
-    browserStep3:
-      "3. 자격 증명은 로컬에 저장되며 언제든 철회할 수 있습니다",
+    browserStep3: "3. 자격 증명은 로컬에 저장되며 언제든 철회할 수 있습니다",
     browserCookiesLabel: "쿠키:",
     browserBearerLabel: "Bearer 토큰:",
     browserCaptured: "✓ 캡처됨",
@@ -7064,7 +7030,7 @@ export const koKR: Translations = {
     statusUnknown: "unknown",
     modeCard: "Cards",
     modeYaml: "YAML",
-    cardEmpty: "아직 규칙이 없습니다 · 아래 \"추가\"를 클릭하여 생성하세요",
+    cardEmpty: '아직 규칙이 없습니다 · 아래 "추가"를 클릭하여 생성하세요',
     cardAddNew: "+ 규칙 추가",
     cardField_id: "규칙 ID",
     cardField_trigger: "Trigger",
@@ -7112,8 +7078,7 @@ export const koKR: Translations = {
     knobEvalTasks: "평가 작업 / 반복",
     autoProposeButton: "실패한 레시피에 대해 자동 제안",
     autoProposeRunning: "제안 중…",
-    autoProposeTitle:
-      "모든 실패한 레시피를 찾아 각각에 대해 Forge 수정 제안",
+    autoProposeTitle: "모든 실패한 레시피를 찾아 각각에 대해 Forge 수정 제안",
     runForgeButton: "Forge 실행",
     runForgeRunning: "실행 중…",
     paretoFrontTitle: (count: number) => `파레토 프런트 · ${count}개 후보`,
@@ -7164,8 +7129,7 @@ export const koKR: Translations = {
     bestAvg: (score: number) => `최고 평균 ${score.toFixed(3)}`,
     converged: "✓ 개선됨",
     notConverged: "개선되지 않음",
-    noIterationsYet:
-      "아직 반복 없음 · Forge를 실행하여 수렴 곡선을 확인하세요",
+    noIterationsYet: "아직 반복 없음 · Forge를 실행하여 수렴 곡선을 확인하세요",
     convergenceChartLabel: "Convergence",
     bestSoFarLabel: "지금까지 최고 (라인)",
     perIterLabel: "반복당 점수 (점)",
@@ -7229,14 +7193,12 @@ export const koKR: Translations = {
   appAuthWrapperPage: {
     securityKicker: "보안",
     pageTitle: "앱 인증",
-    pageSubtitle:
-      "애플리케이션 접근 토큰과 인증 설정을 관리합니다.",
+    pageSubtitle: "애플리케이션 접근 토큰과 인증 설정을 관리합니다.",
     feature1Title: "접근 제어",
     feature1Desc:
       "어떤 애플리케이션이 작업 공간 리소스에 접근할 수 있는지 제어합니다.",
     feature2Title: "토큰 관리",
-    feature2Desc:
-      "안전한 통합을 위해 API 토큰을 생성, 로테이션, 철회합니다.",
+    feature2Desc: "안전한 통합을 위해 API 토큰을 생성, 로테이션, 철회합니다.",
   },
 
   // Observability page
@@ -7279,8 +7241,7 @@ export const koKR: Translations = {
     stepsCount: (n) => `${n}단계`,
     // Blackboard panel
     activeTurns: "활성 턴",
-    noActiveBlackboard:
-      "활성 보드 없음 · 병렬 협업 작업을 실행하여 확인하세요",
+    noActiveBlackboard: "활성 보드 없음 · 병렬 협업 작업을 실행하여 확인하세요",
     noActiveBlackboardHint:
       "병렬 협업 작업 시작 후 보드가 자동으로 활성화됩니다",
     snapshot: "Snapshot",
@@ -7299,8 +7260,7 @@ export const koKR: Translations = {
     clearConfirmDescription:
       "표시된 이벤트 목록을 비웁니다. 새 이벤트는 계속 들어옵니다.",
     noEvents: "이벤트 없음",
-    noEventsHint:
-      "저널 이벤트가 나타날 때까지 기다리세요 · 요청을 시작하세요.",
+    noEventsHint: "저널 이벤트가 나타날 때까지 기다리세요 · 요청을 시작하세요.",
     eventActionFile: "file",
     eventArtifact: "artifact",
     eventArtifactScreenshot: "screenshot",
@@ -7602,13 +7562,13 @@ export const koKR: Translations = {
     profileLaxBlurb:
       "시크릿만 하드 차단 · PII는 재작성 없이 기록 · judge는 전면 감사 모드 · 에어갭 / 내부 신뢰 네트워크에 적합합니다.",
     activeTag: "ACTIVE",
-    profileLoadFailed: "(백엔드에 연결할 수 없음 · 프로필 상태를 사용할 수 없음)",
+    profileLoadFailed:
+      "(백엔드에 연결할 수 없음 · 프로필 상태를 사용할 수 없음)",
     alternativeUnlockTitle: "다른 잠금 해제 경로",
     altEnvLabel: "환경 변수:",
     altEnvDesc: "시작 전에 OCTOPUS_IDENTITY_LOCK=0 설정 · 전역 적용",
     altTurnLabel: "단일 턴:",
-    altTurnDesc:
-      "사용자 메시지 앞에 /raw 붙이기 · 해당 턴에만 통과",
+    altTurnDesc: "사용자 메시지 앞에 /raw 붙이기 · 해당 턴에만 통과",
     altApiLabel: "API 호출:",
     altApiDesc: "스레드 요청의 body.context에 raw_identity: true 추가",
     toastProfileSwitched: (name: string) =>
@@ -7692,7 +7652,8 @@ export const koKR: Translations = {
     usernameLabel: "사용자 이름",
     displayNameLabel: "표시 이름 (선택 사항)",
     loggingIn: "로그인 중…",
-    errorServiceDisabled: "서비스가 활성화되어 있지 않습니다 · 관리자에게 문의하세요",
+    errorServiceDisabled:
+      "서비스가 활성화되어 있지 않습니다 · 관리자에게 문의하세요",
     errorUpstream: "업스트림에 연결할 수 없습니다 · 다시 시도하세요",
     errorCodeInvalid: "코드가 유효하지 않거나 만료되었습니다",
     errorNotInWhitelist: "허용 목록에 없는 사용자 이름입니다",
@@ -7777,10 +7738,8 @@ export const koKR: Translations = {
       code: "인증 코드를 입력하세요",
     },
     terms: {
-      autoRegister:
-        "등록되지 않은 전화번호는 자동으로 가입됩니다",
-      emailAutoRegister:
-        "등록되지 않은 이메일 주소는 자동으로 가입됩니다",
+      autoRegister: "등록되지 않은 전화번호는 자동으로 가입됩니다",
+      emailAutoRegister: "등록되지 않은 이메일 주소는 자동으로 가입됩니다",
       agreeTo: "로그인하면 다음에 동의하는 것으로 간주됩니다",
       and: "및",
       userAgreement: "사용자 계약",
@@ -7925,11 +7884,10 @@ export const koKR: Translations = {
       "DingTalk 개발자 콘솔 · 그룹 로봇 · 로봇 추가 · Webhook URL 복사.",
     dingtalkSecretLabel: "서명 Secret (선택 · 권장)",
     dingtalkSecretHint:
-      "로봇 보안 설정에서 \"서명\"을 체크했을 때 발급되는 비밀키입니다. 비워두면 서명 검증을 건너뜁니다(내부망에서만 신뢰 가능).",
+      '로봇 보안 설정에서 "서명"을 체크했을 때 발급되는 비밀키입니다. 비워두면 서명 검증을 건너뜁니다(내부망에서만 신뢰 가능).',
     feishuAppIdHint:
       "Feishu Open Platform · 사용자 지정 앱 · Credentials 페이지의 App ID.",
-    feishuVerificationTokenPlaceholder:
-      "(Event Subscription 페이지에서 제공)",
+    feishuVerificationTokenPlaceholder: "(Event Subscription 페이지에서 제공)",
     feishuVerificationTokenHint:
       "Event Subscription 페이지의 Verification Token으로, 모든 event payload에 포함됩니다.",
     telegramBotTokenHint: "@BotFather에서 봇을 만들 때 발급된 token.",
@@ -7937,8 +7895,7 @@ export const koKR: Translations = {
     telegramWebhookSecretPlaceholder: "사용자 지정 문자열",
     telegramWebhookSecretHint:
       "setWebhook 호출 시 전달한 secret_token · header 검증에 사용.",
-    discordBotTokenPlaceholder:
-      "(Bot 자격 증명, 먼저 메시지를 본낼 때 사용)",
+    discordBotTokenPlaceholder: "(Bot 자격 증명, 먼저 메시지를 본낼 때 사용)",
     discordBotTokenHint:
       "Discord Developer Portal · Application · Bot 페이지에서 복사.",
     discordPublicKeyPlaceholder: "(64자 hex)",
@@ -7947,8 +7904,7 @@ export const koKR: Translations = {
     botSuffix: "봇",
     confirmDisconnect: (name: string) =>
       `${name} 자격 증명을 제거하고 연결을 끊으시겠습니까?`,
-    unsupportedPlatformDesc1:
-      "의 대화형 통합은 아직 개발 중입니다. 현재는",
+    unsupportedPlatformDesc1: "의 대화형 통합은 아직 개발 중입니다. 현재는",
     unsupportedPlatformDesc2: "에서 구성한 뒤 서비스를 재시작하세요.",
   },
 
@@ -7958,7 +7914,8 @@ export const koKR: Translations = {
     empty: "아직 실행 기록이 없습니다",
     loadFailed: "실행 타임라인 로드 실패",
     noMatches: "일치하는 작업 없음",
-    noMatchesDescription: "다른 task_id 키워드를 시도하거나 검색을 비워 보세요.",
+    noMatchesDescription:
+      "다른 task_id 키워드를 시도하거나 검색을 비워 보세요.",
     searchPlaceholder: "task_id 검색...",
     refresh: "Refresh",
     noTask: "(작업 없음)",
@@ -8035,8 +7992,7 @@ export const koKR: Translations = {
     selectTeam: "그룹 선택",
     noTeams: "아직 그룹이 없습니다, 아래에서 협업자를 초대하세요",
     memberCount: (count) => `${count}명 멤버`,
-    confirmDisband: (name) =>
-      `그룹 "${name}"을(를) 해산하시겠습니까?`,
+    confirmDisband: (name) => `그룹 "${name}"을(를) 해산하시겠습니까?`,
     disbandTeam: "그룹 해산",
     createTeam: "협업자 초대",
   },
@@ -8113,8 +8069,7 @@ export const koKR: Translations = {
 
   evolutionIndicator: {
     clickToView: "클릭하여 자가 진화 상세 보기",
-    rulesAndMemories: (rules, memories) =>
-      `${rules} 규칙 · ${memories} 메모리`,
+    rulesAndMemories: (rules, memories) => `${rules} 규칙 · ${memories} 메모리`,
     deltaRules: (count) => `+${count} 규칙`,
     deltaMemories: (count) => `+${count} 메모리`,
   },
@@ -8177,8 +8132,7 @@ export const koKR: Translations = {
     permissionsLabel: "런타임 권한",
     permissionsHint:
       "전역 게이트, Agent 권한 부여, 최종 적용 권한을 분리해 표시합니다.",
-    permissionEffectiveCount: (enabled, total) =>
-      `${enabled}/${total} 유효`,
+    permissionEffectiveCount: (enabled, total) => `${enabled}/${total} 유효`,
     permissionGlobalGate: "전역 게이트",
     permissionAgentGrant: "Agent 권한 부여",
     permissionEffective: "실제 적용",
@@ -8280,10 +8234,8 @@ export const koKR: Translations = {
   deepResearchRoles: {
     marketLandscape: {
       name: "시장 구조",
-      focus:
-        "시장 규모, 주요 플레이어, 제품 라인, 지역 차이, 트렌드",
-      deliverable:
-        "시장 구조 요약, 벤더 표, 트렌드, 불확실성",
+      focus: "시장 규모, 주요 플레이어, 제품 라인, 지역 차이, 트렌드",
+      deliverable: "시장 구조 요약, 벤더 표, 트렌드, 불확실성",
       searchAngles: [
         "글로벌 및 중국 시장 개요",
         "주요 벤더와 제품군",
@@ -8292,10 +8244,8 @@ export const koKR: Translations = {
     },
     userNeeds: {
       name: "사용자 니즈",
-      focus:
-        "타겟 사용자, 시나리오, 구매 동기, 페인포인트, 미충족 니즈",
-      deliverable:
-        "사용자 세그먼트, 시나리오 맵, 페인포인트 증거, 기회 가설",
+      focus: "타겟 사용자, 시나리오, 구매 동기, 페인포인트, 미충족 니즈",
+      deliverable: "사용자 세그먼트, 시나리오 맵, 페인포인트 증거, 기회 가설",
       searchAngles: [
         "바이어 페르소나와 수행할 작업",
         "리뷰 불만 포럼 토론",
@@ -8304,10 +8254,8 @@ export const koKR: Translations = {
     },
     productPricing: {
       name: "제품과 가격",
-      focus:
-        "가격대, 성능, 기능, 사양, 번들, 차별화",
-      deliverable:
-        "가격/성능/기능 비교표와 구매 기준",
+      focus: "가격대, 성능, 기능, 사양, 번들, 차별화",
+      deliverable: "가격/성능/기능 비교표와 구매 기준",
       searchAngles: [
         "가격 등급과 베스트셀러",
         "사양 비교 성능 벤치마크",
@@ -8316,10 +8264,8 @@ export const koKR: Translations = {
     },
     channelSales: {
       name: "채널과 세일즈",
-      focus:
-        "세일즈 채널, 유통 모델, 콘텐츠 채널, 지역, 점유율 대리 지표",
-      deliverable:
-        "채널 맵, 세일즈 모델, 점유율 대리 지표, 증거 링크",
+      focus: "세일즈 채널, 유통 모델, 콘텐츠 채널, 지역, 점유율 대리 지표",
+      deliverable: "채널 맵, 세일즈 모델, 점유율 대리 지표, 증거 링크",
       searchAngles: [
         "소매 이커머스 유통사",
         "시장 점유율 출하량 대리 지표",
@@ -8328,15 +8274,9 @@ export const koKR: Translations = {
     },
     skeptic: {
       name: "Skeptic",
-      focus:
-        "과장, 구식, 편향, 취약, 모순된 정보",
-      deliverable:
-        "리스크 목록, 증거 신뢰도 점수, 후속 검증 질문",
-      searchAngles: [
-        "모순된 증거",
-        "출처 신뢰도",
-        "누락된 데이터와 주의사항",
-      ],
+      focus: "과장, 구식, 편향, 취약, 모순된 정보",
+      deliverable: "리스크 목록, 증거 신뢰도 점수, 후속 검증 질문",
+      searchAngles: ["모순된 증거", "출처 신뢰도", "누락된 데이터와 주의사항"],
     },
   },
 
@@ -8526,8 +8466,7 @@ export const koKR: Translations = {
     viewMachine: "머신 보기",
     viewResult: "결과 보기",
     readyToReadEditVerify: "코드 읽기, 편집, 검증 준비 완료",
-    readyToBreakdownAndGather:
-      "문제를 분해하고 증거를 수집할 준비 완료",
+    readyToBreakdownAndGather: "문제를 분해하고 증거를 수집할 준비 완료",
     readyToExecuteTask: "작업 실행 준비 완료",
     readyToHandleCodeTask: "코드 작업 처리 준비 완료",
     readyForAgentCollaboration: "Agent 협업 준비 완료",
@@ -8992,6 +8931,8 @@ export const koKR: Translations = {
       docsDetail: "주제 / 출처 / 최근",
       imagesLabel: "이미지",
       imagesDetail: "라이브러리 / 주제 / 출처",
+      videosLabel: "동영상",
+      videosDetail: "키프레임 / 의미 검색",
       computerLabel: "내 Mac",
       computerDetail: "로컬 디스크",
       sourcesLabel: "승인된 폴더",
@@ -9064,6 +9005,49 @@ export const koKR: Translations = {
       filterOcr: "OCR 완료",
       filterLocalLibrary: "로컬 라이브러리",
       ocrBadge: "OCR 완료",
+    },
+    videos: {
+      title: "동영상",
+      subtitle: "{count}개 항목 · 키프레임 의미 검색 및 인물 검색",
+      searchLabel: "동영상 검색:",
+      badgeAllVideos: "모든 동영상",
+      indexNote: "동영상 인덱스 · 키프레임 의미 검색",
+      indexAction: "인덱스 재구축",
+      indexing: "인덱스 구축 중…",
+      noResults: "조건에 맞는 동영상이 없습니다",
+      colName: "이름",
+      colLocation: "위치",
+      colSize: "크기",
+      colDuration: "길이",
+      colModified: "수정일",
+      colActions: "작업",
+      footerNote:
+        "동영상은 로컬에서 키프레임을 추출하고 벡터 인덱스를 생성합니다. 원본 파일은 업로드되지 않습니다.",
+      tabVideos: "동영상",
+      tabPeople: "인물",
+      tabTags: "태그",
+      searchPlaceholder: "동영상 내용 또는 텍스트 검색…",
+      searchHint: "키프레임 의미, 인물, 대사, 동영상 내 텍스트 지원",
+      noIndex: "아직 동영상 인덱스가 없습니다. 「인덱스 재구축」을 클릭하세요",
+      noFaces: "인식된 인물이 없습니다",
+      noTags: "장면 태그가 없습니다",
+      noOcr: "이 텍스트가 포함된 동영상 구간을 찾지 못했습니다",
+      summary: "내용 요약",
+      cover: "커버",
+      duration: "길이",
+      peopleCount: (n) => `${n}명`,
+      faceCount: (n) => `${n}개 구간 중 ${n}명`,
+      player: {
+        open: "재생",
+        close: "닫기",
+        prev: "이전",
+        next: "다음",
+        atTime: (t) => `${t}(으)로 이동`,
+      },
+      ocr: {
+        label: "동영상 내 텍스트",
+        hint: "키프레임에 대해 OCR 텍스트 인식 수행",
+      },
     },
     apps: {
       title: "앱",

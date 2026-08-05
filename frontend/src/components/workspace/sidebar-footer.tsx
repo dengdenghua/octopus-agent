@@ -38,6 +38,8 @@ import { useI18n } from "@/core/i18n/hooks";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useOctLink } from "@/core/oct/hooks";
 import { useAuth } from "@/providers/AuthProvider";
+import { CreditsCenterDialog } from "@/components/workspace/credits-center";
+import { getCommunityCredits } from "@/core/credits/ledger";
 import { cn } from "@/lib/utils";
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -167,6 +169,7 @@ export function AgentFooter() {
   const octLink = useOctLink();
   const { t } = useI18n();
   const credits = octLink.data?.credits?.surplusCredits;
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const [activeName, setActiveName] = useState<string | null>(() =>
     readActiveAgentName(),
   );
@@ -175,9 +178,22 @@ export function AgentFooter() {
       setActiveName(name);
     });
   }, []);
+  // 兜底：监听 localStorage 变化（多标签页同步 + 页面初始化时序补偿）。
+  // emitAgentChanged 已经写 localStorage 并发 eventBus 事件，但 window CustomEvent
+  // 和跨 tab storage 事件不经过 eventBus，这里做最后一道同步保障。
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key !== ACTIVE_AGENT_KEY) return;
+      const next = readActiveAgentName();
+      setActiveName(next);
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   const lock = ROUTE_LOCKS.find((r) => pathname.startsWith(r.prefix));
   const surfaceParam = new URLSearchParams(search).get("surface");
+  const urlAgentName = new URLSearchParams(search).get("agent")?.trim() || null;
   const agentLibrarySurface = surfaceParam === "company" ? "company" : "chat";
   const agentLibraryHref = (tab?: string) => {
     const params = new URLSearchParams({
@@ -194,10 +210,14 @@ export function AgentFooter() {
     () => dedupeAgentsByName([...cliAgents, ...agents]),
     [agents, cliAgents],
   );
-  // A local-partner CLI is either a synthetic `local_*` entry or an on-disk
-  // agent carrying the `local_partner` capability flag.
+  // A local-partner CLI is either a synthetic `local_*` entry, a registry
+  // scaffolded `registry_local_*` entry, or an on-disk agent carrying the
+  // `local_partner` capability flag. `registry_local_*` was previously missed,
+  // leaking the same CLI partner into both the persona list and the "本地 CLI
+  // 伙伴" group (duplicate role rows in the bottom-left switcher).
   const isLocalCliAgent = (a: Agent) =>
-    a.name.startsWith("local_") || Boolean(a.capabilities?.local_partner);
+    /^(?:local_|registry_local_)/.test(a.name) ||
+    Boolean(a.capabilities?.local_partner);
   const personaAgents = useMemo(() => {
     // Show ALL persona agents (restored — the "minimal" snapshot had narrowed
     // this to hub-defaults + the active one, hiding the user's custom agents):
@@ -210,7 +230,12 @@ export function AgentFooter() {
     // Dedupe by base display name: "Eve / Siren" and "Eve" share the base
     // "Eve". Hub-defaults win, so the echo_* variants of the same character
     // don't show up as duplicates next to the general agent.
-    return dedupePersonaAgentsByDisplayName([...hubAgents, ...customAgents]);
+    // The assistant (octopus) is a global fixed persona — it lives in the
+    // sidebar nav as its own entry and must NOT appear here as a switchable
+    // role; it coexists with every other agent instead of replacing one.
+    return dedupePersonaAgentsByDisplayName(
+      [...hubAgents, ...customAgents].filter((a) => a.name !== "octopus"),
+    );
   }, [footerAgents]);
   const cliPartnerAgents = useMemo(
     () => footerAgents.filter(isLocalCliAgent),
@@ -236,11 +261,24 @@ export function AgentFooter() {
       fixHint: null,
     }));
   }, [allCliPartners, cliPartnerAgents]);
-  const effectiveName = lock?.agent ?? activeName ?? "general";
+  // 解析优先级与 page.tsx activeAgentId 保持一致：
+  // 1) route lock（如 /workspace/agents/:id/chats 锁定到该 agent）
+  // 2) URL ?agent= 参数
+  // 3) localStorage 里用户最近选择的 agent
+  // 4) 兜底 "general"
+  const effectiveName = lock?.agent ?? urlAgentName ?? activeName ?? "general";
+
+  // The assistant (octopus) is a global fixed persona, not a switchable role.
+  // It coexists with every other agent but must never surface in the bottom-left
+  // persona trigger — even when the current thread belongs to the assistant.
+  const switcherAgents = useMemo(
+    () => footerAgents.filter((a) => a.name !== "octopus"),
+    [footerAgents],
+  );
 
   const active: Agent | undefined =
-    (effectiveName && footerAgents.find((a) => a.name === effectiveName)) ||
-    footerAgents[0];
+    (effectiveName && switcherAgents.find((a) => a.name === effectiveName)) ||
+    switcherAgents[0];
 
   const lockedAgent: Agent | undefined =
     lock && !agents.find((a) => a.name === lock.agent)
@@ -487,6 +525,19 @@ export function AgentFooter() {
             <span className="min-w-0 flex-1 truncate">{accountName}</span>
           </div>
           <DropdownMenuItem
+            onSelect={() => setCreditsOpen(true)}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
+          >
+            <CoinsIcon className="size-4 shrink-0 opacity-70" />
+            <span className="min-w-0 flex-1 truncate">积分中心</span>
+            <span className="shrink-0 text-xs font-mono text-foreground/80">
+              {typeof credits === "number"
+                ? (credits + getCommunityCredits()).toLocaleString()
+                : "—"}
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
             onSelect={() => emitOpenSettings("account")}
             className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
           >
@@ -522,6 +573,7 @@ export function AgentFooter() {
       >
         <SettingsIcon className="size-4" />
       </button>
+      <CreditsCenterDialog open={creditsOpen} onOpenChange={setCreditsOpen} />
     </div>
   );
 }

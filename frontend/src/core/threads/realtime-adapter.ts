@@ -95,6 +95,26 @@ export function conversationToAgentThreadState(
   conv: Conversation,
   base?: Partial<AgentThreadState>,
 ): AgentThreadState {
+  // Conversation-level incremental path. Only valid when no ``base`` is
+  // supplied (the realtime caller always calls ``conversationToAgentThreadState(state)``):
+  // in that case the top-level arrays derive purely from ``conv.turns``, so a
+  // stable ``turns`` array reference implies unchanged messages/artifacts/todos and
+  // the whole result can be reused without re-walking every turn. The reducer only
+  // allocates a new ``turns`` array when a turn was added/replaced/streamed (a
+  // single-token delta rebuilds its owning turn and the turns array); non-turn
+  // updates (token usage, thread status, plain no-ops) keep the same reference.
+  if (base === undefined) {
+    const cached = topLevelViewCache.get(conv.turns);
+    if (cached) {
+      return {
+        title: "",
+        messages: cached.messages,
+        artifacts: cached.artifacts,
+        ...(cached.todos !== undefined ? { todos: cached.todos } : {}),
+      };
+    }
+  }
+
   const messages: Message[] = [];
   const artifacts: string[] = base?.artifacts ? [...base.artifacts] : [];
   let todos: Todo[] | undefined = base?.todos ? [...base.todos] : undefined;
@@ -108,6 +128,10 @@ export function conversationToAgentThreadState(
 
     const turnMessages = turnToMessagesStable(turn);
     messages.push(...turnMessages);
+  }
+
+  if (base === undefined) {
+    topLevelViewCache.set(conv.turns, { messages, artifacts, todos });
   }
 
   return {
@@ -174,6 +198,15 @@ function turnTodosFrom(turn: Turn): Todo[] | null {
 // the reducer state that owns the keys.
 const turnMessagesCache = new WeakMap<Turn, Message[]>();
 const itemMessageCache = new WeakMap<Item, Message>();
+
+// Conversation-level view cache, keyed on the ``conv.turns`` array reference.
+// Reuses the fully-materialized top-level mapping (messages/artifacts/todos)
+// when the turns array is unchanged, so unchanged turns are never re-walked.
+// Only populated on the no-``base`` path (see conversationToAgentThreadState).
+const topLevelViewCache = new WeakMap<
+  Turn[],
+  { messages: Message[]; artifacts: string[]; todos: Todo[] | undefined }
+>();
 
 function turnToMessagesStable(turn: Turn): Message[] {
   const cached = turnMessagesCache.get(turn);

@@ -5,10 +5,13 @@ import {
   CopyIcon,
   FileTextIcon,
   ListChecksIcon,
+  MessageCircleIcon,
   PanelRightIcon,
   SearchIcon,
+  Settings2Icon,
   UserPlusIcon,
   UsersRoundIcon,
+  WifiIcon,
   XIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -98,6 +101,7 @@ import {
   workflowPresetForMode,
 } from "@/core/agent-modes/presets";
 import { PlanPanel } from "@/components/workspace/plan-panel";
+import { AutomationSubscriptionPanel } from "@/components/workspace/automation/automation-subscription-panel";
 import { Welcome } from "@/components/workspace/welcome";
 import {
   latestPersistedTodoEventsFromMessages,
@@ -166,6 +170,7 @@ import {
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, isHumanMessage, type Message } from "@/core/api/types";
 import {
+  type FileInMessage,
   parseUploadedFiles,
   stripUploadedFilesTag,
 } from "@/core/messages/utils";
@@ -179,7 +184,9 @@ import {
 } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
 import { resolveModelContextWindow } from "@/core/models/context-window";
+import { classifyModeIntent } from "@/core/modes/intent-classifier";
 import { getBackendBaseURL } from "@/core/config";
+import { getChannelsStatus, type ChannelName } from "@/core/channels/api";
 import {
   extractCodeBlocks,
   hasPreviewableBlocks,
@@ -198,6 +205,29 @@ function normalizeReasoningEffortForUi(
   effort: ReasoningEffort | undefined,
 ): ReasoningEffort | undefined {
   return effort === "max" ? "xhigh" : effort;
+}
+
+// Collect the most recent human message texts (newest first, capped at 5) for
+// intent-based mode auto-switching. Index 0 is the latest message so the
+// intent classifier's time weights apply correctly.
+function recentHumanMessageTexts(messages: Message[]): string[] {
+  const texts: string[] = [];
+  for (let i = messages.length - 1; i >= 0 && texts.length < 5; i -= 1) {
+    const message = messages[i];
+    if (!message || !isHumanMessage(message)) continue;
+    const text = extractTextFromMessage(message).trim();
+    if (text) texts.push(text);
+  }
+  return texts;
+}
+
+function modeLabelFor(
+  mode: AgentModeName,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (mode === "audit") return t.modes.audit;
+  if (mode === "uxui") return t.modes.uxui;
+  return t.modes.develop;
 }
 
 const CHAT_WORKDIR_KEY = "chat:workdir:lastUsed";
@@ -1117,12 +1147,22 @@ function RealtimePageContent({
   const emptyWorkbenchAutoDismissedRef = useRef<string | null>(null);
   const [discussionOnly, setDiscussionOnly] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
+  // 助理专属：右侧内嵌「自动化 / 订阅」管理面板开关。
+  const [showAutomationPanel, setShowAutomationPanel] = useState(false);
   const [projectAgentMode, setProjectAgentMode] =
     useState<AgentModeName>("develop");
   const [auditIntensity, setAuditIntensity] =
     useState<AuditIntensity>("standard");
   const [projectDetection, setProjectDetection] =
     useState<DetectResponse | null>(null);
+  // Whether the user manually overrode the auto-detected work mode. When true,
+  // intent-based auto-switching only suggests (never silently switches).
+  const [modeManualOverride, setModeManualOverride] = useState(false);
+  // A pending intent-based mode suggestion surfaced above the composer.
+  const [modeIntentSuggestion, setModeIntentSuggestion] = useState<{
+    mode: AgentModeName;
+    label: string;
+  } | null>(null);
   // Personal-space work mode (general/build/research) — only meaningful when no
   // project dir is bound; threaded into the turn context as personal_mode. It no
   // longer downgrades capability: personal space still runs against an isolated
@@ -1310,6 +1350,34 @@ function RealtimePageContent({
   const resolvedThreadOwnerAgentId =
     threadOwnerAgentId || hintedThreadOwnerAgentId;
   const effectiveAgentId = resolvedThreadOwnerAgentId || activeAgentId;
+  // 助理（octopus）是私人助手本体：不走编码/工作空间工作台，固定进入
+  // 纯对话长对话，隐藏工作空间选择器。
+  const isOctopusAssistant = effectiveAgentId === "octopus";
+
+  const channelsStatusQuery = useQuery({
+    queryKey: ["channels-status"],
+    queryFn: getChannelsStatus,
+    enabled: isOctopusAssistant,
+    refetchInterval: 30000,
+    staleTime: 10000,
+  });
+
+  const connectedChannels = useMemo(() => {
+    if (!channelsStatusQuery.data?.channels) return [];
+    return Object.entries(channelsStatusQuery.data.channels)
+      .filter(([, status]) => status.enabled && status.running)
+      .map(([name]) => name as ChannelName);
+  }, [channelsStatusQuery.data]);
+
+  const channelDisplayNames: Record<string, string> = {
+    wechat: "微信",
+    dingtalk: "钉钉",
+    feishu: "飞书",
+    wecom: "企业微信",
+    telegram: "Telegram",
+    slack: "Slack",
+    discord: "Discord",
+  };
   const { agent: threadOwnerAgent } = useAgent(
     resolvedThreadOwnerAgentId && resolvedThreadOwnerAgentId !== activeAgentId
       ? resolvedThreadOwnerAgentId
@@ -1767,7 +1835,10 @@ function RealtimePageContent({
   const projectWorkspacePath = effectiveWorkDir.trim();
   const isProjectCodeMode = !!projectWorkspacePath;
   const isExplicitConversationMode =
-    routeMode === "chat" || routeMode === "flash" || discussionOnly;
+    isOctopusAssistant ||
+    routeMode === "chat" ||
+    routeMode === "flash" ||
+    discussionOnly;
   const isCodingWorkspaceMode =
     isProjectCodeMode ||
     ((isAgentRoute || isRealtimeRoute) && !isExplicitConversationMode);
@@ -1827,15 +1898,17 @@ function RealtimePageContent({
     () => modePresetForAgentMode(projectAgentMode),
     [projectAgentMode],
   );
-  const effectiveMode: ReasoningMode = isCodingWorkspaceMode
-    ? "code"
-    : isAgentRoute && routeMode === "deep"
-      ? routeMode
-      : isAgentRoute
-        ? "react"
-        : discussionOnly
-          ? "chat"
-          : "react";
+  const effectiveMode: ReasoningMode = isOctopusAssistant
+    ? "chat"
+    : isCodingWorkspaceMode
+      ? "code"
+      : isAgentRoute && routeMode === "deep"
+        ? routeMode
+        : isAgentRoute
+          ? "react"
+          : discussionOnly
+            ? "chat"
+            : "react";
   const streamMode: ReasoningMode | "team" = collaborationEnabled
     ? "team"
     : effectiveMode;
@@ -1941,8 +2014,12 @@ function RealtimePageContent({
   }, [initialPrompt]);
   useEffect(() => {
     const selectedAgent = routeAgentName || queryAgentName || "general";
+    // 统一走 emitAgentChanged：同时写 localStorage + 派发 eventBus 事件，
+    // 保证左下角 AgentFooter（只订阅 eventBus agent:changed）能立即同步，
+    // 不再出现仅写 localStorage/发 window CustomEvent 导致两边角色不一致。
+    // source: "system" 表示这是路由/URL 驱动的同步，不触发 navigate 循环。
+    emitAgentChanged(selectedAgent, "system");
     try {
-      window.localStorage.setItem(ACTIVE_AGENT_KEY, selectedAgent);
       window.dispatchEvent(
         new CustomEvent(ACTIVE_AGENT_EVENT, {
           detail: { name: selectedAgent },
@@ -1996,7 +2073,9 @@ function RealtimePageContent({
   useEvent(
     "agent:changed",
     ({ name, source }) => {
-      if (source === "thread") return;
+      // thread: 由当前 thread owner 驱动的同步，不导航
+      // system: 由 URL/路由驱动的同步（页面首次加载、query 变化），不导航
+      if (source === "thread" || source === "system") return;
       if (!name || name === activeAgentId) return;
       qc.invalidateQueries({ queryKey: ["threads", "search"] });
       navigate(taskWorkspaceRoute({ agentId: name }), { replace: false });
@@ -2248,29 +2327,57 @@ function RealtimePageContent({
     return thread.messages.slice(turnStart);
   }, [thread.messages]);
   const lastTurnUserInput = useMemo(() => {
-    const human = [...thread.messages].reverse().find(isHumanMessage);
-    if (!human) return null;
-    const raw =
-      typeof human.content === "string"
-        ? human.content
-        : human.content
-            .filter(
-              (c): c is { type: "text"; text: string } => c.type === "text",
-            )
+    // 概要页「上下文」统计需要覆盖整段对话喂入的上下文文件，而不只是最后一轮：
+    // 文件通常在对话开头喂入，后续轮次只发文字追问。因此跨所有 human 消息聚合
+    // 上传文件与附件（按文件名去重），文本仍取最后一条 human 消息。
+    const humanMessages = thread.messages.filter(isHumanMessage);
+    if (humanMessages.length === 0) return null;
+
+    const last = humanMessages[humanMessages.length - 1]!;
+    const rawOf = (m: (typeof thread.messages)[number]) =>
+      typeof m.content === "string"
+        ? m.content
+        : m.content
+            .filter((c): c is { type: "text"; text: string } => c.type === "text")
             .map((c) => c.text)
             .join("\n");
-    const text = stripUploadedFilesTag(raw);
-    const uploaded = parseUploadedFiles(raw)
-      .filter((f): f is typeof f & { path: string } => Boolean(f.path))
-      .map((f) => ({
-        filename: f.filename,
-        path: f.path,
-      }));
-    const attachments = Array.isArray(human.additional_kwargs?.attachments)
-      ? (human.additional_kwargs.attachments as Array<{ filename?: string }>)
-          .map((a) => ({ filename: a.filename ?? "" }))
-          .filter((a) => a.filename)
-      : [];
+    const text = stripUploadedFilesTag(rawOf(last));
+
+    const seenFilenames = new Set<string>();
+    const uploaded: Array<{ filename: string; path: string }> = [];
+    const attachments: Array<{ filename: string }> = [];
+    for (const human of humanMessages) {
+      const raw = rawOf(human);
+      // Files ride the structured metadata channel (additional_kwargs.files) as
+      // the primary source; the <uploaded_files> content tag is only a backward
+      // compat fallback. Merge both, de-duplicated by filename.
+      const structuredFiles = (
+        Array.isArray(human.additional_kwargs?.files)
+          ? (human.additional_kwargs.files as FileInMessage[])
+          : []
+      )
+        .map((f) => ({ filename: f.filename, path: f.path ?? "" }))
+        .filter((f) => f.filename);
+      const contentFiles = parseUploadedFiles(raw)
+        .filter((f): f is typeof f & { path: string } => Boolean(f.path))
+        .map((f) => ({
+          filename: f.filename,
+          path: f.path,
+        }));
+      for (const f of [...structuredFiles, ...contentFiles]) {
+        if (seenFilenames.has(f.filename)) continue;
+        seenFilenames.add(f.filename);
+        uploaded.push(f);
+      }
+      const rawAttachments = Array.isArray(human.additional_kwargs?.attachments)
+        ? (human.additional_kwargs.attachments as Array<{ filename?: string }>)
+        : [];
+      for (const a of rawAttachments) {
+        if (!a.filename || seenFilenames.has(a.filename)) continue;
+        seenFilenames.add(a.filename);
+        attachments.push({ filename: a.filename });
+      }
+    }
     if (!text && uploaded.length === 0 && attachments.length === 0) return null;
     return { text, uploadedFiles: uploaded, attachments };
   }, [thread.messages]);
@@ -2740,8 +2847,44 @@ function RealtimePageContent({
       );
   }, [setArtifactsOpen]);
 
+  const handleAcceptModeIntent = useCallback(
+    (mode: AgentModeName) => {
+      setProjectAgentMode(mode);
+      setModeIntentSuggestion(null);
+      toast.success(t.modeIntent.autoSwitched(modeLabelFor(mode, t)));
+    },
+    [t],
+  );
+
+  const handleDismissModeIntent = useCallback(() => {
+    setModeIntentSuggestion(null);
+  }, []);
+
   const handleSubmit = useCallback(
     (message: { text: string; images?: File[]; files?: File[] }) => {
+      // Intent-based mode auto-switch: only in project/code mode, and never
+      // for the octopus assistant (fixed chat persona). Manual override wins —
+      // when the user has hand-picked a mode we only suggest, never silently
+      // switch. High-confidence verdicts auto-switch + toast; medium ones
+      // surface the lightweight suggestion bar above the composer.
+      if (isProjectCodeMode && !isOctopusAssistant) {
+        const verdict = classifyModeIntent(recentHumanMessageTexts(thread.messages));
+        if (
+          verdict.handle !== "none" &&
+          verdict.mode &&
+          verdict.mode !== projectAgentMode
+        ) {
+          const label = modeLabelFor(verdict.mode, t);
+          if (modeManualOverride) {
+            setModeIntentSuggestion({ mode: verdict.mode, label });
+          } else if (verdict.handle === "auto") {
+            setProjectAgentMode(verdict.mode);
+            toast.success(t.modeIntent.autoSwitched(label));
+          } else if (verdict.handle === "suggest") {
+            setModeIntentSuggestion({ mode: verdict.mode, label });
+          }
+        }
+      }
       const images = message.images ?? [];
       const attachedFiles = message.files ?? [];
       const browserFiles = [...attachedFiles, ...images];
@@ -2796,10 +2939,15 @@ function RealtimePageContent({
         });
     },
     [
+      isOctopusAssistant,
+      isProjectCodeMode,
       markSidebarThreadRunning,
+      modeManualOverride,
+      projectAgentMode,
       sendMessage,
+      t,
+      thread.messages,
       threadId,
-      t.chatInputBox.attachmentReadFailed,
     ],
   );
   useEffect(() => {
@@ -3136,43 +3284,58 @@ function RealtimePageContent({
               }
               header={
                 <>
-                  <ChatHeaderMenuButton
-                    onClick={() => setChatsDrawerOpen(true)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2"
-                  />
+                  {!isOctopusAssistant && (
+                    <ChatHeaderMenuButton
+                      onClick={() => setChatsDrawerOpen(true)}
+                      className="absolute left-3 top-1/2 -translate-y-1/2"
+                    />
+                  )}
                   <ChatHeaderAgentBadge
                     agent={displayAgent}
                     agentId={effectiveAgentId}
                   />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 flex items-center gap-2">
                     <ThreadTitle
                       threadId={threadId}
                       thread={thread}
                       className="border-0 bg-transparent px-0 py-0 text-sm"
                     />
+                    {isOctopusAssistant && connectedChannels.length > 0 && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                        <span className="text-[11px] text-muted-foreground/70">
+                          已连接: {connectedChannels.map(c => channelDisplayNames[c] || c).join("、")}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="ml-auto flex shrink-0 items-center gap-1">
-                    <TaskCollaboratorControl
-                      agents={allTaskCollaboratorAgents}
-                      selectedAgents={selectedCollaborators}
-                      selectedAgentIds={selectedCollaboratorIds}
-                      currentAgentName={currentTaskAgentName}
-                      teamMode={teamModeIntent}
-                      open={collaboratorPickerOpen}
-                      onOpenChange={setCollaboratorPickerOpen}
-                      onSelectedAgentIdsChange={
-                        handleSelectedCollaboratorIdsChange
-                      }
-                      onTeamModeChange={handleTeamModeIntentChange}
-                      roster={visibleCollaborationRoster}
-                      threadId={threadId}
-                      isNewThread={isNewThread}
-                    />
-                    <ChatHeaderRecButton
-                      threadId={threadId}
-                      onOpen={() => setRecOverlayOpen(true)}
-                      isRecording={recIsRecording}
-                    />
+                    {/* 助理是单聊：不提供加人/协作，也不录制，头部保持极简 */}
+                    {!isOctopusAssistant && (
+                      <TaskCollaboratorControl
+                        agents={allTaskCollaboratorAgents}
+                        selectedAgents={selectedCollaborators}
+                        selectedAgentIds={selectedCollaboratorIds}
+                        currentAgentName={currentTaskAgentName}
+                        teamMode={teamModeIntent}
+                        open={collaboratorPickerOpen}
+                        onOpenChange={setCollaboratorPickerOpen}
+                        onSelectedAgentIdsChange={
+                          handleSelectedCollaboratorIdsChange
+                        }
+                        onTeamModeChange={handleTeamModeIntentChange}
+                        roster={visibleCollaborationRoster}
+                        threadId={threadId}
+                        isNewThread={isNewThread}
+                      />
+                    )}
+                    {!isOctopusAssistant && (
+                      <ChatHeaderRecButton
+                        threadId={threadId}
+                        onOpen={() => setRecOverlayOpen(true)}
+                        isRecording={recIsRecording}
+                      />
+                    )}
                     {(thread?.values?.title || initialPrompt) && (
                       <ShareMenu
                         iconOnly
@@ -3186,6 +3349,22 @@ function RealtimePageContent({
                             : undefined
                         }
                       />
+                    )}
+                    {isOctopusAssistant && (
+                      <Button
+                        type="button"
+                        aria-label="自动化与订阅"
+                        title="自动化与订阅"
+                        onClick={() => setShowAutomationPanel((open) => !open)}
+                        className={cn(
+                          "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
+                          showAutomationPanel
+                            ? "border-transparent bg-transparent text-foreground/82 hover:border-border-default hover:bg-muted/55 hover:text-foreground"
+                            : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
+                        )}
+                      >
+                        <Settings2Icon className="size-4" />
+                      </Button>
                     )}
                     <RightPanelMenu
                       activePage={activeRightPanel}
@@ -3273,7 +3452,7 @@ function RealtimePageContent({
                   {mounted ? (
                     <div className="flex flex-col gap-2">
                       {isNewThread &&
-                        (isAgentRoute ? (
+                        (isAgentRoute || isOctopusAssistant ? (
                           <AgentWelcome
                             agent={activeAgent}
                             agentName={effectiveAgentId}
@@ -3297,7 +3476,8 @@ function RealtimePageContent({
                         resolveApproval={realtimeApprovals.resolveApproval}
                         className="-mb-1"
                       />
-                      <ChatInputBox
+                      <div className="pt-6">
+                        <ChatInputBox
                         key={composerSeed || "empty-composer"}
                         status={
                           thread.error && !hasCompletedAgentOutput
@@ -3316,7 +3496,7 @@ function RealtimePageContent({
                         disabled={researchLoading}
                         workDir={effectiveWorkDir}
                         displayAgent={composerDisplayAgent}
-                        showWorkDirSelector
+                        showWorkDirSelector={!isOctopusAssistant}
                         onWorkDirChange={handleWorkDirChange}
                         lockWorkDirToThread={!isNewThread}
                         onOpenWorkDirInNewTask={openWorkDirInNewTask}
@@ -3329,6 +3509,10 @@ function RealtimePageContent({
                         onAuditIntensityChange={setAuditIntensity}
                         onPersonalModeChange={setPersonalMode}
                         onProjectDetectionChange={setProjectDetection}
+                        onManualOverrideChange={setModeManualOverride}
+                        modeIntentSuggestion={modeIntentSuggestion}
+                        onAcceptModeIntent={handleAcceptModeIntent}
+                        onDismissModeIntent={handleDismissModeIntent}
                         contextTokens={contextTokens}
                         maxContextTokens={maxContextTokens}
                         isCompressingContext={isCompressingContext}
@@ -3349,24 +3533,30 @@ function RealtimePageContent({
                         autoFocus={isNewThread}
                         defaultValue={composerSeed}
                         placeholder={
-                          isProjectCodeMode
-                            ? t.realtime.composer.placeholderCode
-                            : isNewThread
-                              ? t.realtime.composer.placeholderNew
-                              : undefined
+                          isOctopusAssistant
+                            ? t.realtime.composer.placeholderOctopus
+                            : isProjectCodeMode
+                              ? t.realtime.composer.placeholderCode
+                              : isNewThread
+                                ? t.realtime.composer.placeholderNew
+                                : undefined
                         }
                         className={cn(
                           isNewThread &&
                             "border-border-default bg-card/95 shadow-[0_18px_56px_-34px_rgba(15,23,42,0.45)]",
                         )}
                       />
-                      {isNewThread && !isAgentRoute && !composerSeed && (
-                        <NewChatStarterGrid
-                          onPick={(prompt) => {
-                            setComposerSeed(prompt);
-                          }}
-                        />
-                      )}
+                      </div>
+                      {isNewThread &&
+                        !isAgentRoute &&
+                        !isOctopusAssistant &&
+                        !composerSeed && (
+                          <NewChatStarterGrid
+                            onPick={(prompt) => {
+                              setComposerSeed(prompt);
+                            }}
+                          />
+                        )}
                     </div>
                   ) : (
                     <div
@@ -3377,7 +3567,12 @@ function RealtimePageContent({
                 </div>
               }
               sidebar={
-                showResearchHistory ? (
+                isOctopusAssistant && showAutomationPanel ? (
+                  <AutomationSubscriptionPanel
+                    className="size-full"
+                    onClose={() => setShowAutomationPanel(false)}
+                  />
+                ) : showResearchHistory ? (
                   <DeepResearchHistoryPanel
                     activeJobId={researchJob?.job_id}
                     onSelect={(job) => {
@@ -3462,6 +3657,7 @@ function RealtimePageContent({
               }
               onSecondaryClose={closeAgentWorkbenchPanel}
               showSidebar={
+                (isOctopusAssistant && showAutomationPanel) ||
                 artifactsOpen ||
                 showAgentPlan ||
                 showResearchHistory ||

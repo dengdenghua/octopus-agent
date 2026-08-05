@@ -627,3 +627,21 @@ def mount_routers_a(
         )
     except Exception as _intel_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning("intelligence_router failed to mount: %s", _intel_exc)
+
+    # ─── Media (video understanding) Web API ───────────────────────────────
+    try:
+        from runtime.sensing.gateway.media_router import create_media_router
+
+        app.include_router(
+            create_media_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            ),
+            prefix="/media",
+            tags=["media"],
+        )
+    except Exception as _media_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("media_router failed to mount: %s", _media_exc)

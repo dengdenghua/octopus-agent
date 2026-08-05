@@ -112,6 +112,15 @@ desktop = [
     "pillow>=10.0",
     "uiautomation>=2.0; platform_system == 'Windows'",
 ]
+# ── Local video understanding + AI retrieval (speech-to-text) ──
+video = [
+    "av>=12.0",
+    "faster-whisper>=1.0.0",
+]
+# ── Video hardware acceleration (CUDA / TensorRT ONNX Runtime) ──
+video-gpu = [
+    "onnxruntime-gpu>=1.17",
+]
 # ── Code intelligence (AST code_search / code_edit) ──────
 code-intel = [
     "tree-sitter>=0.23",

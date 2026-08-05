@@ -1114,8 +1114,14 @@ export function AgentWorldUnified() {
 
   // Filter agents
   const dedupedAgents = useMemo(() => {
+    // Hub shows Octopus's own roles only. Third-party local CLI partners
+    // (Claude Code / Codex CLI / …) are registered under ``local_*`` agent
+    // ids and have their own dedicated entry (the bottom-left "本地 CLI 伙伴"
+    // group), so they must not surface here as switchable roles.
     const visibleAgents = agents.filter(
-      (agent) => !HIDDEN_LOCAL_AGENT_IDS.has(agent.id),
+      (agent) =>
+        !HIDDEN_LOCAL_AGENT_IDS.has(agent.id) &&
+        !/^(?:local_|registry_local_)/.test(agent.name),
     );
     const deduped = dedupeAgentWorldAgents(visibleAgents);
     return LOCAL_LIBRARY_INSTALLED_ONLY
@@ -1205,21 +1211,23 @@ export function AgentWorldUnified() {
         </div>
       ) : null}
       {!hudOnly && (
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <div className="relative w-full md:max-w-[360px]">
-            <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-            <Input
-              data-testid="agents-search-input"
-              aria-label={
-                searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
-              }
-              placeholder={
-                searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
-              }
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 rounded-lg border-border-default bg-background/85 pl-8 text-xs shadow-none transition-colors hover:border-border-strong focus-visible:bg-background"
-            />
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2">
+            <div className="relative w-full md:max-w-[360px]">
+              <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+              <Input
+                data-testid="agents-search-input"
+                aria-label={
+                  searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
+                }
+                placeholder={
+                  searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 rounded-lg border-border-default bg-background/85 pl-8 text-xs shadow-none transition-colors hover:border-border-strong focus-visible:bg-background"
+              />
+            </div>
           </div>
         </div>
       )}

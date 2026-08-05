@@ -88,6 +88,10 @@ class PauseController:
     # upper bound that still guarantees a boot-time GC window.
     _GRANT_TTL_SECONDS = 7 * 24 * 3600
     _PENDING_RESUME_TTL_SECONDS = 7 * 24 * 3600
+    # Pause records older than this are considered abandoned and GC'd.
+    # If a user hasn't clicked Continue in 7 days, they're not coming back,
+    # and the yellow "waiting" light in the sidebar is pure noise.
+    _PAUSE_TTL_SECONDS = 7 * 24 * 3600
 
     def __init__(self, *, store_path: Path | None = None, autoload: bool = True) -> None:
         self._lock = RLock()
@@ -116,6 +120,28 @@ class PauseController:
             self._pending_resumes.pop(k, None)
             self._pending_resumes_ts.pop(k, None)
 
+    def _gc_stale_pauses_locked(self) -> int:
+        """Remove stale pause/pending records:
+        - Records older than _PAUSE_TTL_SECONDS (user abandoned them)
+        - Records with empty thread_id (orphans: can never map to a sidebar
+          thread, so they cannot produce a yellow light but still bloat
+          /api/tasks responses and the persisted state file)
+        Returns the number of records removed.
+        """
+        now = time.time()
+        cutoff = now - self._PAUSE_TTL_SECONDS
+        removed = 0
+        for bucket in (self._pending, self._paused):
+            stale_keys = [
+                k
+                for k, req in bucket.items()
+                if req.requested_at < cutoff or not req.thread_id
+            ]
+            for k in stale_keys:
+                bucket.pop(k, None)
+                removed += 1
+        return removed
+
     def _load(self) -> None:
         path = self._store_path
         if path is None or not path.is_file():
@@ -143,6 +169,16 @@ class PauseController:
                         thread_id=rec.get("thread_id", ""),
                         agent_id=rec.get("agent_id", ""),
                     )
+            # GC stale/orphan records immediately after load so the
+            # persisted file stays clean and /api/tasks doesn't serve
+            # yellow-light data for threads that finished long ago.
+            removed = self._gc_stale_pauses_locked()
+            if removed:
+                _log.info(
+                    "pause_control: GC'd %d stale pause record(s) on load",
+                    removed,
+                )
+                self._persist_locked()
         except (OSError, json.JSONDecodeError, TypeError) as exc:
             _log.warning(
                 "pause_control load failed (%s: %s) — starting empty",
@@ -294,25 +330,41 @@ class PauseController:
                     continue  # Implementation note.
                 state = last_state_ts.get(tid)
                 if state is not None and state[1] == "resumed":
-                    pass
-                elif state is not None and state[1] == "paused":
+                    # Task was paused then later resumed — the resume means
+                    # the pause was resolved. It either ran to completion
+                    # (which has_final_answer would have caught above) or
+                    # is still in the active list. Either way, it should
+                    # NOT be re-added as paused/pending, otherwise every
+                    # "pause → resume → complete" sequence leaves a stale
+                    # yellow light forever.
+                    continue
+                if state is not None and state[1] == "paused":
                     self._paused[tid] = PauseRequest(
                         task_id=tid,
                         reason="external",
                         requested_by="journal_recovery",
+                        requested_at=state[0],
                         note="从 journal 反演的历史暂停状态",
                         thread_id=str(getattr(ckpt, "conversation_id", "") or ""),
                         agent_id=str(getattr(ckpt, "agent_id", "") or ""),
                     )
                     recovered += 1
                     continue
-                else:
-                    pass  # Implementation note.
 
+                # No paused/resumed events: task was mid-execution when the
+                # checkpoint was saved. We recover it as pending so the user
+                # sees a Continue button, but we stamp it with the checkpoint
+                # time (not now()) so the TTL GC can sweep it if abandoned.
+                ckpt_ts = float(
+                    getattr(ckpt, "timestamp", 0)
+                    or getattr(ckpt, "created_at", 0)
+                    or time.time()
+                )
                 self._pending[tid] = PauseRequest(
                     task_id=tid,
                     reason="external",
                     requested_by="journal_recovery",
+                    requested_at=ckpt_ts,
                     note=(
                         f"从 journal 反演 · 最后 checkpoint 在 iter "
                         f"{getattr(ckpt, 'iteration_completed', '?')}"
@@ -322,11 +374,16 @@ class PauseController:
                 )
                 recovered += 1
 
-            if recovered > 0:
+            # After recovery, sweep any records older than TTL or with
+            # no thread_id — these are abandoned and will never resolve.
+            gc_removed = self._gc_stale_pauses_locked()
+            if recovered > 0 or gc_removed > 0:
                 self._persist_locked()
+            if recovered > 0:
                 _log.info(
-                    "pause_control: recovered %d task(s) from journal on startup",
+                    "pause_control: recovered %d task(s) from journal on startup (gc'd %d)",
                     recovered,
+                    gc_removed,
                 )
         return recovered
 
@@ -399,10 +456,12 @@ class PauseController:
 
     def list_pending(self) -> list[PauseRequest]:
         with self._lock:
+            self._gc_stale_pauses_locked()
             return list(self._pending.values())
 
     def list_paused(self) -> list[PauseRequest]:
         with self._lock:
+            self._gc_stale_pauses_locked()
             return list(self._paused.values())
 
     # ─── ownership helpers (router-side enforcement) ───────────────

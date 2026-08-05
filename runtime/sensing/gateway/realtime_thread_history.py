@@ -15,6 +15,8 @@ from runtime.protocol import Turn, TurnStatus
 
 def _flatten_turns_to_messages(
     turns: list[Turn],
+    *,
+    include_failed_drafts: bool = True,
 ) -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any]] | None]:
     """Translate a realtime ``Turn[]`` snapshot into the legacy
     ``AgentThreadState`` triple (messages, artifacts, todos).
@@ -38,12 +40,55 @@ def _flatten_turns_to_messages(
       * fileChange      → paths collected into ``artifacts``
       * error           → final synthetic AIMessage with
                           ``additional_kwargs.error``
+
+    ``include_failed_drafts`` controls how a FAILED / INTERRUPTED turn's
+    intermediate agentMessage drafts are treated. When ``False`` (used by
+    the model-context adapter ``_conversation_messages_for_react``), only
+    the turn's user prompt and its final error are kept — the half-built
+    commentary / reasoning / tool chain of a failed turn would otherwise
+    leak stale task narrative into the next turn and make the model answer
+    the *previous* (unfinished) question instead of the user's new one.
+    The sidebar keeps ``True`` so the user can still review what happened.
     """
     messages: list[dict[str, Any]] = []
     artifacts: list[str] = []
     todos: list[dict[str, Any]] | None = None
 
     for turn in turns:
+        turn_failed = turn.status in (TurnStatus.FAILED, TurnStatus.INTERRUPTED)
+        # When not including failed drafts, drop every intermediate AI
+        # message (commentary / reasoning / tool chain) of a failed turn
+        # up front. The user prompt and any trailing error item are still
+        # appended below; the model context then only sees the *failed*
+        # fact, not the stale in-progress narrative it was building.
+        if turn_failed and not include_failed_drafts:
+            for item in turn.items:
+                t = getattr(item, "type", None)
+                if t == "userMessage":
+                    messages.append(
+                        {
+                            "type": "human",
+                            "id": getattr(item, "id", None),
+                            "content": getattr(item, "text", "") or "",
+                        }
+                    )
+                elif t == "error":
+                    message = getattr(item, "message", "") or ""
+                    messages.append(
+                        {
+                            "type": "ai",
+                            "id": getattr(item, "id", None),
+                            "content": f"[上一轮任务失败。] {message}" if message else "[上一轮任务失败。]",
+                            "additional_kwargs": {
+                                "error": {
+                                    "message": message,
+                                    "will_retry": False,
+                                    "info": getattr(item, "error_info", None),
+                                },
+                            },
+                        }
+                    )
+            continue
         pending_reasoning: list[str] = []
         pending_plan: str | None = None
         pending_tool_calls: list[dict[str, Any]] = []
@@ -268,7 +313,10 @@ def _conversation_messages_for_react(
     actually done without inflating the transcript with raw tool I/O.
     """
 
-    legacy_messages, _, _ = _flatten_turns_to_messages(turns)
+    legacy_messages, _, _ = _flatten_turns_to_messages(
+        turns,
+        include_failed_drafts=False,
+    )
     role_by_type = {
         "human": "user",
         "ai": "assistant",

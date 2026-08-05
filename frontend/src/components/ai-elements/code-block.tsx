@@ -127,6 +127,11 @@ export const CodeBlock = ({
   }, []);
 
   useEffect(() => {
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = null;
+    }
+
     const requestId = ++highlightRequestRef.current;
     const applyHighlight = (result: string) => {
       if (mountedRef.current && highlightRequestRef.current === requestId) {
@@ -134,13 +139,11 @@ export const CodeBlock = ({
       }
     };
 
-    if (highlightTimerRef.current) {
-      clearTimeout(highlightTimerRef.current);
-      highlightTimerRef.current = null;
-    }
-    setHtml("");
-
     if (isStreaming) {
+      // Keep the last rendered highlight instead of clearing it on every
+      // token. Clearing per-token made the block flash back to plain text
+      // between debounced re-highlights. The stale highlight is replaced by
+      // the debounced one as soon as the stream pauses.
       highlightTimerRef.current = setTimeout(() => {
         highlightTimerRef.current = null;
         void highlightCode(code, language, showLineNumbers, shikiTheme).then(
@@ -148,6 +151,9 @@ export const CodeBlock = ({
         );
       }, 150);
     } else {
+      // Settled code: drop any stale streaming highlight and highlight the
+      // final code immediately.
+      setHtml("");
       void highlightCode(code, language, showLineNumbers, shikiTheme).then(
         applyHighlight,
       );

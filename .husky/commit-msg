@@ -1,0 +1,10 @@
+#!/bin/sh
+# Validate the commit message with commitlint (Conventional Commits).
+# Runs in the commit-msg hook, which receives the rendered message file
+# as $1 — this is the correct stage for message validation (pre-commit
+# runs before the message is written, so $1 would be stale/empty).
+#
+# commitlint config and the @commitlint packages live at the repo root,
+# so pnpm exec resolves everything from this directory without any
+# NODE_PATH workaround.
+pnpm exec commitlint --edit "$1"

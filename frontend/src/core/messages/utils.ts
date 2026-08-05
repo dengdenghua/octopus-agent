@@ -251,18 +251,20 @@ export function groupMessages<T>(
         isDuplicatedProcessPrelude(message, index, messages)
       ) {
         appendToCurrentProcessingGroup(message);
+      } else if (hasReasoning(message) && !hasContent(message)) {
+        // Reasoning-only intermediate message (no content, no tool
+        // calls yet). Append to the processing group so it renders in
+        // correct chronological order (thinking → commentary → actions)
+        // inside MessageGroup, rather than creating a separate assistant
+        // group that would render AFTER the processing lane and reverse
+        // the visual order.
+        appendToCurrentProcessingGroup(message);
       } else if (hasContent(message)) {
         // Plain AI response (with or without reasoning). Render as a
         // normal assistant message — MessageListItem will draw a
         // collapsed reasoning fold above the content if reasoning is
         // present, so the chain of thought stays accessible without
         // dominating the visible answer.
-        groups.push({ id: message.id, type: "assistant", messages: [message] });
-      } else if (hasReasoning(message)) {
-        // Reasoning-only intermediate message (no content, no tool
-        // calls yet). Render as a normal assistant message so
-        // MessageListItem can show a collapsed thinking row from the raw
-        // reasoning_content instead of an empty process lane.
         groups.push({ id: message.id, type: "assistant", messages: [message] });
       }
     }

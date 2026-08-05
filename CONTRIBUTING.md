@@ -20,6 +20,16 @@ make test        # 或 python -m pytest tests/ -q
 - [ ] 不引入新强依赖（默认只有 `pydantic`；其他必须走 `[project.optional-dependencies]` 软依赖）
 - [ ] 违反不变量的改动必须同步更新 [docs/invariants.md](docs/invariants.md)
 
+## 提交粒度（commit granularity）
+
+一个 commit / PR 只做一件逻辑变更，是保持 git log 可读、review 可审查、回滚可定位的前提。
+
+- **单逻辑变更单 commit**：一个 commit 只做一件事。不要把"改 bug + 顺便重构 + 顺手改文档"塞进同一个 commit；无关改动请拆开。
+- **聚焦 PR**：一个 PR 只解决一个主题。不夹带与主题无关的重构、格式调整或依赖升级；确需重构请在独立 PR 进行。
+- **禁止巨型 commit**：超过 ~500 个文件或几千行 diff 的 commit 应拆分。历史教训：一次"批量拆分"出现过 422 文件 / 79896 行的巨型提交，难以 review 与回滚。
+- **Conventional Commits 格式**：commit message 使用 `feat` / `fix` / `docs` / `refactor` / `chore` / `test` / `perf` 等类型前缀，由 **commitlint**（`.husky/commit-msg`）在提交时强制校验，不符合格式的提交会被拒绝。
+- 该规则与 [.trae/specs/scale-focus-control/spec.md](.trae/specs/scale-focus-control/spec.md) 的 **Delta 2** 目标一致。
+
 ## 提 PR 的 checklist
 
 1. 分支起好名字 · `feat/xxx` / `fix/xxx` / `docs/xxx`

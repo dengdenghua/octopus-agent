@@ -23,37 +23,24 @@ tier: "core"
 | --- | --- |
 | `_planner_helpers.py` | Pure helper functions extracted from :mod:`runtime.core.cerebrum.llm_planner`. |
 | `_planner_parse.py` | Plan-JSON extraction + node validation for :class:`LLMPlanner`. |
-| `_react_context_attachments.py` | User-message content assembly (attachments, images, JSONL manifest). |
-| `_react_context_checkpoint.py` | Message checkpoint (de)serialization helpers. |
+| `_react_context_attachments.py` | User-message content assembly (attachments, images, JSONL manifest), message checkpoint (de)serialization helpers, and related-file prefetching. |
 | `_react_context_code.py` | Code-context prelude and mode/workflow/signals prompt builders. |
-| `_react_context_helpers.py` | Token estimation and context-compression helpers for the ReAct loop. |
-| `_react_context_prefetch.py` | Related-file prefetching for the ReAct loop. |
+| `_react_context_helpers.py` | Token estimation, context-compression helpers, and skill-catalog formatting for the ReAct loop. |
 | `_react_context_project.py` | Project rules / git status / project-profile prompt builders. |
-| `_react_context_skill_catalog.py` | Skill-catalog formatting for the ReAct system prompt. |
 | `_react_execution_dispatch.py` | Tool dispatch / execution helpers for the ReAct loop. |
 | `_react_execution_phase6d.py` | PHASE 6d — action dispatch + observation for the ReAct loop. |
-| `_react_execution_phase6d_guards.py` | PHASE 6d — pre-dispatch guard cluster for the ReAct loop. |
-| `_react_execution_phase6g.py` | PHASE 6g — loop-tail housekeeping for the ReAct loop. |
-| `_react_execution_progress.py` | Working-set / phase / progress-summary helpers for the ReAct loop. |
+| `_react_execution_phase6g.py` | PHASE 6g + 6d — loop-tail housekeeping and pre-dispatch guard cluster for the ReAct loop. |
+| `_react_execution_progress.py` | Working-set / phase / progress-summary helpers and trajectory persistence + planner learning throttles for the ReAct loop. |
 | `_react_execution_results.py` | Tool-result / observation shaping for the ReAct loop. |
-| `_react_execution_trajectory.py` | Trajectory persistence + planner learning throttles for the ReAct loop. |
-| `_react_loop_reexports.py` | Re-export hub for ``react_loop.py``. |
 | `_react_parsing_codequality.py` | Code-quality detectors for ReAct write steps. |
 | `_react_parsing_core.py` | Core ReAct text parsing + incremental Thought streaming. |
-| `_react_parsing_payload.py` | Payload anti-pattern detectors for concurrent / single-flight code. |
-| `_react_parsing_steps.py` | Todo introspection + code-write / payload extraction helpers. |
-| `_react_parsing_testquality.py` | Test-correctness detectors for ReAct write steps. |
-| `_react_parsing_testquality2.py` | Production-hygiene detectors for ReAct write steps. |
+| `_react_parsing_testquality.py` | Test-correctness + production-hygiene detectors for ReAct write steps. |
 | `_react_parsing_tools.py` | Tool-call / XML action parsing helpers for the ReAct trajectory. |
 | `_react_parsing_verification.py` | Verification-trail detection helpers for ReAct steps. |
-| `_react_prompt_assembly_bootstrap.py` | PHASE 1-2 turn bootstrap: entry guards + router / native-gate resolution. |
-| `_react_prompt_assembly_events.py` | PHASE 4/4.5 start events + agent auto-delegation short-circuit. |
-| `_react_prompt_assembly_guidance.py` | System-prompt guidance sections for the PHASE 3 assembly. |
-| `_react_prompt_assembly_memory.py` | Memory / identity / team-roster sections for the PHASE 3 assembly. |
-| `_react_prompt_assembly_messages.py` | Final ``messages`` composition for the PHASE 3 assembly. |
+| `_react_prompt_assembly_bootstrap.py` | PHASE 1-2 turn bootstrap: entry guards + router / native-gate resolution, plus PHASE 4/4.5 start events + agent auto-delegation short-circuit. |
+| `_react_prompt_assembly_guidance.py` | System-prompt guidance + tool / capability / skill-catalog sections for the PHASE 3 assembly. |
 | `_react_prompt_assembly_sections.py` | Early PHASE 3 sections: date / public-orientation / work-mode / read-only / grounding / browser-operation / iteration & budget / todo-protocol resolution. |
-| `_react_prompt_assembly_state.py` | Shared mutable assembly state for the PHASE 3 prompt-assembly split. |
-| `_react_prompt_assembly_tools.py` | Tool / capability / skill-catalog sections for the PHASE 3 assembly. |
+| `_react_prompt_assembly_state.py` | Shared mutable assembly state for the PHASE 3 prompt-assembly split, plus the final ``messages`` composition and the memory / identity / team-roster sections. |
 | `agent_auto_delegate.py` | Auto-delegate to pinned agents on the first ReAct step. |
 | `ai_mode.py` | AI Mode — Marvis-style two-mode wrapper over the 3-tier router. |
 | `capability_router.py` | — |
@@ -88,7 +75,6 @@ tier: "core"
 | `react_in_flight_nudges.py` | In-flight nudges for the ReAct main loop (PHASE 6e, first half). |
 | `react_loop.py` | — |
 | `react_loop_controls.py` | Operator controls + run-budget knobs for the ReAct loop. |
-| `react_loop_exports.py` | Compatibility export contract for :mod:`react_loop`. |
 | `react_loop_state.py` | Shared per-turn state for the ReAct main-loop phases (Wave 2). |
 | `react_model_deadlines.py` | Model-call deadline machinery for the ReAct loop. |
 | `react_model_stream.py` | PHASE 6b — LLM call + Final-Answer anchor streaming for the ReAct loop. |

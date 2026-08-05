@@ -76,6 +76,17 @@
 - [x] `god_file_check --strict` 与 `orphan_module_check --strict` 均通过
 - [x] 基线从 14 项降至 **1 项**：`runtime/sensing/gateway/_tool_bridge_loop.py`（2216 行，单个 2090 行 `stream_agentic_fallback` generator，经用户确认保留在基线，视为不可分割）
 
+## Wave 4（本次会话）：合并过度碎片化的 `_react_parsing_*` 卫星模块（8 → 5）
+
+- [x] Task 46: 合并 `_react_parsing_core.py` + `_react_parsing_steps.py` → `_react_parsing_core.py`（592 行）
+- [x] Task 47: 合并 `_react_parsing_codequality.py` + `_react_parsing_payload.py` → `_react_parsing_codequality.py`（917 行）
+- [x] Task 48: 合并 `_react_parsing_testquality.py` + `_react_parsing_testquality2.py` → `_react_parsing_testquality.py`（857 行）
+- [x] Task 49: 保留 `_react_parsing_tools.py`（432 行）与 `_react_parsing_verification.py`（641 行）不变
+- [x] Task 50: 重接线 intra-cluster 导入（verification 改从 `_react_parsing_core` 导入）
+- [x] Task 51: 更新公开 hub `react_parsing.py`（310 行），re-export 保持 `__all__` 不变（131 项）
+- [x] Task 52: 删除 `_react_parsing_steps.py`、`_react_parsing_payload.py`、`_react_parsing_testquality2.py`
+- [x] Task 53: 验证：行数 < 1000、ruff lint 通过、import smoke 通过、相关测试通过（600 passed）
+
 # Task Dependencies
 
 - 每批内的 Task 可并行执行

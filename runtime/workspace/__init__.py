@@ -50,6 +50,13 @@ from runtime.workspace.org import (
     role_has_channel_admin,
     role_has_org_admin,
 )
+from runtime.workspace.org_audit import (
+    EVENT_TYPES,
+    append_org_audit_event,
+    export_org_audit_bundle,
+    list_org_audit_events,
+    verify_org_audit_chain,
+)
 from runtime.workspace.org_store import OrgStore
 from runtime.workspace.store import WorkspaceStore
 
@@ -63,20 +70,25 @@ __all__ = [
     "Channel",
     "ChannelMember",
     "Department",
+    "EVENT_TYPES",
     "OrgMember",
     "OrgStore",
     "Organization",
     "Workspace",
     "WorkspaceMember",
     "WorkspaceStore",
+    "append_org_audit_event",
     "channel_history",
     "decrypt_options",
     "encrypt_options",
+    "export_org_audit_bundle",
     "grant_for_channel_role",
     "link_channel_to_group",
+    "list_org_audit_events",
     "map_channel_role",
     "role_has_channel_admin",
     "role_has_org_admin",
     "send_channel_message",
     "sync_channel_members_to_group",
+    "verify_org_audit_chain",
 ]

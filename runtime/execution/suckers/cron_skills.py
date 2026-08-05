@@ -116,12 +116,29 @@ def _schedule_task(
     fire_at: str = "",
     recurring: bool = True,
     name: str = "",
+    channel_id: str = "",
+    thread_id: str = "",
     **_: Any,
 ) -> dict[str, Any]:
     """Persist a new scheduled task via the same store as the cron UI."""
     prompt = (prompt or "").strip()
     if not prompt:
         return _err("prompt is required")
+
+    # Delivery target · default to the IM conversation this task was
+    # scheduled from (章鱼助手订阅推送), if any; explicit args win.
+    try:
+        from runtime.adapters.channels.manager import current_channel_target
+
+        _target = current_channel_target()
+    except Exception:  # noqa: BLE001 — channels optional; fall back to no target
+        _target = None
+    if _target is not None:
+        ch_ctx, th_ctx = _target
+    else:
+        ch_ctx, th_ctx = "", ""
+    channel_id = (channel_id or "").strip() or ch_ctx
+    thread_id = (thread_id or "").strip() or th_ctx
 
     have_cron = bool((cron_expression or "").strip())
     have_fire = bool((fire_at or "").strip())
@@ -172,6 +189,9 @@ def _schedule_task(
         "fire_at": fire_at_iso,
         "recurring": is_recurring,
         "prompt": prompt,
+        # 订阅推送 · where to push the cron result over IM (章鱼助手).
+        "channel_id": channel_id,
+        "thread_id": thread_id,
     }
     jobs.append(record)
     _write_cron_jobs(path, jobs)
@@ -253,7 +273,10 @@ def register_cron_skills(registry: SkillRegistry) -> int:
                 "Args: {prompt: str (required), cron_expression: 5-field "
                 "cron string for recurring runs, fire_at: ISO 8601 timestamp "
                 "with timezone offset for one-shot, recurring: bool (default "
-                "true), name: optional task id (auto-generated if omitted)}. "
+                "true), name: optional task id (auto-generated if omitted), "
+                "channel_id/thread_id: optional IM delivery target (defaults "
+                "to the conversation this task is scheduled from, so a "
+                "reminder/subscription auto-pushes its result back over IM). "
                 "Supply exactly one of cron_expression / fire_at. Returns "
                 "{ok, task_id, next_run_at}."
             ),

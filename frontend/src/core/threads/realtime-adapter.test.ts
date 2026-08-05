@@ -1247,6 +1247,55 @@ describe("conversationToAgentThreadState · identity stability", () => {
     // The pre-grounding snapshot must not have been mutated in place.
     expect(first.messages[1]?.additional_kwargs?.grounding).toBeUndefined();
   });
+
+  it("keeps historical turn messages reference-stable across a single-token delta on the last turn", () => {
+    const turnA: Turn = {
+      ...makeTurn([userMsg("q1", "u1"), agentMsg("a1", "ai1")]),
+      id: "ta",
+    };
+    const turnB: Turn = {
+      ...makeTurn(
+        [
+          userMsg("q2", "u2"),
+          { ...agentMsg("partial", "ai2"), status: "inProgress" as const },
+        ],
+        "inProgress",
+      ),
+      id: "tb",
+    };
+
+    let conv = reduce(emptyConversation("th-test"), {
+      method: "turn/completed",
+      params: { threadId: "th-test", turn: turnA },
+    }).next;
+    conv = reduce(conv, {
+      method: "turn/started",
+      params: { threadId: "th-test", turn: turnB },
+    }).next;
+
+    const before = conversationToAgentThreadState(conv);
+
+    // A single token appended to the last turn's agentMessage.
+    const after = reduce(conv, {
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "th-test",
+        turnId: "tb",
+        itemId: "ai2",
+        delta: " answer",
+      },
+    }).next;
+    const afterState = conversationToAgentThreadState(after);
+
+    // The historical turn's messages keep their object identity.
+    expect(afterState.messages[0]).toBe(before.messages[0]);
+    expect(afterState.messages[1]).toBe(before.messages[1]);
+    // The untouched streaming user message in the last turn stays stable too.
+    expect(afterState.messages[2]).toBe(before.messages[2]);
+    // The streamed agentMessage grows and gets a fresh identity.
+    expect(afterState.messages[3]?.content).toBe("partial answer");
+    expect(afterState.messages[3]).not.toBe(before.messages[3]);
+  });
 });
 
 describe("liveToolEvents identity stability", () => {
@@ -1260,9 +1309,25 @@ describe("liveToolEvents identity stability", () => {
     const first = liveToolEventsFromConversation(conv);
     const second = liveToolEventsFromConversation(conv);
 
-    expect(second).not.toBe(first);
+    // Unchanged turns + approvals → the array identity is stable too.
+    expect(second).toBe(first);
     expect(second).toHaveLength(1);
     expect(second[0]).toBe(first[0]);
+  });
+
+  it("keeps the array reference stable across a non-turn state update", () => {
+    const conv1 = makeConv([makeTurn([userMsg("q"), cmd("echo hi", "c1")])]);
+    const first = liveToolEventsFromConversation(conv1);
+
+    // A thread/tokenUsage update rebuilds the Conversation but keeps the
+    // same turns array reference — the derived events are unchanged.
+    const conv2 = reduce(conv1, {
+      method: "thread/tokenUsage/updated",
+      params: { threadId: "th-test", tokenUsage: { total: 42 } },
+    }).next;
+
+    expect(conv2.turns).toBe(conv1.turns);
+    expect(liveToolEventsFromConversation(conv2)).toBe(first);
   });
 
   it("keeps untouched-item events stable when a sibling item streams", () => {

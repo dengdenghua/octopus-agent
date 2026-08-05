@@ -7,7 +7,7 @@ the test-path / public-symbol / wire-schema / dependency checks, and the
 false-verification-claim + red-observation detectors.
 
 Depends on ``react_types``, the ``_react_parsing_tools`` leaf, and the
-``_react_parsing_steps`` helpers (``_extract_step_path`` /
+``_react_parsing_core`` helpers (``_extract_step_path`` /
 ``_extract_step_payloads`` / ``_is_code_write_step``).
 """
 
@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 import sys as _sys
 
-from runtime.core.cerebrum._react_parsing_steps import (
+from runtime.core.cerebrum._react_parsing_core import (
     _extract_step_path,
     _extract_step_payloads,
     _is_code_write_step,

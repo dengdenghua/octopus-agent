@@ -423,8 +423,8 @@ function BrowserShell() {
                 });
               }}
               className={cn(
-                "grid size-7 shrink-0 place-items-center rounded-[12px] border border-border-subtle bg-background/55 text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_6px_16px_rgba(15,23,42,0.045)] transition-colors hover:bg-background/70 hover:text-foreground",
-                sidePanelOpen && "bg-background text-foreground",
+                "grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground",
+                sidePanelOpen && "bg-foreground/5 text-foreground",
               )}
               style={
                 {

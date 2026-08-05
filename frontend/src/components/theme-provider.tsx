@@ -1,7 +1,7 @@
 import { useLocation } from "react-router-dom";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 
-const THEME_LIST = ["light", "dark", "apple"];
+const THEME_LIST = ["light", "dark"];
 
 export function ThemeProvider({
   children,

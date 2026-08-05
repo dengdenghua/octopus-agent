@@ -31,6 +31,7 @@ import {
 import { WorkDirSelector } from "./workdir-selector";
 
 import { ChatComposer } from "./chat-input-box/ChatComposer";
+import { ModeIntentSuggestion } from "./chat-input-box/mode-intent-suggestion";
 
 /**
  * Simplified chat composer for the /workspace/realtime route. Same visual
@@ -90,6 +91,13 @@ export interface ChatInputBoxProps {
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
   onAuditIntensityChange?: (intensity: AuditIntensity) => void;
   onPersonalModeChange?: (mode: PersonalMode) => void;
+  /** Notify when the user manually overrides the project work mode (or when
+   * the override is cleared). Intent-based auto-switching respects this. */
+  onManualOverrideChange?: (isManual: boolean) => void;
+  /** A pending intent-based mode suggestion to render above the composer. */
+  modeIntentSuggestion?: { mode: AgentModeName; label: string } | null;
+  onAcceptModeIntent?: (mode: AgentModeName) => void;
+  onDismissModeIntent?: (mode: AgentModeName) => void;
   /** Project (milestone) mode toggle — surfaced as a deletable 🚩 chip. The turn
    * can route this through the Project OS / cowork group when on. */
   onProjectModeChange?: (active: boolean) => void;
@@ -142,6 +150,10 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
     onAuditIntensityChange,
     onPersonalModeChange,
     onProjectDetectionChange,
+    onManualOverrideChange,
+    modeIntentSuggestion,
+    onAcceptModeIntent,
+    onDismissModeIntent,
   } = props;
 
   const { t } = useI18n();
@@ -194,6 +206,14 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
 
   return (
     <>
+      {modeIntentSuggestion ? (
+        <ModeIntentSuggestion
+          mode={modeIntentSuggestion.mode}
+          modeLabel={modeIntentSuggestion.label}
+          onAccept={onAcceptModeIntent}
+          onDismiss={onDismissModeIntent}
+        />
+      ) : null}
       <ChatComposer {...props} />
       {showWorkDirSelector && showStatusStrip && (
         <div className="flex min-h-7 flex-wrap items-center gap-2 border-t border-border-subtle/60 px-2 pt-1.5 text-xs text-muted-foreground">
@@ -264,6 +284,7 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
                       }
                       onAuditIntensityChange={onAuditIntensityChange}
                       onDetectionChange={onProjectDetectionChange}
+                      onManualOverrideChange={onManualOverrideChange}
                     />
                   </>
                 )}

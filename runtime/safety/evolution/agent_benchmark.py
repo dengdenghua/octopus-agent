@@ -388,7 +388,7 @@ BENCHMARK_CASES: tuple[AgentBenchmarkCase, ...] = (
         weight=6,
         paths=(
             "frontend/src/components/workspace/settings/appearance-settings-page.tsx",
-            "frontend/src/components/browser/liquid-glass.tsx",
+            "frontend/src/hooks/use-appearance.ts",
             "frontend/src/app/browser/page.tsx",
             "frontend/src/components/browser/browser-home.tsx",
             "frontend/src/components/browser/url-bar.tsx",
@@ -396,12 +396,15 @@ BENCHMARK_CASES: tuple[AgentBenchmarkCase, ...] = (
             "frontend/src/app/workspace/computer/page.tsx",
         ),
         required_terms=(
-            "materialTheme",
-            "octo-liquid-glass",
+            "useAppearance",
+            "cornerScale",
+            "--corner-radius-scale",
+            "--density-base-font-size",
+            "AppearanceBootstrap",
             "disabled:pointer-events-none",
             "disabledReason",
         ),
-        next_action="Remove remaining decorative aurora/wallpaper presets and make glass/radius variables fully global.",
+        next_action="Keep decorative aurora/wallpaper presets removed and glass/radius variables global through the unified appearance token system.",
     ),
 )
 

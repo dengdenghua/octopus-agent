@@ -25,7 +25,8 @@ class _Resp:
 def test_model_and_endpoint_from_env(monkeypatch) -> None:
     monkeypatch.delenv("OCTOPUS_EMBED_URL", raising=False)
     monkeypatch.delenv("OCTOPUS_EMBED_MODEL", raising=False)
-    assert eb.embed_model() == "all-MiniLM-L6-v2"  # default
+    # fastembed requires the fully-qualified repo id, so the default is the full ID
+    assert eb.embed_model() == "sentence-transformers/all-MiniLM-L6-v2"
     assert eb.embed_endpoint() == ""
     monkeypatch.setenv("OCTOPUS_EMBED_URL", "http://127.0.0.1:11434/v1/")
     monkeypatch.setenv("OCTOPUS_EMBED_MODEL", "bge-m3")
@@ -119,8 +120,20 @@ def test_no_local_backend_returns_none(monkeypatch) -> None:
     assert eb.embed_texts(["a"]) is None
 
 
-def test_fastembed_model_none_when_absent() -> None:
-    eb._FE_MODEL = None  # fastembed isn't installed in this env → graceful None
+def test_fastembed_model_none_when_absent(monkeypatch) -> None:
+    # fastembed may or may not be installed; the contract is that a failed load
+    # degrades to None (never raises) regardless of the environment.
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _blocking_import(name, *args, **kwargs):
+        if name == "fastembed":
+            raise ImportError("fastembed unavailable")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _blocking_import)
+    eb._FE_MODEL = None  # force a fresh load attempt
     assert eb._fastembed_model() is None
 
 

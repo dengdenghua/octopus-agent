@@ -1,0 +1,42 @@
+// Octopus Agent profile · octopus
+// 章鱼助手 · Octopus 本体 · 私人助手 / 秘书
+
+{
+  "id": "octopus",
+  "templateId": "octopus",
+  "templateVersion": "1.0.0",
+  "name": "章鱼助手",
+  "icon": "🐙",
+  "did": "DID-OCTOPUS-000001",
+  "description": "章鱼助手 · Octopus 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Octopus 里的唯一贴身入口。",
+  "avatar": "avatar.png",
+  "category": "assistant",
+  "tags": [
+    "octopus",
+    "assistant",
+    "secretary",
+    "delegation",
+    "im",
+    "subscription",
+    "project-progress"
+  ],
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "octopus",
+  "defaultProject": {
+    "dir": "project"
+  },
+  "capabilities": {
+    "code_mode_unlock": false,
+    "team_mode": true,
+    "manage_agents": true
+  },
+  "budget": {
+    "max_tokens": 100000,
+    "max_usd": 1.0,
+    "max_iterations": 30
+  }
+}

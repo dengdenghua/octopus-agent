@@ -89,11 +89,11 @@ export function TabBar() {
             tabIndex={0}
             aria-label={tabLabel}
             className={cn(
-              "group relative flex h-7 min-w-[84px] max-w-[152px] cursor-pointer items-center gap-1 rounded-[12px] px-1.5 text-mini transition-[background-color,border-color,box-shadow,color,transform]",
+              "group relative flex h-7 min-w-[84px] max-w-[152px] cursor-pointer items-center gap-1 rounded-md px-1.5 text-mini transition-[background-color,border-color,box-shadow,color,transform]",
               isHomeTab && "min-w-[68px] max-w-[96px]",
               active
-                ? "text-foreground"
-                : "border border-transparent bg-background/18 text-muted-foreground hover:border-border-subtle hover:bg-background/42 hover:text-foreground",
+                ? "bg-card/80 text-foreground"
+                : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
               dragOver && "ring-2 ring-primary ring-offset-0",
             )}
             // Implementation note.
@@ -138,7 +138,7 @@ export function TabBar() {
         type="button"
         onClick={() => openTab()}
         className={cn(
-          "ml-0.5 grid size-7 shrink-0 place-items-center rounded-[12px] text-muted-foreground hover:text-foreground",
+          "ml-0.5 grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground",
         )}
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         title={tb.newTab}

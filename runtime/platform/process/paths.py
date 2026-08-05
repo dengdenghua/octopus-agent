@@ -79,6 +79,14 @@ class AppPaths:
         return self.data_dir / "governance_audit_chain.secret"
 
     @property
+    def org_audit_chain_path(self) -> Path:
+        return self.data_dir / "org_audit_chain.jsonl"
+
+    @property
+    def org_audit_secret_path(self) -> Path:
+        return self.data_dir / "org_audit_chain.secret"
+
+    @property
     def proposal_ledger_path(self) -> Path:
         return self.data_dir / "proposal_ledger.jsonl"
 

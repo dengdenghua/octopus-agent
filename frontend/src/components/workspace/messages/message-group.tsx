@@ -30,6 +30,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { useToolEffects } from "@/core/observability/tool-effects-context";
 import {
   extractContentFromMessage,
+  extractReasoningContentFromMessage,
   findToolCallResult,
   hasToolCalls,
   isLikelyFinalAnswerContent,
@@ -2471,9 +2472,21 @@ function extractPublicReasoningSummary(message: Message): string | null {
   if (typeof direct === "string" && direct.trim()) return direct.trim();
 
   const octopus = additional?.octopus;
-  if (typeof octopus !== "object" || octopus === null) return null;
-  const nested = (octopus as Record<string, unknown>).public_reasoning_summary;
-  return typeof nested === "string" && nested.trim() ? nested.trim() : null;
+  if (typeof octopus === "object" && octopus !== null) {
+    const nested = (octopus as Record<string, unknown>).public_reasoning_summary;
+    if (typeof nested === "string" && nested.trim()) return nested.trim();
+  }
+
+  // Fall back to raw reasoning_content so the chronological timeline
+  // includes the model's actual thinking trace in correct order, rather
+  // than showing actions before thinking. The content stays muted/collapsed
+  // by default and only expands on click.
+  const rawReasoning = extractReasoningContentFromMessage(message);
+  if (rawReasoning && rawReasoning.trim()) {
+    return rawReasoning.trim();
+  }
+
+  return null;
 }
 
 export function convertToSteps(messages: Message[]): CoTStep[] {

@@ -26,6 +26,7 @@ import { useMentionAutocomplete } from "../mention-autocomplete";
 
 import { swallow } from "@/core/utils/log";
 import { currentActorId } from "@/core/auth/api";
+import { OctopusMascot } from "@/components/brand/octopus-mascot";
 import {
   consumeComposerImageEntries,
   rememberLastComposerTarget,
@@ -195,6 +196,8 @@ export function ChatComposer({
     allowAgentModes && mode === "deep" && !!onDeepResearch;
   const isDeepResearchMode = canUseDeepResearch && researchConfigOpen;
   const isBusy = disabled || uploadingMaterials || isUploading;
+  const mascotMood =
+    status === "streaming" ? "thinking" : isBusy ? "working" : "idle";
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
   const permissionLabel =
@@ -835,6 +838,10 @@ export function ChatComposer({
         className,
       )}
     >
+      {/* Octopus mascot sitting on top-right corner */}
+      <div className="pointer-events-none absolute right-0 top-0 z-10" style={{ transform: "translate(20%, -55%)" }}>
+        <OctopusMascot mood={mascotMood} size="sm" />
+      </div>
       <div className="relative">
         {slashPicker}
         <MentionPicker

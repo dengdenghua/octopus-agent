@@ -2,12 +2,12 @@ import {
   ArrowLeftIcon,
   AppWindowIcon,
   BotIcon,
-  BrainIcon,
   ChevronRightIcon,
   DatabaseIcon,
   DnaIcon,
   FileImageIcon,
   FileTextIcon,
+  FilmIcon,
   FolderIcon,
   FolderPlusIcon,
   GlobeIcon,
@@ -19,11 +19,23 @@ import {
   PanelLeftOpenIcon,
   PencilIcon,
   PlusIcon,
+  RssIcon,
   Trash2Icon,
+  CompassIcon,
+  StoreIcon,
+  UserRoundPenIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type SVGProps,
+} from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { swallow } from "@/core/utils/log";
@@ -123,27 +135,43 @@ import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
 // capture just the route + icon.
 type NavRoute = {
   to: string;
-  icon: LucideIcon;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
   labelKey?: string;
   label?: string;
 };
 const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
+/** 助理固定对话线程 id —— 像微信一样共用一个持久会话，不随每次进入新建。
+ *  侧边栏据此识别助理对话，避免生成指向自身的"当前任务会话"条目。 */
+const OCTOPUS_THREAD_ID = "octopus-assistant";
 
 const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
   {
+    to: "/workspace/realtime/octopus-assistant?agent=octopus",
+    label: "助理",
+    icon: UserRoundPenIcon,
+  },
+  {
     to: "/workspace/agents?surface=chat",
     labelKey: "navHR",
-    icon: BotIcon,
+    icon: StoreIcon,
   },
   {
     to: "/workspace/intelligence?surface=chat",
     labelKey: "navIntelligence",
-    icon: BrainIcon,
+    icon: RssIcon,
   },
   {
     to: "/workspace/evolution?surface=chat",
     labelKey: "navEvolution",
     icon: DnaIcon,
+  },
+];
+
+const COMMUNITY_ROUTES: NavRoute[] = [
+  {
+    to: "/workspace/community",
+    label: "发现社区",
+    icon: CompassIcon,
   },
 ];
 
@@ -169,14 +197,14 @@ const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
     icon: FileImageIcon,
   },
   {
+    to: "/workspace/storage?surface=company&library=videos",
+    labelKey: "libraryVideos",
+    icon: FilmIcon,
+  },
+  {
     to: "/workspace/storage?surface=company&library=computer",
     labelKey: "libraryComputer",
     icon: HardDriveIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=sources",
-    labelKey: "libraryAuthorizedDirs",
-    icon: FolderPlusIcon,
   },
 ];
 
@@ -379,6 +407,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   );
   const chatCapabilityItems = useMemo(
     () => resolveRoutes(CHAT_CAPABILITY_ROUTES),
+    [resolveRoutes],
+  );
+  const communityItems = useMemo(
+    () => resolveRoutes(COMMUNITY_ROUTES),
     [resolveRoutes],
   );
   const nasLibraryItems = useMemo(
@@ -870,6 +902,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       if (knownHrefs.has(href)) return [];
       const id = activeWorkspaceThreadIdFromPathname(href);
       if (!id) return [];
+      if (id === OCTOPUS_THREAD_ID) return [];
       return [
         {
           id,
@@ -913,6 +946,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const activeThreadSummary = useMemo<ThreadSummary | null>(() => {
     const activeId = activeWorkspaceThreadIdFromPathname(sidebarPathname);
     if (!activeId) return null;
+    // 助理是固定对话，本身就是一个持久会话，不当作"当前任务"重复置顶。
+    if (activeId === OCTOPUS_THREAD_ID) return null;
     return (
       [
         ...ongoingThreads,
@@ -1003,6 +1038,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           {/* Unified sidebar — no more surface branching. All navigation
             items are always visible regardless of the current route. */}
           <NavSection items={chatCapabilityItems} pathname={pathname} />
+          <NavSection items={communityItems} pathname={pathname} />
           <LocalDatabaseSection
             title={resolveLabel("navDatabase")}
             items={nasLibraryItems}

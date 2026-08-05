@@ -92,6 +92,19 @@
     }
   }
 
+  --animate-community-pop: community-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  @keyframes community-pop {
+    0% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.45);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
   --animate-streaming-bounce: streaming-bounce 1.4s ease-in-out infinite;
   @keyframes streaming-bounce {
     0%,
@@ -385,24 +398,24 @@
   --border-strong: color-mix(in oklch, var(--border) 85%, transparent);
 
   --radius: 0.5rem;
-  --background: oklch(0.985 0.002 255);
-  --foreground: oklch(0.22 0.006 255);
+  --background: oklch(0.99 0.003 90);
+  --foreground: oklch(0.22 0.01 20);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.006 255);
+  --card-foreground: oklch(0.22 0.01 20);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.006 255);
-  --primary: oklch(0.24 0.006 255);
-  --primary-foreground: oklch(0.985 0.002 255);
-  --secondary: oklch(0.96 0.003 255);
-  --secondary-foreground: oklch(0.3 0.008 255);
-  --muted: oklch(0.955 0.003 255);
-  --muted-foreground: oklch(0.48 0.007 255);
-  --accent: oklch(0.945 0.003 255);
-  --accent-foreground: oklch(0.34 0.01 255);
+  --popover-foreground: oklch(0.22 0.01 20);
+  --primary: oklch(0.62 0.17 15);
+  --primary-foreground: oklch(0.99 0.005 90);
+  --secondary: oklch(0.96 0.006 90);
+  --secondary-foreground: oklch(0.3 0.02 20);
+  --muted: oklch(0.96 0.006 90);
+  --muted-foreground: oklch(0.5 0.014 20);
+  --accent: oklch(0.95 0.01 90);
+  --accent-foreground: oklch(0.35 0.03 20);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.89 0.004 255);
-  --input: oklch(0.91 0.004 255);
-  --ring: oklch(0.6 0.01 255);
+  --border: oklch(0.9 0.01 90);
+  --input: oklch(0.92 0.01 90);
+  --ring: oklch(0.68 0.14 15);
   --chart-1: oklch(0.55 0.2 264);
   --chart-2: oklch(0.6 0.15 180);
   --chart-3: oklch(0.55 0.2 330);
@@ -417,14 +430,14 @@
   --success: oklch(0.6 0.15 160);
   --warning: oklch(0.63 0.15 60);
   --info: oklch(0.56 0.16 250);
-  --sidebar: oklch(0.972 0.003 255);
-  --sidebar-foreground: oklch(0.22 0.006 255);
-  --sidebar-primary: oklch(0.24 0.006 255);
-  --sidebar-primary-foreground: oklch(0.985 0.002 255);
-  --sidebar-accent: oklch(0.94 0.004 255);
-  --sidebar-accent-foreground: oklch(0.33 0.01 255);
-  --sidebar-border: oklch(0.89 0.004 255);
-  --sidebar-ring: oklch(0.6 0.01 255);
+  --sidebar: oklch(0.975 0.004 90);
+  --sidebar-foreground: oklch(0.22 0.01 20);
+  --sidebar-primary: oklch(0.62 0.17 15);
+  --sidebar-primary-foreground: oklch(0.99 0.005 90);
+  --sidebar-accent: oklch(0.94 0.01 90);
+  --sidebar-accent-foreground: oklch(0.33 0.03 20);
+  --sidebar-border: oklch(0.9 0.01 90);
+  --sidebar-ring: oklch(0.68 0.14 15);
 
   --container-width-xs: calc(var(--spacing) * 72);
   --container-width-sm: calc(var(--spacing) * 144);
@@ -432,25 +445,57 @@
   --container-width-lg: calc(var(--spacing) * 256);
 }
 
+/* 冷钢蓝（steel）配色 —— 男性风格：冷静、理性、偏冷色调。
+   由 <html data-theme="steel"> 触发，位于 :root 之后以覆盖默认的
+   小红书粉调（rouge）。 */
+[data-theme="steel"] {
+  --background: oklch(0.97 0.006 240);
+  --foreground: oklch(0.2 0.015 240);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.015 240);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.015 240);
+  --primary: oklch(0.5 0.13 240);
+  --primary-foreground: oklch(0.98 0.005 240);
+  --secondary: oklch(0.95 0.012 240);
+  --secondary-foreground: oklch(0.3 0.02 240);
+  --muted: oklch(0.945 0.012 240);
+  --muted-foreground: oklch(0.45 0.022 240);
+  --accent: oklch(0.93 0.015 240);
+  --accent-foreground: oklch(0.32 0.03 240);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.89 0.014 240);
+  --input: oklch(0.92 0.014 240);
+  --ring: oklch(0.6 0.12 240);
+  --sidebar: oklch(0.955 0.008 240);
+  --sidebar-foreground: oklch(0.2 0.015 240);
+  --sidebar-primary: oklch(0.5 0.13 240);
+  --sidebar-primary-foreground: oklch(0.98 0.005 240);
+  --sidebar-accent: oklch(0.92 0.015 240);
+  --sidebar-accent-foreground: oklch(0.32 0.03 240);
+  --sidebar-border: oklch(0.89 0.014 240);
+  --sidebar-ring: oklch(0.6 0.12 240);
+}
+
 .dark {
-  --background: oklch(0.135 0.004 264);
-  --foreground: oklch(0.955 0.003 264);
-  --card: oklch(0.19 0.004 264);
-  --card-foreground: oklch(0.955 0.003 264);
-  --popover: oklch(0.18 0.004 264);
-  --popover-foreground: oklch(0.955 0.003 264);
-  --primary: oklch(0.94 0.004 264);
-  --primary-foreground: oklch(0.2 0.006 264);
-  --secondary: oklch(0.245 0.005 264);
-  --secondary-foreground: oklch(0.9 0.003 264);
-  --muted: oklch(0.225 0.004 264);
-  --muted-foreground: oklch(0.76 0.007 264);
-  --accent: oklch(0.27 0.008 264);
-  --accent-foreground: oklch(0.9 0.005 264);
+  --background: oklch(0.2 0.008 20);
+  --foreground: oklch(0.95 0.006 90);
+  --card: oklch(0.25 0.008 20);
+  --card-foreground: oklch(0.95 0.006 90);
+  --popover: oklch(0.24 0.008 20);
+  --popover-foreground: oklch(0.95 0.006 90);
+  --primary: oklch(0.85 0.13 15);
+  --primary-foreground: oklch(0.25 0.03 20);
+  --secondary: oklch(0.3 0.01 20);
+  --secondary-foreground: oklch(0.9 0.01 90);
+  --muted: oklch(0.28 0.01 20);
+  --muted-foreground: oklch(0.75 0.012 90);
+  --accent: oklch(0.32 0.015 20);
+  --accent-foreground: oklch(0.9 0.01 90);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.285 0.006 264);
-  --input: oklch(0.265 0.005 264);
-  --ring: oklch(0.6 0.012 264);
+  --border: oklch(0.33 0.012 20);
+  --input: oklch(0.31 0.012 20);
+  --ring: oklch(0.7 0.12 15);
   --chart-1: oklch(0.65 0.22 264);
   --chart-2: oklch(0.6 0.17 180);
   --chart-3: oklch(0.65 0.2 330);
@@ -463,17 +508,16 @@
   --success: oklch(0.74 0.15 160);
   --warning: oklch(0.79 0.13 70);
   --info: oklch(0.74 0.14 250);
-  --sidebar: oklch(0.125 0.004 264);
-  --sidebar-foreground: oklch(0.955 0.003 264);
-  --sidebar-primary: oklch(0.94 0.004 264);
-  --sidebar-primary-foreground: oklch(0.2 0.006 264);
-  --sidebar-accent: oklch(0.21 0.007 264);
-  --sidebar-accent-foreground: oklch(0.9 0.005 264);
-  --sidebar-border: oklch(0.275 0.006 264);
-  --sidebar-ring: oklch(0.55 0.012 264);
+  --sidebar: oklch(0.22 0.008 20);
+  --sidebar-foreground: oklch(0.93 0.006 90);
+  --sidebar-primary: oklch(0.85 0.13 15);
+  --sidebar-primary-foreground: oklch(0.25 0.03 20);
+  --sidebar-accent: oklch(0.3 0.012 20);
+  --sidebar-accent-foreground: oklch(0.9 0.01 90);
+  --sidebar-border: oklch(0.33 0.012 20);
+  --sidebar-ring: oklch(0.7 0.12 15);
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.3), 0 10px 24px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.35), 0 18px 40px rgba(0, 0, 0, 0.3);
   --shadow-xl: 0 8px 20px rgba(0, 0, 0, 0.4), 0 28px 64px rgba(0, 0, 0, 0.45);
@@ -485,6 +529,130 @@
   --border-subtle: color-mix(in oklch, var(--border) 30%, transparent);
   --border-default: color-mix(in oklch, var(--border) 60%, transparent);
   --border-strong: color-mix(in oklch, var(--border) 85%, transparent);
+}
+
+/* 冷钢蓝（steel）深色模式 */
+[data-theme="steel"].dark {
+  --background: oklch(0.18 0.012 240);
+  --foreground: oklch(0.93 0.008 240);
+  --card: oklch(0.22 0.012 240);
+  --card-foreground: oklch(0.93 0.008 240);
+  --popover: oklch(0.21 0.012 240);
+  --popover-foreground: oklch(0.93 0.008 240);
+  --primary: oklch(0.72 0.11 240);
+  --primary-foreground: oklch(0.18 0.012 240);
+  --secondary: oklch(0.28 0.015 240);
+  --secondary-foreground: oklch(0.9 0.01 240);
+  --muted: oklch(0.26 0.015 240);
+  --muted-foreground: oklch(0.68 0.018 240);
+  --accent: oklch(0.3 0.02 240);
+  --accent-foreground: oklch(0.9 0.01 240);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(0.32 0.015 240);
+  --input: oklch(0.3 0.015 240);
+  --ring: oklch(0.65 0.1 240);
+  --sidebar: oklch(0.2 0.012 240);
+  --sidebar-foreground: oklch(0.93 0.008 240);
+  --sidebar-primary: oklch(0.72 0.11 240);
+  --sidebar-primary-foreground: oklch(0.18 0.012 240);
+  --sidebar-accent: oklch(0.28 0.015 240);
+  --sidebar-accent-foreground: oklch(0.9 0.01 240);
+  --sidebar-border: oklch(0.32 0.015 240);
+  --sidebar-ring: oklch(0.65 0.1 240);
+}
+
+/* 浏览器首页「跟随配色」默认背景。
+   由 --primary / --background 等语义变量驱动，随浅/深色与 rouge/steel
+   配色实时同步，无需为每种配色单独写死。 */
+.browser-backdrop-palette {
+  background-image: radial-gradient(
+      circle at 22% 14%,
+      color-mix(in oklch, var(--primary) 22%, transparent),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 78% 18%,
+      color-mix(in oklch, var(--primary) 12%, transparent),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 70% 88%,
+      color-mix(in oklch, var(--primary) 16%, transparent),
+      transparent 35%
+    ),
+    linear-gradient(
+      145deg,
+      var(--background) 0%,
+      color-mix(in oklch, var(--background) 55%, var(--muted)) 50%,
+      var(--background) 100%
+    );
+}
+.browser-backdrop-palette-swatch {
+  background-image: linear-gradient(
+    145deg,
+    var(--primary) 0%,
+    var(--background) 100%
+  );
+}
+
+/* ===== 极简液态玻璃（Minimal Liquid Glass）=====
+   设计理念：轻透、克制、无多余装饰。保留毛玻璃质感但大幅降低饱和度，
+   去掉内高光与多层阴影，仅保留极淡的描边与单阴影。 */
+
+/* 主玻璃容器：大面板用 */
+.liquid-glass {
+  background: color-mix(in oklch, var(--card) 40%, transparent);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  border: 0.5px solid color-mix(in oklch, white 20%, transparent);
+  box-shadow: 0 4px 20px -6px color-mix(in oklch, black 8%, transparent);
+}
+.dark .liquid-glass {
+  background: color-mix(in oklch, var(--card) 35%, transparent);
+  border-color: color-mix(in oklch, white 8%, transparent);
+  box-shadow: 0 4px 20px -6px color-mix(in oklch, black 30%, transparent);
+}
+
+/* 次级玻璃：小按钮/搜索框/小组件 */
+.liquid-glass-subtle {
+  background: color-mix(in oklch, var(--card) 45%, transparent);
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  border: 0.5px solid color-mix(in oklch, white 15%, transparent);
+  box-shadow: 0 2px 10px -4px color-mix(in oklch, black 6%, transparent);
+}
+.dark .liquid-glass-subtle {
+  background: color-mix(in oklch, var(--card) 40%, transparent);
+  border-color: color-mix(in oklch, white 6%, transparent);
+  box-shadow: 0 2px 10px -4px color-mix(in oklch, black 20%, transparent);
+}
+
+/* Dock 专用：比普通面板稍强一点的存在感 */
+.liquid-glass-dock {
+  background: color-mix(in oklch, var(--card) 42%, transparent);
+  backdrop-filter: blur(24px) saturate(125%);
+  -webkit-backdrop-filter: blur(24px) saturate(125%);
+  border: 0.5px solid color-mix(in oklch, white 22%, transparent);
+  box-shadow: 0 6px 24px -8px color-mix(in oklch, black 12%, transparent);
+}
+.dark .liquid-glass-dock {
+  background: color-mix(in oklch, var(--card) 32%, transparent);
+  border-color: color-mix(in oklch, white 10%, transparent);
+  box-shadow: 0 6px 24px -8px color-mix(in oklch, black 35%, transparent);
+}
+
+/* 应用图标容器：极轻，几乎无阴影 */
+.liquid-glass-icon {
+  background: color-mix(in oklch, var(--card) 55%, transparent);
+  backdrop-filter: blur(12px) saturate(115%);
+  -webkit-backdrop-filter: blur(12px) saturate(115%);
+  border: 0.5px solid color-mix(in oklch, white 18%, transparent);
+  box-shadow: 0 1px 4px -1px color-mix(in oklch, black 5%, transparent);
+}
+.dark .liquid-glass-icon {
+  background: color-mix(in oklch, var(--card) 45%, transparent);
+  border-color: color-mix(in oklch, white 7%, transparent);
+  box-shadow: 0 1px 4px -1px color-mix(in oklch, black 18%, transparent);
 }
 
 @layer base {
@@ -982,19 +1150,14 @@
     border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
     border-radius: var(--appearance-radius-panel);
     background: color-mix(in oklch, var(--card) 92%, var(--background) 8%);
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 6px 18px rgba(30, 50, 75, 0.045);
     transition:
-      box-shadow 0.2s ease,
+      background 0.2s ease,
       border-color 0.2s ease;
   }
 
   .workspace-panel:hover {
     border-color: color-mix(in oklch, var(--border) 76%, var(--primary) 24%);
-    box-shadow:
-      0 2px 4px rgba(0, 0, 0, 0.05),
-      0 10px 24px rgba(30, 50, 75, 0.07);
+    background: color-mix(in oklch, var(--card) 96%, var(--background) 4%);
   }
 
   .workspace-panel-subtle {
@@ -1003,31 +1166,25 @@
     background: color-mix(in oklch, var(--card) 84%, var(--background) 16%);
     transition:
       background 0.2s ease,
-      border-color 0.2s ease,
-      box-shadow 0.2s ease;
+      border-color 0.2s ease;
   }
 
   .workspace-panel-subtle:hover {
     border-color: color-mix(in oklch, var(--border) 72%, var(--primary) 28%);
-    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+    background: color-mix(in oklch, var(--card) 92%, var(--background) 8%);
   }
 
   .dark .workspace-panel {
     border-color: color-mix(in oklch, var(--border) 86%, transparent);
     background: color-mix(in oklch, var(--card) 90%, var(--background) 10%);
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.28),
-      0 10px 28px rgba(0, 0, 0, 0.22);
     transition:
-      box-shadow 0.2s ease,
+      background 0.2s ease,
       border-color 0.2s ease;
   }
 
   .dark .workspace-panel:hover {
     border-color: color-mix(in oklch, var(--border) 70%, var(--primary) 30%);
-    box-shadow:
-      0 2px 8px rgba(0, 0, 0, 0.3),
-      0 16px 34px rgba(0, 0, 0, 0.28);
+    background: color-mix(in oklch, var(--card) 94%, var(--background) 6%);
   }
 
   .dark .workspace-panel-subtle {
@@ -1035,13 +1192,12 @@
     background: color-mix(in oklch, var(--card) 80%, var(--background) 20%);
     transition:
       background 0.2s ease,
-      border-color 0.2s ease,
-      box-shadow 0.2s ease;
+      border-color 0.2s ease;
   }
 
   .dark .workspace-panel-subtle:hover {
     border-color: color-mix(in oklch, var(--border) 64%, var(--primary) 36%);
-    box-shadow: 0 1px 10px rgba(0, 0, 0, 0.24);
+    background: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
   }
 
   :root [data-slot="input"],

@@ -14,6 +14,7 @@ Auth model:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 try:
@@ -29,9 +30,12 @@ except ImportError:  # pragma: no cover
 from runtime.sensing._fastapi_guard import require_fastapi
 from runtime.workspace import (
     OrgStore,
+    append_org_audit_event,
     role_has_channel_admin,
     role_has_org_admin,
 )
+
+_LOG = logging.getLogger("octopus.sensing.org_router")
 
 
 def create_org_router(
@@ -42,11 +46,39 @@ def create_org_router(
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    audit_chain_path: str | None = None,
+    audit_chain_secret: str | None = None,
 ) -> Any:
     require_fastapi(__name__)
 
     store: Any = org_store if org_store is not None else OrgStore()
     router = APIRouter(tags=["orgs"])
+
+    def _audit(
+        event_type: str,
+        actor: str | None,
+        org_id: str,
+        target: str,
+        *,
+        channel_id: str = "",
+        detail: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Append a permission-change event to the HMAC audit chain. Audit
+        failures are logged but never block the underlying mutation."""
+        try:
+            return append_org_audit_event(
+                event_type=event_type,
+                actor=actor or "",
+                org_id=org_id,
+                target=target,
+                channel_id=channel_id,
+                detail=detail,
+                audit_chain_path=audit_chain_path,
+                audit_chain_secret=audit_chain_secret,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("org audit append failed for %s: %s", event_type, exc)
+            return None
 
     def _auth(request: Request, *, force: bool = False) -> str | None:
         # Mutation endpoints force-auth; reads fall back to anonymous.
@@ -88,7 +120,7 @@ def create_org_router(
 
     @router.post("/api/orgs")
     def create_org(body: dict[str, Any] | None, request: Request) -> dict[str, Any]:
-        _auth(request)  # AUTH-OK: org creation is actor-agnostic (owner from body)
+        actor = _auth(request)  # AUTH-OK: org creation is actor-agnostic (owner from body)
         payload = body or {}
         name = str(payload.get("name") or "")
         owner_id = str(payload.get("owner_id") or "")
@@ -100,6 +132,13 @@ def create_org_router(
             org = store.create_organization(name=name, owner_id=owner_id)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        _audit(
+            "org_create",
+            actor or owner_id,
+            org.id,
+            org.id,
+            detail={"name": org.name, "owner_id": owner_id},
+        )
         return org.to_dict()
 
     @router.get("/api/orgs")
@@ -132,6 +171,7 @@ def create_org_router(
             raise HTTPException(404, "organization not found")
         _require_org_admin(org_id, actor)
         store.delete_organization(org_id)
+        _audit("org_delete", actor, org_id, org_id)
         return {"deleted": org_id}
 
     # ── org members ├───────────────────────────────────────────────────────
@@ -148,16 +188,34 @@ def create_org_router(
         member_id = str(payload.get("member_id") or "")
         if not member_id:
             raise HTTPException(400, "member_id is required")
+        role = str(payload.get("role") or "member")
+        previous_role = store.get_org_member_role(org_id, member_id)
         try:
             member = store.add_org_member(
                 org_id,
                 member_id,
                 kind=str(payload.get("kind") or "agent"),
-                role=str(payload.get("role") or "member"),
+                role=role,
                 display_name=str(payload.get("display_name") or ""),
             )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        if previous_role is not None and previous_role != role:
+            _audit(
+                "org_member_role_change",
+                actor,
+                org_id,
+                member_id,
+                detail={"kind": member.kind, "before": previous_role, "after": role},
+            )
+        else:
+            _audit(
+                "org_member_add",
+                actor,
+                org_id,
+                member_id,
+                detail={"kind": member.kind, "role": role},
+            )
         return member.to_dict()
 
     @router.get("/api/orgs/{org_id}/members")
@@ -177,6 +235,7 @@ def create_org_router(
             raise HTTPException(404, "organization not found")
         _require_org_admin(org_id, actor)
         store.remove_org_member(org_id, member_id)
+        _audit("org_member_remove", actor, org_id, member_id)
         return {"deleted": member_id}
 
     # ── departments ────────────────────────────────────────────────────────
@@ -202,6 +261,13 @@ def create_org_router(
             )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        _audit(
+            "org_department_create",
+            actor,
+            org_id,
+            dept.id,
+            detail={"name": dept.name, "parent_id": dept.parent_id},
+        )
         return dept.to_dict()
 
     @router.get("/api/orgs/{org_id}/departments")
@@ -221,6 +287,7 @@ def create_org_router(
             raise HTTPException(404, "organization not found")
         _require_org_admin(org_id, actor)
         store.delete_department(dept_id)
+        _audit("org_department_delete", actor, org_id, dept_id)
         return {"deleted": dept_id}
 
     # ── channels ───────────────────────────────────────────────────────────
@@ -253,6 +320,21 @@ def create_org_router(
             store.add_channel_member(
                 channel.id, actor, role="owner", require_org_member=False
             )
+            _audit(
+                "channel_member_add",
+                actor,
+                channel.org_id,
+                actor,
+                channel_id=channel.id,
+                detail={"role": "owner"},
+            )
+        _audit(
+            "org_channel_create",
+            actor,
+            channel.org_id,
+            channel.id,
+            detail={"name": channel.name, "kind": channel.kind},
+        )
         return channel.to_dict()
 
     @router.get("/api/orgs/{org_id}/channels")
@@ -288,7 +370,14 @@ def create_org_router(
         if store.get_channel(channel_id) is None:
             raise HTTPException(404, "channel not found")
         _require_channel_admin(channel_id, actor)
+        channel = store.get_channel(channel_id)
         store.delete_channel(channel_id)
+        _audit(
+            "org_channel_delete",
+            actor,
+            channel.org_id if channel else "",
+            channel_id,
+        )
         return {"deleted": channel_id}
 
     # ── channel ACL ────────────────────────────────────────────────────────
@@ -305,14 +394,36 @@ def create_org_router(
         member_id = str(payload.get("member_id") or "")
         if not member_id:
             raise HTTPException(400, "member_id is required")
+        role = str(payload.get("role") or "member")
+        previous_role = store.get_channel_member_role(channel_id, member_id)
         try:
             member = store.add_channel_member(
                 channel_id,
                 member_id,
-                role=str(payload.get("role") or "member"),
+                role=role,
             )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        channel = store.get_channel(channel_id)
+        org_id = channel.org_id if channel else ""
+        if previous_role is not None and previous_role != role:
+            _audit(
+                "channel_member_role_change",
+                actor,
+                org_id,
+                member_id,
+                channel_id=channel_id,
+                detail={"before": previous_role, "after": role},
+            )
+        else:
+            _audit(
+                "channel_member_add",
+                actor,
+                org_id,
+                member_id,
+                channel_id=channel_id,
+                detail={"role": role},
+            )
         return member.to_dict()
 
     @router.get("/api/channels/{channel_id}/members")
@@ -333,7 +444,15 @@ def create_org_router(
         if store.get_channel(channel_id) is None:
             raise HTTPException(404, "channel not found")
         _require_channel_admin(channel_id, actor)
+        channel = store.get_channel(channel_id)
         store.remove_channel_member(channel_id, member_id)
+        _audit(
+            "channel_member_remove",
+            actor,
+            channel.org_id if channel else "",
+            member_id,
+            channel_id=channel_id,
+        )
         return {"deleted": member_id}
 
     return router

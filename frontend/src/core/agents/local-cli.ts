@@ -267,8 +267,7 @@ export function dedupePersonaAgentsByDisplayName(agents: Agent[]): Agent[] {
   const personaIndexByLabel = new Map<string, number>();
   for (const agent of agents) {
     const isExternalRuntime =
-      agent.name.startsWith("local_") ||
-      agent.name.startsWith("mobile_") ||
+      /^(?:local_|registry_local_|mobile_)/.test(agent.name) ||
       Boolean(agent.capabilities?.local_partner);
     if (isExternalRuntime) {
       result.push(agent);

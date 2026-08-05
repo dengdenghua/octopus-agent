@@ -148,7 +148,7 @@ tier: "core"
   - `runtime/cli_serve.py`
 - **`runtime/core/`** · 4 file(s)
   - `runtime/core/cerebrum/_react_execution_phase6d.py`
-  - `runtime/core/cerebrum/_react_prompt_assembly_memory.py`
+  - `runtime/core/cerebrum/_react_prompt_assembly_state.py`
   - `runtime/core/cerebrum/react_parallel_dispatch.py`
   - `runtime/core/cerebrum/react_resume.py`
 - **`runtime/execution/`** · 6 file(s)

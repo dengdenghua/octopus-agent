@@ -1,15 +1,19 @@
-"""User-message content assembly (attachments, images, JSONL manifest).
+"""User-message content assembly (attachments, images, JSONL manifest),
+message checkpoint (de)serialization helpers, and related-file prefetching.
 
-Extracted from ``react_context.py``. Pure builders — no behaviour change.
+Extracted from ``react_context.py``. Pure builders/helpers — no behaviour change.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 _ATTACHMENT_PREVIEW_PER_FILE_CHARS = 4_000
 _ATTACHMENT_PREVIEW_TOTAL_CHARS = 12_000
+
+_logger = logging.getLogger(__name__)
 
 
 def _build_user_message_content(
@@ -154,3 +158,105 @@ def _looks_like_image_attachment(item: dict[str, Any]) -> bool:
         if ext in {"png", "jpg", "jpeg", "gif", "webp", "bmp"}:
             return True
     return False
+
+
+def _serialize_messages_for_checkpoint(messages: list) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for m in messages:
+        entry: dict[str, Any] = {"role": getattr(m, "role", "")}
+        content = getattr(m, "content", "")
+        if isinstance(content, list):
+            entry["content"] = content
+        else:
+            entry["content"] = str(content) if content else ""
+        tool_calls = getattr(m, "tool_calls", None)
+        if tool_calls:
+            entry["tool_calls"] = [
+                {"id": tc.id, "name": tc.name, "input": tc.input} for tc in tool_calls
+            ]
+        tool_call_id = getattr(m, "tool_call_id", None)
+        if tool_call_id:
+            entry["tool_call_id"] = tool_call_id
+        name = getattr(m, "name", None)
+        if name:
+            entry["name"] = name
+        result.append(entry)
+    return result
+
+
+def _restore_messages_from_checkpoint(snapshot: list[dict[str, Any]]) -> list:
+    from runtime.platform.models.llm import Message, ToolCall
+
+    result: list[Message] = []
+    for m in snapshot:
+        if not isinstance(m, dict) or not m.get("role"):
+            continue
+        content = m.get("content", "")
+        if not content:
+            continue
+        msg = Message(role=m["role"], content=content)
+        tool_calls_data = m.get("tool_calls")
+        if tool_calls_data and isinstance(tool_calls_data, list):
+            try:
+                tcs = tuple(
+                    ToolCall(id=tc["id"], name=tc["name"], input=tc.get("input", {}))
+                    for tc in tool_calls_data
+                    if isinstance(tc, dict) and tc.get("id") and tc.get("name")
+                )
+                if tcs:
+                    msg = msg.model_copy(update={"tool_calls": tcs})
+            except (TypeError, ValueError) as exc:
+                _logger.debug("tool_calls restore skipped: %s", exc)
+        result.append(msg)
+    return result
+
+
+def _prefetch_related_files(
+    action: str | None,
+    working_set: dict[str, Any],
+) -> str | None:
+    if not action:
+        return None
+    try:
+        import re
+
+        _path_match = re.search(r'["\']([^"\']+\.(?:py|ts|tsx|js|jsx|go|rs))["\']', action)
+        if not _path_match:
+            return None
+        edited_path = _path_match.group(1)
+        import os
+
+        if not os.path.isfile(edited_path):
+            return None
+        with open(edited_path, encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        _import_patterns = [
+            r'(?:from|import)\s+["\'](\.{1,2}/[^"\']+)["\']',
+            r'(?:from|import)\s+["\'](\./[^"\']+)["\']',
+            r'(?:from|import)\s+["\'](\.\./[^"\']+)["\']',
+        ]
+        local_imports = set()
+        for pat in _import_patterns:
+            for m in re.finditer(pat, content):
+                imp = m.group(1)
+                for ext in ("", ".ts", ".tsx", ".js", ".py", "/index.ts", "/index.py"):
+                    candidate = imp + ext
+                    if os.path.isfile(candidate) and candidate not in working_set:
+                        local_imports.add(candidate)
+                        break
+        if not local_imports:
+            return None
+        parts = []
+        total = 0
+        for fp in sorted(local_imports)[:3]:
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                fc = f.read()
+            if total + len(fc) > 3000:
+                fc = fc[: (3000 - total)] + "\n...(截断)"
+            parts.append(f"--- {fp} ---\n{fc}")
+            total += len(fc)
+            if total >= 3000:
+                break
+        return "\n\n".join(parts) if parts else None
+    except (OSError, ValueError):
+        return None

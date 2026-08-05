@@ -25,7 +25,7 @@ from runtime.core.cerebrum._react_execution_dispatch import (
     _execute_action_via_beak,
     _run_auto_diagnostics,
 )
-from runtime.core.cerebrum._react_execution_phase6d_guards import (
+from runtime.core.cerebrum._react_execution_phase6g import (
     _phase_6d_pre_dispatch_guards,
 )
 from runtime.core.cerebrum._react_execution_results import (

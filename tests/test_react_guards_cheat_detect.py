@@ -467,6 +467,10 @@ class TestFalseVerificationClaimGuardOutcomes:
         steps = [
             _step(
                 1,
+                action='write_text_file({"path":"src/foo.py","content":"x=1"})',
+            ),
+            _step(
+                2,
                 action='exec_shell({"command": "pytest"})',
                 observation="ModuleNotFoundError: No module named 'foo'",
             ),
@@ -482,7 +486,11 @@ class TestFalseVerificationClaimGuardOutcomes:
     def test_claim_with_clean_run_silent(self) -> None:
         steps = [
             _step(
-                1, action='exec_shell({"command": "pytest"})', observation="===== 5 passed ====="
+                1,
+                action='write_text_file({"path":"src/foo.py","content":"x=1"})',
+            ),
+            _step(
+                2, action='exec_shell({"command": "pytest"})', observation="===== 5 passed ====="
             ),
         ]
         assert (
@@ -496,12 +504,35 @@ class TestFalseVerificationClaimGuardOutcomes:
 
     def test_help_request_short_circuits(self) -> None:
         steps = [
-            _step(1, action='exec_shell({"command": "pytest"})', observation="ModuleNotFoundError")
+            _step(
+                1,
+                action='write_text_file({"path":"src/foo.py","content":"x=1"})',
+            ),
+            _step(2, action='exec_shell({"command": "pytest"})', observation="ModuleNotFoundError"),
         ]
         assert (
             _false_verification_claim_guard(
                 steps,
                 "Tests pass — but I cannot continue, please provide the API key.",
+                is_code_mode=True,
+            )
+            is None
+        )
+
+    def test_read_only_reporting_documented_fact_is_silent(self) -> None:
+        # A research/analysis turn reads the repo and reports "tests pass"
+        # as a documented fact (README/CI) without modifying any code. It
+        # must NOT be forced to run a verifier — that's the guard impasse
+        # that buffered the final answer for hundreds of seconds and then
+        # failed the turn.
+        steps = [
+            _step(1, action='exec_shell({"command": "ls"})', observation="src/ tests/"),
+            _step(2, action='read_text_file({"path":"README.md"})', observation="跨语言一致性测试已通过"),
+        ]
+        assert (
+            _false_verification_claim_guard(
+                steps,
+                "测试已通过，无错误",
                 is_code_mode=True,
             )
             is None

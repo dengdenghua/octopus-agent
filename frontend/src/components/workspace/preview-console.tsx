@@ -98,8 +98,8 @@ export function PreviewConsole({
             )
           ) : null}
           <span>{t.codeMode.previewConsole}</span>
-          <span className="tabular-nums rounded bg-muted px-1 py-0.5 text-xs">
-            {diagnostics.length}
+          <span className="tabular-nums whitespace-nowrap rounded bg-muted px-1 py-0.5 text-xs">
+            {t.codeMode.previewConsoleCount(diagnostics.length)}
           </span>
         </button>
 

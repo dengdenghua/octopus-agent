@@ -1,6 +1,10 @@
 from pathlib import Path
 
+import pytest
+
 from benchmarks.validate_result_manifest import validate_manifest
+
+pytestmark = pytest.mark.slow
 
 
 def test_octopus_latest_k3_manifest_is_backed_by_final_artifacts():

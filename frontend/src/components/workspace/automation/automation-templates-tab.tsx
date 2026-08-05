@@ -26,11 +26,14 @@ export type AutomationTemplate = {
 interface AutomationTemplatesTabProps {
   onUseTemplate?: (template: AutomationTemplate) => void;
   onCreateCustom?: () => void;
+  /** 紧凑模式：用于窄容器（如助理右侧面板），改用横向紧凑卡片布局。 */
+  compact?: boolean;
 }
 
 export function AutomationTemplatesTab({
   onUseTemplate,
   onCreateCustom,
+  compact = false,
 }: AutomationTemplatesTabProps) {
   const { t } = useI18n();
 
@@ -116,7 +119,53 @@ export function AutomationTemplatesTab({
     }
   };
 
-  return (
+  return compact ? (
+    <div className="space-y-2">
+      {templates.map((template, index) => {
+        const isCustom = template.id === "custom";
+        const coolTone = index % 2 === 0;
+        return (
+          <button
+            key={template.id}
+            type="button"
+            onClick={
+              isCustom ? handleCreateCustom : () => handleUseTemplate(template)
+            }
+            className={cn(
+              "group flex w-full items-center gap-3 rounded-[10px] border p-3 text-left transition-[transform,border-color,background-color,box-shadow] hover:-translate-y-0.5",
+              coolTone
+                ? "border-border bg-card hover:border-primary/28 hover:bg-card hover:shadow-[var(--shadow-sm)]"
+                : "border-border/90 bg-muted/18 hover:border-primary/24 hover:bg-muted/28 hover:shadow-[var(--shadow-sm)]",
+            )}
+          >
+            <div
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center rounded-md border",
+                coolTone
+                  ? "border-border bg-muted/52"
+                  : "border-primary/15 bg-primary/7",
+              )}
+            >
+              {template.icon}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-sm font-semibold text-foreground">
+                {template.title}
+              </h3>
+              <p className="line-clamp-1 text-xs leading-relaxed text-muted-foreground">
+                {template.description}
+              </p>
+            </div>
+            <span className="sr-only">
+              {isCustom
+                ? t.intelligence.createCustomTask
+                : t.intelligence.useTemplate}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  ) : (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {templates.map((template, index) => {
         const isCustom = template.id === "custom";

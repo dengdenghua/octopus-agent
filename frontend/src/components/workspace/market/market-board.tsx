@@ -1,0 +1,282 @@
+import { SearchIcon, XIcon, PlusIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  MarketBalanceBar,
+  MarketGrid,
+} from "@/components/workspace/market/market-feed";
+import { MarketDetail } from "@/components/workspace/market/market-detail";
+import {
+  MARKET_CATEGORIES,
+  getMarketItems,
+  listMarketItem,
+  type MarketItem,
+} from "@/components/workspace/market/market-data";
+import { getCommunityCredits } from "@/core/credits/ledger";
+import { cn } from "@/lib/utils";
+
+/** 可选封面（复用社区已生成封面图）。 */
+const COVER_OPTIONS = [
+  "/community/price-watch(1).jpg",
+  "/community/weekly-report(1).jpg",
+  "/community/resume(1).jpg",
+  "/community/language-coach.jpg",
+  "/community/study-paper(1).jpg",
+  "/community/smart-home.jpg",
+  "/community/travel-plan(1).jpg",
+  "/community/game-auto-daily.jpg",
+  "/community/gacha.jpg",
+  "/community/meeting-notes.jpg",
+  "/community/plan-tomorrow.jpg",
+  "/community/coupon.jpg",
+] as const;
+
+/** 集市面板：嵌入社区页的二级视图，自带搜索/分类/余额/上架/购买。 */
+export function MarketBoard() {
+  const [activeTab, setActiveTab] = useState("all");
+  const [query, setQuery] = useState("");
+  const [version, setVersion] = useState(0);
+  const [detail, setDetail] = useState<MarketItem | null>(null);
+  const [listOpen, setListOpen] = useState(false);
+
+  const items = useMemo(() => getMarketItems(), [version]);
+  const balance = useMemo(() => getCommunityCredits(), [version]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((it) => {
+      if (activeTab !== "all" && it.category !== activeTab) return false;
+      if (!q) return true;
+      return (
+        it.title.toLowerCase().includes(q) ||
+        it.desc.toLowerCase().includes(q) ||
+        it.seller.toLowerCase().includes(q)
+      );
+    });
+  }, [items, activeTab, query]);
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-1 flex-wrap items-center gap-1.5">
+          {MARKET_CATEGORIES.map((cat) => {
+            const isActive = cat.key === activeTab;
+            return (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => setActiveTab(cat.key)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  isActive
+                    ? "bg-rose-500 text-white"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                <span
+                  className="size-1.5 rounded-full"
+                  style={{ backgroundColor: cat.color }}
+                />
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="relative w-48">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索好物、卖家…"
+              className={cn(
+                "w-full rounded-md border border-border-default bg-background/60 py-1.5 pl-9 pr-8 text-sm",
+                "placeholder:text-muted-foreground/60 outline-none",
+                "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
+              )}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="清空搜索"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setListOpen(true)}
+            className="flex shrink-0 items-center gap-1 rounded-md bg-rose-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-600"
+          >
+            <PlusIcon className="size-4" />
+            上架
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-border-subtle bg-card">
+        <MarketBalanceBar balance={balance} />
+      </div>
+
+      <div className="mt-4 flex-1">
+        <MarketGrid
+          items={filtered}
+          onBuy={(item) => setDetail(item)}
+          onOpen={(item) => setDetail(item)}
+        />
+      </div>
+
+      {detail && (
+        <MarketDetail
+          item={detail}
+          onClose={() => setDetail(null)}
+          onSold={() => setVersion((v) => v + 1)}
+        />
+      )}
+      {listOpen && (
+        <ListModal
+          onClose={() => setListOpen(false)}
+          onListed={() => setVersion((v) => v + 1)}
+        />
+      )}
+    </>
+  );
+}
+
+export function ListModal({
+  onClose,
+  onListed,
+}: {
+  onClose: () => void;
+  onListed: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [desc, setDesc] = useState("");
+  const [price, setPrice] = useState("10");
+  const [category, setCategory] = useState("efficiency");
+  const [cover, setCover] = useState<string>(COVER_OPTIONS[0]);
+
+  const priceNum = Math.max(0, Math.round(Number(price) || 0));
+  const canSubmit = title.trim().length > 0 && priceNum > 0;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    listMarketItem({
+      title,
+      desc,
+      price: priceNum,
+      category,
+      cover,
+    });
+    onListed();
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-center bg-background/95 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="flex h-full w-full max-w-lg flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-border-subtle px-3 py-2">
+          <span className="text-sm font-semibold">上架好物</span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          >
+            <XIcon className="size-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="一句话好物标题…"
+            maxLength={40}
+            className="w-full rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+          />
+          <textarea
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            placeholder="描述用途、亮点（可选）…"
+            rows={3}
+            className="mt-3 w-full resize-none rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+          />
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-1.5 text-xs text-muted-foreground">售价（积分）</p>
+              <input
+                type="number"
+                value={price}
+                min={1}
+                onChange={(e) => setPrice(e.target.value)}
+                className="w-full rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+              />
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs text-muted-foreground">分类</p>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-md border border-border-default bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
+              >
+                {MARKET_CATEGORIES.filter((c) => c.key !== "all").map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="mb-1.5 text-xs text-muted-foreground">选择封面</p>
+            <div className="grid grid-cols-6 gap-2">
+              {COVER_OPTIONS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCover(c)}
+                  className={cn(
+                    "aspect-[3/4] overflow-hidden rounded-md ring-2 transition",
+                    cover === c
+                      ? "ring-rose-500"
+                      : "ring-transparent hover:ring-border-default",
+                  )}
+                >
+                  <img src={c} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border-subtle bg-background px-4 py-3">
+          <span className="text-xs text-muted-foreground">
+            售出后积分将计入你的账户
+          </span>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className={cn(
+              "rounded-md px-4 py-1.5 text-sm font-semibold transition-colors",
+              canSubmit
+                ? "bg-rose-500 text-white hover:bg-rose-600"
+                : "cursor-not-allowed bg-muted text-muted-foreground/50",
+            )}
+          >
+            上架
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

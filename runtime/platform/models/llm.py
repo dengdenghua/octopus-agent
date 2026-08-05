@@ -114,7 +114,10 @@ def model_supports_thinking(model_name: str) -> bool:
         return True
     # Qwen3 hybrid series honors ``enable_thinking``; the later
     # ``-instruct-2507`` refresh dropped the thinking mode.
-    if "qwen3" in m and "instruct" not in m:
+    # Qwen3.5 series (e.g. qwen3.5-flash) does NOT support the agent
+    # plan/thinking feature on this provider, so exclude it explicitly.
+    if ("qwen3" in m and "qwen3.5" not in m and "3.5" not in m
+            and "instruct" not in m):
         return True
     # Zhipu GLM reasoning generations (``thinking.type=enabled``).
     if "glm-4.5" in m or "glm-4.6" in m:

@@ -11,8 +11,7 @@ from runtime.core.cerebrum._react_context_attachments import (
     _build_user_message_content,
     _image_blocks_from_attachments,
     _looks_like_image_attachment,
-)
-from runtime.core.cerebrum._react_context_checkpoint import (
+    _prefetch_related_files,
     _restore_messages_from_checkpoint,
     _serialize_messages_for_checkpoint,
 )
@@ -33,19 +32,18 @@ from runtime.core.cerebrum._react_context_helpers import (
     _ensure_context_budget,
     _estimate_messages_tokens,
     _estimate_tokens,
+    _format_skill_catalog,
     _suffix_within_token_budget,
     _summarize_messages,
     _trim_message_to_budget,
     context_budget_tokens_for_model,
 )
-from runtime.core.cerebrum._react_context_prefetch import _prefetch_related_files
 from runtime.core.cerebrum._react_context_project import (
     _build_project_profile_prompt,
     _collect_initial_diagnostics,
     _git_status_summary,
     _load_project_rules,
 )
-from runtime.core.cerebrum._react_context_skill_catalog import _format_skill_catalog
 
 __all__ = [
     "context_budget_tokens_for_model",

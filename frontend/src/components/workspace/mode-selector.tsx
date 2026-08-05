@@ -3,7 +3,8 @@
  *
  * Project detection decides whether the workspace is new or existing.
  * User-facing modes decide the work strategy: develop, audit, UX/UI.
- * (architect was merged into develop — design/migration is handled there.)
+ * (architect maps to audit; uxui has no backend detection signal and is only
+ * selectable manually.)
  */
 
 import {
@@ -23,6 +24,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { toast } from "sonner";
 
 import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
@@ -137,6 +139,11 @@ interface ModeSelectorProps {
   onModeChange: (mode: AgentModeName) => void;
   onAuditIntensityChange?: (intensity: AuditIntensity) => void;
   onDetectionChange?: (detection: DetectResponse | null) => void;
+  /** Notify the parent when the user manually overrides the auto-detected
+   * mode (true), or when the override is cleared because the workspace
+   * changed or auto-detection reapplied (false). Lets intent-based
+   * auto-switching respect manual control. */
+  onManualOverrideChange?: (isManual: boolean) => void;
   className?: string;
 }
 
@@ -152,6 +159,7 @@ export function ModeSelector({
   onModeChange,
   onAuditIntensityChange,
   onDetectionChange,
+  onManualOverrideChange,
   className,
 }: ModeSelectorProps) {
   const { t } = useI18n();
@@ -192,6 +200,17 @@ export function ModeSelector({
       prevWorkDir.current = workDir;
       manualOverrideRef.current = false;
       setManualOverride(false);
+      onManualOverrideChange?.(false);
+    }
+
+    // A persisted manual override for this workspace wins over auto-detection
+    // (e.g. after a refresh), so the recommended mode never pre-empts it.
+    const storedMode = readStoredModeOverride(workDir);
+    if (storedMode) {
+      manualOverrideRef.current = true;
+      setManualOverride(true);
+      onManualOverrideChange?.(true);
+      onModeChange(storedMode);
     }
 
     let cancelled = false;
@@ -218,7 +237,7 @@ export function ModeSelector({
     return () => {
       cancelled = true;
     };
-  }, [onDetectionChange, onModeChange, workDir]);
+  }, [onDetectionChange, onManualOverrideChange, onModeChange, workDir]);
 
   useEffect(() => {
     let cancelled = false;
@@ -297,15 +316,24 @@ export function ModeSelector({
   }, [expanded, updatePanelPosition]);
 
   const handleToggle = useCallback(
-    (newMode: AgentModeName) => {
+    async (newMode: AgentModeName) => {
+      const previousMode = mode;
       manualOverrideRef.current = true;
       setManualOverride(true);
+      onManualOverrideChange?.(true);
       onModeChange(newMode);
-      void setModeOnServer(newMode, sessionId);
+      writeStoredModeOverride(workDir, newMode);
       setExpanded(false);
       triggerRef.current?.focus();
+      try {
+        await setModeOnServer(newMode, sessionId);
+      } catch (e) {
+        swallow(e);
+        onModeChange(previousMode);
+        toast.error("切换模式失败，已还原");
+      }
     },
-    [onModeChange, sessionId],
+    [mode, onManualOverrideChange, onModeChange, sessionId, workDir],
   );
 
   const closeAndRefocusTrigger = useCallback(() => {
@@ -577,9 +605,67 @@ function compactWorkspaceLabel(path: string): string {
   return normalized.split("/").filter(Boolean).pop() ?? normalized;
 }
 
-function modeFromProjectKind(_kind: DetectedProjectKind): AgentModeName {
-  // architect mode was merged into develop; all detected kinds map to develop.
-  return "develop";
+const MODE_OVERRIDE_STORAGE_KEY = "octopus:modeOverride";
+
+/**
+ * Read the persisted manual-mode override for a workspace path, if any.
+ * Returns null when nothing is stored, the value is invalid, localStorage is
+ * unavailable (SSR), or parsing throws.
+ */
+export function readStoredModeOverride(
+  workspacePath: string,
+): AgentModeName | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(MODE_OVERRIDE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, AgentModeName>;
+    const mode = parsed[workspacePath];
+    return mode === "develop" || mode === "audit" || mode === "uxui"
+      ? mode
+      : null;
+  } catch (e) {
+    swallow(e);
+    return null;
+  }
+}
+
+/**
+ * Persist a manual-mode override for a workspace path under a single
+ * `{ workspacePath: mode }` map. Safe to call on SSR / when localStorage is
+ * unavailable — it no-ops.
+ */
+export function writeStoredModeOverride(
+  workspacePath: string,
+  mode: AgentModeName,
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(MODE_OVERRIDE_STORAGE_KEY);
+    const current = raw
+      ? (JSON.parse(raw) as Record<string, AgentModeName>)
+      : {};
+    current[workspacePath] = mode;
+    window.localStorage.setItem(
+      MODE_OVERRIDE_STORAGE_KEY,
+      JSON.stringify(current),
+    );
+  } catch (e) {
+    swallow(e);
+  }
+}
+
+export function modeFromProjectKind(kind: DetectedProjectKind): AgentModeName {
+  switch (kind) {
+    case "architect":
+      // architect → audit: quality/risk review fits the audit work strategy.
+      return "audit";
+    case "builder":
+    case "coder":
+    default:
+      // builder/coder both resolve to the develop work strategy.
+      return "develop";
+  }
 }
 
 function getModeOptions(t: ReturnType<typeof useI18n>["t"]): ModeOption[] {

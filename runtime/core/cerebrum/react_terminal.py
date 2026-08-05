@@ -96,6 +96,7 @@ def _finalize_react_turn(
         # budget and defeat the whole point of cancellation.
         yield {"type": "react_cancelled", "iteration": i + 1}
         with contextlib.suppress(Exception):
+            pause_controller.clear(str(react_task_id))
             pause_controller.unregister_active(str(react_task_id))
         return None
 
@@ -204,6 +205,7 @@ def _finalize_react_turn(
                     beak_steps=executed_beak_steps,
                     success=False,
                 )
+                pause_controller.clear(str(react_task_id))
                 pause_controller.unregister_active(str(react_task_id))
                 return None
 
@@ -245,6 +247,7 @@ def _finalize_react_turn(
                 beak_steps=executed_beak_steps,
                 success=False,
             )
+            pause_controller.clear(str(react_task_id))
             pause_controller.unregister_active(str(react_task_id))
             # This is the final model attempt after the ordinary recovery
             # retries have been exhausted.  Surface its real, redacted cause
@@ -295,6 +298,13 @@ def _finalize_react_turn(
         )
     except ImportError:
         _logger.debug("camouflage scheduler not available for recording outcome", exc_info=True)
+    # Any terminal state except "paused" must clear the pause/pending record —
+    # paused means we are genuinely waiting for the user to click Continue,
+    # but success / error / model_stall / guard_impasse all mean the turn has
+    # ended and no resume will ever come. Leaving a stale record behind makes
+    # the sidebar thread glow yellow ("waiting") forever.
+    if terminated_reason != "paused":
+        pause_controller.clear(str(react_task_id))
     pause_controller.unregister_active(str(react_task_id))
     completion_receipt = _react_completion_receipt(
         final_answer=final_answer,

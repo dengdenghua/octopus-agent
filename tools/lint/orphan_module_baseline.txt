@@ -4,7 +4,6 @@
 # A line for a module used only via importlib/registry documents
 # that dynamic dependency — keep it, it's not a bug.
 
-runtime/core/cerebrum/react_loop_exports.py
 runtime/execution/loops/dispatcher.py
 runtime/execution/suckers/echo_skills.py
 runtime/execution/suckers/enterprise_skills.py

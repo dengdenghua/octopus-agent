@@ -118,7 +118,8 @@ export const jaJP: Translations = {
     reactMode: "Agent",
     reactModeDescription: "自律的な実行とツールの自動化",
     ephemeralMode: "一時的",
-    ephemeralModeDescription: "メモリの読み取り・書き込みを行いません（シークレットモード）",
+    ephemeralModeDescription:
+      "メモリの読み取り・書き込みを行いません（シークレットモード）",
     reasoningMode: "思考",
     reasoningModeDescription: "ReAct 推論",
     reasoningEffort: "Reasoning Effort",
@@ -127,8 +128,7 @@ export const jaJP: Translations = {
     reasoningEffortLow: "低",
     reasoningEffortLowDescription: "シンプルなロジックチェック + 浅い推論",
     reasoningEffortMedium: "中",
-    reasoningEffortMediumDescription:
-      "多層ロジック分析 + 基本検証",
+    reasoningEffortMediumDescription: "多層ロジック分析 + 基本検証",
     reasoningEffortHigh: "高",
     reasoningEffortHighDescription: "多次元論理推論 + 多経路検証 + 逆方向確認",
     reasoningEffortXHigh: "超高",
@@ -151,8 +151,7 @@ export const jaJP: Translations = {
       },
       {
         suggestion: "調査",
-        prompt:
-          "[トピック] について深く調査し、結果をまとめてください",
+        prompt: "[トピック] について深く調査し、結果をまとめてください",
         icon: MicroscopeIcon,
       },
       {
@@ -316,8 +315,7 @@ export const jaJP: Translations = {
   executionChecklist: {
     title: "進捗チェックリスト",
     clarifyGoal: "タスク目標を明確化",
-    clarifyGoalDetail:
-      "ユーザーリクエストを実行可能な出力目標に収束させます。",
+    clarifyGoalDetail: "ユーザーリクエストを実行可能な出力目標に収束させます。",
     searchRound: (round: number, query: string) =>
       `第 ${round} ラウンド検索：${query}`,
     adjustKeywords: (round: number) =>
@@ -328,8 +326,7 @@ export const jaJP: Translations = {
     readContext: "コンテキストを読む",
     writeFile: "ファイルの書き込み/変更",
     runCommand: "チェックを実行",
-    callTool: (count: number) =>
-      `${count} 個のアクションを協調処理`,
+    callTool: (count: number) => `${count} 個のアクションを協調処理`,
     toolCallDetail:
       "ここには公開進捗が表示されます。詳細な操作はワークベンチに残ります。",
     analyzeAndAlign: "データを分析・統合",
@@ -344,8 +341,7 @@ export const jaJP: Translations = {
     consumerDemand: "消費者需要とシナリオを補充",
     evidenceRound: (round: number) => `第 ${round} グループの証拠を補足`,
     queryPrefix: "クエリ： ",
-    continueFromPrevious:
-      "前ラウンドの情報に基づき証拠の補充を続けます。",
+    continueFromPrevious: "前ラウンドの情報に基づき証拠の補充を続けます。",
   },
 
   // Chat Input Box
@@ -387,7 +383,8 @@ export const jaJP: Translations = {
     removeRole: "ロールを削除",
     toggleMaterial: "資料を切り替え",
     removeMaterial: "資料を削除",
-    startThreadBeforeUpload: "ファイルをアップロードする前に、スレッドを開始または開いてください。",
+    startThreadBeforeUpload:
+      "ファイルをアップロードする前に、スレッドを開始または開いてください。",
     uploadFailed: "アップロードに失敗しました",
     attachmentReadFailed:
       "添付ファイルの読み取りに失敗しました。もう一度お試しください。",
@@ -721,7 +718,8 @@ export const jaJP: Translations = {
     chooseWorkspaceFolder: "ワークスペースフォルダーを選択",
     personalSpace: "個人スペース",
     selectFolder: "フォルダーを選択",
-    selectWorkspaceFolderFirst: "まずワークスペースフォルダーを選択してください",
+    selectWorkspaceFolderFirst:
+      "まずワークスペースフォルダーを選択してください",
     recentWorkspaces: "最近のワークスペース",
     noRecentWorkspaces: "最近のワークスペースがありません",
     browseCurrentFolder: "現在のフォルダーを閲覧",
@@ -764,8 +762,7 @@ export const jaJP: Translations = {
     capabilityAuto: "Auto",
     capabilityCollabTitle:
       "AI が提案、あなたが確認 — Q&A / 計画 / 危険操作はすべて承認が必要",
-    capabilityAutoTitle:
-      "Agent 完全委譲 — 計画 + ツール呼び出し + 自動承認",
+    capabilityAutoTitle: "Agent 完全委譲 — 計画 + ツール呼び出し + 自動承認",
     capabilitySwarmsTitle:
       "マルチ Agent 並列 — ディスパッチ + ロール分割 + 並行実行",
     advanced: "Advanced",
@@ -818,8 +815,7 @@ export const jaJP: Translations = {
     goToLinePrompt: "行へ移動",
     goToLineDefault: "1",
     workbenchLayoutPanels: "ワークベンチレイアウトパネル",
-    verificationFailedNoDetails:
-      "詳細なチェック出力なしで検証が失敗しました。",
+    verificationFailedNoDetails: "詳細なチェック出力なしで検証が失敗しました。",
     // Terminal input
     terminalPlaceholder: "質問、計画、またはコーディング...",
     terminalRestart: "シェルを再起動",
@@ -840,8 +836,10 @@ export const jaJP: Translations = {
     previewConsoleEmpty: "ログエントリがまだありません",
     previewConsoleClear: "Clear",
     previewConsoleAddToChat: "チャットに追加",
+    previewConsoleCount: (n: number) => `${n} 件`,
     previewDevTools: "DevTools",
-    previewDevToolsUnavailable: "DevTools はデスクトップアプリでのみ利用可能です",
+    previewDevToolsUnavailable:
+      "DevTools はデスクトップアプリでのみ利用可能です",
     // Tool panel (realtime)
     toolPanelPreview: "Preview",
     toolPanelTerminal: "Terminal",
@@ -956,10 +954,9 @@ export const jaJP: Translations = {
       footer: "自己完結型オフラインリプレイ",
     },
     composer: {
-      placeholderCode:
-        "修正、デバッグ、検証するプロジェクトタスクを記述...",
-      placeholderNew:
-        "実装、生成、デバッグ、検証するタスクを記述...",
+      placeholderCode: "修正、デバッグ、検証するプロジェクトタスクを記述...",
+      placeholderNew: "実装、生成、デバッグ、検証するタスクを記述...",
+      placeholderOctopus: "そのまま話す：進捗確認、タスク委任、購読の要約...",
     },
     recorder: {
       defaultName: "会話リプレイ学習",
@@ -1003,8 +1000,7 @@ export const jaJP: Translations = {
       running: "running",
       exitCode: (code) => `終了コード ${code}`,
       relatedFiles: (count) => `${count} 個の関連ファイル`,
-      relatedChanges: (count) =>
-        `${count} 個の関連変更`,
+      relatedChanges: (count) => `${count} 個の関連変更`,
     },
     plan: {
       label: "Plan",
@@ -1130,14 +1126,10 @@ export const jaJP: Translations = {
     waitingToStart: "開始待ち",
     waitingForPhase: "このフェーズの開始を待っています",
     phaseCompleted: "このフェーズは完了しました",
-    webSearchActions: (count: number) =>
-      `${count} 個の Web/検索アクション`,
-    fileActions: (count: number) =>
-      `${count} 個のファイルアクション`,
-    terminalActions: (count: number) =>
-      `${count} 個のターミナルアクション`,
-    executionActions: (count: number) =>
-      `${count} 個の実行操作`,
+    webSearchActions: (count: number) => `${count} 個の Web/検索アクション`,
+    fileActions: (count: number) => `${count} 個のファイルアクション`,
+    terminalActions: (count: number) => `${count} 個のターミナルアクション`,
+    executionActions: (count: number) => `${count} 個の実行操作`,
     listSeparator: ", ",
     statusProcessing: "Processing",
     statusCompleted: "Completed",
@@ -1152,7 +1144,8 @@ export const jaJP: Translations = {
     closeWorkspace: "ワークスペースを閉じる",
     activityTrace: "アクティビティトレース",
     computerViewLabel: "コンピュータービュー",
-    computerViewHint: "コンピュータービューにはブラウザ、ファイル、プレビューが表示されます",
+    computerViewHint:
+      "コンピュータービューにはブラウザ、ファイル、プレビューが表示されます",
     copyDetails: "詳細をコピー",
     waitingForToolResult: "ツール結果を待機中...",
     kindTerminal: "Terminal",
@@ -1190,9 +1183,9 @@ export const jaJP: Translations = {
       `${count} 個のワークセットファイルを再構築し、生のメッセージスナップショットは無視。`,
     useLastProgressSummary: (progress: string) =>
       `最近の進捗サマリーを使用：${progress}`,
-    reviewLatestProgressSummary:
-      "再開前に最新の進捗サマリーを確認します。",
-    checkpointLabel: (type: string, id: number) => `チェックポイント：${type} #${id}`,
+    reviewLatestProgressSummary: "再開前に最新の進捗サマリーを確認します。",
+    checkpointLabel: (type: string, id: number) =>
+      `チェックポイント：${type} #${id}`,
     taskLabel: (taskId: string) => `タスク：${taskId}`,
     continueFromIterationLabel: (iteration: number) =>
       `イテレーションから続行：${iteration}`,
@@ -1326,7 +1319,8 @@ export const jaJP: Translations = {
     phaseStatusDone: "Completed",
     phaseStatusPending: "Pending",
     robot: "コラボレーションシーン",
-    noRunningRobotProcess: "アクティブなコラボレーションプロセスがまだありません。",
+    noRunningRobotProcess:
+      "アクティブなコラボレーションプロセスがまだありません。",
     startingRobotProcess:
       "コラボレーションシーンに参加 —最初の可視アクションを待機中…",
     locateTranscriptEvent: "会話で探す",
@@ -1366,8 +1360,7 @@ export const jaJP: Translations = {
     noTaskDescription: "タスク説明がまだありません。",
     waitingForSubagentOutput: "サブエージェントの出力を待機中",
     processReplay: "プロセスリプレイ",
-    processRecords: (count) =>
-      `${count} 件のプロセス記録`,
+    processRecords: (count) => `${count} 件のプロセス記録`,
     iterationRounds: (count) => `${count} ラウンド`,
     computerViewSubtitle: "サブエージェントを選択してコンピュータを表示",
     computerViewSelectHint:
@@ -1562,7 +1555,8 @@ export const jaJP: Translations = {
     filterPlaceholder: "ルール ID またはエンフォーサーで絞り込み...",
     filterAria: "不変条件を絞り込み",
     loading: "Loading...",
-    emptyFiltered: (filter) => `${JSON.stringify(filter)} に一致するルールがありません。`,
+    emptyFiltered: (filter) =>
+      `${JSON.stringify(filter)} に一致するルールがありません。`,
     empty:
       "まだルールが宣言されていません。@enforces(...) デコレーターを追加するとここに表示されます。",
     enforcerCountLabel: (count) => `${count} 個の実行ポイント`,
@@ -1811,6 +1805,7 @@ export const jaJP: Translations = {
     libraryApps: "アプリ",
     libraryDocs: "ドキュメント",
     libraryImages: "画像",
+    libraryVideos: "動画",
     libraryComputer: "コンピューター",
     libraryAuthorizedDirs: "許可済みディレクトリ",
     // Chats drawer
@@ -1844,7 +1839,8 @@ export const jaJP: Translations = {
 
   // Team tasks panel
   teamTasksPanel: {
-    emptyState: "Team を選択または作成すると、ここにチームの Todo リストが表示されます。",
+    emptyState:
+      "Team を選択または作成すると、ここにチームの Todo リストが表示されます。",
     summary: (total, running, done) =>
       `${total} タスク · ${running} 実行中 · ${done} 完了`,
     newTask: "New",
@@ -1852,8 +1848,7 @@ export const jaJP: Translations = {
     emptyFilter: "一致するタスクがありません",
     autoMatch: "Auto-match",
     artifactCount: (count) => `${count} 個の成果物`,
-    rolesCompleted: (completed, total) =>
-      ` · ${completed}/${total} ロール完了`,
+    rolesCompleted: (completed, total) => ` · ${completed}/${total} ロール完了`,
     statusPending: "Pending",
     timeline: {
       evidenceToggle: "プロセス証拠",
@@ -1877,8 +1872,7 @@ export const jaJP: Translations = {
     events: {
       runStarted: "タスクを開始しました",
       roleStarted: (role) => (role ? `${role} started` : "Role started"),
-      roleCompleted: (role) =>
-        role ? `${role} completed` : "1 ロール完了",
+      roleCompleted: (role) => (role ? `${role} completed` : "1 ロール完了"),
       runDone: "タスク完了、アーティファクトを書き戻しました",
       runFailed: "タスク失敗",
       runCancelled: "タスクキャンセル",
@@ -1927,8 +1921,7 @@ export const jaJP: Translations = {
     step1Title: "Chrome 拡張機能ページを開き、デベロッパーモードを有効化",
     step1Desc: "ブラウザーで拡張機能管理ページを開く",
     step1Action: "chrome://extensions を開く",
-    step1Hint:
-      "右上の「デベロッパーモード」スイッチをオンにしてください。",
+    step1Hint: "右上の「デベロッパーモード」スイッチをオンにしてください。",
     step2Title: "拡張機能フォルダーを開く",
     step2Desc: "ブラウザー拡張機能ファイルを含むフォルダーを開く：",
     step2OpenFolder: "フォルダーを開く",
@@ -1983,10 +1976,10 @@ export const jaJP: Translations = {
     pageAgentFeature2Desc:
       "スクリーンショット不要、マルチモーダルモデル不要 —純テキストインタラクション。",
     pageAgentFeature3: "LLM クライアント持ち込み",
-    pageAgentFeature3Desc:
-      "OpenAI 互換 API をサポート、任意の LLM で動作。",
+    pageAgentFeature3Desc: "OpenAI 互換 API をサポート、任意の LLM で動作。",
     pageAgentFeature4: "Chrome 拡張機能",
-    pageAgentFeature4Desc: "クロスタブのマルチページタスク用オプション拡張機能。",
+    pageAgentFeature4Desc:
+      "クロスタブのマルチページタスク用オプション拡張機能。",
     pageAgentCmpArch: "Architecture",
     pageAgentCmpArchPA: "ページ内 JS 注入",
     pageAgentCmpArchRelay: "バックエンド Playwright + WS リレー",
@@ -2013,8 +2006,7 @@ export const jaJP: Translations = {
     systemArchitecture: "Architecture",
     step3DragHint:
       "octopus-browser-relay フォルダーを chrome://extensions ページにドラッグすると、Chrome が即座にインストールします。",
-    extProInstallOnce:
-      "一度インストールすれば自動接続、再認証不要。",
+    extProInstallOnce: "一度インストールすれば自動接続、再認証不要。",
     extProNoManualAuth: "手動での認証クリックは不要です。",
     extProAllVersions: "すべての Chrome バージョンをサポート。",
     extConNeedExtension: "Chrome 拡張機能のインストールが必要です。",
@@ -2073,7 +2065,8 @@ export const jaJP: Translations = {
     pendingRequests: "保留中のリクエスト",
     noGroupPairing: "グループペアリングなし",
     configureAgent: "エージェントを設定",
-    configureAgentHint: "このチャンネルからのメッセージを処理するエージェントを選択",
+    configureAgentHint:
+      "このチャンネルからのメッセージを処理するエージェントを選択",
     agentConfigured: "エージェント設定済み",
     selectAgent: "エージェントを選択",
     selectAgentTitle: (channel: string) => `${channel} の Agent を選択`,
@@ -2093,7 +2086,8 @@ export const jaJP: Translations = {
     applicationId: "アプリケーション ID",
     authorizeBot: "ボットを認証",
     wechatScanTitle: "WeChat でスキャン",
-    wechatScanHint: "WeChat を開く → スキャン → 下の QR コードをスキャンして認証",
+    wechatScanHint:
+      "WeChat を開く → スキャン → 下の QR コードをスキャンして認証",
     wechatWaiting: "スキャン待機中...",
     wechatConnectHint:
       "接続成功後、自分の WeChat にメッセージを送信してペアリングを完了",
@@ -2115,8 +2109,7 @@ export const jaJP: Translations = {
     dingtalkStep4: "権限管理で必要な権限を申請",
     dingtalkStep5:
       "DingTalk グループにボットを追加するか、ボットに直接メッセージしてペアリングを完了",
-    dingtalkClientIdPlaceholder:
-      "開発者コンソールの Client ID (AppKey) を入力",
+    dingtalkClientIdPlaceholder: "開発者コンソールの Client ID (AppKey) を入力",
     dingtalkClientSecretPlaceholder:
       "開発者コンソールの Client Secret (AppSecret) を入力",
     feishuStep1:
@@ -2214,7 +2207,8 @@ export const jaJP: Translations = {
   // Agent API tab · publish agent as HTTP endpoint (backend not ready)
   agentApi: {
     title: "HTTP API として公開",
-    description: "このエージェントを HTTP エンドポイントとして外部アプリに公開します",
+    description:
+      "このエージェントを HTTP エンドポイントとして外部アプリに公開します",
     comingSoonTitle: "近日公開",
     comingSoonDesc:
       "公開バックエンドはまだ準備できていません · 以下に予定されているエンドポイントの形状と呼び出し例をプレビューしています",
@@ -2398,12 +2392,11 @@ export const jaJP: Translations = {
       assistant:
         "温かく、頼りになり、反応が速く、複雑なことをわかりやすくするのが得意。",
       automation: "冷静で、規律正しく、率直。現場のタスクリーダーのよう。",
-      coder:
-        "集中力があり、鋭く、静かな自信を持ち、軽快なエンジニアの雰囲気。",
+      coder: "集中力があり、鋭く、静かな自信を持ち、軽快なエンジニアの雰囲気。",
       creative: "好奇心旺盛で、表現力豊かで、視覚的な感性が鋭く、活気がある。",
-      researcher:
-        "慎重で、忍耐強く、観察力があり、ラボとノートの存在感。",
-      specialist: "落ち着いていて、プロフェッショナルで、境界をわきまえ、深い能力を持つ。",
+      researcher: "慎重で、忍耐強く、観察力があり、ラボとノートの存在感。",
+      specialist:
+        "落ち着いていて、プロフェッショナルで、境界をわきまえ、深い能力を持つ。",
       financial:
         "理性的で、控えめで、安定した判断力を持ち、アナリスト兼アドバイザーの口調。",
     },
@@ -2470,7 +2463,8 @@ export const jaJP: Translations = {
     loadoutCheckTitle: "ロードアウトチェック",
     loadoutCheckSubtitle: "設定ヘルス",
     loadoutOk: "設定は健康、実行可能なロードアウトの準備ができました",
-    checkNoArms: "ARM が有効になっていません。エージェントに機能ソースがありません",
+    checkNoArms:
+      "ARM が有効になっていません。エージェントに機能ソースがありません",
     checkNoPrivateSkills:
       "Skill ホワイトリストが空です。ARM デフォルト skill に依存",
     checkBlockedSkills: (count) =>
@@ -2629,7 +2623,8 @@ export const jaJP: Translations = {
     nameStepAlreadyExistsError: "この名前のエージェントはすでに存在します",
     nameStepNetworkError:
       "ネットワークリクエストに失敗しました。ネットワークまたはバックエンド接続を確認してください",
-    nameStepCheckError: "名前の可用性を確認できませんでした。もう一度お試しください",
+    nameStepCheckError:
+      "名前の可用性を確認できませんでした。もう一度お試しください",
     nameStepBootstrapMessage:
       "新しいカスタムエージェント名は {name} です。その **SOUL** をブートストラップしましょう。",
     save: "エージェントを保存",
@@ -2707,8 +2702,7 @@ export const jaJP: Translations = {
         {
           id: "research",
           label: "ディープリサーチ",
-          brief:
-            "Web 検索、ソースの比較、証拠チェーンの整理、判断が必要です。",
+          brief: "Web 検索、ソースの比較、証拠チェーンの整理、判断が必要です。",
           permissions: [
             "Web 検索を許可",
             "ソースの引用が必須",
@@ -2752,8 +2746,7 @@ export const jaJP: Translations = {
           label: "Web リサーチ",
           arms: ["browser", "search"],
           skills: ["web_search", "open_url", "extract_evidence"],
-          brief:
-            "Web を検索し、ページを開き、ソースと事実の証拠を抽出します。",
+          brief: "Web を検索し、ページを開き、ソースと事実の証拠を抽出します。",
         },
         {
           id: "workspace-tools",
@@ -2872,7 +2865,8 @@ export const jaJP: Translations = {
   // Enterprise assets tab
   enterpriseAssetsTab: {
     loading: "読み込み中…",
-    notAvailableTitle: "エンタープライズアセットライブラリが接続されていません。",
+    notAvailableTitle:
+      "エンタープライズアセットライブラリが接続されていません。",
     notAvailableHintPrefix: "Configure",
     notAvailableHintSuffix:
       "後、ここにエンタープライズ管理のエージェントアセットがリストされます。",
@@ -2881,7 +2875,8 @@ export const jaJP: Translations = {
       `エンタープライズアセットライブラリから · 計 ${count} 件（消費、fork 不可）`,
     install: "ローカルにインストール",
     installing: "インポート中…",
-    importSuccess: (name) => `「${name}」をローカル Agent ライブラリにインポートしました`,
+    importSuccess: (name) =>
+      `「${name}」をローカル Agent ライブラリにインポートしました`,
     importFailed: (msg) => `インポート失敗：${msg}`,
   },
 
@@ -2925,8 +2920,7 @@ export const jaJP: Translations = {
       primaryRoutes: {
         agentTask: {
           title: "エージェントタスクを実行",
-          description:
-            "目標から始めて、計画、アクション、結果を確認します。",
+          description: "目標から始めて、計画、アクション、結果を確認します。",
         },
         codeWork: {
           title: "コード作業",
@@ -2984,6 +2978,10 @@ export const jaJP: Translations = {
     noArtifactSelected: "アーティファクトが選択されていません",
     selectArtifactToView: "アーティファクトを選択して詳細を表示",
     artifactsTitle: "アーティファクト",
+    artifactsTabChanges: "変更",
+    artifactsTabPreview: "プレビュー",
+    noChangesArtifacts: "変更はありません",
+    noPreviewArtifacts: "プレビューできる内容はありません",
     retry: "再試行",
     editResend: "編集して再送信",
     regenerateResponse: "応答を再生成",
@@ -3061,7 +3059,8 @@ export const jaJP: Translations = {
   streaming: {
     thinking: "AI は思考中",
     thoughtProcess: "ライブワークログ",
-    connectionLost: "この返信は中断されました。チャットを続けるか再試行してください。",
+    connectionLost:
+      "この返信は中断されました。チャットを続けるか再試行してください。",
     networkLost:
       "ネットワークが切断されました。タスクは自動一時停止 —メッセージを送信してチェックポイントから再開。",
     turnFailed:
@@ -3502,29 +3501,15 @@ export const jaJP: Translations = {
       system: "システムに従う",
       light: "ライト",
       dark: "ダーク",
-      apple: "Apple 風",
       systemDescription: "OS の設定に自動的に合わせます。",
       lightDescription: "日中の使用に適した、明るくコントラストの高い配色。",
       darkDescription: "眩しさを抑えて集中できるダークな配色。",
-      appleDescription: "モダンで洗練された、クリーンな Apple 風のデザイン。",
-      materialTitle: "インターフェースマテリアル",
-      materialDescription:
-        "現在のテーマの配色を保ちながら、マテリアル効果を重ねます。",
-      materialStandard: "スタンダード",
-      materialStandardDescription: "元のサーフェス処理を維持します",
-      materialLiquid: "リキッドガラス",
-      materialLiquidDescription: "グローバルなブラー、奥行き、動的な屈折",
-      materialIntensityTitle: "マテリアルの強度",
-      materialIntensityCrystal: "クリスタル",
-      materialIntensityCrystalDescription: "最も透明で、ほのかな光沢",
-      materialIntensityClear: "クリア",
-      materialIntensityClearDescription: "軽やかなガラス質感で背景をより透過",
-      materialIntensityBalanced: "バランス",
-      materialIntensityBalancedDescription: "日常使用に適した層状の質感",
-      materialIntensityDeep: "ディープ",
-      materialIntensityDeepDescription: "より強い奥行きとハイライト",
-      materialIntensityFrosted: "フロスト",
-      materialIntensityFrostedDescription: "落ち着いた印象で、より強いカバー力",
+      paletteTitle: "配色スタイル",
+      paletteDescription: "全体の配色スタイルを選びます。主色と背景の雰囲気に影響します。",
+      paletteRouge: "ルージュピンク",
+      paletteRougeDescription: "温かくフレッシュなピンクで、軽やかで柔らかい印象。",
+      paletteSteel: "スチールブルー",
+      paletteSteelDescription: "落ち着いた理知的な冷たいブルーで、シンプルでシャープ。",
       languageTitle: "言語",
       languageDescription: "言語を切り替えます。",
       languageEnglish: "English",
@@ -3558,8 +3543,7 @@ export const jaJP: Translations = {
     },
     skills: {
       title: "エージェントスキル",
-      description:
-        "エージェントスキルの設定と有効状態を管理します。",
+      description: "エージェントスキルの設定と有効状態を管理します。",
       createSkill: "スキルを作成",
       emptyTitle: "エージェントスキルはまだありません",
       emptyDescription:
@@ -3609,8 +3593,7 @@ export const jaJP: Translations = {
     },
     account: {
       title: "アカウント設定",
-      description:
-        "プロフィール、連携アカウント、プライバシー設定を管理します",
+      description: "プロフィール、連携アカウント、プライバシー設定を管理します",
       profile: {
         title: "プロフィール情報",
         description: "プロフィールとアバターを更新します",
@@ -3728,8 +3711,10 @@ export const jaJP: Translations = {
       extraHeadersHint:
         "Header-Name: value の形式で 1 行に 1 つずつ入力します。User-Agent を制限する API（例：Kimi Coding）に必要です。",
       requiredFields: "Model ID、API キー、ベース URL は必須です",
-      fillRequiredBeforeTest: "先に Model ID、API キー、ベース URL を入力してください",
-      testEndpointHint: "実際のリクエストを送信してエンドポイントを確認します。",
+      fillRequiredBeforeTest:
+        "先に Model ID、API キー、ベース URL を入力してください",
+      testEndpointHint:
+        "実際のリクエストを送信してエンドポイントを確認します。",
       updateFailed: "更新に失敗しました",
       networkError: "ネットワークエラー",
       editModelTitle: (name: string) => `編集：${name}`,
@@ -3745,7 +3730,8 @@ export const jaJP: Translations = {
       deleteConfirm: (name: string) =>
         `モデル「${name}」は完全に削除されます。`,
       deleteModelTitle: "モデルを削除",
-      gatewayReturned: (status: number) => `ゲートウェイが ${status} を返しました`,
+      gatewayReturned: (status: number) =>
+        `ゲートウェイが ${status} を返しました`,
       cannotReachGateway: "ゲートウェイ API に接続できません",
       gatewayUrl: "ゲートウェイ URL",
       connected: "接続済み",
@@ -3796,8 +3782,7 @@ export const jaJP: Translations = {
         loading: "互換性診断を読み込み中",
         unavailable: "互換性診断は現在利用できません",
         notApplicable: "OpenAI 互換のエントリではありません",
-        fallbacks: (count: number) =>
-          `${count} 個のフォールバック`,
+        fallbacks: (count: number) => `${count} 個のフォールバック`,
         headers: (names: string) => `ヘッダー：${names}`,
         removedFields: (fields: string, count: number) =>
           `剥離 ${count > 5 ? `${fields}…` : fields}`,
@@ -3988,8 +3973,7 @@ export const jaJP: Translations = {
     reject: "Reject",
     approveExecute: "承認 & 実行",
     startQuest: "Quest を開始",
-    questDesc:
-      "複雑なタスクを記述し、Octopus が自律的に計画、実行、検証",
+    questDesc: "複雑なタスクを記述し、Octopus が自律的に計画、実行、検証",
     requirementPlaceholder: "達成したいことを記述...",
     executionPlan: "実行計画",
     verificationPassed: "検証合格",
@@ -4041,14 +4025,14 @@ export const jaJP: Translations = {
     queryPlaceholder: "ナレッジグラフについて質問を入力...",
     deleteEntity: "エンティティを削除",
     searchEntities: "エンティティを検索...",
-    entitiesExtracted:
-      "エンティティは会話から自動抽出されます",
+    entitiesExtracted: "エンティティは会話から自動抽出されます",
     detect: "Detect",
     noCommunities: "コミュニティがありません",
     clickDetect: "クリックしてコミュニティを検出",
     askQuestion: "質問する...",
     askToSearch: "質問して検索",
-    hybridDescription: "ハイブリッド検索はキーワードとセマンティックマッチングを組み合わせ",
+    hybridDescription:
+      "ハイブリッド検索はキーワードとセマンティックマッチングを組み合わせ",
     emptyStateTitle: "ナレッジベースは空です",
     emptyStateHint:
       "KG にはまだエンティティがありません · エージェントにドキュメントを読ませるかタスクを完了させてください · 抽出器がバックグラウンドでエンティティと関係を書き込みます。",
@@ -4131,7 +4115,8 @@ export const jaJP: Translations = {
       title: "Plugins",
       electronBadge: "Electron",
       webPreviewBadge: "Web プレビュー",
-      descElectron: "ローカルの unpacked Chromium 拡張機能フォルダーをインストール。",
+      descElectron:
+        "ローカルの unpacked Chromium 拡張機能フォルダーをインストール。",
       descWeb:
         "サードパーティプラグインのインストールには Electron デスクトップアプリが必要です。",
       installLocal: "ローカルプラグインをインストール",
@@ -4148,7 +4133,8 @@ export const jaJP: Translations = {
       emptyElectron: "まだプラグインがインストールされていません。",
       emptyElectronHint:
         "ローカルの unpacked プラグインフォルダーをインストールするとここに表示されます。",
-      emptyWeb: "localhost プレビューは Electron プラグイン API にアクセスできません。",
+      emptyWeb:
+        "localhost プレビューは Electron プラグイン API にアクセスできません。",
       placeholderTitle: "プラグインカタログプレースホルダー",
       placeholderDesc:
         "デスクトップアプリでローカルプラグインをインストール・管理。プレビューでも Octopus がサポートするプラグインカテゴリを表示。",
@@ -4337,12 +4323,11 @@ export const jaJP: Translations = {
     statusNotDetected: "未検出",
     availableCount: (count: number) => `${count} 個接続可能`,
     cancel: "Cancel",
-    connectSelected: (count: number) =>
-      `${count} Agent を接続`,
+    connectSelected: (count: number) => `${count} Agent を接続`,
     noPartnerSelected: "検出されたローカルパートナーを選択してください",
-    registerSuccess: (count: number) =>
-      `${count} 個のローカルパートナーを接続`,
-    alreadyExists: "これらのローカルパートナーはすでにエージェントライブラリにあります",
+    registerSuccess: (count: number) => `${count} 個のローカルパートナーを接続`,
+    alreadyExists:
+      "これらのローカルパートナーはすでにエージェントライブラリにあります",
     noPartnersAvailable:
       "接続可能なローカルパートナーがありません。対応するローカルツールを先にインストールしてください",
     registerFailed: "ローカルパートナーの接続に失敗しました",
@@ -4426,7 +4411,8 @@ export const jaJP: Translations = {
       confirmInputContent: "ページにコンテンツを入力します",
       confirmSubmitForm: "現在のフォームを送信する可能性があります",
       confirmSensitiveClick: "クリック対象はセンシティブな操作のようです",
-      confirmSensitiveAction: "ページのセマンティックアクションはセンシティブなようです",
+      confirmSensitiveAction:
+        "ページのセマンティックアクションはセンシティブなようです",
       stopAgentMessage:
         "[ユーザーがエージェントを手動停止 · これ以上の自動操作はありません]",
       maxLoopReached: (count) =>
@@ -4456,8 +4442,7 @@ export const jaJP: Translations = {
         "- 各プラットフォーム完了後、短い調査ログで報告: プラットフォーム / URL / 5つまでの要点 / 検証待ち。",
       researchRequirementPauseForSensitive:
         "- ログイン、アップロード、センシティブ情報の送信が必要な場合は一時停止してユーザーに確認。",
-      researchPlatformHintGemini:
-        "一般検索、長い質問、複数ターン分析",
+      researchPlatformHintGemini: "一般検索、長い質問、複数ターン分析",
       researchPlatformHintNotebookLM:
         "ナレッジベース、引用、ドキュメント内調査",
       researchPlatformNameDoubao: "Doubao",
@@ -4473,12 +4458,10 @@ export const jaJP: Translations = {
       needElectronError:
         "Electron が必要 · 現在ブラウザー（Electron ではない）で実行中",
       tabNotReadyError: "現在のタブの準備ができていません",
-      summarizePagePrompt:
-        "このページの核心内容を簡潔に要約、3-5 の要点。",
+      summarizePagePrompt: "このページの核心内容を簡潔に要約、3-5 の要点。",
       extractKeyPointsPrompt:
         "このページからすべての事実ポイントを順序付きリストとして抽出。",
-      translateToChinesePrompt:
-        "このページの主要な内容を完全に中国語に翻訳。",
+      translateToChinesePrompt: "このページの主要な内容を完全に中国語に翻訳。",
       currentPageLabel: "[現在のページ]",
       urlLabel: "URL：",
       titleLabel: "タイトル:",
@@ -4517,7 +4500,8 @@ export const jaJP: Translations = {
       enabled: "Enabled",
       disabled: "Disabled",
       removeAriaLabel: (name: string) => `${name} を削除`,
-      noExtensionsElectron: "まだサードパーティ拡張機能がインストールされていません。",
+      noExtensionsElectron:
+        "まだサードパーティ拡張機能がインストールされていません。",
       noExtensionsWeb:
         "localhost プレビューは Electron 拡張機能 API にアクセスできません。",
       comingSoonBadge: "Preview",
@@ -4541,13 +4525,12 @@ export const jaJP: Translations = {
       categoryDevelopment: "Development",
       categoryComingSoon: "近日公開",
       taglinePageAgent: "現在のページを実行可能なタスクコンテキストに変換",
-      taglineResearchClipper: "ウェブスニペット、ソース、スクリーンショットを収集",
-      taglineShieldLite:
-        "侵入的要素とトラッキングスクリプトを軽量ブロック",
+      taglineResearchClipper:
+        "ウェブスニペット、ソース、スクリーンショットを収集",
+      taglineShieldLite: "侵入的要素とトラッキングスクリプトを軽量ブロック",
       taglineCookieVault: "テストアカウントの隔離セッションを保存",
       taglineTranslatorLens: "選択テキストとページ領域をホバー翻訳",
-      taglineDomInspector:
-        "要素、セレクター、アクセシビリティツリーを直接検査",
+      taglineDomInspector: "要素、セレクター、アクセシビリティツリーを直接検査",
       taglineVisualRecorder: "クリックパスを記録して自動化ステップを生成",
       tagsPageAgent: ["Automation", "Web Operation", "AI"],
       tagsResearchClipper: ["Library", "Citation", "Screenshot"],
@@ -4616,8 +4599,7 @@ export const jaJP: Translations = {
       widgetTitleResearch: "調査ログ",
       widgetSubtitleResearch: "REC モードは外部 AI 結果をブリーフとして保存",
       widgetTitleTodayTasks: "今日のタスク",
-      widgetSubtitleTodayTasks:
-        "プラットフォームを開く、結果収集、ソース検証",
+      widgetSubtitleTodayTasks: "プラットフォームを開く、結果収集、ソース検証",
       panelTitleTheme: "Theme",
       panelTitleWidgets: "Widgets",
       panelTitleWallpaper: "Wallpaper",
@@ -4626,11 +4608,12 @@ export const jaJP: Translations = {
       panelTitleDesktopSettings: "デスクトップ設定",
       panelSubtitle: "ブラウザーデスクトップコントロールパネル",
       panelClose: "Close",
-      themeNames: ["Morning Mist Glass", "Dark Focus", "Fresh Blue-White"],
+      themeNames: ["配色に連動", "Morning Mist Glass", "Dark Focus", "Fresh Blue-White"],
       themeDescs: [
-        "Current theme · Soft grey-pink gradient",
-        "Suitable for night research and long reading",
-        "More like a productivity browser homepage",
+        "グローバル配色に自動で同期します",
+        "ソフトなグレー・ピンクのグラデーション",
+        "夜間の調査や長時間の読書に最適",
+        "生産性ブラウザのホームに近い",
       ],
       widgetPanelNames: ["Calendar", "Research Log", "Countdown", "Task Panel"],
       widgetPanelDescs: [
@@ -4773,7 +4756,8 @@ export const jaJP: Translations = {
       historyTab: (count: number) => `履歴 (${count})`,
       clearHistoryTitle: "履歴をクリア",
       clearHistory: "Clear",
-      noBookmarks: "ブックマークがまだありません · URL 旁の ⭐ をクリックしてブックマーク",
+      noBookmarks:
+        "ブックマークがまだありません · URL 旁の ⭐ をクリックしてブックマーク",
       noHistory: "ブラウジング履歴がありません",
       removeBookmarkTitle: "ブックマークを削除",
       deviceDesktop: "Desktop",
@@ -4859,8 +4843,7 @@ export const jaJP: Translations = {
     selectDevicePreset: "デバイスプリセットを選択",
     continueInFullBrowser: "完全ブラウザーで続行",
     takeoverButton: "Takeover",
-    sessionNeedsAttention: (issues) =>
-      `ブラウザセッションが要注意：${issues}`,
+    sessionNeedsAttention: (issues) => `ブラウザセッションが要注意：${issues}`,
     reconnectButton: "Reconnect",
     semanticSnapshotFallback: "ページセマンティックスナップショット",
     truncatedBadge: "Truncated",
@@ -4898,8 +4881,9 @@ export const jaJP: Translations = {
     appDescGemini: "包括的検索、複数ターン分析",
     appDescNotebookLM: "ライブラリ、引用、ドキュメント調査",
     appDescDoubao: "中国語調査、中国語書き換え",
-    appDescTongyiQianwen: "推論、コーディング、中国語 Q&A",
-    appDescWenxinYiyan: "Tongyi モデル、マルチモーダルチャット",
+    appDescDeepSeek: "推論、コーディング、中国語 Q&A",
+    appDescTongyiQianwen: "Tongyi モデル、マルチモーダルチャット",
+    appDescWenxinYiyan: "Baidu アシスタント、中国語作成",
     appDescTencentYuanbao: "中国語検索、資料要約",
     appDescPerplexity: "ウェブ検索、ソース手がかり",
     appDescChatGPT: "一般チャット、コーディング支援",
@@ -4931,8 +4915,7 @@ export const jaJP: Translations = {
     switchSearchEngine: "検索エンジンを切り替え",
     commonCategories: "よく使うカテゴリー",
     recentVisits: "最近の訪問",
-    recentVisitCount: (count: number) =>
-      `${count} 件の最近のアクセス`,
+    recentVisitCount: (count: number) => `${count} 件の最近のアクセス`,
     historyOnly: "履歴から",
     noRecentVisits: "最近の訪問がまだありません",
     commonEntries: "共通エントリー",
@@ -4990,18 +4973,15 @@ export const jaJP: Translations = {
     builderTooltip:
       "新規プロジェクト/空フォルダー：先に実行可能な最小スライスを構築",
     coderTooltip: "既存コードベース：構造を読み取り、小さな編集、検証",
-    developTooltip:
-      "新規/既存プロジェクトを自動処理する実装作業",
+    developTooltip: "新規/既存プロジェクトを自動処理する実装作業",
     auditTooltip: "証拠、リスク、優先度付きの品質監査",
     uxuiTooltip: "フロー、レイアウト、ビジュアル、回帰の UX/UI レビュー",
-    architectTooltip:
-      "アーキテクチャやマイグレーション：影響評価と段階的作業",
+    architectTooltip: "アーキテクチャやマイグレーション：影響評価と段階的作業",
     ultraTooltip:
       "Audit Ultra ワークフロー：段階的計画、ツール/サブタスクスケジューリング、検証、レビュー",
     teamCoderTooltip:
       "シニアプログラマーモード —制限付き権限でコーディングタスクを実行",
-    adminTooltip:
-      "システム管理者 —最高権限、すべてのエージェントと設定を管理",
+    adminTooltip: "システム管理者 —最高権限、すべてのエージェントと設定を管理",
     builderDesc: "新規プロジェクト",
     coderDesc: "既存コードベース",
     developDesc: "ビルド、修正、反復",
@@ -5015,8 +4995,7 @@ export const jaJP: Translations = {
       "既存の構造を先に読み、小ステップで編集し、関連チェックを実行。",
     developEffect:
       "プロジェクトスキャンが新規か既存かを処理。小さな検証ステップで実装。",
-    auditEffect:
-      "先に読んでから、証拠、重大度、修正提案とともに問題を報告。",
+    auditEffect: "先に読んでから、証拠、重大度、修正提案とともに問題を報告。",
     uxuiEffect:
       "レイアウト、インタラクション、コピー、仕上げ、レスポンシブ状態のブラウザーウォークスルーを優先。",
     architectEffect:
@@ -5051,6 +5030,15 @@ export const jaJP: Translations = {
     signalCommits: (count: number) => `${count} コミット`,
     signalReadme: "README を検出",
     signalSummaryEmpty: "追加のプロジェクトシグナルはありません",
+  },
+
+  // Intent-based mode auto-switch
+  modeIntent: {
+    suggestSwitch: (modeLabel: string) => `「${modeLabel}」モードに切り替えますか？`,
+    switch: "切り替え",
+    ignore: "無視",
+    autoSwitched: (modeLabel: string) =>
+      `「${modeLabel}」モードに自動切り替えしました`,
   },
 
   // Code page tabs
@@ -5110,7 +5098,8 @@ export const jaJP: Translations = {
     createCustomSkillDesc:
       "システムプロンプト付きの再利用可能なスキルパッケージを定義。",
     importSkill: "スキルをインポート",
-    importSkillDesc: "URL、GitHub Gist からインポート、または JSON/YAML を貼り付け。",
+    importSkillDesc:
+      "URL、GitHub Gist からインポート、または JSON/YAML を貼り付け。",
     name: "Name",
     category: "Category",
     tags: "タグ（カンマ区切り）",
@@ -5206,7 +5195,8 @@ export const jaJP: Translations = {
     noActiveDeployment:
       "アクティブなデプロイがありません。セットアップタブから設定・デプロイ。",
     noActiveDeploymentHint: "アクティブなデプロイがありません。",
-    noDeployments: "デプロイ履歴がまだありません。最初のプロジェクトをデプロイ！",
+    noDeployments:
+      "デプロイ履歴がまだありません。最初のプロジェクトをデプロイ！",
     noDeploymentsHint: "デプロイ履歴がまだありません。",
     requires: "Requires",
     confidence: "confidence",
@@ -5230,7 +5220,8 @@ export const jaJP: Translations = {
     rebuildFull: "再構築（完全再インデックス）",
     clearIndex: "インデックスをクリア",
     notIndexed: "コードベース未インデックス",
-    notIndexedHint: "コードベースをインデックスしてセマンティックコード検索を有効化。",
+    notIndexedHint:
+      "コードベースをインデックスしてセマンティックコード検索を有効化。",
     startIndexing: "インデックスを開始",
     noMatchingCode: "一致するコードが見つかりません。",
     indexingInProgress: "インデックス作成中",
@@ -5449,15 +5440,13 @@ export const jaJP: Translations = {
       toastCreated: "タスクを作成しました",
       toastFailed: "タスクの作成に失敗しました",
       title: "新規タスク",
-      description:
-        "チーム目標を実行可能で追跡可能な成果物付きタスクに分解。",
+      description: "チーム目標を実行可能で追跡可能な成果物付きタスクに分解。",
       taskTitleLabel: "タスクタイトル",
       descriptionLabel: "Details",
       sopLabel: "機能パック / SOP",
       assigneeLabel: "Agent を指派",
       titlePlaceholder: "例：参入すべきニッチ市場を調査",
-      descriptionPlaceholder:
-        "範囲、出力形式、制約、既存資料...",
+      descriptionPlaceholder: "範囲、出力形式、制約、既存資料...",
       autoMatchFreeform: "自動マッチまたは自由実行",
       loadingPacks: "機能パックを読み込み中",
       cancel: "Cancel",
@@ -5837,10 +5826,12 @@ export const jaJP: Translations = {
     source: "情報源",
     web: "Web",
     // Automation tabs
-    configuredTip: "自動化タスクは設定された頻度で実行され、クレジットを消費します。",
+    configuredTip:
+      "自動化タスクは設定された頻度で実行され、クレジットを消費します。",
     configuredTipToggle: "次回から表示しない",
     configuredEmptyTitle: "自動化タスクがありません",
-    configuredEmptyDescription: "テンプレートを選ぶか、会話で Agent に作成してもらってください。",
+    configuredEmptyDescription:
+      "テンプレートを選ぶか、会話で Agent に作成してもらってください。",
     createCustomTask: "カスタムタスク",
     useTemplate: "テンプレートを使用",
     // Create automation dialog
@@ -5849,7 +5840,8 @@ export const jaJP: Translations = {
     createTaskSuccess: "自動化タスクを作成しました",
     createTaskFailed: "自動化タスクの作成に失敗しました",
     createTaskTitle: "新規自動化タスク",
-    createTaskDescription: "タスク名、追跡トピック、実行頻度を設定してください。",
+    createTaskDescription:
+      "タスク名、追跡トピック、実行頻度を設定してください。",
     taskNameLabel: "タスク名",
     taskNamePlaceholder: "例：毎日の AI ニュース要約",
     topicLabel: "追跡トピック",
@@ -6007,8 +5999,7 @@ export const jaJP: Translations = {
     autoLabel: "auto",
     manualLabel: "manual",
     recommendations: "Recommendations",
-    noRecommendations:
-      "全システム良好です。現在おすすめはありません。",
+    noRecommendations: "全システム良好です。現在おすすめはありません。",
     syncFromIntel: "Intel から同期",
     syncing: "Syncing...",
     syncComplete: "同期完了",
@@ -6402,9 +6393,9 @@ export const jaJP: Translations = {
     comment: "Comment",
     cancel: "Cancel",
     noAnnotations: "まだ注釈がありません",
-    noAnnotationsHint: "メッセージ横のコメントアイコンをクリックして追加できます。",
-    annotation: (count: number) =>
-      `${count} 件の注釈`,
+    noAnnotationsHint:
+      "メッセージ横のコメントアイコンをクリックして追加できます。",
+    annotation: (count: number) => `${count} 件の注釈`,
     showResolved: (count: number) => `解決済みを表示 (${count})`,
     hideResolved: (count: number) => `解決済みを非表示 (${count})`,
     anonymous: "Anonymous",
@@ -6454,8 +6445,7 @@ export const jaJP: Translations = {
     definitionFound: (symbol, file, line) => `${symbol} -> ${file}:${line}`,
     definitionNotFound: (symbol) => `定義が見つかりません：${symbol}`,
     definitionLookupFailed: "定義の検索に失敗しました",
-    referencesFound: (count, symbol) =>
-      `${symbol} に ${count} 個の参照`,
+    referencesFound: (count, symbol) => `${symbol} に ${count} 個の参照`,
     referencesNotFound: (symbol) => `参照が見つかりません：${symbol}`,
     referencesLookupFailed: "参照の検索に失敗しました",
   },
@@ -6501,7 +6491,8 @@ export const jaJP: Translations = {
       "タスクを記述、または @Local File Agent でローカル資料を検索...",
     assigneeAll: "All",
     assigneeCount: (count: number) => `${count} 人`,
-    assigneeHint: "誰がこのタスクを開始するか選択。後からメンバーを追加できます",
+    assigneeHint:
+      "誰がこのタスクを開始するか選択。後からメンバーを追加できます",
     assigneeMenuTitle: "このタスクを誰に任せる",
     clearAssignee: "選択をクリアして全員に委ねる",
     localFileAgent: "ローカルファイル Agent",
@@ -6556,12 +6547,14 @@ export const jaJP: Translations = {
     clickToEnable: "無効 · クリックして有効化",
     recommended: "Recommended",
     bindAccountFirst: "先にログインしてください",
-    bindAccountDesc: "ログインページで電話番号ログイン後、公式モデルを一键有効化できます。",
+    bindAccountDesc:
+      "ログインページで電話番号ログイン後、公式モデルを一键有効化できます。",
     modelEnabled: (name: string) => `${name} が有効になりました`,
     enableFailed: "有効化に失敗しました",
     enableFailedWithMessage: (msg: string) => `有効化失敗：${msg}`,
     autoModelLabel: "Auto",
-    autoModelDescription: "タスクタイプに応じてシステムが最適なモデルを自動選択",
+    autoModelDescription:
+      "タスクタイプに応じてシステムが最適なモデルを自動選択",
     autoModelBadge: "Smart",
   },
 
@@ -6606,13 +6599,13 @@ export const jaJP: Translations = {
     factoryResetPending: "消去中…",
     factoryResetConfirm: "復元を実行",
     avatarTooLarge: "アバターは 5MB 未満にしてください",
-    sessionExpired: (reason: string) => `アカウントセッションが期限切れ（${reason}）`,
+    sessionExpired: (reason: string) =>
+      `アカウントセッションが期限切れ（${reason}）`,
     sessionExpiredDefaultReason: "別のデバイスからログインされました",
     sessionCacheHint:
       "以下に表示されているクレジットはキャッシュです。ログアウトして電話番号で再度ログインすると更新されます。",
     cachedSuffix: "（キャッシュ）",
-    expiredTooltip:
-      "名目残高と利用可能残高の差額（期限切れまたは凍結分）",
+    expiredTooltip: "名目残高と利用可能残高の差額（期限切れまたは凍結分）",
     profileUpdated: "プロフィールを更新しました",
     avatarUploaded: "アバターを更新しました",
     accountUnlinked: "アカウントの連携を解除しました",
@@ -6624,7 +6617,8 @@ export const jaJP: Translations = {
   // Subscription Settings
   subscriptionSettings: {
     upgradeTitle: "AI 体験をアップグレード",
-    upgradeDesc: "あらゆるタスクを支援する 7×24 対応のパーソナル AI アシスタント",
+    upgradeDesc:
+      "あらゆるタスクを支援する 7×24 対応のパーソナル AI アシスタント",
     currentPlan: "現在のプラン",
     upgradeNow: "今すぐアップグレード",
     contactUs: "お問い合わせ：",
@@ -6758,7 +6752,8 @@ export const jaJP: Translations = {
     deliveryActionUsePrimary: "主回答を採用して継続",
     deliveryActionUsePrimaryAndRetry: "主回答を採用し失敗メンバーをリトライ",
     deliveryActionAskMembers: "メンバーに補足を依頼",
-    deliveryActionRetryOrFallback: "メンバーをリトライまたは単独 Agent にフォールバック",
+    deliveryActionRetryOrFallback:
+      "メンバーをリトライまたは単独 Agent にフォールバック",
     deliveryActionFallback: "単独 Agent にフォールバック",
     rhythmActive: (name) => `${name} が処理中`,
     rhythmWorking: "コラボレーション実行中",
@@ -6810,6 +6805,29 @@ export const jaJP: Translations = {
     refreshFailed: "更新に失敗しました",
   },
 
+  // ローカルクレジット台帳 / クレジットセンター
+  creditsCenter: {
+    title: "クレジットセンター",
+    totalBalance: "総クレジット",
+    accountBalance: "アカウントクレジット",
+    communityBalance: "コミュニティクレジット",
+    signIn: "毎日チェックイン",
+    signInDone: "本日はチェックイン済み",
+    signInSuccess: (n: number) => `チェックイン成功！${n} クレジット獲得`,
+    signInFailed: "チェックインに失敗しました",
+    earned: "累計獲得",
+    spent: "累計消費",
+    ledger: "取引明細",
+    emptyLedger: "まだ取引履歴がありません。コミュニティを覗いてみましょう",
+    earnHints: "クレジットの稼ぎ方",
+    earnHintSignIn: (n: number) => `毎日チェックイン +${n}`,
+    earnHintPublish: (n: number) => `アイデアを投稿 +${n}`,
+    earnHintFork: (n: number) => `コンテンツがフォークされた +${n}/回`,
+    earnHintLike: (n: number) => `コンテンツがいいねされた +${n}/回`,
+    spendNoBalance:
+      "コミュニティクレジットが不足しています。チェックインまたは創作で稼ぎましょう",
+  },
+
   // Daily credits claim
   dailyClaim: {
     title: "毎日ログインボーナス",
@@ -6822,7 +6840,8 @@ export const jaJP: Translations = {
     claimedToday: "本日分は既に受け取り済み",
     claiming: "受け取り中…",
     drawing: "抽選中…",
-    claimSuccess: (n: number) => `受け取り成功、${n.toLocaleString()} クレジットを獲得`,
+    claimSuccess: (n: number) =>
+      `受け取り成功、${n.toLocaleString()} クレジットを獲得`,
     claimFailed: "受け取りに失敗しました",
     dismissToday: "今日は再表示しない",
     manualEntry: "デイリークレジットを受け取り",
@@ -6831,8 +6850,7 @@ export const jaJP: Translations = {
   // Pay order dialog + pricing glue
   payOrder: {
     title: "WeChat QR で支払い",
-    subtitle:
-      "現在 WeChat 支払いのみ対応、他の決済方法は順次対応予定",
+    subtitle: "現在 WeChat 支払いのみ対応、他の決済方法は順次対応予定",
     backToPricing: "料金プランに戻る",
     purchaseInfo: "購入情報",
     planName: "Plan",
@@ -6899,8 +6917,7 @@ export const jaJP: Translations = {
     browserStatusWaiting: "ログイン待ち...",
     browserStep1: "1. 開いたブラウザウィンドウでログイン",
     browserStep2: "2. ログイン完了後にウィンドウが自動的に閉じます",
-    browserStep3:
-      "3. 認証情報はローカルに保存され、いつでも取り消せます",
+    browserStep3: "3. 認証情報はローカルに保存され、いつでも取り消せます",
     browserCookiesLabel: "Cookies：",
     browserBearerLabel: "Bearer Token：",
     browserCaptured: "✓ 取得済み",
@@ -7141,7 +7158,8 @@ export const jaJP: Translations = {
     replySource_workflow: "Workflow",
     replySource_slowHint: "ワークフロー · 数秒",
     cardField_workflowPick: "登録済みワークフローを選択…",
-    cardField_workflowFallback: "ワークフロー失敗時のフォールバックテキスト (任意)",
+    cardField_workflowFallback:
+      "ワークフロー失敗時のフォールバックテキスト (任意)",
   },
 
   // RecipeForge panel (app/workspace/reflex/gepa-panel.tsx) · prompt evolution
@@ -7157,14 +7175,14 @@ export const jaJP: Translations = {
     knobEvalTasks: "評価タスク / イテレーション",
     autoProposeButton: "敗北レシピに自動提案",
     autoProposeRunning: "提案中…",
-    autoProposeTitle:
-      "全敗北レシピを検索し、それぞれにフォージ修正を提案",
+    autoProposeTitle: "全敗北レシピを検索し、それぞれにフォージ修正を提案",
     runForgeButton: "Forge を実行",
     runForgeRunning: "実行中…",
     paretoFrontTitle: (count: number) => `Pareto フロント · ${count} 候補`,
     iterCount: (count: number) => `${count} イテレーション`,
     elapsedSeconds: (seconds: number) => `${seconds.toFixed(1)} 秒`,
-    thisRunHistory: (count: number) => `今回の実行イテレーション履歴 (${count})`,
+    thisRunHistory: (count: number) =>
+      `今回の実行イテレーション履歴 (${count})`,
     addendumsByScope: (count: number) => `スコープ別アドエンダム · ${count}`,
     addendumCsvTooltip: "アクティブアドエンダムを CSV でダウンロード",
     addendumRefresh: "refresh",
@@ -7218,7 +7236,8 @@ export const jaJP: Translations = {
       `iter=${iter} スキップ：${reason}`,
     historyEarlyStop: (iter: string) =>
       `iter=${iter} · 早期停止（K イテレーション フロント未変化）`,
-    historySeed: (frontSize: string) => `iter=0 シード · front_size=${frontSize}`,
+    historySeed: (frontSize: string) =>
+      `iter=0 シード · front_size=${frontSize}`,
     historyIter: (iter: string) => `iter=${iter}`,
     historyImproved: "✓ 改善あり",
     previewSummary: "preview",
@@ -7274,8 +7293,7 @@ export const jaJP: Translations = {
   appAuthWrapperPage: {
     securityKicker: "Security",
     pageTitle: "アプリ認可",
-    pageSubtitle:
-      "アプリケーションのアクセストークンと認可設定を管理。",
+    pageSubtitle: "アプリケーションのアクセストークンと認可設定を管理。",
     feature1Title: "アクセス制御",
     feature1Desc:
       "どのアプリケーションがワークスペースリソースにアクセスできるかを制御。",
@@ -7393,7 +7411,8 @@ export const jaJP: Translations = {
       memoryConsolidator: "MemoryConsolidator",
       memoryConsolidatorHint: (n) => `${n} 軌跡をスキャン`,
       kgUpdater: "KGUpdater",
-      kgUpdaterHint: "イベントストリームからトリプルを抽出してナレッジグラフに書き込み",
+      kgUpdaterHint:
+        "イベントストリームからトリプルを抽出してナレッジグラフに書き込み",
       workflowRewriter: "WorkflowRewriter",
       workflowRewriterHint: "ワークフローテンプレートの書き換えを提案",
       recipeEvaluator: "RecipeEvaluator",
@@ -7553,7 +7572,8 @@ export const jaJP: Translations = {
     statAvoidRuleHint: "次回自動回避",
     statAvoidRuleTooltip:
       "複数回の振り返り後に抽出された安定したリマインダー。タスク品質に影響する繰り返し問題のみここに保存されます。",
-    statAvoidRuleDesc: "今後の類似タスクはこれらのリマインダーを優先的に参照します。",
+    statAvoidRuleDesc:
+      "今後の類似タスクはこれらのリマインダーを優先的に参照します。",
     statPatternMem: "有効な做法",
     statPatternMemHint: "安定後に保存",
     statPatternMemTooltip:
@@ -7647,7 +7667,8 @@ export const jaJP: Translations = {
     profileLaxBlurb:
       "シークレットのみハードブロック · PII は書き換えず記録のみ · ジャッジは完全に監査モード · エアギャップ環境 / 内部の信頼されたネットワーク向け。",
     activeTag: "ACTIVE",
-    profileLoadFailed: "（バックエンドに接続できません · プロファイルの状態を取得できません）",
+    profileLoadFailed:
+      "（バックエンドに接続できません · プロファイルの状態を取得できません）",
     alternativeUnlockTitle: "その他の解除方法",
     altEnvLabel: "環境変数：",
     altEnvDesc: "起動前に OCTOPUS_IDENTITY_LOCK=0 を設定 · グローバルに適用",
@@ -7719,7 +7740,8 @@ export const jaJP: Translations = {
     termsPrefix: "ログインすることで、以下に同意したものとみなされます",
     termsLink: "利用規約",
     jwtNote: "JWT はローカルに保存されます · 期限切れで自動的に無効化",
-    mockModeBanner: "⚙️ Mock モード · 実際の SMS は送信されません · 開発/デモ専用",
+    mockModeBanner:
+      "⚙️ Mock モード · 実際の SMS は送信されません · 開発/デモ専用",
     mockCodeLabel: (code: string) => `[mock] 認証コード · ${code}`,
     mockServerLog: "[mock] サーバーログで '[MOCK SMS]' を検索してください",
     phoneLabel: "電話番号",
@@ -7738,7 +7760,8 @@ export const jaJP: Translations = {
     usernameLabel: "ユーザー名",
     displayNameLabel: "表示名（任意）",
     loggingIn: "ログイン中…",
-    errorServiceDisabled: "サービスが有効になっていません · 管理者にお問い合わせください",
+    errorServiceDisabled:
+      "サービスが有効になっていません · 管理者にお問い合わせください",
     errorUpstream: "上流に接続できません · 後でもう一度お試しください",
     errorCodeInvalid: "コードが無効または期限切れです",
     errorNotInWhitelist: "ユーザー名がホワイトリストに登録されていません",
@@ -7823,8 +7846,7 @@ export const jaJP: Translations = {
       code: "認証コードを入力してください",
     },
     terms: {
-      autoRegister:
-        "未登録の電話番号は自動的にアカウントが作成されます",
+      autoRegister: "未登録の電話番号は自動的にアカウントが作成されます",
       emailAutoRegister:
         "未登録のメールアドレスは自動的にアカウントが作成されます",
       agreeTo: "ログインすることで、以下に同意したものとみなされます",
@@ -7974,8 +7996,7 @@ export const jaJP: Translations = {
       "ロボットセキュリティ設定で「署名」をチェックした時に表示されるシークレット。空欄で署名検証をスキップ（内網のみ信頼可能）。",
     feishuAppIdHint:
       "Feishu オープンプラットフォーム · カスタムアプリ · 認証情報ページの App ID。",
-    feishuVerificationTokenPlaceholder:
-      "(イベント購読ページで提供)",
+    feishuVerificationTokenPlaceholder: "(イベント購読ページで提供)",
     feishuVerificationTokenHint:
       "イベント購読ページの Verification Token。各イベントペイロードに含まれます。",
     telegramBotTokenHint: "@BotFather で bot を作成した時に取得した Token。",
@@ -7993,8 +8014,7 @@ export const jaJP: Translations = {
     botSuffix: "Bot",
     confirmDisconnect: (name: string) =>
       `${name} の認証情報を削除し接続を切断しますか？`,
-    unsupportedPlatformDesc1:
-      "のインタラクティブ接続はまだ開発中です。現在は",
+    unsupportedPlatformDesc1: "のインタラクティブ接続はまだ開発中です。現在は",
     unsupportedPlatformDesc2: "で設定後サービスを再起動できます。",
   },
 
@@ -8004,7 +8024,8 @@ export const jaJP: Translations = {
     empty: "まだ実行記録がありません",
     loadFailed: "実行タイムラインの読み込みに失敗しました",
     noMatches: "一致するタスクがありません",
-    noMatchesDescription: "別の task_id キーワードを試すか、検索をクリアしてください。",
+    noMatchesDescription:
+      "別の task_id キーワードを試すか、検索をクリアしてください。",
     searchPlaceholder: "task_id を検索...",
     refresh: "Refresh",
     noTask: "(タスクなし)",
@@ -8082,8 +8103,7 @@ export const jaJP: Translations = {
     selectTeam: "グループを選択",
     noTeams: "まだグループがありません、下から協力者を招待",
     memberCount: (count) => `${count} メンバー`,
-    confirmDisband: (name) =>
-      `グループ "${name}" を解散しますか？`,
+    confirmDisband: (name) => `グループ "${name}" を解散しますか？`,
     disbandTeam: "グループを解散",
     createTeam: "協力者を招待",
   },
@@ -8203,7 +8223,8 @@ export const jaJP: Translations = {
     filterUnselected: "Unselected",
     noArmsFound: "一致する ARM バンドルがありません",
     extraAffinityLabel: "extra_affinity",
-    extraAffinityHint: "カンマ区切りのキーワード · インテントルーティングに使用",
+    extraAffinityHint:
+      "カンマ区切りのキーワード · インテントルーティングに使用",
     extraAffinityPlaceholder: "code、refactor、debug",
     privateSkillsLabel: "private_skills",
     privateSkillsHint:
@@ -8222,10 +8243,8 @@ export const jaJP: Translations = {
     customSkillSource: "カスタムスキル",
     noSkillsFound: "一致するスキルがありません",
     permissionsLabel: "ランタイム権限",
-    permissionsHint:
-      "グローバルゲート、Agent 付与、最終有効権限は個別に表示。",
-    permissionEffectiveCount: (enabled, total) =>
-      `${enabled}/${total} 有効`,
+    permissionsHint: "グローバルゲート、Agent 付与、最終有効権限は個別に表示。",
+    permissionEffectiveCount: (enabled, total) => `${enabled}/${total} 有効`,
     permissionGlobalGate: "グローバルゲート",
     permissionAgentGrant: "Agent 付与",
     permissionEffective: "Effective",
@@ -8241,8 +8260,7 @@ export const jaJP: Translations = {
     permissionBlockedByGlobal: "グローバル能力ゲートでブロックされました。",
     permissionBlockedByAgent:
       "グローバルゲートは有効ですが、この Agent の能力臂やスキル許可リストに該当能力がありません。",
-    permissionDefaultGrantHint:
-      "原子 / デフォルト能力。全 Agent に許可。",
+    permissionDefaultGrantHint: "原子 / デフォルト能力。全 Agent に許可。",
     permissionUpdateFailed: (msg) => `権限更新失敗：${msg}`,
     budgetLabel: "Budget",
     budgetOverride: "override",
@@ -8327,10 +8345,8 @@ export const jaJP: Translations = {
   deepResearchRoles: {
     marketLandscape: {
       name: "市場格局",
-      focus:
-        "市場規模、主要プレイヤー、製品ライン、地域差異、トレンド",
-      deliverable:
-        "市場格局サマリー、ベンダーテーブル、トレンド、不確実性",
+      focus: "市場規模、主要プレイヤー、製品ライン、地域差異、トレンド",
+      deliverable: "市場格局サマリー、ベンダーテーブル、トレンド、不確実性",
       searchAngles: [
         "global and China market overview",
         "major vendors and product families",
@@ -8351,10 +8367,8 @@ export const jaJP: Translations = {
     },
     productPricing: {
       name: "製品 & プライシング",
-      focus:
-        "価格帯、パフォーマンス、機能、スペック、バンドル、差別化",
-      deliverable:
-        "価格 / 性能 / 機能比較表と購買基準",
+      focus: "価格帯、パフォーマンス、機能、スペック、バンドル、差別化",
+      deliverable: "価格 / 性能 / 機能比較表と購買基準",
       searchAngles: [
         "pricing tiers and best sellers",
         "spec comparison performance benchmark",
@@ -8365,8 +8379,7 @@ export const jaJP: Translations = {
       name: "チャネル & 営業",
       focus:
         "販売チャネル、流通モデル、コンテンツチャネル、地域、シェア代理指標",
-      deliverable:
-        "チャネルマップ、営業モデル、シェア代理指標、証拠リンク",
+      deliverable: "チャネルマップ、営業モデル、シェア代理指標、証拠リンク",
       searchAngles: [
         "retail ecommerce distributors",
         "market share shipment proxy",
@@ -8375,10 +8388,8 @@ export const jaJP: Translations = {
     },
     skeptic: {
       name: "Skeptic",
-      focus:
-        "誇大、陳腐化、偏見、薄弱、矛盾する情報",
-      deliverable:
-        "リスクリスト、証拠信頼性スコア、追跡検証質問",
+      focus: "誇大、陳腐化、偏見、薄弱、矛盾する情報",
+      deliverable: "リスクリスト、証拠信頼性スコア、追跡検証質問",
       searchAngles: [
         "contradictory evidence",
         "source reliability",
@@ -8573,8 +8584,7 @@ export const jaJP: Translations = {
     viewMachine: "マシンを表示",
     viewResult: "結果を表示",
     readyToReadEditVerify: "コードの読み取り、編集、検証の準備完了",
-    readyToBreakdownAndGather:
-      "問題の分解と証拠収集の準備完了",
+    readyToBreakdownAndGather: "問題の分解と証拠収集の準備完了",
     readyToExecuteTask: "タスク実行の準備完了",
     readyToHandleCodeTask: "コードタスク処理の準備完了",
     readyForAgentCollaboration: "Agent コラボレーションの準備完了",
@@ -9050,6 +9060,8 @@ export const jaJP: Translations = {
       docsDetail: "トピック / ソース / 最近",
       imagesLabel: "画像",
       imagesDetail: "ライブラリ / トピック / ソース",
+      videosLabel: "動画",
+      videosDetail: "キーフレーム / 意味検索",
       computerLabel: "このMac",
       computerDetail: "ローカルディスク",
       sourcesLabel: "許可フォルダ",
@@ -9123,6 +9135,50 @@ export const jaJP: Translations = {
       filterOcr: "OCR済み",
       filterLocalLibrary: "ローカルライブラリ",
       ocrBadge: "OCR済み",
+    },
+    videos: {
+      title: "動画",
+      subtitle: "{count} 項目 · キーフレーム意味検索と人物検索",
+      searchLabel: "動画を検索：",
+      badgeAllVideos: "すべての動画",
+      indexNote: "動画インデックス · キーフレーム意味検索",
+      indexAction: "インデックスを再構築",
+      indexing: "インデックス構築中…",
+      noResults: "条件に一致する動画はありません",
+      colName: "名前",
+      colLocation: "場所",
+      colSize: "サイズ",
+      colDuration: "長さ",
+      colModified: "更新日",
+      colActions: "アクション",
+      footerNote:
+        "動画はローカルでキーフレームを抽出しベクトルインデックス化します。元ファイルはアップロードされません。",
+      tabVideos: "動画",
+      tabPeople: "人物",
+      tabTags: "タグ",
+      searchPlaceholder: "動画の内容や文字を検索…",
+      searchHint: "キーフレーム意味、人物、台詞、動画内の文字に対応",
+      noIndex:
+        "動画インデックスが未作成です。「インデックスを再構築」をクリックしてください",
+      noFaces: "認識された人物はまだありません",
+      noTags: "シーンタグはまだありません",
+      noOcr: "この文字を含む動画シーンが見つかりません",
+      summary: "内容サマリー",
+      cover: "カバー",
+      duration: "長さ",
+      peopleCount: (n) => `${n} 人`,
+      faceCount: (n) => `${n} 個のシーン中の ${n} 人`,
+      player: {
+        open: "再生",
+        close: "閉じる",
+        prev: "前へ",
+        next: "次へ",
+        atTime: (t) => `${t} に移動`,
+      },
+      ocr: {
+        label: "動画内の文字",
+        hint: "キーフレームに対して OCR 文字認識を行います",
+      },
     },
     apps: {
       title: "アプリ",

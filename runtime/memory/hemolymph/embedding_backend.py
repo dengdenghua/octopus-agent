@@ -33,7 +33,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-_DEFAULT_MODEL = "all-MiniLM-L6-v2"
+# fastembed needs the fully-qualified repo id; the bare name it can't resolve.
+_DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 _TIMEOUT_S = 30.0
 
 _ST_MODEL: Any = None

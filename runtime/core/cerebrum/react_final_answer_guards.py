@@ -93,6 +93,21 @@ def _record_rejected_step(
     )
 
 
+_CODE_FENCE_RE = re.compile(r"```[^\n]*\n.*?```", re.DOTALL)
+
+
+def _strip_code_fences(text: str) -> str:
+    """Remove fenced code blocks (```...```) from a candidate answer.
+
+    Code deliverables present ``eval``/``exec``/``__import__``/``compile``
+    inside markdown fences. Those are display-only tokens, not runtime calls
+    the agent is about to run, so the pre-emit guard must not buffer the
+    whole stream on them — the terminal guard in ``_evaluate_final_answer_guards``
+    still vets the full text for genuinely dangerous execution.
+    """
+    return _CODE_FENCE_RE.sub(" ", text or "")
+
+
 def _looks_like_observation_echo(text: str) -> bool:
     """True when model prose is leaked tool/protocol text, not an answer."""
     stripped = (text or "").lstrip()
@@ -146,10 +161,18 @@ def _final_answer_needs_pre_emit_guard(
     if _incomplete_final_answer_guard(body) is not None:
         return True
     lower = body.lower()
-    # Only real executable risk forces buffering. ``subprocess``/``os.system``
-    # and friends are kept because previewing an actual command before it is
-    # vetted is the one case where streaming is unsafe.
-    if (
+    # In code mode the answer *is* the deliverable: the model is presenting
+    # code that routinely contains subprocess/os.system/eval/exec or shell
+    # command text. Buffering on those tokens would freeze the stream the
+    # moment the first one appears, then dump the whole report at once —
+    # exactly the "choppy" code streaming users see. Displaying code is safe
+    # (the terminal guard in _evaluate_final_answer_guards still vets any
+    # real tool execution), so in code mode only genuinely dangerous explicit
+    # exec (eval/exec/__import__/compile of a payload) and secret leakage
+    # force buffering. Keyword presence and shell-injection / unsafe-deser /
+    # destructive-call patterns — which are normal in code deliverables —
+    # only force buffering outside code mode.
+    if not is_code_mode and (
         "subprocess" in lower
         or "os.system" in lower
         or "os.popen" in lower
@@ -162,13 +185,23 @@ def _final_answer_needs_pre_emit_guard(
         or "rm -rf" in lower
     ):
         return True
-    return bool(
-        _detect_secrets_in_payload(body)
-        or _detect_dynamic_exec_in_payload(body)
-        or _detect_shell_injection_in_payload(body)
+    # Dynamic-exec token detection must ignore fenced code blocks: in code
+    # mode the deliverable routinely contains eval/exec/__import__/compile
+    # inside fences, which are display-only. Only a dynamic-exec call in the
+    # surrounding prose (i.e. the model proposing to actually run it) should
+    # buffer the stream. Secrets are still checked on the full text so a
+    # leaked key inside a code block is caught before it streams.
+    if _detect_secrets_in_payload(body):
+        return True
+    if _detect_dynamic_exec_in_payload(_strip_code_fences(body)):
+        return True
+    if not is_code_mode and (
+        _detect_shell_injection_in_payload(body)
         or _detect_unsafe_deser_in_payload(body)
         or _detect_destructive_calls_in_payload(body)
-    )
+    ):
+        return True
+    return False
 
 
 def _evaluate_final_answer_guards(

@@ -430,16 +430,13 @@ def _phase_6b_model_stream(
                                 _final_stream_started = True
                                 _visible_stream_state["chars"] = len(answer_so_far)
                         elif (
-                            len(joined) >= 120
+                            len(joined) >= 20
                             and not _native_orientation_emitted
-                            and not _THOUGHT_RE.search(joined)
-                            and not _ACTION_RE.search(joined)
-                            and not _looks_like_observation_echo(joined)
-                            and "<tool_call>" not in joined
-                            and "<tool_invocation" not in joined
-                            and "<function=" not in joined
-                            and not _looks_like_special_tool_envelope(joined)
-                            and "<final_answer" not in joined.lower()
+                            and not _THOUGHT_RE.match(joined.lstrip())
+                            and not _ACTION_RE.match(joined.lstrip())
+                            and not _looks_like_observation_echo(joined[:80])
+                            and not joined.lstrip().startswith(("<tool_call>", "<tool_invocation", "<function=", "<final_answer"))
+                            and not _looks_like_special_tool_envelope(joined[:100])
                         ):
                             # Zero-anchor chat-style answer: model is
                             # writing plain markdown (no Thought/Action/

@@ -632,6 +632,21 @@ const newLiveEventScopeCache = (): LiveEventScopeCache => ({
 const conversationEventCache = newLiveEventScopeCache();
 const lastTurnEventCache = newLiveEventScopeCache();
 
+// Scope-level array caches. The reducer only allocates a new ``turns`` array (and
+// a new last-turn object) when a turn was added/replaced/streamed; a stable
+// reference therefore implies the derived event array is unchanged. When the
+// owning scope reference AND the ``pendingApprovals`` reference are both stable,
+// the previously-computed ``LiveToolEvent[]`` array is returned as-is, so its
+// identity is stable across calls and downstream memo/snapshot layers keyed on
+// identity hold during streaming. WeakMaps: entries die with the reducer state.
+interface CachedEventScope {
+  pendingApprovals: PendingApproval[];
+  events: LiveToolEvent[];
+}
+const conversationEventScopeCache = new WeakMap<Turn[], CachedEventScope>();
+const lastTurnEventScopeCache = new WeakMap<Turn, CachedEventScope>();
+const lastTurnEmptyScopeCache = new WeakMap<Turn[], CachedEventScope>();
+
 // Stamp the report-deliverable flag on every freshly constructed event
 // (cache-miss paths only). The page-level "requires report deliverable"
 // check reads the flag instead of stringifying input/output on every
@@ -721,6 +736,10 @@ function cachedApprovalToLiveEvent(
 export function liveToolEventsFromConversation(
   conv: Conversation,
 ): LiveToolEvent[] {
+  const cached = conversationEventScopeCache.get(conv.turns);
+  if (cached && cached.pendingApprovals === conv.pendingApprovals) {
+    return cached.events;
+  }
   const itemEvents = conv.turns.flatMap((turn, turnIndex) => {
     const events = turn.items
       .map((item, itemIndex) =>
@@ -739,7 +758,7 @@ export function liveToolEventsFromConversation(
     );
     return phaseEvent ? [...events, phaseEvent] : events;
   });
-  return [
+  const events = [
     ...itemEvents,
     ...conv.pendingApprovals.map((approval, index) =>
       cachedApprovalToLiveEvent(
@@ -749,37 +768,63 @@ export function liveToolEventsFromConversation(
       ),
     ),
   ];
+  conversationEventScopeCache.set(conv.turns, {
+    pendingApprovals: conv.pendingApprovals,
+    events,
+  });
+  return events;
 }
 
 export function liveToolEventsFromLastTurn(
   conv: Conversation,
 ): LiveToolEvent[] {
   const last = conv.turns[conv.turns.length - 1];
-  const itemEvents = last
-    ? last.items
-        .map((item, index) =>
-          cachedItemToLiveEvent(lastTurnEventCache, item, last, index + 1),
-        )
-        .filter((event): event is LiveToolEvent => event !== null)
-    : [];
-  const phaseEvent = last
-    ? cachedPhaseSnapshotsToLiveEvent(
-        lastTurnEventCache,
-        last,
-        itemEvents.length + 1,
-      )
-    : null;
-  const events = phaseEvent ? [...itemEvents, phaseEvent] : itemEvents;
-  return [
-    ...events,
+  if (!last) {
+    const cached = lastTurnEmptyScopeCache.get(conv.turns);
+    if (cached && cached.pendingApprovals === conv.pendingApprovals) {
+      return cached.events;
+    }
+    const events = conv.pendingApprovals.map((approval, index) =>
+      cachedApprovalToLiveEvent(lastTurnEventCache, approval, index + 1),
+    );
+    lastTurnEmptyScopeCache.set(conv.turns, {
+      pendingApprovals: conv.pendingApprovals,
+      events,
+    });
+    return events;
+  }
+  const cached = lastTurnEventScopeCache.get(last);
+  if (cached && cached.pendingApprovals === conv.pendingApprovals) {
+    return cached.events;
+  }
+  const itemEvents = last.items
+    .map((item, index) =>
+      cachedItemToLiveEvent(lastTurnEventCache, item, last, index + 1),
+    )
+    .filter((event): event is LiveToolEvent => event !== null);
+  const phaseEvent = cachedPhaseSnapshotsToLiveEvent(
+    lastTurnEventCache,
+    last,
+    itemEvents.length + 1,
+  );
+  const eventsWithPhase = phaseEvent
+    ? [...itemEvents, phaseEvent]
+    : itemEvents;
+  const events = [
+    ...eventsWithPhase,
     ...conv.pendingApprovals.map((approval, index) =>
       cachedApprovalToLiveEvent(
         lastTurnEventCache,
         approval,
-        events.length + index + 1,
+        eventsWithPhase.length + index + 1,
       ),
     ),
   ];
+  lastTurnEventScopeCache.set(last, {
+    pendingApprovals: conv.pendingApprovals,
+    events,
+  });
+  return events;
 }
 
 function approvalToLiveEvent(

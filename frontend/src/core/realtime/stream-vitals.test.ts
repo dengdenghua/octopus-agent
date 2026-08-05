@@ -146,8 +146,13 @@ describe("seedVitalsFromResumedTurn", () => {
     expect(m.activeTurnId).toBe("turn-resumed");
     expect(m.turnStartedAt).toBe(T0 - 30_000);
     expect(m.lastActivityAt).toBe(T0);
+    // Before the first agent item arrives, stay in "waiting" indefinitely
+    // — the model may be doing server-side reasoning (especially non-thinking
+    // models that emit zero intermediate tokens). Flagging TTFT silence as
+    // "slow" was a false positive that made every long-pondering turn look stuck.
     expect(classify(m, T0 + 9_999).phase).toBe("waiting");
-    expect(classify(m, T0 + 10_000).phase).toBe("slow");
+    expect(classify(m, T0 + 10_000).phase).toBe("waiting");
+    expect(classify(m, T0 + 60_000).phase).toBe("waiting");
   });
 
   it("restores working state when a resumed turn already has agent output", () => {

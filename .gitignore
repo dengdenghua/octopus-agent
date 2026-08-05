@@ -208,6 +208,10 @@ evidence/
 .codex-audit/
 .design-qa/
 design-qa.md
+kimi_replay_capture/
+design-qa-assets/
+reports/
+frontend/uv_bin/
 
 # Avatar-generation intermediate backups — keep on disk, not in git
 agents/*/visuals/backups/

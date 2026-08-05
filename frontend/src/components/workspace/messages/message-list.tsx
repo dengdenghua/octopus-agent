@@ -1052,6 +1052,11 @@ export function MessageList({
     return count;
   }, [groupedMessages, latestHumanGroupIndex, thread.error, thread.isLoading]);
   const groupRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // Holds the ResizeObserver created in the turn-locator effect so the
+  // activity-observer effect below can switch which marker node it watches
+  // without tearing down the scroll/resize listeners.
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const observedMarkerRef = useRef<string | null>(null);
   const resolveAgentIdentity = useCallback(
     (msg?: (typeof messages)[number]): AgentIdentity => {
       const aiMsg = msg?.type === "ai" ? (msg as AIMessage) : undefined;
@@ -1215,14 +1220,17 @@ export function MessageList({
       typeof ResizeObserver === "undefined"
         ? null
         : new ResizeObserver(scheduleUpdate);
-    if (resizeObserver) {
-      if (scrollElement instanceof HTMLElement) {
-        resizeObserver.observe(scrollElement);
-      }
-      for (const marker of turnMarkers) {
-        const node = groupRefs.current[marker.key];
-        if (node) resizeObserver.observe(node);
-      }
+    resizeObserverRef.current = resizeObserver;
+    observedMarkerRef.current = null;
+    // Only observe the scroll container here. Historical turns run under
+    // `content-visibility:auto` (`.message-turn-history`), so they are skipped
+    // from layout while off-screen and essentially never resize; observing all
+    // of them made the observer list grow linearly with turn count on long
+    // conversations. The only node that actually grows during streaming is the
+    // active turn's marker, which the activity-observer effect below subscribes
+    // to (and switches) based on activeTurnKey.
+    if (resizeObserver && scrollElement instanceof HTMLElement) {
+      resizeObserver.observe(scrollElement);
     }
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
@@ -1232,8 +1240,30 @@ export function MessageList({
       }
       window.removeEventListener("resize", scheduleUpdate);
       resizeObserver?.disconnect();
+      resizeObserverRef.current = null;
+      observedMarkerRef.current = null;
     };
   }, [structuralFingerprint, turnMarkers]);
+
+  // Switch which marker node the shared ResizeObserver watches as the active
+  // turn changes. Keeps the observer count bounded (scroll container + 1
+  // active marker) regardless of how many historical turns exist.
+  useEffect(() => {
+    const observer = resizeObserverRef.current;
+    if (!observer) return;
+    const prevKey = observedMarkerRef.current;
+    if (prevKey) {
+      const prevNode = groupRefs.current[prevKey];
+      if (prevNode) observer.unobserve(prevNode);
+    }
+    observedMarkerRef.current = null;
+    if (!activeTurnKey) return;
+    const node = groupRefs.current[activeTurnKey];
+    if (node) {
+      observer.observe(node);
+      observedMarkerRef.current = activeTurnKey;
+    }
+  }, [activeTurnKey, structuralFingerprint]);
 
   const scrollToTurn = (key: string) => {
     setActiveTurnKey(key);

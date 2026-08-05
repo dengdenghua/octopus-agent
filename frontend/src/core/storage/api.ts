@@ -177,6 +177,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * Send a request to the octopus-agent backend (where the video media_router is
+ * mounted at `/media`). Unlike `request`, this does NOT target the NAS storage
+ * service — the video semantic index lives in the agent's data dir.
+ */
+async function backendRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${getBackendBaseURL()}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(init?.headers ?? {}),
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new NASRequestError(path, response.status, text);
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
 export async function startNASService(): Promise<NASServiceStartResponse> {
   const response = await fetch(
     `${getBackendBaseURL()}/api/local-brain/storage/start`,
@@ -357,4 +379,159 @@ export function answerNAS(query: string): Promise<NASAnswerResponse> {
     method: "POST",
     body: JSON.stringify({ query, top_k: 8, source_ids: [] }),
   });
+}
+
+export interface NASVideoIndexResponse {
+  ok: boolean;
+  video_count?: number;
+  keyframe_count?: number;
+  duration_sec?: number;
+  incremental?: boolean;
+  skipped?: number;
+  message?: string;
+}
+
+export function triggerVideoIndex(
+  incremental = true,
+): Promise<NASVideoIndexResponse> {
+  return backendRequest("/media/video/index", {
+    method: "POST",
+    body: JSON.stringify({ directory: ".", incremental }),
+  });
+}
+
+export interface NASVideoSearchHit {
+  video_path: string;
+  time_sec: number;
+  score: number;
+}
+
+export interface NASVideoAppearance {
+  video_path: string;
+  time_sec: number;
+}
+
+export interface NASVideoFaceGroup {
+  person: number;
+  count_faces: number;
+  appearances: NASVideoAppearance[];
+}
+
+export interface NASVideoTag {
+  label: string;
+  score: number;
+}
+
+export interface NASVideoClassifyResult {
+  video_path: string;
+  tags: NASVideoTag[];
+}
+
+export interface NASVideoSpeechHit {
+  video_path: string;
+  start_sec: number;
+  end_sec: number;
+  text: string;
+  score: number;
+}
+
+export interface NASVideoOcrHit {
+  video_path: string;
+  time_sec: number;
+  text: string;
+  score: number;
+}
+
+export interface NASVideoSearchResponse {
+  ok: boolean;
+  hits: NASVideoSearchHit[];
+}
+
+export interface NASVideoFaceGroupsResponse {
+  ok: boolean;
+  groups: NASVideoFaceGroup[];
+}
+
+export interface NASVideoClassifyResponse {
+  ok: boolean;
+  results: NASVideoClassifyResult[];
+}
+
+export interface NASVideoSpeechResponse {
+  ok: boolean;
+  hits: NASVideoSpeechHit[];
+}
+
+export interface NASVideoOcrResponse {
+  ok: boolean;
+  hits: NASVideoOcrHit[];
+}
+
+export function searchVideoByText(
+  query: string,
+  top_k = 10,
+): Promise<NASVideoSearchResponse> {
+  return backendRequest("/media/video/search", {
+    method: "POST",
+    body: JSON.stringify({ query, directory: ".", top_k }),
+  });
+}
+
+export function searchVideoByFace(
+  imagePath: string,
+  top_k = 10,
+): Promise<NASVideoSearchResponse> {
+  return backendRequest("/media/video/search/face", {
+    method: "POST",
+    body: JSON.stringify({ image_path: imagePath, directory: ".", top_k }),
+  });
+}
+
+export function searchVideoByImage(
+  imagePath: string,
+  top_k = 10,
+): Promise<NASVideoSearchResponse> {
+  return backendRequest("/media/video/search/image", {
+    method: "POST",
+    body: JSON.stringify({ image_path: imagePath, directory: ".", top_k }),
+  });
+}
+
+export function searchVideoBySpeech(
+  query: string,
+  top_k = 10,
+): Promise<NASVideoSpeechResponse> {
+  return backendRequest("/media/video/search/speech", {
+    method: "POST",
+    body: JSON.stringify({ query, directory: ".", top_k }),
+  });
+}
+
+export function listVideoFaceGroups(): Promise<NASVideoFaceGroupsResponse> {
+  return backendRequest("/media/video/faces?directory=.&threshold=0.45");
+}
+
+export function classifyVideoTags(): Promise<NASVideoClassifyResponse> {
+  return backendRequest("/media/video/classify", {
+    method: "POST",
+    body: JSON.stringify({ directory: ".", top_k: 5 }),
+  });
+}
+
+export function ocrVideoKeyframes(
+  query: string,
+  top_k = 20,
+): Promise<NASVideoOcrResponse> {
+  return backendRequest("/media/video/ocr", {
+    method: "POST",
+    body: JSON.stringify({ query, directory: ".", top_k }),
+  });
+}
+
+/**
+ * Get the full URL for the video cover image from the agent backend.
+ * Covers are generated dynamically on demand from the video file.
+ */
+export function getVideoCoverURL(videoPath: string, timeSec = 0): string {
+  return `${getBackendBaseURL()}/media/video/cover?video_path=${encodeURIComponent(videoPath)}&time_sec=${timeSec}`;
 }

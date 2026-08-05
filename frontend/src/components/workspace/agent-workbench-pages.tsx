@@ -918,10 +918,59 @@ export function AgentSummaryPage({
   const outlineFactCount = showOutline
     ? progressOutline.reduce((sum, round) => sum + round.facts.length, 0)
     : 0;
-  const observedReferenceTabs = useMemo(
-    () => buildObservedReferenceTabs(blocks, t),
-    [blocks, t],
-  );
+  // 对话开始时喂入的上下文文件（上传文件/附件）——它们进入对话上下文但只出现在
+  // 用户消息里，不属于 process 事件块，因此不会被 buildObservedReferenceTabs 收录。
+  // 这里单独提取，归入 files 分类并计入上下文容量统计，避免"上下文统计只算网络搜索"。
+  const inputReferenceItems = useMemo(() => {
+    if (!userInput) return [] as ObservedReferenceItem[];
+    const items: ObservedReferenceItem[] = [];
+    for (const f of userInput.uploadedFiles ?? []) {
+      items.push({
+        id: `input:upload:${f.path || f.filename}`,
+        title: compactReference(f.filename || f.path, 120),
+        subtitle: f.path && f.path !== f.filename
+          ? compactReference(f.path, 140)
+          : undefined,
+        tag: fileKindLabel(f.filename || f.path),
+      });
+    }
+    for (const a of userInput.attachments ?? []) {
+      if (!a.filename) continue;
+      items.push({
+        id: `input:attach:${a.filename}`,
+        title: compactReference(a.filename, 120),
+        tag: fileKindLabel(a.filename),
+      });
+    }
+    return dedupeReferenceItems(items);
+  }, [userInput]);
+
+  const observedReferenceTabs = useMemo<ObservedReferenceTab[]>(() => {
+    const tabs = buildObservedReferenceTabs(blocks, t);
+    if (inputReferenceItems.length === 0) return tabs;
+    const filesTab = tabs.find((tab) => tab.id === "files");
+    if (filesTab) {
+      return tabs.map((tab) =>
+        tab.id === "files"
+          ? {
+              ...tab,
+              items: dedupeReferenceItems([
+                ...tab.items,
+                ...inputReferenceItems,
+              ]),
+            }
+          : tab,
+      );
+    }
+    return [
+      {
+        id: "files",
+        label: t.agentWorkbenchPages.reference.files,
+        items: inputReferenceItems,
+      },
+      ...tabs,
+    ];
+  }, [blocks, t, inputReferenceItems]);
   const activeRefTab = observedReferenceTabs.some((tab) => tab.id === refTab)
     ? refTab
     : (observedReferenceTabs[0]?.id ?? "files");
@@ -1021,6 +1070,15 @@ export function AgentSummaryPage({
       }
     }
 
+    // 对话开始时喂入的上下文文件（上传文件/附件）同样占用上下文，计入 files 统计。
+    for (const item of inputReferenceItems) {
+      const tokens =
+        estimateTokens(item.title || "") +
+        estimateTokens(item.subtitle || "");
+      fileTokens += tokens;
+      tokenByTab.files += tokens;
+    }
+
     const totalTokens = fileTokens + otherTokens;
     const visualWindow = 128000;
     const percentage =
@@ -1050,7 +1108,7 @@ export function AgentSummaryPage({
       otherPercentage,
       segments,
     };
-  }, [blocks, t]);
+  }, [blocks, t, inputReferenceItems]);
 
   // A tiny context sample is not a useful percentage and reads like task
   // completion. Keep the exact token count in the context section, but only

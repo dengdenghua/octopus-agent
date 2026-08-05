@@ -75,3 +75,13 @@
 - [ ] `test_auto_docs_fresh.py` 通过
 - [ ] 全量测试套件无回归
 - [ ] 公开 API 向后兼容（无 import 错误）
+
+## Wave 4 验证（合并 `_react_parsing_*` 卫星模块 8 → 5）
+- [x] `_react_parsing_core.py` < 1000 行（592）
+- [x] `_react_parsing_codequality.py` < 1000 行（917）
+- [x] `_react_parsing_testquality.py` < 1000 行（857）
+- [x] `_react_parsing_tools.py` / `_react_parsing_verification.py` 保持不变
+- [x] 已删除 `_react_parsing_steps.py` / `_react_parsing_payload.py` / `_react_parsing_testquality2.py`
+- [x] `react_parsing.py` 公开 API 不变（`__all__` 131 项，import smoke 通过）
+- [x] 合并文件 ruff lint 通过
+- [x] 相关 react 测试通过（600 passed）

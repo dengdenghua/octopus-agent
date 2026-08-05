@@ -88,15 +88,83 @@ function formatRelativeTime(isoString: string): string {
 function HistoryItem({
   report,
   isLast,
+  compact = false,
 }: {
   report: IntelligenceReport;
   isLast: boolean;
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const hasErrors = report.source_errors.length > 0;
   const title = report.title || report.topic;
   const hasFindings = report.findings && report.findings.length > 0;
+
+  // 紧凑模式：用于窄容器（如助理右侧面板），去时间轴、改信息卡布局。
+  if (compact) {
+    return (
+      <div className="rounded-[10px] border border-border-default bg-card/50 p-3">
+        <div className="flex items-start gap-2">
+          <div
+            className={cn(
+              "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border",
+              hasErrors
+                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                : "border-primary/20 bg-primary/10 text-primary",
+            )}
+          >
+            {hasErrors ? (
+              <AlertCircleIcon className="size-3.5" />
+            ) : (
+              <CheckCircleIcon className="size-3.5" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                {title}
+              </h3>
+              {hasErrors && (
+                <Badge
+                  variant="destructive"
+                  className="shrink-0 rounded px-1.5 py-0 text-micro font-normal"
+                >
+                  {t.intelligence.historyErrors(report.source_errors.length)}
+                </Badge>
+              )}
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>{formatRelativeTime(report.created_at)}</span>
+              <span className="text-muted-foreground/40">·</span>
+              <span>
+                {t.intelligence.historyItemsAnalyzed(report.items_analyzed)}
+              </span>
+            </div>
+            <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
+              {report.summary}
+            </p>
+            {hasFindings && expanded && (
+              <ul className="mt-2 space-y-1">
+                {report.findings!.slice(0, 3).map((f, i) => (
+                  <li key={i} className="text-xs leading-5 text-foreground/80">
+                    • {stripMarkdownBold(f)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              className="mt-1.5 text-xs text-primary hover:underline"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded
+                ? t.intelligence.historyCollapse
+                : t.intelligence.historyViewDetails}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex gap-4 pb-6">
@@ -166,7 +234,12 @@ function HistoryItem({
   );
 }
 
-export function AutomationHistoryTab() {
+export function AutomationHistoryTab({
+  compact = false,
+}: {
+  /** 紧凑模式：用于窄容器（如助理右侧面板），改用信息卡列表布局。 */
+  compact?: boolean;
+}) {
   const { t } = useI18n();
 
   const reportsQuery = useQuery({
@@ -222,12 +295,13 @@ export function AutomationHistoryTab() {
   );
 
   return (
-    <div>
+    <div className={compact ? "space-y-2" : undefined}>
       {sortedReports.map((report, index) => (
         <HistoryItem
           key={report.id}
           report={report}
           isLast={index === sortedReports.length - 1}
+          compact={compact}
         />
       ))}
     </div>

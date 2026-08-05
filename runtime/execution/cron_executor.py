@@ -243,6 +243,9 @@ def run_due_cron_jobs(
             "duration_ms": duration_ms,
             "status": status,
             "output_excerpt": (output or "")[-_OUTPUT_EXCERPT_CHARS:],
+            # 订阅推送 · IM delivery target recorded at schedule time.
+            "channel_id": str(job.get("channel_id") or ""),
+            "thread_id": str(job.get("thread_id") or ""),
         }
         run_records.append(record)
         _log.info("cron_executor: fired job %r → %s", name, status)

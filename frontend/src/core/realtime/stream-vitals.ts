@@ -313,17 +313,23 @@ export function classifyVitals(
     return { ...base, phase: "working", stalled: false };
   }
 
-  // Silent too long with nothing running → the honest "maybe stuck" state.
-  // A running tool or a fresh activity/heartbeat keeps us out of here.
-  if (!hasRunningWork && sinceActivityMs >= thresholds.activityStaleMs) {
-    return { ...base, phase: "slow", stalled: true };
-  }
-
-  // A heartbeat proves the server is alive; it does not prove the model has
-  // produced anything. Keep this honest waiting state until the first real
-  // agent item (commentary, reasoning, tool or answer) arrives.
+  // Before the first real agent item (commentary, reasoning, tool, answer)
+  // has arrived, we are still waiting for the model to start producing.
+  // This is the TTFT window — the model may legitimately take 10s+ of
+  // server-side reasoning (especially for non-thinking models that never
+  // emit intermediate tokens). Do NOT flag this as "slow/stuck"; stay in
+  // the honest "waiting" state until the first sign of life appears.
+  // Exception: if a tool/subagent is already running (hasRunningWork),
+  // the server is clearly active even without a text/reasoning item.
   if (marks.firstAgentActivityAt == null && !hasRunningWork) {
     return { ...base, phase: "waiting", stalled: false };
+  }
+
+  // Past this point we have seen agent output. Silent too long with
+  // nothing running → the honest "maybe stuck" state. A running tool or
+  // a fresh activity/heartbeat keeps us out of here.
+  if (!hasRunningWork && sinceActivityMs >= thresholds.activityStaleMs) {
+    return { ...base, phase: "slow", stalled: true };
   }
 
   // Active and recently alive: tool running, reasoning streaming, or a

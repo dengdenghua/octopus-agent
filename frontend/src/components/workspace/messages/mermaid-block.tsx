@@ -117,7 +117,7 @@ export function MermaidBlock({
       <div
         ref={containerRef}
         className={cn(
-          "overflow-auto bg-muted/20 p-3",
+          "overflow-auto bg-muted/20 p-3 animate-fade-in",
           "[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full",
         )}
         // Mermaid returns SVG markup after applying its own strict security mode.

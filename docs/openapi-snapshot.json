@@ -29980,6 +29980,29 @@
         ]
       }
     },
+    "/api/plugins/project-wiki/contract": {
+      "get": {
+        "operationId": "api_project_wiki_contract_api_plugins_project_wiki_contract_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Project Wiki Contract Api Plugins Project Wiki Contract Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Project Wiki Contract",
+        "tags": [
+          "project-wiki"
+        ]
+      }
+    },
     "/api/plugins/publisher-trust": {
       "get": {
         "operationId": "_plugin_publisher_trust_api_plugins_publisher_trust_get",
