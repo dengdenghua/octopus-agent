@@ -93,13 +93,23 @@ def model_supports_thinking(model_name: str) -> bool:
     """Whether a model id supports an extended-thinking / reasoning mode.
 
     Model-capability knowledge — lives with the model types so the kernel
-    can ask without importing the sensing/gateway layer. Match narrowly:
+    can ask without importing the sensing/gateway layer. The built-in
+    name patterns below are conservative defaults for well-known models:
     a false positive asks a non-thinking model for a reasoning channel it
     may reject; a false negative merely leaves the reasoning surface
-    empty (custom endpoints can always declare ``supports_thinking`` in
-    ``custom_models.json`` — ``custom_model_supports_thinking`` ORs into
-    the router-level decision).
+    empty.
+
+    For everything else — custom endpoints, new models the patterns don't
+    know yet — the operator declares ``supports_thinking`` in
+    ``custom_models.json`` and that declaration wins (OR'ed in here, so
+    every caller — cerebrum loop, gateway, router — sees one answer).
     """
+    from runtime.platform.models.custom_model_flags import (
+        custom_model_supports_thinking,
+    )
+
+    if custom_model_supports_thinking(model_name):
+        return True
     m = (model_name or "").lower()
     if m.startswith(("o1", "o3", "o4")):
         return True
