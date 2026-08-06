@@ -228,11 +228,24 @@ function buildObservedReferenceTabs(
     memory: [],
     other: [],
   };
+  // todo_write sends a full-replacement checklist each time, so multiple
+  // blocks carry the same evolving list. Keep only the latest one for the
+  // 待办 plan tab to avoid replaying stale/duplicate entries.
+  let latestTodoBlock: WorkBlock | null = null;
 
   for (const block of blocks) {
     if (isAgentLifecycleBlock(block)) continue;
+    if (block.kind === "todo") {
+      if (!latestTodoBlock || block.startedAt >= latestTodoBlock.startedAt) {
+        latestTodoBlock = block;
+      }
+      continue;
+    }
     const tabId = referenceTabForBlock(block);
     buckets[tabId].push(...referenceItemsForBlock(block, t));
+  }
+  if (latestTodoBlock) {
+    buckets.plans.push(...todoReferenceItems(latestTodoBlock, t));
   }
 
   return OBSERVED_REFERENCE_TABS.map((id) => ({
@@ -306,6 +319,76 @@ function referenceItemsForBlock(
       tag: referenceStatusLabel(block.status, t),
     },
   ];
+}
+
+type TodoStatus = "completed" | "in_progress" | "interrupted" | "pending";
+
+function normalizeTodoStatus(value: unknown): TodoStatus {
+  if (value === "completed") return "completed";
+  if (value === "in_progress" || value === "running") return "in_progress";
+  if (
+    value === "interrupted" ||
+    value === "failed" ||
+    value === "error" ||
+    value === "blocked"
+  )
+    return "interrupted";
+  return "pending";
+}
+
+function todoStatusLabel(status: TodoStatus, t: Translations): string | undefined {
+  if (status === "completed") return t.agentWorkbenchPages.statusDone;
+  if (status === "in_progress") return t.agentWorkbenchPages.statusRunning;
+  if (status === "interrupted") return t.agentWorkbenchPages.statusError;
+  return undefined;
+}
+
+function todoRawItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    try {
+      return todoRawItems(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+  if (isRecord(value)) return todoRawItems(value.items ?? value.todos);
+  return [];
+}
+
+/**
+ * Flatten the latest todo_write checklist into reference items for the
+ * 待办 plan tab. Each checklist entry becomes one row (content + status tag).
+ */
+function todoReferenceItems(
+  block: WorkBlock,
+  t: Translations,
+): ObservedReferenceItem[] {
+  const rawItems = todoRawItems(
+    block.event.input?.items ?? block.event.input?.todos,
+  );
+  const items: ObservedReferenceItem[] = [];
+  for (const raw of rawItems) {
+    if (!isRecord(raw)) continue;
+    const content =
+      typeof raw.content === "string" && raw.content.trim()
+        ? raw.content.trim()
+        : typeof raw.text === "string" && raw.text.trim()
+          ? raw.text.trim()
+          : typeof raw.title === "string" && raw.title.trim()
+            ? raw.title.trim()
+            : typeof raw.task === "string" && raw.task.trim()
+              ? raw.task.trim()
+              : "";
+    if (!content) continue;
+    items.push({
+      id: `${block.id}:todo:${items.length}:${content}`,
+      title: compactReference(content, 120),
+      subtitle: undefined,
+      tag: todoStatusLabel(normalizeTodoStatus(raw.status), t),
+    });
+  }
+  return items;
 }
 
 function fileReferenceItems(
@@ -1126,35 +1209,6 @@ export function AgentSummaryPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
-        {/* 思考详情：当用户从对话区点击思考行聚焦到此处时，展示完整思考文本 */}
-        {focusedProcessEvent?.kind === "thinking" &&
-          focusedProcessEvent.detail && (
-            <section className="border-b border-border-subtle py-4">
-              <div className="mb-2 flex items-center gap-2">
-                <BrainCircuitIcon className="size-3.5 text-muted-foreground" />
-                <h3 className="text-xs font-medium text-foreground">
-                  {t.agentWorkbenchPages.thinkingDetail}
-                </h3>
-                {focusedProcessEvent.status && (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {focusedProcessEvent.status === "running"
-                      ? t.agentWorkbenchPages.thinkingInProgress
-                      : focusedProcessEvent.status === "error"
-                        ? t.agentWorkbench.statusError
-                        : t.agentWorkbenchPages.thinkingDone}
-                  </span>
-                )}
-              </div>
-              <div className="rounded-lg border border-border-subtle bg-muted/20 p-3 pl-4 text-sm text-muted-foreground">
-                <MarkdownContent
-                  content={focusedProcessEvent.detail}
-                  isLoading={false}
-                  rehypePlugins={[]}
-                  className="text-sm leading-relaxed"
-                />
-              </div>
-            </section>
-          )}
         {/* 执行详情：当用户从对话区点击执行行聚焦到此处时，展示执行步骤摘要 */}
         {focusedProcessEvent?.kind === "execution" &&
           focusedProcessEvent.detail && (

@@ -37,7 +37,7 @@ export function EmptyShellView({
   visibleTabs: WorkbenchTab[];
   workbenchTabs: WorkbenchTab[];
   closedTabs: Set<AgentWorkbenchTabId>;
-  effectiveActiveTab: "agent" | "diff" | "terminal" | "browser";
+  effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" | "artifacts";
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
   locatableTranscriptEventId: string;

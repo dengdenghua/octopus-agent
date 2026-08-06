@@ -3132,8 +3132,8 @@ function RealtimePageContent({
   }, [setArtifactsOpen]);
 
   const openArtifactsPanel = useCallback(() => {
-    // Artifacts now live inside the workbench (same surface as terminal /
-    // browser). Open the workbench and switch to the artifacts tab.
+    // Artifacts render inside the workbench's "产物" tab (same surface as
+    // terminal / browser). Open the workbench and switch to that tab.
     setArtifactsOpen(false);
     setShowAgentPlan(false);
     setAgentWorkbenchDismissed(false);
@@ -3154,7 +3154,7 @@ function RealtimePageContent({
         }
         selectArtifact(normalizedPath, true);
       }
-      // Always route to the embedded artifacts tab inside the workbench
+      // Route to the embedded artifacts tab inside the workbench
       // (same surface as terminal / browser). Auto-open the workbench
       // if it's not visible.
       setArtifactsOpen(false);
