@@ -1,4 +1,4 @@
-import { ChevronRightIcon, GlobeIcon, TerminalIcon } from "lucide-react";
+import { ChevronRightIcon, GlobeIcon, PackageIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
@@ -30,6 +30,7 @@ import { BrowserTabPage } from "./agent-workbench-panel/browser-tab-page";
 import { AgentKanbanView } from "./agent-workbench-panel/agent-kanban-view";
 import type { WorkbenchRosterSeat } from "./agent-workbench-panel/helpers";
 import { useWorkbenchSelection } from "./agent-workbench-panel/use-workbench-selection";
+import { ArtifactPanel } from "./artifacts/artifact-panel";
 
 // Re-export items that were exported from the original file
 export { hasAgentWorkbenchContent, __testing } from "./agent-workbench-utils";
@@ -260,10 +261,8 @@ export function AgentWorkbenchPanel({
   );
   const requestedActiveTab: AgentWorkbenchTabId =
     activeTab ?? (focusedAgentId ? "agent" : focusedTab) ?? "agent";
-  const effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" =
-    requestedActiveTab === "subagents" ||
-    requestedActiveTab === "plan" ||
-    requestedActiveTab === "artifacts"
+  const effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" | "artifacts" =
+    requestedActiveTab === "subagents" || requestedActiveTab === "plan"
       ? "agent"
       : requestedActiveTab;
   const workbenchTabs: WorkbenchTab[] = [
@@ -278,6 +277,11 @@ export function AgentWorkbenchPanel({
       Icon: TerminalIcon,
     },
     { id: "browser", label: t.agentWorkbenchPages.browserTab, Icon: GlobeIcon },
+    {
+      id: "artifacts",
+      label: t.conversation.artifactsTitle,
+      Icon: PackageIcon,
+    },
   ];
 
   // Auto-open a tab if it becomes the effective active tab
@@ -469,6 +473,8 @@ export function AgentWorkbenchPanel({
       />
     ) : effectiveActiveTab === "browser" ? (
       browserTabPage
+    ) : effectiveActiveTab === "artifacts" && threadId ? (
+      <ArtifactPanel showHeader={false} threadId={threadId} className="size-full" />
     ) : (
       agentKanbanPage
     );

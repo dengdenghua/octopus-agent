@@ -135,7 +135,8 @@ import {
 import { startDeepResearch, type ResearchJob } from "@/core/research/api";
 import { getRecordingStatus } from "@/core/teach-repeat/api";
 import type { RecordingStatus } from "@/core/teach-repeat/types";
-import { ACTIVE_AGENT_EVENT, ACTIVE_AGENT_KEY } from "@/core/agents/active";
+import { ACTIVE_AGENT_EVENT, ACTIVE_AGENT_KEY, useActiveAgentId } from "@/core/agents/active";
+import { getAssistantDisplayName } from "@/core/agents/assistant-naming";
 import {
   dedupeAgentsByName,
   dedupePersonaAgentsByDisplayName,
@@ -187,6 +188,7 @@ import { resolveModelContextWindow } from "@/core/models/context-window";
 import { classifyModeIntent } from "@/core/modes/intent-classifier";
 import { getBackendBaseURL } from "@/core/config";
 import { getChannelsStatus, type ChannelName } from "@/core/channels/api";
+import { usePetAgentEvents } from "@/core/pet/use-pet-agent-events";
 import {
   extractCodeBlocks,
   hasPreviewableBlocks,
@@ -469,7 +471,7 @@ function RightPanelMenu({
       title={panelToggleLabel}
       onClick={handleTogglePanel}
       className={cn(
-        "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
+        "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
         activePage
           ? "border-transparent bg-transparent text-foreground/82 hover:border-border-default hover:bg-muted/55 hover:text-foreground"
           : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
@@ -552,7 +554,10 @@ function ChatHeaderAgentBadge({
   agent: ReturnType<typeof useAgent>["agent"];
   agentId: string;
 }) {
-  const label = agent?.display_name?.trim() || agent?.name?.trim() || agentId;
+  const label =
+    agentId === "octopus"
+      ? getAssistantDisplayName()
+      : agent?.display_name?.trim() || agent?.name?.trim() || agentId;
   const icon = agent?.icon?.trim() || "";
   const initial = label.trim().charAt(0).toUpperCase() || "A";
   const avatarUrl = agent?.avatar_url
@@ -634,7 +639,7 @@ function ChatHeaderRecButton({
       title={recordingTitle}
       aria-label={recordingTitle}
       className={cn(
-        "inline-flex h-[42px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold shadow-none transition-all duration-200 sm:h-8 sm:px-2.5",
+        "inline-flex h-[42px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold shadow-none transition-all duration-base sm:h-8 sm:px-2.5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
         recording
           ? "border-destructive/25 bg-destructive/10 text-destructive hover:bg-destructive/16 dark:text-destructive"
@@ -779,7 +784,7 @@ function TaskCollaboratorControl({
         <button
           type="button"
           className={cn(
-            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium shadow-none transition-all duration-200 sm:h-8 sm:px-2",
+            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium shadow-none transition-all duration-base sm:h-8 sm:px-2",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
             isTeamDraft
               ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
@@ -793,7 +798,7 @@ function TaskCollaboratorControl({
                 <span
                   key={agent.agent_id}
                   className={cn(
-                    "grid size-5 place-items-center overflow-hidden rounded-md border text-xs font-semibold transition-all duration-200",
+                    "grid size-5 place-items-center overflow-hidden rounded-md border text-xs font-semibold transition-all duration-base",
                     isTeamDraft
                       ? "border-primary-foreground/40 bg-primary-foreground/20 text-primary-foreground"
                       : "border-border-default bg-muted text-muted-foreground",
@@ -816,7 +821,7 @@ function TaskCollaboratorControl({
               {extraRosterCount > 0 && (
                 <span
                   className={cn(
-                    "grid size-5 place-items-center rounded-md border text-xs font-semibold transition-all duration-200",
+                    "grid size-5 place-items-center rounded-md border text-xs font-semibold transition-all duration-base",
                     isTeamDraft
                       ? "border-primary/20 bg-primary-foreground/90 text-primary"
                       : "border-border-default bg-muted text-muted-foreground",
@@ -834,7 +839,7 @@ function TaskCollaboratorControl({
           </span>
           <span
             className={cn(
-              "inline-flex items-center gap-1 shrink-0 rounded-md px-1.5 py-0.5 mr-1 text-xs transition-all duration-200",
+              "inline-flex items-center gap-1 shrink-0 rounded-md px-1.5 py-0.5 mr-1 text-xs transition-all duration-base",
               isTeamDraft
                 ? "bg-primary-foreground/80 text-primary font-semibold"
                 : hasOnlineMembers
@@ -864,7 +869,7 @@ function TaskCollaboratorControl({
             <button
               type="button"
               onClick={() => onSelectedAgentIdsChange([])}
-              className="rounded-lg px-2 py-1 text-xs text-muted-foreground transition-all duration-200 hover:bg-muted/70 hover:text-foreground"
+              className="rounded-lg px-2 py-1 text-xs text-muted-foreground transition-all duration-base hover:bg-muted/70 hover:text-foreground"
             >
               {t.chatInputBox.collaboratorsSingle}
             </button>
@@ -882,7 +887,7 @@ function TaskCollaboratorControl({
                   onClick={() => onTeamModeChange(mode)}
                   title={meta.description}
                   className={cn(
-                    "inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all duration-200",
+                    "inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all duration-base",
                     active
                       ? "border-primary/30 bg-primary/10 text-primary"
                       : "border-border-default text-muted-foreground hover:bg-muted/55 hover:text-foreground",
@@ -935,7 +940,7 @@ function TaskCollaboratorControl({
                         {t.agentWorkbenchPanel.mainController}
                       </span>
                     ) : (
-                      <span className="shrink-0 rounded p-0.5 text-muted-foreground opacity-60 transition-all duration-200 group-hover:opacity-100">
+                      <span className="shrink-0 rounded p-0.5 text-muted-foreground opacity-60 transition-all duration-base group-hover:opacity-100">
                         <XIcon className="size-3.5" />
                       </span>
                     )}
@@ -956,7 +961,7 @@ function TaskCollaboratorControl({
                     key={entry.agent_id}
                     type="button"
                     onClick={handleRemove}
-                    className="group flex min-w-0 w-full items-center gap-2 rounded-lg bg-muted/35 px-2 py-1.5 text-left transition-all duration-200 hover:bg-destructive/10 hover:text-destructive"
+                    className="group flex min-w-0 w-full items-center gap-2 rounded-lg bg-muted/35 px-2 py-1.5 text-left transition-all duration-base hover:bg-destructive/10 hover:text-destructive"
                     title="点击移除"
                   >
                     {content}
@@ -967,7 +972,7 @@ function TaskCollaboratorControl({
           )}
         </div>
         <div className="p-3">
-          <label className="flex h-9 items-center gap-2 rounded-lg border border-border-default bg-background/45 px-2.5 transition-all duration-200 hover:border-border-strong hover:bg-background/60 focus-within:border-ring focus-within:bg-background focus-within:ring-2 focus-within:ring-ring/20">
+          <label className="flex h-9 items-center gap-2 rounded-lg border border-border-default bg-background/45 px-2.5 transition-all duration-base hover:border-border-strong hover:bg-background/60 focus-within:border-ring focus-within:bg-background focus-within:ring-2 focus-within:ring-ring/20">
             <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
             <Input
               value={query}
@@ -985,7 +990,7 @@ function TaskCollaboratorControl({
                   key={agent.name}
                   type="button"
                   onClick={() => toggleAgent(agent)}
-                  className="group inline-flex max-w-full items-center gap-1 rounded-lg border border-primary/20 bg-primary/8 px-1.5 py-0.5 text-xs text-primary transition-all duration-200 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
+                  className="group inline-flex max-w-full items-center gap-1 rounded-lg border border-primary/20 bg-primary/8 px-1.5 py-0.5 text-xs text-primary transition-all duration-base hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
                 >
                   <AgentAvatar
                     agent={agent}
@@ -1010,7 +1015,7 @@ function TaskCollaboratorControl({
                     type="button"
                     onClick={() => toggleAgent(agent)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-200",
+                      "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all duration-base",
                       selected ? "bg-primary/8" : "hover:bg-muted/55",
                     )}
                   >
@@ -1028,7 +1033,7 @@ function TaskCollaboratorControl({
                     </span>
                     <span
                       className={cn(
-                        "grid size-5 shrink-0 place-items-center rounded-md border transition-all duration-200",
+                        "grid size-5 shrink-0 place-items-center rounded-md border transition-all duration-base",
                         selected
                           ? "border-primary/30 bg-primary/10 text-primary"
                           : "border-border-default text-transparent",
@@ -1046,7 +1051,7 @@ function TaskCollaboratorControl({
           <button
             type="button"
             onClick={() => void handleCopyLink()}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/60 hover:text-foreground"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted-foreground transition-all duration-base hover:bg-muted/60 hover:text-foreground"
           >
             <CopyIcon className="size-3.5" />
             {t.collab.copyLink}
@@ -1326,10 +1331,15 @@ function RealtimePageContent({
   const isRealtimeRoute = location.pathname.startsWith("/workspace/realtime");
   const memoryMode = searchParams.get("memory") ?? "";
   const queryWorkspacePath = searchParams.get("workspace_path") ?? "";
+  const storedActiveAgentId = useActiveAgentId();
 
   // Unified task routes carry the selected persona in ?agent= while every chat
   // thread stays on the /workspace/realtime/* surface.
-  const activeAgentId = routeAgentName || queryAgentName || "general";
+  const activeAgentId =
+    routeAgentName ||
+    (queryAgentName === "octopus" ? null : queryAgentName) ||
+    storedActiveAgentId ||
+    "general";
   const { agent: activeAgent } = useAgent(activeAgentId);
   const hintedThreadOwnerAgentId = routeState?.threadOwnerAgentId?.trim() || "";
   const hintedWorkspacePath =
@@ -1834,8 +1844,13 @@ function RealtimePageContent({
       : workDir;
   const projectWorkspacePath = effectiveWorkDir.trim();
   const isProjectCodeMode = !!projectWorkspacePath;
+  // When user has explicitly selected a named agent (not default "general", not octopus)
+  // via the footer selector, treat it as conversation mode rather than defaulting to code.
+  const isExplicitAgentSelected =
+    !!effectiveAgentId && effectiveAgentId !== "general" && effectiveAgentId !== "octopus";
   const isExplicitConversationMode =
     isOctopusAssistant ||
+    isExplicitAgentSelected ||
     routeMode === "chat" ||
     routeMode === "flash" ||
     discussionOnly;
@@ -2014,6 +2029,12 @@ function RealtimePageContent({
   }, [initialPrompt]);
   useEffect(() => {
     const selectedAgent = routeAgentName || queryAgentName || "general";
+    // Octopus is the global assistant entry point — it sits ABOVE the
+    // persona picker, not as a selectable role. Navigating to the assistant
+    // thread MUST NOT mutate the footer's active persona, otherwise the
+    // footer drifts to a random agent (e.g. the first local CLI partner)
+    // because "octopus" is filtered out of switcherAgents.
+    if (selectedAgent === "octopus") return;
     // 统一走 emitAgentChanged：同时写 localStorage + 派发 eventBus 事件，
     // 保证左下角 AgentFooter（只订阅 eventBus agent:changed）能立即同步，
     // 不再出现仅写 localStorage/发 window CustomEvent 导致两边角色不一致。
@@ -2032,7 +2053,8 @@ function RealtimePageContent({
   useEffect(() => {
     if (
       !resolvedThreadOwnerAgentId ||
-      resolvedThreadOwnerAgentId === activeAgentId
+      resolvedThreadOwnerAgentId === activeAgentId ||
+      resolvedThreadOwnerAgentId === "octopus"
     ) {
       return;
     }
@@ -2575,6 +2597,13 @@ function RealtimePageContent({
   ]);
   const sidebarThreadId =
     thread.threadId ?? localStartedThreadIdRef.current ?? threadId;
+  // Forward the derived run state to the Godot desktop pet (no-op in browser).
+  usePetAgentEvents({
+    runState: sidebarRunState,
+    settled: agentRunSettled,
+    failed: agentRunFailed,
+    streaming: Boolean(thread.streamingMessage),
+  });
   useEffect(() => {
     const href = threadRouteFor(sidebarThreadId);
     eventBus.emit("thread:run-status", {
@@ -3124,18 +3153,25 @@ function RealtimePageContent({
         }
         selectArtifact(normalizedPath, true);
       }
-      // Keep the artifact in the same right-side workbench surface. The
-      // dedicated artifact drawer remains available from the global panel
-      // menu, but a conversation click should not fork the workspace UI.
-      setArtifactsOpen(false);
-      setShowAgentPlan(false);
-      setAgentWorkbenchDismissed(false);
-      setAgentWorkbenchManuallyOpened(true);
-      setShowResearchHistory(false);
-      setShowResearch(false);
-      setShowPreview(false);
-      setAgentWorkbenchTab("agent");
-      setAgentWorkbenchTabTouched(true);
+      // If the agent workbench is visible, switch to its embedded artifacts
+      // tab so the preview renders inside the workbench (no separate panel).
+      // Otherwise fall back to the legacy standalone artifact sidebar.
+      if (showAgentWorkbench && !agentWorkbenchDismissed) {
+        setAgentWorkbenchTab("artifacts");
+        // Ensure workbench isn't dismissed when user clicks an artifact link
+        setAgentWorkbenchDismissed(false);
+        setAgentWorkbenchManuallyOpened(true);
+      } else {
+        setArtifactsOpen(true);
+        setShowAgentPlan(false);
+        setAgentWorkbenchDismissed(true);
+        setAgentWorkbenchManuallyOpened(false);
+        setShowResearchHistory(false);
+        setShowResearch(false);
+        setShowPreview(false);
+        setAgentWorkbenchTab("agent");
+        setAgentWorkbenchTabTouched(false);
+      }
     },
     [artifacts, selectArtifact, setArtifactsOpen, setArtifacts, threadId],
   );
@@ -3303,7 +3339,7 @@ function RealtimePageContent({
                     {isOctopusAssistant && connectedChannels.length > 0 && (
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="size-1.5 rounded-full bg-emerald-500" />
-                        <span className="text-[11px] text-muted-foreground/70">
+                        <span className="text-mini text-muted-foreground/70">
                           已连接: {connectedChannels.map(c => channelDisplayNames[c] || c).join("、")}
                         </span>
                       </div>
@@ -3357,7 +3393,7 @@ function RealtimePageContent({
                         title="自动化与订阅"
                         onClick={() => setShowAutomationPanel((open) => !open)}
                         className={cn(
-                          "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
+                          "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
                           showAutomationPanel
                             ? "border-transparent bg-transparent text-foreground/82 hover:border-border-default hover:bg-muted/55 hover:text-foreground"
                             : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
@@ -3443,7 +3479,7 @@ function RealtimePageContent({
               inputArea={
                 <div
                   className={cn(
-                    "relative w-full transition-[max-width,transform] duration-300",
+                    "relative w-full transition-[max-width,transform] duration-slow",
                     isNewThread &&
                       "-translate-y-[clamp(3rem,12dvh,7rem)] md:-translate-y-[calc(50vh-168px)]",
                     isNewThread ? "max-w-3xl" : "max-w-(--container-width-md)",
@@ -3452,13 +3488,17 @@ function RealtimePageContent({
                   {mounted ? (
                     <div className="flex flex-col gap-2">
                       {isNewThread &&
-                        (isAgentRoute || isOctopusAssistant ? (
+                        (isAgentRoute || isOctopusAssistant || isExplicitAgentSelected ? (
                           <AgentWelcome
                             agent={activeAgent}
                             agentName={effectiveAgentId}
                           />
                         ) : (
-                          <Welcome mode={effectiveMode} />
+                          <Welcome
+                            mode={effectiveMode}
+                            agent={activeAgent}
+                            agentName={effectiveAgentId}
+                          />
                         ))}
                       {!isNewThread ? (
                         <ComposerStepProgress
@@ -3608,7 +3648,7 @@ function RealtimePageContent({
                       {researchError}
                     </div>
                   </div>
-                ) : artifactsOpen ? (
+                ) : artifactsOpen && !showAgentWorkbench ? (
                   <ArtifactPanel className="size-full" threadId={threadId} />
                 ) : showAgentPlan ? (
                   <PlanPanel
@@ -3704,11 +3744,11 @@ function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
             title={item.prompt}
             className={cn(
               "group inline-flex items-center gap-2 rounded-lg border border-transparent bg-transparent px-3.5 py-2 text-sm font-medium text-muted-foreground/80",
-              "transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-default hover:bg-card hover:text-foreground hover:shadow-[var(--shadow-sm)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0 active:duration-75",
+              "transition-all duration-base ease-out hover:-translate-y-0.5 hover:border-border-default hover:bg-card hover:text-foreground hover:shadow-[var(--shadow-sm)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0 active:duration-instant",
             )}
           >
-            <Icon className="size-4 text-muted-foreground/70 transition-all duration-200 group-hover:scale-110 group-hover:text-primary" />
+            <Icon className="size-4 text-muted-foreground/70 transition-all duration-base group-hover:scale-110 group-hover:text-primary" />
             {item.label}
           </button>
         );
