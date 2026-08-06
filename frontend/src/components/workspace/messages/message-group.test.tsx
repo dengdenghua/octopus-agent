@@ -719,9 +719,12 @@ describe("MessageGroup reasoning grouping", () => {
     );
 
     expect(screen.getByTitle("Open details")).toBeInTheDocument();
+    // Raw reasoning_content now renders as a collapsed one-line trace row
+    // (design: actual thinking trace in chronological order, truncated by
+    // default, expands on click).
     expect(
-      screen.queryByText("Inspect the user request before editing."),
-    ).not.toBeInTheDocument();
+      screen.getByText("Inspect the user request before editing."),
+    ).toBeInTheDocument();
     expect(screen.getByText("frontend route structure")).toBeInTheDocument();
     expect(screen.queryByText(/Search sources/)).not.toBeInTheDocument();
   });
@@ -803,9 +806,10 @@ describe("MessageGroup reasoning grouping", () => {
       },
     );
 
+    // Raw reasoning trace renders as a collapsed timeline row (see above).
     expect(
-      screen.queryByText("Inspect the user request before editing."),
-    ).not.toBeInTheDocument();
+      screen.getByText("Inspect the user request before editing."),
+    ).toBeInTheDocument();
     expect(
       screen.getByTestId("interleaved-process-timeline"),
     ).toBeInTheDocument();
@@ -908,9 +912,10 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(screen.queryByTitle("View 2 saved steps")).not.toBeInTheDocument();
     expect(screen.queryByTitle(/Replay/)).not.toBeInTheDocument();
+    // Raw reasoning trace renders as a collapsed timeline row (see above).
     expect(
-      screen.queryByText("First inspect the request."),
-    ).not.toBeInTheDocument();
+      screen.getByText("First inspect the request."),
+    ).toBeInTheDocument();
     expect(screen.getByText(/laser engraving market 2025/)).toBeInTheDocument();
 
     expect(
@@ -1115,7 +1120,9 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(screen.queryByText("已调用")).not.toBeInTheDocument();
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
-    expect(screen.queryByText("继续检查输出文件。")).not.toBeInTheDocument();
+    // The Action callback syntax is stripped, but the trailing narration
+    // still renders as a collapsed trace row (raw-reasoning fallback).
+    expect(screen.getByText("继续检查输出文件。")).toBeInTheDocument();
     expect(screen.queryByText("执行动作")).not.toBeInTheDocument();
     expect(screen.queryByText("整理调研结果")).not.toBeInTheDocument();
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();

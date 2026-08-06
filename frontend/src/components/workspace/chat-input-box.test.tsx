@@ -45,6 +45,11 @@ vi.mock("./preview-refresh-indicator", () => ({
   PreviewRefreshIndicator: () => null,
 }));
 
+// The 3D pet spins up a three.js WebGL context that jsdom cannot provide.
+vi.mock("@/components/desktop-pet/FbxPet", () => ({
+  FbxPet: () => null,
+}));
+
 function textarea(): HTMLTextAreaElement {
   const el = document.querySelector("textarea");
   if (!el) throw new Error("textarea not found");

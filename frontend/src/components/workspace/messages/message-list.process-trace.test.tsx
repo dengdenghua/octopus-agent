@@ -870,13 +870,15 @@ describe("MessageList process trace lifecycle", () => {
     const savedStepToggles = screen.getAllByTitle("Open details");
     expect(savedStepToggles).toHaveLength(2);
     expect(screen.getByText(/old market query/)).toBeInTheDocument();
+    // Raw reasoning traces render as collapsed one-line rows (raw-reasoning
+    // fallback: actual thinking trace in chronological order).
     expect(
-      screen.queryByText("Inspect the old market request."),
-    ).not.toBeInTheDocument();
+      screen.getByText("Inspect the old market request."),
+    ).toBeInTheDocument();
     expect(screen.getByText(/latest market query/)).toBeInTheDocument();
     expect(
-      screen.queryByText("Inspect the latest market request."),
-    ).not.toBeInTheDocument();
+      screen.getByText("Inspect the latest market request."),
+    ).toBeInTheDocument();
 
     fireEvent.click(savedStepToggles[0]!);
 
@@ -929,7 +931,9 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
-    expect(screen.getByTitle("Open details")).toBeInTheDocument();
+    // Old trace renders (collapsed) + streaming trace keeps its own row —
+    // one "Open details" toggle per rendered trace.
+    expect(screen.getAllByTitle("Open details").length).toBeGreaterThan(0);
     expect(
       screen.getAllByTestId("process-timeline-event-execution").length,
     ).toBeGreaterThan(0);
@@ -937,9 +941,11 @@ describe("MessageList process trace lifecycle", () => {
     expect(screen.getAllByText(/active market query/).length).toBeGreaterThan(
       0,
     );
+    // Streaming trace also renders as a collapsed one-line row (raw-reasoning
+    // fallback); its *details* still live in the workbench, not expanded here.
     expect(
-      screen.queryByText("Inspect the actively streaming market request."),
-    ).not.toBeInTheDocument();
+      screen.getByText("Inspect the actively streaming market request."),
+    ).toBeInTheDocument();
   });
 
   test("pins the Kimi-style stream tail to only the active answer", () => {

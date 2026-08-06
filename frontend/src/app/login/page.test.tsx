@@ -128,26 +128,26 @@ describe("LoginPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("邮箱验证码登录，自动绑定大模型与积分")).toBeInTheDocument();
+    // Redesigned login surface: email-first copy, no phone form at all.
+    expect(await screen.findByText("输入邮箱，一键登录开始使用")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "邮箱" })).toBeInTheDocument();
-    expectTextContentIncludes("未注册邮箱将自动创建账号");
-    expect(screen.queryByText("手机号直接登录，自动绑定大模型与积分")).not.toBeInTheDocument();
-    expect(screen.queryByText("未注册手机号将自动创建账号")).not.toBeInTheDocument();
+    expect(screen.queryByText("登录你的 Octopus 账户")).not.toBeInTheDocument();
+    // No local account provider → no tab strip.
+    expect(screen.queryByText("本地账户")).not.toBeInTheDocument();
   });
 
-  it("uses email-specific registration copy outside the form too", async () => {
-    getAuthProvidersMock.mockResolvedValue([{ id: "oct" }]);
-    allowRegistrationMock.mockReturnValue(true);
+  it("shows email + local tabs when both providers are available", async () => {
+    getAuthProvidersMock.mockResolvedValue([
+      { id: "oct" },
+      { id: "local", label: "本地账户" },
+    ]);
 
     renderPage();
 
-    expect(await screen.findByText("邮箱验证码登录，自动绑定大模型与积分")).toBeInTheDocument();
-    expect(
-      screen.getAllByText((_, node) =>
-        elementOwnsText(node, "未注册邮箱将自动创建账号"),
-      ),
-    ).toHaveLength(2);
-    expect(screen.queryByText("未注册手机号将自动创建账号")).not.toBeInTheDocument();
+    expect(await screen.findByText("邮箱登录")).toBeInTheDocument();
+    expect(screen.getByText("本地账户")).toBeInTheDocument();
+    // Email form is the default tab.
+    expect(screen.getByRole("textbox", { name: "邮箱" })).toBeInTheDocument();
   });
 
   it("获取验证码 is enabled by default; invalid email surfaces toast error", async () => {

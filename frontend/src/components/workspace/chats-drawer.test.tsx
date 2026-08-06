@@ -46,7 +46,7 @@ describe("ChatsDrawer", () => {
       "href",
       "/workspace/agents?surface=chat",
     );
-    expect(screen.getByRole("link", { name: "自动化" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "订阅" })).toHaveAttribute(
       "href",
       "/workspace/intelligence?surface=chat",
     );

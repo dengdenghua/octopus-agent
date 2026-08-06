@@ -4,9 +4,19 @@ import { render, screen } from "@testing-library/react";
 // LivePreviewPanel pulls localized strings off ``t.livePreview.*`` etc. A Proxy
 // that returns "" for any access keeps every leaf render-safe (``t.x`` is "",
 // ``t.x.y`` is undefined — both valid React children) without enumerating keys.
+// Exception: ``codeMode.previewConsoleCount`` is *called* as a function by
+// PreviewConsole, so that namespace needs a real callable.
 vi.mock("@/core/i18n/hooks", () => ({
   useI18n: () => ({
-    t: new Proxy({}, { get: () => "" }),
+    t: new Proxy(
+      {},
+      {
+        get: (_, key) =>
+          key === "codeMode"
+            ? { previewConsoleCount: (n: number) => `${n}` }
+            : "",
+      },
+    ),
     locale: "zh",
     setLocale: () => Promise.resolve(),
   }),
