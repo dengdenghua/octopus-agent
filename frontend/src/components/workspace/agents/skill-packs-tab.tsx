@@ -218,7 +218,7 @@ function PackCard({
               {pack.affinity.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-300"
+                  className="rounded-full bg-info/10 px-2 py-0.5 text-xs font-medium text-info dark:text-info"
                 >
                   {tag}
                 </span>
@@ -439,7 +439,7 @@ function MatchBox({ compact = false }: { compact?: boolean }) {
               {result.affinity.map((a) => (
                 <span
                   key={a}
-                  className="rounded bg-blue-500/10 px-1.5 py-0.5 text-xs text-blue-600 dark:text-blue-300"
+                  className="rounded bg-info/10 px-1.5 py-0.5 text-xs text-info dark:text-info"
                 >
                   {a}
                 </span>

@@ -103,7 +103,7 @@ function HistoryItem({
   // 紧凑模式：用于窄容器（如助理右侧面板），去时间轴、改信息卡布局。
   if (compact) {
     return (
-      <div className="rounded-[10px] border border-border-default bg-card/50 p-3">
+      <div className="rounded-xl border border-border-default bg-card/50 p-3">
         <div className="flex items-start gap-2">
           <div
             className={cn(

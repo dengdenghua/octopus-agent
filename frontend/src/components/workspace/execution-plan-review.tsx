@@ -588,7 +588,7 @@ export function ExecutionPlanReview({
   return (
     <div
       className={cn(
-        "w-full rounded-lg border transition-colors transition-shadow duration-300",
+        "w-full rounded-lg border transition-colors transition-shadow duration-slow",
         isReviewable && "border-warning/30 bg-warning/50/[0.02] shadow-[var(--shadow-xs)]",
         (isExecuting || isApproved) && "border-primary/20 bg-primary/[0.02]",
         isCompleted && "border-success/20 bg-success/50/[0.02]",
@@ -649,7 +649,7 @@ export function ExecutionPlanReview({
           <div className="h-1 overflow-hidden rounded-lg bg-muted">
             <div
               className={cn(
-                "h-full rounded-lg transition-all duration-700 ease-out",
+                "h-full rounded-lg transition-all duration-slow ease-out",
                 isCompleted ? "bg-success" : "bg-primary",
               )}
               style={{ width: `${progressPct}%` }}

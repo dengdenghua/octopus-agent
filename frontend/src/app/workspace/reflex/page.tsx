@@ -583,7 +583,7 @@ function RuleRow({
           {(rule.actions ?? []).map((a) => (
             <Badge
               key={a}
-              className="bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/15"
+              className="bg-info/15 text-info hover:bg-info/15"
             >
               {a}
             </Badge>
@@ -594,7 +594,7 @@ function RuleRow({
             </Badge>
           )}
           {rule.enabled_when && (
-            <Badge className="bg-violet-500/15 text-violet-300 hover:bg-violet-500/15">
+            <Badge className="bg-chart-1/15 text-chart-1 hover:bg-chart-1/15">
               {t.reflexPage.badgeGated}
             </Badge>
           )}
@@ -633,10 +633,10 @@ function RuleRow({
           </div>
         )}
       </td>
-      <td className="py-2 pr-3 font-mono text-xs text-fuchsia-400">
+      <td className="py-2 pr-3 font-mono text-xs text-chart-3">
         {rule.kind}
       </td>
-      <td className="max-w-[280px] truncate py-2 pr-3 font-mono text-xs text-cyan-300">
+      <td className="max-w-[280px] truncate py-2 pr-3 font-mono text-xs text-info">
         {pat}
       </td>
       <td className="py-2 pr-3 text-right font-mono">{rule.priority}</td>

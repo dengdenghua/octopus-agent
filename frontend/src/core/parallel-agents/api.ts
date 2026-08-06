@@ -322,21 +322,21 @@ export async function cancelAll(): Promise<boolean> {
 
 export const STATUS_TEXT_COLOR: Record<string, string> = {
   pending: "text-muted-foreground",
-  running: "text-blue-500",
+  running: "text-info",
   completed: "text-success",
   failed: "text-destructive",
   cancelled: "text-warning",
-  timed_out: "text-orange-500",
+  timed_out: "text-warning",
   partial: "text-warning",
 };
 
 export const STATUS_BG: Record<string, string> = {
   pending: "bg-muted/50",
-  running: "bg-blue-500/10",
+  running: "bg-info/10",
   completed: "bg-success/10",
   failed: "bg-destructive/10",
   cancelled: "bg-warning/10",
-  timed_out: "bg-orange-500/10",
+  timed_out: "bg-warning/10",
   partial: "bg-warning/10",
 };
 

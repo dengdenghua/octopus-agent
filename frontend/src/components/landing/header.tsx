@@ -62,7 +62,7 @@ export function Header({ className, homeURL }: HeaderProps) {
             in-app ``/about`` until proper docs hosting lands. */}
         <Link
           to="/about"
-          className="relative text-white/60 transition-colors after:absolute after:-bottom-0.5 after:left-0 after:h-0.5 after:w-0 after:bg-white/40 after:transition-all after:duration-300 hover:text-white/90 hover:after:w-full"
+          className="relative text-white/60 transition-colors after:absolute after:-bottom-0.5 after:left-0 after:h-0.5 after:w-0 after:bg-white/40 after:transition-all after:duration-slow hover:text-white/90 hover:after:w-full"
         >
           {t.home.docs}
         </Link>
@@ -124,7 +124,7 @@ function StarCounter() {
   return (
     <>
       <StarFilledIcon
-        className="size-4 transition-colors duration-300 group-hover:text-warning"
+        className="size-4 transition-colors duration-slow group-hover:text-warning"
         fill="currentColor"
       />
       {stars > 0 && (

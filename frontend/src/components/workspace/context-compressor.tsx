@@ -132,7 +132,7 @@ export function ContextCompressor({
                 strokeLinecap="round"
                 strokeDasharray={`${strokeLength} ${circumference}`}
                 className={cn(
-                  "transition-[stroke-dasharray] duration-300",
+                  "transition-[stroke-dasharray] duration-slow",
                   isCompressing && "animate-pulse",
                 )}
               />

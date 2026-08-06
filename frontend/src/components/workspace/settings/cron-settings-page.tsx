@@ -445,7 +445,7 @@ export function CronSettingsPage() {
             <DialogTitle className="text-base">
               {t.cronSettings.deleteConfirmTitle}
             </DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-5">
+            <DialogDescription className="text-caption leading-5">
               {taskToDelete
                 ? t.cronSettings.deleteConfirmDescription(taskToDelete)
                 : ""}
@@ -456,7 +456,7 @@ export function CronSettingsPage() {
               type="button"
               disabled={deleting}
               onClick={() => setTaskToDelete(null)}
-              className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+              className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-caption font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
             >
               {t.common.cancel}
             </button>
@@ -469,7 +469,7 @@ export function CronSettingsPage() {
                 const deleted = await doDeleteTask(target);
                 if (deleted) setTaskToDelete(null);
               }}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-caption font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
             >
               {deleting ? (
                 <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />

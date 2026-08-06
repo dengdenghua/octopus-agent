@@ -188,7 +188,7 @@ export function VerifyPanel({
         )}
 
         {(pendingFiles.length > 0 || autoRunning) && (
-          <div className="mb-2 rounded-md border border-sky-500/25 bg-sky-500/8 px-2.5 py-2 text-xs text-sky-700 dark:text-sky-300">
+          <div className="mb-2 rounded-md border border-info/25 bg-info/8 px-2.5 py-2 text-xs text-info dark:text-info">
             <div className="flex items-center gap-1.5 font-medium">
               {autoRunning && <Loader2Icon className="size-3 animate-spin" />}
               {autoRunning

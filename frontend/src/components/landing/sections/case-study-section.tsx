@@ -79,7 +79,7 @@ export function CaseStudySection({ className }: { className?: string }) {
           >
             <Card className="group/card relative h-64 overflow-hidden">
               <div
-                className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-all duration-300 group-hover/card:scale-110 group-hover/card:brightness-90"
+                className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-all duration-slow group-hover/card:scale-110 group-hover/card:brightness-90"
                 style={{
                   backgroundImage: CARD_GRADIENTS[index % CARD_GRADIENTS.length],
                 }}
@@ -87,7 +87,7 @@ export function CaseStudySection({ className }: { className?: string }) {
               <div
                 className={cn(
                   "flex h-full w-full translate-y-[calc(100%-60px)] flex-col items-center",
-                  "transition-all duration-300",
+                  "transition-all duration-slow",
                   "group-hover/card:translate-y-[calc(100%-128px)]",
                 )}
               >

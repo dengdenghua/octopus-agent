@@ -48,10 +48,10 @@ const TYPE_ICONS: Record<TaskType, React.ReactNode> = {
 };
 
 const TYPE_COLORS: Record<TaskType, string> = {
-  background: "text-violet-500",
-  quest: "text-orange-500",
-  scheduled: "text-sky-500",
-  intelligence: "text-purple-500",
+  background: "text-chart-1",
+  quest: "text-chart-7",
+  scheduled: "text-info",
+  intelligence: "text-chart-3",
 };
 
 const STATUS_STYLE: Record<
@@ -194,7 +194,7 @@ export function TaskCard({
         aria-expanded={onClick ? undefined : expanded}
         aria-label={t.taskBoard.taskDetails(task.name || task.id)}
         className={cn(
-          "ui-dense-row group relative cursor-pointer rounded-lg border bg-card transition-all duration-200",
+          "ui-dense-row group relative cursor-pointer rounded-lg border bg-card transition-all duration-base",
           "hover:shadow-[var(--shadow-sm)] hover:border-border-strong hover:-translate-y-0.5",
           isRunning && "border-warning/30 shadow-warning/5",
           task.status === "failed" && "border-destructive/20",
@@ -275,7 +275,7 @@ export function TaskCard({
 
         {/* Expanded detail */}
         {expanded && !compact && (
-          <div className="mt-3 space-y-1.5 border-t pt-2 text-xs text-muted-foreground animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="mt-3 space-y-1.5 border-t pt-2 text-xs text-muted-foreground animate-in fade-in slide-in-from-top-1 duration-base">
             <div className="flex justify-between">
               <span>{t.taskBoard.type}</span>
               <span className="font-medium text-foreground">

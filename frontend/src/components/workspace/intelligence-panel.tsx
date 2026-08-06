@@ -1367,7 +1367,7 @@ export function IntelligencePanel() {
       </div>
 
       {selectedReport && (
-        <section className="overflow-hidden rounded-[1.75rem] border border-border-default bg-card/70">
+        <section className="overflow-hidden rounded-4xl border border-border-default bg-card/70">
           <div className="border-b border-border-default bg-background/40 px-4 py-4">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
               <div className="space-y-3">
@@ -1524,7 +1524,7 @@ export function IntelligencePanel() {
             <DialogTitle className="text-base">
               {t.intelligence.deleteConfirmTitle}
             </DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-5">
+            <DialogDescription className="text-caption leading-5">
               {subscriptionToDelete
                 ? t.intelligence.deleteConfirmDescription(
                     subscriptionToDelete.title,

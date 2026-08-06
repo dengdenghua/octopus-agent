@@ -54,7 +54,7 @@ const PERSONAL_MODES: [ModeMeta, ModeMeta, ModeMeta] = [
     name: "general",
     icon: SparklesIcon,
     activeTone:
-      "bg-sky-500/15 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 ring-1 ring-sky-500/20",
+      "bg-info/15 text-info dark:bg-info/40 dark:text-info ring-1 ring-info/20",
   },
   {
     name: "build",
@@ -66,7 +66,7 @@ const PERSONAL_MODES: [ModeMeta, ModeMeta, ModeMeta] = [
     name: "research",
     icon: FlaskConicalIcon,
     activeTone:
-      "bg-violet-500/15 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300 ring-1 ring-violet-500/20",
+      "bg-chart-1/15 text-chart-1 dark:bg-chart-1/40 dark:text-chart-1 ring-1 ring-chart-1/20",
   },
 ];
 
@@ -301,7 +301,7 @@ export function PersonalModeSelector({
           }
         }}
         className={cn(
-          "group flex items-center gap-1.5 text-xs font-medium text-muted-foreground shadow-none transition-all duration-200",
+          "group flex items-center gap-1.5 text-xs font-medium text-muted-foreground shadow-none transition-all duration-base",
           chromeless
             ? "h-8 rounded-lg px-1.5 hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 hover:border-border-subtle hover:bg-muted/55 hover:text-foreground",

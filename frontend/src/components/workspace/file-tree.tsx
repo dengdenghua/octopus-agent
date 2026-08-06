@@ -40,15 +40,15 @@ export interface FileTreeEvent {
 }
 
 const FILE_ICONS: Record<string, string> = {
-  ts: "text-blue-500 dark:text-blue-400",
-  tsx: "text-blue-500 dark:text-blue-400",
+  ts: "text-info dark:text-info",
+  tsx: "text-info dark:text-info",
   js: "text-warning",
   jsx: "text-warning",
   py: "text-success",
   json: "text-warning dark:text-warning",
   md: "text-muted-foreground",
-  css: "text-purple-500 dark:text-purple-400",
-  html: "text-orange-500 dark:text-orange-400",
+  css: "text-chart-1 dark:text-chart-1",
+  html: "text-chart-7 dark:text-chart-7",
   yaml: "text-destructive dark:text-destructive",
   yml: "text-destructive dark:text-destructive",
   toml: "text-destructive dark:text-destructive",
@@ -434,7 +434,7 @@ export function FileTree({
                   gitStatus === "D" &&
                     "bg-destructive/10 text-destructive",
                   gitStatus === "R" &&
-                    "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                    "bg-info/10 text-info dark:text-info",
                 )}
               >
                 {gitStatus}

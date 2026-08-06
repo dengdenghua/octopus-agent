@@ -97,7 +97,7 @@ export function SelectionEditor({
     <div
       ref={containerRef}
       className={cn(
-        "fixed z-50 animate-in fade-in zoom-in-95 duration-200",
+        "fixed z-50 animate-in fade-in zoom-in-95 duration-base",
         className,
       )}
       style={{
@@ -107,7 +107,7 @@ export function SelectionEditor({
       }}
     >
       <div className="flex items-center gap-2 rounded-lg border border-border-default bg-popover shadow-[var(--shadow-md)] px-3 py-2 min-w-[280px]">
-        <SparklesIcon className="size-4 text-violet-500 shrink-0" />
+        <SparklesIcon className="size-4 text-chart-1 shrink-0" />
         <input
           ref={inputRef}
           type="text"
@@ -119,7 +119,7 @@ export function SelectionEditor({
           disabled={isLoading}
         />
         {isLoading ? (
-          <Loader2Icon className="size-4 animate-spin text-violet-500 shrink-0" />
+          <Loader2Icon className="size-4 animate-spin text-chart-1 shrink-0" />
         ) : (
           <button
             onClick={handleClose}

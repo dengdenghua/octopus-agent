@@ -121,7 +121,7 @@ export function CreditsCenterDialog({
             </p>
             <div className="mt-2 flex gap-2">
               <div className="flex-1 rounded-lg bg-background px-3 py-2">
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-mini text-muted-foreground">
                   {t.creditsCenter.accountBalance}
                 </p>
                 <p className="text-sm font-semibold tabular-nums">
@@ -129,7 +129,7 @@ export function CreditsCenterDialog({
                 </p>
               </div>
               <div className="flex-1 rounded-lg bg-background px-3 py-2">
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-mini text-muted-foreground">
                   {t.creditsCenter.communityBalance}
                 </p>
                 <p className="text-sm font-semibold tabular-nums">
@@ -166,7 +166,7 @@ export function CreditsCenterDialog({
           {/* 账本统计 */}
           <div className="flex gap-2 text-center">
             <div className="flex-1 rounded-lg bg-emerald-500/10 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-mini text-muted-foreground">
                 {t.creditsCenter.earned}
               </p>
               <p className="text-base font-bold tabular-nums text-emerald-600">
@@ -174,7 +174,7 @@ export function CreditsCenterDialog({
               </p>
             </div>
             <div className="flex-1 rounded-lg bg-rose-500/10 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-mini text-muted-foreground">
                 {t.creditsCenter.spent}
               </p>
               <p className="text-base font-bold tabular-nums text-rose-600">
@@ -223,7 +223,7 @@ export function CreditsCenterDialog({
                             {txn.reason}
                           </span>
                         </p>
-                        <p className="text-[11px] text-muted-foreground/70">
+                        <p className="text-mini text-muted-foreground/70">
                           {new Date(txn.createdAt).toLocaleString()}
                         </p>
                       </div>

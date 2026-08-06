@@ -154,7 +154,7 @@ export function WorkspaceNavChatList({
             <SidebarMenuButton
               isActive={pathname.startsWith("/workspace/skills")}
               asChild
-              className="text-muted-foreground rounded-lg py-1 text-sm transition-all duration-150 hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium"
+              className="text-muted-foreground rounded-lg py-1 text-sm transition-all duration-fast hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium"
             >
               <Link to="/workspace/skills">
                 <SparklesIcon className="size-[15px]" />

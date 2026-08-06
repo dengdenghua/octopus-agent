@@ -57,9 +57,9 @@ export function getApprovalData(
 // Colors stay here (styling); the human-readable label comes from i18n
 // (t.toolApproval.tools) so a beginner sees "运行命令"/"改文件", not "bash".
 const TOOL_COLORS: Record<string, string> = {
-  bash: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
-  write_file: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  str_replace: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+  bash: "bg-chart-7/10 text-chart-7 dark:text-chart-7",
+  write_file: "bg-info/10 text-info dark:text-info",
+  str_replace: "bg-chart-1/10 text-chart-1 dark:text-chart-1",
   git_commit: "bg-success/10 text-success",
   schedule_cron: "bg-warning/10 text-warning",
   remote_trigger: "bg-destructive/10 text-destructive",

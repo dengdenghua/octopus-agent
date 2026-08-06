@@ -17,7 +17,7 @@ export default function McpPage() {
           <CapabilityQualityStrip surface="integrations" />
           <section className="workspace-panel ui-density-panel flex flex-col gap-4">
             <div className="space-y-1">
-              <div className="text-muted-foreground text-xs font-medium uppercase tracking-[0.18em]">
+              <div className="text-muted-foreground text-xs font-medium uppercase tracking-eyebrow">
                 {t.mcpCenter.integrations}
               </div>
               <div className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight">
@@ -44,8 +44,8 @@ export default function McpPage() {
               </div>
               <div className="workspace-panel-subtle ui-density-panel rounded-lg bg-gradient-to-br from-blue-500/5 to-transparent transition-colors">
                 <div className="mb-1 flex items-center gap-2 text-sm font-medium">
-                  <div className="flex size-5 items-center justify-center rounded bg-blue-500/10">
-                    <ServerIcon className="size-3 text-blue-500" />
+                  <div className="flex size-5 items-center justify-center rounded bg-info/10">
+                    <ServerIcon className="size-3 text-info" />
                   </div>
                   {t.mcpCenter.configGovernance}
                 </div>

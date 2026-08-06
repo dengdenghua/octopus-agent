@@ -346,7 +346,7 @@ export function ChatPageLayout({
                   : undefined,
                 transition: drawerDragDelta ? "none" : undefined,
               }}
-              className="fixed right-0 bottom-0 left-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-border-default bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)] backdrop-blur-[10px] transition-[height,transform] duration-300 ease-out"
+              className="fixed right-0 bottom-0 left-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-border-default bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)] backdrop-blur-[10px] transition-[height,transform] duration-slow ease-out"
             >
               <button
                 type="button"
@@ -361,7 +361,7 @@ export function ChatPageLayout({
               >
                 <span
                   className={cn(
-                    "h-1 rounded-full bg-muted-foreground/30 transition-[width] duration-300",
+                    "h-1 rounded-full bg-muted-foreground/30 transition-[width] duration-slow",
                     mobileDrawerExpanded ? "w-14" : "w-10",
                   )}
                 />

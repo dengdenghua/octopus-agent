@@ -547,7 +547,7 @@ function LedProgress({ progress }: { progress?: number }) {
           <span
             key={c}
             className={cn(
-              "inline-block rounded-sm transition-colors duration-200",
+              "inline-block rounded-sm transition-colors duration-base",
               isLit
                 ? "bg-success/90 dark:bg-success/90"
                 : "bg-success/15 dark:bg-success/15",

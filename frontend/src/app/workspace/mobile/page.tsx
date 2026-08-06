@@ -660,7 +660,7 @@ function Drawer({
         }}
       />
       {/* Drawer panel */}
-      <div className="absolute left-0 top-0 z-50 flex h-full w-[78%] max-w-[360px] flex-col overflow-hidden bg-white shadow-2xl dark:bg-card animate-in slide-in-from-left duration-200">
+      <div className="absolute left-0 top-0 z-50 flex h-full w-[78%] max-w-[360px] flex-col overflow-hidden bg-white shadow-2xl dark:bg-card animate-in slide-in-from-left duration-base">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3 dark:border-border">
           <div className="flex items-center gap-2">
@@ -713,7 +713,7 @@ function Drawer({
                     className={cn(
                       "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
                       c.isActive
-                        ? "bg-blue-50 dark:bg-blue-500/10"
+                        ? "bg-info/10"
                         : "hover:bg-muted/50 dark:hover:bg-muted-foreground",
                     )}
                   >
@@ -721,7 +721,7 @@ function Drawer({
                       className={cn(
                         "size-3.5 shrink-0",
                         c.isActive
-                          ? "text-blue-500"
+                          ? "text-info"
                           : "text-muted-foreground/70",
                       )}
                     />
@@ -729,7 +729,7 @@ function Drawer({
                       className={cn(
                         "flex-1 truncate text-sm",
                         c.isActive
-                          ? "font-medium text-blue-600 dark:text-blue-400"
+                          ? "font-medium text-info dark:text-info"
                           : "text-muted-foreground dark:text-muted-foreground",
                       )}
                     >
@@ -891,7 +891,7 @@ function DeviceItem({
       className={cn(
         "flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors",
         active
-          ? "bg-blue-50 dark:bg-blue-500/10"
+          ? "bg-info/10"
           : "hover:bg-muted/50 dark:hover:bg-muted-foreground",
       )}
     >
@@ -899,7 +899,7 @@ function DeviceItem({
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-lg",
           active
-            ? "bg-blue-500 text-white"
+            ? "bg-info text-white"
             : "bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground",
         )}
       >
@@ -922,7 +922,7 @@ function DeviceItem({
             online ? "bg-success" : "bg-muted-foreground/30",
           )}
         />
-        {active && <CheckCircle2Icon className="size-3.5 text-blue-500" />}
+        {active && <CheckCircle2Icon className="size-3.5 text-info" />}
       </div>
     </button>
   );
@@ -958,7 +958,7 @@ function DevicePreviewModal({
           if (e.key === "Escape") onClose();
         }}
       />
-      <div className="absolute bottom-0 left-0 right-0 z-50 max-h-[60%] overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-card animate-in slide-in-from-bottom duration-200">
+      <div className="absolute bottom-0 left-0 right-0 z-50 max-h-[60%] overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-card animate-in slide-in-from-bottom duration-base">
         <div className="flex justify-center pt-2 pb-1">
           <div className="h-1 w-10 rounded-full bg-muted-foreground/30 dark:bg-muted" />
         </div>
@@ -1042,7 +1042,7 @@ function PreviewCard({
         "group flex w-full items-center gap-2.5 overflow-hidden rounded-lg border p-2.5 text-left transition-colors",
         disabled
           ? "border-dashed border-border bg-muted/50 opacity-60 dark:border-border dark:bg-background"
-          : "border-border bg-white hover:border-blue-500 hover:bg-blue-50/50 dark:border-border dark:bg-muted dark:hover:bg-blue-500/10",
+          : "border-border bg-white hover:border-info hover:bg-info/10 dark:border-border dark:bg-muted dark:hover:bg-info/10",
       )}
     >
       <div className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted dark:bg-muted">
@@ -1069,7 +1069,7 @@ function PreviewCard({
           "rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
           disabled
             ? "bg-muted text-muted-foreground/70 dark:bg-muted"
-            : "bg-foreground text-white group-hover:bg-blue-500 dark:bg-white dark:text-foreground",
+            : "bg-foreground text-white group-hover:bg-info dark:bg-white dark:text-foreground",
         )}
       >
         {disabled ? "未连接" : "进入"}

@@ -96,6 +96,10 @@
 
 ## 五、建议实施路线
 
+> **进度更新（2026-08-06 续）**：第二阶段全部收官——④ 暗色模式走查（V4 / design-qa P3）：storage/knowledge/evolution 三个页面约 60 处实心 `bg-white`、`border-black/10`、`hover:bg-black/[0.025]` 等浅色直写迁移到 `bg-card`/`border-border`/`bg-muted`（亮色下 pixel 级等价，暗色修复）；QR 码、头像底、深色画布工具栏、liquid-glass 玻璃拟态等刻意直写甄别保留。⑤ 删除 2.2MB 死文件 `src/styles/tailwind-prebuilt.css`（全仓零引用）。⑥ P5 codemirror 静态污染核实为**当前代码误报**：`inline-completion.ts` 与 `diff-viewer.tsx` 均已被调用方 dynamic import，@codemirror 全部落在懒加载 chunk。验证：typecheck ✅ / 构建 ✅。**第三阶段阻塞提示**：聊天主页面与 `agent-operator-panel.tsx` 及整个 `messages/` 目录当前均为用户未提交 WIP，拆分重构建议等 WIP 提交后再启动。
+>
+> **进度更新（2026-08-06）**：第二阶段收尾完成——① 动效时长统一：`duration-75~700` 全仓清零 → `duration-instant/fast/base/slow` 四档 token（发现并修复 Tailwind v4 命名空间问题：命名时长必须是 `@theme` 内的 `--transition-duration-*` 主题键，且既有的 3 处 `duration-base` 此前从未生成过工具类——与 `--font-size-*` 同型 bug）；② 任意值治理：`text-[10/10.5/11/11.5px]` → micro/mini、新增 `--text-caption`(12.5px) 与 `--tracking-caps/eyebrow` token、`rounded-[Npx]` 全部归入圆角档；③ 剩余彩色阶迁移：blue/sky/cyan 315 处 → `info`，violet/purple → `chart-1`、fuchsia/pink → `chart-3`、indigo → `chart-6`、orange → `chart-7`、teal → `chart-2`（浅色调 50/100/200 转 `/10`/`/15` 透明度变体，hover 深档配对转 `/80`/`/90`；`timed_out` 状态橙 → `warning`）。刻意保留：landing 固定深色场景的 purple/zinc、渐变端点品牌色、appearance 设置页主题预览色板。验证：typecheck ✅ / 构建 ✅（新工具类全部生成）/ 单测 1680 通过，40 失败全部证实为既有问题（11 个在 HEAD 提交、29 个来自用户未提交的 FbxPet 3D 宠物 WIP），与本次改动无关。
+>
 > **进度更新（2026-08-04）**：第一阶段 5 项已完成 4 项（katex 经核实为误报，无需改动；产物 35MB/709 chunk → 31MB/518 chunk）。第二阶段：语义状态色 token（success/warning/info）+ chart-6/7/8 扩展分类色落地；**状态色系（emerald/green/amber/yellow/red/rose）约 2060 处硬编码已全仓清零**，数百处手写 `dark:` 亮暗成对写法被 token 吞掉；`text-[10/11px]` 124 处收敛为 `text-micro`/`text-mini` token；附带修复 `--font-size-*` 命名空间错误导致 `text-2xs/3xs` 从未生效的潜在 bug。验证：typecheck ✅ / 1692 单测 ✅ / 构建 ✅。
 
 ### 第一阶段：低风险高收益（1–2 天）✅ 已完成
@@ -108,10 +112,10 @@
 
 ### 第二阶段：视觉一致性（3–5 天）🔶 部分完成
 
-1. 彩色阶硬编码 → 语义 token：✅ **状态色系（emerald/green/amber/yellow/red/rose）约 2060 处已全仓清零**（~160 文件，core/sharing 导出模板刻意排除）；剩余 blue/sky/violet 等约 490 处品牌/类别色需逐个判断语义
-2. 任意值治理：✅ `text-[10/11px]` 124 处已收敛；`rounded-[Npx]`、`text-[12.5px]`、`tracking-[0.16em]` 待处理
-3. 暗色模式专项走查（V4，配合 design-qa.md 的 P3 闭环）— 待做
-4. 动效时长统一到 token（V6）— 待做
+1. 彩色阶硬编码 → 语义 token：✅ **状态色系约 2060 处已清零**（08-04）；✅ **blue/sky/cyan 315 处 → info、紫粉/橙/青系 → chart token**（08-06）；剩余仅渐变端点品牌色与 landing 固定深色场景（刻意保留）
+2. 任意值治理：✅ `text-[10/11px]` 124 处（08-04）；✅ `text-[12.5px]`→`text-caption`、`tracking-[0.1xem]`→`tracking-caps/eyebrow`、`rounded-[Npx]`→圆角档（08-06）；剩余少量刻意保留（9px/13px/15px 等）
+3. 暗色模式专项走查（V4，配合 design-qa.md 的 P3 闭环）— ✅ 已完成（08-06，静态审计 + 3 页面修复，刻意直写甄别保留）
+4. 动效时长统一到 token（V6）— ✅ 已完成（08-06），并修复 `duration-base` 从未生成工具类的命名空间 bug
 
 ### 第三阶段：结构性重构（按迭代排期）
 

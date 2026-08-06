@@ -60,10 +60,10 @@ interface TimelineResponse {
 /* ── event icon/color mapping ──────────────────────── */
 
 const EVENT_STYLE: Record<string, { icon: React.ReactNode; color: string }> = {
-  step: { icon: <WrenchIcon className="size-3.5" />, color: "bg-blue-500" },
+  step: { icon: <WrenchIcon className="size-3.5" />, color: "bg-info" },
   trajectory: {
     icon: <BrainCircuitIcon className="size-3.5" />,
-    color: "bg-violet-500",
+    color: "bg-chart-1",
   },
   react_checkpoint: {
     icon: <CpuIcon className="size-3.5" />,
@@ -72,7 +72,7 @@ const EVENT_STYLE: Record<string, { icon: React.ReactNode; color: string }> = {
   immune: { icon: <ZapIcon className="size-3.5" />, color: "bg-destructive" },
   budget_squirt: {
     icon: <ClockIcon className="size-3.5" />,
-    color: "bg-orange-500",
+    color: "bg-chart-7",
   },
   reflex_hit: {
     icon: <ZapIcon className="size-3.5" />,
@@ -279,7 +279,7 @@ export function ExecutionTimeline() {
                                 {ev.event_type}
                               </span>
                               {ev.skill_name && (
-                                <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-xs text-blue-400">
+                                <span className="rounded bg-info/15 px-1.5 py-0.5 text-xs text-info">
                                   {ev.skill_name}
                                 </span>
                               )}
@@ -301,7 +301,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.action && (
-                              <div className="mt-1 rounded-lg bg-blue-500/10 px-2.5 py-1.5 text-xs font-mono text-blue-300">
+                              <div className="mt-1 rounded-lg bg-info/10 px-2.5 py-1.5 text-xs font-mono text-info">
                                 {stripTraceLabelPrefixes(ev.action).slice(
                                   0,
                                   150,

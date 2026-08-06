@@ -262,7 +262,7 @@ function StatusBadge({ status }: { status: RunReview["status"] }) {
       variant="outline"
       className={cn(
         "text-xs",
-        status === "running" && "border-blue-500/30 text-blue-600",
+        status === "running" && "border-info/30 text-info",
         status === "error" && "border-destructive/30 text-destructive",
         status === "done" && "border-success/30 text-success",
       )}

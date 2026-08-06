@@ -20,7 +20,7 @@ export function ChatHeaderMenuButton({
       title={t.codeMode.threadsHistory}
       className={cn(
         "flex size-[42px] shrink-0 items-center justify-center rounded-lg text-muted-foreground sm:size-8",
-        "transition-all duration-200 hover:bg-muted hover:text-foreground active:scale-95",
+        "transition-all duration-base hover:bg-muted hover:text-foreground active:scale-95",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
         className,
       )}

@@ -189,7 +189,7 @@ function StepIcon({ status }: { status: StepStatus }) {
   }
   if (status === "in_progress") {
     return (
-      <Loader2Icon className="size-4 shrink-0 animate-spin text-blue-500" />
+      <Loader2Icon className="size-4 shrink-0 animate-spin text-info" />
     );
   }
   return <CircleIcon className="size-4 shrink-0 text-muted-foreground/50" />;
@@ -225,7 +225,7 @@ export function ExecutionChecklistPanel({
     >
       <div className="mb-2 flex items-center justify-between">
         <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-          <ListChecksIcon className="size-3.5 text-violet-500" />
+          <ListChecksIcon className="size-3.5 text-chart-1" />
           {t.executionChecklist.title}
         </div>
         <div className="text-xs tabular-nums text-muted-foreground">

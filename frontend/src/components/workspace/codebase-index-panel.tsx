@@ -160,7 +160,7 @@ function ProgressBar({ pct, className }: { pct: number; className?: string }) {
       )}
     >
       <div
-        className="h-full rounded-lg bg-primary transition-all duration-300"
+        className="h-full rounded-lg bg-primary transition-all duration-slow"
         style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
       />
     </div>

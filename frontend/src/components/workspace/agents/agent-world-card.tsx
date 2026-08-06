@@ -34,8 +34,8 @@ export const CATEGORY_STYLES: Record<
   { bg: string; text: string; icon: string }
 > = {
   assistant: {
-    bg: "bg-blue-500/10",
-    text: "text-blue-600 dark:text-blue-400",
+    bg: "bg-info/10",
+    text: "text-info dark:text-info",
     icon: "🤖",
   },
   coder: {
@@ -44,8 +44,8 @@ export const CATEGORY_STYLES: Record<
     icon: "💻",
   },
   researcher: {
-    bg: "bg-violet-500/10",
-    text: "text-violet-600 dark:text-violet-400",
+    bg: "bg-chart-1/10",
+    text: "text-chart-1 dark:text-chart-1",
     icon: "🔬",
   },
   creative: {
@@ -59,13 +59,13 @@ export const CATEGORY_STYLES: Record<
     icon: "⚡",
   },
   specialist: {
-    bg: "bg-cyan-500/10",
-    text: "text-cyan-600 dark:text-cyan-400",
+    bg: "bg-info/10",
+    text: "text-info dark:text-info",
     icon: "🎯",
   },
   financial: {
-    bg: "bg-teal-500/10",
-    text: "text-teal-600 dark:text-teal-400",
+    bg: "bg-chart-2/10",
+    text: "text-chart-2 dark:text-chart-2",
     icon: "💼",
   },
 };
@@ -187,7 +187,7 @@ export function AgentWorldCard({
   return (
     <Card
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-200 ease-out sm:min-h-[176px]",
+        "group relative flex flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 shadow-[var(--shadow-xs)] transition-all duration-base ease-out sm:min-h-[176px]",
         "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[var(--shadow-sm)]",
         "before:pointer-events-none before:absolute before:left-0 before:top-0 before:h-3 before:w-3 before:border-l before:border-t before:border-primary/45",
         "after:pointer-events-none after:absolute after:bottom-0 after:right-0 after:h-3 after:w-3 after:border-b after:border-r before:border-primary/30",
@@ -217,7 +217,7 @@ export function AgentWorldCard({
                 iconFallback
               )}
               {agent.is_official && (
-                <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 shadow-[var(--shadow-xs)]">
+                <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-info shadow-[var(--shadow-xs)]">
                   <BadgeCheckIcon className="h-2.5 w-2.5 text-white" />
                 </div>
               )}

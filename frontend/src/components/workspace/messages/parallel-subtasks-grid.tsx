@@ -151,7 +151,7 @@ function MiniSubtaskRow({
             <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
               <div
                 className={cn(
-                  "h-full rounded-full transition-all duration-500",
+                  "h-full rounded-full transition-all duration-slow",
                   isFailedLike
                     ? "bg-destructive dark:bg-destructive"
                     : task.status === "cancelled"
@@ -308,7 +308,7 @@ export function SubtaskHoverPreview({
               <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
                 <div
                   className={cn(
-                    "h-full rounded-full transition-all duration-500",
+                    "h-full rounded-full transition-all duration-slow",
                     isFailedLike
                       ? "bg-destructive dark:bg-destructive"
                       : task.status === "cancelled"
@@ -529,7 +529,7 @@ export function ParallelSubtasksGrid({
         <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
           <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
             <div
-              className="h-full rounded-full bg-success transition-all duration-500 dark:bg-success"
+              className="h-full rounded-full bg-success transition-all duration-slow dark:bg-success"
               style={{ width: `${overallPercent}%` }}
             />
           </div>

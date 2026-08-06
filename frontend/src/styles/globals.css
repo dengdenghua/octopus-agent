@@ -219,8 +219,24 @@
      replace didn't set one either, so leading keeps inheriting. */
   --text-micro: 0.625rem;
   --text-mini: 0.6875rem;
+  /* 12.5px — dialog descriptions / compact buttons; replaces text-[12.5px].
+     No line-height paired, same rationale as micro/mini above. */
+  --text-caption: 0.78125rem;
   --text-2xs: 0.5625rem;
   --text-3xs: 0.5rem;
+
+  /* Letter-spacing tiers for uppercase eyebrow/label text — replaces the
+     tracking-[0.12em]/[0.14em]/[0.16em]/[0.18em] arbitrary-value spread. */
+  --tracking-caps: 0.12em;
+  --tracking-eyebrow: 0.16em;
+
+  /* duration-* utility namespace: Tailwind v4 resolves named durations from
+     ``--transition-duration-*`` theme keys. The runtime values stay in
+     ``:root`` as --motion-duration-* — keep the two in sync. */
+  --transition-duration-instant: 100ms;
+  --transition-duration-fast: 150ms;
+  --transition-duration-base: 200ms;
+  --transition-duration-slow: 300ms;
 
   --radius-sm: calc((var(--radius) - 4px) * var(--corner-radius-scale, 1));
   --radius-md: calc((var(--radius) - 2px) * var(--corner-radius-scale, 1));

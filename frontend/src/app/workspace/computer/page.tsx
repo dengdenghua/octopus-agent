@@ -2167,7 +2167,7 @@ function ScreenshotActionOverlay({
             className={cn(
               "absolute -inset-4 rounded-full border-2 animate-ping",
               target.tone === "preview"
-                ? "border-blue-400/80"
+                ? "border-info/80"
                 : target.tone === "candidate"
                   ? "border-success/80"
                   : "border-warning/80",
@@ -2177,7 +2177,7 @@ function ScreenshotActionOverlay({
             className={cn(
               "relative grid size-8 place-items-center rounded-full text-white shadow-[var(--shadow-md)] ring-2 ring-white/90",
               target.tone === "preview"
-                ? "bg-blue-600"
+                ? "bg-info"
                 : target.tone === "candidate"
                   ? "bg-success"
                   : "bg-warning",
@@ -2495,7 +2495,7 @@ function CurrentActionPanel({ action }: { action: ActiveAction }) {
   const toneClass = {
     idle: "border-border bg-background/70",
     active:
-      "border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-100",
+      "border-info/30 bg-info/10 text-info",
     warn: "border-warning/30 bg-warning/5 text-warning dark:border-warning/60",
     ok: "border-success/30 bg-success/5 text-success dark:border-success/60",
   }[action.tone];
@@ -2528,7 +2528,7 @@ function ControlSessionPanel({
   const toneClass = {
     idle: "border-border bg-background/70",
     action:
-      "border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-100",
+      "border-info/30 bg-info/10 text-info",
     paused:
       "border-warning/30 bg-warning/5 text-warning dark:border-warning/60",
   }[indicator.mode];

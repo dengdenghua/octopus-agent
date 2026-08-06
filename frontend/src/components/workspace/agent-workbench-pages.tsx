@@ -187,21 +187,21 @@ const OBSERVED_REFERENCE_META: Record<
 > = {
   files: {
     Icon: FileTextIcon,
-    barClassName: "bg-blue-400",
-    dotClassName: "bg-blue-400",
-    iconClassName: "text-blue-500",
+    barClassName: "bg-info",
+    dotClassName: "bg-info",
+    iconClassName: "text-info",
   },
   plans: {
     Icon: ListChecksIcon,
-    barClassName: "bg-violet-400",
-    dotClassName: "bg-violet-400",
-    iconClassName: "text-violet-500",
+    barClassName: "bg-chart-1",
+    dotClassName: "bg-chart-1",
+    iconClassName: "text-chart-1",
   },
   web: {
     Icon: GlobeIcon,
-    barClassName: "bg-sky-400",
-    dotClassName: "bg-sky-400",
-    iconClassName: "text-sky-500",
+    barClassName: "bg-info",
+    dotClassName: "bg-info",
+    iconClassName: "text-info",
   },
   memory: {
     Icon: BrainCircuitIcon,
@@ -1667,7 +1667,7 @@ export function AgentCreationCard({
         {t.agentWorkbenchPages.agentClusterCreateAssistant}
       </div>
       <div className="flex justify-center overflow-hidden bg-[color:color-mix(in_oklch,var(--muted)_38%,var(--background))] px-7 pb-8 pt-16">
-        <div className="relative w-full max-w-sm rotate-[3deg] transition-transform duration-300 hover:rotate-0">
+        <div className="relative w-full max-w-sm rotate-[3deg] transition-transform duration-slow hover:rotate-0">
           <div
             aria-hidden="true"
             className="absolute -top-20 left-1/2 z-10 h-24 w-12 -translate-x-1/2 rounded-b-lg border-x border-border-default bg-foreground shadow-[var(--shadow-xs)]"

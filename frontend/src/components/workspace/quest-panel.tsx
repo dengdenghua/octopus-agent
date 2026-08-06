@@ -365,7 +365,7 @@ function PhaseStepper({ currentPhase }: { currentPhase: QuestPhase }) {
           <div key={phase.key} className="flex items-center">
             <div
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-300",
+                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-slow",
                 isActive && "bg-primary/10 text-primary ring-1 ring-primary/30",
                 isComplete && "text-success",
                 isFuture && "text-muted-foreground/40",
@@ -385,7 +385,7 @@ function PhaseStepper({ currentPhase }: { currentPhase: QuestPhase }) {
             {i < PHASES.length - 1 && (
               <div
                 className={cn(
-                  "mx-1 h-px w-4 transition-colors duration-300",
+                  "mx-1 h-px w-4 transition-colors duration-slow",
                   isComplete
                     ? "bg-success dark:bg-success"
                     : "bg-border",
@@ -425,7 +425,7 @@ function PlanReview({
   };
 
   return (
-    <div className="space-y-3 px-4 py-3 animate-in fade-in duration-300">
+    <div className="space-y-3 px-4 py-3 animate-in fade-in duration-slow">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">{t.questMode.executionPlan}</h4>
         <span
@@ -549,7 +549,7 @@ function ExecutionProgress({
       : 0;
 
   return (
-    <div className="space-y-2 px-4 py-3 animate-in fade-in duration-300">
+    <div className="space-y-2 px-4 py-3 animate-in fade-in duration-slow">
       <div className="flex items-center justify-between text-xs">
         <span className="font-medium">
           {t.questMode.execute} ({completedCount}/{plan.steps.length})
@@ -560,7 +560,7 @@ function ExecutionProgress({
       {/* Progress bar */}
       <div className="bg-primary/10 h-1.5 w-full overflow-hidden rounded-lg">
         <div
-          className="bg-primary h-full rounded-lg transition-all duration-500 shadow-[var(--shadow-xs)] shadow-primary/20"
+          className="bg-primary h-full rounded-lg transition-all duration-slow shadow-[var(--shadow-xs)] shadow-primary/20"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -1031,7 +1031,7 @@ export function QuestPanel({
 
             {/* Phase-specific content */}
             {quest.phase === "analyzing" && (
-              <div className="flex items-center gap-2 px-4 py-6 animate-in fade-in duration-300">
+              <div className="flex items-center gap-2 px-4 py-6 animate-in fade-in duration-slow">
                 <Loader2Icon className="text-primary size-4 animate-spin" />
                 <span className="text-muted-foreground text-sm">
                   {t.questMode.analyzing}
@@ -1040,7 +1040,7 @@ export function QuestPanel({
             )}
 
             {quest.phase === "planning" && (
-              <div className="flex items-center gap-2 px-4 py-6 animate-in fade-in duration-300">
+              <div className="flex items-center gap-2 px-4 py-6 animate-in fade-in duration-slow">
                 <Loader2Icon className="text-primary size-4 animate-spin" />
                 <span className="text-muted-foreground text-sm">
                   {t.questMode.generatingPlan}
@@ -1065,7 +1065,7 @@ export function QuestPanel({
             )}
 
             {quest.phase === "verifying" && (
-              <div className="space-y-2 animate-in fade-in duration-300">
+              <div className="space-y-2 animate-in fade-in duration-slow">
                 {quest.verification ? (
                   <VerificationResults verification={quest.verification} />
                 ) : (
@@ -1080,7 +1080,7 @@ export function QuestPanel({
             )}
 
             {quest.phase === "reporting" && (
-              <div className="flex items-center gap-2 px-4 py-6 animate-in fade-in duration-300">
+              <div className="flex items-center gap-2 px-4 py-6 animate-in fade-in duration-slow">
                 <Loader2Icon className="text-primary size-4 animate-spin" />
                 <span className="text-muted-foreground text-sm">
                   {t.questMode.generatingReport}
@@ -1089,7 +1089,7 @@ export function QuestPanel({
             )}
 
             {(quest.phase === "completed" || quest.phase === "failed") && (
-              <div className="space-y-2 animate-in fade-in duration-300">
+              <div className="space-y-2 animate-in fade-in duration-slow">
                 {quest.verification && (
                   <VerificationResults verification={quest.verification} />
                 )}
@@ -1115,7 +1115,7 @@ export function QuestPanel({
             )}
 
             {quest.phase === "cancelled" && (
-              <div className="space-y-2 px-4 py-6 text-center animate-in fade-in duration-300">
+              <div className="space-y-2 px-4 py-6 text-center animate-in fade-in duration-slow">
                 <div className="mx-auto flex size-12 items-center justify-center rounded-lg bg-muted/50">
                   <XCircleIcon className="text-muted-foreground size-6" />
                 </div>
@@ -1160,7 +1160,7 @@ export function QuestButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-[var(--shadow-xs)] transition-colors transition-shadow duration-200",
+        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-[var(--shadow-xs)] transition-colors transition-shadow duration-base",
         isActive
           ? "bg-primary text-primary-foreground border-primary/60 shadow-primary/10"
           : "bg-background/80 text-muted-foreground hover:bg-muted/50 hover:text-foreground border-border-default",

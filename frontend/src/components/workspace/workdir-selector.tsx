@@ -138,9 +138,9 @@ const AVATAR_PALETTE: Array<{ bg: string; fg: string }> = [
   { bg: "bg-destructive/15", fg: "text-destructive" },
   { bg: "bg-warning/15", fg: "text-warning" },
   { bg: "bg-success/15", fg: "text-success" },
-  { bg: "bg-sky-500/15", fg: "text-sky-600 dark:text-sky-400" },
-  { bg: "bg-violet-500/15", fg: "text-violet-600 dark:text-violet-400" },
-  { bg: "bg-pink-500/15", fg: "text-pink-600 dark:text-pink-400" },
+  { bg: "bg-info/15", fg: "text-info dark:text-info" },
+  { bg: "bg-chart-1/15", fg: "text-chart-1 dark:text-chart-1" },
+  { bg: "bg-chart-3/15", fg: "text-chart-3 dark:text-chart-3" },
 ];
 
 function avatarTile(path: string): { bg: string; fg: string; letter: string } {
@@ -1008,7 +1008,7 @@ export function WorkDirSelector({
     >
       <button
         className={cn(
-          "group flex items-center gap-1.5 text-xs font-medium shadow-none transition-all duration-200",
+          "group flex items-center gap-1.5 text-xs font-medium shadow-none transition-all duration-base",
           chromeless
             ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",

@@ -128,7 +128,7 @@ export function agentRunIconClass(status: AgentRunStatusInput): string {
   if (state === "waiting" || state === "pending")
     return "text-warning";
   if (state === "error") return "text-destructive";
-  if (state === "done") return "text-sky-600 dark:text-sky-400";
+  if (state === "done") return "text-info dark:text-info";
   return "text-muted-foreground";
 }
 
@@ -147,7 +147,7 @@ export function agentRunPanelClass(status: AgentRunStatusInput): string {
     return "border-destructive/35 bg-destructive/10 text-destructive";
   }
   if (state === "done") {
-    return "border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400";
+    return "border-info/25 bg-info/10 text-info dark:text-info";
   }
   return "border-border-default bg-muted/45 text-muted-foreground";
 }
@@ -160,7 +160,7 @@ export function agentRunRobotButtonClass(status: AgentRunStatusInput): string {
   if (state === "waiting") return "border-warning/40 bg-warning/10";
   if (state === "pending") return "border-warning/40 bg-warning/10";
   if (state === "error") return "border-destructive/50 bg-destructive/10";
-  if (state === "done") return "border-sky-500/30 bg-sky-500/8";
+  if (state === "done") return "border-info/30 bg-info/8";
   return "border-border-default bg-muted/35";
 }
 

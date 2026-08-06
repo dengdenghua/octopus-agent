@@ -550,7 +550,7 @@ export function McpSettingsPage() {
             <DialogTitle className="text-base">
               {copy.removeTitle}
             </DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-5">
+            <DialogDescription className="text-caption leading-5">
               {serverToRemove ? copy.removeDescription(serverToRemove) : ""}
             </DialogDescription>
           </DialogHeader>

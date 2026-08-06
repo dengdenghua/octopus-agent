@@ -112,7 +112,7 @@ function TodoRow({ item, live }: { item: TodoItem; live: boolean }) {
     ) : displayStatus === "interrupted" ? (
       <XCircleIcon className="size-4 shrink-0 text-destructive" />
     ) : displayStatus === "in_progress" ? (
-      <Loader2Icon className="size-4 shrink-0 animate-spin text-blue-500" />
+      <Loader2Icon className="size-4 shrink-0 animate-spin text-info" />
     ) : (
       <CircleIcon className="size-4 shrink-0 text-muted-foreground/50" />
     );
@@ -235,7 +235,7 @@ export function TodoPanel({
       >
         <div className="h-1 overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full bg-success transition-all duration-300"
+            className="h-full bg-success transition-all duration-slow"
             style={{ width: `${percent}%` }}
           />
         </div>

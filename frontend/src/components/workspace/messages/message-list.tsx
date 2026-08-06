@@ -2069,7 +2069,7 @@ function TurnLocatorRail({
               data-turn-marker-active={active ? "true" : undefined}
               data-turn-marker-kind={marker.kind}
               className={cn(
-                "group relative flex w-6 items-center justify-center rounded-full transition-all duration-150",
+                "group relative flex w-6 items-center justify-center rounded-full transition-all duration-fast",
                 "focus-visible:ring-ring/50 outline-none focus-visible:ring-2",
                 active
                   ? "opacity-100"
@@ -2083,7 +2083,7 @@ function TurnLocatorRail({
               <span
                 aria-hidden="true"
                 className={cn(
-                  "rounded-full transition-all duration-150",
+                  "rounded-full transition-all duration-fast",
                   marker.kind === "phase"
                     ? cn(
                         "h-8 w-2",

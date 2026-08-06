@@ -89,17 +89,17 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  file: "text-blue-500",
-  symbol: "text-purple-500",
+  file: "text-info",
+  symbol: "text-chart-1",
   folder: "text-warning",
-  git: "text-orange-500",
+  git: "text-chart-7",
   docs: "text-success",
-  web: "text-cyan-500",
+  web: "text-info",
   terminal: "text-muted-foreground",
-  agent: "text-indigo-500",
-  plugin: "text-fuchsia-500",
+  agent: "text-chart-6",
+  plugin: "text-chart-3",
   skill: "text-warning",
-  pack: "text-pink-500",
+  pack: "text-chart-5",
   database: "text-success",
 };
 

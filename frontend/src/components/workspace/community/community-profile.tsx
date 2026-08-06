@@ -109,16 +109,16 @@ export function CommunityProfile({
                   type="button"
                   onClick={() => handleTopic(t)}
                   className={cn(
-                    "flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                    "flex items-center gap-1 rounded-full px-2.5 py-0.5 text-mini font-medium transition-colors",
                     active
-                      ? "bg-pink-500/10 text-pink-500"
+                      ? "bg-chart-3/10 text-chart-3"
                       : "bg-muted/60 text-muted-foreground hover:text-foreground",
                   )}
                 >
                   <span
                     className={cn(
                       "size-1 rounded-full",
-                      active ? "bg-pink-500" : "bg-muted-foreground/50",
+                      active ? "bg-chart-3" : "bg-muted-foreground/50",
                     )}
                   />
                   {t}
@@ -173,7 +173,7 @@ export function CommunityProfile({
               "flex items-center gap-1.5 rounded-md px-5 py-1.5 text-sm font-semibold transition-colors",
               subscribed
                 ? "border border-border-default text-muted-foreground hover:bg-muted/60"
-                : "bg-pink-500 text-white hover:bg-pink-600",
+                : "bg-chart-3 text-white hover:bg-chart-3/90",
             )}
           >
             <BellRingIcon className="size-3.5" />
@@ -199,7 +199,7 @@ export function CommunityProfile({
                 key={p.id}
                 type="button"
                 onClick={() => onOpenPost(p)}
-                className="group overflow-hidden rounded-xl bg-card text-left shadow-[var(--shadow-card)] transition-[transform,box-shadow] duration-[var(--motion-duration-base)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-elevated)]"
+                className="group overflow-hidden rounded-xl bg-card text-left shadow-[var(--shadow-card)] transition-[transform,box-shadow] duration-base hover:-translate-y-0.5 hover:shadow-[var(--shadow-elevated)]"
               >
                 <div
                   className="relative aspect-square w-full overflow-hidden"
@@ -215,13 +215,13 @@ export function CommunityProfile({
                       (e.currentTarget as HTMLImageElement).style.display =
                         "none";
                     }}
-                    className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                    className="size-full object-cover transition-transform duration-slow group-hover:scale-[1.03]"
                   />
-                  <span className="absolute bottom-1.5 left-1.5 line-clamp-1 max-w-[90%] rounded bg-black/40 px-1.5 py-0.5 text-[10px] text-white">
+                  <span className="absolute bottom-1.5 left-1.5 line-clamp-1 max-w-[90%] rounded bg-black/40 px-1.5 py-0.5 text-micro text-white">
                     {p.title}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 p-2 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-2 p-2 text-mini text-muted-foreground">
                   <span className="line-clamp-1 flex-1">{p.title}</span>
                   <span className="flex shrink-0 items-center gap-0.5">
                     <HeartIcon className="size-3" />

@@ -490,7 +490,7 @@ export function CommunityPostCard({
       onClick={() => onOpenComments?.(post)}
       className={cn(
         "group cursor-pointer overflow-hidden rounded-xl bg-card shadow-[var(--shadow-card)]",
-        "transition-[transform,box-shadow] duration-[var(--motion-duration-base)]",
+        "transition-[transform,box-shadow] duration-base",
         "hover:-translate-y-0.5 hover:shadow-[var(--shadow-elevated)]",
         className,
       )}
@@ -512,12 +512,12 @@ export function CommunityPostCard({
               e.stopPropagation();
               onOpenImage?.(0);
             }}
-            className="size-full cursor-zoom-in object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            className="size-full cursor-zoom-in object-cover transition-transform duration-slow group-hover:scale-[1.03]"
           />
         )}
 
         {/* 分类标签（左上角） */}
-        <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+        <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5 text-mini font-semibold text-white backdrop-blur-sm">
           <span
             className="size-1.5 rounded-full"
             style={{ backgroundColor: post.tagColor }}
@@ -534,7 +534,7 @@ export function CommunityPostCard({
               onOpenImage?.(0);
             }}
             aria-label="查看多图"
-            className="absolute right-2 top-2 rounded-full bg-black/40 px-1.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm"
+            className="absolute right-2 top-2 rounded-full bg-black/40 px-1.5 py-0.5 text-mini font-semibold text-white backdrop-blur-sm"
           >
             1/{images.length}
           </button>
@@ -572,7 +572,7 @@ export function CommunityPostCard({
             className="flex min-w-0 shrink-0 items-center gap-1.5"
           >
             <span
-              className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+              className="flex size-5 shrink-0 items-center justify-center rounded-full text-micro font-bold"
               style={{
                 backgroundColor: `${post.authorColor}1f`,
                 color: post.authorColor,
@@ -590,10 +590,10 @@ export function CommunityPostCard({
               type="button"
               onClick={handleFollow}
               className={cn(
-                "shrink-0 rounded text-[11px] font-semibold transition-colors",
+                "shrink-0 rounded text-mini font-semibold transition-colors",
                 isFollowing
                   ? "text-muted-foreground/60 hover:text-foreground"
-                  : "text-pink-500 hover:text-pink-600",
+                  : "text-chart-3 hover:text-chart-3/80",
               )}
             >
               {isFollowing ? "已关注" : "关注"}
@@ -628,8 +628,8 @@ export function CommunityPostCard({
               className={cn(
                 "shrink-0 rounded p-0.5 transition-colors",
                 isLiked
-                  ? "text-pink-500"
-                  : "text-muted-foreground/50 hover:text-pink-500",
+                  ? "text-chart-3"
+                  : "text-muted-foreground/50 hover:text-chart-3",
               )}
             >
               <HeartIcon

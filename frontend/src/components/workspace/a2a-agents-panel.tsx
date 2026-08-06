@@ -305,14 +305,14 @@ function RegisterForm({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://agent.example.com"
-          className="border-input bg-background flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+          className="border-input bg-background flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-info"
           disabled={registering}
           autoFocus
         />
         <button
           type="submit"
           disabled={!url.trim() || registering}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-info px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-info disabled:opacity-50"
         >
           {registering ? (
             <Loader2Icon className="size-3 animate-spin" />
@@ -670,13 +670,13 @@ function AgentDetailView({
             value={taskText}
             onChange={(e) => setTaskText(e.target.value)}
             placeholder={t.a2a.sendTaskPlaceholder}
-            className="border-input bg-background flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+            className="border-input bg-background flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-info"
             disabled={sending}
           />
           <button
             type="submit"
             disabled={!taskText.trim() || sending}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-info px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-info disabled:opacity-50"
           >
             {sending ? (
               <Loader2Icon className="size-3 animate-spin" />
@@ -706,7 +706,7 @@ function AgentDetailView({
                     ? "bg-success/10 text-success"
                     : taskResult.status.state === "failed"
                       ? "bg-destructive/10 text-destructive"
-                      : "bg-blue-500/10 text-blue-500",
+                      : "bg-info/10 text-info",
                 )}
               >
                 {taskResult.status.state}

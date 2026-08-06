@@ -38,7 +38,7 @@ function MiniSparkline({
         <div
           key={i}
           className={cn(
-            "w-1 min-h-[2px] rounded-lg transition-colors duration-300",
+            "w-1 min-h-[2px] rounded-lg transition-colors duration-slow",
             color,
           )}
           style={{ height: `${Math.max(2, (value / max) * 20)}px` }}
@@ -182,8 +182,8 @@ export function StatsBar({
       />
 
       <StatCard
-        icon={<ClockIcon className="size-4 text-sky-500" />}
-        iconColor="bg-sky-500/10"
+        icon={<ClockIcon className="size-4 text-info" />}
+        iconColor="bg-info/10"
         label={t.taskBoard.avgDuration}
         value={
           stats.avg_duration_ms > 0

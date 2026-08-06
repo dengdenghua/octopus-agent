@@ -79,7 +79,7 @@ export function ComposerStepProgress({
         {currentPhase.status === "running" ? (
           <Loader2Icon
             aria-hidden="true"
-            className="size-4 shrink-0 animate-spin text-sky-300 dark:text-sky-400"
+            className="size-4 shrink-0 animate-spin text-info dark:text-info"
           />
         ) : currentPhase.status === "waiting_approval" ? (
           <CircleIcon
@@ -99,7 +99,7 @@ export function ComposerStepProgress({
         ) : (
           <CircleIcon
             aria-hidden="true"
-            className="size-4 shrink-0 text-sky-200 dark:text-sky-500"
+            className="size-4 shrink-0 text-info dark:text-info"
           />
         )}
         <span className="truncate tabular-nums">{label}</span>

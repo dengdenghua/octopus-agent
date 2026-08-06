@@ -331,7 +331,7 @@ export default function ChannelsPage() {
                     <MessageCircleIcon className="size-5" />
                   </div>
                   <div>
-                    <div className="text-muted-foreground text-xs font-medium uppercase tracking-[0.18em]">
+                    <div className="text-muted-foreground text-xs font-medium uppercase tracking-eyebrow">
                       Channel Ops
                     </div>
                     <h1 className="text-xl font-semibold tracking-tight">

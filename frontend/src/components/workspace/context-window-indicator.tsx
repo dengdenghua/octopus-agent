@@ -64,7 +64,7 @@ function BucketBar({
       <div className="h-1 rounded-full bg-muted/50 overflow-hidden">
         <div
           className={cn(
-            "h-full rounded-full transition-all duration-300",
+            "h-full rounded-full transition-all duration-slow",
             overflow ? "bg-warning" : bucket.color.replace("text-", "bg-"),
           )}
           style={{ width: `${usedPct}%` }}
@@ -91,21 +91,21 @@ export function ContextWindowIndicator({
       used: buckets.system.used,
       allocated: buckets.system.allocated,
       icon: MonitorIcon,
-      color: "text-sky-500",
+      color: "text-info",
     },
     {
       name: t.contextWindow?.tools,
       used: buckets.suckers.used,
       allocated: buckets.suckers.allocated,
       icon: WrenchIcon,
-      color: "text-orange-500",
+      color: "text-chart-7",
     },
     {
       name: t.contextWindow?.memory,
       used: buckets.memory.used,
       allocated: buckets.memory.allocated,
       icon: BrainIcon,
-      color: "text-violet-500",
+      color: "text-chart-1",
     },
     {
       name: t.contextWindow?.history,
@@ -138,7 +138,7 @@ export function ContextWindowIndicator({
       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
         <div
           className={cn(
-            "h-full rounded-full transition-all duration-500",
+            "h-full rounded-full transition-all duration-slow",
             isHigh ? "bg-destructive" : isMedium ? "bg-warning" : "bg-primary/60",
           )}
           style={{ width: `${Math.min(100, utilization * 100)}%` }}

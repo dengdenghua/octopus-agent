@@ -911,7 +911,7 @@ function BrowserDesktopHome({
     >
       <div
         className={cn(
-          "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-[24px] border border-white/38 bg-white/18 py-4 shadow-xl shadow-black/10 backdrop-blur-md",
+          "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-4xl border border-white/38 bg-white/18 py-4 shadow-xl shadow-black/10 backdrop-blur-md",
           compactDesktop && "left-3 top-4 h-[calc(100%-2rem)]",
           mobileDesktop && "left-2 w-11",
         )}
@@ -975,13 +975,13 @@ function BrowserDesktopHome({
       >
         <div
           className={cn(
-            "mx-auto flex h-14 w-full max-w-[720px] items-center gap-3 rounded-[18px] border border-white/45 bg-white/76 px-5 text-muted-foreground shadow-xl shadow-black/10 backdrop-blur-xl",
+            "mx-auto flex h-14 w-full max-w-[720px] items-center gap-3 rounded-3xl border border-white/45 bg-white/76 px-5 text-muted-foreground shadow-xl shadow-black/10 backdrop-blur-xl",
             compactDesktop && "max-w-none",
             tabletDesktop && "max-w-[760px]",
             mobileDesktop && "h-12 rounded-2xl px-4",
           )}
         >
-          <SearchIcon className="size-5 shrink-0 text-blue-600" />
+          <SearchIcon className="size-5 shrink-0 text-info" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -1014,7 +1014,7 @@ function BrowserDesktopHome({
             className={cn(
               "rounded-full px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-md)] shadow-black/10 backdrop-blur-xl transition",
               editMode
-                ? "bg-blue-600 text-white hover:bg-blue-700"
+                ? "bg-info text-white hover:bg-info"
                 : "bg-white/55 text-foreground hover:bg-white/75",
             )}
           >
@@ -1052,7 +1052,7 @@ function BrowserDesktopHome({
             )}
           >
             <div className="text-center">
-              <div className="flex overflow-hidden rounded-[20px] bg-white/90 text-foreground shadow-[var(--shadow-md)] shadow-black/10">
+              <div className="flex overflow-hidden rounded-3xl bg-white/90 text-foreground shadow-[var(--shadow-md)] shadow-black/10">
                 <div
                   className={cn(
                     "grid w-24 place-items-center bg-white px-4 py-3 text-center",
@@ -1098,8 +1098,8 @@ function BrowserDesktopHome({
             <div>
               <div
                 className={cn(
-                  "grid grid-cols-2 gap-4 rounded-[22px] border border-white/36 bg-white/38 p-5 shadow-xl shadow-black/10 backdrop-blur-xl",
-                  mobileDesktop && "gap-3 rounded-[20px] p-4",
+                  "grid grid-cols-2 gap-4 rounded-4xl border border-white/36 bg-white/38 p-5 shadow-xl shadow-black/10 backdrop-blur-xl",
+                  mobileDesktop && "gap-3 rounded-3xl p-4",
                 )}
               >
                 {orderedApps.slice(0, 4).map((app) => (
@@ -1128,7 +1128,7 @@ function BrowserDesktopHome({
             <div>
               <div
                 className={cn(
-                  "grid h-56 grid-cols-[220px_1fr] overflow-hidden rounded-[22px] border border-white/32 bg-white/24 shadow-xl shadow-black/10 backdrop-blur-xl",
+                  "grid h-56 grid-cols-[220px_1fr] overflow-hidden rounded-4xl border border-white/32 bg-white/24 shadow-xl shadow-black/10 backdrop-blur-xl",
                   compactDesktop && "mx-auto h-auto max-w-[520px] grid-cols-1",
                   tabletDesktop && "h-52 max-w-none grid-cols-[190px_1fr]",
                   mobileDesktop && "max-w-[320px]",
@@ -1136,7 +1136,7 @@ function BrowserDesktopHome({
               >
                 <div
                   className={cn(
-                    "m-4 rounded-[16px] bg-white/24 p-5",
+                    "m-4 rounded-2xl bg-white/24 p-5",
                     compactDesktop && "mb-0",
                     tabletDesktop && "mb-4",
                   )}
@@ -1248,11 +1248,11 @@ function BrowserDesktopHome({
 
         <div
           className={cn(
-            "mx-auto mb-7 flex max-w-[780px] items-center gap-5 rounded-[26px] border border-white/38 bg-white/54 px-5 py-3 shadow-xl shadow-black/10 backdrop-blur-xl",
+            "mx-auto mb-7 flex max-w-[780px] items-center gap-5 rounded-4xl border border-white/38 bg-white/54 px-5 py-3 shadow-xl shadow-black/10 backdrop-blur-xl",
             compactDesktop &&
-              "absolute bottom-5 left-20 right-5 z-10 mx-0 mb-0 justify-start gap-3 overflow-x-auto rounded-[22px] px-4 py-3",
+              "absolute bottom-5 left-20 right-5 z-10 mx-0 mb-0 justify-start gap-3 overflow-x-auto rounded-4xl px-4 py-3",
             tabletDesktop &&
-              "left-24 right-8 justify-center gap-4 rounded-[26px] px-5",
+              "left-24 right-8 justify-center gap-4 rounded-4xl px-5",
             mobileDesktop && "bottom-4 left-16 right-4 gap-2 px-3",
           )}
         >
@@ -1273,11 +1273,11 @@ function BrowserDesktopHome({
                 onDrop={(event) => dropApp(event, app.url)}
                 onDragEnd={() => setDraggingUrl(null)}
                 className={cn(
-                  "grid size-16 place-items-center rounded-[18px] bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-1 hover:shadow-xl",
+                  "grid size-16 place-items-center rounded-3xl bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-1 hover:shadow-xl",
                   app.color,
                   compactDesktop && "size-13 shrink-0 rounded-2xl",
                   tabletDesktop && "size-14",
-                  mobileDesktop && "size-11 rounded-[15px]",
+                  mobileDesktop && "size-11 rounded-2xl",
                   editMode &&
                     "cursor-move ring-2 ring-white/35 hover:translate-y-0",
                   draggingUrl === app.url && "scale-95 opacity-45",
@@ -1340,7 +1340,7 @@ function DesktopControlPanel({
               : wt.panelTitleDesktopSettings;
 
   return (
-    <div className="absolute bottom-7 left-24 top-24 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[28px] border border-white/38 bg-white/70 text-foreground shadow-xl shadow-black/15 ">
+    <div className="absolute bottom-7 left-24 top-24 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-4xl border border-white/38 bg-white/70 text-foreground shadow-xl shadow-black/15 ">
       <div className="flex items-center justify-between border-b border-white/32 px-5 py-4">
         <div>
           <div className="text-base font-semibold">{title}</div>
@@ -1365,7 +1365,7 @@ function DesktopControlPanel({
                 className={cn(
                   "flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition hover:bg-white/70",
                   index === 0
-                    ? "border-blue-400/60 bg-white/70"
+                    ? "border-info/60 bg-white/70"
                     : "border-white/42 bg-white/38",
                 )}
               >
@@ -1390,7 +1390,7 @@ function DesktopControlPanel({
                     key={wt.widgetPanelNames[index]}
                     className="flex items-center gap-3 rounded-2xl bg-white/46 p-3"
                   >
-                    <span className="grid size-10 place-items-center rounded-2xl bg-blue-500 text-white">
+                    <span className="grid size-10 place-items-center rounded-2xl bg-info text-white">
                       <Icon className="size-5" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -1558,7 +1558,7 @@ function DesktopAppIcon({
     >
       <span
         className={cn(
-          "grid place-items-center rounded-[18px] bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/14 transition group-hover:-translate-y-0.5 group-hover:shadow-xl",
+          "grid place-items-center rounded-3xl bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/14 transition group-hover:-translate-y-0.5 group-hover:shadow-xl",
           compact ? "size-16" : "size-[72px]",
           app.color,
         )}
@@ -1950,7 +1950,7 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
           <div
             key={controlIndicator.nonce}
             aria-hidden="true"
-            className="octopus-browser-webview-edge-light pointer-events-none absolute inset-0 z-20 opacity-100 transition-opacity duration-150"
+            className="octopus-browser-webview-edge-light pointer-events-none absolute inset-0 z-20 opacity-100 transition-opacity duration-fast"
             style={{
               border: `1px solid ${controlEdgeColor}`,
               boxShadow: controlEdgeGlow,

@@ -1653,9 +1653,9 @@ function eventRowColor(kind: string): string {
   if (kind === "immune" || kind === "immune_reject") return "bg-destructive/5";
   if (kind.startsWith("budget")) return "bg-warning/5";
   if (kind === "file_op") return "bg-primary/5";
-  if (kind === "browser_artifact") return "bg-violet-500/5";
+  if (kind === "browser_artifact") return "bg-chart-1/5";
   if (kind === "sub_tool_start" || kind === "sub_tool_end")
-    return "bg-cyan-500/5";
+    return "bg-info/5";
   return "";
 }
 
@@ -1698,7 +1698,7 @@ function PanelGroup({
   return (
     <section className="workspace-panel px-5 py-4">
       <div className="mb-4 space-y-1.5">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        <div className="text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
           {eyebrow}
         </div>
         <h2 className="text-base font-semibold">{title}</h2>

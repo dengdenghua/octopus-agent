@@ -171,7 +171,7 @@ export default function LocalBrainSetup() {
                   {t.localBrain.currentState(it.detail)}
                 </div>
                 {!it.ok && it.action && (
-                  <div className="text-xs leading-snug text-blue-700">
+                  <div className="text-xs leading-snug text-info">
                     {t.localBrain.nextStep(it.action)}
                   </div>
                 )}

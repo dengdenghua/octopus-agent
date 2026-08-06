@@ -613,7 +613,7 @@ function OfficialCreditsCard() {
                   <span className="text-muted-foreground">
                     {t.accountSettings.expiredOrFrozen}
                   </span>
-                  <span className="tabular-nums text-orange-500">
+                  <span className="tabular-nums text-chart-7">
                     −{expired.toLocaleString()}
                   </span>
                 </div>

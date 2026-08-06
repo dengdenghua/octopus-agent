@@ -31,8 +31,8 @@ interface QuickTemplatesProps {
 }
 
 const categoryColors: Record<string, string> = {
-  website: "bg-sky-500/10 text-sky-600",
-  app: "bg-violet-500/10 text-violet-600",
+  website: "bg-info/10 text-info",
+  app: "bg-chart-1/10 text-chart-1",
   tool: "bg-success/10 text-success",
   game: "bg-warning/10 text-warning",
   data: "bg-destructive/10 text-destructive",
@@ -126,7 +126,7 @@ export function QuickTemplates({ onSelect, className }: QuickTemplatesProps) {
               onClick={() => onSelect(template)}
               className={cn(
                 "group flex items-start gap-3 p-3 rounded-lg border border-border-default",
-                "hover:border-primary/30 hover:bg-primary/5 transition-all duration-200",
+                "hover:border-primary/30 hover:bg-primary/5 transition-all duration-base",
                 "text-left",
               )}
             >

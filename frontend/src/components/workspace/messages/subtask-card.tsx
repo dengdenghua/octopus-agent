@@ -312,11 +312,11 @@ export function SubtaskCard({
           {task.status === "timed_out" && (
             <ChainOfThoughtStep
               label={
-                <div className="text-orange-500 dark:text-orange-400">
+                <div className="text-chart-7 dark:text-chart-7">
                   {task.error ?? t.subtask.timedOut}
                 </div>
               }
-              icon={<XCircleIcon className="size-4 text-orange-500" />}
+              icon={<XCircleIcon className="size-4 text-chart-7" />}
             ></ChainOfThoughtStep>
           )}
           {isActive &&

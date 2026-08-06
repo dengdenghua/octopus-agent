@@ -161,8 +161,8 @@ const PROVIDER_META: Record<
   string,
   { icon: React.ElementType; label: string; color: string }
 > = {
-  vercel: { icon: CloudIcon, label: "Vercel", color: "text-blue-500" },
-  docker: { icon: ContainerIcon, label: "Docker", color: "text-cyan-500" },
+  vercel: { icon: CloudIcon, label: "Vercel", color: "text-info" },
+  docker: { icon: ContainerIcon, label: "Docker", color: "text-info" },
   static: { icon: GlobeIcon, label: "Static Preview", color: "text-success" },
 };
 
@@ -180,10 +180,10 @@ const STATE_DISPLAY: Record<
     color: "text-warning",
     icon: Loader2Icon,
   },
-  building: { label: "Building...", color: "text-blue-500", icon: Loader2Icon },
+  building: { label: "Building...", color: "text-info", icon: Loader2Icon },
   deploying: {
     label: "Deploying...",
-    color: "text-blue-500",
+    color: "text-info",
     icon: Loader2Icon,
   },
   ready: { label: "Ready", color: "text-success", icon: CheckCircle2Icon },
@@ -223,7 +223,7 @@ function ProviderCard({
       onClick={onClick}
       disabled={!provider.configured}
       className={cn(
-        "flex flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left text-xs transition-all duration-200",
+        "flex flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left text-xs transition-all duration-base",
         selected
           ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30 shadow-[var(--shadow-xs)] shadow-primary/5"
           : "border-border-default hover:border-primary/40 hover:bg-accent/40",
@@ -525,7 +525,7 @@ export function DeployPanel({
   return (
     <div
       className={cn(
-        "bg-popover flex max-h-[32rem] w-[26rem] flex-col overflow-hidden rounded-lg border border-border-default shadow-2xl shadow-black/5 animate-in slide-in-from-bottom-2 fade-in duration-200",
+        "bg-popover flex max-h-[32rem] w-[26rem] flex-col overflow-hidden rounded-lg border border-border-default shadow-2xl shadow-black/5 animate-in slide-in-from-bottom-2 fade-in duration-base",
         className,
       )}
     >
@@ -682,7 +682,7 @@ export function DeployPanel({
                   onClick={handleDeploy}
                   disabled={loading || !selectedProvider}
                   className={cn(
-                    "flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200",
+                    "flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-base",
                     "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[var(--shadow-xs)] shadow-primary/10",
                     "disabled:cursor-not-allowed disabled:opacity-50",
                   )}
@@ -897,7 +897,7 @@ export function DeployButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-[var(--shadow-xs)] transition-all duration-200",
+        "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium shadow-[var(--shadow-xs)] transition-all duration-base",
         isActive
           ? "bg-primary text-primary-foreground border-primary/60 shadow-primary/10"
           : "bg-background/80 text-muted-foreground hover:bg-muted/50 hover:text-foreground border-border-default",

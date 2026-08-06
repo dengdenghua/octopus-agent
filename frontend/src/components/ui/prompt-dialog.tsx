@@ -53,7 +53,7 @@ export function PromptDialog({
         <DialogHeader className="gap-1 text-left">
           <DialogTitle className="text-[15px]">{title}</DialogTitle>
           {label ? (
-            <DialogDescription className="text-[12.5px] leading-5">
+            <DialogDescription className="text-caption leading-5">
               {label}
             </DialogDescription>
           ) : null}
@@ -77,14 +77,14 @@ export function PromptDialog({
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-caption font-medium text-foreground/80 transition-colors hover:bg-muted"
             >
               {cancelLabel ?? t.common.cancel}
             </button>
             <button
               type="submit"
               disabled={!trimmed}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-foreground px-3 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90 disabled:pointer-events-none disabled:opacity-60"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-foreground px-3 text-caption font-medium text-background transition-colors hover:bg-foreground/90 disabled:pointer-events-none disabled:opacity-60"
             >
               {submitLabel ?? t.common.confirm}
             </button>

@@ -33,7 +33,7 @@ export function StatusDot({ status }: { status?: string | null }) {
       : status === "failed"
         ? "bg-destructive"
         : status === "running"
-          ? "bg-blue-500"
+          ? "bg-info"
           : "bg-muted-foreground/40";
   return <span className={cn("size-2 shrink-0 rounded-full", cls)} />;
 }
@@ -193,11 +193,11 @@ export function BrowserDesktopReplayReviewCard({
   const staleCount = trends.stale_source_artifact_count ?? 0;
   const reviewRate = Math.round((trends.review_rate ?? 0) * 100);
   return (
-    <div className="mt-3 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+    <div className="mt-3 rounded-lg border border-info/20 bg-info/5 px-3 py-2">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <ListChecksIcon className="size-4 text-blue-700 dark:text-blue-300" />
+            <ListChecksIcon className="size-4 text-info dark:text-info" />
             Browser/Desktop replay review
             <Badge variant="outline" className="text-xs">
               {total} pending
@@ -361,10 +361,10 @@ export function ReplayEvidenceDrilldownCard({
   const caseId = evidence.case_id || "replay evidence";
   const fingerprint = evidence.fingerprint || "";
   return (
-    <div className="mb-3 rounded-lg border border-blue-500/25 bg-blue-500/10 px-3 py-2">
+    <div className="mb-3 rounded-lg border border-info/25 bg-info/10 px-3 py-2">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs font-semibold text-blue-800 dark:text-blue-200">
+          <div className="flex items-center gap-2 text-xs font-semibold text-info dark:text-info">
             <ListChecksIcon className="size-3.5" />
             Replay evidence available
             <Badge variant="outline" className="text-xs">

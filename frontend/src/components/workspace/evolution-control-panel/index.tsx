@@ -229,7 +229,7 @@ function Pill({
     ok: "bg-success/10 text-success dark:bg-success/15 dark:text-success",
     warn: "bg-warning/10 text-warning dark:bg-warning/15 dark:text-warning",
     bad: "bg-destructive/10 text-destructive dark:bg-destructive/15 dark:text-destructive",
-    info: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+    info: "bg-info/15 text-info",
   };
   return (
     <span

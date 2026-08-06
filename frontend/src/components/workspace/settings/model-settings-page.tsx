@@ -907,7 +907,7 @@ function ModelSettingsOverview({
               gatewayStatus === "connected" &&
                 "bg-success/10 text-success dark:bg-success/20 dark:text-success",
               gatewayStatus === "checking" &&
-                "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+                "bg-info/15 text-info",
               gatewayStatus === "disconnected" &&
                 "bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive",
             )}
@@ -1580,7 +1580,7 @@ export default function ModelSettingsPage() {
                           </button>
                         )}
                         <button
-                          className="text-xs font-medium text-orange-500 hover:text-orange-600"
+                          className="text-xs font-medium text-chart-7 hover:text-chart-7"
                           onClick={() =>
                             setEditingModel(
                               editingModel === modelId ? null : modelId,
@@ -1591,7 +1591,7 @@ export default function ModelSettingsPage() {
                           {t.common.edit}
                         </button>
                         <button
-                          className="text-xs font-medium text-orange-500 hover:text-orange-600"
+                          className="text-xs font-medium text-chart-7 hover:text-chart-7"
                           onClick={() => handleDelete(modelId)}
                           aria-label={`${t.common.delete}: ${displayName}`}
                         >
@@ -1733,7 +1733,7 @@ export default function ModelSettingsPage() {
             <DialogTitle className="text-base">
               {t.settings.model.deleteModelTitle}
             </DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-5">
+            <DialogDescription className="text-caption leading-5">
               {modelToDelete
                 ? t.settings.model.deleteConfirm(
                     deleteModelConfig?.display_name ||
@@ -1754,7 +1754,7 @@ export default function ModelSettingsPage() {
               type="button"
               disabled={deletingModel}
               onClick={() => setModelToDelete(null)}
-              className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+              className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-caption font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
             >
               {t.common.cancel}
             </button>
@@ -1767,7 +1767,7 @@ export default function ModelSettingsPage() {
                 const deleted = await doDeleteModel(target);
                 if (deleted) setModelToDelete(null);
               }}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-caption font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
             >
               {deletingModel ? (
                 <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
@@ -1945,7 +1945,7 @@ function GatewayDiagnosticsSection({
                 gatewayStatus === "disconnected" &&
                   "bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive",
                 gatewayStatus === "checking" &&
-                  "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+                  "bg-info/15 text-info",
               )}
             >
               {gatewayStatus === "checking" && (
@@ -1981,11 +1981,11 @@ function GatewayDiagnosticsSection({
           />
         </div>
 
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-500/20 dark:bg-blue-500/10">
-          <div className="mb-2 font-medium text-blue-800 dark:text-blue-300">
+        <div className="rounded-lg border border-info/30 bg-info/10 p-4 text-sm">
+          <div className="mb-2 font-medium text-info dark:text-info">
             {t.settings.model.connectionHelp}
           </div>
-          <ul className="list-disc space-y-1 pl-4 text-xs text-blue-700 dark:text-blue-400">
+          <ul className="list-disc space-y-1 pl-4 text-xs text-info dark:text-info">
             <li>{t.settings.model.connectionHelpReconnect}</li>
             <li>{t.settings.model.setDefaultHint}</li>
             <li>{t.settings.model.connectionHelpDiagnose}</li>
@@ -2918,8 +2918,8 @@ function EditModelForm({
               )}
               {testStatus === "testing" && (
                 <>
-                  <Loader2Icon className="h-4 w-4 animate-spin text-blue-500" />
-                  <span className="text-blue-500">{t.common.loading}</span>
+                  <Loader2Icon className="h-4 w-4 animate-spin text-info" />
+                  <span className="text-info">{t.common.loading}</span>
                 </>
               )}
               {testStatus === "success" && (
@@ -2962,7 +2962,7 @@ function EditModelForm({
         </Button>
         <Button
           size="sm"
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-chart-7 hover:bg-chart-7/90 text-white"
           onClick={handleSave}
           disabled={saving || loading}
         >
@@ -3467,8 +3467,8 @@ function AddModelForm({
           )}
           {testStatus === "testing" && (
             <>
-              <Loader2Icon className="h-4 w-4 animate-spin text-blue-500" />
-              <span className="text-blue-500">{t.common.loading}</span>
+              <Loader2Icon className="h-4 w-4 animate-spin text-info" />
+              <span className="text-info">{t.common.loading}</span>
             </>
           )}
           {testStatus === "success" && (
@@ -3516,7 +3516,7 @@ function AddModelForm({
         </Button>
         <Button
           type="submit"
-          className="bg-orange-500 hover:bg-orange-600 text-white"
+          className="bg-chart-7 hover:bg-chart-7/90 text-white"
           disabled={saving}
         >
           {saving ? t.common.loading : t.common.save}
@@ -3651,7 +3651,7 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
               {t.settings.model.localModels.providerHint}
             </span>
             {scanStatus === "scanning" && (
-              <Loader2Icon className="size-3.5 animate-spin text-blue-500" />
+              <Loader2Icon className="size-3.5 animate-spin text-info" />
             )}
             {scanStatus === "done" && services.length > 0 && (
               <span className="inline-flex items-center rounded-md border border-success/30 bg-success/5 px-1.5 py-0.5 text-xs font-medium text-success dark:border-success/40 dark:bg-success/10 dark:text-success">

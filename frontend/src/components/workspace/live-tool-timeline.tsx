@@ -1208,7 +1208,7 @@ function ToolEventRow({
   return (
     <div
       className={cn(
-        "relative transition-all duration-200",
+        "relative transition-all duration-base",
         nested ? "py-1 pl-2 text-xs" : "py-1.5 pl-2 text-xs",
         event.status === "error" ? "text-destructive" : "text-muted-foreground",
       )}

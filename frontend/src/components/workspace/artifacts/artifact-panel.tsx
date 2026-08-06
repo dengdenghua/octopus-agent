@@ -90,7 +90,7 @@ export function ArtifactPanel({
             <TabsTrigger value="all" className="h-7 rounded-md px-2 text-xs">
               {t.conversation.artifactsTitle}
               {artifactCount > 0 && (
-                <span className="ml-1 font-mono text-[11px] text-muted-foreground tabular-nums">
+                <span className="ml-1 font-mono text-mini text-muted-foreground tabular-nums">
                   {artifactCount}
                 </span>
               )}
@@ -102,7 +102,7 @@ export function ArtifactPanel({
               <GitPullRequestIcon className="size-3.5" />
               {t.conversation.artifactsTabChanges}
               {changeArtifacts.length > 0 && (
-                <span className="ml-0.5 font-mono text-[11px] text-muted-foreground tabular-nums">
+                <span className="ml-0.5 font-mono text-mini text-muted-foreground tabular-nums">
                   {changeArtifacts.length}
                 </span>
               )}
@@ -114,7 +114,7 @@ export function ArtifactPanel({
               <EyeIcon className="size-3.5" />
               {t.conversation.artifactsTabPreview}
               {previewArtifacts.length > 0 && (
-                <span className="ml-0.5 font-mono text-[11px] text-muted-foreground tabular-nums">
+                <span className="ml-0.5 font-mono text-mini text-muted-foreground tabular-nums">
                   {previewArtifacts.length}
                 </span>
               )}

@@ -473,7 +473,7 @@ function BrowserShell() {
                   "relative overflow-hidden bg-background",
                   renderDevice === "desktop"
                     ? "h-full w-full"
-                    : "h-full max-h-full max-w-full rounded-[28px] border-[6px] border-foreground/22 shadow-[0_22px_64px_rgba(15,23,42,0.18)]",
+                    : "h-full max-h-full max-w-full rounded-4xl border-[6px] border-foreground/22 shadow-[0_22px_64px_rgba(15,23,42,0.18)]",
                 )}
                 style={
                   renderDevice === "desktop"
@@ -613,7 +613,7 @@ function BrowserSidePanel({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        "absolute right-3 top-[6.75rem] z-[40] hidden h-[calc(100vh-7.5rem)] w-[280px] flex-col rounded-2xl bg-popover px-3 py-3 text-popover-foreground shadow-lg transition-[opacity,transform] duration-160 md:flex",
+        "absolute right-3 top-[6.75rem] z-[40] hidden h-[calc(100vh-7.5rem)] w-[280px] flex-col rounded-2xl bg-popover px-3 py-3 text-popover-foreground shadow-lg transition-[opacity,transform] duration-fast md:flex",
         open ? "pointer-events-auto" : "pointer-events-none",
       )}
       style={{

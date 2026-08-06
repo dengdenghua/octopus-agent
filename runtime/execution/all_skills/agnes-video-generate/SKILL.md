@@ -1,119 +1,106 @@
 ---
 name: agnes-video-generate
-description: "使用 Agnes AI 网关异步提交视频生成任务（默认 wait=false，立即返回 task_id 不阻塞）。支持文字到视频、图像到视频、关键帧过渡。模型 agnes-video-v2.0，最多 441 帧（8n+1 规则）。提交后用 agnes-video-poll 查询进度。"
+description: "使用火山引擎(火山方舟, doubao-seedance-1.5-pro)或 Agnes AI 网关异步提交视频生成任务。默认 wait=true 阻塞到完成并返回 video_url；也可 wait=false 立即返回 task_id，用 agnes-video-poll 查询进度。支持文字到视频、图像到视频(首帧/首尾帧)。"
 enabled: true
-aliases: [agnes_video, generate_video_agnes]
+aliases: [agnes_video, generate_video_agnes, volcano_video, generate_video_volcano]
 ---
 
-# Agnes Video Generation
+# Video Generation（火山 / Agnes）
 
-通过 Agnes AI Gateway (`https://apihub.agnes-ai.com/v1/videos`) **异步**提交视频生成任务。
-默认立即返回 `task_id`，不阻塞当前 ReAct 轮次；后续用 `agnes-video-poll` 查询结果。
+根据 `base_url` 自动选择 provider：
+
+- **火山方舟**（默认）：`https://ark.cn-beijing.volces.com/api/plan/v3`，模型 `doubao-seedance-1.5-pro`
+  - 创建：`POST {base}/contents/generations/tasks`
+  - 查询：`GET {base}/contents/generations/tasks/{id}`
+  - 成功状态：`succeeded`；视频 URL 位于 `content.video_url`
+- **Agnes AI Gateway**：`https://apihub.agnes-ai.com/v1`，模型 `agnes-video-v2.0`
+  - 创建：`POST {base}/videos`；查询：`GET {base}/videos/{id}`
+  - 成功状态：`completed`
 
 ## Models
 
-| ID | 用途 |
-|----|----|
-| `agnes-video-v2.0` | 文/图→视频，可包含同步音频 |
+| Provider | ID | 用途 |
+|----------|----|----|
+| 火山 | `doubao-seedance-1.5-pro` | 文/图→视频（默认） |
+| Agnes | `agnes-video-v2.0` | 文/图→视频（回退） |
 
 ## Constraints
 
-- `num_frames` 必须满足 **8n+1**（典型值：49, 81, 121, 161, ..., 441）
-- `frame_rate` ∈ [1, 60]
-- 任务异步执行，单次轮询超时 ~60s 不一定完成
+- **Agnes**：`num_frames` 必须满足 **8n+1**（49, 81, 121, ...）；`frame_rate` ∈ [1,60]
+- **火山 Seedance**：`num_frames/frame_rate` 会换算为 `duration`（秒，≥1）；`width,height` 换算为最接近的 `ratio`；分辨率默认 `1080p`
 
 ## Configuration
 
+API Key 按优先级取第一个非空值：
+`VOLCENGINE_API_KEY` → `ARK_API_KEY` → `AGNES_API_KEY` → `OPENAI_API_KEY`
+
 ```bash
-export AGNES_API_KEY=sk-...
-# 可选
-export AGNES_BASE_URL=https://apihub.agnes-ai.com/v1
+export VOLCENGINE_API_KEY=ark-xxx
+# base URL 可选，默认火山 plan/v3
+export VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/plan/v3
 ```
 
 ## Usage
 
-### 文生视频（默认非阻塞，立即返回 task_id）
+### 文生视频（等待完成，默认）
 
 ```python
 from agnes_video_generate import generate_video
 
 result = generate_video(
-    prompt="A cinematic shot of a red panda walking through a forest at golden hour",
+    prompt="一只戴黑色围巾的拟人化小章鱼在书桌上踱步，皮克斯风，透明背景",
     width=1152,
     height=768,
     num_frames=49,
     frame_rate=24,
-    wait=False,        # 默认值；立即返回 task_id，不阻塞 ReAct 轮次
+    wait=True,          # 默认；阻塞到 succeeded 并返回 video_url
 )
-# {"task_id": "task_xyz", "status": "queued", "model": "agnes-video-v2.0"}
+# {"task_id": "...", "status": "succeeded", "video_url": "https://..."}
 ```
 
-**为什么默认非阻塞**：视频渲染通常 30-180 秒，阻塞 LLM 轮次浪费上下文配额。
-模型应该在收到 `task_id` 后继续与用户对话，等用户问"好了吗？"或几轮后再调
-`agnes-video-poll` 查询结果。
-
-### 等到完成后才返回（仅在调用脚本/批处理场景使用）
+### 非阻塞提交（配合 agnes-video-poll）
 
 ```python
 result = generate_video(
     prompt="...",
-    wait=True,            # 显式阻塞，直到 status=completed 或超时
-    max_wait_seconds=300,
+    wait=False,          # 立即返回 task_id，不阻塞 ReAct 轮次
 )
-# {"task_id": "...", "status": "completed", "video_url": "https://..."}
+# {"task_id": "cgt-...", "status": "queued"}
 ```
 
-### 后续轮询（推荐配合 agnes-video-poll 使用）
+### 图生视频（首帧 / 首尾帧）
 
 ```python
-# 在后续对话轮次中：
-from agnes_video_generate import poll_video
-status = poll_video("task_xyz")
-# 或者用独立 skill：
-status = agnes_video_poll(task_id="task_xyz")
-```
-
-### 图生视频
-
-```python
+# 首帧
 result = generate_video(
     prompt="The woman slowly turns around and looks back at the camera",
     image="https://example.com/portrait.png",
-    num_frames=121,
+    num_frames=81,
     frame_rate=24,
 )
-```
 
-### 关键帧过渡
-
-```python
+# 首尾帧（两张图）
 result = generate_video(
     prompt="Smooth cinematic transition between the two keyframes",
-    image=[
-        "https://example.com/keyframe1.png",
-        "https://example.com/keyframe2.png",
-    ],
-    num_frames=121,
+    image=["https://example.com/kf1.png", "https://example.com/kf2.png"],
+    num_frames=81,
 )
 ```
 
 ## Returns
 
-提交时（或 wait=False）：
-```json
-{"task_id": "task_xxx", "status": "queued", "model": "agnes-video-v2.0",
- "video_url": null, "size": "1152x768", "seconds": "2.0"}
-```
-
 完成时：
 ```json
-{"task_id": "...", "status": "completed",
- "video_url": "https://...mp4", "progress": 100,
- "completed_at": 1780827120}
+{"task_id": "...", "status": "succeeded",
+ "video_url": "https://...mp4", "progress": 100}
+```
+
+提交时（wait=False）：
+```json
+{"task_id": "cgt-...", "status": "queued", "model": "doubao-seedance-1.5-pro"}
 ```
 
 ## Errors
 
-- `ValueError("num_frames must satisfy 8n+1")` — 帧数不合法
-- `RuntimeError("agnes video task failed: ...")` — 任务终态为 failed
-- `TimeoutError("agnes video task did not complete within ...s")` — 等待超时
+- `RuntimeError("video task failed: ...")` — 任务终态为 failed/expired
+- `TimeoutError("video task did not complete within ...s")` — 等待超时

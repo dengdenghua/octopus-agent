@@ -176,12 +176,12 @@ export function CommunityPostDetail({
                 >
                   <ChevronRightIcon className="size-4" />
                 </button>
-                <span className="absolute bottom-2 right-2 rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+                <span className="absolute bottom-2 right-2 rounded-full bg-black/40 px-2 py-0.5 text-mini font-semibold text-white backdrop-blur-sm">
                   {imageIndex + 1}/{images.length}
                 </span>
               </>
             )}
-            <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+            <span className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/40 px-2 py-0.5 text-mini font-semibold text-white backdrop-blur-sm">
               <span
                 className="size-1.5 rounded-full"
                 style={{ backgroundColor: post.tagColor }}
@@ -203,7 +203,7 @@ export function CommunityPostDetail({
 
             <div className="mt-4 flex items-center gap-2">
               <span
-                className="flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                className="flex size-6 shrink-0 items-center justify-center rounded-full text-mini font-bold"
                 style={{
                   backgroundColor: `${post.authorColor}1f`,
                   color: post.authorColor,
@@ -228,7 +228,7 @@ export function CommunityPostDetail({
                 className={cn(
                   "flex items-center gap-1 text-sm tabular-nums transition-colors",
                   liked
-                    ? "text-pink-500"
+                    ? "text-chart-3"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -284,7 +284,7 @@ export function CommunityPostDetail({
                 {comments.map((c) => (
                   <div key={c.id} className="flex items-start gap-2.5">
                     <span
-                      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-mini font-bold"
                       style={{
                         backgroundColor: `${c.authorColor}1f`,
                         color: c.authorColor,
@@ -295,7 +295,7 @@ export function CommunityPostDetail({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2">
                         <span className="text-xs font-medium">{c.author}</span>
-                        <span className="text-[11px] text-muted-foreground/60">
+                        <span className="text-mini text-muted-foreground/60">
                           {formatRelativeTime(c.createdAt)}
                         </span>
                       </div>

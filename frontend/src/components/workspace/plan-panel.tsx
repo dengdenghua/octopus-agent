@@ -285,7 +285,7 @@ export function PlanButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] transition-colors transition-shadow duration-200",
+        "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-xs)] transition-colors transition-shadow duration-base",
         isActive
           ? "border-primary/60 bg-primary/10 text-primary shadow-primary/10"
           : "border-border-default bg-background/80 text-muted-foreground hover:text-foreground hover:border-foreground/20 hover:bg-muted/50",
@@ -360,7 +360,7 @@ export function PlanPanel({
     <div
       className={cn(
         "w-80 rounded-lg border border-border-default bg-popover shadow-xl shadow-black/5",
-        "animate-in slide-in-from-bottom-2 fade-in duration-200",
+        "animate-in slide-in-from-bottom-2 fade-in duration-base",
         className,
       )}
     >
@@ -387,7 +387,7 @@ export function PlanPanel({
       <div className="px-4 pt-2">
         <div className="h-1 overflow-hidden rounded-lg bg-muted">
           <div
-            className="bg-primary h-full rounded-lg transition-[width] duration-500"
+            className="bg-primary h-full rounded-lg transition-[width] duration-slow"
             style={{ width: `${progressPct}%` }}
           />
         </div>

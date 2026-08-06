@@ -113,7 +113,7 @@ export function TeamModePicker({
       )}
     >
       <div
-        className="absolute top-[3px] bottom-[3px] rounded-full bg-background shadow-[var(--shadow-xs)] ring-1 ring-border-subtle transition-all duration-300 ease-out"
+        className="absolute top-[3px] bottom-[3px] rounded-full bg-background shadow-[var(--shadow-xs)] ring-1 ring-border-subtle transition-all duration-slow ease-out"
         style={{
           left: `calc(${activeIndex} * (100% - 4px) / ${count} + 2px)`,
           width: `calc((100% - 4px) / ${count})`,

@@ -41,7 +41,7 @@ export function CodeWelcome({
       icon: RefreshCwIcon,
       label: t.codeWelcome.refactor,
       prompt: t.codeWelcome.refactorPrompt,
-      color: "text-sky-500",
+      color: "text-info",
     },
     {
       icon: TestTubeIcon,
@@ -53,13 +53,13 @@ export function CodeWelcome({
       icon: SearchIcon,
       label: t.codeWelcome.explainCode,
       prompt: t.codeWelcome.explainCodePrompt,
-      color: "text-violet-500",
+      color: "text-chart-1",
     },
     {
       icon: WrenchIcon,
       label: t.codeWelcome.optimize,
       prompt: t.codeWelcome.optimizePrompt,
-      color: "text-orange-500",
+      color: "text-chart-7",
     },
   ];
 
@@ -94,7 +94,7 @@ export function CodeWelcome({
               onClick={() => onSubmit?.(action.prompt)}
               className={cn(
                 "flex flex-col items-center gap-2 rounded-lg border border-border-default bg-card/50 px-3 py-4",
-                "text-center transition-all duration-150",
+                "text-center transition-all duration-fast",
                 "hover:border-border hover:bg-muted/50 hover:shadow-[var(--shadow-xs)]",
                 "active:scale-[0.98]",
               )}

@@ -336,7 +336,7 @@ function SkillCard({
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-md",
           isEnabled
-            ? "bg-gradient-to-br from-purple-500/20 to-blue-500/20 text-purple-500"
+            ? "bg-gradient-to-br from-purple-500/20 to-blue-500/20 text-chart-1"
             : "bg-muted/60 text-muted-foreground",
         )}
       >
@@ -420,8 +420,8 @@ export default function SkillsPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <div className="flex size-6 items-center justify-center rounded bg-purple-500/10">
-                  <PuzzleIcon className="size-4 text-purple-500" />
+                <div className="flex size-6 items-center justify-center rounded bg-chart-1/10">
+                  <PuzzleIcon className="size-4 text-chart-1" />
                 </div>
                 <h1 className="text-lg font-bold">{t.skillsPage.pageTitle}</h1>
               </div>

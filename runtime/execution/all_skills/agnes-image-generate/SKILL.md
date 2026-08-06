@@ -1,35 +1,37 @@
 ---
 name: agnes-image-generate
-description: "使用 Agnes AI 网关从文字描述生成图像。agnes-image-2.1-flash 同时支持文生图和图生图。当用户需要生成图片、插画或封面时调用此技能。"
+description: "使用火山引擎(火山方舟)或 Agnes AI 网关从文字描述生成图像。默认火山 doubao-seedream-5.0-lite（文生图+图生图），未配置火山 key 时自动回退 Agnes agnes-image-2.1-flash。当用户需要生成图片、插画或封面时调用此技能。"
 enabled: true
-aliases: [agnes_image, generate_image_agnes]
+aliases: [agnes_image, generate_image_agnes, volcano_image, generate_image_volcano]
 ---
 
-# Agnes Image Generation
+# Image Generation（火山 / Agnes）
 
-通过 Agnes AI Gateway (`https://apihub.agnes-ai.com/v1`) 调用图像生成模型，
-返回托管在 `platform-outputs.agnes-ai.space` 上的 PNG URL。
+根据 `base_url` 自动选择 provider：
+
+- **火山方舟**（默认）：`https://ark.cn-beijing.volces.com/api/plan/v3`，模型 `doubao-seedream-5.0-lite`
+- **Agnes AI Gateway**：`https://apihub.agnes-ai.com/v1`，模型 `agnes-image-2.1-flash`
 
 ## Models
 
-| ID | 用途 |
-|----|----|
-| `agnes-image-2.1-flash` | text→image + image→image（默认，最新） |
-| `agnes-image-2.0-flash` | image→image（旧版，可选） |
+| Provider | ID | 用途 |
+|----------|----|----|
+| 火山 | `doubao-seedream-5.0-lite` | text→image + image→image（默认） |
+| Agnes | `agnes-image-2.1-flash` | text→image + image→image（回退） |
 
 ## Configuration
 
-需要在环境变量或配置中设置 API Key：
+API Key 按优先级取第一个非空值：
+`VOLCENGINE_API_KEY` → `ARK_API_KEY` → `AGNES_API_KEY` → `OPENAI_API_KEY`
 
 ```bash
+# 火山（推荐）
+export VOLCENGINE_API_KEY=ark-xxx
+# base URL 可选，默认火山 plan/v3
+export VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/plan/v3
+
+# Agnes 回退
 export AGNES_API_KEY=sk-...
-# 或回退使用通用 OpenAI 兼容变量
-export OPENAI_API_KEY=sk-...
-```
-
-可选覆盖 base URL（默认 `https://apihub.agnes-ai.com/v1`）：
-```bash
-export AGNES_BASE_URL=https://apihub.agnes-ai.com/v1
 ```
 
 ## Usage
@@ -42,7 +44,7 @@ from agnes_image_generate import generate_image
 result = generate_image(
     prompt="a tiny red panda holding a paintbrush, soft studio lighting, 4k",
 )
-# {"url": "https://platform-outputs.agnes-ai.space/.../image.png", "model": "agnes-image-2.1-flash"}
+# {"url": "https://...", "model": "doubao-seedream-5.0-lite"}
 ```
 
 ### 指定尺寸 + 数量
@@ -50,7 +52,7 @@ result = generate_image(
 ```python
 result = generate_image(
     prompt="cinematic dragon over Hong Kong skyline at dusk",
-    size="1152x768",
+    size="2048x2048",   # 火山推荐 2048x2048 / 2304x1728 / 2560x1440 ...
     n=2,
 )
 # {"urls": ["...", "..."], ...}
@@ -69,20 +71,15 @@ result = generate_image(
 
 ```json
 {
-  "url": "https://platform-outputs.agnes-ai.space/images/text-to-image/.../xxx.png",
+  "url": "https://...",
   "urls": ["..."],
-  "model": "agnes-image-2.1-flash",
+  "model": "doubao-seedream-5.0-lite",
   "created": 1780826984,
-  "usage": {"total_tokens": 0}
+  "usage": {}
 }
 ```
 
-When `n > 1` the result includes both `url` (first one) and `urls` (full list)
-for caller convenience.
-
 ## Errors
 
-- `ValueError("AGNES_API_KEY not found")` — neither `AGNES_API_KEY` nor
-  `OPENAI_API_KEY` is set.
-- `RuntimeError("agnes API error: ...")` — non-200 response from the gateway;
-  the underlying message is preserved.
+- `ValueError("No API key found")` — 未配置任何 provider 的 key。
+- `RuntimeError("image API error: ...")` — 非 200 响应；底层信息保留。

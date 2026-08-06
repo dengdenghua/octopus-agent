@@ -851,7 +851,7 @@ export const enUS: Translations = {
     previewConsoleEmpty: "No log entries yet",
     previewConsoleClear: "Clear",
     previewConsoleAddToChat: "Add to chat",
-    previewConsoleCount: (n: number) => `${n}`,
+    previewConsoleCount: (n: number) => `${n} ${n === 1 ? "log" : "logs"}`,
     previewDevTools: "DevTools",
     previewDevToolsUnavailable: "DevTools is only available in the desktop app",
     // Tool panel (realtime)
@@ -9089,6 +9089,7 @@ Strategy:
       startFailed:
         "The local knowledge base service failed to start. Check the backend logs and try again.",
       notConnected: "Local knowledge base service is still unreachable: {url}",
+      networkError: "Unable to connect to the local knowledge base service. Please make sure it is running and try again.",
     },
     toolbar: {
       authorize: "Authorize",

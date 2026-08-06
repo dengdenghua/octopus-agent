@@ -248,7 +248,7 @@ function AgentClusterCard({
   return (
     <div className="px-1 py-1.5">
       <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <NetworkIcon className="size-4 shrink-0 text-sky-500" />
+        <NetworkIcon className="size-4 shrink-0 text-info" />
         <span className="font-medium text-foreground">
           {t.message.agentCluster}
         </span>

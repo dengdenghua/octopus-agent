@@ -22,7 +22,7 @@ import { useI18n } from "@/core/i18n/hooks";
 const SEVERITY_COLOR: Record<string, string> = {
   high: "bg-destructive/15 text-destructive border-destructive/30",
   mid: "bg-warning/15 text-warning border-warning/30",
-  low: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+  low: "bg-info/15 text-info dark:text-info border-info/30",
 };
 
 function formatTs(ts: number | undefined): string {

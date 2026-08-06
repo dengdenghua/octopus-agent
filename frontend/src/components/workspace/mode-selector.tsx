@@ -183,10 +183,10 @@ export function ModeSelector({
   const activeOption = modeOptions.find((option) => option.name === mode) ?? {
     name: "develop",
     icon: CodeIcon,
-    tone: "bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 dark:bg-sky-900/30 dark:text-sky-400",
+    tone: "bg-info/15 text-info hover:bg-info/25 dark:bg-info/30 dark:text-info",
     activeTone:
-      "bg-sky-500/15 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 ring-1 ring-sky-500/20",
-    ring: "ring-sky-500/20",
+      "bg-info/15 text-info dark:bg-info/40 dark:text-info ring-1 ring-info/20",
+    ring: "ring-info/20",
     label: t.modes.develop,
     desc: t.modes.developDesc,
     effect: t.modes.developEffect,
@@ -440,7 +440,7 @@ export function ModeSelector({
           }
         }}
         className={cn(
-          "group flex items-center gap-1.5 text-xs font-medium text-muted-foreground shadow-none transition-all duration-200",
+          "group flex items-center gap-1.5 text-xs font-medium text-muted-foreground shadow-none transition-all duration-base",
           chromeless
             ? "h-8 rounded-lg px-1.5 hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 hover:border-border-default hover:bg-muted/55 hover:text-foreground",
@@ -463,7 +463,7 @@ export function ModeSelector({
         )}
         {codeModeUnlocked ? (
           <span
-            className="size-1.5 rounded-full bg-success/90 shadow-[0_0_6px_rgba(16,185,129,0.28)] transition-all duration-200"
+            className="size-1.5 rounded-full bg-success/90 shadow-[0_0_6px_rgba(16,185,129,0.28)] transition-all duration-base"
             aria-hidden="true"
           />
         ) : (
@@ -518,7 +518,7 @@ export function ModeSelector({
                         aria-selected={mode === option.name}
                         onClick={() => handleToggle(option.name)}
                         className={cn(
-                          "flex w-full items-center gap-2 rounded-lg py-2 text-xs transition-all duration-200",
+                          "flex w-full items-center gap-2 rounded-lg py-2 text-xs transition-all duration-base",
                           "px-3",
                           mode === option.name
                             ? option.activeTone
@@ -673,10 +673,10 @@ function getModeOptions(t: ReturnType<typeof useI18n>["t"]): ModeOption[] {
     {
       name: "develop",
       icon: CodeIcon,
-      tone: "bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 dark:bg-sky-900/30 dark:text-sky-400",
+      tone: "bg-info/15 text-info hover:bg-info/25 dark:bg-info/30 dark:text-info",
       activeTone:
-        "bg-sky-500/15 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 ring-1 ring-sky-500/20",
-      ring: "ring-sky-500/20",
+        "bg-info/15 text-info dark:bg-info/40 dark:text-info ring-1 ring-info/20",
+      ring: "ring-info/20",
       label: t.modes.develop,
       desc: t.modes.developDesc,
       effect: t.modes.developEffect,
@@ -697,10 +697,10 @@ function getModeOptions(t: ReturnType<typeof useI18n>["t"]): ModeOption[] {
     {
       name: "uxui",
       icon: PaletteIcon,
-      tone: "bg-fuchsia-500/15 text-fuchsia-700 hover:bg-fuchsia-500/25 dark:bg-fuchsia-900/30 dark:text-fuchsia-400",
+      tone: "bg-chart-3/15 text-chart-3 hover:bg-chart-3/25 dark:bg-chart-3/30 dark:text-chart-3",
       activeTone:
-        "bg-fuchsia-500/15 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-300 ring-1 ring-fuchsia-500/20",
-      ring: "ring-fuchsia-500/20",
+        "bg-chart-3/15 text-chart-3 dark:bg-chart-3/40 dark:text-chart-3 ring-1 ring-chart-3/20",
+      ring: "ring-chart-3/20",
       label: t.modes.uxui,
       desc: t.modes.uxuiDesc,
       effect: t.modes.uxuiEffect,

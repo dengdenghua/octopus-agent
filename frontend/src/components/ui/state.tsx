@@ -41,7 +41,7 @@ const STATUS_STYLES: Record<StatusTone, string> = {
   warning:
     "border-warning/25 bg-warning/10 text-warning",
   error: "border-destructive/25 bg-destructive/10 text-destructive",
-  paused: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  paused: "border-info/25 bg-info/10 text-info dark:text-info",
 };
 
 const STATUS_ICONS: Record<StatusTone, typeof ClockIcon> = {

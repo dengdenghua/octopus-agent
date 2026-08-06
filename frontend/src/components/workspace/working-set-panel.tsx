@@ -48,14 +48,14 @@ const getPhaseConfig = (t: {
 }) => ({
   understand: {
     label: t.workingSet?.understand,
-    color: "text-sky-600 dark:text-sky-400",
-    bg: "bg-sky-500/10",
+    color: "text-info dark:text-info",
+    bg: "bg-info/10",
     icon: EyeIcon,
   },
   execute: {
     label: t.workingSet?.execute,
-    color: "text-violet-600 dark:text-violet-400",
-    bg: "bg-violet-500/10",
+    color: "text-chart-1 dark:text-chart-1",
+    bg: "bg-chart-1/10",
     icon: PencilIcon,
   },
   verify: {
@@ -75,12 +75,12 @@ function FileItem({ file }: { file: WorkingSetFile }) {
       className={cn(
         "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors",
         isEditing
-          ? "bg-violet-500/5 border border-violet-500/20"
+          ? "bg-chart-1/5 border border-chart-1/20"
           : "bg-muted/30 border border-transparent",
       )}
     >
       {isEditing ? (
-        <PencilIcon className="size-3 shrink-0 text-violet-500" />
+        <PencilIcon className="size-3 shrink-0 text-chart-1" />
       ) : (
         <FileCodeIcon className="size-3 shrink-0 text-muted-foreground/60" />
       )}
@@ -88,7 +88,7 @@ function FileItem({ file }: { file: WorkingSetFile }) {
         className={cn(
           "truncate font-mono",
           isEditing
-            ? "text-violet-700 dark:text-violet-400"
+            ? "text-chart-1 dark:text-chart-1"
             : "text-muted-foreground",
         )}
         title={file.path}
@@ -185,7 +185,7 @@ function ThinkingPlanMini({ plan }: { plan: ThinkingPlanSnapshot }) {
         role="progressbar"
       >
         <div
-          className="h-full rounded-full bg-primary/70 transition-all duration-300"
+          className="h-full rounded-full bg-primary/70 transition-all duration-slow"
           style={{ width: `${Math.round(progress * 100)}%` }}
         />
       </div>
@@ -284,7 +284,7 @@ export function WorkingSetPanel({
           <div className="space-y-3">
             {editingFiles.length > 0 && (
               <div>
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-violet-600/70 dark:text-violet-400/70">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-chart-1/70 dark:text-chart-1/70">
                   <PencilIcon className="size-2.5" />
                   <span>{t.workingSet?.editing}</span>
                   <span className="text-muted-foreground/40">

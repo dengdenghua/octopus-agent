@@ -75,11 +75,11 @@ function StepItem({
         <div className="relative flex flex-col items-center">
           <div
             className={cn(
-              "flex size-6 items-center justify-center rounded-full border-2 transition-colors duration-300",
+              "flex size-6 items-center justify-center rounded-full border-2 transition-colors duration-slow",
               step.status === "completed" &&
                 "border-success/50 bg-success/10 text-success",
               step.status === "running" &&
-                "border-violet-500 bg-violet-500/10 text-violet-600",
+                "border-chart-1 bg-chart-1/10 text-chart-1",
               step.status === "error" &&
                 "border-destructive/50 bg-destructive/10 text-destructive",
               step.status === "pending" &&
@@ -99,7 +99,7 @@ function StepItem({
           {!isLast && (
             <div
               className={cn(
-                "mt-1 h-full min-h-[20px] w-px transition-colors duration-300",
+                "mt-1 h-full min-h-[20px] w-px transition-colors duration-slow",
                 step.status === "completed"
                   ? "bg-success/30"
                   : "bg-border/50",
@@ -115,7 +115,7 @@ function StepItem({
                 <Icon
                   className={cn(
                     "size-3.5 shrink-0",
-                    step.status === "running" && "text-violet-500",
+                    step.status === "running" && "text-chart-1",
                     step.status === "completed" && "text-success",
                     step.status === "error" && "text-destructive",
                     step.status === "pending" && "text-muted-foreground/50",
@@ -125,7 +125,7 @@ function StepItem({
                   className={cn(
                     "truncate text-sm font-medium",
                     step.status === "running" &&
-                      "text-violet-700 dark:text-violet-400",
+                      "text-chart-1 dark:text-chart-1",
                     step.status === "completed" &&
                       "text-success",
                     step.status === "error" &&
@@ -229,11 +229,11 @@ export function AgentWorkflowPanel({
     <div className={cn("flex h-full flex-col", className)}>
       <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
         <div className="flex items-center gap-2">
-          <BotIcon className="size-4 text-violet-500" />
+          <BotIcon className="size-4 text-chart-1" />
           <span className="text-sm font-medium">{t.agentWorkflow.title}</span>
         </div>
         {isRunning && (
-          <div className="flex items-center gap-1.5 text-xs text-violet-600">
+          <div className="flex items-center gap-1.5 text-xs text-chart-1">
             <Loader2Icon className="size-3 animate-spin" />
             <span>{t.agentWorkflow.running}</span>
           </div>
@@ -252,8 +252,8 @@ export function AgentWorkflowPanel({
         <div className="h-1.5 overflow-hidden rounded-full bg-muted">
           <div
             className={cn(
-              "h-full rounded-full transition-colors duration-500",
-              isRunning ? "bg-violet-500" : "bg-success",
+              "h-full rounded-full transition-colors duration-slow",
+              isRunning ? "bg-chart-1" : "bg-success",
             )}
             style={{ width: `${progress}%` }}
           />

@@ -463,7 +463,7 @@ export function GeneLockControlCard({
                   onClick={() => setMode(mode as "dev" | "production")}
                   aria-pressed={selected}
                   className={cn(
-                    "h-6 rounded-[5px] px-2 text-xs transition-colors",
+                    "h-6 rounded-md px-2 text-xs transition-colors",
                     selected
                       ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                       : "text-muted-foreground hover:text-foreground",
@@ -490,7 +490,7 @@ export function GeneLockControlCard({
                 aria-pressed={index === lvl}
                 title={`${name} · ${g.levelDescriptions[index]}`}
                 className={cn(
-                  "h-6 rounded-[5px] px-2 font-mono text-xs transition-colors",
+                  "h-6 rounded-md px-2 font-mono text-xs transition-colors",
                   index === lvl
                     ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                     : "text-muted-foreground hover:text-foreground",

@@ -1050,10 +1050,10 @@ export function BrowserHome({
             )}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[11px] font-semibold text-foreground">
+            <span className="block truncate text-mini font-semibold text-foreground">
               {item.title}
             </span>
-            <span className="block truncate text-[10px] text-muted-foreground/80">
+            <span className="block truncate text-micro text-muted-foreground/80">
               {item.meta}
             </span>
           </span>
@@ -1774,14 +1774,14 @@ export function BrowserHome({
               <button
                 type="button"
                 onClick={resetDesktopLayout}
-                className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
+                className="rounded-lg px-2 py-1 text-mini font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
               >
                 {wt.resetLayout}
               </button>
               <button
                 type="button"
                 onClick={handleCreateFolder}
-                className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
+                className="rounded-lg px-2 py-1 text-mini font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
               >
                 <Folder className="w-3 h-3 inline mr-0.5" />
                 {wt.newFolder}
@@ -1789,7 +1789,7 @@ export function BrowserHome({
               <button
                 type="button"
                 onClick={handleAddIcon}
-                className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
+                className="rounded-lg px-2 py-1 text-mini font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
               >
                 <Plus className="w-3 h-3 inline mr-0.5" />
                 {wt.addIconBtn}
@@ -1797,7 +1797,7 @@ export function BrowserHome({
               <button
                 type="button"
                 onClick={() => handleAddWidget()}
-                className="rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
+                className="rounded-lg px-2 py-1 text-mini font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
               >
                 <PanelLeftIcon className="w-3 h-3 inline mr-0.5" />
                 {wt.addWidgetBtn}
@@ -1808,7 +1808,7 @@ export function BrowserHome({
             type="button"
             onClick={() => setEditMode((value) => !value)}
             className={cn(
-              "rounded-lg px-2 py-1 text-[11px] font-medium transition liquid-glass-subtle",
+              "rounded-lg px-2 py-1 text-mini font-medium transition liquid-glass-subtle",
               editMode
                 ? "bg-primary/90 text-primary-foreground hover:bg-primary"
                 : "text-foreground hover:bg-white/10",
@@ -1821,7 +1821,7 @@ export function BrowserHome({
         {editMode && (
           <div
             className={cn(
-              "absolute left-16 top-7 rounded-xl px-2 py-1 text-[11px] font-medium text-foreground/80 liquid-glass-subtle",
+              "absolute left-16 top-7 rounded-xl px-2 py-1 text-mini font-medium text-foreground/80 liquid-glass-subtle",
               compactDesktop && "left-14 top-[88px]",
               tabletDesktop && "left-16",
               mobileDesktop && "left-12 right-4 text-center",
@@ -1868,7 +1868,7 @@ export function BrowserHome({
                   >
                     {day}
                   </div>
-                  <div className="mt-1 text-[11px] font-medium text-muted-foreground">
+                  <div className="mt-1 text-mini font-medium text-muted-foreground">
                     {week}
                   </div>
                 </div>
@@ -1886,7 +1886,7 @@ export function BrowserHome({
                   >
                     {month}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  <div className="mt-0.5 text-mini text-muted-foreground">
                     {wt.aiBrowserDesktop}
                   </div>
                 </div>
@@ -1914,7 +1914,7 @@ export function BrowserHome({
                   >
                     <span
                       className={cn(
-                        "grid size-[68px] grid-cols-2 gap-1 rounded-[18px] p-1.5 transition liquid-glass-icon",
+                        "grid size-[68px] grid-cols-2 gap-1 rounded-3xl p-1.5 transition liquid-glass-icon",
                         mobileDesktop && "size-16",
                       )}
                     >
@@ -1933,7 +1933,7 @@ export function BrowserHome({
                   </button>
                 ))}
               </div>
-              <div className="mt-1.5 text-center text-[11px] font-medium text-muted-foreground/70">
+              <div className="mt-1.5 text-center text-mini font-medium text-muted-foreground/70">
                 {bt.commonCategories}
               </div>
 
@@ -1982,7 +1982,7 @@ export function BrowserHome({
                             <span className="block truncate text-sm font-semibold">
                               {getAppName(app.name)}
                             </span>
-                            <span className="block truncate text-[11px] text-muted-foreground">
+                            <span className="block truncate text-mini text-muted-foreground">
                               {getAppDesc(app.description)}
                             </span>
                           </span>
@@ -2008,7 +2008,7 @@ export function BrowserHome({
                   <div className="text-[13px] font-semibold text-foreground">
                     {bt.recentVisits}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
+                  <div className="text-mini text-muted-foreground">
                     {recentPanelItems.length > 0
                       ? bt.recentVisitCount(recentPanelItems.length)
                       : bt.noRecentVisits}
@@ -2029,7 +2029,7 @@ export function BrowserHome({
                 </div>
               )}
               {recentPanelItems.length === 0 && (
-                <div className="rounded-lg border border-border-subtle/60 px-3 py-4 text-center text-[11px] text-muted-foreground/70">
+                <div className="rounded-lg border border-border-subtle/60 px-3 py-4 text-center text-mini text-muted-foreground/70">
                   {bt.noRecentVisits}
                 </div>
               )}
@@ -2076,7 +2076,7 @@ export function BrowserHome({
                         {widget.type === "notes" && (
                           <div className="space-y-1.5">
                             <div className="rounded-lg border border-border-subtle/60 p-2">
-                              <p className="text-[11px] text-muted-foreground/80">
+                              <p className="text-mini text-muted-foreground/80">
                                 {bt.todoPlaceholder}
                               </p>
                             </div>
@@ -2103,7 +2103,7 @@ export function BrowserHome({
                             {["ChatGPT", "Claude", "Gemini"].map((name) => (
                               <div
                                 key={name}
-                                className="rounded-lg border border-border-subtle/60 p-1.5 text-center text-[11px] text-muted-foreground/80"
+                                className="rounded-lg border border-border-subtle/60 p-1.5 text-center text-mini text-muted-foreground/80"
                               >
                                 {name}
                               </div>
@@ -2125,7 +2125,7 @@ export function BrowserHome({
                             {["GitHub", "StackOverflow", "MDN"].map((name) => (
                               <div
                                 key={name}
-                                className="rounded-lg border border-border-subtle/60 p-1 text-[11px] text-muted-foreground/80"
+                                className="rounded-lg border border-border-subtle/60 p-1 text-mini text-muted-foreground/80"
                               >
                                 {name}
                               </div>
@@ -2176,7 +2176,7 @@ export function BrowserHome({
                             handleContext(e, link.id, "icon")
                           }
                         >
-                          <div className="relative w-12 h-12 rounded-[14px] liquid-glass-icon flex items-center justify-center text-muted-foreground overflow-hidden">
+                          <div className="relative w-12 h-12 rounded-xl liquid-glass-icon flex items-center justify-center text-muted-foreground overflow-hidden">
                             <span className="text-lg font-bold">
                               {link.name[0]}
                             </span>
@@ -2191,7 +2191,7 @@ export function BrowserHome({
                               />
                             )}
                           </div>
-                          <span className="text-[11px] text-muted-foreground/80 truncate w-full text-center">
+                          <span className="text-mini text-muted-foreground/80 truncate w-full text-center">
                             {link.name}
                           </span>
                         </button>
@@ -2239,7 +2239,7 @@ export function BrowserHome({
                         }}
                         onClick={() => toggleFolder(folder.id)}
                       >
-                        <div className="w-12 h-12 rounded-[14px] liquid-glass-icon flex items-center justify-center relative">
+                        <div className="w-12 h-12 rounded-xl liquid-glass-icon flex items-center justify-center relative">
                           {isOpen ? (
                             <FolderOpen className="w-5 h-5 text-foreground" />
                           ) : (
@@ -2249,7 +2249,7 @@ export function BrowserHome({
                             {links.length}
                           </span>
                         </div>
-                        <span className="text-[11px] text-muted-foreground/80 truncate w-full text-center">
+                        <span className="text-mini text-muted-foreground/80 truncate w-full text-center">
                           {folder.name}
                         </span>
                       </button>
@@ -2290,7 +2290,7 @@ export function BrowserHome({
                                     />
                                   )}
                                 </span>
-                                <span className="text-[10px] text-muted-foreground/80 truncate w-full text-center">
+                                <span className="text-micro text-muted-foreground/80 truncate w-full text-center">
                                   {link.name}
                                 </span>
                               </button>
@@ -2332,7 +2332,7 @@ export function BrowserHome({
                 onDrop={(event) => dropDockApp(event, app.url)}
                 onDragEnd={() => setDraggingUrl(null)}
                 className={cn(
-                  "group grid size-12 place-items-center rounded-[14px] transition liquid-glass-icon hover:bg-white/10",
+                  "group grid size-12 place-items-center rounded-xl transition liquid-glass-icon hover:bg-white/10",
                   compactDesktop && "size-11 shrink-0 rounded-xl",
                   tabletDesktop && "size-11",
                   mobileDesktop && "size-10 rounded-xl",
@@ -2344,7 +2344,7 @@ export function BrowserHome({
               >
                 <DesktopAppLogo
                   app={app}
-                  className="size-full rounded-[14px]"
+                  className="size-full rounded-xl"
                   iconClassName={cn(
                     "size-[58%]",
                     compactDesktop && "size-[56%]",

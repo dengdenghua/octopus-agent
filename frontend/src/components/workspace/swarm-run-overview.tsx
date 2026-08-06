@@ -247,7 +247,7 @@ export function SwarmRunOverview({
       )}
     >
       <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2">
-        <BrainCircuitIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
+        <BrainCircuitIcon className="size-4 shrink-0 text-info dark:text-info" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-medium text-foreground">
@@ -293,7 +293,7 @@ export function SwarmRunOverview({
       <div className="h-1 bg-muted/45">
         <div
           className={cn(
-            "h-full transition-[width] duration-300",
+            "h-full transition-[width] duration-slow",
             agentRunProgressBarClass(overview.status),
           )}
           style={{ width: `${Math.round(overview.progress * 100)}%` }}

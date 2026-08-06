@@ -536,7 +536,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
 
           <div className="space-y-2 rounded-sm border border-border bg-card/55 p-2.5">
             <div className="flex items-center justify-between gap-3">
-              <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="font-mono text-xs uppercase tracking-caps text-muted-foreground">
                 {t.armsEditor.skillMarketplaceLabel}
               </div>
               <div className="font-mono text-xs text-muted-foreground">
@@ -579,7 +579,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
             <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-sm border border-border bg-background/70 px-2.5 py-1.5">
-                  <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="font-mono text-xs uppercase tracking-caps text-muted-foreground">
                     {t.armsEditor.filterAll}
                   </div>
                   <div className="text-sm font-semibold">
@@ -587,7 +587,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                   </div>
                 </div>
                 <div className="rounded-sm border border-border bg-background/70 px-2.5 py-1.5">
-                  <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="font-mono text-xs uppercase tracking-caps text-muted-foreground">
                     {t.armsEditor.filterSelected}
                   </div>
                   <div className="text-sm font-semibold">
@@ -732,7 +732,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
 
           <div className="grid gap-2 md:grid-cols-3">
             <div className="rounded-sm border border-border bg-card/60 px-3 py-2">
-              <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="font-mono text-xs uppercase tracking-caps text-muted-foreground">
                 {t.armsEditor.permissionGlobalGate}
               </div>
               <div className="mt-1 text-sm font-semibold">
@@ -740,7 +740,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               </div>
             </div>
             <div className="rounded-sm border border-border bg-card/60 px-3 py-2">
-              <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="font-mono text-xs uppercase tracking-caps text-muted-foreground">
                 {t.armsEditor.permissionAgentGrant}
               </div>
               <div className="mt-1 text-sm font-semibold">
@@ -748,7 +748,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               </div>
             </div>
             <div className="rounded-sm border border-border bg-card/60 px-3 py-2">
-              <div className="font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="font-mono text-xs uppercase tracking-caps text-muted-foreground">
                 {t.armsEditor.permissionEffective}
               </div>
               <div className="mt-1 text-sm font-semibold">
@@ -800,7 +800,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className="font-mono text-xs font-semibold uppercase tracking-[0.12em]">
+                          <div className="font-mono text-xs font-semibold uppercase tracking-caps">
                             {permission.id}
                           </div>
                           <Badge

@@ -673,7 +673,7 @@ export default function DesktopShellPage() {
               className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 transition hover:bg-foreground/10 md:flex"
               title={t.desktop.header.aiReady}
             >
-              <SparklesIcon className="size-3.5 text-blue-600" />
+              <SparklesIcon className="size-3.5 text-info" />
               <span>{t.desktop.header.aiReady}</span>
             </button>
             <span className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 sm:flex">
@@ -711,7 +711,7 @@ export default function DesktopShellPage() {
         </header>
 
         <div className="relative min-h-0 flex-1 px-8 pb-28 pt-7">
-          <div className="pointer-events-none absolute right-8 top-8 rounded-[22px] bg-black/20 px-5 py-4 text-right shadow-2xl shadow-black/14 ">
+          <div className="pointer-events-none absolute right-8 top-8 rounded-4xl bg-black/20 px-5 py-4 text-right shadow-2xl shadow-black/14 ">
             <div className="text-xs font-semibold text-white/78">
               {t.desktop.widget.today}
             </div>
@@ -733,7 +733,7 @@ export default function DesktopShellPage() {
               data-desktop-interactive
               className="flex h-12 w-full max-w-[620px] items-center gap-3 rounded-2xl border border-white/36 bg-card/70 px-4 text-foreground shadow-2xl shadow-black/12 "
             >
-              <SearchIcon className="size-5 shrink-0 text-blue-600" />
+              <SearchIcon className="size-5 shrink-0 text-info" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
@@ -755,7 +755,7 @@ export default function DesktopShellPage() {
 
         <div
           className={cn(
-            "absolute inset-0 z-30 transition-all duration-300 ease-out",
+            "absolute inset-0 z-30 transition-all duration-slow ease-out",
             desktopDrawerOpen
               ? "pointer-events-auto opacity-100"
               : "pointer-events-none opacity-0",
@@ -764,7 +764,7 @@ export default function DesktopShellPage() {
           <div
             data-desktop-interactive
             className={cn(
-              "absolute inset-0 bg-black/18 px-8 pb-28 pt-14 backdrop-blur-sm transition-opacity duration-300",
+              "absolute inset-0 bg-black/18 px-8 pb-28 pt-14 backdrop-blur-sm transition-opacity duration-slow",
               desktopDrawerOpen ? "opacity-100" : "opacity-0",
             )}
             onClick={() => setDesktopDrawerOpen(false)}
@@ -772,7 +772,7 @@ export default function DesktopShellPage() {
           <section
             ref={drawerRef}
             className={cn(
-              "absolute inset-x-8 bottom-28 top-14 mx-auto max-w-[760px] rounded-[28px] border border-white/34 bg-card/70 p-5 text-foreground shadow-2xl shadow-black/24  transition-all duration-300 ease-out",
+              "absolute inset-x-8 bottom-28 top-14 mx-auto max-w-[760px] rounded-4xl border border-white/34 bg-card/70 p-5 text-foreground shadow-2xl shadow-black/24  transition-all duration-slow ease-out",
               desktopDrawerOpen
                 ? "translate-y-0 opacity-100"
                 : "translate-y-4 opacity-0",
@@ -804,7 +804,7 @@ export default function DesktopShellPage() {
                     type="button"
                     onClick={handleAutoArchive}
                     disabled={archiving || loadingItems}
-                    className="inline-flex h-7 items-center gap-1 bg-blue-600 px-2.5 text-mini font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+                    className="inline-flex h-7 items-center gap-1 bg-info px-2.5 text-mini font-medium text-white transition hover:bg-info disabled:opacity-50"
                     title={t.desktop.drawer.autoArchiveTooltip}
                   >
                     <ArchiveIcon className="size-3" />
@@ -927,7 +927,7 @@ export default function DesktopShellPage() {
                           desktopCategory === category.key
                             ? "bg-foreground text-background"
                             : dragOverCategory === category.key
-                              ? "bg-blue-500 text-white ring-2 ring-blue-300"
+                              ? "bg-info text-white ring-2 ring-info"
                               : "bg-muted/60 text-muted-foreground hover:bg-muted",
                         )}
                       >
@@ -1000,11 +1000,11 @@ export default function DesktopShellPage() {
                                     });
                                   }}
                                   title={item.path}
-                                  className="group flex min-h-[92px] flex-col items-center justify-center gap-1.5 rounded-2xl p-2 text-center transition hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+                                  className="group flex min-h-[92px] flex-col items-center justify-center gap-1.5 rounded-2xl p-2 text-center transition hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info focus-visible:ring-offset-2"
                                 >
                                   <span
                                     className={cn(
-                                      "grid size-12 place-items-center rounded-[14px] text-white shadow-[var(--shadow-md)] shadow-black/12 ring-1 ring-white/35 transition-transform duration-150 group-hover:scale-105",
+                                      "grid size-12 place-items-center rounded-xl text-white shadow-[var(--shadow-md)] shadow-black/12 ring-1 ring-white/35 transition-transform duration-fast group-hover:scale-105",
                                       category === "folder"
                                         ? "bg-gradient-to-br from-warning to-orange-500"
                                         : category === "app"
@@ -1100,7 +1100,7 @@ export default function DesktopShellPage() {
 
         <nav
           data-desktop-interactive
-          className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-end gap-2.5 rounded-[24px] border border-white/38 bg-card/50 px-3.5 py-2.5 shadow-2xl shadow-black/22 "
+          className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-end gap-2.5 rounded-4xl border border-white/38 bg-card/50 px-3.5 py-2.5 shadow-2xl shadow-black/22 "
         >
           {dockApps.map((app) => {
             const Icon = app.icon;
@@ -1111,7 +1111,7 @@ export default function DesktopShellPage() {
                 onClick={() => openApp(app)}
                 title={app.name}
                 className={cn(
-                  "grid size-[54px] place-items-center rounded-[15px] bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/18 ring-1 ring-white/25 transition hover:-translate-y-2 hover:scale-110",
+                  "grid size-[54px] place-items-center rounded-2xl bg-gradient-to-br text-white shadow-[var(--shadow-md)] shadow-black/18 ring-1 ring-white/25 transition hover:-translate-y-2 hover:scale-110",
                   app.color,
                 )}
               >
@@ -1129,7 +1129,7 @@ export default function DesktopShellPage() {
                 onClick={() => openApp(app)}
                 title={`${app.name} · ${app.subtitle}`}
                 className={cn(
-                  "grid size-[54px] place-items-center rounded-[15px] bg-gradient-to-br shadow-[var(--shadow-md)] shadow-black/12 ring-1 ring-white/25 transition hover:-translate-y-2 hover:scale-110",
+                  "grid size-[54px] place-items-center rounded-2xl bg-gradient-to-br shadow-[var(--shadow-md)] shadow-black/12 ring-1 ring-white/25 transition hover:-translate-y-2 hover:scale-110",
                   app.color,
                 )}
               >
@@ -1142,7 +1142,7 @@ export default function DesktopShellPage() {
             type="button"
             onClick={() => setDesktopDrawerOpen(true)}
             title={t.desktop.dock.desktopFiles}
-            className="grid size-[54px] place-items-center rounded-[15px] bg-card/80 text-orange-500 shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
+            className="grid size-[54px] place-items-center rounded-2xl bg-card/80 text-chart-7 shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
           >
             <FolderIcon className="size-6" />
           </button>
@@ -1151,9 +1151,9 @@ export default function DesktopShellPage() {
             onClick={() => setShowWidget(!showWidget)}
             title={t.desktop.dock.systemMonitor}
             className={cn(
-              "grid size-[54px] place-items-center rounded-[15px] shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-2 hover:scale-110",
+              "grid size-[54px] place-items-center rounded-2xl shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-2 hover:scale-110",
               showWidget
-                ? "bg-blue-500 text-white ring-2 ring-blue-300"
+                ? "bg-info text-white ring-2 ring-info"
                 : "bg-card/80 text-foreground",
             )}
           >
@@ -1163,7 +1163,7 @@ export default function DesktopShellPage() {
             type="button"
             onClick={() => navigate("/workspace")}
             title={t.desktop.dock.settings}
-            className="grid size-[54px] place-items-center rounded-[15px] bg-card/80 text-foreground shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
+            className="grid size-[54px] place-items-center rounded-2xl bg-card/80 text-foreground shadow-[var(--shadow-md)] shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
           >
             <SettingsIcon className="size-6" />
           </button>
@@ -1229,7 +1229,7 @@ export default function DesktopShellPage() {
                         ? "bg-destructive"
                         : systemInfo.memory.percent > 50
                           ? "bg-warning"
-                          : "bg-blue-500",
+                          : "bg-info",
                     )}
                     style={{ width: `${systemInfo.memory.percent}%` }}
                   />

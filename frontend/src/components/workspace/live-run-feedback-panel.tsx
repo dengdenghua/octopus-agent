@@ -405,7 +405,7 @@ export function LiveRunFeedbackPanel({
         {entries.map((entry) => (
           <div key={entry.id} className="flex gap-2">
             {entry.kind === "progress" ? (
-              <ActivityIcon className="mt-0.5 size-3.5 shrink-0 text-sky-500" />
+              <ActivityIcon className="mt-0.5 size-3.5 shrink-0 text-info" />
             ) : (
               <MessageSquareTextIcon className="mt-0.5 size-3.5 shrink-0 text-success" />
             )}

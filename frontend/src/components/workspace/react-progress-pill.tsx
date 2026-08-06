@@ -59,14 +59,14 @@ export const ReactProgressPill = memo(function ReactProgressPill({
         "flex items-center gap-1.5 rounded-full border border-border-default bg-card/50 px-2 py-0.5 text-xs",
         hot
           ? "border-warning/60 bg-warning/5 dark:border-warning/40"
-          : "border-blue-300/60 bg-blue-50/60 dark:border-blue-700/40 dark:bg-blue-950/30",
+          : "border-info/30 bg-info/10",
         className,
       )}
     >
       <LoaderIcon
         className={cn(
           "h-3 w-3 animate-spin",
-          hot ? "text-warning" : "text-blue-600",
+          hot ? "text-warning" : "text-info",
         )}
       />
       {active.max_iterations > 0 && (

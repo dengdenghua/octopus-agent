@@ -232,13 +232,13 @@ export default function CommunityPage() {
                   <div
                     className={cn(
                       "flex size-6 items-center justify-center rounded-md",
-                      isMarket ? "bg-rose-500/10" : "bg-pink-500/10",
+                      isMarket ? "bg-rose-500/10" : "bg-chart-3/10",
                     )}
                   >
                     {isMarket ? (
                       <StoreIcon className="size-4 text-rose-500" />
                     ) : (
-                      <CompassIcon className="size-4 text-pink-500" />
+                      <CompassIcon className="size-4 text-chart-3" />
                     )}
                   </div>
                   <h1 className="text-lg font-bold">发现</h1>
@@ -258,7 +258,7 @@ export default function CommunityPage() {
                           viewMode === v.key
                             ? v.key === "market"
                               ? "bg-rose-500 text-white"
-                              : "bg-pink-500 text-white"
+                              : "bg-chart-3 text-white"
                             : "text-muted-foreground hover:text-foreground",
                         )}
                       >
@@ -473,7 +473,7 @@ function SubscriptionPanel({
                 className={cn(
                   "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                   active
-                    ? "bg-pink-500/10 text-pink-500"
+                    ? "bg-chart-3/10 text-chart-3"
                     : "border border-border-default text-muted-foreground hover:bg-muted/60",
                 )}
               >
@@ -530,10 +530,10 @@ function SubscriptionPanel({
                       type="button"
                       onClick={() => onToggleFollow(name)}
                       className={cn(
-                        "rounded px-2 py-0.5 text-[11px] font-semibold transition-colors",
+                        "rounded px-2 py-0.5 text-mini font-semibold transition-colors",
                         isFollowing
                           ? "text-muted-foreground/60 hover:text-foreground"
-                          : "text-pink-500 hover:text-pink-600",
+                          : "text-chart-3 hover:text-chart-3/80",
                       )}
                     >
                       {isFollowing ? "已关注" : "关注"}
@@ -542,7 +542,7 @@ function SubscriptionPanel({
                       type="button"
                       onClick={() => onToggleAuthor(name)}
                       className={cn(
-                        "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold transition-colors",
+                        "flex items-center gap-1 rounded px-2 py-0.5 text-mini font-semibold transition-colors",
                         isSub
                           ? "text-muted-foreground/60 hover:text-foreground"
                           : "text-primary hover:text-primary/80",

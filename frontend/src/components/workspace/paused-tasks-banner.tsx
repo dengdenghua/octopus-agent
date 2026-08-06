@@ -187,9 +187,9 @@ export function PausedTasksBanner({ className }: Props) {
       {activeVisible.map((t) => (
         <div
           key={t.task_id}
-          className="flex items-start gap-3 rounded-lg border border-blue-300/60 bg-blue-50 p-3 shadow-[var(--shadow-sm)] dark:border-blue-700/40 dark:bg-blue-950/40"
+          className="flex items-start gap-3 rounded-lg border border-info/30 bg-info/10 p-3 shadow-[var(--shadow-sm)]"
         >
-          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-200/70 text-blue-900 dark:bg-blue-800/50 dark:text-blue-200">
+          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-info/20 text-info">
             <LoaderIcon className="h-3.5 w-3.5 animate-spin" />
           </div>
           <div className="min-w-0 flex-1">

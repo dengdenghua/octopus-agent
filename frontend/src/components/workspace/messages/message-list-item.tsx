@@ -398,7 +398,7 @@ export const MessageListItem = memo(function MessageListItem({
                 onClick={() => {
                   void submitFeedback("liked");
                 }}
-                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-success/10 hover:text-success dark:hover:text-success"
+                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-success/10 hover:text-success dark:hover:text-success"
                 title={t.conversation.goodResponse}
                 aria-label={t.conversation.goodResponse}
               >
@@ -408,7 +408,7 @@ export const MessageListItem = memo(function MessageListItem({
                 onClick={() => {
                   void submitFeedback("disliked");
                 }}
-                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-destructive/10 hover:text-destructive dark:hover:text-destructive"
+                className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-destructive/10 hover:text-destructive dark:hover:text-destructive"
                 title={t.conversation.badResponse}
                 aria-label={t.conversation.badResponse}
               >
@@ -419,7 +419,7 @@ export const MessageListItem = memo(function MessageListItem({
           <CopyButton
             clipboardData={clipboardText}
             size="icon-sm"
-            className="size-6 rounded-lg border-0 bg-transparent p-0 text-muted-foreground/70 shadow-none transition-colors duration-200 hover:bg-muted/60 hover:text-foreground focus-visible:ring-0"
+            className="size-6 rounded-lg border-0 bg-transparent p-0 text-muted-foreground/70 shadow-none transition-colors duration-base hover:bg-muted/60 hover:text-foreground focus-visible:ring-0"
           />
           {message.type === "ai" ? (
             <button
@@ -430,7 +430,7 @@ export const MessageListItem = memo(function MessageListItem({
                   }),
                 );
               }}
-              className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/60 hover:text-foreground"
+              className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-muted/60 hover:text-foreground"
               title={t.conversation.regenerateResponse}
               aria-label={t.conversation.regenerateResponse}
             >
@@ -446,7 +446,7 @@ export const MessageListItem = memo(function MessageListItem({
                   }),
                 );
               }}
-              className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/60 hover:text-foreground"
+              className="inline-flex size-6 items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-muted/60 hover:text-foreground"
               title={t.conversation.editResend}
               aria-label={t.conversation.editResend}
             >

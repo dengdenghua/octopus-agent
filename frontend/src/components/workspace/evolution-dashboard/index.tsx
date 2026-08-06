@@ -90,7 +90,7 @@ export function EvolutionDashboard({ className }: { className?: string }) {
         aria-live="polite"
       >
         <div className="flex flex-col items-center gap-3">
-          <Loader2Icon className="size-8 animate-spin text-purple-500" />
+          <Loader2Icon className="size-8 animate-spin text-chart-1" />
           <span className="text-sm text-muted-foreground">
             {t.evolutionDashboard.loading}
           </span>

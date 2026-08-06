@@ -407,7 +407,7 @@ function OfficialPricingSection() {
               className={cn(
                 "relative flex flex-col rounded-lg border p-5 transition-all",
                 isRecommended
-                  ? "border-violet-300/60 bg-gradient-to-b from-violet-50/50 to-white shadow-[var(--shadow-sm)] dark:from-violet-950/20 dark:to-transparent dark:border-violet-700/40"
+                  ? "border-chart-1/60 bg-gradient-to-b from-violet-50/50 to-white shadow-[var(--shadow-sm)] dark:from-violet-950/20 dark:to-transparent dark:border-chart-1/40"
                   : "bg-card border-border-default hover:border-border hover:shadow-[var(--shadow-xs)]",
               )}
             >
@@ -448,7 +448,7 @@ function OfficialPricingSection() {
                 className={cn(
                   "mt-4 h-9 w-full rounded-lg text-xs font-medium",
                   isRecommended
-                    ? "bg-violet-600 text-white hover:bg-violet-700"
+                    ? "bg-chart-1 text-white hover:bg-chart-1/90"
                     : "bg-foreground text-background hover:bg-foreground/85",
                 )}
                 disabled={pendingId !== null}

@@ -612,7 +612,7 @@ function Section({
 }) {
   return (
     <section className="space-y-2 border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-caps text-muted-foreground">
         <Icon className="size-3.5" />
         {title}
       </div>
@@ -1331,7 +1331,7 @@ function KnowledgeGraph3DContent() {
                   {focusNode.sources.slice(0, 3).map((source) => (
                     <span
                       key={source}
-                      className="max-w-full truncate rounded bg-sky-400/10 px-1.5 py-0.5 text-xs text-sky-200"
+                      className="max-w-full truncate rounded bg-info/10 px-1.5 py-0.5 text-xs text-info"
                     >
                       {shortText(source, 28)}
                     </span>
@@ -1340,7 +1340,7 @@ function KnowledgeGraph3DContent() {
               )}
               {focusEdges.length > 0 && (
                 <div className="space-y-1 border-t border-white/10 pt-2">
-                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+                  <div className="text-xs font-semibold uppercase tracking-caps text-muted-foreground/70">
                     {controls.evidence}
                   </div>
                   {focusEdges.map((edge) => {

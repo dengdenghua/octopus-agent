@@ -36,7 +36,7 @@ function verdictStyle(verdict: string): string {
     case "degraded":
       return "bg-warning/15 text-warning border-warning/30";
     case "unhealthy":
-      return "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30";
+      return "bg-chart-7/15 text-chart-7 dark:text-chart-7 border-chart-7/30";
     case "critical":
       return "bg-destructive/15 text-destructive border-destructive/30";
     default:
@@ -58,11 +58,11 @@ function trendIcon(trend: string): React.ReactElement {
 function actionBadgeStyle(action: string): string {
   switch (action) {
     case "evolve":
-      return "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30";
+      return "bg-chart-1/15 text-chart-1 dark:text-chart-1 border-chart-1/30";
     case "revert":
       return "bg-destructive/15 text-destructive border-destructive/30";
     case "hold":
-      return "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30";
+      return "bg-info/15 text-info dark:text-info border-info/30";
     case "explore":
       return "bg-warning/15 text-warning border-warning/30";
     default:
@@ -73,7 +73,7 @@ function actionBadgeStyle(action: string): string {
 function severityDotColor(severity: string): string {
   switch (severity) {
     case "info":
-      return "bg-blue-500";
+      return "bg-info";
     case "warning":
       return "bg-warning";
     case "critical":
@@ -86,9 +86,9 @@ function severityDotColor(severity: string): string {
 function kindBadgeStyle(kind: string): string {
   switch (kind) {
     case "soul_change":
-      return "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30";
+      return "bg-chart-1/15 text-chart-1 dark:text-chart-1 border-chart-1/30";
     case "genome_change":
-      return "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30";
+      return "bg-info/15 text-info dark:text-info border-info/30";
     case "score_regression":
       return "bg-destructive/15 text-destructive border-destructive/30";
     default:
@@ -107,7 +107,7 @@ function statusStyle(rate: number): string {
   if (rate >= 0.8)
     return "bg-success/15 text-success border-success/30";
   if (rate >= 0.6)
-    return "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30";
+    return "bg-info/15 text-info dark:text-info border-info/30";
   if (rate >= 0.4)
     return "bg-warning/15 text-warning border-warning/30";
   return "bg-destructive/15 text-destructive border-destructive/30";
@@ -115,7 +115,7 @@ function statusStyle(rate: number): string {
 
 function successRateBarColor(rate: number): string {
   if (rate >= 0.8) return "bg-success";
-  if (rate >= 0.6) return "bg-sky-500";
+  if (rate >= 0.6) return "bg-info";
   if (rate >= 0.4) return "bg-warning";
   return "bg-destructive";
 }
@@ -354,7 +354,7 @@ export function DriftExplainCard({ agentId }: { agentId?: string }) {
       ? "bg-destructive/10 text-destructive border-destructive/30"
       : maxSeverity === "warning"
         ? "bg-warning/10 text-warning border-warning/30"
-        : "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30";
+        : "bg-info/10 text-info dark:text-info border-info/30";
 
   return (
     <div className="rounded-lg border bg-card p-4">

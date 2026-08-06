@@ -7857,6 +7857,7 @@ export interface Translations {
       notFound: string;
       startFailed: string;
       notConnected: string;
+      networkError: string;
     };
     toolbar: {
       authorize: string;

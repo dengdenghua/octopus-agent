@@ -61,7 +61,7 @@ const STATUS_CONFIG: Record<
     icon: <ClockIcon className="size-3" />,
   },
   running: {
-    color: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+    color: "bg-info/15 text-info dark:text-info",
     icon: <Loader2Icon className="size-3 animate-spin" />,
   },
   paused: {
@@ -81,7 +81,7 @@ const STATUS_CONFIG: Record<
     icon: <XIcon className="size-3" />,
   },
   interrupted: {
-    color: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
+    color: "bg-chart-7/15 text-chart-7 dark:text-chart-7",
     icon: <AlertCircleIcon className="size-3" />,
   },
 };

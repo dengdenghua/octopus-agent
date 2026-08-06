@@ -490,7 +490,7 @@ function ReplayCasesTable({
                   className={cn(
                     "text-xs",
                     item.resume.available
-                      ? "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                      ? "border-info/30 bg-info/10 text-info dark:text-info"
                       : "border-muted bg-muted/20 text-muted-foreground",
                   )}
                 >

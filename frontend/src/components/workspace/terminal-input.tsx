@@ -101,7 +101,7 @@ export function TerminalInput({
             title={t.codeMode.send}
             aria-label={t.codeMode.send}
             className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",
+              "flex size-7 shrink-0 items-center justify-center rounded-lg transition-[background-color,transform] duration-fast",
               "bg-foreground text-background hover:bg-foreground/90 active:scale-95",
               "disabled:bg-transparent disabled:text-muted-foreground/50 disabled:cursor-not-allowed disabled:hover:bg-muted/60 disabled:hover:text-muted-foreground",
             )}

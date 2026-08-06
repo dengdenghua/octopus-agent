@@ -1118,8 +1118,8 @@ function PastRunRow({
 }) {
   const triggerColor =
     run.trigger === "auto_propose"
-      ? "bg-violet-500/15 text-violet-300"
-      : "bg-cyan-500/15 text-cyan-300";
+      ? "bg-chart-1/15 text-chart-1"
+      : "bg-info/15 text-info";
   const dt = new Date(run.ts * 1000);
   const canApply = !!(run.best_candidate_id && run.best_prompt && !run.applied);
   const lifecyclePhase =
@@ -1639,8 +1639,8 @@ function AddendumRow({
   const dt = new Date(entry.mtime * 1000);
   const scopeColor =
     entry.scope === "global"
-      ? "bg-cyan-500/15 text-cyan-300"
-      : "bg-violet-500/15 text-violet-300";
+      ? "bg-info/15 text-info"
+      : "bg-chart-1/15 text-chart-1";
   return (
     <div className="rounded-md border border-border-default bg-background/40 px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
@@ -1716,7 +1716,7 @@ function HistoryRow({ entry, t }: { entry: HistoryEntry; t: Translations }) {
   }
   if (entry.early_stop) {
     return (
-      <div className="text-violet-300">
+      <div className="text-chart-1">
         {t.recipeForge.historyEarlyStop(String(entry.iter))}
       </div>
     );

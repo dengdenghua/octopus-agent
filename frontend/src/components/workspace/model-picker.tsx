@@ -150,7 +150,7 @@ function ReasoningEffortSetting({
                 onChange(effort);
               }}
               className={cn(
-                "h-5 rounded-[5px] px-1 text-xs transition-colors",
+                "h-5 rounded-md px-1 text-xs transition-colors",
                 selected
                   ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
@@ -409,7 +409,7 @@ export function ModelPicker({
       aria-label={t.modelPicker.selectModel}
       title={t.modelPicker.selectModel}
     >
-      {isAutoMode && <SparklesIcon className="size-3 shrink-0 text-blue-500" />}
+      {isAutoMode && <SparklesIcon className="size-3 shrink-0 text-info" />}
       <span className="truncate max-w-[140px]">
         {isAutoMode
           ? t.modelPicker.autoModelLabel
@@ -470,12 +470,12 @@ export function ModelPicker({
           <PickerRow
             label={
               <span className="inline-flex items-center gap-1.5">
-                <SparklesIcon className="size-3 shrink-0 text-blue-500" />
+                <SparklesIcon className="size-3 shrink-0 text-info" />
                 {t.modelPicker.autoModelLabel}
               </span>
             }
             right={
-              <span className="rounded border border-blue-500/40 px-1 py-0 text-xs text-blue-500">
+              <span className="rounded border border-info/40 px-1 py-0 text-xs text-info">
                 {t.modelPicker.autoModelBadge}
               </span>
             }

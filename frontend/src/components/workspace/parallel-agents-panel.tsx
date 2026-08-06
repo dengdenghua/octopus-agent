@@ -88,7 +88,7 @@ function getStatusIcon(status: string, className?: string) {
 function batchStatusDotClass(status: string): string {
   switch (status) {
     case "running":
-      return "bg-blue-500";
+      return "bg-info";
     case "completed":
       return "bg-success";
     case "failed":
@@ -333,7 +333,7 @@ function ProgressRing({
         strokeDasharray={circumference}
         strokeDashoffset={circumference * (1 - successPct)}
         strokeLinecap="round"
-        className="text-success transition-colors duration-500"
+        className="text-success transition-colors duration-slow"
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
       {/* Failed arc */}
@@ -348,7 +348,7 @@ function ProgressRing({
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - failPct)}
           strokeLinecap="round"
-          className="text-destructive transition-colors duration-500"
+          className="text-destructive transition-colors duration-slow"
           transform={`rotate(${-90 + successPct * 360} ${size / 2} ${size / 2})`}
         />
       )}
@@ -438,7 +438,7 @@ function AgentCard({
           <div
             className={cn(
               "flex h-10 w-10 items-center justify-center rounded-lg",
-              task.status === "running" ? "bg-blue-500/15" : "bg-muted",
+              task.status === "running" ? "bg-info/15" : "bg-muted",
             )}
           >
             <BotIcon className="text-muted-foreground size-5" />
@@ -498,7 +498,7 @@ function AgentCard({
               {Array.from({ length: 8 }).map((_, i) => (
                 <span
                   key={i}
-                  className="size-[5px] rounded-lg bg-blue-500"
+                  className="size-[5px] rounded-lg bg-info"
                   style={{
                     opacity: 0.25,
                     animation: `dotPulse 1.2s ease-in-out ${i * 0.12}s infinite`,
@@ -727,8 +727,8 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
         </div>
         <div className="flex items-center gap-2">
           {isActive && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600">
-              <span className="size-1.5 animate-pulse rounded-lg bg-blue-500" />
+            <span className="inline-flex items-center gap-1 rounded-lg bg-info/10 px-2 py-0.5 text-xs font-medium text-info">
+              <span className="size-1.5 animate-pulse rounded-lg bg-info" />
               {totalActive} {t.parallelAgents.active}
             </span>
           )}

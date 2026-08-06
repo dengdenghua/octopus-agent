@@ -20,7 +20,7 @@ export default function EvolutionPage() {
   return (
     <WorkspaceContainer>
       <WorkspaceBody className="pt-0">
-        <div className="flex h-full min-h-0 w-full flex-col bg-white">
+        <div className="flex h-full min-h-0 w-full flex-col bg-card">
           <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-muted px-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">
@@ -59,7 +59,7 @@ export default function EvolutionPage() {
             </div>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-auto bg-white p-3">
+          <div className="min-h-0 flex-1 overflow-auto bg-card p-3">
             <EvolutionDashboard />
 
             {showAdvanced && (

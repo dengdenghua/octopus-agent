@@ -74,7 +74,7 @@ export function OnboardingGuide() {
         <div className="min-h-[320px] flex items-center justify-center">
           <div
             key={step}
-            className="w-full animate-in fade-in slide-in-from-right-4 duration-300"
+            className="w-full animate-in fade-in slide-in-from-right-4 duration-slow"
           >
             {step === 0 && <WelcomeStep />}
             {step === 1 && <ChatModesStep />}
@@ -101,7 +101,7 @@ export function OnboardingGuide() {
                 key={i}
                 onClick={() => setStep(i)}
                 className={cn(
-                  "size-2 rounded-lg transition-all duration-200",
+                  "size-2 rounded-lg transition-all duration-base",
                   i === step
                     ? "bg-primary w-5"
                     : "bg-muted-foreground/30 hover:bg-muted-foreground/50",
@@ -164,7 +164,7 @@ function ChatModesStep() {
       icon: MessageSquareIcon,
       title: t.onboarding.modeChat,
       desc: t.onboarding.modeChatDesc,
-      color: "text-blue-500 bg-blue-500/10",
+      color: "text-info bg-info/10",
     },
     {
       icon: CodeIcon,
@@ -176,7 +176,7 @@ function ChatModesStep() {
       icon: UsersIcon,
       title: t.onboarding.modeTeam,
       desc: t.onboarding.modeTeamDesc,
-      color: "text-purple-500 bg-purple-500/10",
+      color: "text-chart-1 bg-chart-1/10",
     },
   ];
 
@@ -213,19 +213,19 @@ function KeyFeaturesStep() {
       icon: GlobeIcon,
       title: t.onboarding.featureAgentWorld,
       desc: t.onboarding.featureAgentWorldDesc,
-      color: "text-sky-500 bg-sky-500/10",
+      color: "text-info bg-info/10",
     },
     {
       icon: GitBranchIcon,
       title: t.onboarding.featureWorkflows,
       desc: t.onboarding.featureWorkflowsDesc,
-      color: "text-orange-500 bg-orange-500/10",
+      color: "text-chart-7 bg-chart-7/10",
     },
     {
       icon: ShoppingBagIcon,
       title: t.onboarding.featureSkillsMarket,
       desc: t.onboarding.featureSkillsMarketDesc,
-      color: "text-pink-500 bg-pink-500/10",
+      color: "text-chart-3 bg-chart-3/10",
     },
     {
       icon: ClipboardListIcon,

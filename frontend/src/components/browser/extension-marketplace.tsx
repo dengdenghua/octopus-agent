@@ -545,7 +545,7 @@ export function ExtensionMarketplace({
                 <div className="flex flex-col gap-5 md:flex-row md:items-start">
                   <div
                     className={cn(
-                      "flex size-20 items-center justify-center rounded-[28px] bg-gradient-to-br text-white shadow-xl",
+                      "flex size-20 items-center justify-center rounded-4xl bg-gradient-to-br text-white shadow-xl",
                       selected.accent,
                     )}
                   >

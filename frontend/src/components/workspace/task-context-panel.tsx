@@ -107,7 +107,7 @@ export function TaskContextPanel({
 
       {reads.length > 0 && (
         <Section
-          icon={<BookOpenIcon className="size-3 text-cyan-500" />}
+          icon={<BookOpenIcon className="size-3 text-info" />}
           label={`Read (${reads.length})`}
         >
           {reads.map((f) => (
@@ -118,7 +118,7 @@ export function TaskContextPanel({
 
       {writes.length > 0 && (
         <Section
-          icon={<FileEditIcon className="size-3 text-blue-500" />}
+          icon={<FileEditIcon className="size-3 text-info" />}
           label={`Modified (${writes.length})`}
         >
           {writes.map((f) => (
@@ -141,7 +141,7 @@ export function TaskContextPanel({
                     ? "bg-success"
                     : c.status === "error"
                       ? "bg-destructive"
-                      : "bg-blue-400 animate-pulse",
+                      : "bg-info animate-pulse",
                 )}
               />
               <span className="text-xs font-mono text-muted-foreground truncate">

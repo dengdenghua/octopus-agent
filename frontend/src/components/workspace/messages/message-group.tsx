@@ -1126,14 +1126,14 @@ export function MessageGroup({
                   agentDisplayName={subagentIdentity.name}
                   icon={subagentIdentity.icon}
                   avatarUrl={subagentIdentity.avatarUrl}
-                  className="size-4 shrink-0 rounded-[4px] text-micro"
+                  className="size-4 shrink-0 rounded-sm text-micro"
                 />
               ) : owningSubagent?.name ? (
                 <AgentAvatar
                   agentDisplayName={owningSubagent.name}
                   icon={owningSubagent.icon}
                   avatarUrl={owningSubagent.avatarUrl}
-                  className="size-4 shrink-0 rounded-[4px] text-micro"
+                  className="size-4 shrink-0 rounded-sm text-micro"
                 />
               ) : (
                 <ActionIcon className="size-3.5 shrink-0 text-muted-foreground" />

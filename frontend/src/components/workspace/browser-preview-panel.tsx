@@ -495,17 +495,17 @@ async function detectLocalServices(): Promise<DetectedService[]> {
 function ActionIcon({ action }: { action: string }) {
   switch (action) {
     case "navigate":
-      return <GlobeIcon className="size-3 text-blue-500" />;
+      return <GlobeIcon className="size-3 text-info" />;
     case "click":
     case "click_at":
     case "double_click_at":
-      return <MousePointerClickIcon className="size-3 text-orange-500" />;
+      return <MousePointerClickIcon className="size-3 text-chart-7" />;
     case "type":
       return <TypeIcon className="size-3 text-success" />;
     case "screenshot":
-      return <ImageIcon className="size-3 text-purple-500" />;
+      return <ImageIcon className="size-3 text-chart-1" />;
     case "viewport":
-      return <MonitorIcon className="size-3 text-cyan-500" />;
+      return <MonitorIcon className="size-3 text-info" />;
     case "scroll":
       return <ArrowLeftIcon className="size-3 text-muted-foreground" />;
     default:
@@ -1511,9 +1511,9 @@ export function BrowserPreviewPanel({
                   ? "w-full rounded-lg border border-border-default"
                   : "border-[5px] border-foreground/80",
                 deviceFrameKind === "tablet" &&
-                  "max-h-full rounded-[24px] shadow-[0_22px_64px_rgba(15,23,42,0.24)]",
+                  "max-h-full rounded-4xl shadow-[0_22px_64px_rgba(15,23,42,0.24)]",
                 deviceFrameKind === "phone" &&
-                  "max-h-full rounded-[28px] shadow-[0_24px_70px_rgba(15,23,42,0.28)]",
+                  "max-h-full rounded-4xl shadow-[0_24px_70px_rgba(15,23,42,0.28)]",
               )}
               style={{
                 aspectRatio:
@@ -1572,9 +1572,9 @@ export function BrowserPreviewPanel({
                   ? "w-full rounded-lg border border-border-default"
                   : "border-[5px] border-foreground/80",
                 deviceFrameKind === "tablet" &&
-                  "max-h-full rounded-[24px] shadow-[0_22px_64px_rgba(15,23,42,0.24)]",
+                  "max-h-full rounded-4xl shadow-[0_22px_64px_rgba(15,23,42,0.24)]",
                 deviceFrameKind === "phone" &&
-                  "max-h-full rounded-[28px] shadow-[0_24px_70px_rgba(15,23,42,0.28)]",
+                  "max-h-full rounded-4xl shadow-[0_24px_70px_rgba(15,23,42,0.28)]",
               )}
               style={{
                 aspectRatio:
@@ -1666,7 +1666,7 @@ export function BrowserPreviewPanel({
                         className={cn(
                           "flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-bold transition-transform group-hover:scale-[1.03]",
                           svc.type === "frontend"
-                            ? "bg-blue-500/10 text-blue-600"
+                            ? "bg-info/10 text-info"
                             : svc.type === "backend"
                               ? "bg-success/10 text-success"
                               : "bg-muted text-muted-foreground",
@@ -1686,7 +1686,7 @@ export function BrowserPreviewPanel({
                         className={cn(
                           "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
                           svc.type === "frontend"
-                            ? "bg-blue-500/10 text-blue-600"
+                            ? "bg-info/10 text-info"
                             : svc.type === "backend"
                               ? "bg-success/10 text-success"
                               : "bg-muted text-muted-foreground",

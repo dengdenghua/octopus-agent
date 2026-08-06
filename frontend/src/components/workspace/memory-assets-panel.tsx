@@ -78,9 +78,9 @@ function LayerMark({ layer }: { layer: MemoryLayer }) {
       className={cn(
         "grid size-9 shrink-0 place-items-center rounded-lg border text-mini font-semibold",
         layer === "L0" && "border-slate-200 bg-slate-50 text-slate-600",
-        layer === "L1" && "border-sky-200 bg-sky-50 text-sky-700",
+        layer === "L1" && "border-info bg-info text-info",
         layer === "L2" && "border-success/30 bg-success/5 text-success",
-        layer === "L3" && "border-violet-200 bg-violet-50 text-violet-700",
+        layer === "L3" && "border-chart-1/30 bg-chart-1/10 text-chart-1",
       )}
     >
       {layer}

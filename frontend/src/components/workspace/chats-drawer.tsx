@@ -252,7 +252,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
           side="left"
           className={cn(
             "gap-0 p-0",
-            "data-[state=open]:duration-300 data-[state=closed]:duration-200",
+            "data-[state=open]:duration-slow data-[state=closed]:duration-base",
           )}
           style={{ width: DRAWER_WIDTH, maxWidth: DRAWER_WIDTH }}
         >
@@ -282,7 +282,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                     onClick={() => onOpenChange(false)}
                     aria-current={item.active ? "page" : undefined}
                     className={cn(
-                      "flex h-10 min-w-0 items-center gap-2 rounded-md px-2.5 text-[12.5px] font-medium outline-none transition-colors",
+                      "flex h-10 min-w-0 items-center gap-2 rounded-md px-2.5 text-caption font-medium outline-none transition-colors",
                       "focus-visible:ring-2 focus-visible:ring-primary/55 focus-visible:ring-offset-1",
                       item.active
                         ? "bg-muted/70 text-foreground"
@@ -318,7 +318,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t.sidebar.searchChats}
-                className="h-10 pl-8 text-[12.5px]"
+                className="h-10 pl-8 text-caption"
               />
             </div>
           </div>
@@ -367,7 +367,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                         onClick={() => onOpenChange(false)}
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "flex min-h-10 items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] outline-none transition-colors",
+                          "flex min-h-10 items-center gap-2 rounded-md px-2 py-1.5 text-caption outline-none transition-colors",
                           "hover:bg-muted/55",
                           "focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset",
                           active &&
@@ -437,7 +437,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
             <button
               type="button"
               onClick={openSettings}
-              className="flex h-10 w-full items-center gap-2 rounded-md px-2.5 text-[12.5px] font-medium text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset"
+              className="flex h-10 w-full items-center gap-2 rounded-md px-2.5 text-caption font-medium text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset"
             >
               <SettingsIcon className="size-4" />
               {t.common.settings}

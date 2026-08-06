@@ -698,7 +698,7 @@ function ApprovalRulesSection() {
             <DialogTitle className="text-base">
               {t.settings.automation.rules.deleteConfirmTitle}
             </DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-5">
+            <DialogDescription className="text-caption leading-5">
               {ruleToDelete
                 ? `“${ruleToDelete.rule.tool}” · ${t.settings.automation.rules.deleteConfirmHint}`
                 : ""}

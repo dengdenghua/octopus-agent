@@ -773,12 +773,17 @@ export default function StoragePage() {
       setImages([]);
       setVideos([]);
       setAlbums([]);
+      const isNetworkError =
+        error instanceof TypeError &&
+        /Failed to fetch|NetworkError|network error/i.test(error.message);
       setServiceError(
         isNASAuthenticationError(error)
           ? copy.service.credentialsExpired
-          : error instanceof Error
-            ? error.message
-            : String(error),
+          : isNetworkError
+            ? copy.service.networkError
+            : error instanceof Error
+              ? error.message
+              : String(error),
       );
       return false;
     }
@@ -827,10 +832,19 @@ export default function StoragePage() {
       }
       if (didAutoStartRef.current) return;
       didAutoStartRef.current = true;
-      if (await ensureNASService()) void maybeAutoDownloadVision();
+      try {
+        if (await ensureNASService()) void maybeAutoDownloadVision();
+      } catch (error) {
+        const isNetworkError =
+          error instanceof TypeError &&
+          /Failed to fetch|NetworkError|network error/i.test(error.message);
+        if (isNetworkError) {
+          setServiceError(copy.service.networkError);
+        }
+      }
     };
     void init();
-  }, [ensureNASService, maybeAutoDownloadVision, refreshNAS]);
+  }, [copy.service.networkError, ensureNASService, maybeAutoDownloadVision, refreshNAS]);
 
   useEffect(() => {
     const reconnect = () => {
@@ -873,7 +887,16 @@ export default function StoragePage() {
       await ensureNASService();
     } catch (error) {
       if (!(await refreshNAS())) {
-        setServiceError(error instanceof Error ? error.message : String(error));
+        const isNetworkError =
+          error instanceof TypeError &&
+          /Failed to fetch|NetworkError|network error/i.test(error.message);
+        setServiceError(
+          isNetworkError
+            ? copy.service.networkError
+            : error instanceof Error
+              ? error.message
+              : String(error),
+        );
       }
     } finally {
       setIsReconnecting(false);
@@ -932,15 +955,15 @@ export default function StoragePage() {
     <WorkspaceContainer className="px-0 pb-0 md:px-0">
       <WorkspaceBody className="overflow-hidden pt-0">
         <div className="flex size-full overflow-hidden">
-          <section className="workspace-panel flex min-h-0 flex-1 overflow-hidden rounded-none border-0 bg-white">
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <section className="workspace-panel flex min-h-0 flex-1 overflow-hidden rounded-none border-0 bg-card">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-card">
               {serviceError && (
                 <div className="flex items-center justify-between gap-3 border-b border-warning/70 bg-warning/5 px-4 py-2 text-xs text-warning">
                   <span className="min-w-0 truncate">{serviceError}</span>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 shrink-0 rounded-md border-warning/40 bg-white px-3 text-warning hover:bg-warning/10"
+                    className="h-7 shrink-0 rounded-md border-warning/40 bg-card px-3 text-warning hover:bg-warning/10"
                     onClick={() => void reconnectNAS()}
                     disabled={isReconnecting}
                   >
@@ -962,7 +985,7 @@ export default function StoragePage() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-8 rounded-md bg-white px-2 text-xs shadow-[var(--shadow-xs)]"
+                    className="h-8 rounded-md bg-card px-2 text-xs shadow-[var(--shadow-xs)]"
                     onClick={pickFolder}
                     disabled={isPickingFolder}
                   >
@@ -972,7 +995,7 @@ export default function StoragePage() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-8 rounded-md bg-white px-2 text-xs shadow-[var(--shadow-xs)]"
+                    className="h-8 rounded-md bg-card px-2 text-xs shadow-[var(--shadow-xs)]"
                     onClick={startIndexing}
                     disabled={isIndexing || !manifest}
                   >
@@ -1093,7 +1116,7 @@ function ToolbarSearch({
   const { t } = useI18n();
   const copy = t.storage;
   return (
-    <div className="flex min-w-0 max-w-full flex-1 items-center gap-1 rounded-md border border-black/10 bg-white px-2 shadow-[var(--shadow-xs)] sm:min-w-[300px]">
+    <div className="flex min-w-0 max-w-full flex-1 items-center gap-1 rounded-md border border-border bg-card px-2 shadow-[var(--shadow-xs)] sm:min-w-[300px]">
       <div className="flex min-w-0 flex-1 items-center">
         <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
         <span className="ml-2 hidden shrink-0 text-xs text-muted-foreground xl:inline">
@@ -1260,7 +1283,7 @@ function TopicCenterView({
 
       <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(420px,1fr)_320px] overflow-hidden">
         <aside className="min-h-0 overflow-y-auto border-r border-border bg-muted/50 p-3">
-          <div className="mb-3 rounded-lg bg-white p-3 shadow-[var(--shadow-xs)] ring-1 ring-border">
+          <div className="mb-3 rounded-lg bg-card p-3 shadow-[var(--shadow-xs)] ring-1 ring-border">
             <div className="text-sm font-semibold">
               {copy.overview.indexingTitle}
             </div>
@@ -1282,7 +1305,7 @@ function TopicCenterView({
           </div>
         </aside>
 
-        <main className="min-h-0 overflow-y-auto bg-white p-4">
+        <main className="min-h-0 overflow-y-auto bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold">{tabs[0]}</div>
@@ -1292,7 +1315,7 @@ function TopicCenterView({
             </div>
             <Badge
               variant="outline"
-              className="rounded-full border-black/10 bg-white"
+              className="rounded-full border-border bg-card"
             >
               {copy.overview.localDatabaseBadge}
             </Badge>
@@ -1377,7 +1400,7 @@ function DocumentLibraryView({
                     ? "bg-foreground text-background"
                     : smartFilter === value
                       ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:bg-white",
+                      : "text-muted-foreground hover:bg-card",
                 )}
               >
                 {label}
@@ -1394,7 +1417,7 @@ function DocumentLibraryView({
           />
         </div>
       </div>
-      <main className="min-h-0 flex-1 overflow-hidden bg-white">
+      <main className="min-h-0 flex-1 overflow-hidden bg-card">
         <div className="grid grid-cols-[minmax(240px,1fr)_minmax(180px,280px)_92px_120px_104px] items-center gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
           <span>{copy.docs.colName}</span>
           <span>{copy.docs.colLocation}</span>
@@ -1486,7 +1509,7 @@ function ImageLibraryView({
           </Button>
           <Badge
             variant="outline"
-            className="h-8 rounded-md border-black/10 bg-white px-2.5 text-xs"
+            className="h-8 rounded-md border-border bg-card px-2.5 text-xs"
           >
             {copy.images.badgeAllImages}
           </Badge>
@@ -1500,7 +1523,7 @@ function ImageLibraryView({
           </Button>
         </div>
       </div>
-      <main className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 lg:px-6">
+      <main className="min-h-0 flex-1 overflow-y-auto bg-card px-4 py-4 lg:px-6">
         <div className="mb-4 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           {IMAGE_SMART_FILTERS.map(([value, label]) => (
             <button
@@ -1512,7 +1535,7 @@ function ImageLibraryView({
                 "rounded-md px-2.5 py-1 transition-colors",
                 smartFilter === value
                   ? "bg-foreground text-background"
-                  : "border border-black/10 bg-white hover:bg-muted",
+                  : "border border-border bg-card hover:bg-muted",
               )}
             >
               {label}
@@ -1569,7 +1592,7 @@ function AlbumChip({
         "flex items-center gap-1.5 rounded-md pr-2 text-xs transition-colors",
         active
           ? "bg-foreground text-background"
-          : "border border-black/10 bg-white hover:bg-muted",
+          : "border border-border bg-card hover:bg-muted",
       )}
     >
       <span className="size-6 overflow-hidden rounded-l-md bg-muted">
@@ -1798,7 +1821,7 @@ function VideoLibraryView({
           <Button
             size="sm"
             variant="secondary"
-            className="h-8 rounded-md bg-white px-2 text-xs shadow-[var(--shadow-xs)]"
+            className="h-8 rounded-md bg-card px-2 text-xs shadow-[var(--shadow-xs)]"
             onClick={rebuildIndex}
             disabled={isIndexing || !manifest}
           >
@@ -1809,7 +1832,7 @@ function VideoLibraryView({
           </Button>
           <Badge
             variant="outline"
-            className="h-8 rounded-md border-black/10 bg-white px-2.5 text-xs"
+            className="h-8 rounded-md border-border bg-card px-2.5 text-xs"
           >
             {copy.videos.badgeAllVideos}
           </Badge>
@@ -1833,7 +1856,7 @@ function VideoLibraryView({
               "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
               activeTab === value
                 ? "bg-foreground text-background"
-                : "text-muted-foreground hover:bg-white",
+                : "text-muted-foreground hover:bg-card",
             )}
           >
             <Icon className="size-3.5" />
@@ -1842,11 +1865,11 @@ function VideoLibraryView({
         ))}
       </div>
 
-      <main className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-4 lg:px-6">
+      <main className="min-h-0 flex-1 overflow-y-auto bg-card px-4 py-4 lg:px-6">
         {activeTab === "videos" && (
           <>
             <div className="mb-2 flex items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-black/10 bg-white px-2 shadow-[var(--shadow-xs)]">
+              <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border bg-card px-2 shadow-[var(--shadow-xs)]">
                 <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
                 <Input
                   value={searchQuery}
@@ -1878,7 +1901,7 @@ function VideoLibraryView({
               <span>{copy.videos.searchHint}</span>
             </div>
             {files.length === 0 && !hasSearched ? (
-              <div className="rounded-lg border border-border bg-white px-4 py-12 text-center text-sm text-muted-foreground">
+              <div className="rounded-lg border border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
                 {copy.videos.noIndex}
               </div>
             ) : hasSearched ? (
@@ -1888,7 +1911,7 @@ function VideoLibraryView({
                     <div className="mb-2 text-xs font-semibold text-muted-foreground">
                       {copy.videos.summary}
                     </div>
-                    <div className="overflow-hidden rounded-lg border border-border bg-white shadow-[var(--shadow-xs)]">
+                    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-xs)]">
                       {searchHits.map((hit, index) => {
                         const video = resolveAsset(hit.video_path);
                         return (
@@ -1898,7 +1921,7 @@ function VideoLibraryView({
                             onClick={() =>
                               video && openSearchHit(hit, video)
                             }
-                            className="flex w-full items-center gap-3 border-b border-black/[0.04] px-3 py-2.5 text-left last:border-b-0 hover:bg-black/[0.025]"
+                            className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left last:border-b-0 hover:bg-muted"
                           >
                             <PlayIcon className="size-4 shrink-0 text-primary" />
                             <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -1911,7 +1934,7 @@ function VideoLibraryView({
                             </span>
                             <Badge
                               variant="outline"
-                              className="rounded-full border-black/10"
+                              className="rounded-full border-border"
                             >
                               {Math.round(hit.score * 100)}%
                             </Badge>
@@ -1926,7 +1949,7 @@ function VideoLibraryView({
                     <div className="mb-2 text-xs font-semibold text-muted-foreground">
                       {copy.videos.ocr.label}
                     </div>
-                    <div className="overflow-hidden rounded-lg border border-border bg-white shadow-[var(--shadow-xs)]">
+                    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-xs)]">
                       {ocrHits.map((hit, index) => {
                         const video = resolveAsset(hit.video_path);
                         return (
@@ -1946,7 +1969,7 @@ function VideoLibraryView({
                                 0,
                               )
                             }
-                            className="flex w-full items-start gap-3 border-b border-black/[0.04] px-3 py-2.5 text-left last:border-b-0 hover:bg-black/[0.025]"
+                            className="flex w-full items-start gap-3 border-b border-border/40 px-3 py-2.5 text-left last:border-b-0 hover:bg-muted"
                           >
                             <FileSearchIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                             <span className="min-w-0 flex-1">
@@ -1962,7 +1985,7 @@ function VideoLibraryView({
                             </span>
                             <Badge
                               variant="outline"
-                              className="rounded-full border-black/10"
+                              className="rounded-full border-border"
                             >
                               {Math.round(hit.score * 100)}%
                             </Badge>
@@ -1973,7 +1996,7 @@ function VideoLibraryView({
                   </div>
                 )}
                 {searchHits.length === 0 && ocrHits.length === 0 && (
-                  <div className="rounded-lg border border-border bg-white px-4 py-10 text-center text-sm text-muted-foreground">
+                  <div className="rounded-lg border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
                     {copy.videos.noOcr}
                   </div>
                 )}
@@ -1995,10 +2018,10 @@ function VideoLibraryView({
               faceGroups.map((group) => (
                 <div
                   key={group.person}
-                  className="overflow-hidden rounded-lg border border-border bg-white shadow-[var(--shadow-xs)]"
+                  className="overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-xs)]"
                 >
                   <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-3 py-2.5">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-black/[0.04] text-muted-foreground">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
                       <UserIcon className="size-4" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -2028,7 +2051,7 @@ function VideoLibraryView({
                               index,
                             )
                           }
-                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-black/[0.025]"
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted"
                         >
                           <PlayIcon className="size-4 shrink-0 text-primary" />
                           <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -2046,7 +2069,7 @@ function VideoLibraryView({
                 </div>
               ))
             ) : (
-              <div className="rounded-lg border border-border bg-white px-4 py-12 text-center text-sm text-muted-foreground">
+              <div className="rounded-lg border border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
                 {copy.videos.noFaces}
               </div>
             )}
@@ -2071,7 +2094,7 @@ function VideoLibraryView({
                       "rounded-md px-2.5 py-1 text-xs transition-colors",
                       selectedTag === tag.label
                         ? "bg-foreground text-background"
-                        : "border border-black/10 bg-white hover:bg-muted",
+                        : "border border-border bg-card hover:bg-muted",
                     )}
                   >
                     {tag.label}
@@ -2079,7 +2102,7 @@ function VideoLibraryView({
                   </button>
                 ))
               ) : (
-                <div className="w-full rounded-lg border border-border bg-white px-4 py-12 text-center text-sm text-muted-foreground">
+                <div className="w-full rounded-lg border border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
                   {copy.videos.noTags}
                 </div>
               )}
@@ -2137,7 +2160,7 @@ function VideoAssetTile({
       type="button"
       onClick={onOpen}
       title={`${asset.name}\n${asset.path}`}
-      className="group min-w-0 overflow-hidden rounded-[8px] bg-muted/40 text-left"
+      className="group min-w-0 overflow-hidden rounded-lg bg-muted/40 text-left"
     >
       <span className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-black">
         {showCover ? (
@@ -2145,7 +2168,7 @@ function VideoAssetTile({
             src={coverUrl}
             alt={asset.name}
             onError={() => setCoverFailed(true)}
-            className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            className="size-full object-cover transition-transform duration-base group-hover:scale-[1.02]"
           />
         ) : videoUrl ? (
           <video
@@ -2204,7 +2227,7 @@ function VideoPlayerDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="max-w-3xl border-border-default bg-white p-0 sm:max-w-3xl"
+        className="max-w-3xl border-border-default bg-card p-0 sm:max-w-3xl"
         showCloseButton={false}
       >
         <div className="p-4">
@@ -2233,7 +2256,7 @@ function VideoPlayerDialog({
               <Button
                 size="sm"
                 variant="secondary"
-                className="rounded-md bg-black/[0.04]"
+                className="rounded-md bg-muted"
                 onClick={onPrev}
                 disabled={target.index <= 0}
               >
@@ -2242,7 +2265,7 @@ function VideoPlayerDialog({
               <Button
                 size="sm"
                 variant="secondary"
-                className="rounded-md bg-black/[0.04]"
+                className="rounded-md bg-muted"
                 onClick={onNext}
                 disabled={target.index >= target.hits.length - 1}
               >
@@ -2274,7 +2297,7 @@ function TopicNavRow({
       className={cn(
         "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
         active
-          ? "bg-white shadow-[var(--shadow-xs)] ring-1 ring-border"
+          ? "bg-card shadow-[var(--shadow-xs)] ring-1 ring-border"
           : "hover:bg-white/70",
       )}
     >
@@ -2303,7 +2326,7 @@ function TopicNavRow({
 function FileCard({ item }: { item: FileItem }) {
   const Icon = item.icon;
   return (
-    <div className="group flex min-h-20 items-center gap-3 rounded-lg border border-border bg-white p-3 text-left shadow-[var(--shadow-xs)] transition-colors hover:border-black/10 hover:bg-muted/30">
+    <div className="group flex min-h-20 items-center gap-3 rounded-lg border border-border bg-card p-3 text-left shadow-[var(--shadow-xs)] transition-colors hover:border-border hover:bg-muted/30">
       <div
         className={cn(
           "flex size-11 shrink-0 items-center justify-center rounded-lg",
@@ -2332,7 +2355,7 @@ function FileCard({ item }: { item: FileItem }) {
 function FileManagerRow({ item }: { item: FileItem }) {
   const Icon = item.icon;
   return (
-    <div className="grid w-full grid-cols-[minmax(260px,1fr)_minmax(180px,260px)_100px_148px_112px] items-center gap-4 border-b border-black/[0.04] px-4 py-3 text-left last:border-b-0 hover:bg-black/[0.025]">
+    <div className="grid w-full grid-cols-[minmax(260px,1fr)_minmax(180px,260px)_100px_148px_112px] items-center gap-4 border-b border-border/40 px-4 py-3 text-left last:border-b-0 hover:bg-muted">
       <span className="flex min-w-0 items-center gap-3">
         <span
           className={cn(
@@ -2373,14 +2396,14 @@ function ImageAssetTile({
     <button
       type="button"
       title={`${item.name}\n${item.path}\n${item.size}\n${item.updated}`}
-      className="group min-w-0 overflow-hidden rounded-[8px] bg-muted/40 text-left"
+      className="group min-w-0 overflow-hidden rounded-lg bg-muted/40 text-left"
     >
       <span className="flex aspect-square w-full items-center justify-center overflow-hidden">
         {imageUrl ? (
           <img
             src={imageUrl}
             alt={item.name}
-            className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            className="size-full object-cover transition-transform duration-base group-hover:scale-[1.02]"
           />
         ) : (
           <Icon className="size-7 text-muted-foreground" />
@@ -2440,7 +2463,7 @@ function PreviewPanel({
   const Icon = item.icon;
   return (
     <div className="flex min-h-full flex-col">
-      <div className="rounded-lg bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
+      <div className="rounded-lg bg-card p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
         <div className="text-sm font-semibold">{title}</div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {subtitle}
@@ -2463,7 +2486,7 @@ function PreviewPanel({
         </div>
       </div>
 
-      <div className="mt-3 rounded-lg bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
+      <div className="mt-3 rounded-lg bg-card p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
         <div className="text-sm font-semibold">
           {copy.preview.sourceLocation}
         </div>
@@ -2483,7 +2506,7 @@ function PreviewPanel({
         </div>
       </div>
 
-      <div className="mt-3 rounded-lg bg-white p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
+      <div className="mt-3 rounded-lg bg-card p-4 shadow-[var(--shadow-xs)] ring-1 ring-border">
         <div className="text-sm font-semibold">{copy.preview.snippetTitle}</div>
         <p className="mt-2 rounded-lg bg-muted/50 p-3 text-xs leading-5 text-muted-foreground">
           {copy.preview.snippetDesc}
@@ -2493,14 +2516,14 @@ function PreviewPanel({
       <div className="mt-3 grid gap-2">
         <Button
           variant="secondary"
-          className="justify-start rounded-lg bg-white shadow-[var(--shadow-xs)]"
+          className="justify-start rounded-lg bg-card shadow-[var(--shadow-xs)]"
         >
           <FileSearchIcon className="size-4" />
           {copy.preview.quoteInChat}
         </Button>
         <Button
           variant="secondary"
-          className="justify-start rounded-lg bg-white shadow-[var(--shadow-xs)]"
+          className="justify-start rounded-lg bg-card shadow-[var(--shadow-xs)]"
         >
           <FolderOpenIcon className="size-4" />
           {copy.preview.openLocation}
@@ -2640,7 +2663,7 @@ function AppsView({
         </div>
       </div>
       <main
-        className="min-h-0 flex-1 overflow-y-auto bg-white px-5 py-5"
+        className="min-h-0 flex-1 overflow-y-auto bg-card px-5 py-5"
         onPointerDown={() => setSelectedAppId(null)}
         onContextMenu={(event) => {
           if (event.target === event.currentTarget) event.preventDefault();
@@ -2776,7 +2799,7 @@ function AppListRow({
         selected && "bg-accent/70",
       )}
     >
-      <span className="flex size-14 items-center justify-center overflow-hidden rounded-[14px] bg-black/[0.025] transition-transform group-hover:-translate-y-0.5 group-active:scale-95">
+      <span className="flex size-14 items-center justify-center overflow-hidden rounded-xl bg-black/[0.025] transition-transform group-hover:-translate-y-0.5 group-active:scale-95">
         {iconUrl ? (
           <img src={iconUrl} alt="" className="size-14 object-contain" />
         ) : (
@@ -2872,7 +2895,7 @@ function LocalDiskView({
                   "max-w-32 truncate rounded px-1.5 py-1",
                   index === items.length - 1
                     ? "font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-black/[0.04] hover:text-foreground",
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 {item}
@@ -2886,7 +2909,7 @@ function LocalDiskView({
             type="button"
             onClick={goUp}
             disabled={pathParts.length <= 1}
-            className="ml-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-black/[0.04] disabled:opacity-30"
+            className="ml-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30"
           >
             返回上一级
           </button>
@@ -2907,7 +2930,7 @@ function LocalDiskView({
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
+        <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-card">
           <div className="grid grid-cols-[minmax(0,1fr)_120px_96px_36px] gap-3 border-b border-border bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
             <span>名称</span>
             <span>类型</span>
@@ -2962,7 +2985,7 @@ function LocalDiskEntryRow({
       type="button"
       onClick={onOpen}
       disabled={!onOpen}
-      className="grid w-full grid-cols-[minmax(0,1fr)_120px_96px_36px] items-center gap-3 border-b border-black/[0.035] px-3 py-2.5 text-left text-sm transition-colors hover:bg-black/[0.025]"
+      className="grid w-full grid-cols-[minmax(0,1fr)_120px_96px_36px] items-center gap-3 border-b border-black/[0.035] px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted"
     >
       <span className="flex min-w-0 items-center gap-2.5">
         <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground ring-1 ring-border">
@@ -3008,7 +3031,7 @@ function SourcesView({
   onRemoveSource: (id: string) => Promise<void>;
 }) {
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+    <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card">
       <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">授权目录</div>
@@ -3062,7 +3085,7 @@ function SourcesView({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 shrink-0 rounded-md border-warning/40 bg-white px-3 text-warning hover:bg-warning/10"
+            className="h-8 shrink-0 rounded-md border-warning/40 bg-card px-3 text-warning hover:bg-warning/10"
             onClick={onReconnect}
             disabled={isReconnecting}
           >
@@ -3081,7 +3104,7 @@ function SourcesView({
               <button
                 key={item}
                 type="button"
-                className="rounded-md border border-black/10 bg-white px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                className="rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
               >
                 {item}
               </button>
@@ -3091,13 +3114,13 @@ function SourcesView({
         <div className="hidden shrink-0 items-center gap-2 md:flex">
           <Badge
             variant="outline"
-            className="rounded-md border-black/10 bg-white text-xs"
+            className="rounded-md border-border bg-card text-xs"
           >
             本地索引
           </Badge>
           <Badge
             variant="outline"
-            className="rounded-md border-black/10 bg-white text-xs"
+            className="rounded-md border-border bg-card text-xs"
           >
             原文件不上传
           </Badge>
@@ -3147,7 +3170,7 @@ function SourcesView({
               </Button>
               <Button
                 variant="secondary"
-                className="rounded-md bg-black/[0.04]"
+                className="rounded-md bg-muted"
               >
                 <ShieldCheckIcon className="size-4" />
                 查看隐私策略
@@ -3206,7 +3229,7 @@ function SearchResultsView({
           <Button
             size="sm"
             variant="ghost"
-            className="h-8 shrink-0 rounded-lg bg-white px-2 shadow-[var(--shadow-xs)] ring-1 ring-border"
+            className="h-8 shrink-0 rounded-lg bg-card px-2 shadow-[var(--shadow-xs)] ring-1 ring-border"
             onClick={onBack}
           >
             返回{libraryLabel}
@@ -3243,11 +3266,11 @@ function SearchResultsView({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto bg-muted/50 p-5">
         {hasHits ? (
-          <div className="overflow-hidden rounded-lg bg-white shadow-[var(--shadow-xs)] ring-1 ring-border">
+          <div className="overflow-hidden rounded-lg bg-card shadow-[var(--shadow-xs)] ring-1 ring-border">
             {hits.map((hit) => (
               <div
                 key={hit.chunk_id}
-                className="flex w-full items-center gap-3 border-b border-black/[0.04] px-4 py-3 text-left last:border-b-0 hover:bg-black/[0.025]"
+                className="flex w-full items-center gap-3 border-b border-border/40 px-4 py-3 text-left last:border-b-0 hover:bg-muted"
               >
                 <FileSearchIcon className="size-5 shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
@@ -3263,7 +3286,7 @@ function SearchResultsView({
                 </div>
                 <Badge
                   variant="outline"
-                  className="rounded-full border-black/10"
+                  className="rounded-full border-border"
                 >
                   {Math.round(hit.score * 100)}%
                 </Badge>
@@ -3272,7 +3295,7 @@ function SearchResultsView({
             ))}
           </div>
         ) : (
-          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-lg bg-white px-6 text-center shadow-[var(--shadow-xs)] ring-1 ring-border">
+          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-lg bg-card px-6 text-center shadow-[var(--shadow-xs)] ring-1 ring-border">
             <div className="grid size-14 place-items-center rounded-lg bg-warning/5 text-warning">
               <FileSearchIcon className="size-6" />
             </div>
@@ -3289,7 +3312,7 @@ function SearchResultsView({
               <Button
                 size="sm"
                 variant="secondary"
-                className="rounded-lg bg-black/[0.04]"
+                className="rounded-lg bg-muted"
                 onClick={() => {
                   window.location.hash =
                     "/workspace/storage?surface=company&library=sources";
@@ -3300,7 +3323,7 @@ function SearchResultsView({
               <Button
                 size="sm"
                 variant="secondary"
-                className="rounded-lg bg-black/[0.04]"
+                className="rounded-lg bg-muted"
               >
                 切换隐私模式
               </Button>
@@ -3385,9 +3408,9 @@ function SourceRow({
 
 function toneClass(tone: string) {
   const classes: Record<string, string> = {
-    blue: "bg-sky-50 text-sky-700",
+    blue: "bg-info/10 text-info",
     green: "bg-success/5 text-success",
-    violet: "bg-violet-50 text-violet-700",
+    violet: "bg-chart-1/10 text-chart-1",
     amber: "bg-warning/5 text-warning",
     rose: "bg-destructive/5 text-destructive",
     zinc: "bg-muted text-muted-foreground",

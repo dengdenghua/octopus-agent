@@ -64,7 +64,7 @@ export function ConfirmDialog({
         <DialogHeader className="gap-1 text-left">
           <DialogTitle className="text-[15px]">{title}</DialogTitle>
           {description ? (
-            <DialogDescription className="text-[12.5px] leading-5">
+            <DialogDescription className="text-caption leading-5">
               {description}
             </DialogDescription>
           ) : null}
@@ -74,7 +74,7 @@ export function ConfirmDialog({
             type="button"
             disabled={pending}
             onClick={() => onOpenChange(false)}
-            className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+            className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-caption font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
           >
             {cancelLabel ?? t.common.cancel}
           </button>
@@ -84,8 +84,8 @@ export function ConfirmDialog({
             onClick={onConfirm}
             className={
               destructive
-                ? "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
-                : "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-foreground px-3 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/90 disabled:pointer-events-none disabled:opacity-60"
+                ? "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-destructive/25 bg-destructive/[0.07] px-3 text-caption font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
+                : "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-foreground px-3 text-caption font-medium text-background transition-colors hover:bg-foreground/90 disabled:pointer-events-none disabled:opacity-60"
             }
           >
             {pending ? (

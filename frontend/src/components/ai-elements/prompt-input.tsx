@@ -1109,7 +1109,7 @@ export const PromptInputSubmit = ({
   return (
     <InputGroupButton
       className={cn(
-        "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-[var(--shadow-sm)] shadow-purple-500/20 transition-all hover:shadow-[var(--shadow-md)] hover:shadow-purple-500/30 hover:brightness-110",
+        "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-[var(--shadow-sm)] shadow-chart-1/20 transition-all hover:shadow-[var(--shadow-md)] hover:shadow-chart-1/30 hover:brightness-110",
         className,
       )}
       size={size}

@@ -26,7 +26,7 @@ const STATUS_DOT_COLOR: Record<string, string> = {
 };
 
 const CANARY_PHASE_STYLE: Record<string, string> = {
-  shadow: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
+  shadow: "bg-info/15 text-info dark:text-info border-info/30",
   canary_5:
     "bg-warning/15 text-warning border-warning/30",
   canary_25:

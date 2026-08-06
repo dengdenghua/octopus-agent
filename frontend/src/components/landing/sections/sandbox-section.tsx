@@ -39,7 +39,7 @@ export function SandboxSection({ className }: { className?: string }) {
             <TypingAnimation delay={2400}>
               $ write game.py --lines 156
             </TypingAnimation>
-            <AnimatedSpan delay={3200} className="text-blue-500">
+            <AnimatedSpan delay={3200} className="text-info">
               ✔ Written 156 lines
             </AnimatedSpan>
 

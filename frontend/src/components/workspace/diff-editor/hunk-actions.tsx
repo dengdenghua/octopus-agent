@@ -117,9 +117,9 @@ export function HunkHeader({
   const context = contextMatch?.[1] ?? "";
 
   return (
-    <div className="group flex items-center justify-between bg-blue-500/5 px-3 py-1 dark:bg-blue-500/10">
+    <div className="group flex items-center justify-between bg-info/5 px-3 py-1 dark:bg-info/10">
       <div className="flex items-center gap-2 overflow-hidden">
-        <span className="shrink-0 font-mono text-xs text-blue-500 dark:text-blue-400">
+        <span className="shrink-0 font-mono text-xs text-info dark:text-info">
           {hunk.header.split("@@").slice(0, 2).join("@@")}@@
         </span>
         {context && (

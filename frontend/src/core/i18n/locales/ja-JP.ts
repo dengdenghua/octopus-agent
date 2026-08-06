@@ -9075,6 +9075,7 @@ export const jaJP: Translations = {
       startFailed:
         "ローカル知識ベースサービスの起動に失敗しました。バックエンドログを確認して再試行してください。",
       notConnected: "ローカル知識ベースサービスにまだ接続できません：{url}",
+      networkError: "ローカル知識ベースサービスに接続できません。サービスが起動していることを確認して再試行してください。",
     },
     toolbar: {
       authorize: "許可",

@@ -8946,6 +8946,7 @@ export const koKR: Translations = {
       startFailed:
         "로컬 지식 베이스 서비스 시작에 실패했습니다. 백엔드 로그를 확인한 후 다시 시도하세요.",
       notConnected: "로컬 지식 베이스 서비스에 아직 연결되지 않았습니다: {url}",
+      networkError: "로컬 지식 베이스 서비스에 연결할 수 없습니다. 서비스가 실행 중인지 확인한 후 다시 시도하세요.",
     },
     toolbar: {
       authorize: "승인",

@@ -64,9 +64,9 @@ const TASK_TYPE_ICONS: Record<
   string,
   { icon: typeof CodeIcon; color: string }
 > = {
-  coding: { icon: CodeIcon, color: "text-blue-500" },
-  reasoning: { icon: BrainCircuitIcon, color: "text-purple-500" },
-  creative: { icon: PaletteIcon, color: "text-pink-500" },
+  coding: { icon: CodeIcon, color: "text-info" },
+  reasoning: { icon: BrainCircuitIcon, color: "text-chart-1" },
+  creative: { icon: PaletteIcon, color: "text-chart-3" },
   simple: { icon: ZapIcon, color: "text-success" },
   math: { icon: CalculatorIcon, color: "text-warning" },
 };
@@ -213,7 +213,7 @@ export function ModelRouterIndicator({
         <div
           className={cn(
             "bg-popover text-popover-foreground absolute bottom-full left-0 z-50 mb-1 w-72 rounded-lg border p-3 shadow-[var(--shadow-md)]",
-            "animate-in fade-in-0 slide-in-from-bottom-2 duration-200",
+            "animate-in fade-in-0 slide-in-from-bottom-2 duration-base",
           )}
         >
           {/* Header */}

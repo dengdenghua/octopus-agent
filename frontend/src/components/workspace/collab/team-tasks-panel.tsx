@@ -91,7 +91,7 @@ export function TeamTasksPanel({
       running: {
         label: t.taskBoard.running,
         Icon: Loader2Icon,
-        className: "border-blue-500/25 bg-blue-500/10 text-blue-700",
+        className: "border-info/25 bg-info/10 text-info",
       },
       done: {
         label: t.agentWorkbenchPages.statusDone,
@@ -406,7 +406,7 @@ export function TeamTasksPanel({
                 <button
                   type="button"
                   onClick={() => setShowTimeline((v) => !v)}
-                  className="flex items-center gap-0.5 rounded-md bg-blue-500/10 px-1.5 py-0.5 text-blue-700 transition-colors hover:bg-blue-500/20"
+                  className="flex items-center gap-0.5 rounded-md bg-info/10 px-1.5 py-0.5 text-info transition-colors hover:bg-info/20"
                 >
                   {showTimeline ? (
                     <ChevronDownIcon className="size-3" />

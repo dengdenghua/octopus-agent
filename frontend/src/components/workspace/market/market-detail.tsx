@@ -75,16 +75,16 @@ export function MarketDetail({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-mini text-muted-foreground">
             <span
-              className="flex size-4 items-center justify-center rounded-full text-[10px] font-bold text-white"
+              className="flex size-4 items-center justify-center rounded-full text-micro font-bold text-white"
               style={{ backgroundColor: item.sellerColor }}
             >
               {item.sellerInitial}
             </span>
             <span>{item.seller}</span>
             {item.mine && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">我的</span>
+              <span className="rounded bg-muted px-1.5 py-0.5 text-micro">我的</span>
             )}
           </div>
           <h2 className="mt-2 text-lg font-bold leading-snug">{item.title}</h2>
@@ -95,7 +95,7 @@ export function MarketDetail({
 
         <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border-subtle bg-background px-5 py-3">
           <div>
-            <p className="text-[11px] text-muted-foreground">售价</p>
+            <p className="text-mini text-muted-foreground">售价</p>
             <p className="flex items-baseline gap-0.5 text-lg font-bold text-rose-500">
               {item.price}
               <span className="text-xs font-medium text-rose-400">积分</span>

@@ -31,7 +31,7 @@ export function MarketCard({
           src={item.cover}
           alt={item.title}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          className="h-full w-full object-cover transition-transform duration-slow group-hover:scale-105"
         />
         {item.sold && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/55">
@@ -48,7 +48,7 @@ export function MarketCard({
         <div className="mt-auto flex items-end justify-between gap-2 pt-2">
           <span className="flex items-baseline gap-0.5 text-[15px] font-bold text-rose-500">
             {item.price}
-            <span className="text-[11px] font-medium text-rose-400">积分</span>
+            <span className="text-mini font-medium text-rose-400">积分</span>
           </span>
           <button
             type="button"
@@ -58,7 +58,7 @@ export function MarketCard({
             }}
             disabled={item.sold || item.mine}
             className={cn(
-              "flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors",
+              "flex items-center gap-1 rounded-md px-2 py-1 text-mini font-semibold transition-colors",
               item.sold || item.mine
                 ? "cursor-default bg-muted text-muted-foreground/60"
                 : "bg-rose-500 text-white hover:bg-rose-600",
@@ -67,7 +67,7 @@ export function MarketCard({
             {item.mine ? "我的" : item.sold ? "已售" : "立即购买"}
           </button>
         </div>
-        <div className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+        <div className="mt-1.5 flex items-center gap-1 text-mini text-muted-foreground">
           <span
             className="flex size-3.5 items-center justify-center rounded-full text-[9px] font-bold text-white"
             style={{ backgroundColor: item.sellerColor }}

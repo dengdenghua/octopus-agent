@@ -461,7 +461,7 @@ ${jsContent || "// No JavaScript"}
             <div className="flex h-full min-h-0 justify-center overflow-auto">
               <div
                 className={cn(
-                  "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border-default bg-background shadow-[var(--shadow-xs)] transition-all duration-300",
+                  "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border-default bg-background shadow-[var(--shadow-xs)] transition-all duration-slow",
                   device === "mobile" && "max-w-[375px]",
                   device === "tablet" && "max-w-[768px]",
                 )}
@@ -527,8 +527,7 @@ function injectPreviewDiagnostics(html: string): string {
   if (window.__octopusPreviewBridgeInstalled) return;
   window.__octopusPreviewBridgeInstalled = true;
   const __swallow = (e) => { try { /* noop */ } catch (_) {} };
-  const __safeStr = (v) => {
-    // 保证任何值最终都返回非空字符串（不含 undefined / null 原生值混入 join）
+  const __safeStr = (v, seen) => {
     if (v === null) return "null";
     if (v === undefined) return "undefined";
     try {
@@ -536,14 +535,58 @@ function injectPreviewDiagnostics(html: string): string {
     } catch (_) {}
     try {
       const t = typeof v;
-      if (t === "string") return v;
+      if (t === "string") {
+        const trimmed = v.trim();
+        return trimmed || "(空字符串)";
+      }
+      if (t === "number") {
+        if (Number.isNaN(v)) return "NaN";
+        if (!Number.isFinite(v)) return v > 0 ? "Infinity" : "-Infinity";
+        return String(v);
+      }
       if (t === "bigint") return v.toString() + "n";
+      if (t === "boolean") return v ? "true" : "false";
       if (t === "symbol") return v.toString();
-      // JSON.stringify 对 undefined / function / symbol 会返回 undefined 原生值，需兜底
-      const s = JSON.stringify(v);
-      if (s !== undefined) return s;
       if (t === "function") return "function " + (v.name || "anonymous");
-      return String(v);
+      if (v instanceof Element) {
+        const tag = v.tagName?.toLowerCase() || "element";
+        const id = v.id ? "#" + v.id : "";
+        const cls = v.className && typeof v.className === "string" ? "." + v.className.trim().split(/\s+/).join(".") : "";
+        return "<" + tag + id + cls + ">";
+      }
+      const nextSeen = seen || new WeakSet();
+      if (typeof v === "object") {
+        if (nextSeen.has(v)) return "[Circular]";
+        nextSeen.add(v);
+      }
+      if (Array.isArray(v)) {
+        try {
+          const items = v.map((item) => __safeStr(item, nextSeen));
+          return "[" + items.join(", ") + "]";
+        } catch (_) {
+          return "[Array(" + v.length + ")]";
+        }
+      }
+      try {
+        const s = JSON.stringify(v, (key, val) => {
+          if (val === undefined) return "[undefined]";
+          if (typeof val === "function") return "[Function]";
+          if (typeof val === "symbol") return val.toString();
+          if (val instanceof Element) return __safeStr(val, nextSeen);
+          if (typeof val === "object" && val !== null) {
+            if (nextSeen.has(val)) return "[Circular]";
+            nextSeen.add(val);
+          }
+          return val;
+        });
+        if (s !== undefined && s !== "{}") return s;
+        const str = String(v);
+        if (str && str !== "[object Object]") return str;
+        return "{}";
+      } catch (e) {
+        __swallow(e);
+        try { return String(v); } catch (_) { return "?"; }
+      }
     } catch (e) {
       __swallow(e);
       try { return String(v); } catch (_) { return "?"; }
@@ -553,13 +596,13 @@ function injectPreviewDiagnostics(html: string): string {
     try {
       let m = message;
       if (typeof m !== "string") m = __safeStr(m);
-      if (!m || !m.trim()) m = "Preview diagnostic";
+      if (!m || !m.trim()) m = "(控制台输出)";
       window.parent.postMessage({
         type: "octopus-preview-diagnostic",
         level,
         source,
         message: m,
-        stack: stack ? String(stack) : undefined,
+        stack: stack ? __safeStr(stack) : undefined,
       }, "*");
     } catch (e) { __swallow(e); }
   };
@@ -569,12 +612,17 @@ function injectPreviewDiagnostics(html: string): string {
     console[level] = (...args) => {
       try {
         if (args.length === 0) {
-          send(sendLevel, "console", "");
+          send(sendLevel, "console", "(控制台输出，无参数)");
         } else {
-          // 先用空格分隔，format 每个元素确保不是原生 undefined/null
           const parts = new Array(args.length);
-          for (let i = 0; i < args.length; i++) parts[i] = __safeStr(args[i]);
-          send(sendLevel, "console", parts.join(" "));
+          let hasContent = false;
+          for (let i = 0; i < args.length; i++) {
+            const s = __safeStr(args[i]);
+            parts[i] = s;
+            if (s && s.trim()) hasContent = true;
+          }
+          const msg = hasContent ? parts.join(" ") : "(控制台输出)";
+          send(sendLevel, "console", msg);
         }
       } catch (e) { __swallow(e); }
       orig.apply(console, args);
@@ -586,14 +634,15 @@ function injectPreviewDiagnostics(html: string): string {
   __wrapConsole("log",     "info");
   __wrapConsole("debug",   "info");
   window.addEventListener("error", (event) => {
-    send("error", "runtime", event.message || "Runtime error", event.error && event.error.stack);
+    const msg = event.message || event.error?.message || "Runtime error";
+    send("error", "runtime", msg, event.error?.stack);
   });
   window.addEventListener("unhandledrejection", (event) => {
     const reason = event.reason;
     const msg = (reason === undefined || reason === null)
       ? "Unhandled promise rejection"
       : __safeStr(reason);
-    send("error", "runtime", msg, reason && reason.stack);
+    send("error", "runtime", msg, reason?.stack);
   });
   window.addEventListener("load", () => {
     window.setTimeout(() => {

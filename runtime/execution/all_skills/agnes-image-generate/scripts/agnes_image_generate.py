@@ -1,8 +1,14 @@
-"""Agnes AI image generation skill.
+"""AI image generation skill — dual-provider (Volcano / Agnes).
 
-Wraps POST https://apihub.agnes-ai.com/v1/images/generations against the
-Agnes AI Gateway. The gateway is OpenAI-compatible, so this skill is a
-thin adapter — Authorization header + body shape, returns the hosted
+Wraps ``POST {base_url}/images/generations``. The provider is auto-detected
+from ``base_url``:
+
+- **Volcano (火山方舟)** — ``https://ark.cn-beijing.volces.com/api/plan/v3``,
+  model ``doubao-seedream-5.0-lite``（文生图 + 图生图）。
+- **Agnes AI Gateway** — ``https://apihub.agnes-ai.com/v1``,
+  model ``agnes-image-2.1-flash``（OpenAI 兼容）。
+
+Both are thin adapters: Authorization header + body shape, returns hosted
 image URL(s).
 
 Usage:
@@ -10,9 +16,10 @@ Usage:
     r = generate_image("a cat astronaut on Mars")
     print(r["url"])
 
-The skill reads its API key from `AGNES_API_KEY` first, then falls back
-to `OPENAI_API_KEY` (since Agnes is OpenAI-compatible and many users
-already have that var set).
+API key resolution (first match wins):
+    Volcano: ``VOLCENGINE_API_KEY`` / ``ARK_API_KEY``
+    Agnes:   ``AGNES_API_KEY``
+    Fallback: ``OPENAI_API_KEY``
 """
 
 from __future__ import annotations
@@ -27,9 +34,31 @@ import requests
 
 _LOG = logging.getLogger(__name__)
 
-DEFAULT_BASE_URL = "https://apihub.agnes-ai.com/v1"
-DEFAULT_MODEL = "agnes-image-2.1-flash"
+# Volcano (火山方舟) — Agent Plan 套餐端点
+VOLC_URL = "https://ark.cn-beijing.volces.com/api/plan/v3"
+VOLC_MODEL = "doubao-seedream-5.0-lite"
+
+# Agnes AI Gateway — OpenAI 兼容
+AGNES_URL = "https://apihub.agnes-ai.com/v1"
+AGNES_MODEL = "agnes-image-2.1-flash"
+
+DEFAULT_BASE_URL = VOLC_URL
+DEFAULT_MODEL = VOLC_MODEL
 TIMEOUT_SECONDS = 300
+
+
+def _is_volcano(base_url: str) -> bool:
+    """True when the base URL points at Volcano Ark (vs. Agnes)."""
+    return "volces.com" in (base_url or "").lower()
+
+
+def _resolve_api_key() -> str:
+    """Pick the first available API key across the supported providers."""
+    for var in ("VOLCENGINE_API_KEY", "ARK_API_KEY", "AGNES_API_KEY", "OPENAI_API_KEY"):
+        val = os.environ.get(var, "").strip()
+        if val:
+            return val
+    return ""
 
 
 @dataclass(frozen=True)
@@ -42,20 +71,25 @@ class AgnesConfig:
 
     @classmethod
     def from_env(cls) -> AgnesConfig:
-        key = (os.environ.get("AGNES_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
+        key = _resolve_api_key()
         if not key:
             raise ValueError(
-                "AGNES_API_KEY not found. Set AGNES_API_KEY or "
-                "OPENAI_API_KEY env var, or pass api_key= explicitly.",
+                "No API key found. Set VOLCENGINE_API_KEY / ARK_API_KEY "
+                "(Volcano) or AGNES_API_KEY / OPENAI_API_KEY (Agnes), "
+                "or pass api_key= explicitly.",
             )
-        base = (os.environ.get("AGNES_BASE_URL", "").strip() or DEFAULT_BASE_URL).rstrip("/")
+        base = (
+            os.environ.get("VOLCENGINE_BASE_URL", "").strip()
+            or os.environ.get("AGNES_BASE_URL", "").strip()
+            or DEFAULT_BASE_URL
+        ).rstrip("/")
         return cls(api_key=key, base_url=base)
 
 
 def generate_image(
     prompt: str,
     *,
-    model: str = DEFAULT_MODEL,
+    model: str | None = None,
     size: str | None = None,
     n: int = 1,
     image: str | list[str] | None = None,
@@ -63,23 +97,22 @@ def generate_image(
     base_url: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Generate one or more images via Agnes AI's OpenAI-compatible endpoint.
+    """Generate one or more images via Volcano or Agnes.
 
     Parameters
     ----------
     prompt
         Text description of the desired image. Required.
     model
-        Agnes image model id. Default ``agnes-image-2.1-flash``
-        (supports both text→image and image→image).
+        Model id. Defaults to ``doubao-seedream-5.0-lite`` (Volcano) when the
+        base URL is Volcano, else ``agnes-image-2.1-flash``.
     size
-        Optional WxH string like ``"1024x1024"``. When omitted the gateway
-        picks a sensible default for the model.
+        Optional WxH string like ``"2048x2048"`` (Volcano) or ``"1024x1024"``
+        (Agnes). When omitted the gateway picks a sensible default.
     n
-        Number of images to generate. Most Agnes image models accept 1-4.
+        Number of images to generate.
     image
-        Optional reference image URL (or list of URLs) for image-to-image.
-        Passed through as ``extra_body.image``.
+        Optional reference image URL (or list of URLs) for image→image.
     api_key, base_url
         Override env-resolved config. ``base_url`` should NOT include the
         ``/images/generations`` suffix — it's appended automatically.
@@ -106,6 +139,10 @@ def generate_image(
         api_key = api_key or cfg.api_key
         base_url = (base_url or cfg.base_url).rstrip("/")
 
+    volcano = _is_volcano(base_url)
+    if model is None:
+        model = VOLC_MODEL if volcano else AGNES_MODEL
+
     payload: dict[str, Any] = {
         "model": model,
         "prompt": str(prompt).strip(),
@@ -114,10 +151,13 @@ def generate_image(
     if size:
         payload["size"] = size
     if image is not None:
-        payload.setdefault("extra_body", {})["image"] = image
+        # Volcano: image is a first-class request field; Agnes keeps it
+        # under extra_body for backward compatibility.
+        if volcano:
+            payload["image"] = image
+        else:
+            payload.setdefault("extra_body", {})["image"] = image
     if extra:
-        # Shallow merge — extra_body fields combine; everything else is
-        # overwritten by the explicit args above.
         for key, value in extra.items():
             if key == "extra_body" and isinstance(value, dict):
                 payload.setdefault("extra_body", {}).update(value)
@@ -130,7 +170,8 @@ def generate_image(
         "Content-Type": "application/json",
     }
     _LOG.info(
-        "agnes_image_generate model=%s n=%d size=%s",
+        "image_generate provider=%s model=%s n=%d size=%s",
+        "volcano" if volcano else "agnes",
         model,
         payload["n"],
         size or "auto",
@@ -145,20 +186,20 @@ def generate_image(
         )
     except requests.RequestException as exc:
         raise RuntimeError(
-            f"agnes API request failed: {type(exc).__name__}: {exc}",
+            f"image API request failed: {type(exc).__name__}: {exc}",
         ) from exc
 
     if resp.status_code != 200:
         body = resp.text[:500].replace("\n", " ")
         raise RuntimeError(
-            f"agnes API error: HTTP {resp.status_code} — {body}",
+            f"image API error: HTTP {resp.status_code} — {body}",
         )
 
     try:
         data = resp.json()
     except ValueError as exc:
         raise RuntimeError(
-            f"agnes API returned non-JSON: {resp.text[:200]!r}",
+            f"image API returned non-JSON: {resp.text[:200]!r}",
         ) from exc
 
     items = data.get("data") or []
@@ -185,11 +226,16 @@ __all__ = ["AgnesConfig", "generate_image"]
 if __name__ == "__main__":  # pragma: no cover — manual smoke test
     import argparse
 
-    parser = argparse.ArgumentParser(description="Agnes image generate")
+    parser = argparse.ArgumentParser(description="Image generate (Volcano/Agnes)")
     parser.add_argument("prompt", help="Text prompt")
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=None)
     parser.add_argument("--size", default=None)
     parser.add_argument("--n", type=int, default=1)
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="Override base URL (e.g. Volcano plan/v3 or Agnes /v1)",
+    )
     args = parser.parse_args()
 
     result = generate_image(
@@ -197,5 +243,6 @@ if __name__ == "__main__":  # pragma: no cover — manual smoke test
         model=args.model,
         size=args.size,
         n=args.n,
+        base_url=args.base_url,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))

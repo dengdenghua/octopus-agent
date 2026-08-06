@@ -645,7 +645,7 @@ export default function NewAgentPage() {
                 >
                   <ArrowLeftIcon className="size-4" />
                 </Button>
-                <div className="flex items-center gap-2 rounded-sm border border-white/8 bg-white/[0.025] px-2 py-1 font-mono text-xs uppercase tracking-[0.18em] text-white/48">
+                <div className="flex items-center gap-2 rounded-sm border border-white/8 bg-white/[0.025] px-2 py-1 font-mono text-xs uppercase tracking-eyebrow text-white/48">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                   AGENT BLUEPRINT
                 </div>
@@ -666,10 +666,10 @@ export default function NewAgentPage() {
 
                   <div className="mt-6 rounded-sm border border-white/10 bg-black/16 p-3">
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="font-mono text-xs uppercase tracking-[0.16em] text-white/46">
+                      <span className="font-mono text-xs uppercase tracking-eyebrow text-white/46">
                         SHORT BRIEF
                       </span>
-                      <span className="font-mono text-xs uppercase tracking-[0.14em] text-white/30">
+                      <span className="font-mono text-xs uppercase tracking-eyebrow text-white/30">
                         Ctrl/⌘ + Enter
                       </span>
                     </div>
@@ -699,7 +699,7 @@ export default function NewAgentPage() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-[82px_1fr] items-center gap-3 rounded-sm border border-white/10 bg-white/[0.035] px-3 py-2">
-                    <span className="font-mono text-xs uppercase tracking-[0.14em] text-white/42">
+                    <span className="font-mono text-xs uppercase tracking-eyebrow text-white/42">
                       Agent ID
                     </span>
                     <Input
@@ -767,7 +767,7 @@ export default function NewAgentPage() {
 
                 <div className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent]">
                   <div className="rounded-sm border border-white/8 bg-black/10 p-3">
-                    <div className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-white/38">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-white/38">
                       ROLE
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -793,7 +793,7 @@ export default function NewAgentPage() {
                   </div>
 
                   <div className="rounded-sm border border-white/8 bg-black/10 p-3">
-                    <div className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-white/38">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-white/38">
                       SCENE
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -821,7 +821,7 @@ export default function NewAgentPage() {
                   </div>
 
                   <div className="rounded-sm border border-white/8 bg-black/10 p-3">
-                    <div className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-white/38">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-white/38">
                       CAPABILITY PACK
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -882,7 +882,7 @@ export default function NewAgentPage() {
                   </Button>
 
                   <div className="mt-1 rounded-sm border border-white/7 bg-white/[0.018] p-3">
-                    <div className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-white/32">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-white/32">
                       TEMPLATE REF
                     </div>
                     <div className="flex flex-wrap gap-1.5">

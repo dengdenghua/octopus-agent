@@ -549,7 +549,7 @@ export function AgentProgressPill({
             <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
               <div
                 className={cn(
-                  "h-full rounded-full transition-all duration-300",
+                  "h-full rounded-full transition-all duration-slow",
                   displayPhase.status === "error"
                     ? "bg-destructive"
                     : displayPhase.status === "running"

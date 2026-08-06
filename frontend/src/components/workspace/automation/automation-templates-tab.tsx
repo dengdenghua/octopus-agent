@@ -132,7 +132,7 @@ export function AutomationTemplatesTab({
               isCustom ? handleCreateCustom : () => handleUseTemplate(template)
             }
             className={cn(
-              "group flex w-full items-center gap-3 rounded-[10px] border p-3 text-left transition-[transform,border-color,background-color,box-shadow] hover:-translate-y-0.5",
+              "group flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-[transform,border-color,background-color,box-shadow] hover:-translate-y-0.5",
               coolTone
                 ? "border-border bg-card hover:border-primary/28 hover:bg-card hover:shadow-[var(--shadow-sm)]"
                 : "border-border/90 bg-muted/18 hover:border-primary/24 hover:bg-muted/28 hover:shadow-[var(--shadow-sm)]",
@@ -176,7 +176,7 @@ export function AutomationTemplatesTab({
             type="button"
             onClick={isCustom ? handleCreateCustom : () => handleUseTemplate(template)}
             className={cn(
-              "group flex min-h-44 flex-col items-start rounded-[10px] border p-5 text-left transition-[transform,border-color,background-color,box-shadow] hover:-translate-y-0.5",
+              "group flex min-h-44 flex-col items-start rounded-xl border p-5 text-left transition-[transform,border-color,background-color,box-shadow] hover:-translate-y-0.5",
               coolTone
                 ? "border-border bg-card hover:border-primary/28 hover:bg-card hover:shadow-[var(--shadow-sm)]"
                 : "border-border/90 bg-muted/18 hover:border-primary/24 hover:bg-muted/28 hover:shadow-[var(--shadow-sm)]",

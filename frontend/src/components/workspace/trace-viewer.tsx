@@ -74,7 +74,7 @@ function statusColor(status: string): string {
     case "failed":
       return "text-destructive";
     case "running":
-      return "text-blue-500";
+      return "text-info";
     default:
       return "text-muted-foreground";
   }
@@ -89,7 +89,7 @@ function statusBg(status: string): string {
     case "failed":
       return "bg-destructive";
     case "running":
-      return "bg-blue-500";
+      return "bg-info";
     default:
       return "bg-muted-foreground/30";
   }
@@ -104,7 +104,7 @@ function statusBarBg(status: string): string {
     case "failed":
       return "bg-destructive/70";
     case "running":
-      return "bg-blue-500/70";
+      return "bg-info/70";
     default:
       return "bg-muted-foreground/20";
   }

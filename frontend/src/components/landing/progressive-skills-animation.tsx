@@ -399,11 +399,11 @@ export default function ProgressiveSkillsAnimation() {
             {getFileTree().map((item, index) => (
               <motion.div
                 key={`${item.name}-${index}`}
-                className={`flex items-center gap-3 text-lg font-medium transition-all duration-300 ${
+                className={`flex items-center gap-3 text-lg font-medium transition-all duration-slow ${
                   item.done
                     ? "text-success"
                     : item.dragging
-                      ? "translate-x-8 scale-105 text-blue-400"
+                      ? "translate-x-8 scale-105 text-info"
                       : item.active
                         ? "text-white"
                         : item.highlight
@@ -476,7 +476,7 @@ export default function ProgressiveSkillsAnimation() {
                   animate={{ opacity: 1, y: 0 }}
                   className="flex justify-end"
                 >
-                  <div className="max-w-[90%] rounded-lg rounded-tr-sm bg-blue-600 px-5 py-3">
+                  <div className="max-w-[90%] rounded-lg rounded-tr-sm bg-info px-5 py-3">
                     <p className="text-base">
                       Research mRNA delivery, build a landing page, deploy to
                       Vercel
@@ -574,7 +574,7 @@ export default function ProgressiveSkillsAnimation() {
                               className="flex items-center gap-2 text-sm text-zinc-500"
                             >
                               {step.type === "search" ? (
-                                <Search size={14} className="text-blue-400" />
+                                <Search size={14} className="text-info" />
                               ) : (
                                 <Globe size={14} className="text-success" />
                               )}
@@ -599,7 +599,7 @@ export default function ProgressiveSkillsAnimation() {
                               className="flex items-center gap-2 text-sm text-zinc-500"
                             >
                               {step.type === "search" ? (
-                                <Search size={14} className="text-blue-400" />
+                                <Search size={14} className="text-info" />
                               ) : (
                                 <Globe size={14} className="text-success" />
                               )}

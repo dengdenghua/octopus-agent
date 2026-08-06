@@ -20,8 +20,8 @@ const CATEGORY_STYLE_MAP: Record<
   { bg: string; text: string; icon: string }
 > = {
   assistant: {
-    bg: "bg-blue-500/10",
-    text: "text-blue-600 dark:text-blue-400",
+    bg: "bg-info/10",
+    text: "text-info dark:text-info",
     icon: "🤖",
   },
   coder: {
@@ -30,8 +30,8 @@ const CATEGORY_STYLE_MAP: Record<
     icon: "💻",
   },
   researcher: {
-    bg: "bg-violet-500/10",
-    text: "text-violet-600 dark:text-violet-400",
+    bg: "bg-chart-1/10",
+    text: "text-chart-1 dark:text-chart-1",
     icon: "🔬",
   },
   creative: {
@@ -45,18 +45,18 @@ const CATEGORY_STYLE_MAP: Record<
     icon: "⚡",
   },
   specialist: {
-    bg: "bg-cyan-500/10",
-    text: "text-cyan-600 dark:text-cyan-400",
+    bg: "bg-info/10",
+    text: "text-info dark:text-info",
     icon: "🎯",
   },
   financial: {
-    bg: "bg-teal-500/10",
-    text: "text-teal-600 dark:text-teal-400",
+    bg: "bg-chart-2/10",
+    text: "text-chart-2 dark:text-chart-2",
     icon: "💼",
   },
   "digital-twin": {
-    bg: "bg-fuchsia-500/10",
-    text: "text-fuchsia-600 dark:text-fuchsia-400",
+    bg: "bg-chart-3/10",
+    text: "text-chart-3 dark:text-chart-3",
     icon: "🫂",
   },
 };
@@ -136,7 +136,7 @@ export function RegistryAssetCard({
   return (
     <Card
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 transition-all duration-200 ease-out",
+        "group relative flex flex-col overflow-hidden rounded-lg border-border-default bg-card/86 py-0 transition-all duration-base ease-out",
         "hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_0_24px_hsl(var(--primary)/0.10)]",
       )}
     >
