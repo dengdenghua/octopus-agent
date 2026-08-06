@@ -101,9 +101,9 @@ export function WorkbenchTabHeader({
               <div
                 key={id}
                 className={cn(
-                  "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 border border-transparent text-sm font-medium shadow-none transition-colors",
+                  "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-lg border border-transparent text-sm font-medium shadow-none transition-colors",
                   active
-                    ? "border-border-subtle text-foreground"
+                    ? "border-border-subtle bg-background text-foreground"
                     : "text-muted-foreground hover:border-border-subtle hover:bg-background/45 hover:text-foreground",
                 )}
               >
