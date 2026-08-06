@@ -3239,14 +3239,12 @@ function RealtimePageContent({
   }, [setArtifactsOpen]);
   const selectAgentWorkbenchTab = useCallback(
     (tab: AgentWorkbenchTabId) => {
-      if (tab === "artifacts") {
-        openArtifactsPanel();
-        return;
-      }
       if (tab === "plan") {
         openAgentPlanPanel();
         return;
       }
+      // "artifacts" now renders inline inside the workbench (same surface as
+      // terminal / browser) — no need to open the legacy standalone sidebar.
       setArtifactsOpen(false);
       setShowAgentPlan(false);
       setAgentWorkbenchDismissed(false);
@@ -3257,7 +3255,7 @@ function RealtimePageContent({
       setAgentWorkbenchTab(tab);
       setAgentWorkbenchTabTouched(true);
     },
-    [openAgentPlanPanel, openArtifactsPanel, setArtifactsOpen],
+    [openAgentPlanPanel, setArtifactsOpen],
   );
 
   const currentAgent = useMemo(
