@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogClose,
@@ -410,10 +411,10 @@ export function AgentsTab({
         aria-live="polite"
       >
         <span className="sr-only">{t.agentWorldUnified.loadingAgents}</span>
-        <div className="h-8 w-full animate-pulse rounded-lg bg-muted" />
+        <Skeleton className="h-8 w-full" />
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="h-32 animate-pulse bg-muted" />
+            <Skeleton key={i} className="h-32" />
           ))}
         </div>
       </div>

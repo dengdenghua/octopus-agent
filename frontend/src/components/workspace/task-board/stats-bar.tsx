@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { TaskBoardStats } from "@/core/task-board/types";
 import { cn } from "@/lib/utils";
 
@@ -117,7 +118,7 @@ export function StatsBar({
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-[72px] animate-pulse rounded-lg border bg-muted/50"
+            className="h-[72px] border"
           />
         ))}
       </div>

@@ -24,6 +24,7 @@ import {
 } from "./community-data";
 import { CommunityPostDetail } from "./community-post-detail";
 import { CommunityForkButton } from "./community-fork-button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const FAVORITES_KEY = "octopus.community.favorites.v1";
 const LIKES_KEY = "octopus.community.likes.v1";
@@ -225,15 +226,15 @@ export function CommunityFeed({
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="animate-pulse overflow-hidden rounded-xl bg-card shadow-[var(--shadow-card)]"
+            className="overflow-hidden rounded-xl bg-card shadow-[var(--shadow-card)]"
           >
-            <div
-              className="bg-muted/70"
+            <Skeleton
+              className="w-full"
               style={{ height: 120 + (i % 3) * 40 }}
             />
             <div className="space-y-2 p-3">
-              <div className="h-3 w-3/4 rounded bg-muted/70" />
-              <div className="h-3 w-1/2 rounded bg-muted/50" />
+              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
             </div>
           </div>
         ))}
