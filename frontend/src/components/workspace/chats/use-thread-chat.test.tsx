@@ -28,18 +28,20 @@ function ThreadChatProbe() {
 }
 
 describe("useThreadChat", () => {
-  test("allocates a fresh local thread when navigating to /new again", async () => {
+  test("keeps the same local thread when re-entering the /new route", async () => {
     renderWithProviders(<ThreadChatProbe />, {
       initialRoute: "/workspace/realtime/new",
     });
     const firstThreadId = screen.getByTestId("thread-id").textContent;
+    expect(screen.getByTestId("is-new")).toHaveTextContent("true");
 
     fireEvent.click(screen.getByRole("button", { name: "New task" }));
 
+    // The /new route is now a stable identity (pathId = pathname|threadId),
+    // so re-entering it does NOT allocate a fresh thread — the in-progress
+    // draft is preserved instead of being discarded.
     await waitFor(() => {
-      expect(screen.getByTestId("thread-id").textContent).not.toBe(
-        firstThreadId,
-      );
+      expect(screen.getByTestId("thread-id").textContent).toBe(firstThreadId);
     });
     expect(screen.getByTestId("is-new")).toHaveTextContent("true");
   });
