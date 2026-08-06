@@ -1,10 +1,15 @@
 import { ChevronRightIcon, GlobeIcon, PackageIcon, TerminalIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import type { OutlineRound } from "@/core/threads/progress-outline";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
+import {
+  ArtifactsProvider,
+  useArtifacts,
+} from "@/components/workspace/artifacts/context";
+import { ArtifactInlinePreview } from "@/components/workspace/artifacts/artifact-file-list";
 import type {
   AgentWorkbenchEventView,
   AgentWorkbenchProcessEventSnapshot,
@@ -474,7 +479,9 @@ export function AgentWorkbenchPanel({
     ) : effectiveActiveTab === "browser" ? (
       browserTabPage
     ) : effectiveActiveTab === "artifacts" && threadId ? (
-      <ArtifactPanel showHeader={false} threadId={threadId} className="size-full" />
+      <ArtifactsProvider threadId={threadId}>
+        <ArtifactInlinePreviewEmbedded />
+      </ArtifactsProvider>
     ) : (
       agentKanbanPage
     );
@@ -529,6 +536,40 @@ export function AgentWorkbenchPanel({
         {effectiveEmbeddedPage}
       </section>
       {machineRail}
+    </div>
+  );
+}
+
+/**
+ * Streamlined inline artifact preview for the workbench's "产物" tab.
+ * Renders HTML (iframe) / Markdown (Streamdown) directly — no file list,
+ * no tab routing, no detail-page navigation. Uses the same shared
+ * preview pipeline as ArtifactFileDetail so there is exactly one
+ * rendering code-path for artifact content.
+ */
+function ArtifactInlinePreviewEmbedded() {
+  const { artifacts } = useArtifacts();
+  const { t } = useI18n();
+
+  const previewable = useMemo(() => {
+    if (!artifacts) return [];
+    return artifacts.filter((f) => {
+      const ext = f.split(".").pop()?.toLowerCase() ?? "";
+      return ["html", "htm", "md", "markdown"].includes(ext);
+    });
+  }, [artifacts]);
+
+  if (previewable.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-4 text-sm text-muted-foreground">
+        {t.conversation.noPreviewArtifacts}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <ArtifactInlinePreview files={previewable} threadId="" />
     </div>
   );
 }

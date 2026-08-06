@@ -50,7 +50,7 @@ export function WorkbenchTabHeader({
   visibleTabs: WorkbenchTab[];
   workbenchTabs: WorkbenchTab[];
   closedTabs: Set<AgentWorkbenchTabId>;
-  effectiveActiveTab: "agent" | "diff" | "terminal" | "browser";
+  effectiveActiveTab: AgentWorkbenchTabId;
   onTabClick: (tabId: AgentWorkbenchTabId) => void;
   onTabClose: (tabId: AgentWorkbenchTabId) => void;
   locatableTranscriptEventId: string;
