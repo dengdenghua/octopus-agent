@@ -21,7 +21,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
-  ArtifactPanel,
   ArtifactsProvider,
   useArtifacts,
 } from "@/components/workspace/artifacts";
@@ -3133,15 +3132,17 @@ function RealtimePageContent({
   }, [setArtifactsOpen]);
 
   const openArtifactsPanel = useCallback(() => {
-    setArtifactsOpen(true);
+    // Artifacts now live inside the workbench (same surface as terminal /
+    // browser). Open the workbench and switch to the artifacts tab.
+    setArtifactsOpen(false);
     setShowAgentPlan(false);
-    setAgentWorkbenchDismissed(true);
-    setAgentWorkbenchManuallyOpened(false);
+    setAgentWorkbenchDismissed(false);
+    setAgentWorkbenchManuallyOpened(true);
     setShowResearchHistory(false);
     setShowResearch(false);
     setShowPreview(false);
-    setAgentWorkbenchTab("agent");
-    setAgentWorkbenchTabTouched(false);
+    setAgentWorkbenchTab("artifacts");
+    setAgentWorkbenchTabTouched(true);
   }, [setArtifactsOpen]);
 
   const openWorkbenchArtifact = useCallback(
@@ -3153,25 +3154,18 @@ function RealtimePageContent({
         }
         selectArtifact(normalizedPath, true);
       }
-      // If the agent workbench is visible, switch to its embedded artifacts
-      // tab so the preview renders inside the workbench (no separate panel).
-      // Otherwise fall back to the legacy standalone artifact sidebar.
-      if (showAgentWorkbench && !agentWorkbenchDismissed) {
-        setAgentWorkbenchTab("artifacts");
-        // Ensure workbench isn't dismissed when user clicks an artifact link
-        setAgentWorkbenchDismissed(false);
-        setAgentWorkbenchManuallyOpened(true);
-      } else {
-        setArtifactsOpen(true);
-        setShowAgentPlan(false);
-        setAgentWorkbenchDismissed(true);
-        setAgentWorkbenchManuallyOpened(false);
-        setShowResearchHistory(false);
-        setShowResearch(false);
-        setShowPreview(false);
-        setAgentWorkbenchTab("agent");
-        setAgentWorkbenchTabTouched(false);
-      }
+      // Always route to the embedded artifacts tab inside the workbench
+      // (same surface as terminal / browser). Auto-open the workbench
+      // if it's not visible.
+      setArtifactsOpen(false);
+      setShowAgentPlan(false);
+      setAgentWorkbenchDismissed(false);
+      setAgentWorkbenchManuallyOpened(true);
+      setShowResearchHistory(false);
+      setShowResearch(false);
+      setShowPreview(false);
+      setAgentWorkbenchTab("artifacts");
+      setAgentWorkbenchTabTouched(true);
     },
     [artifacts, selectArtifact, setArtifactsOpen, setArtifacts, threadId],
   );
@@ -3646,8 +3640,6 @@ function RealtimePageContent({
                       {researchError}
                     </div>
                   </div>
-                ) : artifactsOpen && !showAgentWorkbench ? (
-                  <ArtifactPanel className="size-full" threadId={threadId} />
                 ) : showAgentPlan ? (
                   <PlanPanel
                     className="size-full rounded-none border-0 shadow-none"
