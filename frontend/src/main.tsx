@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import {
@@ -10,10 +11,10 @@ import {
 import { AppRouter } from "./router";
 import { swallow } from "./core/utils/log";
 import { ThemeProvider } from "./components/theme-provider";
-import { I18nProvider } from "./core/i18n/context";
+import { I18nProvider, useI18nContext } from "./core/i18n/context";
 import { getLocaleFromCookie } from "./core/i18n/cookies";
-import { detectLocale, normalizeLocale } from "./core/i18n/locale";
-import { loadTranslations } from "./core/i18n/translations";
+import { detectLocale, normalizeLocale, type Locale } from "./core/i18n/locale";
+import { enUS } from "./core/i18n/locales/en-US";
 import { AuthProvider } from "./providers/AuthProvider";
 import { AppearanceBootstrap } from "./hooks/use-appearance";
 import { BackendBootstrapOverlay } from "./components/workspace/backend-bootstrap-overlay";
@@ -109,19 +110,20 @@ async function bootstrap() {
   const initialLocale = savedLocale
     ? normalizeLocale(savedLocale)
     : detectLocale();
-  const initialTranslations = await loadTranslations(initialLocale);
 
-  // Sync HTML lang attribute with the detected locale
+  // First paint uses the bundled en-US pack so it is never blocked on a
+  // locale-chunk fetch (non-en packs are ~120KB gzipped). The real locale is
+  // loaded in the background by <I18nLocaleBootstrap /> and swapped in once
+  // ready — locale state updates immediately, only the copy flashes en →
+  // target (no blank/empty flash). en-US users are unaffected (no-op swap).
   document.documentElement.lang = initialLocale.split("-")[0] ?? initialLocale;
 
   createRoot(document.getElementById("root")!).render(
     <HashRouter>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider defaultTheme="system" storageKey="octopus-theme">
-          <I18nProvider
-            initialLocale={initialLocale}
-            initialTranslations={initialTranslations}
-          >
+          <I18nProvider initialLocale="en-US" initialTranslations={enUS}>
+            <I18nLocaleBootstrap targetLocale={initialLocale} />
             <AuthProvider>
               <AppearanceBootstrap />
               <AppRouter />
@@ -132,6 +134,21 @@ async function bootstrap() {
       </QueryClientProvider>
     </HashRouter>,
   );
+}
+
+/**
+ * Kicks off the async load of the real locale after first paint. For en-US this
+ * is a no-op (already mounted with en-US). For other locales it loads the chunk
+ * and swaps translations in via the provider's race-guarded setLocale.
+ */
+function I18nLocaleBootstrap({ targetLocale }: { targetLocale: Locale }) {
+  const { setLocale } = useI18nContext();
+  useEffect(() => {
+    if (targetLocale !== "en-US") {
+      void setLocale(targetLocale);
+    }
+  }, [targetLocale, setLocale]);
+  return null;
 }
 
 void bootstrap();
