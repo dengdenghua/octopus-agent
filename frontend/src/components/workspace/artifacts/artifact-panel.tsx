@@ -10,7 +10,10 @@ import { checkCodeFile } from "@/core/utils/files";
 import { cn } from "@/lib/utils";
 
 import { ArtifactFileDetail } from "./artifact-file-detail";
-import { ArtifactFileList } from "./artifact-file-list";
+import {
+  ArtifactFileList,
+  ArtifactInlinePreview,
+} from "./artifact-file-list";
 import { useArtifacts } from "./context";
 
 // 产物面板将产物按「全部 / 变更 / 预览」分类展示：变更指 Agent 通过
@@ -151,7 +154,10 @@ export function ArtifactPanel({
                 title={t.conversation.noPreviewArtifacts}
               />
             ) : (
-              <ArtifactFileList files={previewArtifacts} threadId={threadId} />
+              <ArtifactInlinePreview
+                files={previewArtifacts}
+                threadId={threadId}
+              />
             )}
           </TabsContent>
         </Tabs>
