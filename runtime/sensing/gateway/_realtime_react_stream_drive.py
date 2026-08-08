@@ -18,7 +18,10 @@ from runtime.memory.threads.event_log import EventLog
 from runtime.platform.models import ParsedIntent
 from runtime.protocol import TurnStatus
 from runtime.safety.approval.approval_gate import ApprovalProvider
-from runtime.sensing.gateway._realtime_react_stream_apply import _apply_react_event
+from runtime.sensing.gateway._realtime_react_stream_apply import (
+    _apply_react_event,
+    _start_orchestrator_bridge,
+)
 from runtime.sensing.gateway._realtime_react_stream_helpers import (
     _SINGLE_AGENT_HEARTBEAT_INTERVAL_S,
     _agentic_stream_event_to_react_event,
@@ -194,6 +197,19 @@ async def _drive_react(
                             _safe_put(evt)
                 else:
                     _resume_task_id = _resume_task_id_from_intent(intent)
+
+                    def _on_auto_parallel_batch(batch_id: str) -> None:
+                        # The auto-parallel short-circuit (running on the
+                        # producer thread) dispatched a parallel batch. Hop
+                        # back to the event loop and start the orchestrator
+                        # bridge so the workbench renders each sub-task as a
+                        # live tile immediately.
+                        async def _spawn() -> None:
+                            _start_orchestrator_bridge(runtime, turn, log, emitter, batch_id)
+
+                        with contextlib.suppress(RuntimeError):
+                            asyncio.run_coroutine_threadsafe(_spawn(), loop)
+
                     events: Iterator[dict[str, Any]] = stream_react_loop(
                         runtime._stack,
                         intent,
@@ -209,6 +225,7 @@ async def _drive_react(
                             "reasoning_effort",
                         ),
                         steering_drain=lambda: runtime._drain_turn_steering(turn.id),
+                        on_auto_parallel_batch=_on_auto_parallel_batch,
                     )
                     for evt in events:
                         _safe_put(evt)
@@ -312,6 +329,15 @@ async def _drive_react(
             await watcher
         with contextlib.suppress(Exception):
             await worker
+        # Cancel any live orchestrator bridges for this turn. Each bridge
+        # subscribes to a parallel batch that already terminated (the loop
+        # consumed its synthetic observation), so leaving them running would
+        # only leak tasks idling until batch GC.
+        bridge_tasks: set[asyncio.Task] = getattr(runtime, "_orchestrator_bridge_tasks", set())
+        for task in list(bridge_tasks):
+            task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.gather(*bridge_tasks, return_exceptions=True)
 
     # Finalize anything still open. Wrapped in suppress so a torn-
     # down ws doesn't take the whole turn-completion path with it.

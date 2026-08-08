@@ -24,6 +24,7 @@ export default defineConfig({
     "mobile-smoke.spec.ts",
     "stream-timeline-narrative.spec.ts",
     "workflow-editor.spec.ts",
+    "auto-parallel.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

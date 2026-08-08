@@ -12,7 +12,7 @@ import logging
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from runtime.core.cerebrum.react_browser_iteration import (
     _browser_operation_requested,
@@ -229,6 +229,7 @@ def _emit_turn_start_events(
     executor: Any,
     stack: Any,
     messages: list,
+    on_auto_parallel_batch: Callable[[str], None] | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """react_started / grounding / auto-delegation events (PHASE 4/4.5).
 
@@ -358,4 +359,91 @@ def _emit_turn_start_events(
                         None,
                     ),
                     "reason": f"{type(exc).__name__}: {exc}",
+                }
+
+    # ── PHASE 4.6 · auto-decomposition + parallel short-circuit ────────
+    # When a goal is complex enough to split into >=2 independent
+    # sub-inquiries, pre-run them in parallel (orchestrator dispatch) and
+    # inject the aggregated results as a synthetic Observation. The main
+    # loop then synthesises the Final Answer against real per-subtask
+    # evidence instead of re-reasoning about decomposition. Skipped when
+    # a single-agent auto-delegation already short-circuited the turn.
+    if tools_active and not planning_mode and not _auto_delegated:
+        try:
+            from runtime.core.cerebrum.agent_auto_parallel import (
+                plan_auto_parallel,
+                run_auto_parallel,
+            )
+
+            _auto_goal = str(intent.normalized_goal or "") or str(intent.raw or "")
+            _parallel_plan = plan_auto_parallel(_auto_goal)
+        except (ImportError, AttributeError, TypeError):
+            _parallel_plan = None
+        if _parallel_plan is not None and _parallel_plan.should_parallelize():
+            _subtask_descriptions = [
+                t.description for t in _parallel_plan.subtasks
+            ]
+            yield {
+                "type": "auto_parallel_started",
+                "subtasks": _subtask_descriptions,
+                "reason": _parallel_plan.reason,
+            }
+            try:
+                _parallel_result = run_auto_parallel(
+                    _parallel_plan,
+                    thread_id=thread_id or "",
+                    context={
+                        "thread_id": thread_id or "",
+                        "source": "auto_parallel",
+                        "parent_task_id": str(react_task_id),
+                    },
+                    on_batch_started=on_auto_parallel_batch,
+                )
+            except (ImportError, AttributeError, TypeError, ValueError) as exc:
+                _parallel_result = None
+                _logger.debug(
+                    "auto-parallel failed; falling back to model: %s",
+                    exc,
+                    exc_info=True,
+                )
+            _parallel_ok = bool(
+                _parallel_result is not None
+                and _parallel_result.get("success")
+            )
+            _parallel_content = str(
+                (_parallel_result or {}).get("content", "") or ""
+            ).strip()
+            if _parallel_ok and _parallel_content:
+                obs_block = (
+                    "<auto-parallel-observation>\n"
+                    f"Goal decomposed into {len(_subtask_descriptions)} "
+                    "independent sub-inquiries and resolved in parallel:\n"
+                    + "\n".join(f"- {d}" for d in _subtask_descriptions)
+                    + "\n\nAggregated sub-agent outputs:\n\n"
+                    f"{_parallel_content}\n"
+                    "</auto-parallel-observation>\n\n"
+                    "Use these as the primary evidence for your Final "
+                    "Answer. Add your own synthesis, cross-referencing, or "
+                    "follow-up only if the user's request demands more than "
+                    "the aggregated outputs already cover."
+                )
+                messages.append(Message(role="user", content=obs_block))
+                yield {
+                    "type": "auto_parallel_completed",
+                    "subtasks": len(_subtask_descriptions),
+                    "output_length": len(_parallel_content),
+                    "batch_id": (_parallel_result or {}).get("batch_id") or None,
+                }
+            else:
+                err = str((_parallel_result or {}).get("error") or "") or ""
+                _logger.info(
+                    "auto-parallel produced no usable output (ok=%s, err=%s) — "
+                    "falling back to model",
+                    _parallel_ok,
+                    err,
+                )
+                yield {
+                    "type": "auto_parallel_skipped",
+                    "subtasks": _subtask_descriptions,
+                    "reason": err or "no usable output",
                 }

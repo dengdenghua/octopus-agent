@@ -106,15 +106,6 @@ async def _apply_react_event(
             )
             del logged_update
         return
-    if kind == "auto_parallel_batch":
-        # The auto-parallel short-circuit dispatched a parallel batch. Bridge
-        # its orchestrator event stream onto the turn so the workbench renders
-        # each sub-task as a live tile instead of showing a blank gap until
-        # the batch finishes.
-        batch_id = str(evt.get("batch_id") or "").strip()
-        if batch_id:
-            _start_orchestrator_bridge(runtime, turn, log, emitter, batch_id)
-        return
     if kind == "text_delta":
         await state.append_agent_message(turn, log, emitter, evt.get("delta", ""))
         return

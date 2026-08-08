@@ -17,15 +17,29 @@ def mount_parallel(
     *,
     parallel_agent_orchestrator: Any,
 ) -> None:
-    """Mount parallel-agents + deep-research + subagents routers."""
+    """Mount parallel-agents + deep-research + subagents routers.
+
+    The orchestrator backs the ReAct auto-parallel short-circuit too, so the
+    app wires it as the single shared instance (``set_auto_parallel_orchestrator``)
+    instead of letting ``agent_auto_parallel`` lazily spawn a second one. When
+    none is supplied, the shared real-runner orchestrator is used so HTTP-
+    triggered parallel / deep-research tasks actually delegate to sub-agents
+    rather than the stub runner.
+    """
     app = ctx.app
 
     if parallel_agent_orchestrator is None:
-        from runtime.execution.parallel_agents import ParallelAgentOrchestrator
-
-        parallel_agent_orchestrator = ParallelAgentOrchestrator(
-            max_concurrency=4,
+        from runtime.core.cerebrum.agent_auto_parallel import (
+            get_auto_parallel_orchestrator,
         )
+
+        parallel_agent_orchestrator = get_auto_parallel_orchestrator()
+    else:
+        from runtime.core.cerebrum.agent_auto_parallel import (
+            set_auto_parallel_orchestrator,
+        )
+
+        set_auto_parallel_orchestrator(parallel_agent_orchestrator)
     from runtime.sensing.gateway.parallel_agents_router import create_parallel_agents_router
 
     app.include_router(

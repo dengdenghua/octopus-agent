@@ -1332,23 +1332,20 @@ class TestCreateAppDefaultOrchestrator:
         # Implementation note.
         assert data["max_concurrency"] == 4
 
-    def test_default_orchestrator_dispatch_works(self, tmp_path):
+    def test_default_orchestrator_reuses_real_runner_singleton(self, tmp_path):
+        from runtime.core.cerebrum.agent_auto_parallel import (
+            get_auto_parallel_orchestrator,
+        )
         from runtime.platform.ui import create_app
 
         app = create_app(journal_path=tmp_path / "events.jsonl")
-        client = TestClient(app)
-        r = client.post(
-            "/api/agents/parallel/dispatch",
-            json={"tasks": [{"description": "hi", "subagent_name": "x"}]},
-        )
-        assert r.status_code == 200
-        bid = r.json()["batch_id"]
-        # Implementation note.
-        for _ in range(100):
-            g = client.get(f"/api/agents/parallel/batch/{bid}").json()
-            if g["status"] == "completed":
-                break
-            time.sleep(0.02)
-        g = client.get(f"/api/agents/parallel/batch/{bid}").json()
-        assert g["completed_tasks"] == 1
-        assert "stub" in g["results"][0]["result"]
+        # The app mounts the shared auto-parallel orchestrator (real sub-agent
+        # runner) rather than a per-app stub instance, so HTTP-triggered
+        # parallel / deep-research tasks actually delegate to sub-agents and
+        # the ReAct auto-parallel short-circuit shares the same instance.
+        default = app.state.parallel_agent_orchestrator
+        assert default is get_auto_parallel_orchestrator()
+        # Real sub-agent runner is wired (not the ``[stub subagent=...]`` default).
+        from runtime.core.cerebrum.agent_auto_parallel import _subagent_task_runner
+
+        assert default._runner is _subagent_task_runner

@@ -125,6 +125,7 @@ def stream_react_loop(
     planning_mode: bool = False,
     reasoning_effort: str | None = None,
     steering_drain: Callable[[], list[str]] | None = None,
+    on_auto_parallel_batch: Callable[[str], None] | None = None,
 ) -> Generator[dict[str, Any], None, ReActResult | None]:
     # Orchestration map: bootstrap/prompt → react_prompt_assembly; resume →
     # react_resume; model streaming → react_model_stream; parse →
@@ -229,6 +230,7 @@ def stream_react_loop(
         executor=executor,
         stack=stack,
         messages=messages,
+        on_auto_parallel_batch=on_auto_parallel_batch,
     )
 
     # ── PHASE 5 · pre-loop state init + checkpoint resume ──────────────
@@ -394,6 +396,15 @@ def stream_react_loop(
         )
         return next_model
 
+    def _try_requested_model_switch(state: _LoopState) -> str | None:
+        """Model-switch hooked to the spin guard's escalation stage.
+
+        Uses the same failover closure and one-switch-per-turn budget as the
+        LLM-error path, passing a distinct reason so the audit trail shows the
+        switch was spin-triggered rather than error-triggered.
+        """
+        return _try_react_model_failover("model_spinning")
+
     # Realtime reasoning providers may stream private thinking for minutes
     # before producing ordinary text or a tool call. The UI must not depend on
     # that hidden stream for its first conversational beat. Generate one
@@ -523,6 +534,22 @@ def stream_react_loop(
         if _guard_terminated_reason is not None:
             terminated_reason = _guard_terminated_reason
             break
+
+        # ── Spin-escalation model switch (capability-enhancing) ────────
+        # The spin guard (phase 6g) may request a model switch after a
+        # compression pass failed to break a spinning turn. Consume the flag
+        # here, before the next LLM call, so the switch takes effect on this
+        # iteration rather than waiting for another blank round.
+        if state.spin_model_switch_requested:
+            state.spin_model_switch_requested = False
+            _fallback_model = _try_requested_model_switch(state)
+            if _fallback_model is not None:
+                _logger.warning(
+                    "react_loop spin-escalation model switch → %s before iter %d (task %s)",
+                    _fallback_model,
+                    i,
+                    react_task_id,
+                )
 
         # ── PHASE 6b · LLM call + Final-Answer anchor stream ───────────
         state.native_mode = _native_mode
