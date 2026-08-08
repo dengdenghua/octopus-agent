@@ -1339,7 +1339,10 @@ describe("<AgentWorkbenchPanel />", () => {
     await waitFor(() => expect(onSelectTab).toHaveBeenCalledWith("terminal"));
   });
 
-  test("renders selected public thinking detail in the summary panel", async () => {
+  // SKIPPED: focusedProcessEvent detail rendering was removed in recent refactor.
+  // Design decision: "思考/执行详情均在对话框内完整展示，右侧不再重复渲染"
+  // (see agent-workbench-pages.tsx line 1085-1086)
+  test.skip("renders selected public thinking detail in the summary panel", async () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         focusedEventId="thinking-7"
@@ -1377,7 +1380,7 @@ describe("<AgentWorkbenchPanel />", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("renders selected execution detail in the summary panel", async () => {
+  test.skip("renders selected execution detail in the summary panel", async () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         focusedEventId="write-9"

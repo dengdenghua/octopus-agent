@@ -18,6 +18,9 @@ describe("pickLocalDirectory", () => {
       "/Users/dangbei/Project",
     );
     expect(open).toHaveBeenCalledWith({
+      title: "选择工作区文件夹",
+      buttonLabel: "选取",
+      message: "请选择一个文件夹作为工作区",
       properties: ["openDirectory", "createDirectory"],
       defaultPath: "/Users/dangbei",
     });

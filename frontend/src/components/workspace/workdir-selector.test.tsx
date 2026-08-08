@@ -244,13 +244,12 @@ describe("<WorkDirSelector />", () => {
 
   it("uses the Electron native folder picker when available", async () => {
     const onWorkDirChange = vi.fn();
+    const open = vi.fn().mockResolvedValue({
+      canceled: false,
+      filePaths: ["F:\\picked\\project"],
+    });
     vi.stubGlobal("octopus", {
-      dialog: {
-        open: vi.fn().mockResolvedValue({
-          canceled: false,
-          filePaths: ["F:\\picked\\project"],
-        }),
-      },
+      dialog: { open },
     });
 
     renderWithProviders(
@@ -260,14 +259,19 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
-    // A bound workDir trigger opens the menu; the folder-picker CTA inside
-    // is what invokes the Electron native picker.
+    // Primary trigger now directly invokes the native picker (no menu)
     fireEvent.click(
       screen.getByTitle("Choose workspace folder: F:/work/octopus-agent"),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Open folder" }));
 
     await waitFor(() => {
+      expect(open).toHaveBeenCalledWith({
+        title: "选择工作区文件夹",
+        buttonLabel: "选取",
+        message: "请选择一个文件夹作为工作区",
+        properties: ["openDirectory", "createDirectory"],
+        defaultPath: "F:/work/octopus-agent",
+      });
       expect(onWorkDirChange).toHaveBeenCalledWith("F:\\picked\\project");
     });
   });
@@ -326,6 +330,9 @@ describe("<WorkDirSelector />", () => {
 
     await waitFor(() => {
       expect(open).toHaveBeenCalledWith({
+        title: "选择工作区文件夹",
+        buttonLabel: "选取",
+        message: "请选择一个文件夹作为工作区",
         properties: ["openDirectory", "createDirectory"],
         defaultPath: "",
       });
