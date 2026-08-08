@@ -1015,7 +1015,7 @@ export function WorkDirSelector({
           isEmpty ? emptyTriggerClass : activeTriggerClass,
           isPicking && "cursor-wait opacity-50",
         )}
-        onClick={workDir ? handleMenuToggle : handlePrimaryAction}
+        onClick={handlePrimaryAction}
         disabled={isPicking}
         title={triggerTitle}
         type="button"

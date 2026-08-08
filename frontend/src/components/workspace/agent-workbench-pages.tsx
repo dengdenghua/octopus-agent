@@ -10,7 +10,6 @@ import {
   FileTextIcon,
   GitBranchIcon,
   GlobeIcon,
-  ListChecksIcon,
   Loader2Icon,
   MonitorIcon,
   MoreHorizontalIcon,
@@ -832,8 +831,6 @@ export function AgentSummaryPage({
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     () => new Set(["progress", "artifacts"]),
   );
-  const manuallyToggledSections = useRef(new Set<string>());
-  const previousRunActive = useRef(false);
   const [refTab, setRefTab] = useState<ObservedReferenceTabId>("files");
   const artifactDiffEntries = useMemo(
     () => diffEntries.filter((entry) => entry.created),
@@ -869,7 +866,6 @@ export function AgentSummaryPage({
   );
   const runActive = Boolean(runningPhase);
   const toggleSection = (section: string) => {
-    manuallyToggledSections.current.add(section);
     setExpandedSections((prev) => {
       const next = new Set(prev);
       if (next.has(section)) next.delete(section);
@@ -877,33 +873,6 @@ export function AgentSummaryPage({
       return next;
     });
   };
-  // Keep the phase outline visible during and after a run. The conversation
-  // carries the live narrative, while the workbench is the durable overview
-  // users return to for "what happened" and "what remains". Manual collapse
-  // is still respected.
-  useEffect(() => {
-    const wasActive = previousRunActive.current;
-    previousRunActive.current = runActive;
-
-    if (runActive && !wasActive) {
-      manuallyToggledSections.current.delete("progress");
-      setExpandedSections((previous) => {
-        const next = new Set(previous);
-        next.add("progress");
-        return next;
-      });
-      return;
-    }
-
-    if (phases.length > 0 && !manuallyToggledSections.current.has("progress")) {
-      setExpandedSections((previous) => {
-        if (previous.has("progress")) return previous;
-        const next = new Set(previous);
-        next.add("progress");
-        return next;
-      });
-    }
-  }, [phases.length, runActive]);
   const showOutline =
     progressOutline !== undefined && progressOutline.length > 0;
   const outlineExecutionCount = showOutline
@@ -982,23 +951,17 @@ export function AgentSummaryPage({
 
     setExpandedSections((previous) => {
       const next = new Set(previous);
+      // Progress section stays always expanded when workbench is open
+      next.add("progress");
       if (diffEntries.length > 0) {
-        if (!manuallyToggledSections.current.has("artifacts")) {
-          next.add("artifacts");
-        }
-        if (!manuallyToggledSections.current.has("references")) {
-          next.delete("references");
-        }
+        next.add("artifacts");
+        next.delete("references");
       } else if (
         phases.length === 0 &&
-        totalReferenceItems > 0 &&
-        !manuallyToggledSections.current.has("references")
+        totalReferenceItems > 0
       ) {
         next.add("references");
-      } else if (
-        phases.length > 0 &&
-        !manuallyToggledSections.current.has("references")
-      ) {
+      } else if (phases.length > 0) {
         next.delete("references");
       }
       if (
@@ -1119,48 +1082,10 @@ export function AgentSummaryPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
-        {/* 思考详情只接收显式公开的过程摘要，绝不接收 provider 原始推理。 */}
-        {focusedProcessEvent?.kind === "thinking" &&
-          focusedProcessEvent.detail && (
-            <section className="border-b border-border-subtle py-4">
-              <div className="mb-2 flex items-center gap-2">
-                <BrainCircuitIcon className="size-3.5 text-muted-foreground" />
-                <h3 className="text-xs font-medium text-foreground">
-                  {t.agentWorkbenchPages.thinkingDetail}
-                </h3>
-              </div>
-              <div className="rounded-lg border border-border-subtle bg-muted/20 p-3 text-sm text-muted-foreground">
-                <MarkdownContent
-                  content={focusedProcessEvent.detail}
-                  isLoading={false}
-                  rehypePlugins={[]}
-                  className="text-sm leading-relaxed"
-                />
-              </div>
-            </section>
-          )}
-        {/* 执行详情：当用户从对话区点击执行行聚焦到此处时，展示执行步骤摘要 */}
-        {focusedProcessEvent?.kind === "execution" &&
-          focusedProcessEvent.detail && (
-            <section className="border-b border-border-subtle py-4">
-              <div className="mb-2 flex items-center gap-2">
-                <ListChecksIcon className="size-3.5 text-muted-foreground" />
-                <h3 className="text-xs font-medium text-foreground">
-                  {t.agentWorkbenchPages.executionDetail}
-                </h3>
-              </div>
-              <div className="rounded-lg border border-border-subtle bg-muted/20 p-3 text-sm text-muted-foreground">
-                <MarkdownContent
-                  content={focusedProcessEvent.detail}
-                  isLoading={false}
-                  rehypePlugins={[]}
-                  className="text-sm leading-relaxed"
-                />
-              </div>
-            </section>
-          )}
-        {/* 进展 */}
-        {!focusedProcessEvent && (phases.length > 0 || showOutline) && (
+        {/* 思考/执行详情均在对话框内完整展示，右侧不再重复渲染。
+            Progress section is always visible when workbench is open (user requirement:
+            "靠展开工作台" to show steps, not driven by step count or auto-expand heuristics). */}
+        {!focusedProcessEvent && (
           <section className="border-b border-border-subtle py-4">
             <button
               type="button"

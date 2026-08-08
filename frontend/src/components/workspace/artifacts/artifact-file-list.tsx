@@ -124,10 +124,8 @@ export function ArtifactFileList({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Inline preview grid for the "preview" tab — renders HTML / MD     */
-/*  artifacts directly inside the artifact panel instead of a bare   */
-/*  file list. Reuses ArtifactFilePreview / HtmlPreview from the      */
-/*  detail view so the rendering is identical.                       */
+/*  Inline preview grid for the "preview" tab of the drawer panel.   */
+/*  Renders HTML / MD artifacts directly as cards (flat list).       */
 /* ------------------------------------------------------------------ */
 
 const LazyStreamdown = lazy(
@@ -180,7 +178,7 @@ function InlineMarkdownPreview({ content }: { content: string }) {
   );
 }
 
-function ArtifactInlinePreviewItem({
+function ArtifactInlinePreviewCard({
   filepath,
   threadId,
 }: {
@@ -196,7 +194,6 @@ function ArtifactInlinePreviewItem({
     threadId,
     enabled: !isWriteFile,
   });
-  // write-file content comes from the tool-call payload, not the artifact API.
   const effectiveContent = isWriteFile ? "" : (content ?? "");
 
   return (
@@ -248,6 +245,12 @@ function ArtifactInlinePreviewItem({
   );
 }
 
+/**
+ * Flat grid of inline preview cards (HTML / Markdown). Used by the
+ * drawer's "预览" tab — renders every previewable file as a card stacked
+ * vertically. For the workbench's embedded artifacts panel use the
+ * master-detail ``ArtifactInlinePreviewEmbedded`` instead.
+ */
 export function ArtifactInlinePreview({
   className,
   files,
@@ -285,12 +288,12 @@ export function ArtifactInlinePreview({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-2",
+        "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2",
         className,
       )}
     >
       {previewable.map((filepath) => (
-        <ArtifactInlinePreviewItem
+        <ArtifactInlinePreviewCard
           key={filepath}
           filepath={filepath}
           threadId={threadId}

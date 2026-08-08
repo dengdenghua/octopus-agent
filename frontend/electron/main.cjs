@@ -28,6 +28,11 @@ const petSidecar = require("./pet-sidecar.cjs");
 const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
 const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
 
+// Force Chinese locale for native dialogs and system UI so native controls
+// (Cancel / New Folder / sidebar / search) follow the app's primary language.
+app.commandLine.appendSwitch("lang", "zh-CN");
+app.commandLine.appendSwitch("accept-lang", "zh-CN,zh;q=0.9,en;q=0.8");
+
 // ── auto-update (electron-updater, packaged builds only) ───────
 // electron-updater is an optional dependency; guard the require so an
 // uninstalled package degrades to "auto-update disabled" instead of crashing.

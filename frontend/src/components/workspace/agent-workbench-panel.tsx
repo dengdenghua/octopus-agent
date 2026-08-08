@@ -1,15 +1,16 @@
-import { ChevronRightIcon, GlobeIcon, PackageIcon, TerminalIcon } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeftIcon, ChevronRightIcon, DownloadIcon, EyeIcon, GlobeIcon, PackageIcon, SparklesIcon, TerminalIcon } from "lucide-react";
+import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, lazy } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
+import { artifactDisplayPath, normalizeWorkspaceArtifactRef, urlOfArtifact } from "@/core/artifacts/utils";
+import { useArtifactContent } from "@/core/artifacts/hooks";
 import type { OutlineRound } from "@/core/threads/progress-outline";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
-import {
-  ArtifactsProvider,
-  useArtifacts,
-} from "@/components/workspace/artifacts/context";
-import { ArtifactInlinePreview } from "@/components/workspace/artifacts/artifact-file-list";
+import { useArtifacts } from "@/components/workspace/artifacts/context";
+import { ArtifactLink } from "@/components/workspace/citations/artifact-link";
+import { checkCodeFile, getFileIcon, getFileName } from "@/core/utils/files";
+import { useStreamdownPlugins } from "@/core/streamdown";
 import type {
   AgentWorkbenchEventView,
   AgentWorkbenchProcessEventSnapshot,
@@ -20,10 +21,11 @@ import { cn } from "@/lib/utils";
 import { CoworkCollabBar } from "./cowork-collab-bar";
 import { CollaborationSessionPanel } from "./collaboration-session-view";
 import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
-import type { AgentWorkbenchTabId } from "./agent-workbench-utils";
+import type { AgentWorkbenchTabId, DiffEntry } from "./agent-workbench-utils";
 import { useAgentWorkbenchI18n } from "./use-agent-workbench-i18n";
 import { AgentDiffPage } from "./agent-workbench-pages";
 import { useAgentWorkbenchSnapshot } from "./agent-workbench-snapshot";
+import { deriveAgentPhases } from "./agent-phases";
 import { type AgentRunState, workbenchRunState } from "./agent-run-status";
 import { MachineScopeRail } from "./agent-workbench-panel/machine-scope-rail";
 import { EmptyShellView } from "./agent-workbench-panel/empty-shell-view";
@@ -142,12 +144,22 @@ function AgentWorkbenchPanelImpl({
   const {
     agentTiles,
     blocks,
-    currentPhase,
+    currentPhase: snapshotCurrentPhase,
     focusedTab,
     inferredWorkDir,
-    phases,
+    phases: snapshotPhases,
     visibleDiffEntries,
   } = workbenchSnapshot;
+
+  // Directly derive phases from raw events (same logic as composer-step-progress)
+  // to ensure workbench always shows task plan when expanded, regardless of
+  // whether server snapshot has been populated or survived a refresh/interrupt.
+  const directDerived = useMemo(
+    () => deriveAgentPhases(events, { hasAnswer, runSettled, runFailed, paused }),
+    [events, hasAnswer, runSettled, runFailed, paused],
+  );
+  const phases = snapshotPhases.length > 0 ? snapshotPhases : directDerived.phases;
+  const currentPhase = snapshotCurrentPhase ?? directDerived.currentPhase;
 
   const {
     selectedEffectKey,
@@ -485,9 +497,14 @@ function AgentWorkbenchPanelImpl({
     ) : effectiveActiveTab === "browser" ? (
       browserTabPage
     ) : effectiveActiveTab === "artifacts" && threadId ? (
-      <ArtifactsProvider threadId={threadId}>
-        <ArtifactInlinePreviewEmbedded />
-      </ArtifactsProvider>
+      // Reuses the outer ArtifactsProvider (page-level) so the artifact list
+      // synced from the backend stays visible. Wrapping in a fresh provider
+      // here reset artifacts to [] and showed "暂无预览内容" for generated
+      // outputs even though the files existed on disk.
+      <ArtifactInlinePreviewEmbedded
+        threadId={threadId}
+        currentTurnEntries={visibleDiffEntries}
+      />
     ) : (
       agentKanbanPage
     );
@@ -546,26 +563,85 @@ function AgentWorkbenchPanelImpl({
   );
 }
 
+const LazyStreamdown = lazy(
+  () => import("@/components/ai-elements/streamdown-host"),
+);
+
 /**
- * Streamlined inline artifact preview for the workbench's "产物" tab.
- * Renders HTML (iframe) / Markdown (Streamdown) directly — no file list,
- * no tab routing, no detail-page navigation. Uses the same shared
- * preview pipeline as ArtifactFileDetail so there is exactly one
- * rendering code-path for artifact content.
+ * Two-state artifact panel for the workbench's "产物" tab.
+ *
+ * State 1 – List view (default):
+ *   A single flat list of all artifacts. Current-turn files appear first
+ *   with a ✨ "本轮" badge; history files follow without grouping headers.
+ *
+ * State 2 – Preview view:
+ *   Full-bleed preview of the selected file with a back button in the
+ *   header to return to the list. This mirrors the drawer's ArtifactPanel
+ *   / ArtifactFileDetail two-state pattern so the two surfaces feel
+ *   consistent.
  */
-function ArtifactInlinePreviewEmbedded() {
-  const { artifacts } = useArtifacts();
+function ArtifactInlinePreviewEmbedded({
+  threadId,
+  currentTurnEntries = [],
+}: {
+  threadId: string;
+  currentTurnEntries?: DiffEntry[];
+}) {
+  const { artifacts, selectedArtifact: externalSelected, select } = useArtifacts();
   const { t } = useI18n();
+  const streamdownPlugins = useStreamdownPlugins();
 
-  const previewable = useMemo(() => {
-    if (!artifacts) return [];
-    return artifacts.filter((f) => {
-      const ext = f.split(".").pop()?.toLowerCase() ?? "";
-      return ["html", "htm", "md", "markdown"].includes(ext);
-    });
-  }, [artifacts]);
+  const currentTurnRefs = useMemo(() => {
+    const seen = new Set<string>();
+    const refs: string[] = [];
+    for (const entry of currentTurnEntries) {
+      const ref = normalizeWorkspaceArtifactRef(entry.path, threadId);
+      if (seen.has(ref)) continue;
+      seen.add(ref);
+      refs.push(ref);
+    }
+    return refs;
+  }, [currentTurnEntries, threadId]);
 
-  if (previewable.length === 0) {
+  const currentTurnSet = useMemo(() => new Set(currentTurnRefs), [currentTurnRefs]);
+
+  // Single flat list: current-turn first (in their natural order), then history.
+  const allFiles = useMemo(() => {
+    const cur: string[] = [];
+    const hist: string[] = [];
+    for (const f of artifacts ?? []) {
+      if (currentTurnSet.has(f)) cur.push(f);
+      else hist.push(f);
+    }
+    return [...cur, ...hist];
+  }, [artifacts, currentTurnSet]);
+
+  // Preview state: which file is being viewed full-screen. `null` = list view.
+  const [previewing, setPreviewing] = useState<string | null>(null);
+
+  // When an external selection arrives (e.g. clicking a filename in chat),
+  // jump straight to the preview view for that file.
+  useEffect(() => {
+    if (externalSelected && allFiles.includes(externalSelected)) {
+      setPreviewing(externalSelected);
+      // Also sync the shared context so the drawer stays in sync.
+      select(externalSelected);
+    }
+  }, [externalSelected, allFiles, select]);
+
+  const handleSelect = useCallback(
+    (path: string) => {
+      setPreviewing(path);
+      select(path);
+    },
+    [select],
+  );
+
+  const handleBack = useCallback(() => {
+    setPreviewing(null);
+  }, []);
+
+  if (allFiles.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-4 text-sm text-muted-foreground">
         {t.conversation.noPreviewArtifacts}
@@ -573,9 +649,174 @@ function ArtifactInlinePreviewEmbedded() {
     );
   }
 
+  // ── Preview view ──
+  if (previewing) {
+    return (
+      <PreviewPane
+        filepath={previewing}
+        threadId={threadId}
+        streamdownPlugins={streamdownPlugins}
+        onBack={handleBack}
+      />
+    );
+  }
+
+  // ── List view ──
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <ArtifactInlinePreview files={previewable} threadId="" />
+      <div className="flex-1 overflow-y-auto">
+        {allFiles.map((f) => (
+          <FileListRow
+            key={f}
+            filepath={f}
+            isCurrentTurn={currentTurnSet.has(f)}
+            onSelect={handleSelect}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── List row ─────────────────────── */
+
+function FileListRow({
+  filepath,
+  isCurrentTurn = false,
+  onSelect,
+}: {
+  filepath: string;
+  isCurrentTurn?: boolean;
+  onSelect: (path: string) => void;
+}) {
+  const displayPath = artifactDisplayPath(filepath);
+  const name = getFileName(displayPath);
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(filepath)}
+      className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/50"
+    >
+      <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
+        {getFileIcon(displayPath, "size-3.5")}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+        {name}
+      </span>
+      {isCurrentTurn && (
+        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+          <SparklesIcon className="size-2.5" />
+          本轮
+        </span>
+      )}
+    </button>
+  );
+}
+
+/* ─────────────────────── Preview pane (full-screen) ─────────────────────── */
+
+function PreviewPane({
+  filepath,
+  threadId,
+  streamdownPlugins,
+  onBack,
+}: {
+  filepath: string;
+  threadId: string;
+  streamdownPlugins: Pick<
+    import("streamdown").StreamdownProps,
+    "remarkPlugins" | "rehypePlugins"
+  >;
+  onBack: () => void;
+}) {
+  const { t } = useI18n();
+  const displayPath = artifactDisplayPath(filepath);
+  const isWriteFile = filepath.startsWith("write-file:");
+  const { content, url, isLoading } = useArtifactContent({
+    filepath,
+    threadId,
+    enabled: !isWriteFile,
+  });
+  const effectiveContent = isWriteFile ? "" : content ?? "";
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  const lang = checkCodeFile(displayPath).language;
+  const isHtml = lang === "html";
+  const isMarkdown = lang === "markdown";
+
+  return (
+    <div className="flex min-h-0 size-full flex-col">
+      {/* Header with back button */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle bg-muted/30 px-2 py-1.5">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={t.common.back}
+        >
+          <ArrowLeftIcon className="size-3.5" />
+        </button>
+        <span className="flex size-5 shrink-0 items-center justify-center">
+          {getFileIcon(displayPath, "size-3")}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">
+          {getFileName(displayPath)}
+        </span>
+        {lang && (
+          <span className="shrink-0 text-[10px] text-muted-foreground uppercase">
+            {lang}
+          </span>
+        )}
+        <a
+          href={urlOfArtifact({ filepath, threadId, download: true })}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={t.common.download}
+        >
+          <DownloadIcon className="size-3" />
+        </a>
+      </div>
+
+      {/* Content */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 text-xs text-muted-foreground">
+            {t.common.loading}…
+          </div>
+        )}
+        {isMarkdown ? (
+          <div className="size-full overflow-auto px-4 py-3">
+            <Suspense
+              fallback={
+                <div className="size-full whitespace-pre-wrap break-words py-2 text-sm text-muted-foreground">
+                  {effectiveContent}
+                </div>
+              }
+            >
+              <LazyStreamdown
+                className="size-full"
+                {...streamdownPlugins}
+                components={{ a: ArtifactLink }}
+              >
+                {effectiveContent}
+              </LazyStreamdown>
+            </Suspense>
+          </div>
+        ) : isHtml ? (
+          <iframe
+            ref={iframeRef}
+            className="size-full border-0"
+            sandbox="allow-scripts allow-forms"
+            title={`${getFileName(displayPath)} preview`}
+            {...(url ? { src: url } : { srcDoc: effectiveContent })}
+          />
+        ) : (
+          <div className="flex size-full items-center justify-center p-4 text-xs text-muted-foreground">
+            此文件类型暂不支持预览
+          </div>
+        )}
+      </div>
     </div>
   );
 }

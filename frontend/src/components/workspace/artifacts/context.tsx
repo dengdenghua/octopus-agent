@@ -10,6 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 
+import { listWorkspaceArtifactRefs } from "@/core/artifacts/workspace-outputs";
 import { useSidebar } from "@/components/ui/sidebar";
 import { env } from "@/env";
 
@@ -59,6 +60,35 @@ export function ArtifactsProvider({
       setAutoOpen(true);
     }
   }, [threadId]);
+
+  // Hydrate the artifact list from the backend on mount / thread change.
+  // Historically this was only triggered from chat-box after the assistant
+  // message settled; switching to the workbench "产物" tab before that
+  // point (or clicking an artifact summary row while the list was empty)
+  // showed `暂无预览内容` even though files were already persisted on disk.
+  //
+  // The fetch only runs when we have a threadId and the list is still empty.
+  // If chat-box or openWorkbenchArtifact already populated artifacts we skip.
+  useEffect(() => {
+    if (!threadId) return;
+    if (env.STATIC_WEBSITE_ONLY) return;
+    if (artifacts.length > 0) return;
+    const controller = new AbortController();
+    listWorkspaceArtifactRefs(threadId, controller.signal)
+      .then((refs) => {
+        if (controller.signal.aborted) return;
+        if (refs.length === 0) return;
+        setArtifacts((prev) =>
+          prev.length === 0 ? refs : Array.from(new Set([...prev, ...refs])),
+        );
+      })
+      .catch(() => {
+        // Network/backend errors here are non-fatal: the same list is also
+        // refreshed from chat-box when the turn settles, so we silently drop
+        // failures instead of surfacing them in the UI.
+      });
+    return () => controller.abort();
+  }, [threadId, artifacts.length]);
 
   const select = useCallback(
     (artifact: string, autoSelect = false) => {

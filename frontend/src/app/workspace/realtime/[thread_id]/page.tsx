@@ -3610,7 +3610,7 @@ function RealtimePageContent({
                           runSettled={agentRunSettled}
                           runFailed={agentRunFailed}
                           paused={hasPausedOrPendingBackgroundTask}
-                          onOpenDetails={() => selectAgentWorkbenchTab("agent")}
+                          className="mt-2"
                         />
                       ) : null}
                       <RealtimeApprovalPrompt

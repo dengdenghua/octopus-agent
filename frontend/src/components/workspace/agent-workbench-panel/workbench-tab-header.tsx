@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MainComputerStatusButton } from "./main-computer-status-button";
 import type { AgentRunState } from "../agent-run-status";
+import { Tooltip } from "../tooltip";
 
 export type WorkbenchTab = {
   id: AgentWorkbenchTabId;
@@ -120,37 +121,39 @@ function WorkbenchTabHeaderImpl({
                   <Icon className="size-4 shrink-0" />
                   <span className="truncate">{label}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTabClose(id);
-                  }}
-                  className={cn(
-                    "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
-                    active
-                      ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground focus-visible:bg-muted"
-                      : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground focus-visible:text-muted-foreground/70 focus-visible:bg-muted",
-                  )}
-                  aria-label={t.editorTabs.closeTabAria(label)}
-                  title={t.editorTabs.closeTabAria(label)}
-                >
-                  <XIcon className="size-3" />
-                </button>
+                <Tooltip content={t.editorTabs.closeTabAria(label)}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTabClose(id);
+                    }}
+                    className={cn(
+                      "mr-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                      active
+                        ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground focus-visible:bg-muted"
+                        : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground focus-visible:text-muted-foreground/70 focus-visible:bg-muted",
+                    )}
+                    aria-label={t.editorTabs.closeTabAria(label)}
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </Tooltip>
               </div>
             );
           })}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
-              title={t.agentWorkbenchPanel.tabList}
-              aria-label={t.agentWorkbenchPanel.tabList}
-            >
-              <LayoutGridIcon className="size-3.5" />
-            </button>
+            <Tooltip content={t.agentWorkbenchPanel.tabList}>
+              <button
+                type="button"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+                aria-label={t.agentWorkbenchPanel.tabList}
+              >
+                <LayoutGridIcon className="size-3.5" />
+              </button>
+            </Tooltip>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
             {workbenchTabs.map(({ id, label, Icon }) => {
@@ -172,30 +175,32 @@ function WorkbenchTabHeaderImpl({
           </DropdownMenuContent>
         </DropdownMenu>
         {locatableTranscriptEventId ? (
-          <button
-            type="button"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
-            title={t.agentWorkbenchPanel.locateTranscriptEvent}
-            aria-label={t.agentWorkbenchPanel.locateTranscriptEvent}
-            onClick={() =>
-              emitLocateAgentWorkbenchEvent({
-                eventId: locatableTranscriptEventId,
-              })
-            }
-          >
-            <LocateFixedIcon className="size-3.5" />
-          </button>
+          <Tooltip content={t.agentWorkbenchPanel.locateTranscriptEvent}>
+            <button
+              type="button"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+              aria-label={t.agentWorkbenchPanel.locateTranscriptEvent}
+              onClick={() =>
+                emitLocateAgentWorkbenchEvent({
+                  eventId: locatableTranscriptEventId,
+                })
+              }
+            >
+              <LocateFixedIcon className="size-3.5" />
+            </button>
+          </Tooltip>
         ) : null}
         {onClose ? (
-          <button
-            type="button"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
-            title={t.agentWorkbenchPanel.collapseWorkbench}
-            aria-label={t.agentWorkbenchPanel.collapseWorkbench}
-            onClick={onClose}
-          >
-            <PanelRightCloseIcon className="size-3.5" />
-          </button>
+          <Tooltip content={t.agentWorkbenchPanel.collapseWorkbench}>
+            <button
+              type="button"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
+              aria-label={t.agentWorkbenchPanel.collapseWorkbench}
+              onClick={onClose}
+            >
+              <PanelRightCloseIcon className="size-3.5" />
+            </button>
+          </Tooltip>
         ) : null}
       </div>
     </header>

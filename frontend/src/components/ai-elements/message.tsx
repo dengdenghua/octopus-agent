@@ -29,7 +29,10 @@ import {
 
 import type { StreamdownProps } from "./streamdown-host";
 
-const LazyStreamdown = lazy(() => import("./streamdown-host"));
+const LazyStreamdown = lazy(async () => {
+  const mod = await import("./streamdown-host");
+  return { default: mod.LocalizedStreamdown };
+});
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];

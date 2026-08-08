@@ -1,12 +1,19 @@
 import {
   AlertCircleIcon,
   CheckCircle2Icon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   CircleIcon,
   Loader2Icon,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import { deriveAgentPhases, progressForPhases } from "./agent-phases";
+import {
+  agentPhaseDisplayTitle,
+  deriveAgentPhases,
+  progressForPhases,
+  type AgentPhase,
+} from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -19,6 +26,29 @@ function hasExplicitTaskPlan(events: LiveToolEvent[]): boolean {
   });
 }
 
+function PhaseStatusIcon({
+  phase,
+  className,
+}: {
+  phase: AgentPhase;
+  className?: string;
+}) {
+  if (phase.status === "running")
+    return (
+      <Loader2Icon
+        aria-hidden="true"
+        className={cn("size-4 shrink-0 animate-spin text-info dark:text-info", className)}
+      />
+    );
+  if (phase.status === "waiting_approval")
+    return <CircleIcon aria-hidden="true" className={cn("size-4 shrink-0 text-warning", className)} />;
+  if (phase.status === "error")
+    return <AlertCircleIcon aria-hidden="true" className={cn("size-4 shrink-0 text-destructive", className)} />;
+  if (phase.status === "done")
+    return <CheckCircle2Icon aria-hidden="true" className={cn("size-4 shrink-0 text-success", className)} />;
+  return <CircleIcon aria-hidden="true" className={cn("size-4 shrink-0 text-info dark:text-info", className)} />;
+}
+
 export function ComposerStepProgress({
   events,
   hasAnswer,
@@ -26,7 +56,6 @@ export function ComposerStepProgress({
   runSettled,
   runFailed,
   paused,
-  onOpenDetails,
   className,
 }: {
   events: LiveToolEvent[];
@@ -35,10 +64,10 @@ export function ComposerStepProgress({
   runSettled?: boolean;
   runFailed?: boolean;
   paused?: boolean;
-  onOpenDetails: () => void;
   className?: string;
 }) {
   const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
   const hasPlan = useMemo(() => hasExplicitTaskPlan(events), [events]);
   const { phases, currentPhase } = useMemo(
     () =>
@@ -50,6 +79,8 @@ export function ComposerStepProgress({
       }),
     [events, hasAnswer, paused, runFailed, runSettled],
   );
+
+  const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
 
   // This indicator describes a real model-authored task plan only. Generic
   // tool activity stays in the transcript rather than being presented as an
@@ -66,44 +97,49 @@ export function ComposerStepProgress({
 
   const progress = progressForPhases(phases, currentPhase);
   const label = t.agentWorkbench.stepProgress(progress.current, progress.total);
+  const phaseLabels = t.agentPhases;
 
   return (
-    <div className={cn("flex w-full justify-center pb-1", className)}>
+    <div className={cn("flex w-full flex-col items-center", className)}>
       <button
         type="button"
-        onClick={onOpenDetails}
+        onClick={toggleExpanded}
         aria-label={`${label} · ${currentPhase.title}`}
+        aria-expanded={expanded}
         title={currentPhase.title}
-        className="group inline-flex h-10 max-w-full items-center gap-2 rounded-full border border-border-default bg-background/95 px-4 text-sm font-semibold text-muted-foreground shadow-[0_8px_24px_-16px_rgba(15,23,42,0.45)] backdrop-blur-xl transition-[border-color,background-color,color,transform] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:translate-y-0"
+        className="group inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border border-border-default bg-background/95 pl-3.5 pr-2.5 text-xs font-semibold text-muted-foreground shadow-[0_8px_24px_-16px_rgba(15,23,42,0.45)] backdrop-blur-xl transition-[border-color,background-color,color,transform] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:translate-y-0"
       >
-        {currentPhase.status === "running" ? (
-          <Loader2Icon
-            aria-hidden="true"
-            className="size-4 shrink-0 animate-spin text-info dark:text-info"
-          />
-        ) : currentPhase.status === "waiting_approval" ? (
-          <CircleIcon
-            aria-hidden="true"
-            className="size-4 shrink-0 text-warning"
-          />
-        ) : currentPhase.status === "error" ? (
-          <AlertCircleIcon
-            aria-hidden="true"
-            className="size-4 shrink-0 text-destructive"
-          />
-        ) : currentPhase.status === "done" ? (
-          <CheckCircle2Icon
-            aria-hidden="true"
-            className="size-4 shrink-0 text-success"
-          />
-        ) : (
-          <CircleIcon
-            aria-hidden="true"
-            className="size-4 shrink-0 text-info dark:text-info"
-          />
-        )}
+        <PhaseStatusIcon phase={currentPhase} className="size-3.5" />
         <span className="truncate tabular-nums">{label}</span>
+        {expanded ? (
+          <ChevronUpIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground/60" />
+        ) : (
+          <ChevronDownIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground/60" />
+        )}
       </button>
+
+      {expanded ? (
+        <ul className="mt-2.5 w-full max-w-sm space-y-0.5 rounded-lg border border-border-subtle bg-background/60 p-2.5 text-left">
+          {phases.map((phase) => (
+            <li
+              key={phase.id}
+              className="flex items-start gap-1.5 px-1 py-0.5 text-xs leading-5"
+            >
+              <PhaseStatusIcon phase={phase} className="mt-0.5 size-3.5" />
+              <span
+                className={cn(
+                  "line-clamp-2 min-w-0 flex-1",
+                  phase.status === "pending"
+                    ? "text-muted-foreground"
+                    : "text-foreground",
+                )}
+              >
+                {agentPhaseDisplayTitle(phase, phaseLabels)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

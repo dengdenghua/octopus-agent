@@ -9,6 +9,9 @@ export async function pickLocalDirectory(
 ): Promise<string | null> {
   if (window.octopus?.dialog?.open) {
     const result = await window.octopus.dialog.open({
+      title: "选择工作区文件夹",
+      buttonLabel: "选取",
+      message: "请选择一个文件夹作为工作区",
       properties: ["openDirectory", "createDirectory"],
       defaultPath,
     });

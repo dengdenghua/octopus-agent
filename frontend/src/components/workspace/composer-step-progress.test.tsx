@@ -1,5 +1,5 @@
 import { fireEvent, screen } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 
 import { ComposerStepProgress } from "./composer-step-progress";
 import type { LiveToolEvent } from "./live-tool-timeline";
@@ -17,8 +17,7 @@ function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
 }
 
 describe("<ComposerStepProgress />", () => {
-  test("shows progress from an explicit task plan and opens its details", () => {
-    const onOpenDetails = vi.fn();
+  test("shows progress from an explicit task plan and expands its details in place", () => {
     renderWithProviders(
       <ComposerStepProgress
         isLoading
@@ -33,16 +32,19 @@ describe("<ComposerStepProgress />", () => {
             },
           }),
         ]}
-        onOpenDetails={onOpenDetails}
       />,
     );
 
     const button = screen.getByRole("button", { name: /Step 2 \/ 3/ });
     expect(button).toHaveTextContent("Step 2 / 3");
     expect(button).toHaveAttribute("title", "Implement the change");
+    expect(button).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(button);
-    expect(onOpenDetails).toHaveBeenCalledTimes(1);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Inspect the project")).toBeInTheDocument();
+    expect(screen.getByText("Implement the change")).toBeInTheDocument();
+    expect(screen.getByText("Verify the result")).toBeInTheDocument();
   });
 
   test("does not turn generic tool activity into numbered steps", () => {
@@ -60,7 +62,6 @@ describe("<ComposerStepProgress />", () => {
             input: { command: "npm test" },
           }),
         ]}
-        onOpenDetails={() => undefined}
       />,
     );
 
@@ -83,7 +84,6 @@ describe("<ComposerStepProgress />", () => {
             },
           }),
         ]}
-        onOpenDetails={() => undefined}
       />,
     );
 
