@@ -233,3 +233,6 @@ runtime/execution/all_skills/.preinstalled
 # Local assistant/IDE state generated during development.
 .workbuddy/
 .trae/skills/
+
+# Godot editor cache for the desktop-pet sidecar (never commit; regenerated).
+pet-sidecar/.godot/
