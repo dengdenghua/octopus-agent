@@ -41,9 +41,10 @@ function uvCmd() {
 // `desktop-core` extra in pyproject.toml.
 const CORE_DEPS = [
   "fastapi>=0.115,<1.0",
+  "starlette>=1.3.1",
   "uvicorn[standard]>=0.32",
   "pyyaml>=6.0",
-  "python-multipart>=0.0.9",
+  "python-multipart>=0.0.31",
   "httpx>=0.27",
   "python-dotenv>=1.0",
   "pydantic>=2.12.0",
@@ -57,7 +58,7 @@ const CORE_DEPS = [
 // Heavy optional capability → pyproject extra. Installed lazily on first use.
 const OPTIONAL_GROUPS = {
   browser: ["playwright>=1.48"],
-  desktop: ["pyautogui>=0.9.54", "pillow>=10.0"],
+  desktop: ["pyautogui>=0.9.54", "pillow>=12.3.0"],
   "code-intel": [
     "tree-sitter>=0.23",
     "tree-sitter-python>=0.23",

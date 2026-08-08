@@ -23,7 +23,7 @@ import type { LiveToolEvent } from "./live-tool-timeline";
 
 interface TodoItem {
   content: string;
-  status: "pending" | "in_progress" | "completed" | "interrupted";
+  status: "pending" | "in_progress" | "completed" | "blocked" | "interrupted";
   activeForm: string;
 }
 
@@ -79,12 +79,13 @@ function extractLatestTodos(events: LiveToolEvent[]): TodoItem[] {
         ? "completed"
         : record.status === "in_progress" || record.status === "running"
           ? "in_progress"
-          : record.status === "interrupted" ||
-              record.status === "failed" ||
-              record.status === "error" ||
-              record.status === "blocked"
-            ? "interrupted"
-            : "pending";
+          : record.status === "blocked"
+            ? "blocked"
+            : record.status === "interrupted" ||
+                record.status === "failed" ||
+                record.status === "error"
+              ? "interrupted"
+              : "pending";
     const activeForm =
       typeof record.activeForm === "string" && record.activeForm.trim()
         ? record.activeForm.trim()
@@ -105,11 +106,11 @@ function isLiveTodoStream(events: LiveToolEvent[]): boolean {
 
 function TodoRow({ item, live }: { item: TodoItem; live: boolean }) {
   const displayStatus =
-    item.status !== "completed" && !live ? "interrupted" : item.status;
+    item.status === "in_progress" && !live ? "pending" : item.status;
   const icon =
     displayStatus === "completed" ? (
       <CheckCircle2Icon className="size-4 shrink-0 text-success" />
-    ) : displayStatus === "interrupted" ? (
+    ) : displayStatus === "interrupted" || displayStatus === "blocked" ? (
       <XCircleIcon className="size-4 shrink-0 text-destructive" />
     ) : displayStatus === "in_progress" ? (
       <Loader2Icon className="size-4 shrink-0 animate-spin text-info" />
@@ -126,7 +127,8 @@ function TodoRow({ item, live }: { item: TodoItem; live: boolean }) {
           "text-sm leading-5",
           displayStatus === "completed" && "text-muted-foreground line-through",
           displayStatus === "in_progress" && "font-medium",
-          displayStatus === "interrupted" && "font-medium text-destructive",
+          (displayStatus === "interrupted" || displayStatus === "blocked") &&
+            "font-medium text-destructive",
         )}
       >
         {label}

@@ -5,80 +5,76 @@ type OctopusBrandMarkProps = {
   size?: "md" | "lg";
 };
 
-const sizeClass = {
+const sizeConfig = {
   md: {
-    outer: "size-9 rounded-[11px]",
-    ring: "size-4",
-    core: "size-1.5",
-    node: "size-1",
-    inset: "inset-1.5 rounded-[7px]",
+    box: "size-9 rounded-xl",
+    svg: "size-5",
   },
   lg: {
-    outer: "size-11 rounded-[13px]",
-    ring: "size-5",
-    core: "size-2",
-    node: "size-1.5",
-    inset: "inset-2 rounded-[8px]",
+    box: "size-11 rounded-xl",
+    svg: "size-6",
   },
 } as const;
+
+function OctopusGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      fill="none"
+      className={className}
+      aria-hidden="true"
+    >
+      {/* Head */}
+      <circle cx="16" cy="11" r="6.5" fill="currentColor" />
+      {/* Eyes */}
+      <circle cx="13.8" cy="10.2" r="1.3" fill="white" fillOpacity="0.95" />
+      <circle cx="18.2" cy="10.2" r="1.3" fill="white" fillOpacity="0.95" />
+      <circle cx="14" cy="10.5" r="0.6" fill="#1a1a1e" />
+      <circle cx="18.4" cy="10.5" r="0.6" fill="#1a1a1e" />
+      <circle cx="14.2" cy="10" r="0.25" fill="white" />
+      <circle cx="18.6" cy="10" r="0.25" fill="white" />
+      {/* Tentacles: 5 elegant curves */}
+      <g
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        fill="none"
+        strokeOpacity="0.9"
+      >
+        <path d="M10.5 15.5 C8 19, 7 23, 8 26.5" />
+        <path d="M13 16.5 C11.5 20, 11 24, 12 27" />
+        <path d="M16 17 C15.5 21, 15.5 25, 16 27.5" />
+        <path d="M19 16.5 C20.5 20, 21 24, 20 27" />
+        <path d="M21.5 15.5 C24 19, 25 23, 24 26.5" />
+      </g>
+      {/* Tentacle tips */}
+      <g fill="currentColor" fillOpacity="0.9">
+        <circle cx="8" cy="26.5" r="1.4" />
+        <circle cx="12" cy="27" r="1.3" />
+        <circle cx="16" cy="27.5" r="1.2" />
+        <circle cx="20" cy="27" r="1.3" />
+        <circle cx="24" cy="26.5" r="1.4" />
+      </g>
+    </svg>
+  );
+}
 
 export function OctopusBrandMark({
   className,
   size = "md",
 }: OctopusBrandMarkProps) {
-  const token = sizeClass[size];
+  const cfg = sizeConfig[size];
 
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "relative inline-grid shrink-0 place-items-center overflow-hidden border border-foreground/15 bg-background/95 text-foreground shadow-[var(--shadow-xs)]",
-        token.outer,
+        "relative inline-grid shrink-0 place-items-center overflow-hidden border border-foreground/10 bg-foreground/[0.04] text-primary shadow-[var(--shadow-xs)]",
+        cfg.box,
         className,
       )}
     >
-      <span
-        className={cn(
-          "absolute border border-foreground/10",
-          token.inset,
-        )}
-      />
-      <span
-        className={cn(
-          "relative grid place-items-center rounded-full border border-foreground/45",
-          token.ring,
-        )}
-      >
-        <span className={cn("rounded-full bg-primary", token.core)} />
-      </span>
-      <span
-        className={cn(
-          "absolute rounded-full bg-foreground/55",
-          token.node,
-          size === "lg" ? "left-2 top-2" : "left-1.5 top-1.5",
-        )}
-      />
-      <span
-        className={cn(
-          "absolute rounded-full bg-primary",
-          token.node,
-          size === "lg" ? "right-2 top-2" : "right-1.5 top-1.5",
-        )}
-      />
-      <span
-        className={cn(
-          "absolute rounded-full bg-foreground/35",
-          token.node,
-          size === "lg" ? "bottom-2 left-2" : "bottom-1.5 left-1.5",
-        )}
-      />
-      <span
-        className={cn(
-          "absolute rounded-full bg-foreground/55",
-          token.node,
-          size === "lg" ? "bottom-2 right-2" : "bottom-1.5 right-1.5",
-        )}
-      />
+      <OctopusGlyph className={cfg.svg} />
     </span>
   );
 }

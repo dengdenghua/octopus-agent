@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { BotIcon, ChevronRightIcon, MonitorIcon } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
@@ -34,7 +36,7 @@ type AgentKanbanUserInput = {
   attachments: Array<{ filename: string }>;
 } | null;
 
-export function AgentKanbanView({
+function AgentKanbanViewImpl({
   effectiveActivityView,
   hasIndependentTrace,
   hasComputerActivity,
@@ -376,3 +378,5 @@ export function AgentKanbanView({
     </div>
   );
 }
+
+export const AgentKanbanView = memo(AgentKanbanViewImpl);

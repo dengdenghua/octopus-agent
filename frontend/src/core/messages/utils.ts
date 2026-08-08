@@ -77,6 +77,44 @@ function isDuplicatedProcessPrelude(
   return false;
 }
 
+/**
+ * Check whether an AI message is an intermediate process prelude rather than
+ * the final answer. This covers cases where the model emits a plan/commentary
+ * message (e.g. "接下来我会先圈定3个...") BEFORE any tool calls, and that text
+ * isn't duplicated in a later structured process item (so isDuplicatedProcessPrelude
+ * misses it). If subsequent AI messages in the same turn carry tool calls or
+ * public_progress markers, this message belongs on the process timeline, not as
+ * a standalone answer bubble above the thinking.
+ */
+export function isProcessPrelude(
+  message: Message,
+  index: number,
+  messages: Message[],
+): boolean {
+  if (message.type !== "ai") return false;
+  if (hasToolCalls(message)) return false;
+  if (message.additional_kwargs?.public_progress === true) return false;
+  // Only messages with visible content can be preludes; reasoning-only
+  // messages are already routed by the hasReasoning && !hasContent branch.
+  if (!hasContent(message)) return false;
+
+  for (let nextIndex = index + 1; nextIndex < messages.length; nextIndex += 1) {
+    const next = messages[nextIndex]!;
+    if (next.type === "human") break;
+    if (next.type !== "ai") continue;
+    // A later AI message in the same turn that carries tool calls or
+    // public progress signals means processing continues after this message →
+    // this message is commentary/plan, not the final answer.
+    if (
+      next.additional_kwargs?.public_progress === true ||
+      hasToolCalls(next)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function groupMessages<T>(
   messages: Message[],
   mapper: (group: MessageGroup) => T,
@@ -248,7 +286,8 @@ export function groupMessages<T>(
         groups.push({ id: message.id, type: "assistant", messages: [message] });
       } else if (
         hasContent(message) &&
-        isDuplicatedProcessPrelude(message, index, messages)
+        (isDuplicatedProcessPrelude(message, index, messages) ||
+          isProcessPrelude(message, index, messages))
       ) {
         appendToCurrentProcessingGroup(message);
       } else if (hasReasoning(message) && !hasContent(message)) {
@@ -508,6 +547,8 @@ export function isSettledAssistantAnswer(
     metadata?.message_kind === "commentary" ||
     metadata?.public_progress === true ||
     metadata?.response_state === "interrupted" ||
+    metadata?.response_state === "paused" ||
+    metadata?.response_state === "cancelled" ||
     metadata?.response_state === "failed" ||
     metadata?.run_status === "streaming"
   ) {
@@ -517,7 +558,11 @@ export function isSettledAssistantAnswer(
   return extractContentFromMessage(message).trim().length >= minTextLength;
 }
 
-export type AssistantTerminalState = "interrupted" | "failed";
+export type AssistantTerminalState =
+  | "paused"
+  | "cancelled"
+  | "interrupted"
+  | "failed";
 
 export function latestAssistantTerminalState(
   messages: Message[],
@@ -526,7 +571,14 @@ export function latestAssistantTerminalState(
     const message = messages[index];
     if (message?.type !== "ai") continue;
     const state = message.additional_kwargs?.response_state;
-    if (state === "interrupted" || state === "failed") return state;
+    if (
+      state === "paused" ||
+      state === "cancelled" ||
+      state === "interrupted" ||
+      state === "failed"
+    ) {
+      return state;
+    }
   }
   return null;
 }

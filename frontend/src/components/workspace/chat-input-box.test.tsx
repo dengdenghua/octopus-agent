@@ -45,9 +45,9 @@ vi.mock("./preview-refresh-indicator", () => ({
   PreviewRefreshIndicator: () => null,
 }));
 
-// The 3D pet spins up a three.js WebGL context that jsdom cannot provide.
-vi.mock("@/components/desktop-pet/FbxPet", () => ({
-  FbxPet: () => null,
+// The 3D pet was removed during the Live2D migration; reserved for re-mount.
+vi.mock("@/components/desktop-pet", () => ({
+  DesktopPetMascot: () => null,
 }));
 
 function textarea(): HTMLTextAreaElement {

@@ -3,10 +3,7 @@ import { Suspense, useCallback, lazy, useMemo, useRef } from "react";
 import type { StreamdownProps } from "streamdown";
 
 import { Button } from "@/components/ui/button";
-import {
-  artifactDisplayPath,
-  urlOfArtifact,
-} from "@/core/artifacts/utils";
+import { artifactDisplayPath, urlOfArtifact } from "@/core/artifacts/utils";
 import { useArtifactContent } from "@/core/artifacts/hooks";
 import { useI18n } from "@/core/i18n/hooks";
 import { useStreamdownPlugins } from "@/core/streamdown";
@@ -61,66 +58,66 @@ export function ArtifactFileList({
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         {files.map((file, index) => (
-        <button
-          key={file}
-          type="button"
-          className={cn(
-            "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50",
-            index > 0 && "border-t border-border-subtle",
-          )}
-          onClick={() => handleClick(file)}
-        >
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/60">
-            {getFileIcon(artifactDisplayPath(file), "size-4")}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium text-foreground">
-              {getFileName(artifactDisplayPath(file))}
+          <button
+            key={file}
+            type="button"
+            className={cn(
+              "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50",
+              index > 0 && "border-t border-border-subtle",
+            )}
+            onClick={() => handleClick(file)}
+          >
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/60">
+              {getFileIcon(artifactDisplayPath(file), "size-4")}
             </div>
-            <div className="truncate text-xs text-muted-foreground">
-              {getFileExtensionDisplayName(artifactDisplayPath(file))}
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-foreground">
+                {getFileName(artifactDisplayPath(file))}
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                {getFileExtensionDisplayName(artifactDisplayPath(file))}
+              </div>
             </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {file.endsWith(".skill") && (
+            <div className="flex shrink-0 items-center gap-1">
+              {file.endsWith(".skill") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={installingFile === file}
+                  onClick={(e) => handleInstallSkill(e, file)}
+                >
+                  {installingFile === file ? (
+                    <LoaderIcon className="size-3.5 animate-spin" />
+                  ) : (
+                    <PackageIcon className="size-3.5" />
+                  )}
+                  {t.common.install}
+                </Button>
+              )}
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                disabled={installingFile === file}
-                onClick={(e) => handleInstallSkill(e, file)}
+                size="icon-sm"
+                className="size-7"
+                asChild
+                aria-label={t.common.download}
               >
-                {installingFile === file ? (
-                  <LoaderIcon className="size-3.5 animate-spin" />
-                ) : (
-                  <PackageIcon className="size-3.5" />
-                )}
-                {t.common.install}
+                <a
+                  href={urlOfArtifact({
+                    filepath: file,
+                    threadId: threadId,
+                    download: true,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <DownloadIcon className="size-3.5" />
+                </a>
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="size-7"
-              asChild
-              aria-label={t.common.download}
-            >
-              <a
-                href={urlOfArtifact({
-                  filepath: file,
-                  threadId: threadId,
-                  download: true,
-                })}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <DownloadIcon className="size-3.5" />
-              </a>
-            </Button>
-          </div>
-        </button>
-      ))}
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -160,11 +157,7 @@ function InlineHtmlPreview({
   );
 }
 
-function InlineMarkdownPreview({
-  content,
-}: {
-  content: string;
-}) {
+function InlineMarkdownPreview({ content }: { content: string }) {
   const streamdownPlugins = useStreamdownPlugins();
   return (
     <div className="size-full overflow-auto px-3 py-2">
@@ -183,6 +176,74 @@ function InlineMarkdownPreview({
           {content ?? ""}
         </LazyStreamdown>
       </Suspense>
+    </div>
+  );
+}
+
+function ArtifactInlinePreviewItem({
+  filepath,
+  threadId,
+}: {
+  filepath: string;
+  threadId: string;
+}) {
+  const { t } = useI18n();
+  const displayPath = artifactDisplayPath(filepath);
+  const { language } = checkCodeFile(displayPath);
+  const isWriteFile = filepath.startsWith("write-file:");
+  const { content, url, isLoading } = useArtifactContent({
+    filepath,
+    threadId,
+    enabled: !isWriteFile,
+  });
+  // write-file content comes from the tool-call payload, not the artifact API.
+  const effectiveContent = isWriteFile ? "" : (content ?? "");
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-background">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
+        <div className="flex size-6 shrink-0 items-center justify-center rounded bg-muted/60">
+          {getFileIcon(displayPath, "size-3")}
+        </div>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">
+          {getFileName(displayPath)}
+        </span>
+        <span className="shrink-0 text-[10px] text-muted-foreground uppercase">
+          {language}
+        </span>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="size-6"
+          asChild
+          aria-label={t.common.download}
+        >
+          <a
+            href={urlOfArtifact({ filepath, threadId, download: true })}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <DownloadIcon className="size-3" />
+          </a>
+        </Button>
+      </div>
+
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 text-xs text-muted-foreground">
+            {t.common.loading}…
+          </div>
+        )}
+        {language === "markdown" ? (
+          <InlineMarkdownPreview content={effectiveContent} />
+        ) : language === "html" ? (
+          <InlineHtmlPreview
+            content={effectiveContent}
+            filepath={displayPath}
+            url={url}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -222,76 +283,19 @@ export function ArtifactInlinePreview({
   }
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-2", className)}>
-      {previewable.map((filepath) => {
-        const displayPath = artifactDisplayPath(filepath);
-        const { language } = checkCodeFile(displayPath);
-        const isWriteFile = filepath.startsWith("write-file:");
-        const { content, url, isLoading } = useArtifactContent({
-          filepath,
-          threadId,
-          enabled: !isWriteFile,
-        });
-        // write-file content comes from tool-call payload, not the hook
-        const effectiveContent = isWriteFile ? "" : (content ?? "");
-
-        return (
-          <div
-            key={filepath}
-            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-background"
-          >
-            {/* File header bar */}
-            <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
-              <div className="flex size-6 shrink-0 items-center justify-center rounded bg-muted/60">
-                {getFileIcon(displayPath, "size-3")}
-              </div>
-              <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                {getFileName(displayPath)}
-              </span>
-              <span className="shrink-0 text-[10px] text-muted-foreground uppercase">
-                {language}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="size-6"
-                asChild
-                aria-label={t.common.download}
-              >
-                <a
-                  href={urlOfArtifact({
-                    filepath,
-                    threadId,
-                    download: true,
-                  })}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <DownloadIcon className="size-3" />
-                </a>
-              </Button>
-            </div>
-
-            {/* Preview body */}
-            <div className="relative min-h-0 flex-1 overflow-hidden">
-              {isLoading && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 text-xs text-muted-foreground">
-                  {t.common.loading}…
-                </div>
-              )}
-              {language === "markdown" ? (
-                <InlineMarkdownPreview content={effectiveContent} />
-              ) : language === "html" ? (
-                <InlineHtmlPreview
-                  content={effectiveContent}
-                  filepath={displayPath}
-                  url={url}
-                />
-              ) : null}
-            </div>
-          </div>
-        );
-      })}
+    <div
+      className={cn(
+        "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-2",
+        className,
+      )}
+    >
+      {previewable.map((filepath) => (
+        <ArtifactInlinePreviewItem
+          key={filepath}
+          filepath={filepath}
+          threadId={threadId}
+        />
+      ))}
     </div>
   );
 }

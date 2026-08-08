@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { ListChecksIcon } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
@@ -14,7 +16,7 @@ import { blockIcon, compactDetail } from "../agent-workbench-utils";
 import { StatusGlyph } from "../agent-workbench-pages";
 import { workBlockLabelsFromI18n } from "./helpers";
 
-export function ActivityTraceView({
+function ActivityTraceViewImpl({
   blocks,
   currentBlockId,
   emptyText,
@@ -134,3 +136,5 @@ export function ActivityTraceView({
     </div>
   );
 }
+
+export const ActivityTraceView = memo(ActivityTraceViewImpl);

@@ -150,7 +150,7 @@ function SummaryDiffEntryList({
   );
 }
 
-type ObservedReferenceTabId = "files" | "plans" | "web" | "memory" | "other";
+type ObservedReferenceTabId = "files" | "web" | "memory" | "other";
 
 interface ObservedReferenceItem {
   faviconUrl?: string;
@@ -171,7 +171,6 @@ interface ObservedReferenceTab {
 
 const OBSERVED_REFERENCE_TABS: ObservedReferenceTabId[] = [
   "files",
-  "plans",
   "web",
   "memory",
 ];
@@ -190,12 +189,6 @@ const OBSERVED_REFERENCE_META: Record<
     barClassName: "bg-info",
     dotClassName: "bg-info",
     iconClassName: "text-info",
-  },
-  plans: {
-    Icon: ListChecksIcon,
-    barClassName: "bg-chart-1",
-    dotClassName: "bg-chart-1",
-    iconClassName: "text-chart-1",
   },
   web: {
     Icon: GlobeIcon,
@@ -223,29 +216,18 @@ function buildObservedReferenceTabs(
 ): ObservedReferenceTab[] {
   const buckets: Record<ObservedReferenceTabId, ObservedReferenceItem[]> = {
     files: [],
-    plans: [],
     web: [],
     memory: [],
     other: [],
   };
-  // todo_write sends a full-replacement checklist each time, so multiple
-  // blocks carry the same evolving list. Keep only the latest one for the
-  // 待办 plan tab to avoid replaying stale/duplicate entries.
-  let latestTodoBlock: WorkBlock | null = null;
 
   for (const block of blocks) {
     if (isAgentLifecycleBlock(block)) continue;
-    if (block.kind === "todo") {
-      if (!latestTodoBlock || block.startedAt >= latestTodoBlock.startedAt) {
-        latestTodoBlock = block;
-      }
-      continue;
-    }
+    // A todo_write event is execution progress, not an observed input or
+    // evidence source. It is rendered by the dedicated Progress section.
+    if (block.kind === "todo") continue;
     const tabId = referenceTabForBlock(block);
     buckets[tabId].push(...referenceItemsForBlock(block, t));
-  }
-  if (latestTodoBlock) {
-    buckets.plans.push(...todoReferenceItems(latestTodoBlock, t));
   }
 
   return OBSERVED_REFERENCE_TABS.map((id) => ({
@@ -275,7 +257,6 @@ function referenceTabForBlock(block: WorkBlock): ObservedReferenceTabId {
     return "memory";
   }
   if (block.kind === "file" || block.kind === "read") return "files";
-  if (block.kind === "todo") return "plans";
   if (
     (block.kind === "search" || block.kind === "browser") &&
     hasHttpReference(block)
@@ -319,76 +300,6 @@ function referenceItemsForBlock(
       tag: referenceStatusLabel(block.status, t),
     },
   ];
-}
-
-type TodoStatus = "completed" | "in_progress" | "interrupted" | "pending";
-
-function normalizeTodoStatus(value: unknown): TodoStatus {
-  if (value === "completed") return "completed";
-  if (value === "in_progress" || value === "running") return "in_progress";
-  if (
-    value === "interrupted" ||
-    value === "failed" ||
-    value === "error" ||
-    value === "blocked"
-  )
-    return "interrupted";
-  return "pending";
-}
-
-function todoStatusLabel(status: TodoStatus, t: Translations): string | undefined {
-  if (status === "completed") return t.agentWorkbenchPages.statusDone;
-  if (status === "in_progress") return t.agentWorkbenchPages.statusRunning;
-  if (status === "interrupted") return t.agentWorkbenchPages.statusError;
-  return undefined;
-}
-
-function todoRawItems(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    try {
-      return todoRawItems(JSON.parse(value));
-    } catch {
-      return [];
-    }
-  }
-  if (isRecord(value)) return todoRawItems(value.items ?? value.todos);
-  return [];
-}
-
-/**
- * Flatten the latest todo_write checklist into reference items for the
- * 待办 plan tab. Each checklist entry becomes one row (content + status tag).
- */
-function todoReferenceItems(
-  block: WorkBlock,
-  t: Translations,
-): ObservedReferenceItem[] {
-  const rawItems = todoRawItems(
-    block.event.input?.items ?? block.event.input?.todos,
-  );
-  const items: ObservedReferenceItem[] = [];
-  for (const raw of rawItems) {
-    if (!isRecord(raw)) continue;
-    const content =
-      typeof raw.content === "string" && raw.content.trim()
-        ? raw.content.trim()
-        : typeof raw.text === "string" && raw.text.trim()
-          ? raw.text.trim()
-          : typeof raw.title === "string" && raw.title.trim()
-            ? raw.title.trim()
-            : typeof raw.task === "string" && raw.task.trim()
-              ? raw.task.trim()
-              : "";
-    if (!content) continue;
-    items.push({
-      id: `${block.id}:todo:${items.length}:${content}`,
-      title: compactReference(content, 120),
-      subtitle: undefined,
-      tag: todoStatusLabel(normalizeTodoStatus(raw.status), t),
-    });
-  }
-  return items;
 }
 
 function fileReferenceItems(
@@ -1011,9 +922,10 @@ export function AgentSummaryPage({
       items.push({
         id: `input:upload:${f.path || f.filename}`,
         title: compactReference(f.filename || f.path, 120),
-        subtitle: f.path && f.path !== f.filename
-          ? compactReference(f.path, 140)
-          : undefined,
+        subtitle:
+          f.path && f.path !== f.filename
+            ? compactReference(f.path, 140)
+            : undefined,
         tag: fileKindLabel(f.filename || f.path),
       });
     }
@@ -1124,7 +1036,6 @@ export function AgentSummaryPage({
     let otherTokens = 0;
     const tokenByTab: Record<ObservedReferenceTabId, number> = {
       files: 0,
-      plans: 0,
       web: 0,
       memory: 0,
       other: 0,
@@ -1156,8 +1067,7 @@ export function AgentSummaryPage({
     // 对话开始时喂入的上下文文件（上传文件/附件）同样占用上下文，计入 files 统计。
     for (const item of inputReferenceItems) {
       const tokens =
-        estimateTokens(item.title || "") +
-        estimateTokens(item.subtitle || "");
+        estimateTokens(item.title || "") + estimateTokens(item.subtitle || "");
       fileTokens += tokens;
       tokenByTab.files += tokens;
     }
@@ -1209,6 +1119,26 @@ export function AgentSummaryPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
+        {/* 思考详情只接收显式公开的过程摘要，绝不接收 provider 原始推理。 */}
+        {focusedProcessEvent?.kind === "thinking" &&
+          focusedProcessEvent.detail && (
+            <section className="border-b border-border-subtle py-4">
+              <div className="mb-2 flex items-center gap-2">
+                <BrainCircuitIcon className="size-3.5 text-muted-foreground" />
+                <h3 className="text-xs font-medium text-foreground">
+                  {t.agentWorkbenchPages.thinkingDetail}
+                </h3>
+              </div>
+              <div className="rounded-lg border border-border-subtle bg-muted/20 p-3 text-sm text-muted-foreground">
+                <MarkdownContent
+                  content={focusedProcessEvent.detail}
+                  isLoading={false}
+                  rehypePlugins={[]}
+                  className="text-sm leading-relaxed"
+                />
+              </div>
+            </section>
+          )}
         {/* 执行详情：当用户从对话区点击执行行聚焦到此处时，展示执行步骤摘要 */}
         {focusedProcessEvent?.kind === "execution" &&
           focusedProcessEvent.detail && (

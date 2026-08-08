@@ -25,6 +25,9 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
     // existing users see no visual change until they opt in.
     chat_font_size: "medium",
   },
+  session: {
+    auto_new_session_hours: 0,
+  },
 };
 
 const LOCAL_SETTINGS_KEY = "octopus.local-settings";
@@ -62,6 +65,11 @@ export interface LocalSettings {
   display: {
     chat_font_size: "small" | "medium" | "large";
   };
+  session: {
+    /** Hours of inactivity before a *new* chat session is auto-started when
+     * the user sends the next message. `0` disables the behavior. */
+    auto_new_session_hours: number;
+  };
 }
 
 function mergeLocalSettings(settings?: Partial<LocalSettings>): LocalSettings {
@@ -91,6 +99,10 @@ function mergeLocalSettings(settings?: Partial<LocalSettings>): LocalSettings {
     display: {
       ...DEFAULT_LOCAL_SETTINGS.display,
       ...settings?.display,
+    },
+    session: {
+      ...DEFAULT_LOCAL_SETTINGS.session,
+      ...settings?.session,
     },
   };
 }

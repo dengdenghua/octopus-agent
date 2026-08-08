@@ -109,22 +109,31 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-/** Python: ``TurnStatus[status_str.upper()]`` with KeyError → COMPLETED. */
+/** Python: ``TurnStatus[status_str.upper()]`` with missing/unknown → FAILED. */
 function decodeTurnStatus(raw: unknown): TurnStatus {
-  switch (String(raw ?? "completed").toLowerCase()) {
+  switch (String(raw ?? "failed").toLowerCase()) {
     case "inprogress":
       return "inProgress";
     case "interrupted":
       return "interrupted";
+    case "paused":
+      return "paused";
+    case "cancelled":
+    case "canceled":
+      return "cancelled";
+    case "completed":
+      return "completed";
     case "failed":
       return "failed";
     default:
-      return "completed";
+      return "failed";
   }
 }
 
 function decodeStringArray(raw: unknown): string[] {
-  return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string") : [];
+  return Array.isArray(raw)
+    ? raw.filter((v): v is string => typeof v === "string")
+    : [];
 }
 
 // ── Normalization ─────────────────────────────────────────────
@@ -142,7 +151,9 @@ export function normalizeEvent(evt: LoggedEvent): ConversationEvent[] {
 
   switch (evt.event) {
     case "thread_started":
-      return [{ method: "thread/started", params: { thread: { id: threadId } } }];
+      return [
+        { method: "thread/started", params: { thread: { id: threadId } } },
+      ];
 
     case "turn_started": {
       if (!turnId) return [];
@@ -182,7 +193,9 @@ export function normalizeEvent(evt: LoggedEvent): ConversationEvent[] {
       // Field set mirrors ``_apply_turn_update``: grounding, phases,
       // workspaceFocus, workbenchSnapshot — each applied independently.
       const grounding = Array.isArray(payload.grounding)
-        ? (payload.grounding.filter((g) => asRecord(g) !== null) as GroundingSource[])
+        ? (payload.grounding.filter(
+            (g) => asRecord(g) !== null,
+          ) as GroundingSource[])
         : null;
       if (grounding && grounding.length > 0) {
         events.push({
@@ -257,19 +270,39 @@ export function normalizeEvent(evt: LoggedEvent): ConversationEvent[] {
       switch (kind) {
         case "agentMessage":
           return typeof delta === "string"
-            ? [{ method: "item/agentMessage/delta", params: { threadId, turnId, itemId, delta } }]
+            ? [
+                {
+                  method: "item/agentMessage/delta",
+                  params: { threadId, turnId, itemId, delta },
+                },
+              ]
             : [];
         case "reasoning":
           return typeof delta === "string"
-            ? [{ method: "item/reasoning/textDelta", params: { threadId, turnId, itemId, delta, contentIndex: 0 } }]
+            ? [
+                {
+                  method: "item/reasoning/textDelta",
+                  params: { threadId, turnId, itemId, delta, contentIndex: 0 },
+                },
+              ]
             : [];
         case "plan":
           return typeof delta === "string"
-            ? [{ method: "item/plan/delta", params: { threadId, turnId, itemId, delta } }]
+            ? [
+                {
+                  method: "item/plan/delta",
+                  params: { threadId, turnId, itemId, delta },
+                },
+              ]
             : [];
         case "commandOutput":
           return typeof delta === "string"
-            ? [{ method: "item/commandExecution/outputDelta", params: { threadId, turnId, itemId, delta } }]
+            ? [
+                {
+                  method: "item/commandExecution/outputDelta",
+                  params: { threadId, turnId, itemId, delta },
+                },
+              ]
             : [];
         case "fileChangeHunk": {
           // Shape mirrors ``_merge_file_change_hunk``: {path, op, hunk}.
@@ -294,7 +327,12 @@ export function normalizeEvent(evt: LoggedEvent): ConversationEvent[] {
         case "mcpToolProgress": {
           const progress = asRecord(delta) as McpToolProgress | null;
           return progress
-            ? [{ method: "item/mcpToolCall/progress", params: { threadId, turnId, itemId, progress } }]
+            ? [
+                {
+                  method: "item/mcpToolCall/progress",
+                  params: { threadId, turnId, itemId, progress },
+                },
+              ]
             : [];
         }
         default:

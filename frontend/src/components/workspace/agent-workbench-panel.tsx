@@ -1,5 +1,5 @@
 import { ChevronRightIcon, GlobeIcon, PackageIcon, TerminalIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import type { OutlineRound } from "@/core/threads/progress-outline";
@@ -43,7 +43,7 @@ export type { AgentWorkbenchTabId } from "./agent-workbench-utils";
 export { workspaceFocusTabFromEvents } from "./agent-workbench-utils";
 export type { WorkbenchRosterSeat } from "./agent-workbench-panel/helpers";
 
-export function AgentWorkbenchPanel({
+function AgentWorkbenchPanelImpl({
   activeTab,
   events,
   progressOutline,
@@ -270,24 +270,27 @@ export function AgentWorkbenchPanel({
     requestedActiveTab === "subagents" || requestedActiveTab === "plan"
       ? "agent"
       : requestedActiveTab;
-  const workbenchTabs: WorkbenchTab[] = [
-    {
-      id: "diff",
-      label: t.agentWorkbenchPages.diffTab,
-      Icon: ChevronRightIcon,
-    },
-    {
-      id: "terminal",
-      label: t.agentWorkbenchPages.terminalTab,
-      Icon: TerminalIcon,
-    },
-    { id: "browser", label: t.agentWorkbenchPages.browserTab, Icon: GlobeIcon },
-    {
-      id: "artifacts",
-      label: t.conversation.artifactsTitle,
-      Icon: PackageIcon,
-    },
-  ];
+  const workbenchTabs: WorkbenchTab[] = useMemo(
+    () => [
+      {
+        id: "diff",
+        label: t.agentWorkbenchPages.diffTab,
+        Icon: ChevronRightIcon,
+      },
+      {
+        id: "terminal",
+        label: t.agentWorkbenchPages.terminalTab,
+        Icon: TerminalIcon,
+      },
+      { id: "browser", label: t.agentWorkbenchPages.browserTab, Icon: GlobeIcon },
+      {
+        id: "artifacts",
+        label: t.conversation.artifactsTitle,
+        Icon: PackageIcon,
+      },
+    ],
+    [t.agentWorkbenchPages, t.conversation],
+  );
 
   // Auto-open a tab if it becomes the effective active tab
   useEffect(() => {
@@ -326,7 +329,10 @@ export function AgentWorkbenchPanel({
     [onSelectTab],
   );
 
-  const visibleTabs = workbenchTabs.filter((tab) => !closedTabs.has(tab.id));
+  const visibleTabs = useMemo(
+    () => workbenchTabs.filter((tab) => !closedTabs.has(tab.id)),
+    [workbenchTabs, closedTabs],
+  );
   const inferredWorkspaceLabel = inferredWorkDir
     ?.split(/[\\/]/)
     .filter(Boolean)
@@ -573,3 +579,5 @@ function ArtifactInlinePreviewEmbedded() {
     </div>
   );
 }
+
+export const AgentWorkbenchPanel = memo(AgentWorkbenchPanelImpl);

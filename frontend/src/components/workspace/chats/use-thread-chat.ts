@@ -1,5 +1,5 @@
 import { useParams, useLocation, useSearchParams } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { env } from "@/env";
 import { uuid } from "@/core/utils/uuid";
@@ -25,43 +25,39 @@ function resolveStateFromPath(
 export function useThreadChat() {
   const params = useParams();
   const threadIdFromPath = params.threadId ?? params.thread_id;
-  const { key: locationKey, pathname } = useLocation();
+  const { pathname } = useLocation();
   const isNewPath = threadIdFromPath === "new" || pathname.endsWith("/new");
 
   const [searchParams] = useSearchParams();
+
+  // Build a stable identity for the current route so we only reset state
+  // when the user actually navigates (new → existing, existing → different
+  // existing, existing → new). We combine pathname + threadIdFromPath so
+  // that both hash changes and param changes trigger a reset.
+  const pathId = `${pathname}|${threadIdFromPath ?? ""}`;
 
   const [state, setState] = useState<ThreadChatState>(() =>
     resolveStateFromPath(threadIdFromPath, isNewPath),
   );
 
-  // Track the last location key we synchronized state for. On every
-  // render, check if the location has changed; if so, compute the
-  // correct state for the new route and use it for THIS render frame
-  // (by returning it directly) while also scheduling a state update.
-  // This eliminates the one-frame stale state that was causing old
-  // messages to flash when navigating between threads or to /new.
-  const lastKeyRef = useRef<string>(locationKey);
+  // Track the last pathId we resolved state for. When it changes, we
+  // synchronously compute the correct state during render (before child
+  // components run) to avoid a one-frame flash of stale messages. This
+  // is the getDerivedStateFromProps pattern for hooks: calling setState
+  // during render is safe when guarded by a condition — React will
+  // immediately re-render with the new state without showing intermediate UI.
+  const lastPathIdRef = useRef<string>(pathId);
   let current: ThreadChatState = state;
 
-  if (lastKeyRef.current !== locationKey) {
-    lastKeyRef.current = locationKey;
+  if (lastPathIdRef.current !== pathId) {
+    lastPathIdRef.current = pathId;
     current = resolveStateFromPath(threadIdFromPath, isNewPath);
     setState(current);
   }
 
-  // Safety net: if the path-derived values don't match state (e.g.,
-  // direct URL manipulation without a locationKey change in some edge
-  // cases), reconcile in an effect.
-  useEffect(() => {
-    const expected = resolveStateFromPath(threadIdFromPath, isNewPath);
-    setState((prev) => {
-      if (prev.threadId === expected.threadId && prev.isNewThread === expected.isNewThread) {
-        return prev;
-      }
-      return expected;
-    });
-  }, [locationKey, threadIdFromPath, isNewPath]);
-
+  // setIsNewThread allows callers to mark a thread as "no longer new"
+  // after the first message is sent (before the deferred route commit
+  // navigates to the real thread id).
   const setIsNewThread = (v: boolean) => {
     setState((s) => ({ ...s, isNewThread: v }));
   };

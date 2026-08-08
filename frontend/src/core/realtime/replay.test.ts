@@ -148,10 +148,12 @@ describe("normalizeEvent", () => {
   it("maps turn_completed to turn/finalized with tolerant status decode", () => {
     const cases: Array<[unknown, string]> = [
       ["completed", "completed"],
+      ["paused", "paused"],
+      ["cancelled", "cancelled"],
       ["interrupted", "interrupted"],
       ["failed", "failed"],
-      ["garbage", "completed"],
-      [undefined, "completed"],
+      ["garbage", "failed"],
+      [undefined, "failed"],
     ];
     for (const [raw, expected] of cases) {
       const [evt] = normalizeEvent({

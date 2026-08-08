@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  getNASBaseURL,
   NASRequestError,
   isNASAuthenticationError,
   startNASService,
@@ -19,14 +20,18 @@ describe("Storage API errors", () => {
     expect(isNASAuthenticationError(new Error("network"))).toBe(false);
   });
 
-  it("recovers the local storage token into session-only storage", async () => {
+  it("uses the agent same-origin storage gateway", () => {
+    expect(getNASBaseURL()).toBe("/api/storage");
+  });
+
+  it("starts storage without persisting its private token in the browser", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
           ok: true,
           status: "already_running",
-          base_url: "http://127.0.0.1:8767",
-          auth_token: "storage-session-token",
+          base_url: "/api/storage",
+          auth_token: null,
         }),
         { status: 200 },
       ),
@@ -43,8 +48,6 @@ describe("Storage API errors", () => {
         headers: {},
       }),
     );
-    expect(sessionStorage.getItem("octopus.storage.auth-token")).toBe(
-      "storage-session-token",
-    );
+    expect(sessionStorage.getItem("octopus.storage.auth-token")).toBeNull();
   });
 });

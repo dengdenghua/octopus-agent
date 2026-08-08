@@ -82,7 +82,7 @@ export function ArtifactFileDetail({
 }) {
   const { t } = useI18n();
   const streamdownPlugins = useStreamdownPlugins();
-  const { artifacts, setOpen, select } = useArtifacts();
+  const { artifacts, select, clearSelection } = useArtifacts();
   const isWriteFile = useMemo(() => {
     return filepathFromProps.startsWith("write-file:");
   }, [filepathFromProps]);
@@ -270,7 +270,7 @@ export function ArtifactFileDetail({
             <ArtifactAction
               icon={XIcon}
               label={t.common.close}
-              onClick={() => setOpen(false)}
+              onClick={() => clearSelection()}
               tooltip={t.common.close}
             />
           </ArtifactActions>

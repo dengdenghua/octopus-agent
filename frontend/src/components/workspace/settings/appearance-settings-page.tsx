@@ -61,9 +61,11 @@ export default function AppearanceSettingsPage() {
     cornerScale,
     density,
     palette,
+    customColor,
     setCornerScale,
     setDensity,
     setPalette,
+    setCustomColor,
   } = useAppearance();
 
   const themeOptions = useMemo(
@@ -125,10 +127,10 @@ export default function AppearanceSettingsPage() {
         title={t.settings.appearance.paletteTitle}
         description={t.settings.appearance.paletteDescription}
       >
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-2">
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
           <PalettePreviewCard
-            label={t.settings.appearance.paletteRouge}
-            description={t.settings.appearance.paletteRougeDescription}
+            label={t.settings.appearance.paletteRose}
+            description={t.settings.appearance.paletteRoseDescription}
             active={palette === "rouge"}
             swatch="#e85d75"
             onSelect={() => setPalette("rouge")}
@@ -140,6 +142,54 @@ export default function AppearanceSettingsPage() {
             swatch="#3e6fd8"
             onSelect={() => setPalette("steel")}
           />
+          <PalettePreviewCard
+            label={t.settings.appearance.paletteEmerald}
+            description={t.settings.appearance.paletteEmeraldDescription}
+            active={palette === "emerald"}
+            swatch="#1a7a56"
+            onSelect={() => setPalette("emerald")}
+          />
+          <PalettePreviewCard
+            label={t.settings.appearance.paletteViolet}
+            description={t.settings.appearance.paletteVioletDescription}
+            active={palette === "violet"}
+            swatch="#6a5fb4"
+            onSelect={() => setPalette("violet")}
+          />
+          <PalettePreviewCard
+            label={t.settings.appearance.paletteAmber}
+            description={t.settings.appearance.paletteAmberDescription}
+            active={palette === "amber"}
+            swatch="#8a5a1c"
+            onSelect={() => setPalette("amber")}
+          />
+          <PalettePreviewCard
+            label={t.settings.appearance.paletteTeal}
+            description={t.settings.appearance.paletteTealDescription}
+            active={palette === "teal"}
+            swatch="#1a7a80"
+            onSelect={() => setPalette("teal")}
+          />
+          <PalettePreviewCard
+            label={t.settings.appearance.paletteCustom}
+            description={t.settings.appearance.paletteCustomDescription}
+            active={palette === "custom"}
+            swatch={customColor}
+            onSelect={() => setCustomColor(customColor)}
+          />
+        </div>
+        <div className="mt-3 flex items-center gap-3 rounded-lg border bg-muted/20 px-4 py-3">
+          <input
+            type="color"
+            aria-label={t.settings.appearance.paletteCustom}
+            className="h-9 w-12 cursor-pointer rounded border bg-transparent p-0.5"
+            value={customColor}
+            onChange={(event) => setCustomColor(event.target.value)}
+          />
+          <span className="font-mono text-sm uppercase">{customColor}</span>
+          <span className="text-xs text-muted-foreground">
+            {t.settings.appearance.paletteCustomHint}
+          </span>
         </div>
       </SettingsSection>
 

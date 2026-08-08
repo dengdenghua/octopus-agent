@@ -111,53 +111,8 @@ export function isNASAuthenticationError(error: unknown): boolean {
   return error instanceof NASRequestError && error.status === 401;
 }
 
-const DEFAULT_STORAGE_URL = "http://127.0.0.1:8767";
-const STORAGE_KEY = "octopus.storage.base-url";
-const LEGACY_STORAGE_KEY = "octopus.nas.base-url";
-const STORAGE_TOKEN_KEY = "octopus.storage.auth-token";
-
-function normalizeBaseURL(value: string | null | undefined): string {
-  if (!value) return DEFAULT_STORAGE_URL;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return DEFAULT_STORAGE_URL;
-    }
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return DEFAULT_STORAGE_URL;
-  }
-}
-
 export function getNASBaseURL(): string {
-  const fromEnv =
-    (import.meta.env.VITE_STORAGE_BASE_URL as string | undefined) ??
-    (import.meta.env.VITE_NAS_BASE_URL as string | undefined);
-  if (fromEnv) return normalizeBaseURL(fromEnv);
-  if (typeof window === "undefined") return DEFAULT_STORAGE_URL;
-  return normalizeBaseURL(
-    window.localStorage.getItem(STORAGE_KEY) ??
-      window.localStorage.getItem(LEGACY_STORAGE_KEY),
-  );
-}
-
-export function setNASBaseURL(value: string): string {
-  const normalized = normalizeBaseURL(value);
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(STORAGE_KEY, normalized);
-  }
-  return normalized;
-}
-
-export function setNASAuthToken(value: string | null | undefined): void {
-  if (typeof window === "undefined" || !value) return;
-  window.sessionStorage.setItem(STORAGE_TOKEN_KEY, value);
-}
-
-function getNASAuthHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  const token = window.sessionStorage.getItem(STORAGE_TOKEN_KEY);
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return `${getBackendBaseURL()}/api/storage`;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -165,7 +120,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...getNASAuthHeaders(),
+      ...authHeaders(),
       ...(init?.headers ?? {}),
     },
   });
@@ -215,7 +170,6 @@ export async function startNASService(): Promise<NASServiceStartResponse> {
     );
   }
   const body = (await response.json()) as NASServiceStartResponse;
-  setNASAuthToken(body.auth_token);
   return body;
 }
 
@@ -362,7 +316,7 @@ export function getNASFileContentURL(assetId: string): string {
 
 export async function loadNASAssetURL(path: string): Promise<string> {
   const response = await fetch(`${getNASBaseURL()}${path}`, {
-    headers: getNASAuthHeaders(),
+    headers: authHeaders(),
   });
   if (!response.ok) {
     throw new NASRequestError(

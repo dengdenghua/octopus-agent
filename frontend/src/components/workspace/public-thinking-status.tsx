@@ -143,7 +143,6 @@ export function PublicThinkingStatus({
         : phase === "waiting"
           ? t.publicThinkingStatus.waitingForModel
           : (action ?? t.publicThinkingStatus.processing);
-  const elapsedSeconds = Math.floor((vitals?.elapsedMs ?? 0) / 1000);
   // In the working phase the action already leads the line; only the
   // alert phases keep it as trailing context.
   const detail = phase === "working" ? undefined : action;
@@ -172,11 +171,6 @@ export function PublicThinkingStatus({
         aria-hidden="true"
       />
       <span className="shrink-0">{label}</span>
-      {elapsedSeconds > 0 && (
-        <span className="tabular-nums text-muted-foreground/40">
-          {elapsedSeconds}s
-        </span>
-      )}
       {detail && (
         <span className="min-w-0 truncate text-muted-foreground/45">
           · {detail}

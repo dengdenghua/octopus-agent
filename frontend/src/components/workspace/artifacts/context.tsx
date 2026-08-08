@@ -21,6 +21,7 @@ export interface ArtifactsContextType {
   autoSelect: boolean;
   select: (artifact: string, autoSelect?: boolean) => void;
   deselect: () => void;
+  clearSelection: () => void;
 
   open: boolean;
   autoOpen: boolean;
@@ -78,6 +79,11 @@ export function ArtifactsProvider({
     setOpen(false);
   }, []);
 
+  const clearSelection = useCallback(() => {
+    setSelectedArtifact(null);
+    setAutoSelect(true);
+  }, []);
+
   const value: ArtifactsContextType = {
     artifacts,
     setArtifacts,
@@ -96,6 +102,7 @@ export function ArtifactsProvider({
     selectedArtifact,
     select,
     deselect,
+    clearSelection,
   };
 
   return (

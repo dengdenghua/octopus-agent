@@ -5,6 +5,12 @@ import { afterEach } from "vitest";
 // Cleanup after each test
 afterEach(() => {
   cleanup();
+  // Runtime backend/profile hints are deliberately session-scoped in the
+  // product. They must not leak between Vitest files sharing one jsdom worker,
+  // otherwise API tests become order-dependent and can target a prior test's
+  // injected Electron backend.
+  window.sessionStorage.clear();
+  delete window.octopus;
 });
 
 // Mock window.matchMedia

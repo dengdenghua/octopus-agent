@@ -181,8 +181,9 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expect(screen.queryByText("thread-internal-1")).not.toBeInTheDocument();
     const workbenchHeader = screen.getByRole("banner");
-    expect(within(workbenchHeader).getByTitle("主电脑")).toBeInTheDocument();
-    expect(within(workbenchHeader).getByText("已完成")).toBeInTheDocument();
+    expect(
+      within(workbenchHeader).getByTitle("主电脑 · 已完成"),
+    ).toBeInTheDocument();
   });
 
   test("empty shell says the controller is idle when no turn is running", () => {

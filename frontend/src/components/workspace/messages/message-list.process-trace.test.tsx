@@ -832,7 +832,7 @@ describe("MessageList process trace lifecycle", () => {
       type: "ai",
       content: "",
       additional_kwargs: {
-        reasoning_content: "Inspect the old market request.",
+        public_reasoning_summary: "Inspect the old market request.",
       },
       tool_calls: [
         {
@@ -847,7 +847,7 @@ describe("MessageList process trace lifecycle", () => {
       type: "ai",
       content: "",
       additional_kwargs: {
-        reasoning_content: "Inspect the latest market request.",
+        public_reasoning_summary: "Inspect the latest market request.",
       },
       tool_calls: [
         {
@@ -870,8 +870,7 @@ describe("MessageList process trace lifecycle", () => {
     const savedStepToggles = screen.getAllByTitle("Open details");
     expect(savedStepToggles).toHaveLength(2);
     expect(screen.getByText(/old market query/)).toBeInTheDocument();
-    // Raw reasoning traces render as collapsed one-line rows (raw-reasoning
-    // fallback: actual thinking trace in chronological order).
+    // Explicit public summaries render as compact one-line process rows.
     expect(
       screen.getByText("Inspect the old market request."),
     ).toBeInTheDocument();
@@ -892,7 +891,7 @@ describe("MessageList process trace lifecycle", () => {
       type: "ai",
       content: "",
       additional_kwargs: {
-        reasoning_content: "Inspect the old market request.",
+        public_reasoning_summary: "Inspect the old market request.",
       },
       tool_calls: [
         {
@@ -907,7 +906,8 @@ describe("MessageList process trace lifecycle", () => {
       type: "ai",
       content: "",
       additional_kwargs: {
-        reasoning_content: "Inspect the actively streaming market request.",
+        public_reasoning_summary:
+          "Inspect the actively streaming market request.",
       },
       tool_calls: [
         {
@@ -941,8 +941,7 @@ describe("MessageList process trace lifecycle", () => {
     expect(screen.getAllByText(/active market query/).length).toBeGreaterThan(
       0,
     );
-    // Streaming trace also renders as a collapsed one-line row (raw-reasoning
-    // fallback); its *details* still live in the workbench, not expanded here.
+    // Streaming public summaries stay compact; details live in the workbench.
     expect(
       screen.getByText("Inspect the actively streaming market request."),
     ).toBeInTheDocument();
@@ -1127,7 +1126,7 @@ describe("streamingMessageProgressKey", () => {
 });
 
 describe("MessageList reasoning privacy", () => {
-  test("falls back to raw reasoning content for the thinking row when no public summary exists", () => {
+  test("does not expose raw reasoning content when no public summary exists", () => {
     const privateChineseReasoning =
       '\u7528\u6237\u95ee\u6211"\u4f60\u662f\u8c01"\uff0c\u6839\u636e\u6211\u7684\u8eab\u4efd\uff0c\u6211\u5e94\u8be5\u56de\u7b54"\u6211\u662f Octopus"\u3002';
     const assistant: AIMessage = {
@@ -1149,15 +1148,11 @@ describe("MessageList reasoning privacy", () => {
     renderMessageList({ thread, locale: "zh-CN" });
 
     expect(screen.getByText("\u6211\u662f Octopus\u3002")).toBeInTheDocument();
-    // With no explicit public_reasoning_summary, the thinking row now falls
-    // back to raw reasoning_content so the user can see what the model is
-    // thinking instead of staring at an empty dot. The row stays collapsed
-    // and muted; full text opens on click in the right sidebar.
-    expect(screen.getByText(/用户问我/)).toBeInTheDocument();
-    expect(screen.getByText(/SOUL\.md/)).toBeInTheDocument();
+    expect(screen.queryByText(/用户问我/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/SOUL\.md/)).not.toBeInTheDocument();
   });
 
-  test("shows raw reasoning-only streaming messages as the thinking row", () => {
+  test("keeps raw reasoning-only streaming messages private", () => {
     const leakedReasoning =
       "好的，用户之前发了很长一段关于我是Octopus的系统指令，现在又发了当前日期，我应该先判断是否需要工具。";
     const assistant: AIMessage = {
@@ -1176,11 +1171,11 @@ describe("MessageList reasoning privacy", () => {
 
     renderMessageList({ thread, locale: "zh-CN" });
 
-    // Reasoning-only streaming messages now surface in the thinking row
-    // (collapsed, muted) so the user sees the model is actively reasoning
-    // instead of a blank turn. The full text opens on click.
-    expect(screen.getByText(/系统指令/)).toBeInTheDocument();
-    expect(screen.getByText(/当前日期/)).toBeInTheDocument();
+    expect(screen.queryByText(/系统指令/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/当前日期/)).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-activity-pulse"),
+    ).toBeInTheDocument();
   });
 
   test("renders explicitly public reasoning summaries without exposing raw reasoning", () => {

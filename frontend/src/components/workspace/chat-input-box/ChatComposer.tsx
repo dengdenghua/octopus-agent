@@ -26,7 +26,6 @@ import { useMentionAutocomplete } from "../mention-autocomplete";
 
 import { swallow } from "@/core/utils/log";
 import { currentActorId } from "@/core/auth/api";
-import { OctopusMascot } from "@/components/brand/octopus-mascot";
 import {
   consumeComposerImageEntries,
   rememberLastComposerTarget,
@@ -196,8 +195,6 @@ export function ChatComposer({
     allowAgentModes && mode === "deep" && !!onDeepResearch;
   const isDeepResearchMode = canUseDeepResearch && researchConfigOpen;
   const isBusy = disabled || uploadingMaterials || isUploading;
-  const mascotMood =
-    status === "streaming" ? "thinking" : isBusy ? "working" : "idle";
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
   const permissionLabel =
@@ -832,16 +829,14 @@ export function ChatComposer({
       className={cn(
         "group relative",
         "rounded-lg border border-border-default/80 bg-background/80 shadow-[var(--shadow-xs)] backdrop-blur-sm",
-        "transition-all duration-200 ease-out",
+        "transition-all duration-base ease-out",
         "hover:border-border-default hover:shadow-[var(--shadow-sm)]",
         "focus-within:border-primary/25 focus-within:shadow-[0_0_0_3px_rgba(138,127,255,0.08),var(--shadow-sm)]",
         className,
       )}
     >
-      {/* Octopus mascot sitting on top-right corner */}
-      <div className="pointer-events-none absolute right-0 top-0 z-10" style={{ transform: "translate(20%, -55%)" }}>
-        <OctopusMascot mood={mascotMood} size="sm" />
-      </div>
+      {/* 3D mascot slot — Live2D integration pending */}
+      <div className="pointer-events-none absolute z-10" style={{ right: -30, top: -100 }} />
       <div className="relative">
         {slashPicker}
         <MentionPicker
@@ -952,7 +947,7 @@ export function ChatComposer({
                 type="button"
                 data-testid="chat-tools-trigger"
                 disabled={isBusy || status === "streaming"}
-                className="flex size-[42px] items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-200 hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 sm:size-8 active:scale-95"
+                className="flex size-[42px] items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 sm:size-8 active:scale-95"
                 title={t.chatInputBox.composerInsertions}
                 aria-label={t.chatInputBox.composerInsertions}
               >
@@ -1074,7 +1069,7 @@ export function ChatComposer({
                 onModeChange?.(mode === "chat" ? "react" : "chat", draft)
               }
               className={cn(
-                "flex size-[42px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-200 sm:size-8",
+                "flex size-[42px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-base sm:size-8",
                 mode === "chat"
                   ? "bg-primary/10 text-primary hover:bg-primary/15"
                   : "border border-transparent text-muted-foreground hover:border-border-default hover:bg-muted/60 hover:text-foreground",
@@ -1124,7 +1119,7 @@ export function ChatComposer({
                 type="button"
                 onClick={handleSubmit}
                 data-testid="chat-steer-button"
-                className="flex size-[42px] items-center justify-center rounded-lg bg-foreground text-background transition-all duration-200 hover:bg-foreground/90 active:scale-95 sm:size-8"
+                className="flex size-[42px] items-center justify-center rounded-lg bg-foreground text-background transition-all duration-base hover:bg-foreground/90 active:scale-95 sm:size-8"
                 title={sendLabel}
                 aria-label={sendLabel}
               >
@@ -1133,7 +1128,7 @@ export function ChatComposer({
               <button
                 type="button"
                 onClick={onStop}
-                className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-200 hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
+                className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
                 title={stopLabel}
                 aria-label={stopLabel}
               >
@@ -1144,7 +1139,7 @@ export function ChatComposer({
             <button
               type="button"
               onClick={onStop}
-              className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-200 hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
+              className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
               title={stopLabel}
               aria-label={stopLabel}
             >
@@ -1162,7 +1157,7 @@ export function ChatComposer({
                 isBusy
               }
               className={cn(
-                "flex size-[42px] items-center justify-center rounded-lg transition-all duration-200 sm:size-8",
+                "flex size-[42px] items-center justify-center rounded-lg transition-all duration-base sm:size-8",
                 isDeepResearchMode
                   ? "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95"
                   : "bg-foreground text-background hover:bg-foreground/90 active:scale-95",

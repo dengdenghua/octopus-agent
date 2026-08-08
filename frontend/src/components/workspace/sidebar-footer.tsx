@@ -263,10 +263,13 @@ export function AgentFooter() {
   }, [allCliPartners, cliPartnerAgents]);
   // 解析优先级与 page.tsx activeAgentId 保持一致：
   // 1) route lock（如 /workspace/agents/:id/chats 锁定到该 agent）
-  // 2) URL ?agent= 参数
+  // 2) URL ?agent= 参数 — 但 "octopus" 是全局助理入口，位于角色选择器
+  //    之上，不应改变左下角的角色选择状态，因此忽略它
   // 3) localStorage 里用户最近选择的 agent
   // 4) 兜底 "general"
-  const effectiveName = lock?.agent ?? urlAgentName ?? activeName ?? "general";
+  const effectiveUrlAgent = urlAgentName === "octopus" ? null : urlAgentName;
+  const effectiveName =
+    lock?.agent ?? effectiveUrlAgent ?? activeName ?? "general";
 
   // The assistant (octopus) is a global fixed persona, not a switchable role.
   // It coexists with every other agent but must never surface in the bottom-left
@@ -413,7 +416,7 @@ export function AgentFooter() {
             }
             className={cn(
               "group/agent flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left",
-              "opacity-85 transition-[opacity,background-color] duration-150",
+              "opacity-85 transition-[opacity,background-color] duration-fast",
               "hover:opacity-100 hover:bg-muted/50 outline-none",
               "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0",
             )}
@@ -566,7 +569,7 @@ export function AgentFooter() {
         onClick={() => emitOpenSettings()}
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground",
-          "opacity-70 transition-[opacity,background-color,color] duration-150",
+          "opacity-70 transition-[opacity,background-color,color] duration-fast",
           "hover:bg-muted hover:text-foreground hover:opacity-100",
           "group-data-[collapsible=icon]:hidden",
         )}

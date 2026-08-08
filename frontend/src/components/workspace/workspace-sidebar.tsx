@@ -146,11 +146,6 @@ const OCTOPUS_THREAD_ID = "octopus-assistant";
 
 const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
   {
-    to: "/workspace/realtime/octopus-assistant?agent=octopus",
-    label: "助理",
-    icon: UserRoundPenIcon,
-  },
-  {
     to: "/workspace/agents?surface=chat",
     labelKey: "navHR",
     icon: StoreIcon,
@@ -159,6 +154,12 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
     to: "/workspace/intelligence?surface=chat",
     labelKey: "navIntelligence",
     icon: RssIcon,
+  },
+  {
+    // 助手（octopus）是全局上层入口，放在「订阅」下方，避免与主任务入口混淆。
+    to: "/workspace/realtime/octopus-assistant?agent=octopus",
+    label: "助手",
+    icon: UserRoundPenIcon,
   },
   {
     to: "/workspace/evolution?surface=chat",
@@ -2077,7 +2078,7 @@ function ProjectGroup({
                     aria-current={active ? "page" : undefined}
                     title={thread.title}
                     className={cn(
-                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-3 pr-3 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-[4.25rem] group-focus-within/thread:pr-[4.25rem]",
+                      "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-3 pr-3 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-fast group-hover/thread:pr-[4.25rem] group-focus-within/thread:pr-[4.25rem]",
                       "hover:bg-muted/40 hover:text-foreground",
                       "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
                       active &&
@@ -2110,7 +2111,7 @@ function ProjectGroup({
                     </span>
                     <span
                       className={cn(
-                        "overflow-hidden whitespace-nowrap text-mini text-muted-foreground transition-[width,opacity,color] duration-150 group-hover/thread:text-muted-foreground/90",
+                        "overflow-hidden whitespace-nowrap text-mini text-muted-foreground transition-[width,opacity,color] duration-fast group-hover/thread:text-muted-foreground/90",
                         active
                           ? "w-0 opacity-0"
                           : "w-10 opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0",
@@ -2129,7 +2130,7 @@ function ProjectGroup({
                       onOpenFiles(thread, project);
                     }}
                     className={cn(
-                      "absolute right-0.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground/65 opacity-0 transition-[opacity,background-color,color] duration-150",
+                      "absolute right-0.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground/65 opacity-0 transition-[opacity,background-color,color] duration-fast",
                       "group-hover/thread:opacity-100 hover:bg-muted/55 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
                     )}
                   >
@@ -2337,7 +2338,7 @@ function SectionHeader({
           {/* Implementation note. */}
           <ChevronRightIcon
             className={cn(
-              "size-3 shrink-0 transition-transform duration-150",
+              "size-3 shrink-0 transition-transform duration-fast",
               open && "rotate-90",
             )}
           />
@@ -2650,7 +2651,7 @@ function ChatsSection({
                       aria-current={active ? "page" : undefined}
                       title={t.title}
                       className={cn(
-                        "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-2 pr-2 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-150 group-hover/thread:pr-8 group-focus-within/thread:pr-8",
+                        "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-2 pr-2 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-fast group-hover/thread:pr-8 group-focus-within/thread:pr-8",
                         "hover:bg-muted/40 hover:text-foreground",
                         "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
                         active &&

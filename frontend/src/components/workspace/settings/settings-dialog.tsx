@@ -2,6 +2,7 @@ import {
   ActivityIcon,
   BellIcon,
   InfoIcon,
+  MessageSquareIcon,
   BrainIcon,
   CpuIcon,
   LogOutIcon,
@@ -67,6 +68,8 @@ const importMcp = () =>
   import("@/components/workspace/settings/mcp-settings-page").then((mod) => ({
     default: mod.McpSettingsPage,
   }));
+const importSession = () =>
+  import("@/components/workspace/settings/session-settings-page");
 
 const AboutSettingsPage = lazy(importAbout);
 const AccountSettingsPage = lazy(importAccount);
@@ -78,6 +81,7 @@ const SubscriptionSettingsPage = lazy(importSubscription);
 const PrivacySettingsPage = lazy(importPrivacy);
 const AutomationSettingsPage = lazy(importAutomation);
 const McpSettingsPage = lazy(importMcp);
+const SessionSettingsPage = lazy(importSession);
 
 // Run every chunk import in parallel the first time the dialog opens.
 // Browsers dedupe the ``import()`` calls against cache, so repeated opens
@@ -99,6 +103,7 @@ function preloadSettingsPages(): void {
     importPrivacy,
     importAutomation,
     importMcp,
+    importSession,
   ].forEach((fn) => {
     fn().catch((e) => {
       swallow(e);
@@ -124,7 +129,8 @@ type SettingsSection =
   | "privacy"
   | "notification"
   | "observability"
-  | "about";
+  | "about"
+  | "session";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -430,6 +436,19 @@ export function SettingsDialog(props: SettingsDialogProps) {
           "version",
           "help",
           ...t.settings.dialog.sectionKeywords.about,
+        ],
+      },
+      {
+        id: "session",
+        label: "会话",
+        icon: MessageSquareIcon,
+        keywords: [
+          "session",
+          "会话",
+          "auto",
+          "新起",
+          "timeout",
+          "自动新起会话",
         ],
       },
     ];
@@ -782,6 +801,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {hasSettingsResults && activeSection === "about" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <AboutSettingsPage />
+                </Suspense>
+              )}
+              {hasSettingsResults && activeSection === "session" && (
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <SessionSettingsPage />
                 </Suspense>
               )}
             </div>

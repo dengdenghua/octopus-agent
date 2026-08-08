@@ -283,7 +283,11 @@ function turnToMessages(turn: Turn): Message[] {
   // not an authoritative response. Target only the last prose item; earlier
   // public checkpoints and completed tool evidence stay visible.
   let interruptedMessageId: string | null = null;
-  if (turn.status === "interrupted") {
+  if (
+    turn.status === "interrupted" ||
+    turn.status === "paused" ||
+    turn.status === "cancelled"
+  ) {
     for (let index = turn.items.length - 1; index >= 0; index -= 1) {
       const item = turn.items[index];
       if (item?.type === "agentMessage") {
@@ -349,8 +353,12 @@ function turnToMessages(turn: Turn): Message[] {
       return;
     }
     const kwargs = buildAiAdditionalKwargs(pending);
-    if (turn.status === "interrupted") {
-      kwargs.response_state = "interrupted";
+    if (
+      turn.status === "interrupted" ||
+      turn.status === "paused" ||
+      turn.status === "cancelled"
+    ) {
+      kwargs.response_state = turn.status;
       if (turn.interruptReason) {
         kwargs.interrupt_reason = turn.interruptReason;
       }
@@ -528,8 +536,14 @@ function turnToMessages(turn: Turn): Message[] {
         // the answer lane instead of being reclassified later by text length
         // or Markdown shape. The fallback above keeps old logs compatible.
         kwargs.message_kind = messageKind;
+        if (turn.outcomeReason) {
+          kwargs.outcome_reason = turn.outcomeReason;
+        }
+        if (turn.objectiveId) kwargs.objective_id = turn.objectiveId;
+        if (turn.taskId) kwargs.task_id = turn.taskId;
+        if (turn.checkpointId) kwargs.checkpoint_id = turn.checkpointId;
         if (isInterruptedMessage) {
-          kwargs.response_state = "interrupted";
+          kwargs.response_state = turn.status;
           if (turn.interruptReason) {
             kwargs.interrupt_reason = turn.interruptReason;
           }
@@ -540,12 +554,24 @@ function turnToMessages(turn: Turn): Message[] {
           }
         }
         if (isFailedMessage) {
-          const failureDetail = split.finalAnswer?.trim() || "turn failed";
+          const turnError =
+            turn.error && typeof turn.error === "object" ? turn.error : null;
+          const failureDetail =
+            (typeof turnError?.message === "string" &&
+              turnError.message.trim()) ||
+            split.finalAnswer?.trim() ||
+            "turn failed";
+          const failureCode =
+            (typeof turnError?.code === "string" && turnError.code.trim()) ||
+            "agent_response_failed";
           kwargs.response_state = "failed";
           kwargs.error = {
             message: failureDetail,
             will_retry: false,
-            info: { code: "agent_response_failed" },
+            info: {
+              code: failureCode,
+              details: turnError?.details,
+            },
           };
         }
         if (messageKind === "commentary" && !isInterruptedMessage) {
@@ -557,7 +583,7 @@ function turnToMessages(turn: Turn): Message[] {
           content:
             isInterruptedMessage || isFailedMessage
               ? ""
-              : (split.finalAnswer || split.publicUpdate || ""),
+              : split.finalAnswer || split.publicUpdate || "",
           additional_kwargs: kwargs,
           ...(pending.toolCalls.length > 0
             ? { tool_calls: pending.toolCalls }
@@ -657,10 +683,62 @@ function turnToMessages(turn: Turn): Message[] {
   }
 
   flushPendingAsTrailingAi();
+  appendPausedTurnReceipt(out, turn);
+  appendCancelledTurnReceipt(out, turn);
   appendInterruptedTurnReceipt(out, turn);
   appendFailedTurnReceipt(out, turn);
   attachGroundingToNarrativeAnchor(out, turn.grounding);
   return out;
+}
+
+function appendPausedTurnReceipt(out: Message[], turn: Turn): void {
+  if (turn.status !== "paused") return;
+  if (
+    out.some(
+      (message) =>
+        message.type === "ai" &&
+        message.additional_kwargs?.response_state === "paused",
+    )
+  ) {
+    return;
+  }
+  out.push({
+    id: `${turn.id}-paused-receipt`,
+    type: "ai",
+    content: "",
+    additional_kwargs: {
+      response_state: "paused",
+      message_kind: "answer",
+      interrupt_reason: turn.interruptReason,
+      outcome_reason: turn.outcomeReason,
+      objective_id: turn.objectiveId,
+      task_id: turn.taskId,
+      checkpoint_id: turn.checkpointId,
+    },
+  } as AIMessage);
+}
+
+function appendCancelledTurnReceipt(out: Message[], turn: Turn): void {
+  if (turn.status !== "cancelled") return;
+  if (
+    out.some(
+      (message) =>
+        message.type === "ai" &&
+        message.additional_kwargs?.response_state === "cancelled",
+    )
+  ) {
+    return;
+  }
+  out.push({
+    id: `${turn.id}-cancelled-receipt`,
+    type: "ai",
+    content: "",
+    additional_kwargs: {
+      response_state: "cancelled",
+      message_kind: "answer",
+      interrupt_reason: turn.interruptReason,
+    },
+  } as AIMessage);
 }
 
 /**
@@ -973,10 +1051,7 @@ function mergeAdditionalKwargs(
   return merged;
 }
 
-function mergeReasoningDurationMs(
-  a: unknown,
-  b: unknown,
-): number | null {
+function mergeReasoningDurationMs(a: unknown, b: unknown): number | null {
   const aNum = typeof a === "number" && Number.isFinite(a) ? a : null;
   const bNum = typeof b === "number" && Number.isFinite(b) ? b : null;
   if (aNum === null && bNum === null) return null;

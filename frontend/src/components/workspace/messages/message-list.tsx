@@ -555,6 +555,16 @@ function failureKind(
   ) {
     return "verification";
   }
+  if (/guard_impasse|todo-protocol guard|completeness guard/i.test(signal)) {
+    return "guard";
+  }
+  if (
+    /missing_terminal_state|unknown_turn_status|runtime returned without a terminal/i.test(
+      signal,
+    )
+  ) {
+    return "lifecycle";
+  }
   return "error";
 }
 
@@ -930,13 +940,19 @@ export function MessageList({
           ? t.streaming.networkLost
           : kind === "verification"
             ? t.streaming.verificationRequired
-            : requiresWorkspaceWrite
-              ? t.streaming.workspaceWriteRequired
-              : t.streaming.turnFailed;
+            : kind === "guard"
+              ? t.streaming.guardBlocked
+              : kind === "lifecycle"
+                ? t.streaming.lifecycleFailed
+                : requiresWorkspaceWrite
+                  ? t.streaming.workspaceWriteRequired
+                  : t.streaming.turnFailed;
       return { ...failure, kind, message };
     },
     [
       t.streaming.networkLost,
+      t.streaming.guardBlocked,
+      t.streaming.lifecycleFailed,
       t.streaming.turnFailed,
       t.streaming.verificationRequired,
       t.streaming.workspaceWriteRequired,
@@ -2005,7 +2021,7 @@ export function MessageList({
         activityLabel={t.message.newUpdates}
         aria-label={t.message.backToLatest}
         title={t.message.backToLatest}
-        style={{ bottom: `${Math.max(12, paddingBottom + 12)}px` }}
+        style={{ bottom: "72px" }}
       >
         {t.message.latest}
       </ConversationScrollButton>

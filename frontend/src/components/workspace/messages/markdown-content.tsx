@@ -1,4 +1,4 @@
-import { useMemo, memo } from "react";
+import { lazy, Suspense, useMemo, memo } from "react";
 import type { AnchorHTMLAttributes, HTMLAttributes, ReactElement } from "react";
 import type { BundledLanguage } from "shiki";
 
@@ -17,7 +17,17 @@ import { useStreamdownPlugins } from "@/core/streamdown";
 import { cn } from "@/lib/utils";
 
 import { CitationLink } from "../citations/citation-link";
-import { MermaidBlock } from "./mermaid-block";
+
+// MermaidBlock is lazy-loaded so the real ``mermaid`` bundle (pulled in via
+// its internal ``import("mermaid-real")``) is not statically reachable from
+// the chat entry and therefore not modulepreloaded on first paint. The block
+// itself is tiny (~4 KB); the heavy mermaid library only loads when a
+// ``mermaid`` / ``mmd`` code fence is actually rendered.
+const MermaidBlock = lazy(() =>
+  import("./mermaid-block").then((module) => ({
+    default: module.MermaidBlock,
+  })),
+);
 
 /**
  * Chat font-size → ``prose-*`` variant.
@@ -145,11 +155,13 @@ export const MarkdownContent = memo(
                 normalizedLanguage === "mmd"
               ) {
                 return (
-                  <MermaidBlock
-                    code={code}
-                    isStreaming={isLoading}
-                    className="my-3"
-                  />
+                  <Suspense fallback={null}>
+                    <MermaidBlock
+                      code={code}
+                      isStreaming={isLoading}
+                      className="my-3"
+                    />
+                  </Suspense>
                 );
               }
 

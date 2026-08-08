@@ -1426,6 +1426,8 @@ export const enUS: Translations = {
       normal: "Normal",
       outcomes: {
         completed: "Completed",
+        paused: "Paused",
+        cancelled: "Cancelled",
         interrupted: "Interrupted",
         failed: "Failed",
       },
@@ -3008,6 +3010,10 @@ export const enUS: Translations = {
     feedbackFailed: "Failed to save feedback.",
     interruptedMessage:
       "This response was interrupted during generation and may be incomplete.",
+    pausedMessage:
+      "This task is paused. Progress and its checkpoint were saved, and it can be continued.",
+    cancelledMessage:
+      "This task was cancelled. Completed steps and outputs are still preserved.",
     strategyReflex: "⚡ Reflex",
     strategyReact: "🧠 ReAct",
     strategyDirectLlm: "💬 Direct",
@@ -3080,6 +3086,10 @@ export const enUS: Translations = {
       "Network disconnected. Task auto-paused — send a message to resume from checkpoint.",
     turnFailed:
       "This turn stopped before finishing. Continue the chat or retry.",
+    guardBlocked:
+      "The result was preserved, but a completion guard did not pass. Continue using the reason below.",
+    lifecycleFailed:
+      "The task outcome could not be persisted reliably. Retry or restart the backend.",
     workspaceWriteRequired:
       "This task requires a project file change, but no successful file change was recorded.",
     verificationRequired:
@@ -3519,11 +3529,25 @@ export const enUS: Translations = {
       lightDescription: "Bright palette with higher contrast for daytime.",
       darkDescription: "Dim palette that reduces glare for focus.",
       paletteTitle: "Color palette",
-      paletteDescription: "Pick an overall color palette that shapes the accent and backdrop.",
-      paletteRouge: "Rouge Pink",
-      paletteRougeDescription: "Warm, fresh pink — light and airy.",
+      paletteDescription:
+        "Pick an overall color palette that shapes the accent and backdrop.",
+      paletteRose: "Rose",
+      paletteRoseDescription: "Elegant, romantic pink — refined and soft.",
       paletteSteel: "Cold Steel Blue",
       paletteSteelDescription: "Calm, rational cool blue — crisp and clean.",
+      paletteEmerald: "Emerald",
+      paletteEmeraldDescription: "Calm, lucid green — natural and fresh.",
+      paletteViolet: "Violet",
+      paletteVioletDescription: "Mysterious, noble purple — deep and elegant.",
+      paletteAmber: "Amber Gold",
+      paletteAmberDescription: "Warm, luxurious gold — premium feel.",
+      paletteTeal: "Teal",
+      paletteTealDescription: "Crisp, clean cyan — sharp and tidy.",
+      paletteCustom: "Custom",
+      paletteCustomDescription:
+        "Pick your own accent color — live preview, auto-saved.",
+      paletteCustomHint:
+        "Use the picker for any accent; text and highlights adapt automatically.",
       languageTitle: "Language",
       languageDescription: "Switch between languages.",
       languageEnglish: "English",
@@ -4620,7 +4644,12 @@ Strategy:
       panelTitleDesktopSettings: "Desktop Settings",
       panelSubtitle: "Browser Desktop Control Panel",
       panelClose: "Close",
-      themeNames: ["Follow Palette", "Morning Mist Glass", "Dark Focus", "Fresh Blue-White"],
+      themeNames: [
+        "Follow Palette",
+        "Morning Mist Glass",
+        "Dark Focus",
+        "Fresh Blue-White",
+      ],
       themeDescs: [
         "Auto-syncs with the global color palette",
         "Soft grey-pink gradient",
@@ -9089,7 +9118,8 @@ Strategy:
       startFailed:
         "The local knowledge base service failed to start. Check the backend logs and try again.",
       notConnected: "Local knowledge base service is still unreachable: {url}",
-      networkError: "Unable to connect to the local knowledge base service. Please make sure it is running and try again.",
+      networkError:
+        "Unable to connect to the local knowledge base service. Please make sure it is running and try again.",
     },
     toolbar: {
       authorize: "Authorize",

@@ -463,7 +463,7 @@
 
 /* 冷钢蓝（steel）配色 —— 男性风格：冷静、理性、偏冷色调。
    由 <html data-theme="steel"> 触发，位于 :root 之后以覆盖默认的
-   小红书粉调（rouge）。 */
+   蔷薇粉调（rouge）。 */
 [data-theme="steel"] {
   --background: oklch(0.97 0.006 240);
   --foreground: oklch(0.2 0.015 240);
@@ -575,6 +575,86 @@
   --sidebar-accent-foreground: oklch(0.9 0.01 240);
   --sidebar-border: oklch(0.32 0.015 240);
   --sidebar-ring: oklch(0.65 0.1 240);
+}
+
+/* ── 高级配色预设：以下仅覆盖主色相关 token（primary / ring / sidebar-primary /
+   chart-1 及其前景），背景与中性色沿用 rouge/dark 基础，呈现克制的高级质感。
+   每种配色均提供浅色与深色（[data-theme=xxx].dark）两套，确保明暗模式一致。 */
+
+[data-theme="emerald"] {
+  --primary: oklch(0.517 0.103 163);
+  --primary-foreground: oklch(0.98 0.005 163);
+  --ring: oklch(0.567 0.103 163);
+  --sidebar-primary: oklch(0.517 0.103 163);
+  --sidebar-primary-foreground: oklch(0.98 0.005 163);
+  --sidebar-ring: oklch(0.567 0.103 163);
+  --chart-1: oklch(0.517 0.103 163);
+}
+[data-theme="emerald"].dark {
+  --primary: oklch(0.7 0.1 163);
+  --primary-foreground: oklch(0.16 0.02 163);
+  --ring: oklch(0.68 0.1 163);
+  --sidebar-primary: oklch(0.7 0.1 163);
+  --sidebar-primary-foreground: oklch(0.16 0.02 163);
+  --sidebar-ring: oklch(0.68 0.1 163);
+  --chart-1: oklch(0.7 0.1 163);
+}
+
+[data-theme="violet"] {
+  --primary: oklch(0.536 0.13 287);
+  --primary-foreground: oklch(0.98 0.004 287);
+  --ring: oklch(0.586 0.13 287);
+  --sidebar-primary: oklch(0.536 0.13 287);
+  --sidebar-primary-foreground: oklch(0.98 0.004 287);
+  --sidebar-ring: oklch(0.586 0.13 287);
+  --chart-1: oklch(0.536 0.13 287);
+}
+[data-theme="violet"].dark {
+  --primary: oklch(0.71 0.125 287);
+  --primary-foreground: oklch(0.16 0.02 287);
+  --ring: oklch(0.69 0.125 287);
+  --sidebar-primary: oklch(0.71 0.125 287);
+  --sidebar-primary-foreground: oklch(0.16 0.02 287);
+  --sidebar-ring: oklch(0.69 0.125 287);
+  --chart-1: oklch(0.71 0.125 287);
+}
+
+[data-theme="amber"] {
+  --primary: oklch(0.509 0.098 68);
+  --primary-foreground: oklch(0.98 0.005 68);
+  --ring: oklch(0.559 0.098 68);
+  --sidebar-primary: oklch(0.509 0.098 68);
+  --sidebar-primary-foreground: oklch(0.98 0.005 68);
+  --sidebar-ring: oklch(0.559 0.098 68);
+  --chart-1: oklch(0.509 0.098 68);
+}
+[data-theme="amber"].dark {
+  --primary: oklch(0.7 0.095 68);
+  --primary-foreground: oklch(0.16 0.02 68);
+  --ring: oklch(0.68 0.095 68);
+  --sidebar-primary: oklch(0.7 0.095 68);
+  --sidebar-primary-foreground: oklch(0.16 0.02 68);
+  --sidebar-ring: oklch(0.68 0.095 68);
+  --chart-1: oklch(0.7 0.095 68);
+}
+
+[data-theme="teal"] {
+  --primary: oklch(0.53 0.084 201);
+  --primary-foreground: oklch(0.98 0.005 201);
+  --ring: oklch(0.58 0.084 201);
+  --sidebar-primary: oklch(0.53 0.084 201);
+  --sidebar-primary-foreground: oklch(0.98 0.005 201);
+  --sidebar-ring: oklch(0.58 0.084 201);
+  --chart-1: oklch(0.53 0.084 201);
+}
+[data-theme="teal"].dark {
+  --primary: oklch(0.7 0.082 201);
+  --primary-foreground: oklch(0.16 0.02 201);
+  --ring: oklch(0.68 0.082 201);
+  --sidebar-primary: oklch(0.7 0.082 201);
+  --sidebar-primary-foreground: oklch(0.16 0.02 201);
+  --sidebar-ring: oklch(0.68 0.082 201);
+  --chart-1: oklch(0.7 0.082 201);
 }
 
 /* 浏览器首页「跟随配色」默认背景。

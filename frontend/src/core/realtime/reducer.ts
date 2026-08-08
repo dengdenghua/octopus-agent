@@ -578,7 +578,8 @@ export function reduce(
       const { supersededTurnIds, summaryTurn } = evt.params;
       const superseded = new Set(supersededTurnIds);
       const firstIdx = state.turns.findIndex((t) => superseded.has(t.id));
-      const removed = (t: Turn) => superseded.has(t.id) || t.id === summaryTurn.id;
+      const removed = (t: Turn) =>
+        superseded.has(t.id) || t.id === summaryTurn.id;
       const keep = state.turns.filter((t) => !removed(t));
       let insertAt: number;
       if (firstIdx === -1) {
@@ -930,7 +931,11 @@ function closeItemsForTurn(
   turnStatus: Turn["status"],
 ): Item[] {
   let interruptedMessageId: string | null = null;
-  if (turnStatus === "interrupted") {
+  if (
+    turnStatus === "interrupted" ||
+    turnStatus === "paused" ||
+    turnStatus === "cancelled"
+  ) {
     for (let index = items.length - 1; index >= 0; index -= 1) {
       const item = items[index];
       if (item?.type === "agentMessage") {
@@ -962,7 +967,13 @@ function closeItemsForTurn(
 
 function itemTerminalStatus(turnStatus: Turn["status"]): Item["status"] {
   if (turnStatus === "failed") return "failed";
-  if (turnStatus === "interrupted") return "interrupted";
+  if (
+    turnStatus === "interrupted" ||
+    turnStatus === "paused" ||
+    turnStatus === "cancelled"
+  ) {
+    return "interrupted";
+  }
   return "completed";
 }
 
@@ -988,11 +999,7 @@ function upsertItem(
     if (!existing) return unchanged(state);
     if (phase === "completed" || existing.status === "inProgress") {
       nextItems = orderTimelineItems(
-        replaceAt(
-          turn.items,
-          idx,
-          preserveCompletedStreamText(existing, item),
-        ),
+        replaceAt(turn.items, idx, preserveCompletedStreamText(existing, item)),
       );
     } else {
       return unchanged(state);
@@ -1079,9 +1086,7 @@ export interface ReducerDiagnostic {
   deltaLength: number;
 }
 
-export type ReducerDiagnosticHandler = (
-  diagnostic: ReducerDiagnostic,
-) => void;
+export type ReducerDiagnosticHandler = (diagnostic: ReducerDiagnostic) => void;
 
 function mergeDelta(
   state: Conversation,

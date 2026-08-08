@@ -16,10 +16,7 @@ import {
 } from "react";
 
 import { ChainOfThought } from "@/components/ai-elements/chain-of-thought";
-import {
-  Collapsible,
-  CollapsibleContent,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { isApprovalRequest } from "@/components/workspace/tool-approval-card";
 import {
   type AgentRunState,
@@ -30,10 +27,10 @@ import { useI18n } from "@/core/i18n/hooks";
 import { useToolEffects } from "@/core/observability/tool-effects-context";
 import {
   extractContentFromMessage,
-  extractReasoningContentFromMessage,
   findToolCallResult,
   hasToolCalls,
   isLikelyFinalAnswerContent,
+  isProcessPrelude,
   stripInternalToolProtocol,
   stripLeakedRendererMarkup,
 } from "@/core/messages/utils";
@@ -610,8 +607,7 @@ export function MessageGroup({
       if (thinkingStartTimeRef.current === null) {
         // Prefer the backend's first-token timestamp; fall back to now()
         // for legacy streams that don't carry reasoning_started_at.
-        thinkingStartTimeRef.current =
-          reasoningStartedAt ?? Date.now();
+        thinkingStartTimeRef.current = reasoningStartedAt ?? Date.now();
         setThinkingElapsedMs(0);
       }
       const intervalId = setInterval(() => {
@@ -763,20 +759,26 @@ export function MessageGroup({
               data-progress-sequence={item.step.progressSequence}
               data-timeline-sequence={item.step.timelineSequence}
             >
-              <span className="relative mt-[7px] flex size-1.5 shrink-0 items-center justify-center">
-                <span
-                  className={cn(
-                    "absolute inline-flex size-1.5 rounded-full opacity-25",
-                    agentRunStatusLightClass(state),
-                    agentRunStatusLightPulseClass(state),
-                  )}
+              <span className="mt-0.5 flex shrink-0 items-center gap-1">
+                <BrainIcon
+                  className="size-3 text-muted-foreground"
+                  aria-label={t.messageGrouping.thinking}
                 />
-                <span
-                  className={cn(
-                    "relative inline-flex size-1 rounded-full",
-                    agentRunStatusLightClass(state),
-                  )}
-                />
+                <span className="relative flex size-1.5 shrink-0 items-center justify-center">
+                  <span
+                    className={cn(
+                      "absolute inline-flex size-1.5 rounded-full opacity-25",
+                      agentRunStatusLightClass(state),
+                      agentRunStatusLightPulseClass(state),
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "relative inline-flex size-1 rounded-full",
+                      agentRunStatusLightClass(state),
+                    )}
+                  />
+                </span>
               </span>
               <div className="min-w-0 flex-1">
                 <MarkdownContent
@@ -949,7 +951,7 @@ export function MessageGroup({
       const subagentIdentity = isSubagentRow
         ? subagentIdentityFromArgs(
             isAggregatedGroup
-              ? item.items[0]?.step.args ?? {}
+              ? (item.items[0]?.step.args ?? {})
               : item.type === "toolCall"
                 ? item.step.args
                 : {},
@@ -1483,13 +1485,7 @@ function extractTeamCallTarget(
     const value = args[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
-  for (const key of [
-    "agent",
-    "agent_id",
-    "subagent_type",
-    "name",
-    "role",
-  ]) {
+  for (const key of ["agent", "agent_id", "subagent_type", "name", "role"]) {
     const value = args[key];
     if (typeof value === "string" && value.trim()) {
       return friendlyRoleName(value.trim());
@@ -1549,6 +1545,8 @@ interface CoTReasoningStep extends GenericCoTStep<"reasoning"> {
   /** Wall-clock thinking time from the backend (reasoning_duration_ms).
    * Undefined when the backend didn't provide it (legacy data). */
   durationMs?: number;
+  /** Grounding reference (source file, etc.) for this reasoning step. */
+  groundingMessage?: Message;
 }
 
 interface CoTActionCallbackStep extends GenericCoTStep<"actionCallback"> {
@@ -1937,7 +1935,9 @@ function executionCoverageByVisibleItem(
       const coveredItems =
         item.type === "aggregatedToolGroup" ? item.items : [item];
       const positions = coveredItems
-        .map((covered) => positionByItem.get(covered) ?? Number.MAX_SAFE_INTEGER)
+        .map(
+          (covered) => positionByItem.get(covered) ?? Number.MAX_SAFE_INTEGER,
+        )
         .sort((a, b) => a - b);
       return {
         item,
@@ -2210,8 +2210,7 @@ function summarizeCompactExecutionTargets(
   // inspect, while still falling back to directory/search scopes when artifacts
   // are missing.
   const artifactTargets = targets.filter(isFileArtifactEvidence);
-  const sourceTargets =
-    artifactTargets.length >= 2 ? artifactTargets : targets;
+  const sourceTargets = artifactTargets.length >= 2 ? artifactTargets : targets;
   const visibleTargets = sourceTargets.slice(-3);
   const hiddenCount = sourceTargets.length - visibleTargets.length;
   return `${visibleTargets.join(" · ")}${hiddenCount > 0 ? ` +${hiddenCount}` : ""}`;
@@ -2465,7 +2464,9 @@ function summarizeCollapsedPhase(
   return t.message.completedSteps(phaseItems.length);
 }
 
-function extractPublicReasoningSummary(message: Message): string | null {
+function extractExplicitPublicReasoningSummary(
+  message: Message,
+): string | null {
   if (message.type !== "ai") return null;
   const additional = message.additional_kwargs;
   const direct = additional?.public_reasoning_summary;
@@ -2473,20 +2474,23 @@ function extractPublicReasoningSummary(message: Message): string | null {
 
   const octopus = additional?.octopus;
   if (typeof octopus === "object" && octopus !== null) {
-    const nested = (octopus as Record<string, unknown>).public_reasoning_summary;
+    const nested = (octopus as Record<string, unknown>)
+      .public_reasoning_summary;
     if (typeof nested === "string" && nested.trim()) return nested.trim();
   }
 
-  // Fall back to raw reasoning_content so the chronological timeline
-  // includes the model's actual thinking trace in correct order, rather
-  // than showing actions before thinking. The content stays muted/collapsed
-  // by default and only expands on click.
-  const rawReasoning = extractReasoningContentFromMessage(message);
-  if (rawReasoning && rawReasoning.trim()) {
-    return rawReasoning.trim();
-  }
-
+  // Do NOT fall back to raw reasoning_content for public_progress messages —
+  // that is private model state. The public narrator text lives in
+  // message.content itself.
   return null;
+}
+
+function extractPublicReasoningSummary(message: Message): string | null {
+  // The provider's raw reasoning_content is private model state. A collapsed
+  // row is still disclosure, and opening that row in the workbench discloses
+  // even more. Only the explicit public-summary protocol may create a visible
+  // thinking event; public_progress narration is handled from message.content.
+  return extractExplicitPublicReasoningSummary(message);
 }
 
 export function convertToSteps(messages: Message[]): CoTStep[] {
@@ -2506,11 +2510,13 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
   }
   let iteration = 1;
   let lastStepType: "reasoning" | "toolCall" | null = null;
+  let deferredPrelude: { message: Message; commentary: string } | null = null;
 
   const pushReasoningStep = (
     message: Message,
     reasoning: string,
     idSuffix = "reasoning",
+    groundingMessage?: Message,
   ) => {
     if (!reasoning.trim()) return;
     const fingerprint = timelineNarrativeFingerprint(reasoning);
@@ -2545,9 +2551,64 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
         Number.isFinite(message.additional_kwargs.reasoning_duration_ms)
           ? message.additional_kwargs.reasoning_duration_ms
           : undefined,
+      groundingMessage,
       iteration,
     });
     lastStepType = "reasoning";
+  };
+
+  const pushCommentaryStep = (
+    message: Message,
+    commentary: string,
+    idSuffix = "commentary",
+  ) => {
+    const publicCommentary = publicProcessText(commentary);
+    const fingerprint = timelineNarrativeFingerprint(publicCommentary);
+    if (
+      !publicCommentary ||
+      !fingerprint ||
+      seenPublicNarrative.has(fingerprint)
+    ) {
+      return;
+    }
+    seenPublicNarrative.add(fingerprint);
+    steps.push({
+      id: `${message.id}-${idSuffix}`,
+      messageId: message.id,
+      type: "commentary",
+      commentary: publicCommentary,
+      phaseId:
+        typeof message.additional_kwargs?.phase_id === "string"
+          ? message.additional_kwargs.phase_id
+          : undefined,
+      parentItemId:
+        typeof message.additional_kwargs?.parent_item_id === "string"
+          ? message.additional_kwargs.parent_item_id
+          : undefined,
+      progressSequence:
+        typeof message.additional_kwargs?.progress_sequence === "number"
+          ? message.additional_kwargs.progress_sequence
+          : undefined,
+      timelineSequence:
+        typeof message.additional_kwargs?.timeline_sequence === "number"
+          ? message.additional_kwargs.timeline_sequence
+          : undefined,
+      groundingMessage: Array.isArray(message.additional_kwargs?.grounding)
+        ? message
+        : undefined,
+      iteration,
+    });
+    lastStepType = "reasoning";
+  };
+
+  const flushDeferredPrelude = () => {
+    if (!deferredPrelude) return;
+    pushCommentaryStep(
+      deferredPrelude.message,
+      deferredPrelude.commentary,
+      "process-prelude",
+    );
+    deferredPrelude = null;
   };
 
   const toToolCallStep = (
@@ -2582,8 +2643,18 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
     return step;
   };
 
-  for (const message of messages) {
+  for (
+    let messageIndex = 0;
+    messageIndex < messages.length;
+    messageIndex += 1
+  ) {
+    const message = messages[messageIndex]!;
     if (message.type === "ai") {
+      if (isProcessPrelude(message, messageIndex, messages)) {
+        const commentary = extractContentFromMessage(message);
+        if (commentary.trim()) deferredPrelude = { message, commentary };
+        continue;
+      }
       const tc = (message as AIMessage).tool_calls;
       const visibleToolCalls = (tc ?? []).filter((toolCall) => {
         if (isHiddenTimelineToolName(toolCall.name)) return false;
@@ -2616,6 +2687,7 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
         // A checkpoint follows the previous tool result and the current
         // private reasoning. Preserve that real order instead of zipping the
         // three channels by array index.
+        flushDeferredPrelude();
         for (const toolCall of visibleToolCalls) {
           steps.push(toToolCallStep(message, toolCall));
           lastStepType = "toolCall";
@@ -2623,18 +2695,28 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
         const commentary = publicProcessText(
           extractContentFromMessage(message),
         );
-        const commentaryFingerprint = timelineNarrativeFingerprint(commentary);
+        const commentaryFingerprint = commentary
+          ? timelineNarrativeFingerprint(commentary)
+          : "";
+        // Public progress messages carry narrator-authored Chinese thought
+        // content. Do NOT leak raw private reasoning_content (English) into
+        // the public timeline. The message content itself is the public text.
         for (let index = 0; index < reasoningChunks.length; index += 1) {
           const reasoningChunk = reasoningChunks[index];
           if (
             reasoningChunk &&
-            timelineNarrativeFingerprint(reasoningChunk) !==
-              commentaryFingerprint
+            (!commentaryFingerprint ||
+              timelineNarrativeFingerprint(reasoningChunk) !==
+                commentaryFingerprint)
           ) {
             pushReasoningStep(message, reasoningChunk, `reasoning-${index}`);
           }
         }
-        if (commentary && !seenPublicNarrative.has(commentaryFingerprint)) {
+        if (
+          commentary &&
+          commentaryFingerprint &&
+          !seenPublicNarrative.has(commentaryFingerprint)
+        ) {
           seenPublicNarrative.add(commentaryFingerprint);
           steps.push({
             id: `${message.id}-commentary`,
@@ -2679,6 +2761,7 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
           pushReasoningStep(message, reasoningChunk, `reasoning-${index}`);
         }
         const tool_call = visibleToolCalls[index];
+        if (reasoningChunk || tool_call) flushDeferredPrelude();
         if (!tool_call) continue;
         const step = toToolCallStep(message, tool_call);
         steps.push(step);

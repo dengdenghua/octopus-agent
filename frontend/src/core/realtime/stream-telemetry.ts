@@ -53,6 +53,8 @@ function isTelemetryRecord(value: unknown): value is StreamTurnTelemetry {
     typeof item.maxDeltaGapMs === "number" &&
     typeof item.stalledAtEnd === "boolean" &&
     (item.outcome === "completed" ||
+      item.outcome === "paused" ||
+      item.outcome === "cancelled" ||
       item.outcome === "interrupted" ||
       item.outcome === "failed")
   );

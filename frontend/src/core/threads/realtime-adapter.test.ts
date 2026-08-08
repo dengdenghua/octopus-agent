@@ -1001,6 +1001,32 @@ describe("conversationToAgentThreadState · interrupted turn", () => {
   });
 });
 
+describe("conversationToAgentThreadState · paused task", () => {
+  it("creates a resumable receipt with stable lifecycle coordinates", () => {
+    const turn = makeTurn([userMsg("q")], "paused");
+    turn.interruptReason = "iteration budget reached";
+    turn.objectiveId = "objective-1";
+    turn.taskId = "task-1";
+    turn.checkpointId = 27;
+    turn.outcomeReason = "iteration_near_limit";
+
+    const state = conversationToAgentThreadState(makeConv([turn]));
+
+    expect(state.messages[1]).toMatchObject({
+      id: `${turn.id}-paused-receipt`,
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        response_state: "paused",
+        interrupt_reason: "iteration budget reached",
+        objective_id: "objective-1",
+        task_id: "task-1",
+        checkpoint_id: 27,
+      },
+    });
+  });
+});
+
 describe("conversationToAgentThreadState · multi-turn", () => {
   it("accumulates messages across turns in order", () => {
     const state = conversationToAgentThreadState(

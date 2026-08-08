@@ -1392,6 +1392,8 @@ export const koKR: Translations = {
       normal: "정상",
       outcomes: {
         completed: "완료",
+        paused: "일시 중지",
+        cancelled: "취소됨",
         interrupted: "중단",
         failed: "실패",
       },
@@ -2938,6 +2940,10 @@ export const koKR: Translations = {
     feedbackFailed: "피드백을 저장하지 못했습니다.",
     interruptedMessage:
       "이 응답은 생성 중 중단되었으며 완전하지 않을 수 있습니다.",
+    pausedMessage:
+      "작업이 일시 중지되었습니다. 진행 상황과 체크포인트가 저장되어 계속할 수 있습니다.",
+    cancelledMessage:
+      "작업이 취소되었습니다. 완료된 단계와 결과물은 그대로 보존됩니다.",
     strategyReflex: "⚡ 리플렉스",
     strategyReact: "🧠 ReAct",
     strategyDirectLlm: "💬 직접",
@@ -3011,6 +3017,10 @@ export const koKR: Translations = {
       "네트워크 연결이 끊겼습니다. 작업이 자동으로 일시정지되었습니다 — 메시지를 보내 체크포인트에서 재개하세요.",
     turnFailed:
       "이번 턴이 완료되기 전에 중지되었습니다. 대화를 계속하거나 재시도하세요.",
+    guardBlocked:
+      "결과는 보존되었지만 완료 조건을 통과하지 못했습니다. 아래 이유에 따라 계속하세요.",
+    lifecycleFailed:
+      "작업 결과를 안정적으로 저장하지 못했습니다. 다시 시도하거나 백엔드를 재시작하세요.",
     workspaceWriteRequired:
       "이 작업은 프로젝트 파일 변경이 필요하지만, 성공적인 파일 변경이 기록되지 않았습니다.",
     verificationRequired:
@@ -3448,11 +3458,27 @@ export const koKR: Translations = {
       lightDescription: "낮에 사용하기 좋은 밝고 대비가 높은 팔레트입니다.",
       darkDescription: "눈부심을 줄여 집중에 도움이 되는 어두운 팔레트입니다.",
       paletteTitle: "색상 팔레트",
-      paletteDescription: "전체 색상 팔레트를 선택해 강조색과 배경 분위기를 결정합니다.",
-      paletteRouge: "루즈 핑크",
-      paletteRougeDescription: "따뜻하고 산뜻한 핑크, 가볍고 부드러운 느낌.",
+      paletteDescription:
+        "전체 색상 팔레트를 선택해 강조색과 배경 분위기를 결정합니다.",
+      paletteRose: "로즈",
+      paletteRoseDescription:
+        "우아하고 로맨틱한 핑크, 부드럽고 고급스러운 느낌.",
       paletteSteel: "콜드 스틸 블루",
-      paletteSteelDescription: "차분하고 이지적인 차가운 블루, 깔끔하고 간결한 느낌.",
+      paletteSteelDescription:
+        "차분하고 이지적인 차가운 블루, 깔끔하고 간결한 느낌.",
+      paletteEmerald: "에메랄드",
+      paletteEmeraldDescription: "고요하고 맑은 그린, 자연스럽고 산뜻한 느낌.",
+      paletteViolet: "바이올렛",
+      paletteVioletDescription: "신비롭고 고귀한 퍼플, 깊이 있는 우아함.",
+      paletteAmber: "앰버 골드",
+      paletteAmberDescription: "따뜻하고 화려한 골드, 프리미엄质感.",
+      paletteTeal: "틸",
+      paletteTealDescription: "청량하고 깔끔한 시안, 산뜻하고 단정한 느낌.",
+      paletteCustom: "사용자 지정",
+      paletteCustomDescription:
+        "원하는 강조색을 직접 골라 실시간 미리보기 후 자동 저장.",
+      paletteCustomHint:
+        "피커로 어떤 강조색이든 선택하면 글자와 강조가 자동 조정됩니다.",
       languageTitle: "언어",
       languageDescription: "언어를 전환합니다.",
       languageEnglish: "English",
@@ -4528,7 +4554,12 @@ export const koKR: Translations = {
       panelTitleDesktopSettings: "데스크톱 설정",
       panelSubtitle: "브라우저 데스크톱 제어 패널",
       panelClose: "닫기",
-      themeNames: ["팔레트 연동", "아침 안개 글라스", "다크 포커스", "산뜻한 블루 화이트"],
+      themeNames: [
+        "팔레트 연동",
+        "아침 안개 글라스",
+        "다크 포커스",
+        "산뜻한 블루 화이트",
+      ],
       themeDescs: [
         "전역 색상 팔레트에 자동 동기화",
         "부드러운 그레이-핑크 그라데이션",
@@ -8946,7 +8977,8 @@ export const koKR: Translations = {
       startFailed:
         "로컬 지식 베이스 서비스 시작에 실패했습니다. 백엔드 로그를 확인한 후 다시 시도하세요.",
       notConnected: "로컬 지식 베이스 서비스에 아직 연결되지 않았습니다: {url}",
-      networkError: "로컬 지식 베이스 서비스에 연결할 수 없습니다. 서비스가 실행 중인지 확인한 후 다시 시도하세요.",
+      networkError:
+        "로컬 지식 베이스 서비스에 연결할 수 없습니다. 서비스가 실행 중인지 확인한 후 다시 시도하세요.",
     },
     toolbar: {
       authorize: "승인",

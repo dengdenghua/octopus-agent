@@ -140,7 +140,10 @@ export function buildThreadRunStatusByHref({
   }
 
   for (const [href, status] of liveThreadRunStatusByHref ?? []) {
-    byHref.set(href, mergeThreadRunStatus(byHref.get(href), status));
+    // Live state is scoped to the current objective and is newer than the
+    // heterogeneous historical task projections above.  A stale failed team
+    // task must not keep a newly running/resumed thread red forever.
+    byHref.set(href, status);
   }
 
   return byHref;
@@ -177,7 +180,9 @@ function mergeTaskStatusForThread(
 ) {
   const href = threadHrefById.get(threadId);
   if (!href) return;
-  byHref.set(href, mergeThreadRunStatus(byHref.get(href), status));
+  // PauseController/background state is the current realtime objective.
+  // It supersedes older team-task projections for the same conversation.
+  byHref.set(href, status);
 }
 
 export function mergeThreadRunStatus(

@@ -56,7 +56,7 @@ describe("PublicThinkingStatus", () => {
     // Mid-task pauses are NOT "thinking" — that label is reserved for the
     // pre-first-response window of a fresh turn (see the waiting case).
     expect(status).toHaveTextContent("正在处理");
-    expect(status).toHaveTextContent("8s");
+    expect(status).not.toHaveTextContent("8s");
     expect(status).not.toHaveTextContent("思考中");
     expect(status).not.toHaveTextContent("理解");
     expect(status).not.toHaveTextContent("规划");
@@ -75,7 +75,7 @@ describe("PublicThinkingStatus", () => {
 
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("思考中");
-    expect(status).toHaveTextContent("18s");
+    expect(status).not.toHaveTextContent("18s");
     expect(status).not.toHaveTextContent("模型处理中");
     expect(status).not.toHaveTextContent("模型");
   });
@@ -93,7 +93,7 @@ describe("PublicThinkingStatus", () => {
     const pulse = screen.getByTestId("conversation-activity-pulse");
     // The running action leads the line — no generic "思考中" wrapper.
     expect(pulse).toHaveTextContent("搜索资料: Kimi streaming interaction");
-    expect(pulse).toHaveTextContent("12s");
+    expect(pulse).not.toHaveTextContent("12s");
     expect(pulse).not.toHaveTextContent("思考中");
     expect(pulse).not.toHaveTextContent("web_search");
   });
@@ -178,7 +178,7 @@ describe("PublicThinkingStatus", () => {
 
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("还在继续，稍慢一些");
-    expect(status).toHaveTextContent("31s");
+    expect(status).not.toHaveTextContent("31s");
     expect(status).toHaveAttribute("data-phase", "slow");
   });
 });

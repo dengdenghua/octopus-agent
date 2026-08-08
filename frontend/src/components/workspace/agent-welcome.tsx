@@ -1,7 +1,12 @@
-import { BotIcon } from "lucide-react";
+import { BotIcon, PencilIcon } from "lucide-react";
+import { useState } from "react";
 
 import { type Agent } from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
+import {
+  getAssistantDisplayName,
+  setAssistantDisplayName,
+} from "@/core/agents/assistant-naming";
 import { getBackendBaseURL } from "@/core/config";
 import { cn } from "@/lib/utils";
 
@@ -14,16 +19,22 @@ export function AgentWelcome({
   agent: Agent | null | undefined;
   agentName: string;
 }) {
-  const displayName =
-    agent?.display_name ??
-    agent?.name ??
-    (agentName === "general" ? "Octopus Agent" : agentName);
+  const isOctopus = agentName === "octopus";
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(getAssistantDisplayName);
+
+  const displayName = isOctopus
+    ? getAssistantDisplayName()
+    : agent?.display_name ?? agent?.name ?? (agentName === "general" ? "Octopus Agent" : agentName);
   const description = agent?.description;
-  // Local CLI partners (Codex CLI / Claude Code / …) are not regular in-process
-  // agents — label the badge so it doesn't read as a generic "Agent".
   const isLocalPartner =
     agentName.startsWith("local_") || (agent?.name ?? "").startsWith("local_");
-  const typeBadge = isLocalPartner ? "本地伙伴" : "Agent";
+  const typeBadge = isLocalPartner ? "本地伙伴" : isOctopus ? "助手" : "Agent";
+
+  const commitRename = () => {
+    setAssistantDisplayName(draft);
+    setRenaming(false);
+  };
 
   return (
     <div
@@ -52,10 +63,48 @@ export function AgentWelcome({
         </span>
       </div>
       <div className="space-y-2">
-        <h2 className="text-xl font-bold tracking-tight text-foreground">
-          {displayName}
-        </h2>
-        {description ? (
+        {isOctopus && renaming ? (
+          <div className="flex items-center justify-center gap-2">
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRename();
+                if (e.key === "Escape") {
+                  setDraft(getAssistantDisplayName());
+                  setRenaming(false);
+                }
+              }}
+              onBlur={commitRename}
+              maxLength={20}
+              className="h-8 w-48 rounded-lg border border-border bg-card px-2 text-center text-lg font-bold tracking-tight outline-none focus:border-primary/50"
+            />
+          </div>
+        ) : (
+          <h2 className="group inline-flex items-center gap-1.5 text-xl font-bold tracking-tight text-foreground">
+            {displayName}
+            {isOctopus && (
+              <button
+                type="button"
+                aria-label="重命名助手"
+                title="重命名助手"
+                onClick={() => {
+                  setDraft(getAssistantDisplayName());
+                  setRenaming(true);
+                }}
+                className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-muted/60 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+              >
+                <PencilIcon className="size-3.5" />
+              </button>
+            )}
+          </h2>
+        )}
+        {isOctopus ? (
+          <p className="text-muted-foreground/80 max-w-md text-sm leading-relaxed">
+            今天帮你做些什么？可以随时 @ 引用文件、/ 调用技能，我随时都在。
+          </p>
+        ) : description ? (
           <p className="text-muted-foreground/80 max-w-md text-sm leading-relaxed">
             {description}
           </p>

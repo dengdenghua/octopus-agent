@@ -102,7 +102,7 @@ type OutputSummary = {
 export type FailurePresentation = {
   message: string;
   detail: string;
-  kind: "error" | "network" | "verification";
+  kind: "error" | "network" | "verification" | "guard" | "lifecycle";
   code?: string;
   eventId?: string;
 };
@@ -675,13 +675,9 @@ export function MessageOutputSummary({
         </div>
         {reviewableChanges.length > 0 && (
           <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-xs shadow-[var(--shadow-xs)]">
-            <span className="text-success">
-              +{totalAdded}
-            </span>
+            <span className="text-success">+{totalAdded}</span>
             <span className="mx-1 text-muted-foreground"> </span>
-            <span className="text-destructive">
-              -{totalRemoved}
-            </span>
+            <span className="text-destructive">-{totalRemoved}</span>
           </div>
         )}
         {resultUrl && (
@@ -823,13 +819,9 @@ export function MessageOutputSummary({
                     {changeSummaryLabel}
                   </span>
                   <span className="mt-0.5 block font-mono text-xs leading-none">
-                    <span className="text-success">
-                      +{totalAdded}
-                    </span>
+                    <span className="text-success">+{totalAdded}</span>
                     <span className="mx-1 text-muted-foreground"> </span>
-                    <span className="text-destructive">
-                      -{totalRemoved}
-                    </span>
+                    <span className="text-destructive">-{totalRemoved}</span>
                   </span>
                 </span>
               ) : (
@@ -839,13 +831,9 @@ export function MessageOutputSummary({
                       {changeSummaryLabel}
                     </span>
                     <span className="mt-0.5 block font-mono text-xs leading-none">
-                      <span className="text-success">
-                        +{totalAdded}
-                      </span>
+                      <span className="text-success">+{totalAdded}</span>
                       <span className="mx-1 text-muted-foreground"> </span>
-                      <span className="text-destructive">
-                        -{totalRemoved}
-                      </span>
+                      <span className="text-destructive">-{totalRemoved}</span>
                     </span>
                   </span>
                   <ChevronDownIcon
@@ -1049,13 +1037,9 @@ function ChangeRow({
           </span>
         )}
         <span className="shrink-0 font-mono text-xs">
-          <span className="text-success">
-            +{change.added}
-          </span>
+          <span className="text-success">+{change.added}</span>
           <span className="mx-1 text-muted-foreground"> </span>
-          <span className="text-destructive">
-            -{change.removed}
-          </span>
+          <span className="text-destructive">-{change.removed}</span>
         </span>
       </div>
       {hasHunks && open && (
@@ -1155,10 +1139,8 @@ function HunkDecisionRow({
 
 function hunkLineTone(line: string): string {
   if (line.startsWith("@@")) return "text-muted-foreground";
-  if (line.startsWith("+"))
-    return "bg-success/10 text-success";
-  if (line.startsWith("-"))
-    return "bg-destructive/10 text-destructive";
+  if (line.startsWith("+")) return "bg-success/10 text-success";
+  if (line.startsWith("-")) return "bg-destructive/10 text-destructive";
   return "text-foreground/80";
 }
 

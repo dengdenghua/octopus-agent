@@ -87,6 +87,8 @@ export interface TodoListItem extends ItemBase {
   type: "todo-list";
   explanation: string | null;
   plan: TodoEntry[];
+  objectiveId?: string | null;
+  taskId?: string | null;
 }
 
 export interface AgentPhaseSnapshot {
@@ -286,7 +288,13 @@ export type Item =
   | ArtifactItem
   | ErrorItem;
 
-export type TurnStatus = "inProgress" | "completed" | "interrupted" | "failed";
+export type TurnStatus =
+  | "inProgress"
+  | "completed"
+  | "paused"
+  | "cancelled"
+  | "interrupted"
+  | "failed";
 
 /** Soft hand-off hint payload from ``turn/metaSkill/hint``.
  *
@@ -324,8 +332,13 @@ export interface GroundingSource {
  * isolation. Agent profile pages must never be shown as ordinary project
  * evidence under another agent's response.
  */
-export function isPrivateAgentGroundingSource(source: GroundingSource): boolean {
-  const path = source.path.replaceAll("\\", "/").replace(/^\.\/?/, "").toLowerCase();
+export function isPrivateAgentGroundingSource(
+  source: GroundingSource,
+): boolean {
+  const path = source.path
+    .replaceAll("\\", "/")
+    .replace(/^\.\/?/, "")
+    .toLowerCase();
   return path.startsWith("agents/") || path.startsWith("20-backend/26-agents/");
 }
 
@@ -347,6 +360,10 @@ export interface Turn {
   workbenchSnapshot?: WorkbenchSnapshotV2 | null;
   /** Human-readable reason the turn was interrupted (null if not interrupted). */
   interruptReason?: string | null;
+  objectiveId?: string | null;
+  taskId?: string | null;
+  checkpointId?: number | null;
+  outcomeReason?: string | null;
 }
 
 // Lightweight thread metadata for ``thread/list`` responses. Keeps the

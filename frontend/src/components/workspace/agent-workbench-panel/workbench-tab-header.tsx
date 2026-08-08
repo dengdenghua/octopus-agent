@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import {
   CheckIcon,
   LayoutGridIcon,
@@ -26,7 +28,7 @@ export type WorkbenchTab = {
   Icon: LucideIcon;
 };
 
-export function WorkbenchTabHeader({
+function WorkbenchTabHeaderImpl({
   mainButton,
   visibleTabs,
   workbenchTabs,
@@ -199,3 +201,5 @@ export function WorkbenchTabHeader({
     </header>
   );
 }
+
+export const WorkbenchTabHeader = memo(WorkbenchTabHeaderImpl);

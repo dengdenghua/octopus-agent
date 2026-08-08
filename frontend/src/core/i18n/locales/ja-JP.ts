@@ -1406,6 +1406,8 @@ export const jaJP: Translations = {
       normal: "正常",
       outcomes: {
         completed: "完了",
+        paused: "一時停止",
+        cancelled: "キャンセル",
         interrupted: "中断",
         failed: "失敗",
       },
@@ -2992,6 +2994,10 @@ export const jaJP: Translations = {
     feedbackFailed: "フィードバックの保存に失敗しました。",
     interruptedMessage:
       "この応答は生成中に中断されたため、不完全な可能性があります。",
+    pausedMessage:
+      "タスクは一時停止されました。進捗とチェックポイントは保存され、続行できます。",
+    cancelledMessage:
+      "タスクはキャンセルされました。完了済みの手順と成果物は保持されます。",
     strategyReflex: "⚡ 反射",
     strategyReact: "🧠 ReAct 推論",
     strategyDirectLlm: "💬 直接",
@@ -3065,6 +3071,10 @@ export const jaJP: Translations = {
       "ネットワークが切断されました。タスクは自動一時停止 —メッセージを送信してチェックポイントから再開。",
     turnFailed:
       "このターンは完了前に停止しました。チャットを続けるか再試行してください。",
+    guardBlocked:
+      "結果は保持されましたが、完了条件を満たしていません。以下の理由に沿って続行してください。",
+    lifecycleFailed:
+      "タスク結果を確実に保存できませんでした。再試行するかバックエンドを再起動してください。",
     workspaceWriteRequired:
       "このタスクはプロジェクトファイルの変更が必要ですが、有効なファイル変更が記録されませんでした。",
     verificationRequired:
@@ -3505,11 +3515,28 @@ export const jaJP: Translations = {
       lightDescription: "日中の使用に適した、明るくコントラストの高い配色。",
       darkDescription: "眩しさを抑えて集中できるダークな配色。",
       paletteTitle: "配色スタイル",
-      paletteDescription: "全体の配色スタイルを選びます。主色と背景の雰囲気に影響します。",
-      paletteRouge: "ルージュピンク",
-      paletteRougeDescription: "温かくフレッシュなピンクで、軽やかで柔らかい印象。",
+      paletteDescription:
+        "全体の配色スタイルを選びます。主色と背景の雰囲気に影響します。",
+      paletteRose: "ローズ",
+      paletteRoseDescription:
+        "上品でロマンチックなピンク。落ち着きがあり上質。",
       paletteSteel: "スチールブルー",
-      paletteSteelDescription: "落ち着いた理知的な冷たいブルーで、シンプルでシャープ。",
+      paletteSteelDescription:
+        "落ち着いた理知的な冷たいブルーで、シンプルでシャープ。",
+      paletteEmerald: "エメラルド",
+      paletteEmeraldDescription: "静かで透明感のあるグリーン。自然で清新。",
+      paletteViolet: "バイオレット",
+      paletteVioletDescription: "神秘で気高いパープル。深みのあるエレガント。",
+      paletteAmber: "アンバーゴールド",
+      paletteAmberDescription: "温かく華やかなゴールド。上質な風合い。",
+      paletteTeal: "ティール",
+      paletteTealDescription:
+        "すっきりとした清涼感のあるシアン。シャープで整う。",
+      paletteCustom: "カスタム",
+      paletteCustomDescription:
+        "お好みのアクセントカラーを選択。プレビュー付きで自動保存。",
+      paletteCustomHint:
+        "ピッカーで任意のアクセントを選ぶと、文字と強調が自動調整されます。",
       languageTitle: "言語",
       languageDescription: "言語を切り替えます。",
       languageEnglish: "English",
@@ -4608,7 +4635,12 @@ export const jaJP: Translations = {
       panelTitleDesktopSettings: "デスクトップ設定",
       panelSubtitle: "ブラウザーデスクトップコントロールパネル",
       panelClose: "Close",
-      themeNames: ["配色に連動", "Morning Mist Glass", "Dark Focus", "Fresh Blue-White"],
+      themeNames: [
+        "配色に連動",
+        "Morning Mist Glass",
+        "Dark Focus",
+        "Fresh Blue-White",
+      ],
       themeDescs: [
         "グローバル配色に自動で同期します",
         "ソフトなグレー・ピンクのグラデーション",
@@ -5034,7 +5066,8 @@ export const jaJP: Translations = {
 
   // Intent-based mode auto-switch
   modeIntent: {
-    suggestSwitch: (modeLabel: string) => `「${modeLabel}」モードに切り替えますか？`,
+    suggestSwitch: (modeLabel: string) =>
+      `「${modeLabel}」モードに切り替えますか？`,
     switch: "切り替え",
     ignore: "無視",
     autoSwitched: (modeLabel: string) =>
@@ -9075,7 +9108,8 @@ export const jaJP: Translations = {
       startFailed:
         "ローカル知識ベースサービスの起動に失敗しました。バックエンドログを確認して再試行してください。",
       notConnected: "ローカル知識ベースサービスにまだ接続できません：{url}",
-      networkError: "ローカル知識ベースサービスに接続できません。サービスが起動していることを確認して再試行してください。",
+      networkError:
+        "ローカル知識ベースサービスに接続できません。サービスが起動していることを確認して再試行してください。",
     },
     toolbar: {
       authorize: "許可",

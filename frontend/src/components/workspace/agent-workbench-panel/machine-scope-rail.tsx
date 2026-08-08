@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { BotIcon } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
@@ -9,7 +11,7 @@ import { agentRunDotClass } from "../agent-run-status";
 import type { WorkbenchRosterSeat } from "./helpers";
 import { dockAgentStatusLabel, rosterSeatRoleLabel } from "./helpers";
 
-export function MachineScopeRail({
+function MachineScopeRailImpl({
   agents,
   leaderSeat,
   mainRunState,
@@ -126,3 +128,5 @@ export function MachineScopeRail({
     </div>
   );
 }
+
+export const MachineScopeRail = memo(MachineScopeRailImpl);

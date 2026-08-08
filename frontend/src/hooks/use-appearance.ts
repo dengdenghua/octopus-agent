@@ -21,17 +21,53 @@ export type Density =
   | "dense"
   | "ultradense";
 
-/** 配色主题：rouge = 小红书粉调（默认），steel = 冷钢蓝（男性风格）。 */
-export type Palette = "rouge" | "steel";
+/** 配色主题：rouge = 蔷薇粉（默认），steel = 冷钢蓝，emerald/violet/amber/teal = 高级预设，custom = 用户自定义主色。 */
+export type Palette =
+  | "rouge"
+  | "steel"
+  | "emerald"
+  | "violet"
+  | "amber"
+  | "teal"
+  | "custom";
 
 const CORNER_KEY = "octopus-corner-scale";
 const DENSITY_KEY = "octopus-density";
 const PALETTE_KEY = "octopus-palette";
+const CUSTOM_COLOR_KEY = "octopus-custom-color";
 const APPEARANCE_CHANGE_EVENT = "octopus:appearance-change";
 
 const DEFAULT_CORNER: CornerScale = 1;
 const DEFAULT_DENSITY: Density = "comfortable";
 const DEFAULT_PALETTE: Palette = "rouge";
+const DEFAULT_CUSTOM_COLOR = "#3e6fd8";
+
+/** 主色相关的 CSS 变量；自定义配色时覆盖这一组即可,其余 token 沿用基础主题。 */
+const CUSTOM_PALETTE_VARS = [
+  "--primary",
+  "--primary-foreground",
+  "--ring",
+  "--sidebar-primary",
+  "--sidebar-primary-foreground",
+  "--sidebar-ring",
+  "--chart-1",
+] as const;
+
+/** 根据色值亮度返回可读前景色（深色字 / 浅色字）,保证主色上的文字对比度达标。 */
+function readableForeground(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#f8fafc";
+  const int = parseInt(m[1] ?? "0", 16);
+  const channel = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const r = channel((int >> 16) & 255);
+  const g = channel((int >> 8) & 255);
+  const b = channel(int & 255);
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.45 ? "#1f2937" : "#f8fafc";
+}
 const DENSITY_TOKENS: Record<
   Density,
   {
@@ -129,7 +165,15 @@ function isDensity(value: string | null): value is Density {
 }
 
 function isPalette(value: string | null): value is Palette {
-  return value === "rouge" || value === "steel";
+  return (
+    value === "rouge" ||
+    value === "steel" ||
+    value === "emerald" ||
+    value === "violet" ||
+    value === "amber" ||
+    value === "teal" ||
+    value === "custom"
+  );
 }
 
 function readPalette(): Palette {
@@ -138,10 +182,39 @@ function readPalette(): Palette {
   return isPalette(raw) ? raw : DEFAULT_PALETTE;
 }
 
-function applyPalette(palette: Palette) {
+function isHexColor(value: string | null | undefined): value is string {
+  return /^#[0-9a-f]{6}$/i.test(value ?? "");
+}
+
+function readCustomColor(): string {
+  if (typeof window === "undefined") return DEFAULT_CUSTOM_COLOR;
+  const raw = window.localStorage.getItem(CUSTOM_COLOR_KEY);
+  return isHexColor(raw) ? raw : DEFAULT_CUSTOM_COLOR;
+}
+
+function clearCustomPaletteVars(root: HTMLElement) {
+  for (const v of CUSTOM_PALETTE_VARS) root.style.removeProperty(v);
+}
+
+function applyPalette(palette: Palette, customColor?: string) {
   const root = document.documentElement;
+  if (palette === "custom") {
+    // 以 rouge 基础变量为底,再用用户色值覆盖主色相关 token。
+    root.dataset.theme = "rouge";
+    const color = isHexColor(customColor) ? customColor : DEFAULT_CUSTOM_COLOR;
+    const fg = readableForeground(color);
+    root.style.setProperty("--primary", color);
+    root.style.setProperty("--primary-foreground", fg);
+    root.style.setProperty("--ring", color);
+    root.style.setProperty("--sidebar-primary", color);
+    root.style.setProperty("--sidebar-primary-foreground", fg);
+    root.style.setProperty("--sidebar-ring", color);
+    root.style.setProperty("--chart-1", color);
+    return;
+  }
   if (palette === DEFAULT_PALETTE) delete root.dataset.theme;
   else root.dataset.theme = palette;
+  clearCustomPaletteVars(root);
 }
 
 function applyCorner(scale: CornerScale) {
@@ -175,18 +248,22 @@ export function useAppearance() {
     useState<CornerScale>(DEFAULT_CORNER);
   const [density, setDensityState] = useState<Density>(DEFAULT_DENSITY);
   const [palette, setPaletteState] = useState<Palette>(DEFAULT_PALETTE);
+  const [customColor, setCustomColorState] =
+    useState<string>(DEFAULT_CUSTOM_COLOR);
 
   useEffect(() => {
     const syncFromStorage = () => {
       const c = readCorner();
       const d = readDensity();
       const p = readPalette();
+      const pc = readCustomColor();
       setCornerScaleState(c);
       setDensityState(d);
       setPaletteState(p);
+      setCustomColorState(pc);
       applyCorner(c);
       applyDensity(d);
-      applyPalette(p);
+      applyPalette(p, pc);
     };
 
     syncFromStorage();
@@ -220,7 +297,7 @@ export function useAppearance() {
     emitAppearanceChange();
   }, []);
 
-  const setPalette = useCallback((p: Palette) => {
+  const setPalette = useCallback((p: Exclude<Palette, "custom">) => {
     setPaletteState(p);
     applyPalette(p);
     try {
@@ -231,13 +308,29 @@ export function useAppearance() {
     emitAppearanceChange();
   }, []);
 
+  const setCustomColor = useCallback((hex: string) => {
+    const color = isHexColor(hex) ? hex : DEFAULT_CUSTOM_COLOR;
+    setPaletteState("custom");
+    setCustomColorState(color);
+    applyPalette("custom", color);
+    try {
+      window.localStorage.setItem(PALETTE_KEY, "custom");
+      window.localStorage.setItem(CUSTOM_COLOR_KEY, color);
+    } catch (e) {
+      swallow(e, "storage");
+    }
+    emitAppearanceChange();
+  }, []);
+
   return {
     cornerScale,
     density,
     palette,
+    customColor,
     setCornerScale,
     setDensity,
     setPalette,
+    setCustomColor,
   };
 }
 

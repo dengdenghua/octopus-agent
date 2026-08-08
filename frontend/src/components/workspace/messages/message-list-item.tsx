@@ -33,7 +33,6 @@ import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   extractContentFromMessage,
-  extractReasoningContentFromMessage,
   extractTextFromMessage,
   parseUploadedFiles,
   stripInternalToolProtocol,
@@ -193,18 +192,10 @@ function looksLikeBoilerplateThinking(text?: string | null): boolean {
 }
 
 function buildPublicThinkingSummary(message: Message): string | null {
-  // Prefer summaries the backend explicitly marks as public. Fall back to
-  // the raw reasoning_content so the user can see what the model is actually
-  // thinking instead of staring at an empty dot — the row stays collapsed
-  // and muted by default, and the full text only opens on click.
-  const explicit = getPublicReasoningSummary(message);
-  if (explicit) return explicit;
-  const raw = extractReasoningContentFromMessage(message);
-  if (raw && raw.trim()) {
-    const cleaned = raw.trim();
-    if (!looksLikeBoilerplateThinking(cleaned)) return cleaned;
-  }
-  return null;
+  // A collapsed row and its workbench detail are both user-visible surfaces.
+  // Never populate either from provider reasoning_content; the backend's
+  // explicit public summary protocol is the only allowed source.
+  return getPublicReasoningSummary(message);
 }
 
 function cleanClipboardText(value: string): string {
@@ -228,9 +219,7 @@ export function messageClipboardText(message: Message): string {
   const cleanedVisible = cleanClipboardText(visibleContent);
   if (cleanedVisible) return cleanedVisible;
 
-  // Clipboard only includes explicitly public reasoning summaries, never the
-  // raw reasoning_content fallback used for the on-screen thinking row —
-  // copying private chain-of-thought into another app is a leak risk.
+  // Clipboard only includes explicitly public reasoning summaries.
   return cleanClipboardText(getPublicReasoningSummary(message) ?? "");
 }
 
@@ -323,10 +312,7 @@ export const MessageListItem = memo(function MessageListItem({
     messageMetadata?.response_state !== "interrupted" &&
     messageMetadata?.response_state !== "failed" &&
     messageMetadata?.run_status !== "streaming";
-  const clipboardText = useMemo(
-    () => messageClipboardText(message),
-    [message],
-  );
+  const clipboardText = useMemo(() => messageClipboardText(message), [message]);
   const showMessageActions =
     !isLoading &&
     (isHuman || (assistantIsSettledAnswer && clipboardText.length > 0));
@@ -608,6 +594,8 @@ function MessageContent_({
   const showInterruptedReceipt =
     responseState === "interrupted" ||
     (legacyRunStatus === "streaming" && hasVisibleBody);
+  const showPausedReceipt = responseState === "paused";
+  const showCancelledReceipt = responseState === "cancelled";
   const filesList =
     files && files.length > 0 && thread_id ? (
       <RichFilesList files={files} threadId={thread_id} />
@@ -807,6 +795,18 @@ function MessageContent_({
           {typeof interruptReason === "string" && interruptReason.trim()
             ? `${t.conversation.interruptedMessage}（原因：${interruptReason}）`
             : t.conversation.interruptedMessage}
+        </div>
+      )}
+      {!isCurrentlyStreaming && showPausedReceipt && (
+        <div className="mt-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+          {typeof interruptReason === "string" && interruptReason.trim()
+            ? `${t.conversation.pausedMessage}（${interruptReason}）`
+            : t.conversation.pausedMessage}
+        </div>
+      )}
+      {!isCurrentlyStreaming && showCancelledReceipt && (
+        <div className="mt-2 text-xs leading-5 text-muted-foreground/70">
+          {t.conversation.cancelledMessage}
         </div>
       )}
     </AIElementMessageContent>

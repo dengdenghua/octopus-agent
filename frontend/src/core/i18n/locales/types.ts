@@ -1194,6 +1194,8 @@ export interface Translations {
       normal: string;
       outcomes: {
         completed: string;
+        paused: string;
+        cancelled: string;
         interrupted: string;
         failed: string;
       };
@@ -2385,6 +2387,8 @@ export interface Translations {
     feedbackRecorded: string;
     feedbackFailed: string;
     interruptedMessage: string;
+    pausedMessage: string;
+    cancelledMessage: string;
     strategyReflex: string;
     strategyReact: string;
     strategyDirectLlm: string;
@@ -2452,6 +2456,8 @@ export interface Translations {
     connectionLost: string;
     networkLost: string;
     turnFailed: string;
+    guardBlocked: string;
+    lifecycleFailed: string;
     workspaceWriteRequired: string;
     verificationRequired: string;
     streamEndpointUnavailable: string;
@@ -2861,10 +2867,21 @@ export interface Translations {
       darkDescription: string;
       paletteTitle: string;
       paletteDescription: string;
-      paletteRouge: string;
-      paletteRougeDescription: string;
+      paletteRose: string;
+      paletteRoseDescription: string;
       paletteSteel: string;
       paletteSteelDescription: string;
+      paletteEmerald: string;
+      paletteEmeraldDescription: string;
+      paletteViolet: string;
+      paletteVioletDescription: string;
+      paletteAmber: string;
+      paletteAmberDescription: string;
+      paletteTeal: string;
+      paletteTealDescription: string;
+      paletteCustom: string;
+      paletteCustomDescription: string;
+      paletteCustomHint: string;
       languageTitle: string;
       languageDescription: string;
       languageEnglish: string;

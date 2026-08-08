@@ -322,25 +322,28 @@ export function useRealtimeThread(
     [args.threadId],
   );
 
-  const applyEvent = useCallback((evt: ConversationEvent) => {
-    setState((prev) => {
-      // Second line of defense: reject events that belong to a different
-      // thread than the one currently held in state. This guards against
-      // any in-flight notifications from a previous thread's WebSocket
-      // that slip through between cleanup and the socket actually closing.
-      const eventThreadId =
-        "threadId" in evt.params ? evt.params.threadId : evt.params.thread.id;
-      if (
-        typeof eventThreadId === "string" &&
-        eventThreadId !== prev.threadId
-      ) {
-        return prev;
-      }
-      const { next } = reduce(prev, evt, onReducerDiagnostic);
-      stateRef.current = next;
-      return next;
-    });
-  }, [onReducerDiagnostic]);
+  const applyEvent = useCallback(
+    (evt: ConversationEvent) => {
+      setState((prev) => {
+        // Second line of defense: reject events that belong to a different
+        // thread than the one currently held in state. This guards against
+        // any in-flight notifications from a previous thread's WebSocket
+        // that slip through between cleanup and the socket actually closing.
+        const eventThreadId =
+          "threadId" in evt.params ? evt.params.threadId : evt.params.thread.id;
+        if (
+          typeof eventThreadId === "string" &&
+          eventThreadId !== prev.threadId
+        ) {
+          return prev;
+        }
+        const { next } = reduce(prev, evt, onReducerDiagnostic);
+        stateRef.current = next;
+        return next;
+      });
+    },
+    [onReducerDiagnostic],
+  );
 
   // Build/teardown the client when threadId changes.
   useEffect(() => {
@@ -725,12 +728,13 @@ export function useRealtimeThread(
       params: Record<string, unknown>;
     }): void => {
       if (cancelled) {
-        const belongsToDetachedThread =
-          note.params?.threadId === args.threadId;
+        const belongsToDetachedThread = note.params?.threadId === args.threadId;
         const turn = note.params?.turn as { status?: unknown } | undefined;
         const reachedTerminalState =
           (note.method === "turn/completed" &&
             (turn?.status === "completed" ||
+              turn?.status === "paused" ||
+              turn?.status === "cancelled" ||
               turn?.status === "interrupted" ||
               turn?.status === "failed")) ||
           note.method === "turn/interrupted";
@@ -761,6 +765,8 @@ export function useRealtimeThread(
         if (
           typeof turn?.id === "string" &&
           (outcome === "completed" ||
+            outcome === "paused" ||
+            outcome === "cancelled" ||
             outcome === "interrupted" ||
             outcome === "failed")
         ) {

@@ -90,7 +90,7 @@ describe("TodoPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("marks unfinished in-progress work as interrupted once the turn is no longer live", () => {
+  it("returns unfinished in-progress work to pending once the turn is no longer live", () => {
     const { container } = renderWithProviders(
       <TodoPanel
         liveToolEvents={[
@@ -116,10 +116,10 @@ describe("TodoPanel", () => {
 
     expect(screen.getByText("Detect issue")).toBeInTheDocument();
     expect(container.querySelector(".animate-spin")).toBeNull();
-    expect(container.querySelector(".text-destructive")).not.toBeNull();
+    expect(container.querySelector(".text-destructive")).toBeNull();
   });
 
-  it("marks pending work as interrupted once the turn is no longer live", () => {
+  it("keeps never-started pending work neutral once the turn is no longer live", () => {
     const { container } = renderWithProviders(
       <TodoPanel
         liveToolEvents={[
@@ -135,6 +135,6 @@ describe("TodoPanel", () => {
 
     expect(screen.getByText("Never started")).toBeInTheDocument();
     expect(container.querySelector(".animate-spin")).toBeNull();
-    expect(container.querySelector(".text-destructive")).not.toBeNull();
+    expect(container.querySelector(".text-destructive")).toBeNull();
   });
 });
