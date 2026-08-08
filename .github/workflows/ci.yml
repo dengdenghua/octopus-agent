@@ -83,6 +83,9 @@ jobs:
       - name: Repo URL consistency (matches pyproject.toml source of truth)
         run: python tools/lint/repo_url_check.py --strict
 
+      - name: Desktop-core deps (Electron bootstrap matches pyproject extras)
+        run: python tools/lint/desktop_core_sync_check.py --strict
+
       - name: Test-count freshness (no stale "3800+" in roadmap)
         run: python tools/lint/count_tests.py --check
 

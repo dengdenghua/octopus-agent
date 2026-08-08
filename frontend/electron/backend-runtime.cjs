@@ -58,7 +58,11 @@ const CORE_DEPS = [
 // Heavy optional capability → pyproject extra. Installed lazily on first use.
 const OPTIONAL_GROUPS = {
   browser: ["playwright>=1.48"],
-  desktop: ["pyautogui>=0.9.54", "pillow>=12.3.0"],
+  desktop: [
+    "pyautogui>=0.9.54",
+    "pillow>=10.0",
+    "uiautomation>=2.0; platform_system == 'Windows'",
+  ],
   "code-intel": [
     "tree-sitter>=0.23",
     "tree-sitter-python>=0.23",
@@ -68,9 +72,10 @@ const OPTIONAL_GROUPS = {
     "fastembed>=0.8.0",
     "insightface>=1.0.1",
     "opencv-python-headless>=5.0.0.93",
+    "rapidocr-onnxruntime>=1.3.0",
   ],
-  extract: ["trafilatura>=2.0"],
-  mcp: ["mcp>=0.9,<2.0"],
+  extract: ["trafilatura>=2.0", "pypdf>=6.15.0"],
+  mcp: ["mcp>=1.28.1,<2.0", "pydantic-settings>=2.14.2", "pyjwt[crypto]>=2.13.0"],
 };
 
 function venvReady() {

@@ -13,12 +13,8 @@ classifiers = [
 ]
 dependencies = [
     "defusedxml>=0.7.1",
-    "fastembed>=0.8.0",
-    "insightface>=1.0.1",
-    "opencv-python-headless>=5.0.0.93",
     "pillow>=12.3.0",
     "pydantic>=2.12.0",
-    "rapidocr-onnxruntime>=1.3.0",
 ]
 
 [project.optional-dependencies]
@@ -119,6 +115,16 @@ desktop = [
     "pillow>=10.0",
     "uiautomation>=2.0; platform_system == 'Windows'",
 ]
+# ── Local vision skills (image semantic index / album / OCR) ──
+# Heavy binary deps. The image-semantic / image-album skills self-gate on
+# import (they degrade gracefully when these are missing), so they stay out
+# of the base install. Install with `pip install -e ".[vision]"`.
+vision = [
+    "fastembed>=0.8.0",
+    "insightface>=1.0.1",
+    "opencv-python-headless>=5.0.0.93",
+    "rapidocr-onnxruntime>=1.3.0",
+]
 # ── Local video understanding + AI retrieval (speech-to-text) ──
 video = [
     "av>=12.0",
@@ -194,6 +200,11 @@ all = [
     "tree-sitter>=0.23",
     "tree-sitter-python>=0.23",
     "tree-sitter-typescript>=0.23",
+    # local vision (image semantic index / album / OCR)
+    "fastembed>=0.8.0",
+    "insightface>=1.0.1",
+    "opencv-python-headless>=5.0.0.93",
+    "rapidocr-onnxruntime>=1.3.0",
     # observability
     "opentelemetry-api>=1.25",
     "opentelemetry-sdk>=1.25",
