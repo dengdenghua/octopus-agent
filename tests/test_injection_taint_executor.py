@@ -144,7 +144,9 @@ def test_tainted_turn_blocks_risky_tool_without_approval(
     assert not step.success
     assert step.result.status == "immune_reject"
     assert step.result.error_type == "immune_reject"
-    assert "injection_taint_block" in (step.result.stderr_tags[-1] if step.result.stderr_tags else "")
+    assert "injection_taint_block" in (
+        step.result.stderr_tags[-1] if step.result.stderr_tags else ""
+    )
 
 
 # ── Tests: tainted turn + low-risk tool → allowed ─────────────────
@@ -281,7 +283,9 @@ def test_tainted_turn_blocks_durable_persistence_even_when_gate_handled(
     assert not step.success
     assert step.result.status == "immune_reject"
     assert step.result.error_type == "immune_reject"
-    assert "injection_taint_block" in (step.result.stderr_tags[-1] if step.result.stderr_tags else "")
+    assert "injection_taint_block" in (
+        step.result.stderr_tags[-1] if step.result.stderr_tags else ""
+    )
 
 
 def test_clean_turn_allows_durable_persistence(

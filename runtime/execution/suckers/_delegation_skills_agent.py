@@ -6,6 +6,7 @@ level (``_allowed_agent_ids`` / ``_check_absolute_cap`` / ``_record_delegation``
 are resolved lazily via ``delegation_skills`` so a monkeypatch is still observed
 at call time — the same pattern used by ``_write_skills_background``.
 """
+
 from __future__ import annotations
 
 import json

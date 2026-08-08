@@ -45,10 +45,13 @@ def _tool_digest(tool_names: Iterable[str]) -> str:
 # ═══════════════════════════════════════════════════════════
 
 
-def _trust_store_path() -> Path:
-    """~/.octopus/mcp_trust.json · overrideable via $OCTOPUS_HOME."""
+def _trust_store_path(tenant_id: str | None = None) -> Path:
+    """Return the approval file for the legacy or tenant-scoped store."""
     home = os.environ.get("OCTOPUS_HOME")
     base = Path(home) if home else (Path.home() / ".octopus")
+    if tenant_id:
+        digest = hashlib.sha256(tenant_id.encode("utf-8")).hexdigest()[:32]
+        base = base / "tenants" / digest
     base.mkdir(parents=True, exist_ok=True)
     return base / "mcp_trust.json"
 
@@ -65,8 +68,14 @@ class MCPTrustStore:
     * ``list_all()``                                  — UI read
     """
 
-    def __init__(self, path: Path | str | None = None) -> None:
-        self._path = Path(path) if path else _trust_store_path()
+    def __init__(
+        self,
+        path: Path | str | None = None,
+        *,
+        tenant_id: str | None = None,
+    ) -> None:
+        self.tenant_id = str(tenant_id).strip() if tenant_id else None
+        self._path = Path(path) if path else _trust_store_path(self.tenant_id)
         self._lock = threading.RLock()
         self._entries: dict[str, TrustEntry] = {}
         self._load()
@@ -174,27 +183,33 @@ class MCPTrustStore:
 # Module-global convenience · one store per process
 # ═══════════════════════════════════════════════════════════
 
-_GLOBAL_STORE: MCPTrustStore | None = None
+_GLOBAL_STORES: dict[str, MCPTrustStore] = {}
 _GLOBAL_STORE_LOCK = threading.Lock()
 
 
-def get_trust_store() -> MCPTrustStore:
-    """Lazy singleton · first call reads (or creates) the JSON."""
-    global _GLOBAL_STORE
-    if _GLOBAL_STORE is None:
+def get_trust_store(tenant_id: str | None = None) -> MCPTrustStore:
+    """Return the approval store isolated to ``tenant_id``.
+
+    The no-argument form preserves the local CLI/legacy store.  Shared HTTP
+    deployments must pass the server-resolved tenant; files are partitioned
+    by a one-way tenant digest and are never selected from request input.
+    """
+    key = str(tenant_id).strip() if tenant_id else "__legacy__"
+    if key not in _GLOBAL_STORES:
         with _GLOBAL_STORE_LOCK:
-            if _GLOBAL_STORE is None:
-                _GLOBAL_STORE = MCPTrustStore()
-    return _GLOBAL_STORE
+            if key not in _GLOBAL_STORES:
+                _GLOBAL_STORES[key] = MCPTrustStore(
+                    tenant_id=None if key == "__legacy__" else key,
+                )
+    return _GLOBAL_STORES[key]
 
 
 def reset_trust_store_for_tests() -> None:
     """Drop the singleton · tests use this to isolate from user's
     real ~/.octopus directory (pair with monkeypatching
     $OCTOPUS_HOME)."""
-    global _GLOBAL_STORE
     with _GLOBAL_STORE_LOCK:
-        _GLOBAL_STORE = None
+        _GLOBAL_STORES.clear()
 
 
 __all__ = [

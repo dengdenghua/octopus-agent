@@ -8,6 +8,7 @@ the ``delegation_skills`` module level (``_allowed_agent_ids`` /
 ``delegation_skills`` so a monkeypatch is still observed at call time — the
 same pattern used by ``_delegation_skills_agent`` / ``_write_skills_background``.
 """
+
 from __future__ import annotations
 
 import json

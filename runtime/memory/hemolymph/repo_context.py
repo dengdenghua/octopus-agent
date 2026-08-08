@@ -132,9 +132,7 @@ def is_private_agent_context_path(path: str) -> bool:
     tool's authorization policy, not this automatic prompt prefetch.
     """
     normalized = str(path or "").replace("\\", "/").lstrip("./").lower()
-    return normalized.startswith("agents/") or normalized.startswith(
-        _AGENT_PROFILE_WIKI_PREFIX
-    )
+    return normalized.startswith("agents/") or normalized.startswith(_AGENT_PROFILE_WIKI_PREFIX)
 
 
 def _maybe_rerank(

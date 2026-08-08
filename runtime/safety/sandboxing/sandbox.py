@@ -18,8 +18,9 @@ platform integration each user has to install. Instead it provides:
   3. A pluggable ``Backend`` interface so a real bwrap/Seatbelt/Job
      Object backend can be wired in by the caller without touching
      the runner itself.
-  4. A no-op ``DirectBackend`` that runs subprocess directly. This is
-     the default — soft constraints still apply.
+  4. A no-op ``DirectBackend`` that runs subprocess directly. This remains
+     the local-development default — soft constraints still apply. Shared /
+     commercial mode selects a hard backend and fails closed when none exists.
 
 The contract: even with the no-op backend, **a sandbox-aware caller
 gets observable behavior** (timeout, output cap, env scrubbing,
@@ -43,6 +44,16 @@ from pathlib import Path
 from typing import Protocol
 
 _logger = logging.getLogger(__name__)
+
+
+_COMMERCIAL_DEPLOYMENT_MODES = frozenset(
+    {
+        "commercial",
+        "production",
+        "shared",
+        "server",
+    }
+)
 
 
 # Default env keys allowed through to the child. Anything else is
@@ -386,6 +397,52 @@ class SandboxViolation(Exception):
     Caller should surface this as ``status=rejected`` so the planner
     distinguishes "not allowed" from "ran and failed".
     """
+
+
+def commercial_execution_mode() -> bool:
+    """Return whether the process is running in a shared/commercial mode.
+
+    This is deliberately an explicit deployment switch.  Local desktop and
+    test callers keep the historical soft fallback unless they opt into a
+    strict process sandbox themselves.  A commercial deployment must opt in
+    with ``OCTOPUS_DEPLOYMENT_MODE=commercial`` (``production``/``shared``
+    are accepted aliases) so an operator cannot accidentally expose a
+    network-facing service with the local development execution contract.
+    """
+
+    raw = os.environ.get("OCTOPUS_DEPLOYMENT_MODE", "").strip().lower()
+    return raw in _COMMERCIAL_DEPLOYMENT_MODES
+
+
+def process_sandbox_required() -> bool:
+    """Whether a high-risk process caller must provide a hard sandbox.
+
+    Explicit hard backend requests are also treated as required.  This lets
+    ``OCTOPUS_PROCESS_SANDBOX=strict`` fail closed even for a local operator,
+    while leaving the default local ``auto`` behavior backwards compatible.
+    """
+
+    raw = os.environ.get("OCTOPUS_PROCESS_SANDBOX", "").strip().lower()
+    return commercial_execution_mode() or raw in {
+        "strict",
+        "bwrap",
+        "bubblewrap",
+        "seatbelt",
+        "sandbox-exec",
+    }
+
+
+def effective_process_sandbox_mode() -> str:
+    """Resolve the backend mode with a commercial fail-closed override."""
+
+    raw = os.environ.get("OCTOPUS_PROCESS_SANDBOX", "").strip().lower()
+    if commercial_execution_mode():
+        # A commercial deployment may select a specific hard backend, but
+        # cannot downgrade itself to ``soft``/``direct``/``auto``.
+        if raw in {"bwrap", "bubblewrap", "seatbelt", "sandbox-exec", "strict"}:
+            return raw
+        return "strict"
+    return raw or "auto"
 
 
 def select_process_backend(mode: str | None = None) -> BackendChoice:

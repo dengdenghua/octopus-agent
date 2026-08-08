@@ -62,14 +62,14 @@ def _phase(
     )
 
 
-def test_terminal_phases_completed_marks_all_unfinished_done() -> None:
+def test_terminal_phases_completed_preserves_unstarted_todo_truth() -> None:
     phases = [
         _phase(pid="p1", index=1, status="done"),
         _phase(pid="p2", index=2, status="running", active="cmd-1"),
         _phase(pid="p3", index=3, status="pending"),
     ]
     out = _terminal_workbench_phases(phases, TurnStatus.COMPLETED)
-    assert [p.status for p in out] == ["done", "done", "done"]
+    assert [p.status for p in out] == ["done", "done", "pending"]
     assert all(p.active_item_id is None for p in out), (
         "all active_item_id must clear on terminal completion"
     )
@@ -98,14 +98,14 @@ def test_terminal_phases_failed_when_already_failed_at_running_keeps_done_only()
     assert [p.status for p in out] == ["error", "pending"]
 
 
-def test_terminal_phases_interrupted_running_becomes_waiting_approval() -> None:
+def test_terminal_phases_interrupted_running_becomes_pending() -> None:
     phases = [
         _phase(pid="p1", index=1, status="done"),
         _phase(pid="p2", index=2, status="running", active="cmd-1"),
     ]
     out = _terminal_workbench_phases(phases, TurnStatus.INTERRUPTED)
-    # done preserved; running becomes waiting_approval
-    assert [p.status for p in out] == ["done", "waiting_approval"]
+    # done is preserved; interrupted work is unfinished, not approval-gated.
+    assert [p.status for p in out] == ["done", "pending"]
     assert all(p.active_item_id is None for p in out)
 
 

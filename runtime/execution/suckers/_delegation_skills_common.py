@@ -6,6 +6,7 @@ routing, dynamic skill packs, context/name coercion, the role catalog, session
 resolution, budget messaging, and the pure parallel-envelope / vote aggregation
 helpers. No function here spawns sub-agents or depends on another submodule.
 """
+
 from __future__ import annotations
 
 import contextlib

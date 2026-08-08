@@ -20,7 +20,7 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 from runtime.safety.approval.device_lock import get_device_lock_manager
 from runtime.sensing.model_router.devices import (
@@ -66,7 +66,28 @@ def create_android_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> APIRouter:
-    router = APIRouter(prefix="/api/android", tags=["android"])
+    def _operator_http(request: Request = None) -> None:  # type: ignore[assignment]
+        # Router-level dependencies are also evaluated for WebSocket routes;
+        # the WebSocket handshake is authenticated explicitly below because
+        # it has no HTTP Request object.
+        if request is None:
+            return
+        from runtime.safety.auth.principal import require_operator
+
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(
+        prefix="/api/android",
+        tags=["android"],
+        dependencies=[Depends(_operator_http)] if require_auth else [],
+    )
     pool = get_device_pool()
     lock_mgr = get_device_lock_manager()
     pending_previews: dict[str, dict[str, Any]] = {}
@@ -111,7 +132,9 @@ def create_android_router(
                 secret=jwt_secret,
                 required_issuer=jwt_issuer,
                 required_audience=jwt_audience,
-                trust_jwt_sub=True,
+                # JWT claims are never sufficient to create an operator;
+                # verify the subject against the configured identity store.
+                trust_jwt_sub=False,
             )
             if identity is not None:
                 return identity.actor_id

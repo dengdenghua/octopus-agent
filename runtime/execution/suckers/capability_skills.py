@@ -389,17 +389,14 @@ def _search_capabilities_for_registry(registry: SkillRegistry):
         # silently returns every capability, the model thinks the search
         # succeeded, and it can loop on the same wrong shape.
         if not query and extra:
-            misplaced = sorted(
-                k for k, v in extra.items()
-                if isinstance(v, str) and v.strip()
-            )
+            misplaced = sorted(k for k, v in extra.items() if isinstance(v, str) and v.strip())
             if misplaced:
                 return {
                     "ok": False,
                     "error": (
                         f"search_capabilities received a query under "
                         f"unrecognized key(s) {misplaced}, but 'query' is "
-                        f"empty. Re-issue as search_capabilities(query=\"...\")."
+                        f'empty. Re-issue as search_capabilities(query="...").'
                     ),
                 }
         q = _as_text(query).strip()
@@ -511,8 +508,7 @@ def _use_capability_for_registry(registry: SkillRegistry):
         # can loop on the same wrong shape.
         if args is None and extra:
             misplaced = sorted(
-                k for k, v in extra.items()
-                if isinstance(v, (dict, list, str)) and v
+                k for k, v in extra.items() if isinstance(v, (dict, list, str)) and v
             )
             if misplaced:
                 return {

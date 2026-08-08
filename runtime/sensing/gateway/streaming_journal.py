@@ -13,6 +13,7 @@ from runtime.memory.journal.journal import (
     JournalEventType,
 )
 from runtime.platform.models import TaskId
+from runtime.safety.auth.scope import TenantScope
 
 Subscriber = Callable[[JournalEvent], None]
 
@@ -43,14 +44,24 @@ class StreamingJournal(Journal):
         self._inner.write(event)
         self._broadcast(event)
 
-    def read_all(self) -> list[JournalEvent]:
-        return self._inner.read_all()
+    def read_all(self, *, scope: TenantScope | None = None) -> list[JournalEvent]:
+        return self._inner.read_all(scope=scope)
 
-    def read_by_task(self, task_id: TaskId) -> list[JournalEvent]:
-        return self._inner.read_by_task(task_id)
+    def read_by_task(
+        self,
+        task_id: TaskId,
+        *,
+        scope: TenantScope | None = None,
+    ) -> list[JournalEvent]:
+        return self._inner.read_by_task(task_id, scope=scope)
 
-    def read_by_type(self, event_type: JournalEventType) -> list[JournalEvent]:
-        return self._inner.read_by_type(event_type)
+    def read_by_type(
+        self,
+        event_type: JournalEventType,
+        *,
+        scope: TenantScope | None = None,
+    ) -> list[JournalEvent]:
+        return self._inner.read_by_type(event_type, scope=scope)
 
     def read_since(self, ts: datetime) -> list[JournalEvent]:
         return self._inner.read_since(ts)

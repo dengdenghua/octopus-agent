@@ -12,9 +12,7 @@ def _start(payload: dict) -> dict:
 
 
 def test_flat_octopus_tool_name() -> None:
-    assert normalized_tool_name(_start({"tool_name": "browser_navigate"})) == (
-        "browser_navigate"
-    )
+    assert normalized_tool_name(_start({"tool_name": "browser_navigate"})) == ("browser_navigate")
 
 
 def test_codex_command_execution_wrapper() -> None:

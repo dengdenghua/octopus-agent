@@ -231,6 +231,7 @@ def test_exec_shell_cat_grants_read_tracking(
     target.write_text("original: value\n", encoding="utf-8")
 
     registry = SkillRegistry()
+
     # exec_shell handler that returns a successful cat argv — the form
     # _record_successful_read recognises.
     def _exec_shell_handler(command: str = "", **_kw):

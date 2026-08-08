@@ -4,9 +4,12 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.platform.ui.app import create_app
+from runtime.safety.auth.identity import Identity, IdentityStore
+from runtime.sensing.gateway.cron_router import create_cron_router
 
 
 @pytest.fixture
@@ -147,3 +150,62 @@ def test_cron_runs_endpoint_empty_without_ledger(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"ok": True, "runs": [], "count": 0}
+
+
+def test_cron_shell_mutations_require_operator_role(tmp_path: Path) -> None:
+    identities = IdentityStore()
+    identities.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    identities.add(
+        Identity(actor_id="ops", roles=("operator",)),
+        api_key_plaintext="sk-ops",
+    )
+    identities.add(
+        Identity(actor_id="admin", roles=("admin",)),
+        api_key_plaintext="sk-admin",
+    )
+    app = FastAPI()
+    app.include_router(
+        create_cron_router(
+            tmp_path / "cron_jobs.json",
+            identity_store=identities,
+            require_auth=True,
+        )
+    )
+    secured = TestClient(app)
+    payload = {
+        "name": "privileged",
+        "command": "echo controlled",
+        "cron_expression": "0 * * * *",
+    }
+
+    assert secured.post("/api/cron", json=payload).status_code == 401
+    assert (
+        secured.post(
+            "/api/cron",
+            json=payload,
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 403
+    )
+    created = secured.post(
+        "/api/cron",
+        json=payload,
+        headers={"Authorization": "Bearer sk-ops"},
+    )
+    assert created.status_code == 200
+    assert created.json()["creator_actor"] == "ops"
+
+    assert (
+        secured.delete(
+            "/api/cron/privileged",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 403
+    )
+    assert (
+        secured.delete(
+            "/api/cron/privileged",
+            headers={"Authorization": "Bearer sk-admin"},
+        ).status_code
+        == 200
+    )

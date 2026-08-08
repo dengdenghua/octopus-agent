@@ -30,6 +30,7 @@ Self-gating: no images, no CLIP tower, or ``OCTOPUS_IMAGE_SEMANTIC=0`` →
 from __future__ import annotations
 
 import array
+import contextlib
 import math
 import os
 import sqlite3
@@ -100,8 +101,10 @@ def _text_model() -> Any:
         try:
             from fastembed import TextEmbedding
 
-            _kwargs: dict[str, Any] = {"model_name": "Qdrant/clip-ViT-B-32-text",
-                                       "providers": ort_providers()}
+            _kwargs: dict[str, Any] = {
+                "model_name": "Qdrant/clip-ViT-B-32-text",
+                "providers": ort_providers(),
+            }
             _q = embed_quantization()
             if _q:
                 _kwargs["quantization"] = _q
@@ -121,8 +124,10 @@ def _image_model() -> Any:
         try:
             from fastembed import ImageEmbedding
 
-            _kwargs: dict[str, Any] = {"model_name": "Qdrant/clip-ViT-B-32-vision",
-                                       "providers": ort_providers()}
+            _kwargs: dict[str, Any] = {
+                "model_name": "Qdrant/clip-ViT-B-32-vision",
+                "providers": ort_providers(),
+            }
             _q = embed_quantization()
             if _q:
                 _kwargs["quantization"] = _q
@@ -173,15 +178,9 @@ def _open(path: Path):
         "CREATE TABLE IF NOT EXISTS image_tags (path TEXT, tag TEXT, score REAL, "
         "PRIMARY KEY (path, tag))"
     )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS image_ocr (path TEXT PRIMARY KEY, text TEXT)"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS image_hashes (path TEXT PRIMARY KEY, dhash TEXT)"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS image_quality (path TEXT PRIMARY KEY, sharpness REAL)"
-    )
+    conn.execute("CREATE TABLE IF NOT EXISTS image_ocr (path TEXT PRIMARY KEY, text TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS image_hashes (path TEXT PRIMARY KEY, dhash TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS image_quality (path TEXT PRIMARY KEY, sharpness REAL)")
     conn.execute(
         "CREATE TABLE IF NOT EXISTS image_categories (name TEXT PRIMARY KEY, prototype BLOB)"
     )
@@ -212,22 +211,23 @@ def _compute_dhash(img, size: int = 8) -> str:
     """Compute difference hash (dHash) for image similarity / duplicate detection.
     8x8 → 64 bits → 16 hex chars."""
     try:
-        gray = img.convert('L').resize((size + 1, size), Image.Resampling.LANCZOS)
-        diff = ''
+        gray = img.convert("L").resize((size + 1, size), Image.Resampling.LANCZOS)
+        diff = ""
         for row in range(size):
             for col in range(size):
                 left = gray.getpixel((col, row))
                 right = gray.getpixel((col + 1, row))
-                diff += '1' if right > left else '0'
+                diff += "1" if right > left else "0"
         return hex(int(diff, 2))
     except Exception:  # noqa: BLE001
-        return ''
+        return ""
 
 
 def _laplacian_sharpness(img) -> float:
     """Compute Laplacian variance for blur detection. Lower variance → more blurry."""
     import cv2
     import numpy as np
+
     try:
         gray = cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2GRAY)
         lap = cv2.Laplacian(gray, cv2.CV_64F)
@@ -455,9 +455,7 @@ def search_by_text(
         return None
     scored = [(_cosine(q, vec), p) for p, vec in rows]
     scored.sort(key=lambda t: -t[0])
-    return [
-        {"path": p, "score": round(s, 4)} for s, p in scored[: max(1, int(top_k))]
-    ]
+    return [{"path": p, "score": round(s, 4)} for s, p in scored[: max(1, int(top_k))]]
 
 
 def search_by_image(
@@ -486,9 +484,7 @@ def search_by_image(
         return None
     scored = [(_cosine(q, vec), p) for p, vec in rows]
     scored.sort(key=lambda t: -t[0])
-    return [
-        {"path": p, "score": round(s, 4)} for s, p in scored[: max(1, int(top_k))]
-    ]
+    return [{"path": p, "score": round(s, 4)} for s, p in scored[: max(1, int(top_k))]]
 
 
 def group_faces(
@@ -507,17 +503,16 @@ def group_faces(
     try:
         conn = sqlite3.connect(str(path))
         try:
-            rows = conn.execute("SELECT path, face_index, face_embedding FROM image_faces").fetchall()
+            rows = conn.execute(
+                "SELECT path, face_index, face_embedding FROM image_faces"
+            ).fetchall()
         finally:
             conn.close()
     except sqlite3.Error:
         return None
     if not rows:
         return None
-    faces = [
-        (str(p), int(fi), v) for p, fi, blob in rows
-        if len(v := _blob_to_vec(blob)) > 0
-    ]
+    faces = [(str(p), int(fi), v) for p, fi, blob in rows if len(v := _blob_to_vec(blob)) > 0]
     if not faces:
         return None
 
@@ -573,7 +568,9 @@ def search_face(
     try:
         conn = sqlite3.connect(str(path))
         try:
-            rows = conn.execute("SELECT path, face_embedding FROM image_faces ORDER BY path").fetchall()
+            rows = conn.execute(
+                "SELECT path, face_embedding FROM image_faces ORDER BY path"
+            ).fetchall()
         finally:
             conn.close()
     except sqlite3.Error:
@@ -592,9 +589,7 @@ def search_face(
             sim = _cosine(qv, iv)
             best[im_path] = max(best.get(im_path, 0.0), sim)
     ranked = sorted(best.items(), key=lambda kv: -kv[1])
-    return [
-        {"path": p, "score": round(s, 4)} for p, s in ranked[: max(1, int(top_k))]
-    ]
+    return [{"path": p, "score": round(s, 4)} for p, s in ranked[: max(1, int(top_k))]]
 
 
 # ---------------------------------------------------------------------------
@@ -610,15 +605,31 @@ def _ham_dist(a: str, b: str) -> int:
         return 1 << 30
 
 
+_READ_DB_QUERIES = {
+    ("image_categories", "name"): "SELECT name FROM image_categories",
+    ("image_hashes", "path, dhash"): "SELECT path, dhash FROM image_hashes",
+    ("image_quality", "path, sharpness"): "SELECT path, sharpness FROM image_quality",
+    ("image_clip", "path, clip_embedding"): "SELECT path, clip_embedding FROM image_clip",
+    (
+        "image_meta",
+        "path, width, height, mtime, exif_time, file_type, location",
+    ): "SELECT path, width, height, mtime, exif_time, file_type, location FROM image_meta",
+    ("image_faces", "path"): "SELECT path FROM image_faces",
+}
+
+
 def _read_db(db_path, *, table: str, columns: str):
     """Read ``columns`` from ``table`` in a DB file, or ``None`` on any miss."""
+    query = _READ_DB_QUERIES.get((table, columns))
+    if query is None:
+        raise ValueError(f"unsupported image index query: {table}.{columns}")
     path = Path(db_path) if db_path is not None else _DEFAULT_DB
     if not path.exists():
         return None
     try:
         conn = sqlite3.connect(str(path))
         try:
-            return conn.execute(f"SELECT {columns} FROM {table}").fetchall()
+            return conn.execute(query).fetchall()
         finally:
             conn.close()
     except sqlite3.Error:
@@ -651,9 +662,22 @@ def classify_image(
         img_vec = list(img_model.embed([pil]))[0]
     except Exception:  # noqa: BLE001
         return None
-    label_list = list(labels) if labels else [
-        "风景", "人物", "食物", "动物", "文档", "截图", "建筑", "夜景", "旅行", "其他",
-    ]
+    label_list = (
+        list(labels)
+        if labels
+        else [
+            "风景",
+            "人物",
+            "食物",
+            "动物",
+            "文档",
+            "截图",
+            "建筑",
+            "夜景",
+            "旅行",
+            "其他",
+        ]
+    )
     rows = _read_db(db_path, table="image_categories", columns="name")
     if rows:
         for (name,) in rows:
@@ -665,14 +689,10 @@ def classify_image(
     except Exception:  # noqa: BLE001
         return None
     scored = [
-        (_cosine(img_vec, tv), label)
-        for label, tv in zip(label_list, text_vecs, strict=False)
+        (_cosine(img_vec, tv), label) for label, tv in zip(label_list, text_vecs, strict=False)
     ]
     scored.sort(key=lambda t: -t[0])
-    return [
-        {"label": label, "score": round(s, 4)}
-        for s, label in scored[: max(1, int(top_k))]
-    ]
+    return [{"label": label, "score": round(s, 4)} for s, label in scored[: max(1, int(top_k))]]
 
 
 def ocr_image(
@@ -714,10 +734,8 @@ def ocr_image(
         text = str(item[1])
         if text:
             pieces.append(text)
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             confs.append(float(item[2]))
-        except (TypeError, ValueError):
-            pass
     text = "\n".join(pieces)
     confidence = sum(confs) / len(confs) if confs else 0.0
     if text:
@@ -732,7 +750,7 @@ def ocr_image(
                 conn.commit()
             finally:
                 conn.close()
-        except sqlite3.Error:
+        except sqlite3.Error:  # noqa: BLE001 — OCR result remains valid if cache persistence fails
             pass
     return {"text": text, "boxes": boxes, "confidence": round(confidence, 4)}
 
@@ -758,9 +776,9 @@ def find_duplicates(
     for path, h in entries:
         placed = False
         for g in groups:
-            if _ham_dist(h, entries[
-                next(i for i, (p, _) in enumerate(entries) if p == g[0])
-            ][1]) <= int(hash_threshold):
+            if _ham_dist(
+                h, entries[next(i for i, (p, _) in enumerate(entries) if p == g[0])][1]
+            ) <= int(hash_threshold):
                 g.append(path)
                 placed = True
                 break

@@ -10,6 +10,7 @@ All four are self-gating: when the CLIP tower / face model isn't available or
 ``OCTOPUS_IMAGE_SEMANTIC=0``, they return a clear message instead of failing —
 so the agent degrades to a plain filesystem listing.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -81,14 +82,18 @@ def _face_search_by_image(
     results = _idx.search_face(image_path, top_k=top_k, db_path=_idx_db(directory))
     if results is None:
         return _not_ready("face search", face=True)
-    return {"query_image": image_path, "backend": "arcface", "count": len(results), "results": results}
+    return {
+        "query_image": image_path,
+        "backend": "arcface",
+        "count": len(results),
+        "results": results,
+    }
 
 
 def _idx_db(directory: str) -> str:
     """Point the index at a directory-scoped DB so different libraries don't
     collide. Falls back to the default ``data/image_index.db`` on empty dir."""
     import os
-
     from pathlib import Path
 
     d = (directory or ".").strip()

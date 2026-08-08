@@ -246,7 +246,10 @@ def client(store_path: Path) -> TestClient:
 @pytest.fixture
 def secured_client(store_path: Path) -> tuple[TestClient, dict[str, str]]:
     store = IdentityStore()
-    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store.add(
+        Identity(actor_id="alice", roles=("operator",)),
+        api_key_plaintext="sk-alice",
+    )
     app = FastAPI()
     app.include_router(
         create_remote_backends_router(

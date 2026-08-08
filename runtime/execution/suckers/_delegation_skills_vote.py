@@ -9,6 +9,7 @@ The spawn reuses ``_call_agent_parallel``, which is resolved lazily via
 ``delegation_skills`` so a monkeypatch of ``delegation_skills._call_agent_parallel``
 is observed at call time.
 """
+
 from __future__ import annotations
 
 from typing import Any

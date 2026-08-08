@@ -153,10 +153,33 @@ def _h_screenshot() -> dict[str, Any]:
     return result
 
 
-def _artifacts_root() -> Path:
+def _artifacts_root(
+    *,
+    tenant_id: str | None = None,
+    owner_actor_id: str | None = None,
+) -> Path:
     from runtime.platform.process.paths import app_paths
 
-    return app_paths().data_dir / "browser_artifacts"
+    root = app_paths().data_dir / "browser_artifacts"
+    if tenant_id and owner_actor_id:
+
+        def _safe(value: str) -> str:
+            return hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
+
+        return root / "tenants" / _safe(tenant_id) / _safe(owner_actor_id)
+    try:
+        from runtime.memory.journal.journal_context import (
+            current_owner_actor_id,
+            current_tenant_id,
+        )
+
+        context_tenant = current_tenant_id()
+        context_owner = current_owner_actor_id()
+        if context_tenant and context_owner:
+            return _artifacts_root(tenant_id=context_tenant, owner_actor_id=context_owner)
+    except (ImportError, RuntimeError):  # noqa: BLE001 — tenant context is optional here
+        pass
+    return root
 
 
 def _pixel_assertion_for_screenshot(path: Path) -> dict[str, Any]:
@@ -330,13 +353,19 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
             from runtime.memory.journal.journal_context import (
                 current_agent_id,
                 current_conversation_id,
+                current_owner_actor_id,
+                current_tenant_id,
             )
 
             _thread_id = current_conversation_id() or ""
             _agent_id = current_agent_id() or ""
+            _tenant_id = current_tenant_id() or ""
+            _owner_actor_id = current_owner_actor_id() or ""
         except (ImportError, AttributeError):
             _thread_id = ""
             _agent_id = ""
+            _tenant_id = ""
+            _owner_actor_id = ""
 
         event: dict[str, Any] = {
             "type": "artifact",
@@ -349,6 +378,8 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
             # rely on the four keys above.
             "thread_id": _thread_id,
             "agent_id": _agent_id,
+            "tenant_id": _tenant_id,
+            "owner_actor_id": _owner_actor_id,
             "skill": "live_browser_screenshot",
             "filename": fname,
             "mime_type": "image/png",

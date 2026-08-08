@@ -54,10 +54,7 @@ def inspect_publisher_trust_store(
         "key_count": key_count,
         "active_key_count": active_count,
         "revoked_key_count": sum(
-            1
-            for row in publishers
-            for key in row["keys"]
-            if key["status"] == "revoked"
+            1 for row in publishers for key in row["keys"] if key["status"] == "revoked"
         ),
         "rotation_due_count": rotation_due_count,
         "ready": bool(publishers) and active_count >= len(publishers) and rotation_due_count == 0,
@@ -234,7 +231,9 @@ def _next_actions(publishers: list[dict[str, Any]], *, exists: bool) -> list[str
         if publisher["active_key_count"] == 0:
             actions.append(f"Register an active key for {publisher['publisher_id']}.")
         if publisher["rotation_due_count"]:
-            actions.append(f"Rotate {publisher['rotation_due_count']} key(s) for {publisher['publisher_id']}.")
+            actions.append(
+                f"Rotate {publisher['rotation_due_count']} key(s) for {publisher['publisher_id']}."
+            )
     return actions
 
 

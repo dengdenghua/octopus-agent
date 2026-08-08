@@ -931,9 +931,7 @@ class TestSubToolEventDispatch:
                 "recovered",
             ],
         )
-        registry = _StubRegistry(
-            {"bb_write": lambda **kw: {"ok": False, "error": "no turn"}}
-        )
+        registry = _StubRegistry({"bb_write": lambda **kw: {"ok": False, "error": "no turn"}})
         runner = make_llm_ephemeral_runner(
             router,
             registry=registry,
@@ -963,11 +961,7 @@ class TestToolBridgeParentIdTracking:
         # (set before handler, pop after) is structural. The loop
         # body lives in the ``_tool_bridge_loop`` satellite module
         # (``tool_bridge`` is now a re-export hub), so read that.
-        src = (
-            _tool_bridge_loop.__file__
-            if hasattr(_tool_bridge_loop, "__file__")
-            else None
-        )
+        src = _tool_bridge_loop.__file__ if hasattr(_tool_bridge_loop, "__file__") else None
         assert src is not None
         with open(src, encoding="utf-8") as f:
             text = f.read()

@@ -44,7 +44,9 @@ from ._event_log_helpers import (
 from ._event_log_serialization import (
     _exclusive_file_lock,
     _thread_id_from_path,
-    coalesce_events,
+)
+from ._event_log_serialization import (
+    coalesce_events as coalesce_events,
 )
 from ._replay import _apply_event
 
@@ -229,6 +231,8 @@ class EventLog:
                 payload={
                     "params": (turn.params.model_dump(by_alias=True) if turn.params else None),
                     "startedAt": turn.started_at.isoformat(),
+                    "objectiveId": turn.objective_id,
+                    "taskId": turn.task_id,
                 },
             )
         )
@@ -258,6 +262,10 @@ class EventLog:
         workspace_focus: dict[str, Any] | None = None,
         workbench_snapshot: dict[str, Any] | None = None,
         grounding: list[dict[str, str]] | None = None,
+        objective_id: str | None = None,
+        task_id: str | None = None,
+        checkpoint_id: int | None = None,
+        outcome_reason: str | None = None,
     ) -> LoggedEvent | None:
         payload: dict[str, Any] = {}
         if phases is not None:
@@ -268,6 +276,14 @@ class EventLog:
             payload["workbenchSnapshot"] = workbench_snapshot
         if grounding is not None:
             payload["grounding"] = grounding
+        if objective_id is not None:
+            payload["objectiveId"] = objective_id
+        if task_id is not None:
+            payload["taskId"] = task_id
+        if checkpoint_id is not None:
+            payload["checkpointId"] = checkpoint_id
+        if outcome_reason is not None:
+            payload["outcomeReason"] = outcome_reason
         if not payload:
             return None
         return self.append(

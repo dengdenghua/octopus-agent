@@ -13,9 +13,10 @@ additive 新文件,零碰 Codex WIP(cowork/oct/i18n);SDK 读/解析半边仍 run
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import re
+import shutil
 import tarfile
 import tempfile
 from io import BytesIO
@@ -42,6 +43,7 @@ from runtime.sensing._fastapi_guard import require_fastapi
 # prompt-skill，不下载、导入或执行远程代码。真正的本地代码插件仍需走本地
 # 插件目录和显式权限审核。
 _ROLE_ASSET_TYPES = ("role", "twin-role")
+_MAX_PLUGIN_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
 
 
 def _ensure_safe_dir(path: Path) -> None:
@@ -289,16 +291,31 @@ def _install_registry_plugin_bundle(
             members = archive.getmembers()
             if not members:
                 raise ValueError("registry plugin bundle is empty")
+            total_size = 0
             for member in members:
                 path = Path(member.name)
                 if path.is_absolute() or ".." in path.parts:
                     raise ValueError(f"unsafe path in plugin bundle: {member.name}")
                 if member.issym() or member.islnk() or not (member.isdir() or member.isfile()):
                     raise ValueError(f"unsupported entry in plugin bundle: {member.name}")
-            try:
-                archive.extractall(tmp_root, filter="data")
-            except TypeError:  # pragma: no cover - Python 3.11 compatibility
-                archive.extractall(tmp_root)
+                total_size += max(0, int(member.size))
+                if total_size > _MAX_PLUGIN_UNCOMPRESSED_BYTES:
+                    raise ValueError("registry plugin bundle expands beyond the safety limit")
+
+            # Extract regular files ourselves on every supported Python. This
+            # keeps the same traversal/link guarantees on 3.11 and avoids the
+            # unsafe extractall fallback needed before tarfile filters existed.
+            for member in members:
+                destination = tmp_root.joinpath(*Path(member.name).parts)
+                if member.isdir():
+                    destination.mkdir(parents=True, exist_ok=True)
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                source = archive.extractfile(member)
+                if source is None:
+                    raise ValueError(f"could not read plugin bundle entry: {member.name}")
+                with source, destination.open("wb") as output:
+                    shutil.copyfileobj(source, output)
 
         candidates = [
             path.parent.parent
@@ -369,6 +386,7 @@ def create_registry_consumer_router(
     publisher_trust_store_path = (
         Path(publisher_trust_store_path) if publisher_trust_store_path is not None else None
     )
+
     def _current_plugin_branding() -> dict[str, dict[str, Any]]:
         # Re-scan on registry reads so a newly installed bundle gets its logo
         # without requiring a runtime restart.  Discovery is local-only and

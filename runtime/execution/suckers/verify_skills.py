@@ -437,6 +437,7 @@ def run_checks(
                 timeout=timeout_per_check,
                 output_cap_bytes=output_cap,
                 sandbox_dir=effective_sandbox_dir,
+                sandbox_required=True,
             )
         elif isinstance(legacy_cmd, str):
             _logger.warning(
@@ -449,6 +450,7 @@ def run_checks(
                 timeout=timeout_per_check,
                 output_cap_bytes=output_cap,
                 sandbox_dir=effective_sandbox_dir,
+                sandbox_required=True,
             )
         else:
             results.append(

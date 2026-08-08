@@ -25,6 +25,7 @@ class TaskRunStatus(StrEnum):
     VERIFYING = "verifying"
     REPAIRING = "repairing"
     CANCELLED = "cancelled"
+    DISCONNECTED = "disconnected"
     FAILED = "failed"
     COMPLETED = "completed"
 
@@ -52,6 +53,7 @@ class LostTaskLease(TaskLeaseError):
 
 TERMINAL_TASK_STATUSES = {
     TaskRunStatus.CANCELLED,
+    TaskRunStatus.DISCONNECTED,
     TaskRunStatus.FAILED,
     TaskRunStatus.COMPLETED,
 }

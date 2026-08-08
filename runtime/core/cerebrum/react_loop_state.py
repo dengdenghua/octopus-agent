@@ -117,6 +117,19 @@ class _LoopState:
     quiet_evidence_steps: list = field(default_factory=list)
     throughput_last_emit: float = 0.0
     consecutive_llm_errors: int = 0
+    # The main loop reads ``iteration_limit`` dynamically, allowing a
+    # productive long-running turn to receive a bounded in-place extension
+    # instead of being interrupted solely because it reached the initial
+    # recipe limit. ``iteration_base_limit`` keeps each grant fixed-size so
+    # repeated extensions do not grow exponentially.
+    iteration_base_limit: int = 0
+    iteration_limit: int = 0
+    iteration_extensions_used: int = 0
+    # Count of consecutive "blank" iterations where the model emitted no
+    # tool call, no observation, no meaningful thought and no final answer
+    # (e.g. degraded reasoning producing only whitespace). Used by the
+    # model-spin guard to stop burning iterations early.
+    consecutive_spin_iterations: int = 0
     # ── emit · terminal accumulators (synced in/out) ──
     final_answer: str | None = None
     terminated_reason: str = "max_iter"

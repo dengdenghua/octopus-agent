@@ -149,25 +149,89 @@ def _dedup_repeated_lines(text: str) -> str:
     return out  # noqa: RET504 — keep `out` named for readability
 
 
-_JSON_ARRAY_RE = re.compile(r"\[(\s*\{.*?\}\s*,?\s*){13,}\]", re.DOTALL)
+# Array trimming logic:
+# The original regex ``\[(\s*\{.*?\}\s*,?\s*){13,}\]`` caused catastrophic
+# backtracking on large inputs, burning the GIL and disconnecting clients.
+#
+# The fix below splits the problem:
+# 1. A simple, linear-time state machine locates each ``[``'s matching ``]``
+#    (handling nested brackets and quoted strings correctly). This never
+#    backtracks.
+# 2. Once an array's span is known, the original object-finding logic
+#    (which is fine on its own, only dangerous when combined with the outer
+#    nested-quantifier regex) extracts items and performs the head/tail
+#    trimming. We no longer use ``json.JSONDecoder.raw_decode`` because
+#    tool outputs are often not strictly valid JSON (trailing commas,
+#    single quotes, Python repr, etc.) and we must not silently skip
+#    compression on those cases.
+
+
+def _find_json_array_end(text: str, start: int) -> int:
+    """Find the index of the ``]`` that closes the array starting at ``start``.
+
+    Linear-time bracket matching that respects JSON string literals
+    (so ``[`` or ``]`` inside strings don't affect the depth).
+    Returns -1 if the brackets don't balance.
+    """
+    depth = 0
+    i = start
+    n = len(text)
+    in_string = False
+    escape = False
+    while i < n:
+        ch = text[i]
+        if escape:
+            escape = False
+            i += 1
+            continue
+        if in_string:
+            if ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+        else:
+            if ch == '"':
+                in_string = True
+            elif ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+                if depth == 0:
+                    return i
+        i += 1
+    return -1
 
 
 def _trim_oversized_arrays(text: str) -> str:
     """When JSON output contains a long list of objects, keep first 5
-    and last 2 — model rarely needs item #8 of 50."""
+    and last 2 — model rarely needs item #8 of 50.
 
-    def _replace(m: re.Match[str]) -> str:
-        body = m.group(0)
-        # Cheap object-boundary split; not a full JSON parser, but
-        # tool outputs are usually well-formed.
-        items = re.findall(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", body)
-        if len(items) <= 12:
-            return body
-        head = ", ".join(items[:5])
-        tail = ", ".join(items[-2:])
-        return f"[{head}, … ({len(items) - 7} more items omitted) …, {tail}]"
+    Uses a linear bracket-matching state machine to find arrays (no
+    catastrophic backtracking), then applies the original lenient
+    object extraction to produce the trimmed output.
+    """
 
-    return _JSON_ARRAY_RE.sub(_replace, text)
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] == "[":
+            end = _find_json_array_end(text, i)
+            if end > i:
+                body = text[i : end + 1]
+                # The original regex to extract JSON objects. It is safe
+                # here because the outer boundary is already fixed; the
+                # regex only runs on the bounded substring.
+                items = re.findall(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", body)
+                if len(items) > 12:
+                    head = ", ".join(items[:5])
+                    tail = ", ".join(items[-2:])
+                    out.append(f"[{head}, … ({len(items) - 7} more items omitted) …, {tail}]")
+                    i = end + 1
+                    continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
 
 
 def _hard_cap(text: str, max_chars: int) -> str:

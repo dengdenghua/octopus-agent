@@ -65,7 +65,11 @@ def task_recovery_advice(
     if record.status in TERMINAL_TASK_STATUSES:
         action = "none"
         reason = "task is already terminal"
-        if record.status in {TaskRunStatus.FAILED, TaskRunStatus.CANCELLED}:
+        if record.status in {
+            TaskRunStatus.FAILED,
+            TaskRunStatus.CANCELLED,
+            TaskRunStatus.DISCONNECTED,
+        }:
             can_resume = True
             action = "resume_from_checkpoint" if has_checkpoint else "restart"
             reason = f"task ended as {record.status.value}"

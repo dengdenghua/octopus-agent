@@ -22,6 +22,13 @@ def test_bundled_project_wiki_is_discoverable_and_loadable() -> None:
     assert hub.update_plugin_config(PLUGIN_ID, {"output_dir": "elsewhere"}) is False
 
 
+def test_commercial_mode_rejects_in_process_plugin_loading(monkeypatch) -> None:
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
+    hub = PluginHub()
+
+    assert hub.load(PLUGIN_ID) is None
+
+
 def test_project_wikis_share_contract_but_keep_data_isolated(tmp_path: Path) -> None:
     first = tmp_path / "first"
     second = tmp_path / "second"

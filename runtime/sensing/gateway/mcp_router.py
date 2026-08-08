@@ -33,6 +33,7 @@ startup log) inspect what's registered without re-doing the work.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -148,6 +149,8 @@ def create_mcp_router(
         # ``state`` parameter checked in the handler itself.
         if request.url.path.endswith("/api/mcp/oauth/callback"):
             return
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "identity store required for MCP auth")
         from runtime.adapters.web_auth import _resolve_actor
 
         _resolve_actor(
@@ -159,9 +162,43 @@ def create_mcp_router(
             jwt_audience=jwt_audience,
         )
 
+    def _operator_dep(request: Request) -> None:
+        if request.url.path.endswith("/api/mcp/oauth/callback"):
+            return
+        from runtime.safety.auth.principal import require_operator
+
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(tags=["mcp"], dependencies=[Depends(_auth_dep)])
     mcp_config_state: dict[str, Any] = {"mcp_servers": {}}
+    # Configuration and runtime clients are tenant-owned.  A single process
+    # may serve many tenants, so neither map may be keyed only by server name.
+    mcp_config_states: dict[str, dict[str, Any]] = {"__legacy__": mcp_config_state}
     mcp_runtime: dict[str, dict[str, Any]] = {}
+
+    def _tenant_id(request: Any) -> str | None:
+        principal = getattr(getattr(request, "state", None), "principal", None)
+        value = getattr(principal, "tenant_id", None)
+        return str(value).strip() if value else None
+
+    def _tenant_key(tenant_id: str | None) -> str:
+        return tenant_id or "__legacy__"
+
+    def _runtime_key(name: str, tenant_id: str | None) -> str:
+        return f"{_tenant_key(tenant_id)}\x00{name}"
+
+    def _config_for(tenant_id: str | None) -> dict[str, Any]:
+        key = _tenant_key(tenant_id)
+        if key not in mcp_config_states:
+            mcp_config_states[key] = {"mcp_servers": {}}
+        return mcp_config_states[key]
 
     # Seed declared state from config.yaml's mcp_servers list.
     if initial_mcp_servers:
@@ -176,7 +213,7 @@ def create_mcp_router(
                 "enabled": True,
                 "description": f"{cmd} {' '.join(args)}".strip(),
             }
-        mcp_config_state = {"mcp_servers": servers}
+        mcp_config_state["mcp_servers"] = servers
 
     # ─── Helpers ────────────────────────────────────────────
 
@@ -207,6 +244,7 @@ def create_mcp_router(
         name: str,
         entry: dict[str, Any],
         request: Any = None,
+        tenant_id: str | None = None,
     ) -> dict[str, Any]:
         """Spawn an MCP server + graft its tools into the registry.
 
@@ -228,6 +266,7 @@ def create_mcp_router(
                 HTTP_AVAILABLE,
                 STDIO_AVAILABLE,
             )
+            from runtime.adapters.mcp_client.trust import get_trust_store
         except ImportError as e:
             return {"ok": False, "error": f"mcp_client import failed: {e}"}
 
@@ -236,6 +275,9 @@ def create_mcp_router(
         url = str(entry.get("url") or preset.get("url") or "")
         is_remote = transport in ("http", "sse") or bool(url)
         name_prefix = entry.get("name_prefix") or preset.get("name_prefix") or name
+        if tenant_id:
+            tenant_tag = hashlib.sha256(tenant_id.encode("utf-8")).hexdigest()[:12]
+            name_prefix = f"mcp_t{tenant_tag}_{name_prefix}"
 
         if is_remote:
             # Remote (streamable-http / SSE) server.
@@ -248,6 +290,7 @@ def create_mcp_router(
                 transport=transport if transport in ("http", "sse") else "http",
                 url=url,
                 headers=dict(entry.get("headers") or {}),
+                tenant_id=tenant_id,
             )
             summary: dict[str, Any] = {"transport": transport, "url": url}
         else:
@@ -275,6 +318,8 @@ def create_mcp_router(
                 command=command,
                 args=list(args),
                 env=dict(env),
+                tenant_id=tenant_id,
+                sandbox_dir=(str(entry.get("sandbox_dir")) if entry.get("sandbox_dir") else None),
             )
             summary = {"command": command, "args": list(args), "env": dict(env)}
 
@@ -292,6 +337,8 @@ def create_mcp_router(
                 name_prefix=name_prefix,
                 require_trust=True,
                 server_name=name,
+                tenant_id=tenant_id,
+                trust_store=get_trust_store(tenant_id),
             )
         except Exception as e:  # noqa: BLE001
             # Spawn / connection can fail in dozens of ways (missing
@@ -304,16 +351,18 @@ def create_mcp_router(
             return {"ok": False, "error": f"register failed: {e}"}
         after = set(registry.all_names())
         added = sorted(after - before)
-        mcp_runtime[name] = {
+        mcp_runtime[_runtime_key(name, tenant_id)] = {
             "skills": added,
+            "server_name": name,
+            "tenant_id": tenant_id,
             "name_prefix": name_prefix,
             "client": client,
             **summary,
         }
         return {"ok": True, "registered": added}
 
-    def _unregister_runtime_mcp(name: str) -> dict[str, Any]:
-        record = mcp_runtime.pop(name, None)
+    def _unregister_runtime_mcp(name: str, tenant_id: str | None = None) -> dict[str, Any]:
+        record = mcp_runtime.pop(_runtime_key(name, tenant_id), None)
         if not record or registry is None:
             return {"ok": True, "removed": []}
         removed: list[str] = []
@@ -333,14 +382,16 @@ def create_mcp_router(
     # ─── Endpoints ──────────────────────────────────────────
 
     @router.get("/api/mcp/config")
-    def api_mcp_config() -> dict[str, Any]:
-        return mcp_config_state
+    def api_mcp_config(request: Request) -> dict[str, Any]:
+        return _config_for(_tenant_id(request))
 
-    @router.put("/api/mcp/config")
+    @router.put("/api/mcp/config", dependencies=[Depends(_operator_dep)])
     def api_mcp_config_update(
         body: dict[str, Any],
         request: Request,
     ) -> dict[str, Any]:
+        tenant_id = _tenant_id(request)
+        config_state = _config_for(tenant_id)
         servers = body.get("mcp_servers")
         if not isinstance(servers, dict):
             raise HTTPException(400, "mcp_servers must be an object")
@@ -372,26 +423,26 @@ def create_mcp_router(
                     entry[key] = payload[key]
             normalized[name] = entry
 
-            was_enabled = name in mcp_runtime
+            was_enabled = _runtime_key(name, tenant_id) in mcp_runtime
             if enabled and not was_enabled:
-                status[name] = _register_runtime_mcp(name, entry, request)
+                status[name] = _register_runtime_mcp(name, entry, request, tenant_id)
                 # Bubble errors to the entry so the UI can render.
                 if not status[name].get("ok"):
                     entry["enabled"] = False
                     entry["error"] = status[name].get("error")
             elif not enabled and was_enabled:
-                status[name] = _unregister_runtime_mcp(name)
-        mcp_config_state["mcp_servers"] = normalized
-        return {**mcp_config_state, "_status": status}
+                status[name] = _unregister_runtime_mcp(name, tenant_id)
+        config_state["mcp_servers"] = normalized
+        return {**config_state, "_status": status}
 
     # ─── Trust management ─────────────────────────────────
 
     @router.get("/api/mcp/trust")
-    def api_mcp_trust_list() -> dict[str, Any]:
+    def api_mcp_trust_list(request: Request) -> dict[str, Any]:
         """List all MCP trust entries · UI renders approval chips."""
         from runtime.adapters.mcp_client.trust import get_trust_store
 
-        store = get_trust_store()
+        store = get_trust_store(_tenant_id(request))
         return {
             "entries": [
                 {
@@ -405,8 +456,8 @@ def create_mcp_router(
             ],
         }
 
-    @router.post("/api/mcp/trust")
-    def api_mcp_trust_approve(body: dict[str, Any]) -> dict[str, Any]:
+    @router.post("/api/mcp/trust", dependencies=[Depends(_operator_dep)])
+    def api_mcp_trust_approve(body: dict[str, Any], request: Request) -> dict[str, Any]:
         name = str(body.get("server_name") or "").strip()
         if not name:
             raise HTTPException(400, "server_name required")
@@ -416,7 +467,7 @@ def create_mcp_router(
         note = str(body.get("note") or "")
         from runtime.adapters.mcp_client.trust import get_trust_store
 
-        entry = get_trust_store().approve(
+        entry = get_trust_store(_tenant_id(request)).approve(
             name,
             [str(t) for t in tool_names],
             note=note,
@@ -448,7 +499,7 @@ def create_mcp_router(
     def _oauth_redirect_uri(request: Request) -> str:
         return str(request.base_url).rstrip("/") + "/api/mcp/oauth/callback"
 
-    @router.post("/api/mcp/oauth/authorize")
+    @router.post("/api/mcp/oauth/authorize", dependencies=[Depends(_operator_dep)])
     def api_mcp_oauth_authorize(
         body: dict[str, Any],
         request: Request,
@@ -471,7 +522,8 @@ def create_mcp_router(
             )
 
         redirect_uri = _oauth_redirect_uri(request)
-        store = oauth.get_oauth_store()
+        tenant_id = _tenant_id(request)
+        store = oauth.get_oauth_store(tenant_id)
         client_id = store.get_client(endpoints.issuer)
         if not client_id and endpoints.registration_url:
             client_id = oauth_discovery.register_client(
@@ -540,7 +592,7 @@ window.close();
 
         from runtime.adapters.mcp_client import oauth
 
-        store = oauth.get_oauth_store()
+        store = oauth.get_oauth_store_for_state(state)
         pending = store.pop_pending(state)
         if pending is None:
             return _page(
@@ -567,19 +619,22 @@ window.close();
         return _page(f"Authorized {pending.server}. You can close this tab.", ok=True)
 
     @router.get("/api/mcp/oauth/status")
-    def api_mcp_oauth_status(server: str) -> dict[str, Any]:
+    def api_mcp_oauth_status(server: str, request: Request) -> dict[str, Any]:
         from runtime.adapters.mcp_client import oauth
 
-        return {"server": server, "authorized": oauth.get_oauth_store().has_tokens(server)}
+        return {
+            "server": server,
+            "authorized": oauth.get_oauth_store(_tenant_id(request)).has_tokens(server),
+        }
 
-    @router.delete("/api/mcp/oauth/{server_name}")
-    def api_mcp_oauth_forget(server_name: str) -> dict[str, Any]:
+    @router.delete("/api/mcp/oauth/{server_name}", dependencies=[Depends(_operator_dep)])
+    def api_mcp_oauth_forget(server_name: str, request: Request) -> dict[str, Any]:
         from runtime.adapters.mcp_client import oauth
 
-        return {"ok": oauth.get_oauth_store().forget(server_name)}
+        return {"ok": oauth.get_oauth_store(_tenant_id(request)).forget(server_name)}
 
-    @router.delete("/api/mcp/trust/{server_name}")
-    def api_mcp_trust_revoke(server_name: str) -> dict[str, Any]:
+    @router.delete("/api/mcp/trust/{server_name}", dependencies=[Depends(_operator_dep)])
+    def api_mcp_trust_revoke(server_name: str, request: Request) -> dict[str, Any]:
         """Revoke approval · tools drop out immediately.
 
         The trust store flag is the source of truth for *future*
@@ -592,11 +647,12 @@ window.close();
         """
         from runtime.adapters.mcp_client.trust import get_trust_store
 
-        revoked = get_trust_store().revoke(server_name)
+        tenant_id = _tenant_id(request)
+        revoked = get_trust_store(tenant_id).revoke(server_name)
         runtime_status: dict[str, Any] | None = None
-        if server_name in mcp_runtime:
+        if _runtime_key(server_name, tenant_id) in mcp_runtime:
             try:
-                runtime_status = _unregister_runtime_mcp(server_name)
+                runtime_status = _unregister_runtime_mcp(server_name, tenant_id)
             except Exception as exc:  # noqa: BLE001
                 runtime_status = {"error": str(exc)}
         return {

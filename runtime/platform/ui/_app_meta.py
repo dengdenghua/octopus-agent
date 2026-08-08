@@ -34,9 +34,7 @@ def mount_meta(
 
     _source_public_skills = Path(__file__).resolve().parents[3] / "skills" / "public"
     _skill_library_dirs = [
-        p
-        for p in (ctx.resources_root / "skills" / "public", _source_public_skills)
-        if p.is_dir()
+        p for p in (ctx.resources_root / "skills" / "public", _source_public_skills) if p.is_dir()
     ]
 
     app.include_router(

@@ -208,9 +208,7 @@ class TestFailedVerificationFollowupGuard:
             _step(1, action='run_tests({"cwd": "."})', observation="1 failed"),
             _step(
                 2,
-                action=(
-                    'edit_file({"path": "cache.py", "old_string": "x", "new_string": "y"})'
-                ),
+                action=('edit_file({"path": "cache.py", "old_string": "x", "new_string": "y"})'),
             ),
         ]
 
@@ -259,7 +257,7 @@ class TestRedundantGreenVerificationGuard:
             _step(
                 3,
                 action=(
-                    "exec_shell({\"command\": \"node -e 'let fail = 0; "
+                    'exec_shell({"command": "node -e \'let fail = 0; '
                     "if (!race()) fail++; process.exit(fail > 0 ? 1 : 0);'\"})"
                 ),
                 observation="Race tests: 4/4 passed",
@@ -277,9 +275,7 @@ class TestRedundantGreenVerificationGuard:
             _step(2, action='lint_check({"cwd": "."})', observation="All checks passed!"),
             _step(
                 3,
-                action=(
-                    'edit_file({"path": "cache.py", "old_string": "x", "new_string": "y"})'
-                ),
+                action=('edit_file({"path": "cache.py", "old_string": "x", "new_string": "y"})'),
             ),
             _step(4, action='run_tests({"cwd": "."})', observation="6 passed"),
         ]

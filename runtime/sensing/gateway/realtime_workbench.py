@@ -81,9 +81,13 @@ def _terminal_workbench_phases(
     terminal_status: TurnStatus,
 ) -> list[AgentPhaseSnapshot]:
     if terminal_status == TurnStatus.COMPLETED:
+        # Completion closes the phase that was actively executing, but it is
+        # not permission to rewrite untouched pending/approval rows as done.
+        # Those statuses are checklist evidence and must survive refresh for
+        # lifecycle reconciliation and honest receipts.
         return [
             phase.model_copy(update={"status": "done", "active_item_id": None})
-            if phase.status in {"pending", "running", "waiting_approval"}
+            if phase.status == "running"
             else phase.model_copy(update={"active_item_id": None})
             for phase in phases
         ]
@@ -102,11 +106,27 @@ def _terminal_workbench_phases(
                 continue
             terminal_phases.append(phase.model_copy(update={"active_item_id": None}))
         return terminal_phases
-    if terminal_status == TurnStatus.INTERRUPTED:
+    if terminal_status == TurnStatus.PAUSED:
+        # Preserve todo truth.  A budget/system pause is not an approval and
+        # must not paint the current phase as waiting for confirmation or as
+        # still executing after the worker has yielded.
         return [
-            phase.model_copy(update={"active_item_id": None})
-            if phase.status != "running"
-            else phase.model_copy(update={"status": "waiting_approval", "active_item_id": None})
+            phase.model_copy(
+                update={
+                    "status": "pending" if phase.status == "running" else phase.status,
+                    "active_item_id": None,
+                }
+            )
+            for phase in phases
+        ]
+    if terminal_status in {TurnStatus.INTERRUPTED, TurnStatus.CANCELLED}:
+        return [
+            phase.model_copy(
+                update={
+                    "status": "pending" if phase.status == "running" else phase.status,
+                    "active_item_id": None,
+                }
+            )
             for phase in phases
         ]
     return list(phases)
@@ -201,7 +221,10 @@ def _phase_title(title: str, _index: int = 0) -> str:
 # deploying because deploy takes precedence.
 _PHASE_KIND_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("deploying", re.compile(r"deploy|release|publish|ship|部署|上线|发布")),
-    ("testing", re.compile(r"test|verify|validat|check|qa|lint|build|测试|验证|确认|检查|构建|打包")),
+    (
+        "testing",
+        re.compile(r"test|verify|validat|check|qa|lint|build|测试|验证|确认|检查|构建|打包"),
+    ),
     (
         "implementing",
         re.compile(

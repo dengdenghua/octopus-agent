@@ -29,10 +29,13 @@ atomic, so a lost update is benign (a job fires one tick late).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import subprocess
 import sys
+import threading
 from collections.abc import Callable
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -51,6 +54,7 @@ _OUTPUT_EXCERPT_CHARS = 500
 RunResult = tuple[str, str]
 ShellRunner = Callable[[str, dict[str, Any]], RunResult]
 PromptRunner = Callable[[str, dict[str, Any]], RunResult]
+_CRON_FALLBACK_LOCK = threading.Lock()
 
 
 # ─── Default runners (subprocess) ────────────────────────────
@@ -62,21 +66,29 @@ def default_shell_runner(command: str, job: dict[str, Any]) -> RunResult:
     Creation of these jobs is auth-gated at the router layer, so the
     command is operator-intended; we inherit the server environment.
     """
-    try:
-        proc = subprocess.run(  # nosec B602 — operator-authored shell job, auth-gated at router
-            command,
-            shell=True,  # noqa: S602 — the job *is* a shell command by design
-            capture_output=True,
-            text=True,
-            timeout=SHELL_JOB_TIMEOUT_S,
-        )
-    except subprocess.TimeoutExpired:
+    proc, timed_out = _run_process(
+        _shell_argv(command),
+        timeout=SHELL_JOB_TIMEOUT_S,
+    )
+    if timed_out:
         return "timeout", f"exceeded {SHELL_JOB_TIMEOUT_S}s"
     output = ((proc.stdout or "") + (proc.stderr or "")).strip()
     status = "ok" if proc.returncode == 0 else "error"
     if proc.returncode != 0:
         output = f"exit={proc.returncode} {output}"
     return status, output
+
+
+def _shell_argv(command: str) -> list[str]:
+    """Return an explicit platform shell invocation for an operator command.
+
+    Scheduled UI jobs intentionally use shell syntax, but keeping the shell
+    interpreter in argv makes that trust boundary visible and prevents the
+    generic process runner from ever accepting ``shell=True``.
+    """
+    if sys.platform == "win32":
+        return ["cmd.exe", "/d", "/s", "/c", command]
+    return ["/bin/sh", "-c", command]
 
 
 def default_prompt_runner(prompt: str, job: dict[str, Any]) -> RunResult:
@@ -86,20 +98,102 @@ def default_prompt_runner(prompt: str, job: dict[str, Any]) -> RunResult:
     out of the serving process, and reuses the existing CLI path so the
     job gets the same planner/tools/config as an interactive run.
     """
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-m", "runtime", "run", prompt],
-            capture_output=True,
-            text=True,
-            timeout=PROMPT_JOB_TIMEOUT_S,
-        )
-    except subprocess.TimeoutExpired:
+    proc, timed_out = _run_process(
+        [sys.executable, "-m", "runtime", "run", prompt],
+        timeout=PROMPT_JOB_TIMEOUT_S,
+    )
+    if timed_out:
         return "timeout", f"exceeded {PROMPT_JOB_TIMEOUT_S}s"
     output = ((proc.stdout or "") + (proc.stderr or "")).strip()
     status = "ok" if proc.returncode == 0 else "error"
     if proc.returncode != 0:
         output = f"exit={proc.returncode} {output}"
     return status, output
+
+
+def _run_process(
+    argv: list[str],
+    *,
+    timeout: float,
+) -> tuple[subprocess.CompletedProcess[str], bool]:
+    """Run a scheduled command in its own session and kill its descendants.
+
+    ``subprocess.run(timeout=...)`` only guarantees that the direct child is
+    reaped.  Scheduled commands commonly spawn shells, test runners, or
+    agent subprocesses, so a timeout must target the whole process group.
+    """
+    from runtime.platform.process.tree import process_group_kwargs, terminate_process_tree
+
+    proc = subprocess.Popen(  # noqa: S603 — argv is explicit and shell=False
+        argv,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        **process_group_kwargs(),
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return (
+            subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr),
+            False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        terminate_process_tree(proc)
+        stdout, stderr = proc.communicate()
+        # Preserve any output captured before the timeout.  communicate may
+        # return bytes only for non-text callers, but these runners are text.
+        if not stdout:
+            stdout = exc.stdout or ""
+        if not stderr:
+            stderr = exc.stderr or ""
+        return (
+            subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr),
+            True,
+        )
+
+
+@contextmanager
+def _cron_execution_lock(path: Path):
+    """Acquire a non-blocking lock so multiple service replicas don't fire.
+
+    POSIX flock is released by the kernel on crash, which avoids stale lock
+    files.  On platforms without ``fcntl`` this remains a process-local
+    fallback; the subprocess cleanup contract still applies there.
+    """
+    # Keep this separate from atomic_write_json's ``<target>.lock``.  The
+    # executor holds its lock while persisting last_run; reusing the writer's
+    # sidecar would deadlock when the same process opens that second fd.
+    lock_path = path.with_name(path.name + ".execution.lock")
+    handle = None
+    acquired = False
+    fallback_acquired = False
+    try:
+        try:
+            import fcntl
+
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            handle = lock_path.open("a+", encoding="utf-8")
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+            except BlockingIOError:
+                acquired = False
+        except ImportError:
+            # Windows deployments currently run one scheduler per data dir;
+            # retain process-local protection when POSIX flock is absent.
+            fallback_acquired = _CRON_FALLBACK_LOCK.acquire(blocking=False)
+            acquired = fallback_acquired
+        yield acquired
+    finally:
+        if fallback_acquired:
+            _CRON_FALLBACK_LOCK.release()
+        if handle is not None:
+            with contextlib.suppress(Exception):
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            with contextlib.suppress(Exception):
+                handle.close()
 
 
 # ─── Due calculation ─────────────────────────────────────────
@@ -175,6 +269,29 @@ def _read_raw_jobs(path: Path) -> list[dict[str, Any]]:
 
 
 def run_due_cron_jobs(
+    *,
+    cron_path: Path | None = None,
+    now: datetime | None = None,
+    shell_runner: ShellRunner | None = None,
+    prompt_runner: PromptRunner | None = None,
+    deliver: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """Run due jobs once, serialized across scheduler processes."""
+    path = cron_path or app_paths().cron_jobs_path
+    with _cron_execution_lock(path) as acquired:
+        if not acquired:
+            _log.debug("cron_executor: another scheduler owns %s", path)
+            return {"ok": True, "fired": 0, "results": [], "skipped": "lock_held"}
+        return _run_due_cron_jobs(
+            cron_path=path,
+            now=now,
+            shell_runner=shell_runner,
+            prompt_runner=prompt_runner,
+            deliver=deliver,
+        )
+
+
+def _run_due_cron_jobs(
     *,
     cron_path: Path | None = None,
     now: datetime | None = None,

@@ -10,6 +10,7 @@ from typing import Any
 from runtime.memory.learning.experience_ledger import ExperienceLedger
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.platform.io import atomic_write_json, read_json_with_backup
+from runtime.safety.auth.scope import TenantScope, row_visible
 from runtime.safety.evolution.governance_audit import (
     promotion_audit_signals,
     verify_governance_audit_chain,
@@ -44,6 +45,7 @@ class PromotionApplier:
         audit_path: str | Path,
         journal: Any = None,
         registry: Any = None,
+        scope: TenantScope | None = None,
     ) -> None:
         self.review_queue = review_queue
         self.experience_ledger = experience_ledger
@@ -52,6 +54,7 @@ class PromotionApplier:
         # Optional: required only for the "forged_skill" target (active forge).
         self.journal = journal
         self.registry = registry
+        self.scope = scope
 
     def plan(
         self,
@@ -212,10 +215,14 @@ class PromotionApplier:
         limit: int,
     ) -> list[dict[str, Any]]:
         if item_id:
-            rows = self.review_queue.items(status="promoted", limit=10000)["items"]
+            rows = self.review_queue.items(status="promoted", limit=10000, scope=self.scope)[
+                "items"
+            ]
             rows = [row for row in rows if str(row.get("id") or "") == item_id]
         else:
-            rows = self.review_queue.items(status="promoted", limit=limit)["items"]
+            rows = self.review_queue.items(status="promoted", limit=limit, scope=self.scope)[
+                "items"
+            ]
         if target:
             wanted = _target_name({"promoted_to": target, "target_bucket": target})
             rows = [row for row in rows if _target_name(row) == wanted]
@@ -230,7 +237,7 @@ class PromotionApplier:
     ) -> dict[str, Any]:
         if target in {"experience", "project_knowledge", "experiment_backlog"}:
             review = _review_from_queue_item(item, target=target)
-            result = self.experience_ledger.add_from_task_run_review(review)
+            result = self.experience_ledger.add_from_task_run_review(review, scope=self.scope)
             return {
                 "type": "experience_ledger",
                 "target_bucket": target,
@@ -261,6 +268,7 @@ class PromotionApplier:
                         decision_context=decision_context,
                     ),
                 },
+                scope=self.scope,
             )
             return {
                 "type": "proposal_ledger",
@@ -281,6 +289,7 @@ class PromotionApplier:
                     "source_task_ids": item.get("source_task_ids") or [],
                     "item": item,
                 },
+                scope=self.scope,
             )
             return {
                 "type": "proposal_ledger",
@@ -302,6 +311,7 @@ class PromotionApplier:
                     "item": item,
                     "evidence": _browser_desktop_recipe_evidence(item),
                 },
+                scope=self.scope,
             )
             return {
                 "type": "proposal_ledger",
@@ -353,7 +363,11 @@ class PromotionApplier:
         }
 
     def _audit_records(self) -> list[dict[str, Any]]:
-        return list(self._read_audit_payload().get("records") or [])
+        return [
+            row
+            for row in self._read_audit_payload().get("records") or []
+            if row_visible(row, self.scope)
+        ]
 
     def _read_audit_payload(self) -> dict[str, Any]:
         raw = read_json_with_backup(self.audit_path, default=None)
@@ -393,6 +407,8 @@ def _normalize_audit_payload(raw: dict[str, Any]) -> dict[str, Any]:
                 ),
                 "event_type": _clean_text(record.get("event_type"), limit=80),
                 "review_queue_item_id": item_id,
+                "tenant_id": _clean_text(record.get("tenant_id"), limit=160),
+                "owner_actor_id": _clean_text(record.get("owner_actor_id"), limit=160),
                 "agent_id": _clean_text(record.get("agent_id"), limit=120),
                 "target": target,
                 "status": _clean_text(record.get("status"), limit=40) or "applied",
@@ -517,6 +533,8 @@ def _audit_record(
     return {
         "id": _promotion_id(item_id=item_id, target=target),
         "review_queue_item_id": item_id,
+        "tenant_id": str(item.get("tenant_id") or ""),
+        "owner_actor_id": str(item.get("owner_actor_id") or ""),
         "agent_id": str(agent_ids[0]) if agent_ids else "",
         "target": target,
         "status": status,

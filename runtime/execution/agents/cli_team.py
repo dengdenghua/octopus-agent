@@ -186,12 +186,7 @@ def _summarize_cli_team(goal: str, results: list[dict[str, Any]]) -> dict[str, A
     succeeded = sum(1 for r in results if r.get("ok"))
     failed = count - succeeded
     changed_files = sorted(
-        {
-            str(path)
-            for r in results
-            for path in (r.get("files") or [])
-            if str(path).strip()
-        }
+        {str(path) for r in results for path in (r.get("files") or []) if str(path).strip()}
     )
     successful_members = [_member_label(r) for r in results if r.get("ok")]
     failed_members = [
@@ -357,7 +352,9 @@ def run_cli_team(
             rec["raw_error"] = rec["error"]
             rec["failure_kind"] = "execution_exception"
             rec["failure_title"] = "CLI team member crashed before producing a candidate"
-            rec["fix_hint"] = "Check the local worktree setup and rerun this member from its native CLI."
+            rec["fix_hint"] = (
+                "Check the local worktree setup and rerun this member from its native CLI."
+            )
         return rec
 
     results: list[dict[str, Any]] = []

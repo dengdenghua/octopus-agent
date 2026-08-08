@@ -43,7 +43,7 @@ def secured_client(
 
     monkeypatch.chdir(tmp_path)
     store = IdentityStore()
-    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store.add(Identity(actor_id="alice", roles=("operator",)), api_key_plaintext="sk-alice")
     app = create_app(
         cocoloop_require_auth=True,
         cocoloop_identity_store=store,

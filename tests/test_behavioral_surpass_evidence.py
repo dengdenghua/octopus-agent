@@ -134,9 +134,7 @@ def test_missing_bundle_never_claims_surpassed(tmp_path: Path) -> None:
 
 def test_current_provider_failure_is_reported_as_unscored_blocker(tmp_path: Path) -> None:
     now = datetime(2026, 7, 17, tzinfo=UTC)
-    status_path = (
-        tmp_path / "benchmarks" / "results" / "behavioral-infrastructure-latest.json"
-    )
+    status_path = tmp_path / "benchmarks" / "results" / "behavioral-infrastructure-latest.json"
     status_path.parent.mkdir(parents=True)
     status_path.write_text(
         json.dumps(

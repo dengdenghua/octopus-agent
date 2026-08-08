@@ -90,6 +90,41 @@ def test_pre_driver_failure_emits_terminal_turn_completed(
     assert terminal and terminal[-1]["payload"]["status"] == "failed"
 
 
+def test_paused_turn_keeps_distinct_resumable_status(gateway: Any) -> None:
+    """A paused turn (react_paused followed by the loop's trailing
+    react_completed with success=False) must remain resumable as
+    ``paused`` — never flattened to ``interrupted`` or downgraded to
+    ``failed``. Regression for the
+    live session tUTpWExF1Q0N1_5580atdQ where the sidebar showed "失败"
+    next to a "当前进度已暂停并保存" pause message.
+    """
+    client, _ = gateway
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "当前进度已暂停并保存，等待继续。"},
+            {"type": "react_paused", "iteration": 1},
+            {"type": "react_completed", "success": False},
+        ]
+    )
+    with client.websocket_connect("/api/realtime") as ws:
+        result = _drive(
+            ws,
+            params={
+                "threadId": "th_fin_paused",
+                "input": [{"type": "text", "text": "hi"}],
+                "approvalPolicy": "never",
+            },
+        )
+    completed = [n for n in result["notifications"] if n.method == "turn/completed"]
+    assert completed, "expected a terminal turn/completed notification"
+    turn = completed[-1].params["turn"]
+    assert turn["status"] == "paused", (
+        "a paused turn must stay explicitly resumable, not be flattened "
+        f"to failed; got {turn['status']!r}"
+    )
+    assert turn["completedAt"]
+
+
 @pytest.mark.asyncio()
 async def test_cancelled_turn_journals_interruption_and_reraises(
     tmp_path: Path,

@@ -13,9 +13,9 @@ Endpoints
     POST   /api/remote-backends/{id}/proxy   · one-shot HTTP proxy
     WS     /api/remote-backends/{id}/realtime· JSON-RPC 2.0 WebSocket relay
 
-All mutating + proxy endpoints require ``ui.remote_transport``
-feature flag to be ON; otherwise they return 403. The ``GET`` is
-safe to call regardless — it's just a list.
+All endpoints require ``ui.remote_transport`` to be ON for active use;
+in authenticated/shared mode the registry is an operator/admin control
+plane because the current store has no tenant ownership columns.
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket
 
+from runtime.safety.auth.principal import require_operator, resolve_principal
+from runtime.safety.auth.url_guard import check_url
 from runtime.sensing.gateway.remote_transport import (
     BackendRegistry,
     SshTunnel,
@@ -80,9 +82,7 @@ def create_remote_backends_router(
         """Raised to refuse an unauthenticated remote-backend WS handshake."""
 
     def _auth_http(request: Request) -> None:
-        from runtime.adapters.web_auth import _resolve_actor
-
-        _resolve_actor(
+        resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -90,6 +90,32 @@ def create_remote_backends_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+
+    def _operator_http(request: Request) -> None:
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    def _assert_safe_backend_url(url: str) -> None:
+        # Registration is configuration-only. DNS is deliberately deferred to
+        # the egress helper, which resolves and pins the destination at the
+        # moment of health/proxy/WS use. This avoids rejecting a harmless
+        # hostname because a local resolver temporarily returns a reserved
+        # address, while never allowing that address to be contacted.
+        verdict = check_url(url, allow_private=False, resolve_dns=False)
+        if not verdict.allow:
+            raise HTTPException(
+                400,
+                {
+                    "error": "remote_backend_url_rejected",
+                    "reason": verdict.reason,
+                },
+            )
 
     def _resolve_ws_actor(ws: WebSocket) -> str | None:
         if identity_store is None:
@@ -119,14 +145,18 @@ def create_remote_backends_router(
                 secret=jwt_secret,
                 required_issuer=jwt_issuer,
                 required_audience=jwt_audience,
-                trust_jwt_sub=True,
+                trust_jwt_sub=False,
             )
             if identity is not None:
+                if require_auth and not set(identity.roles).intersection({"admin", "operator"}):
+                    raise _WsAuthError("operator role required")
                 return identity.actor_id
             if require_auth:
                 raise _WsAuthError("invalid jwt")
         identity = identity_store.verify_api_key(token)
         if identity is not None:
+            if require_auth and not set(identity.roles).intersection({"admin", "operator"}):
+                raise _WsAuthError("operator role required")
             return identity.actor_id
         if require_auth:
             raise _WsAuthError("invalid token")
@@ -136,7 +166,7 @@ def create_remote_backends_router(
 
     @router.get("/api/remote-backends")
     def list_backends(request: Request) -> dict[str, Any]:
-        _auth_http(request)
+        _operator_http(request)
         from runtime.platform import feature_flags as _ff
 
         return {
@@ -149,7 +179,7 @@ def create_remote_backends_router(
         request: Request,
         body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        _auth_http(request)
+        _operator_http(request)
         _require_flag()
         payload = body or {}
         name = str(payload.get("name") or "").strip()
@@ -167,6 +197,7 @@ def create_remote_backends_router(
                     400,
                     "ssh.host is required when ssh is provided",
                 )
+        _assert_safe_backend_url(url)
         try:
             backend = registry.add(name=name, url=url, ssh=ssh)
         except ValueError as exc:
@@ -175,7 +206,7 @@ def create_remote_backends_router(
 
     @router.delete("/api/remote-backends/{backend_id}")
     def remove_backend(backend_id: str, request: Request) -> dict[str, Any]:
-        _auth_http(request)
+        _operator_http(request)
         _require_flag()
         if not registry.remove(backend_id):
             raise HTTPException(404, f"backend {backend_id!r} not found")
@@ -183,11 +214,12 @@ def create_remote_backends_router(
 
     @router.post("/api/remote-backends/{backend_id}/health")
     def ping_backend(backend_id: str, request: Request) -> dict[str, Any]:
-        _auth_http(request)
+        _operator_http(request)
         _require_flag()
         backend = registry.get(backend_id)
         if backend is None:
             raise HTTPException(404, f"backend {backend_id!r} not found")
+        _assert_safe_backend_url(backend.url)
         status, detail = health_check(backend)
         registry.update_health(backend_id, status=status, detail=detail)
         return {
@@ -202,11 +234,12 @@ def create_remote_backends_router(
         request: Request,
         body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        _auth_http(request)
+        _operator_http(request)
         _require_flag()
         backend = registry.get(backend_id)
         if backend is None:
             raise HTTPException(404, f"backend {backend_id!r} not found")
+        _assert_safe_backend_url(backend.url)
         payload = body or {}
         method = str(payload.get("method") or "GET").upper()
         path = str(payload.get("path") or "").strip()

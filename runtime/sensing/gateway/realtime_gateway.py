@@ -107,7 +107,9 @@ class RealtimeGateway:
         jwt_issuer: str | None = None,
         jwt_audience: str | None = None,
         jwt_leeway_seconds: int = 0,
-        trust_jwt_sub: bool = True,
+        # Claims never synthesize an identity; the subject must be registered
+        # in the configured IdentityStore before a WebSocket is accepted.
+        trust_jwt_sub: bool = False,
         allow_client_approval_bypass: bool = False,
         max_in_flight_requests_per_connection: int = 32,
         max_connections_per_actor: int = 64,
@@ -300,6 +302,10 @@ class RealtimeGateway:
             shared_interrupts=self._shared_interrupts,
         )
         conn.actor_id = actor_id
+        if actor_id is not None and self._identity_store is not None:
+            identity = self._identity_store.get(actor_id)
+            metadata = getattr(identity, "metadata", None) or {}
+            conn.tenant_id = str(metadata.get("tenant_id") or f"legacy:{actor_id}")
         self._connections.add(conn)
         # Each inbound client Request becomes a background task so the
         # receive loop stays free to deliver the corresponding Responses
@@ -503,14 +509,25 @@ class RealtimeGateway:
                 },
             )
             raise _RpcError(JsonRpcErrorCode.INTERNAL_ERROR, str(exc)) from exc
-        # Best-effort: emit turn/completed if the runtime didn't.
-        # The runtime owns the authoritative status — we only flip the
-        # in-progress placeholder to completed so clients watching the
-        # notification stream see a terminal state. INTERRUPTED /
-        # FAILED are preserved as-is.
+        # A runtime return without a terminal outcome is a lifecycle protocol
+        # violation, never evidence of success.  Fail closed so the client can
+        # offer a truthful retry instead of persisting a fabricated completion.
         with suppress(Exception):
             if turn.status == TurnStatus.IN_PROGRESS:
-                turn.status = TurnStatus.COMPLETED
+                turn.status = TurnStatus.FAILED
+                turn.error = {
+                    "message": "runtime returned without a terminal task outcome",
+                    "code": "missing_terminal_state",
+                }
+                turn.outcome_reason = "missing_terminal_state"
+                log_for = getattr(self._runtime, "_log_for", None)
+                if callable(log_for):
+                    log_for(thread_id).turn_completed(
+                        thread_id,
+                        turn.id,
+                        turn.status,
+                        error=turn.error,
+                    )
             # Terminal snapshots must carry completedAt: journal replay
             # stamps it from the turn_completed event ts, so a null here
             # makes the live view disagree with the post-refresh view
@@ -560,6 +577,10 @@ class RealtimeGateway:
             first["metadata"] = block_metadata_dict
             input_blocks[0] = first
             cleaned["input"] = input_blocks
+            # Server-injected ownership context. The client never chooses
+            # these values; the gateway overwrites them after authentication.
+            cleaned["tenant_id"] = conn.tenant_id or f"legacy:{conn.actor_id}"
+            cleaned["owner_actor_id"] = conn.actor_id
         return cleaned
 
 

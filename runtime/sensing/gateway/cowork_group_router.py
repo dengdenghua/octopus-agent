@@ -11,6 +11,7 @@ static AgentGroupRegistry of agent-team *templates*, a different concept).
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from contextlib import suppress
 from typing import Any
@@ -291,8 +292,8 @@ def create_cowork_group_router(
 
         state = group_store.state(thread_id)
         if state.room_id:
-            room = _room_snapshot(state.room_id) or {"id": state.room_id}
-            _collaboration_store().upsert_room(thread_id, dict(room))
+            room = (await asyncio.to_thread(_room_snapshot, state.room_id)) or {"id": state.room_id}
+            await asyncio.to_thread(_collaboration_store().upsert_room, thread_id, dict(room))
             return room, False
 
         creator = getattr(team_rooms_router, "create_team_from_payload", None)
@@ -301,7 +302,7 @@ def create_cowork_group_router(
 
         members = [m for m in body.members if str(m.get("name") or "").strip()]
         if not members:
-            members = _room_members_from_group(thread_id)
+            members = await asyncio.to_thread(_room_members_from_group, thread_id)
         if not members:
             raise HTTPException(
                 400,
@@ -321,12 +322,13 @@ def create_cowork_group_router(
         room_id = str((room or {}).get("id") or "")
         if not room_id:
             raise HTTPException(502, "team room creator returned no id")
-        room = _collaboration_store().upsert_room(thread_id, dict(room))
-        link_room(group_store, thread_id, room_id, actor=_actor(request))
+        room = await asyncio.to_thread(_collaboration_store().upsert_room, thread_id, dict(room))
+        await asyncio.to_thread(link_room, group_store, thread_id, room_id, actor=_actor(request))
         if body.mode:
             if body.mode not in ("chat", "cluster", "swarm", "project"):
                 raise HTTPException(400, "mode must be chat | cluster | swarm | project")
-            group_store.append(
+            await asyncio.to_thread(
+                group_store.append,
                 thread_id,
                 MemberEvent(action="mode", actor=_actor(request), mode=body.mode),  # type: ignore[arg-type]
             )
@@ -389,7 +391,7 @@ def create_cowork_group_router(
             "ok": True,
             "created": created,
             "room": room,
-            "session": _session_payload(thread_id),
+            "session": await asyncio.to_thread(_session_payload, thread_id),
         }
 
     @router.get("/api/collab/{thread_id}/tasks")
@@ -447,12 +449,12 @@ def create_cowork_group_router(
             runner = getattr(team_tasks_router, "run_task_from_request", None)
             if callable(runner):
                 task = await _maybe_await(runner(request, task["id"]))
-        task = _collaboration_store().upsert_task(thread_id, dict(task))
+        task = await asyncio.to_thread(_collaboration_store().upsert_task, thread_id, dict(task))
         return {
             "ok": True,
             "room_id": room_id,
             "task": task,
-            "session": _session_payload(thread_id),
+            "session": await asyncio.to_thread(_session_payload, thread_id),
         }
 
     @router.post("/api/collab/{thread_id}/link-room", dependencies=[Depends(_auth_dep)])

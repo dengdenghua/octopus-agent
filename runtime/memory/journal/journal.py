@@ -18,6 +18,7 @@ from runtime.platform.models import (
     new_id,
     now_utc,
 )
+from runtime.safety.auth.scope import TenantScope
 from runtime.safety.invariants import AppendOnlyList
 from runtime.safety.invariants.enforce import enforces
 
@@ -125,12 +126,14 @@ class InMemoryJournal(Journal):
 
     @enforces("CC-5")
     def write(self, event: JournalEvent) -> None:
+        event = self._apply_context(event)
         with self._lock:
             self._events.append(event)
 
-    def read_all(self) -> list[JournalEvent]:
+    def read_all(self, *, scope: TenantScope | None = None) -> list[JournalEvent]:
         with self._lock:
-            return self._events.snapshot()
+            events = self._events.snapshot()
+        return [event for event in events if self._visible(event, scope)]
 
     def __len__(self) -> int:
         return len(self._events)
@@ -258,6 +261,7 @@ class JSONLJournal(Journal):
 
     @enforces("CC-5")
     def write(self, event: JournalEvent) -> None:
+        event = self._apply_context(event)
         line = event.model_dump_json()
         # Optional secret/PII scrubbing. Done on the serialised JSON
         # string so we cover every nested ``output`` / ``args`` field
@@ -399,6 +403,8 @@ class JSONLJournal(Journal):
                 thread_id=thread_id,
                 task_id=task_id,
                 agent_id=agent_id,
+                tenant_id=str(event.tenant_id or "") or None,
+                owner_actor_id=str(event.owner_actor_id or event.actor or "") or None,
                 ts=ts,
             )
             if isinstance(event, TokenUsageEvent):
@@ -411,6 +417,8 @@ class JSONLJournal(Journal):
                     input_tokens=event.input_tokens,
                     output_tokens=event.output_tokens,
                     cost_usd=event.cost_usd,
+                    tenant_id=str(event.tenant_id or "") or None,
+                    owner_actor_id=str(event.owner_actor_id or event.actor or "") or None,
                     ts=ts,
                 )
             elif isinstance(event, ReactCheckpointEvent):
@@ -432,6 +440,8 @@ class JSONLJournal(Journal):
                         "progress_summary": event.progress_summary,
                         "current_phase": event.current_phase,
                     },
+                    tenant_id=str(event.tenant_id or "") or None,
+                    owner_actor_id=str(event.owner_actor_id or event.actor or "") or None,
                     ts=ts,
                 )
             elif isinstance(event, TaskCheckpointEvent):
@@ -448,6 +458,8 @@ class JSONLJournal(Journal):
                         "tokens_spent": event.tokens_spent,
                         "usd_spent": event.usd_spent,
                     },
+                    tenant_id=str(event.tenant_id or "") or None,
+                    owner_actor_id=str(event.owner_actor_id or event.actor or "") or None,
                     ts=ts,
                 )
         except Exception:  # noqa: BLE001
@@ -508,7 +520,7 @@ class JSONLJournal(Journal):
             size,
         )
 
-    def read_all(self) -> list[JournalEvent]:
+    def read_all(self, *, scope: TenantScope | None = None) -> list[JournalEvent]:
         with self._lock:
             if not self._path.exists():
                 # File gone entirely → reset cache (a fresh file may
@@ -521,7 +533,8 @@ class JSONLJournal(Journal):
             if file_size == self._cache_byte_pos:
                 # Nothing new — hand back cached list (shallow copy so
                 # caller mutations don't poison the cache).
-                return list(self._cache)
+                events = list(self._cache)
+                return [event for event in events if self._visible(event, scope)]
             if file_size < self._cache_byte_pos:
                 # File shrank (manual truncate / rotation) → invalidate.
                 self._cache = []
@@ -558,7 +571,8 @@ class JSONLJournal(Journal):
                             self._cache_byte_pos,
                         )
             self._cache_byte_pos = new_pos
-            return list(self._cache)
+            events = list(self._cache)
+            return [event for event in events if self._visible(event, scope)]
 
     def __len__(self) -> int:
         if not self._path.exists():

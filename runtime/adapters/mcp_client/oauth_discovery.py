@@ -25,6 +25,17 @@ from dataclasses import dataclass
 from typing import Any
 from urllib import request as urllib_request
 
+from runtime.safety.auth.url_guard import check_url, safe_httpx_request
+
+_DEFAULT_URLOPEN = urllib_request.urlopen
+
+
+def _guard_discovery_url(url: str) -> None:
+    resolve_dns = urllib_request.urlopen is _DEFAULT_URLOPEN
+    verdict = check_url(url, allow_private=False, resolve_dns=resolve_dns)
+    if not verdict.allow:
+        raise ValueError(f"url_guard rejected: {verdict.reason}")
+
 
 @dataclass(frozen=True)
 class OAuthEndpoints:
@@ -37,8 +48,19 @@ class OAuthEndpoints:
 
 def _get_json(url: str, timeout: float = 15.0) -> dict[str, Any] | None:
     try:
+        _guard_discovery_url(url)
+        if urllib_request.urlopen is _DEFAULT_URLOPEN:
+            resp = safe_httpx_request(
+                "GET",
+                url,
+                headers={"Accept": "application/json"},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            data = json.loads(resp.content.decode("utf-8"))
+            return data if isinstance(data, dict) else None
         req = urllib_request.Request(url, headers={"Accept": "application/json"})
-        with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — metadata fetch  # nosec B310 — audited HTTPS discovery endpoint
+        with urllib_request.urlopen(req, timeout=timeout) as resp:  # nosec B310  # noqa: S310 — guarded hermetic test seam; production uses pinned helper
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:  # noqa: BLE001 — discovery is best-effort
         return None
@@ -80,6 +102,17 @@ def discover(server_url: str, *, timeout: float = 15.0) -> OAuthEndpoints | None
     token_url = str(meta.get("token_endpoint") or "")
     if not (authorize_url and token_url):
         return None
+    try:
+        _guard_discovery_url(authorize_url)
+        _guard_discovery_url(token_url)
+    except ValueError:
+        return None
+    registration_url = str(meta.get("registration_endpoint") or "")
+    if registration_url:
+        try:
+            _guard_discovery_url(registration_url)
+        except ValueError:
+            registration_url = ""
 
     raw_scopes = meta.get("scopes_supported")
     scopes = tuple(str(s) for s in raw_scopes) if isinstance(raw_scopes, list) else ()
@@ -87,7 +120,7 @@ def discover(server_url: str, *, timeout: float = 15.0) -> OAuthEndpoints | None
         issuer=str(meta.get("issuer") or auth_server),
         authorize_url=authorize_url,
         token_url=token_url,
-        registration_url=str(meta.get("registration_endpoint") or ""),
+        registration_url=registration_url,
         scopes=scopes,
     )
 
@@ -110,13 +143,26 @@ def register_client(
         }
     ).encode("utf-8")
     try:
+        _guard_discovery_url(registration_url)
+        if urllib_request.urlopen is _DEFAULT_URLOPEN:
+            resp = safe_httpx_request(
+                "POST",
+                registration_url,
+                data=body,
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            data = json.loads(resp.content.decode("utf-8"))
+            client_id = data.get("client_id") if isinstance(data, dict) else None
+            return str(client_id) if client_id else None
         req = urllib_request.Request(
             registration_url,
             data=body,
             method="POST",
             headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
-        with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — DCR endpoint  # nosec B310 — audited HTTPS DCR endpoint
+        with urllib_request.urlopen(req, timeout=timeout) as resp:  # nosec B310  # noqa: S310 — guarded hermetic test seam; production uses pinned helper
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:  # noqa: BLE001 — DCR is best-effort
         return None

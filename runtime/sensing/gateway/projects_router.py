@@ -22,6 +22,8 @@ from runtime.projectos.engine import (
 )
 from runtime.projectos.store import ProjectStore
 from runtime.projectos.timeline import project_process_timeline
+from runtime.safety.auth.principal import CurrentPrincipal, resolve_principal
+from runtime.safety.auth.scope import scope_from_principal
 
 
 class PlanBody(BaseModel):
@@ -70,6 +72,7 @@ def create_projects_router(
     store: ProjectStore | None = None,
     group_store: Any = None,
     collaboration_store: Any = None,
+    thread_store: Any = None,
     model_router: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -98,13 +101,8 @@ def create_projects_router(
             "decompose_tasks": stub_decompose_tasks,
         }
 
-    def _engine() -> ProjectEngine:
-        return ProjectEngine(project_store, **_base_hooks())
-
-    def _auth_dep(request: Request) -> None:
-        from runtime.adapters.web_auth import _resolve_actor
-
-        _resolve_actor(
+    def _principal(request: Request) -> CurrentPrincipal | None:
+        principal = resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -112,35 +110,105 @@ def create_projects_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        if principal is not None:
+            request.state.project_principal = principal
+        return principal
 
-    router = APIRouter(tags=["projectos"])
+    def _scoped_store(request: Request) -> ProjectStore:
+        principal = _principal(request)
+        if principal is None:
+            return project_store
+        allow_cross_tenant = bool(principal.roles.intersection({"admin", "operator"}))
+        return project_store.with_scope(
+            scope_from_principal(principal, allow_cross_tenant=allow_cross_tenant)
+        )
+
+    def _engine(principal: CurrentPrincipal | None = None) -> ProjectEngine:
+        scope = scope_from_principal(
+            principal,
+            allow_cross_tenant=bool(
+                principal is not None and principal.roles.intersection({"admin", "operator"})
+            ),
+        )
+        return ProjectEngine(
+            project_store,
+            **_base_hooks(),
+            owner_id=principal.actor_id if principal is not None else "",
+            tenant_id=principal.tenant_id if principal is not None else "",
+            scope=scope,
+        )
+
+    def _auth_dep(request: Request) -> None:
+        _principal(request)
+
+    router = APIRouter(tags=["projectos"], dependencies=[Depends(_auth_dep)])
 
     def _bad_request(exc: ValueError) -> HTTPException:
         return HTTPException(400, str(exc))
 
-    def _project_or_404(project_id: str):
+    def _project_or_404(
+        request: Request,
+        project_id: str,
+        *,
+        allow_operator: bool = True,
+    ):
         try:
-            project = project_store.get_project(project_id)
+            project = _scoped_store(request).get_project(project_id)
         except ValueError as exc:
             raise _bad_request(exc) from exc
         if project is None:
             raise HTTPException(404, "project not found")
+        principal = _principal(request)
+        if principal is not None:
+            global_operator = bool(principal.roles.intersection({"admin", "operator"}))
+            if not project.owner_id or not project.tenant_id:
+                if not (allow_operator and global_operator):
+                    raise HTTPException(404, "project not found")
+            elif project.tenant_id != principal.tenant_id or (
+                project.owner_id != principal.actor_id and not global_operator
+            ):
+                raise HTTPException(404, "project not found")
         return project
 
-    def _full_state(project_id: str) -> dict[str, Any]:
+    def _thread_access(request: Request, thread_id: str) -> CurrentPrincipal | None:
+        principal = _principal(request)
+        if principal is None:
+            return None
+        if thread_store is None or not hasattr(thread_store, "get"):
+            raise HTTPException(503, "thread ownership unavailable")
+        thread = thread_store.get(thread_id)
+        if thread is None:
+            raise HTTPException(404, "thread not found")
+        metadata = thread.get("metadata") if isinstance(thread, dict) else {}
+        owner = metadata.get("owner_actor_id") if isinstance(metadata, dict) else None
+        stored_tenant = (
+            str(metadata.get("tenant_id") or "").strip() if isinstance(metadata, dict) else ""
+        )
+        if not principal.tenant_id.startswith("legacy:") and stored_tenant != principal.tenant_id:
+            raise HTTPException(404, "thread not found")
+        if stored_tenant and stored_tenant != principal.tenant_id:
+            raise HTTPException(404, "thread not found")
+        if owner != principal.actor_id and not principal.roles.intersection({"admin", "operator"}):
+            raise HTTPException(404, "thread not found")
+        return principal
+
+    def _full_state(request: Request, project_id: str) -> dict[str, Any]:
+        _project_or_404(request, project_id)
         try:
-            state = full_project_state(project_store, project_id)
+            state = full_project_state(_scoped_store(request), project_id)
         except ValueError as exc:
             raise _bad_request(exc) from exc
         if state is None:
             raise HTTPException(404, "project not found")
         return state
 
-    def _project_to_collaboration(project_id: str, *, thread_id: str = "") -> None:
+    def _project_to_collaboration(
+        request: Request, project_id: str, *, thread_id: str = ""
+    ) -> None:
         if collaboration_store is None:
             return
         try:
-            state = full_project_state(project_store, project_id)
+            state = full_project_state(_scoped_store(request), project_id)
             if state is None:
                 return
             raw_project = state.get("project")
@@ -165,6 +233,7 @@ def create_projects_router(
                         "metadata": {
                             "source": "projectos",
                             "project_id": project_id,
+                            "tenant_id": project.get("tenant_id") or "",
                             **({"thread_id": thread_id} if thread_id else {}),
                         },
                     },
@@ -215,6 +284,7 @@ def create_projects_router(
                             "metadata": {
                                 "source": "projectos",
                                 "project_id": project_id,
+                                "tenant_id": project.get("tenant_id") or "",
                                 "milestone_id": milestone_id,
                                 "task_type": task.get("type"),
                                 "assigned_agent": assigned_agent,
@@ -227,34 +297,65 @@ def create_projects_router(
             return
 
     @router.get("/api/projects")
-    def list_projects() -> dict[str, Any]:
-        return {"projects": [p.to_dict() for p in project_store.list_projects()]}
+    def list_projects(request: Request) -> dict[str, Any]:
+        principal = _principal(request)
+        projects = _scoped_store(request).list_projects()
+        if principal is not None:
+            global_operator = bool(principal.roles.intersection({"admin", "operator"}))
+            visible: list[Any] = []
+            for project in projects:
+                if project.tenant_id and project.tenant_id != principal.tenant_id:
+                    continue
+                if not project.owner_id or not project.tenant_id:
+                    if global_operator:
+                        visible.append(project)
+                    continue
+                if project.owner_id == principal.actor_id or global_operator:
+                    visible.append(project)
+            projects = visible
+        return {"projects": [p.to_dict() for p in projects]}
 
     @router.get("/api/projects/by-thread/{thread_id}")
-    def get_project_by_thread(thread_id: str) -> dict[str, Any]:
+    def get_project_by_thread(request: Request, thread_id: str) -> dict[str, Any]:
+        _thread_access(request, thread_id)
         try:
-            project = project_store.project_for_thread(thread_id)
+            project = _scoped_store(request).project_for_thread(thread_id)
         except ValueError as exc:
             raise _bad_request(exc) from exc
         if project is None:
             raise HTTPException(404, "project not found for thread")
-        return _full_state(project.id)
+        return _full_state(request, project.id)
 
     @router.get("/api/projects/thread-map")
-    def thread_project_map() -> dict[str, str]:
-        return project_store.thread_project_map()
+    def thread_project_map(request: Request) -> dict[str, str]:
+        principal = _principal(request)
+        scoped_store = _scoped_store(request)
+        mapping = scoped_store.thread_project_map()
+        if principal is None:
+            return mapping
+        filtered: dict[str, str] = {}
+        for thread_id, project_id in mapping.items():
+            project = scoped_store.get_project(project_id)
+            if project is None or project.tenant_id != principal.tenant_id:
+                continue
+            if project.owner_id == principal.actor_id or principal.roles.intersection(
+                {"admin", "operator"}
+            ):
+                filtered[thread_id] = project_id
+        return filtered
 
     @router.get("/api/projects/{project_id}")
-    def get_project(project_id: str) -> dict[str, Any]:
-        return _full_state(project_id)
+    def get_project(request: Request, project_id: str) -> dict[str, Any]:
+        return _full_state(request, project_id)
 
     @router.get("/api/projects/{project_id}/report")
-    def report(project_id: str) -> dict[str, Any]:
+    def report(request: Request, project_id: str) -> dict[str, Any]:
         """A milestone report: each milestone + its tasks' status/output."""
-        project = _project_or_404(project_id)
+        project = _project_or_404(request, project_id)
         out = []
         try:
-            milestones = project_store.milestones_for(project_id)
+            scoped_store = _scoped_store(request)
+            milestones = scoped_store.milestones_for(project_id)
         except ValueError as exc:
             raise _bad_request(exc) from exc
         for m in milestones:
@@ -272,18 +373,18 @@ def create_projects_router(
                             "status": t.status,
                             "output": t.output,
                         }
-                        for t in project_store.tasks_for_milestone(m.id)
+                        for t in scoped_store.tasks_for_milestone(m.id)
                     ],
                 }
             )
         return {"project": project.name, "status": project.status, "milestones": out}
 
     @router.get("/api/projects/{project_id}/events")
-    def events(project_id: str, limit: int = 100) -> dict[str, Any]:
+    def events(request: Request, project_id: str, limit: int = 100) -> dict[str, Any]:
         """Project audit trail: recoveries, interventions, and future operator actions."""
-        _project_or_404(project_id)
+        _project_or_404(request, project_id)
         try:
-            audit_events = project_store.events_for_project(project_id, limit=limit)
+            audit_events = _scoped_store(request).events_for_project(project_id, limit=limit)
         except ValueError as exc:
             raise _bad_request(exc) from exc
         return {
@@ -292,11 +393,11 @@ def create_projects_router(
         }
 
     @router.get("/api/projects/{project_id}/process-timeline")
-    def process_timeline(project_id: str, limit: int = 100) -> dict[str, Any]:
+    def process_timeline(request: Request, project_id: str, limit: int = 100) -> dict[str, Any]:
         """Project process timeline: persisted plan/run/control evidence."""
-        _project_or_404(project_id)
+        _project_or_404(request, project_id)
         try:
-            timeline = project_process_timeline(project_store, project_id, limit=limit)
+            timeline = project_process_timeline(_scoped_store(request), project_id, limit=limit)
         except ValueError as exc:
             raise _bad_request(exc) from exc
         if timeline is None:
@@ -304,42 +405,45 @@ def create_projects_router(
         return {"timeline": timeline}
 
     @router.post("/api/projects", dependencies=[Depends(_auth_dep)])
-    def plan(body: PlanBody) -> dict[str, Any]:
+    def plan(request: Request, body: PlanBody) -> dict[str, Any]:
         """Turn a one-line goal into a project with generated milestones."""
+        principal = _principal(request)
         try:
-            project = _engine().plan(body.name, body.goal)
+            project = _engine(principal).plan(body.name, body.goal)
         except ValueError as exc:
             raise _bad_request(exc) from exc
-        _project_to_collaboration(project.id)
-        return {"ok": True, **_full_state(project.id)}
+        _project_to_collaboration(request, project.id)
+        return {"ok": True, **_full_state(request, project.id)}
 
     @router.post("/api/projects/move", dependencies=[Depends(_auth_dep)])
-    def move_thread(body: MoveThreadBody) -> dict[str, Any]:
-        project = _project_or_404(body.project_id)
+    def move_thread(request: Request, body: MoveThreadBody) -> dict[str, Any]:
+        project = _project_or_404(request, body.project_id)
+        _thread_access(request, body.thread_id)
         try:
-            project_store.bind_thread(body.thread_id, project.id)
+            _scoped_store(request).bind_thread(body.thread_id, project.id)
         except ValueError as exc:
             raise _bad_request(exc) from exc
         return {"ok": True, "thread_id": body.thread_id, "project_id": project.id}
 
     @router.delete("/api/projects/{project_id}", dependencies=[Depends(_auth_dep)])
-    def delete_project(project_id: str) -> dict[str, Any]:
-        _project_or_404(project_id)
+    def delete_project(request: Request, project_id: str) -> dict[str, Any]:
+        _project_or_404(request, project_id)
         try:
-            project_store.delete_project(project_id)
+            _scoped_store(request).delete_project(project_id)
         except ValueError as exc:
             raise _bad_request(exc) from exc
         return {"ok": True, "project_id": project_id}
 
     @router.post("/api/projects/from-group/{thread_id}", dependencies=[Depends(_auth_dep)])
-    def from_group(thread_id: str, body: FromGroupBody) -> dict[str, Any]:
+    def from_group(request: Request, thread_id: str, body: FromGroupBody) -> dict[str, Any]:
         """Turn a custom cowork group into a project team: plan milestones and (by
         default) run them, routing each task to the group's ACTUAL members by
         capability — not the fixed 4 roles. This is "assemble a group → turn on
         project mode"."""
+        principal = _thread_access(request, thread_id)
         try:
             result = run_project_from_group(
-                project_store,
+                _scoped_store(request),
                 _group_store(),
                 thread_id,
                 name=body.name,
@@ -347,12 +451,14 @@ def create_projects_router(
                 hooks=_base_hooks(),
                 run=body.run,
                 max_ticks=body.max_ticks,
+                owner_id=principal.actor_id if principal is not None else "",
+                tenant_id=principal.tenant_id if principal is not None else "",
             )
             raw_project = result.get("project")
             project = raw_project if isinstance(raw_project, dict) else {}
             project_id = str(project.get("id") or "")
             if project_id:
-                _project_to_collaboration(project_id, thread_id=thread_id)
+                _project_to_collaboration(request, project_id, thread_id=thread_id)
             return result
         except ValueError as exc:
             raise _bad_request(exc) from exc
@@ -360,34 +466,34 @@ def create_projects_router(
             raise HTTPException(500, f"project run failed: {exc}") from exc
 
     @router.post("/api/projects/{project_id}/tick", dependencies=[Depends(_auth_dep)])
-    def tick(project_id: str) -> dict[str, Any]:
+    def tick(request: Request, project_id: str) -> dict[str, Any]:
         """Advance the project one loop iteration."""
-        _project_or_404(project_id)
+        _project_or_404(request, project_id)
         try:
-            result = _engine().tick(project_id)
-            thread_project = project_store.thread_for_project(project_id)
-            _project_to_collaboration(project_id, thread_id=thread_project or "")
+            result = _engine(_principal(request)).tick(project_id)
+            thread_project = _scoped_store(request).thread_for_project(project_id)
+            _project_to_collaboration(request, project_id, thread_id=thread_project or "")
             return result
         except ValueError as exc:
             raise _bad_request(exc) from exc
 
     @router.post("/api/projects/{project_id}/run", dependencies=[Depends(_auth_dep)])
-    def run(project_id: str, body: RunBody) -> dict[str, Any]:
+    def run(request: Request, project_id: str, body: RunBody) -> dict[str, Any]:
         """Drive the loop until the project is done/blocked or max_ticks."""
-        _project_or_404(project_id)
+        _project_or_404(request, project_id)
         try:
-            result = _engine().run(project_id, max_ticks=body.max_ticks)
-            thread_project = project_store.thread_for_project(project_id)
-            _project_to_collaboration(project_id, thread_id=thread_project or "")
+            result = _engine(_principal(request)).run(project_id, max_ticks=body.max_ticks)
+            thread_project = _scoped_store(request).thread_for_project(project_id)
+            _project_to_collaboration(request, project_id, thread_id=thread_project or "")
             return result
         except ValueError as exc:
             raise _bad_request(exc) from exc
 
     @router.post("/api/projects/{project_id}/recover", dependencies=[Depends(_auth_dep)])
-    def recover(project_id: str, body: RecoverBody) -> dict[str, Any]:
+    def recover(request: Request, project_id: str, body: RecoverBody) -> dict[str, Any]:
         """Reopen blocked project work after an operator fixes the cause."""
-        _project_or_404(project_id)
-        engine = _engine()
+        _project_or_404(request, project_id)
+        engine = _engine(_principal(request))
         try:
             recovered = engine.recover(
                 project_id,
@@ -402,21 +508,31 @@ def create_projects_router(
                 run_result = engine.run(project_id, max_ticks=body.max_ticks)
             except ValueError as exc:
                 raise _bad_request(exc) from exc
-            thread_project = project_store.thread_for_project(project_id)
-            _project_to_collaboration(project_id, thread_id=thread_project or "")
-            return {"ok": True, "recover": recovered, "run": run_result, **_full_state(project_id)}
-        thread_project = project_store.thread_for_project(project_id)
-        _project_to_collaboration(project_id, thread_id=thread_project or "")
-        return {"ok": True, "recover": recovered, **_full_state(project_id)}
+            thread_project = _scoped_store(request).thread_for_project(project_id)
+            _project_to_collaboration(request, project_id, thread_id=thread_project or "")
+            return {
+                "ok": True,
+                "recover": recovered,
+                "run": run_result,
+                **_full_state(request, project_id),
+            }
+        thread_project = _scoped_store(request).thread_for_project(project_id)
+        _project_to_collaboration(request, project_id, thread_id=thread_project or "")
+        return {"ok": True, "recover": recovered, **_full_state(request, project_id)}
 
     @router.post(
         "/api/projects/{project_id}/tasks/{task_id}/intervene",
         dependencies=[Depends(_auth_dep)],
     )
-    def intervene_task(project_id: str, task_id: str, body: TaskInterventionBody) -> dict[str, Any]:
+    def intervene_task(
+        request: Request,
+        project_id: str,
+        task_id: str,
+        body: TaskInterventionBody,
+    ) -> dict[str, Any]:
         """Manually reassign, reset, complete, or skip a task."""
-        _project_or_404(project_id)
-        engine = _engine()
+        _project_or_404(request, project_id)
+        engine = _engine(_principal(request))
         try:
             intervention = engine.intervene_task(
                 project_id,
@@ -440,16 +556,20 @@ def create_projects_router(
                 run_result = engine.run(project_id, max_ticks=body.max_ticks)
             except ValueError as exc:
                 raise _bad_request(exc) from exc
-            thread_project = project_store.thread_for_project(project_id)
-            _project_to_collaboration(project_id, thread_id=thread_project or "")
+            thread_project = _scoped_store(request).thread_for_project(project_id)
+            _project_to_collaboration(request, project_id, thread_id=thread_project or "")
             return {
                 "ok": True,
                 "intervention": intervention,
                 "run": run_result,
-                **_full_state(project_id),
+                **_full_state(request, project_id),
             }
-        thread_project = project_store.thread_for_project(project_id)
-        _project_to_collaboration(project_id, thread_id=thread_project or "")
-        return {"ok": True, "intervention": intervention, **_full_state(project_id)}
+        thread_project = _scoped_store(request).thread_for_project(project_id)
+        _project_to_collaboration(request, project_id, thread_id=thread_project or "")
+        return {
+            "ok": True,
+            "intervention": intervention,
+            **_full_state(request, project_id),
+        }
 
     return router

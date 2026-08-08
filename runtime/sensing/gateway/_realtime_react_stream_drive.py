@@ -117,8 +117,7 @@ async def _drive_react(
             ).result(timeout=2.0)
         except (RuntimeError, TimeoutError):
             _logger.warning(
-                "tool_output_delta drop (consumer slow) — "
-                "command output may be truncated in the UI"
+                "tool_output_delta drop (consumer slow) — command output may be truncated in the UI"
             )
 
     def producer() -> None:
@@ -173,6 +172,7 @@ async def _drive_react(
                     runtime._stack,
                     intent,
                     planning_mode=_planning_mode,
+                    model=model,
                 ):
                     from runtime.sensing.gateway.tool_bridge import (
                         stream_agentic_fallback,
@@ -273,7 +273,8 @@ async def _drive_react(
             if emitter.is_turn_interrupted(turn.id):
                 if not cancel_source.is_cancelled:
                     cancel_source.cancel(reason="user interrupted turn")
-                turn.status = TurnStatus.INTERRUPTED
+                turn.status = TurnStatus.CANCELLED
+                turn.outcome_reason = "user_cancelled"
                 # Record the concrete interrupt reason so the
                 # frontend can tell the user *why* the turn stopped.
                 if not turn.interrupt_reason:

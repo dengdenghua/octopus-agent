@@ -5,7 +5,9 @@ from datetime import UTC, datetime, timedelta
 from math import ceil
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from runtime.safety.auth.scope import scope_from_request
 
 
 def _envelope(data: Any) -> dict[str, Any]:
@@ -88,11 +90,12 @@ def _usage_rows(
     *,
     start: datetime | None = None,
     end: datetime | None = None,
+    scope: Any = None,
 ) -> list[_UsageRow]:
     rows: list[_UsageRow] = []
 
     try:
-        token_events = list(journal.read_by_type("token_usage"))
+        token_events = list(journal.read_by_type("token_usage", scope=scope))
     except (OSError, ImportError, AttributeError, TypeError, ValueError):
         token_events = []
     for ev in token_events:
@@ -121,7 +124,7 @@ def _usage_rows(
         )
 
     try:
-        budget_events = list(journal.read_by_type("budget_commit"))
+        budget_events = list(journal.read_by_type("budget_commit", scope=scope))
     except (OSError, ImportError, AttributeError, TypeError, ValueError):
         budget_events = []
     for ev in budget_events:
@@ -153,7 +156,7 @@ def _usage_rows(
     )
 
 
-def _summary(rows: list[_UsageRow], period: str) -> dict[str, Any]:
+def _summary(rows: list[_UsageRow], period: str, *, user_id: str = "local") -> dict[str, Any]:
     by_model: dict[str, dict[str, Any]] = {}
     by_event_type: dict[str, int] = {}
     total_cost = 0.0
@@ -180,7 +183,7 @@ def _summary(rows: list[_UsageRow], period: str) -> dict[str, Any]:
         )[0]
 
     return {
-        "user_id": "local",
+        "user_id": user_id,
         "period": period,
         "total_cost": _money(total_cost),
         "total_requests": len(rows),
@@ -191,18 +194,47 @@ def _summary(rows: list[_UsageRow], period: str) -> dict[str, Any]:
     }
 
 
-def create_account_usage_router(*, journal: Any) -> APIRouter:
-    router = APIRouter(tags=["account", "usage"])
+def create_account_usage_router(
+    *,
+    journal: Any,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> APIRouter:
+    def _auth_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import resolve_principal
+
+        principal = resolve_principal(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+        if require_auth and principal is None:
+            raise HTTPException(401, "authentication required")
+        request.state.usage_scope = scope_from_request(request)
+        request.state.usage_actor = principal.actor_id if principal is not None else "local"
+
+    router = APIRouter(tags=["account", "usage"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/account/usage")
-    def account_usage() -> dict[str, Any]:
+    def account_usage(request: Request) -> dict[str, Any]:
         period_start, period_end = _month_window()
-        rows = _usage_rows(journal, start=period_start, end=period_end)
+        rows = _usage_rows(
+            journal,
+            start=period_start,
+            end=period_end,
+            scope=getattr(request.state, "usage_scope", None),
+        )
         total_tokens = sum(row.total_tokens for row in rows)
         total_cost = sum(row.cost for row in rows)
         return _envelope(
             {
-                "user_id": "local",
+                "user_id": getattr(request.state, "usage_actor", "local"),
                 "plan_id": "local",
                 "period_start": _iso(period_start),
                 "period_end": _iso(period_end),
@@ -219,20 +251,38 @@ def create_account_usage_router(*, journal: Any) -> APIRouter:
 
     @router.get("/api/account/usage/summary")
     def account_usage_summary(
+        request: Request,
         period: str = Query(default="month"),
     ) -> dict[str, Any]:
         normalized, start, end = _period_window(period)
-        return _envelope(_summary(_usage_rows(journal, start=start, end=end), normalized))
+        return _envelope(
+            _summary(
+                _usage_rows(
+                    journal,
+                    start=start,
+                    end=end,
+                    scope=getattr(request.state, "usage_scope", None),
+                ),
+                normalized,
+                user_id=getattr(request.state, "usage_actor", "local"),
+            )
+        )
 
     @router.get("/api/account/usage/events")
     def account_usage_events(
+        request: Request,
         limit: int = Query(default=20, ge=1, le=200),
         page: int = Query(default=1, ge=1),
         event_type: str | None = Query(default=None),
         period: str = Query(default="month"),
     ) -> dict[str, Any]:
         _normalized, start, end = _period_window(period)
-        rows = _usage_rows(journal, start=start, end=end)
+        rows = _usage_rows(
+            journal,
+            start=start,
+            end=end,
+            scope=getattr(request.state, "usage_scope", None),
+        )
         if event_type:
             rows = [row for row in rows if row.event_type == event_type]
         total = len(rows)
@@ -243,7 +293,7 @@ def create_account_usage_router(*, journal: Any) -> APIRouter:
                 "data": [
                     {
                         "event_id": row.event_id,
-                        "user_id": "local",
+                        "user_id": getattr(request.state, "usage_actor", "local"),
                         "event_type": row.event_type,
                         "product": row.product,
                         "model": row.model,
@@ -266,13 +316,18 @@ def create_account_usage_router(*, journal: Any) -> APIRouter:
         )
 
     @router.get("/api/account/billing")
-    def account_billing_summary() -> dict[str, Any]:
+    def account_billing_summary(request: Request) -> dict[str, Any]:
         period_start, period_end = _month_window()
-        rows = _usage_rows(journal, start=period_start, end=period_end)
+        rows = _usage_rows(
+            journal,
+            start=period_start,
+            end=period_end,
+            scope=getattr(request.state, "usage_scope", None),
+        )
         current_period_cost = _money(sum(row.cost for row in rows))
         return _envelope(
             {
-                "user_id": "local",
+                "user_id": getattr(request.state, "usage_actor", "local"),
                 "current_balance": "0",
                 "bonus_balance": "0",
                 "current_period_cost": current_period_cost,

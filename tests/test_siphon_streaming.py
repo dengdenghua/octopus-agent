@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from runtime.memory.journal import InMemoryJournal, JSONLJournal
+from runtime.memory.journal._journal_models import TokenUsageEvent
 from runtime.platform.models import (
     ArmId,
     ExecutionResult,
@@ -17,6 +18,7 @@ from runtime.platform.models import (
     Trajectory,
     TrajectoryOutcome,
 )
+from runtime.safety.auth.scope import TenantScope
 from runtime.sensing.gateway import StreamingJournal
 
 # ═══════════════════════════════════════════════════════════
@@ -129,6 +131,31 @@ class TestReadPassThrough:
         j.write_trajectory(_mk_traj())
         assert len(j.read_by_type("trajectory")) == 1
         assert len(j.read_by_type("step")) == 0
+
+    def test_scoped_reads_are_forwarded_to_inner_journal(self):
+        j = StreamingJournal(InMemoryJournal())
+        alice = TenantScope("tenant-a", "alice")
+        bob = TenantScope("tenant-b", "bob")
+        j.write(
+            TokenUsageEvent(
+                tenant_id="tenant-a",
+                owner_actor_id="alice",
+                input_tokens=1,
+                output_tokens=2,
+            )
+        )
+        j.write(
+            TokenUsageEvent(
+                tenant_id="tenant-b",
+                owner_actor_id="bob",
+                input_tokens=3,
+                output_tokens=4,
+            )
+        )
+
+        assert len(j.read_all(scope=alice)) == 1
+        assert len(j.read_by_type("token_usage", scope=alice)) == 1
+        assert len(j.read_by_type("token_usage", scope=bob)) == 1
 
 
 # ═══════════════════════════════════════════════════════════

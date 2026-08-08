@@ -82,9 +82,9 @@ def create_computer_router(
         # deploys reject anonymous access at the router boundary. Returns the
         # resolved actor so lease-mutating routes can bind the exclusive lease
         # to the authenticated principal instead of a spoofable body field.
-        from runtime.adapters.web_auth import _resolve_actor
+        from runtime.safety.auth.principal import require_operator, resolve_principal
 
-        return _resolve_actor(
+        principal = resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -92,6 +92,16 @@ def create_computer_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        if require_auth:
+            require_operator(
+                request,
+                identity_store,
+                require_auth,
+                jwt_secret=jwt_secret,
+                jwt_issuer=jwt_issuer,
+                jwt_audience=jwt_audience,
+            )
+        return principal.actor_id if principal is not None else None
 
     router = APIRouter(
         prefix="/api/computer",
@@ -849,9 +859,7 @@ def create_computer_router(
         action = item["action"]
         result = _execute(action)
         ok = "error" not in result
-        diagnostic = (
-            _execution_failure_diagnostic(action, result) if not ok else {}
-        )
+        diagnostic = _execution_failure_diagnostic(action, result) if not ok else {}
         raw_preview_contract = item.get("preview_contract")
         preview_contract: dict[str, Any]
         if isinstance(raw_preview_contract, dict):

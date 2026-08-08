@@ -9,7 +9,9 @@ and the A/B recipe splitter that assigns loop variants per task.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import logging
+import threading
 from collections.abc import Callable, Generator
 from typing import Any
 
@@ -31,9 +33,18 @@ _logger = logging.getLogger(__name__)
 # no-op — telemetry must never break the loop.
 _GUARD_TELEMETRY_SINGLETON: Any = None
 _GUARD_TELEMETRY_INIT_DONE = False
+_GUARD_TELEMETRY_SEEN: set[tuple[str, str, str]] = set()
+_GUARD_TELEMETRY_SEEN_LOCK = threading.Lock()
+_GUARD_TELEMETRY_SEEN_LIMIT = 4096
 
 
-def _guard_hit_recorder() -> Callable[[str, str], None] | None:
+def _guard_hit_recorder(
+    *,
+    dedupe_key: str = "",
+    goal: str = "",
+    iteration: int | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> Callable[[str, str], None] | None:
     """Return a ``recorder(label, category)`` callable, or None when
     telemetry is disabled / unavailable."""
     global _GUARD_TELEMETRY_SINGLETON, _GUARD_TELEMETRY_INIT_DONE
@@ -53,7 +64,26 @@ def _guard_hit_recorder() -> Callable[[str, str], None] | None:
     sink = _GUARD_TELEMETRY_SINGLETON
     if sink is None:
         return None
-    return lambda label, category: sink.record(label, category)
+    goal_digest = hashlib.sha256(goal.encode("utf-8", errors="ignore")).hexdigest()[:16]
+
+    def _record_once(label: str, category: str) -> None:
+        if dedupe_key:
+            hit_key = (dedupe_key, label, category)
+            with _GUARD_TELEMETRY_SEEN_LOCK:
+                if hit_key in _GUARD_TELEMETRY_SEEN:
+                    return
+                if len(_GUARD_TELEMETRY_SEEN) >= _GUARD_TELEMETRY_SEEN_LIMIT:
+                    _GUARD_TELEMETRY_SEEN.clear()
+                _GUARD_TELEMETRY_SEEN.add(hit_key)
+        sink.record(
+            label,
+            category,
+            goal_digest=goal_digest,
+            iteration=iteration,
+            metadata=metadata,
+        )
+
+    return _record_once
 
 
 def _reset_guard_telemetry_for_tests() -> None:
@@ -61,6 +91,8 @@ def _reset_guard_telemetry_for_tests() -> None:
     global _GUARD_TELEMETRY_SINGLETON, _GUARD_TELEMETRY_INIT_DONE
     _GUARD_TELEMETRY_SINGLETON = None
     _GUARD_TELEMETRY_INIT_DONE = False
+    with _GUARD_TELEMETRY_SEEN_LOCK:
+        _GUARD_TELEMETRY_SEEN.clear()
 
 
 # ── Operator kill-switch for individual guards ────────────────────
@@ -381,6 +413,7 @@ def _cancel_pause_guard(
 
     if pause_controller.is_pause_requested(str(react_task_id) if react_task_id else None):
         terminated_reason = "paused"
+        req_meta = pause_controller.get_request(str(react_task_id))
         _logger.info(
             "react_loop paused at iteration %d (task %s) — checkpoint written",
             iteration,
@@ -410,7 +443,6 @@ def _cancel_pause_guard(
                     current_phase=current_phase,
                 )
             try:
-                req_meta = pause_controller.get_request(str(react_task_id))
                 journal.write_task_paused(
                     task_id=str(react_task_id) if react_task_id else "",
                     reason=req_meta.reason if req_meta else "external",
@@ -425,6 +457,8 @@ def _cancel_pause_guard(
             "type": "react_paused",
             "iteration": iteration,
             "task_id": str(react_task_id) if react_task_id else None,
+            "reason": req_meta.reason if req_meta else "external",
+            "note": req_meta.note if req_meta else "",
         }
         return terminated_reason
     return None

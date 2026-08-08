@@ -35,8 +35,9 @@ from runtime.core.cerebrum.react_final_answer_guards import (
     _evaluate_final_answer_guards,
     _final_answer_needs_pre_emit_guard,
     _guard_impasse_final_answer,
+    _guard_rejection_outcome,
+    _guard_soft_landing_answer,
     _looks_like_observation_echo,
-    _note_guard_impasse,
     _unfinished_implementation_recovery_needed,
 )
 from runtime.core.cerebrum.react_loop_state import (
@@ -311,6 +312,7 @@ def _phase_6c_parse_and_guard(
         # text twice on iteration N+1.
         if (
             _final_stream_started
+            and not _length_limited
             and not maybe_final
             and step.action.lower() in {"none", "n/a", ""}
             and not _looks_like_observation_echo(text)
@@ -337,7 +339,13 @@ def _phase_6c_parse_and_guard(
             )
             if _guard_hit is not None:
                 _guard_label, _guard_message = _guard_hit
-                if _note_guard_impasse(_guard_impasse_state, _guard_label, steps):
+                _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
+                if _guard_outcome == "soft_land":
+                    final_answer = _guard_soft_landing_answer(text, _guard_label)
+                    terminated_reason = "final_answer_with_warning"
+                    steps.append(step)
+                    return _LoopControl.BREAK
+                if _guard_outcome == "hard_stop":
                     # Same loop-level bound as the main guard site: the
                     # chat-flush path rejects and continues too, so an
                     # unsatisfiable guard here would livelock identically.
@@ -393,7 +401,7 @@ def _phase_6c_parse_and_guard(
             if _is_length_truncated:
                 # Surface the partial text so the user sees streaming
                 # progress; don't count it against bail-at.
-                if text and not maybe_final:
+                if text and not maybe_final and not _final_stream_started:
                     yield {
                         "type": "text_delta",
                         "delta": text,
@@ -486,11 +494,15 @@ def _phase_6c_parse_and_guard(
                         )
                     if _guard_hit is not None:
                         _guard_label, _guard_message = _guard_hit
-                        if _note_guard_impasse(
-                            _guard_impasse_state,
-                            _guard_label,
-                            steps,
-                        ):
+                        _guard_outcome = _guard_rejection_outcome(
+                            _guard_impasse_state, _guard_label, steps
+                        )
+                        if _guard_outcome == "soft_land":
+                            final_answer = _guard_soft_landing_answer(text, _guard_label)
+                            terminated_reason = "final_answer_with_warning"
+                            steps.append(step)
+                            return _LoopControl.BREAK
+                        if _guard_outcome == "hard_stop":
                             _logger.warning(
                                 "react_loop guard impasse (plain-answer recovery) · "
                                 "%s rejected 3x with no intervening tool execution — "
@@ -556,7 +568,7 @@ def _phase_6c_parse_and_guard(
             step.observation = (
                 "[protocol-reminder] Your previous turn published an Update but "
                 "did not emit an Action tool call. The task is not complete. "
-                "Emit exactly one Action: skill_name({\"arg\": \"value\"}) now "
+                'Emit exactly one Action: skill_name({"arg": "value"}) now '
                 "to make progress — do not write another Update without an Action."
             )
 

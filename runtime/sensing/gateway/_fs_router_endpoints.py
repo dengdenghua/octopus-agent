@@ -8,7 +8,10 @@ Extracted from ``fs_router.py`` (god-file reduction). All ``/api/fs`` and
 
 from __future__ import annotations
 
+import asyncio
+import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -25,6 +28,7 @@ from ._fs_router_diff import (
 )
 from ._fs_router_helpers import (
     _assert_in_scope,
+    _assert_local_request_scope,
     _broadcast_file_written,
     _check_acl,
     _check_lease_conflict_or_acquire,
@@ -38,6 +42,7 @@ from ._fs_router_helpers import (
     _pick_directory_tk,
     _pick_directory_windows,
     _remote_backend_for,
+    _require_local_thread_scope,
     _resolve_remote_workspace,
     _tree_depth_of,
     _walk_tree,
@@ -55,13 +60,37 @@ from ._fs_router_paths import _assert_within_allowed_roots, _safe_relative_parts
 
 def register_endpoints(router: Any, ctx: _FsContext) -> None:
     @router.get("/api/fs/roots", response_model=FsRootsResponse)
-    def api_fs_roots() -> dict[str, Any]:
+    def api_fs_roots(
+        request: Request,
+        thread_id: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        if ctx.require_auth:
+            roots = _require_local_thread_scope(
+                ctx,
+                request,
+                thread_id=thread_id,
+            )
+            return {"entries": _filesystem_roots(roots)}
         return {"entries": _filesystem_roots()}
 
     @router.get("/api/fs/pick-directory", response_model=FsPickDirectoryResponse)
     def api_fs_pick_directory(
+        request: Request,
         default_path: str | None = Query(default=None),
+        thread_id: str | None = Query(default=None),
     ) -> dict[str, Any]:
+        if ctx.require_auth:
+            _require_local_thread_scope(
+                ctx,
+                request,
+                thread_id=thread_id,
+            )
+            if default_path:
+                _assert_in_scope(
+                    ctx,
+                    Path(default_path),
+                    thread_id=thread_id,
+                )
         try:
             if sys.platform.startswith("win"):
                 path = _pick_directory_windows(default_path)
@@ -78,6 +107,14 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
             }
         if not path:
             return {"success": False, "path": None, "canceled": True, "error": None}
+        if ctx.require_auth:
+            path = str(
+                _assert_in_scope(
+                    ctx,
+                    Path(path),
+                    thread_id=thread_id,
+                )
+            )
         return {"success": True, "path": path, "canceled": False, "error": None}
 
     @router.post(
@@ -85,56 +122,116 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
         response_model=FsImportDirectoryResponse,
     )
     async def api_fs_import_directory(
+        request: Request,
         files: list[UploadFile] = File(...),  # noqa: B008
         relative_paths: list[str] = Form(default=[]),  # noqa: B008
+        thread_id: str | None = Form(default=None),  # noqa: B008
+        workspace_path: str | None = Form(default=None),  # noqa: B008
     ) -> dict[str, Any]:
         from runtime.platform.process.paths import app_paths
 
         if not files:
             raise HTTPException(400, "files are required")
+        max_files = max(1, int(os.environ.get("OCTOPUS_FS_IMPORT_MAX_FILES", "1000")))
+        max_bytes = max(
+            1,
+            int(os.environ.get("OCTOPUS_FS_IMPORT_MAX_BYTES", str(100 * 1024 * 1024))),
+        )
+        if len(files) > max_files:
+            raise HTTPException(413, f"too many files; maximum is {max_files}")
+
+        scope_roots: list[Path] = []
+        if ctx.require_auth:
+            scope_roots = _require_local_thread_scope(
+                ctx,
+                request,
+                thread_id=thread_id,
+                workspace_path=workspace_path,
+            )
         first_rel = (
             relative_paths[0] if relative_paths else files[0].filename or "imported-workspace"
         )
         first_parts = _safe_relative_parts(first_rel)
         folder_name = first_parts[0] if len(first_parts) > 1 else "imported-workspace"
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", folder_name).strip(".-") or "workspace"
-        import_root = (
-            app_paths().data_dir
-            / "imported_workspaces"
-            / f"{int(time.time())}-{slug[:48]}-{uuid.uuid4().hex[:8]}"
-        )
-        import_root.mkdir(parents=True, exist_ok=True)
+        if ctx.require_auth:
+            base_root = Path(workspace_path).expanduser() if workspace_path else scope_roots[0]
+            base_root = _assert_in_scope(
+                ctx,
+                base_root,
+                thread_id=thread_id,
+                workspace_path=workspace_path,
+            )
+            import_root = (
+                base_root
+                / ".octopus"
+                / "imports"
+                / f"{int(time.time())}-{slug[:48]}-{uuid.uuid4().hex[:8]}"
+            )
+        else:
+            import_root = (
+                app_paths().data_dir
+                / "imported_workspaces"
+                / f"{int(time.time())}-{slug[:48]}-{uuid.uuid4().hex[:8]}"
+            )
+        await asyncio.to_thread(import_root.mkdir, parents=True, exist_ok=True)
 
         saved = 0
-        for index, upload in enumerate(files):
-            rel = (
-                relative_paths[index]
-                if index < len(relative_paths)
-                else upload.filename or f"file-{index}"
-            )
-            parts = _safe_relative_parts(rel)
-            if len(parts) > 1:
-                parts = parts[1:]
-            if not parts:
-                parts = [Path(upload.filename or f"file-{index}").name]
-            target = import_root.joinpath(*parts)
-            try:
-                resolved_target = target.resolve(strict=False)
-                resolved_target.relative_to(import_root.resolve())
-            except (OSError, ValueError) as exc:
-                raise HTTPException(400, "invalid relative path") from exc
-            data = await upload.read()
-            try:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(data)
-            except OSError as exc:
-                raise HTTPException(
-                    500,
-                    f"failed to import directory: {exc}",
-                ) from exc
-            saved += 1
+        total_bytes = 0
+        try:
+            for index, upload in enumerate(files):
+                rel = (
+                    relative_paths[index]
+                    if index < len(relative_paths)
+                    else upload.filename or f"file-{index}"
+                )
+                parts = _safe_relative_parts(rel)
+                if len(parts) > 1:
+                    parts = parts[1:]
+                if not parts:
+                    parts = [Path(upload.filename or f"file-{index}").name]
+                target = import_root.joinpath(*parts)
+                try:
+                    resolved_target = target.resolve(strict=False)
+                    resolved_target.relative_to(import_root.resolve())
+                except (OSError, ValueError) as exc:
+                    raise HTTPException(400, "invalid relative path") from exc
+                part_target = target.with_name(f".{target.name}.uploading")
+                try:
+                    await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
+                    with part_target.open("wb") as output:
+                        while True:
+                            chunk = await upload.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            total_bytes += len(chunk)
+                            if total_bytes > max_bytes:
+                                raise HTTPException(
+                                    413,
+                                    f"import exceeds maximum size of {max_bytes} bytes",
+                                )
+                            await asyncio.to_thread(output.write, chunk)
+                    await asyncio.to_thread(os.replace, part_target, target)
+                except HTTPException:
+                    raise
+                except OSError as exc:
+                    raise HTTPException(
+                        500,
+                        f"failed to import directory: {exc}",
+                    ) from exc
+                saved += 1
+        except Exception:
+            # The directory is newly allocated for this request, so cleanup
+            # cannot remove an existing user workspace.  It prevents partial
+            # imports from becoming visible after a quota/path failure.
+            await asyncio.to_thread(shutil.rmtree, import_root, ignore_errors=True)
+            raise
 
-        return {"success": True, "path": str(import_root), "files": saved}
+        return {
+            "success": True,
+            "path": str(import_root),
+            "files": saved,
+        }
 
     @router.get("/api/fs/tree", response_model=FsTreeResponse)
     async def api_fs_tree(
@@ -176,6 +273,12 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
             ]
             return {"entries": tree}
         # Local-path fallback (existing behaviour).
+        _assert_local_request_scope(
+            ctx,
+            request,
+            thread_id=thread_id,
+            workspace_path=workspace_path,
+        )
         root = _assert_in_scope(
             ctx,
             Path(path),
@@ -183,7 +286,8 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
             workspace_path=workspace_path,
         )
         return {
-            "entries": _walk_tree(
+            "entries": await asyncio.to_thread(
+                _walk_tree,
                 root,
                 max_depth=depth,
                 include_ignored=include_ignored,
@@ -232,6 +336,12 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
                 "truncated": len(lines) > max_lines,
             }
         # Local-path fallback (existing behaviour).
+        _assert_local_request_scope(
+            ctx,
+            request,
+            thread_id=thread_id,
+            workspace_path=workspace_path,
+        )
         file_path = _assert_in_scope(
             ctx,
             Path(path),
@@ -241,7 +351,11 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
         if not file_path.exists() or not file_path.is_file():
             raise HTTPException(404, f"file not found: {file_path}")
         try:
-            content = file_path.read_text(encoding="utf-8", errors="replace")
+            content = await asyncio.to_thread(
+                file_path.read_text,
+                encoding="utf-8",
+                errors="replace",
+            )
         except OSError as exc:
             raise HTTPException(
                 500,
@@ -278,16 +392,14 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
                 write=True,
                 body=body,
             )
-            holder_id = (
-                body.get("holder_id")
-                if isinstance(body.get("holder_id"), str)
-                else None
-            )
-            thread_id = (
-                body.get("thread_id")
-                if isinstance(body.get("thread_id"), str)
-                else None
-            )
+            holder_id = body.get("holder_id") if isinstance(body.get("holder_id"), str) else None
+            principal = getattr(getattr(request, "state", None), "principal", None)
+            principal_actor = getattr(principal, "actor_id", None)
+            if principal_actor:
+                if holder_id and holder_id != principal_actor:
+                    raise HTTPException(403, "holder_id must match the authenticated actor")
+                holder_id = principal_actor
+            thread_id = body.get("thread_id") if isinstance(body.get("thread_id"), str) else None
             # Task 6.3: lease gate + auto-acquire.
             _check_lease_conflict_or_acquire(ctx, ws.id, rel_path, holder_id)
             backend = _remote_backend_for(ctx, ws)
@@ -319,6 +431,14 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
                 "bytes": len(payload),
             }
         # Local-path fallback (existing behaviour).
+        _assert_local_request_scope(
+            ctx,
+            request,
+            thread_id=(body.get("thread_id") if isinstance(body.get("thread_id"), str) else None),
+            workspace_path=(
+                body.get("workspace_path") if isinstance(body.get("workspace_path"), str) else None
+            ),
+        )
         file_path = _assert_in_scope(
             ctx,
             Path(path_value),
@@ -328,8 +448,8 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
             else None,
         )
         try:
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(file_path.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(file_path.write_text, content, encoding="utf-8")
         except OSError as exc:
             raise HTTPException(
                 500,
@@ -342,7 +462,7 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
         }
 
     @router.post("/api/fs/revert-diff")
-    def api_fs_revert_diff(body: dict[str, Any]) -> dict[str, Any]:
+    def api_fs_revert_diff(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         """Reverse-apply a unified diff against the current file contents."""
         path_value = body.get("path")
         diff_text = body.get("diff")
@@ -351,13 +471,21 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
         if not isinstance(diff_text, str) or not diff_text.strip():
             raise HTTPException(400, "diff is required")
 
+        thread_id = body.get("thread_id") if isinstance(body.get("thread_id"), str) else None
+        workspace_path = (
+            body.get("workspace_path") if isinstance(body.get("workspace_path"), str) else None
+        )
+        _assert_local_request_scope(
+            ctx,
+            request,
+            thread_id=thread_id,
+            workspace_path=workspace_path,
+        )
         file_path = _assert_in_scope(
             ctx,
             Path(path_value),
-            thread_id=body.get("thread_id") if isinstance(body.get("thread_id"), str) else None,
-            workspace_path=body.get("workspace_path")
-            if isinstance(body.get("workspace_path"), str)
-            else None,
+            thread_id=thread_id,
+            workspace_path=workspace_path,
         )
         if file_path.exists() and not file_path.is_file():
             raise HTTPException(404, f"file not found: {file_path}")
@@ -402,7 +530,7 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
         }
 
     @router.post("/api/fs/revert")
-    def api_fs_revert(body: dict[str, Any]) -> dict[str, Any]:
+    def api_fs_revert(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         """Revert a file to its last git-committed state.
 
         Both ``path`` and ``workspace`` (if given) must resolve under
@@ -414,11 +542,40 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
         workspace = body.get("workspace")
         if not isinstance(path_value, str) or not path_value.strip():
             raise HTTPException(400, "path is required")
-        file_path = _assert_within_allowed_roots(Path(path_value).expanduser())
+        thread_id = body.get("thread_id") if isinstance(body.get("thread_id"), str) else None
+        _assert_local_request_scope(
+            ctx,
+            request,
+            thread_id=thread_id,
+            workspace_path=workspace if isinstance(workspace, str) else None,
+        )
+        if (
+            ctx.require_auth
+            and getattr(getattr(request, "state", None), "principal", None) is not None
+        ):
+            file_path = _assert_in_scope(
+                ctx,
+                Path(path_value).expanduser(),
+                thread_id=thread_id,
+                workspace_path=workspace if isinstance(workspace, str) else None,
+            )
+        else:
+            file_path = _assert_within_allowed_roots(Path(path_value).expanduser())
         if workspace:
             if not isinstance(workspace, str):
                 raise HTTPException(400, "workspace must be a string")
-            cwd_path = _assert_within_allowed_roots(Path(workspace).expanduser())
+            if (
+                ctx.require_auth
+                and getattr(getattr(request, "state", None), "principal", None) is not None
+            ):
+                cwd_path = _assert_in_scope(
+                    ctx,
+                    Path(workspace).expanduser(),
+                    thread_id=thread_id,
+                    workspace_path=workspace,
+                )
+            else:
+                cwd_path = _assert_within_allowed_roots(Path(workspace).expanduser())
         else:
             cwd_path = _assert_within_allowed_roots(file_path.parent)
         # The file must live under the chosen cwd so that ``git
@@ -449,10 +606,32 @@ def register_endpoints(router: Any, ctx: _FsContext) -> None:
 
     @router.get("/api/git/status")
     def api_git_status(
+        request: Request,
         path: str = Query(default="."),
+        thread_id: str | None = Query(default=None),
+        workspace_path: str | None = Query(default=None),
     ) -> dict[str, Any]:
         """Run git status --porcelain in the given directory."""
-        root = Path(path).expanduser()
+        candidate = (
+            Path(workspace_path).expanduser()
+            if path in {"", "."} and workspace_path
+            else Path(path).expanduser()
+        )
+        if ctx.require_auth:
+            _assert_local_request_scope(
+                ctx,
+                request,
+                thread_id=thread_id,
+                workspace_path=workspace_path,
+            )
+            root = _assert_in_scope(
+                ctx,
+                candidate,
+                thread_id=thread_id,
+                workspace_path=workspace_path,
+            )
+        else:
+            root = _assert_within_allowed_roots(candidate)
         if not root.is_dir():
             raise HTTPException(404, f"directory not found: {root}")
         try:

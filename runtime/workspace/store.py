@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from runtime.safety.auth.scope import TenantScope
 from runtime.workspace.crypto import decrypt_options, encrypt_options
 from runtime.workspace.model import (
     VALID_MEMBER_ROLES,
@@ -47,7 +48,8 @@ CREATE TABLE IF NOT EXISTS workspaces (
     mount_target       TEXT NOT NULL,
     mount_options_json TEXT NOT NULL,
     owner_id           TEXT NOT NULL,
-    created_at         REAL NOT NULL
+    created_at         REAL NOT NULL,
+    tenant_id          TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS workspace_members (
     workspace_id TEXT NOT NULL,
@@ -77,6 +79,7 @@ def _workspace_from_row(row: tuple[Any, ...]) -> Workspace:
         mount_options=decrypt_options(str(row[4])),
         owner_id=str(row[5]),
         created_at=float(row[6]),
+        tenant_id=str(row[7]) if len(row) > 7 else "",
     )
 
 
@@ -98,16 +101,60 @@ class WorkspaceStore:
     ``<data>/workspaces.db`` is used (resolved via ``app_paths``).
     """
 
-    def __init__(self, db_path: Path | str | None = None) -> None:
+    def __init__(
+        self,
+        db_path: Path | str | None = None,
+        *,
+        scope: TenantScope | None = None,
+    ) -> None:
         path = Path(db_path) if db_path else _default_db_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         self._db = path
         self._lock = threading.Lock()
+        self._scope = scope
         self._ensure_schema()
 
     @property
     def db_path(self) -> Path:
         return self._db
+
+    def with_scope(self, scope: TenantScope | None) -> WorkspaceStore:
+        """Return a scoped view sharing this DB and write lock."""
+        view = object.__new__(WorkspaceStore)
+        view._db = self._db
+        view._lock = self._lock
+        view._scope = scope
+        return view
+
+    def _effective_scope(self, scope: TenantScope | None) -> TenantScope | None:
+        return self._scope if scope is None else scope
+
+    @staticmethod
+    def _workspace_allowed(ws: Workspace, scope: TenantScope | None) -> bool:
+        if scope is None or scope.allow_cross_tenant:
+            return True
+        if scope.is_legacy and ws.tenant_id.startswith("legacy:"):
+            # Legacy identities have no authoritative tenant assignment yet;
+            # ACL membership remains the compatibility boundary until the
+            # migration assigns an explicit tenant.
+            return True
+        return bool(ws.tenant_id and ws.tenant_id == scope.tenant_id)
+
+    def _workspace_row_for_scope(
+        self,
+        conn: sqlite3.Connection,
+        workspace_id: str,
+        scope: TenantScope | None,
+    ) -> tuple[Any, ...] | None:
+        row = conn.execute(
+            "SELECT id, name, mount_type, mount_target, mount_options_json, "
+            "owner_id, created_at, tenant_id FROM workspaces WHERE id=?",
+            (workspace_id,),
+        ).fetchone()
+        if not row:
+            return None
+        ws = _workspace_from_row(row)
+        return row if self._workspace_allowed(ws, self._effective_scope(scope)) else None
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self._db), timeout=10.0)
@@ -117,6 +164,11 @@ class WorkspaceStore:
     def _ensure_schema(self) -> None:
         with self._lock, self._connect() as conn:
             conn.executescript(_SCHEMA)
+            columns = {
+                str(row[1]) for row in conn.execute("PRAGMA table_info(workspaces)").fetchall()
+            }
+            if "tenant_id" not in columns:
+                conn.execute("ALTER TABLE workspaces ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''")
 
     # ── workspaces ────────────────────────────────────────────────────────
 
@@ -128,8 +180,10 @@ class WorkspaceStore:
         mount_target: str,
         mount_options: dict[str, Any] | None = None,
         owner_id: str,
+        tenant_id: str = "",
         workspace_id: str | None = None,
         created_at: float | None = None,
+        scope: TenantScope | None = None,
     ) -> Workspace:
         """Insert a new workspace row. ``mount_options`` is encrypted at rest.
 
@@ -138,13 +192,18 @@ class WorkspaceStore:
         """
         if mount_type not in VALID_MOUNT_TYPES:
             raise ValueError(
-                f"invalid mount_type {mount_type!r}; "
-                f"expected one of {sorted(VALID_MOUNT_TYPES)}"
+                f"invalid mount_type {mount_type!r}; expected one of {sorted(VALID_MOUNT_TYPES)}"
             )
         if not name.strip():
             raise ValueError("name is required")
         if not owner_id:
             raise ValueError("owner_id is required")
+        effective = self._effective_scope(scope)
+        if effective is not None and not effective.allow_cross_tenant:
+            if owner_id and owner_id != effective.actor_id:
+                raise PermissionError("workspace owner must match the scoped actor")
+            tenant_id = effective.tenant_id
+            owner_id = effective.actor_id
         ws = Workspace(
             id=workspace_id or str(uuid4()),
             name=name.strip(),
@@ -153,13 +212,14 @@ class WorkspaceStore:
             mount_options=dict(mount_options or {}),
             owner_id=owner_id,
             created_at=float(created_at if created_at is not None else time.time()),
+            tenant_id=str(tenant_id or ""),
         )
         encrypted = encrypt_options(ws.mount_options)
         with self._lock, self._connect() as conn:
             conn.execute(
                 "INSERT INTO workspaces"
                 "(id, name, mount_type, mount_target, mount_options_json, "
-                "owner_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "owner_id, created_at, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     ws.id,
                     ws.name,
@@ -168,51 +228,70 @@ class WorkspaceStore:
                     encrypted,
                     ws.owner_id,
                     ws.created_at,
+                    ws.tenant_id,
                 ),
             )
         # Auto-add the owner as a member so list_workspaces_for_user works
         # for the owner without an explicit add_member call.
-        self.add_member(ws.id, ws.owner_id, role="owner", added_at=ws.created_at)
+        self.add_member(ws.id, ws.owner_id, role="owner", added_at=ws.created_at, scope=effective)
         return ws
 
-    def get_workspace(self, workspace_id: str) -> Workspace | None:
+    def get_workspace(
+        self, workspace_id: str, *, scope: TenantScope | None = None
+    ) -> Workspace | None:
         with self._lock, self._connect() as conn:
-            row = conn.execute(
-                "SELECT id, name, mount_type, mount_target, mount_options_json, "
-                "owner_id, created_at FROM workspaces WHERE id=?",
-                (workspace_id,),
-            ).fetchone()
+            row = self._workspace_row_for_scope(conn, workspace_id, scope)
         if not row:
             return None
         return _workspace_from_row(row)
 
-    def list_workspaces(self) -> list[Workspace]:
+    def list_workspaces(self, *, scope: TenantScope | None = None) -> list[Workspace]:
         """All workspaces, ordered by creation time then id (stable)."""
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT id, name, mount_type, mount_target, mount_options_json, "
-                "owner_id, created_at FROM workspaces "
+                "owner_id, created_at, tenant_id FROM workspaces "
                 "ORDER BY created_at, id"
             ).fetchall()
-        return [_workspace_from_row(r) for r in rows]
+        effective = self._effective_scope(scope)
+        return [
+            ws
+            for ws in (_workspace_from_row(r) for r in rows)
+            if self._workspace_allowed(ws, effective)
+        ]
 
-    def list_workspaces_for_user(self, member_id: str) -> list[Workspace]:
+    def list_workspaces_for_user(
+        self,
+        member_id: str,
+        *,
+        tenant_id: str | None = None,
+        scope: TenantScope | None = None,
+    ) -> list[Workspace]:
         """Workspaces ``member_id`` belongs to (any role)."""
         if not member_id:
             return []
+        effective = self._effective_scope(scope)
+        if effective is not None and not effective.allow_cross_tenant:
+            if member_id != effective.actor_id:
+                return []
+            tenant_id = effective.tenant_id
         with self._lock, self._connect() as conn:
-            rows = conn.execute(
+            query = (
                 "SELECT w.id, w.name, w.mount_type, w.mount_target, "
-                "w.mount_options_json, w.owner_id, w.created_at "
+                "w.mount_options_json, w.owner_id, w.created_at, w.tenant_id "
                 "FROM workspaces w "
                 "INNER JOIN workspace_members m ON m.workspace_id = w.id "
-                "WHERE m.member_id = ? "
-                "ORDER BY w.created_at, w.id",
-                (member_id,),
-            ).fetchall()
+                "WHERE m.member_id = ?"
+            )
+            params: tuple[Any, ...] = (member_id,)
+            if tenant_id is not None:
+                query += " AND w.tenant_id = ?"
+                params += (str(tenant_id),)
+            query += " ORDER BY w.created_at, w.id"
+            rows = conn.execute(query, params).fetchall()
         return [_workspace_from_row(r) for r in rows]
 
-    def delete_workspace(self, workspace_id: str) -> bool:
+    def delete_workspace(self, workspace_id: str, *, scope: TenantScope | None = None) -> bool:
         """Remove a workspace and all of its members in one transaction.
 
         Returns True if the workspace existed and was removed, False if it
@@ -221,10 +300,7 @@ class WorkspaceStore:
         if not workspace_id:
             return False
         with self._lock, self._connect() as conn:
-            exists = conn.execute(
-                "SELECT 1 FROM workspaces WHERE id=?", (workspace_id,)
-            ).fetchone()
-            if not exists:
+            if self._workspace_row_for_scope(conn, workspace_id, scope) is None:
                 return False
             conn.execute(
                 "DELETE FROM workspace_members WHERE workspace_id=?",
@@ -242,6 +318,7 @@ class WorkspaceStore:
         *,
         role: str = "viewer",
         added_at: float | None = None,
+        scope: TenantScope | None = None,
     ) -> WorkspaceMember:
         """Add or upsert a membership row.
 
@@ -250,10 +327,7 @@ class WorkspaceStore:
         without a remove+re-add round-trip.
         """
         if role not in VALID_MEMBER_ROLES:
-            raise ValueError(
-                f"invalid role {role!r}; "
-                f"expected one of {sorted(VALID_MEMBER_ROLES)}"
-            )
+            raise ValueError(f"invalid role {role!r}; expected one of {sorted(VALID_MEMBER_ROLES)}")
         if not member_id:
             raise ValueError("member_id is required")
         if not workspace_id:
@@ -265,10 +339,8 @@ class WorkspaceStore:
             added_at=float(added_at if added_at is not None else time.time()),
         )
         with self._lock, self._connect() as conn:
-            exists = conn.execute(
-                "SELECT 1 FROM workspaces WHERE id=?", (workspace_id,)
-            ).fetchone()
-            if not exists:
+            row = self._workspace_row_for_scope(conn, workspace_id, scope)
+            if row is None:
                 raise ValueError(f"workspace {workspace_id!r} does not exist")
             conn.execute(
                 "INSERT INTO workspace_members(workspace_id, member_id, role, added_at) "
@@ -283,22 +355,34 @@ class WorkspaceStore:
             )
         return member
 
-    def remove_member(self, workspace_id: str, member_id: str) -> bool:
+    def remove_member(
+        self,
+        workspace_id: str,
+        member_id: str,
+        *,
+        scope: TenantScope | None = None,
+    ) -> bool:
         """Remove a membership row. Returns True if a row was deleted."""
         if not workspace_id or not member_id:
             return False
         with self._lock, self._connect() as conn:
+            if self._workspace_row_for_scope(conn, workspace_id, scope) is None:
+                return False
             cur = conn.execute(
                 "DELETE FROM workspace_members WHERE workspace_id=? AND member_id=?",
                 (workspace_id, member_id),
             )
             return cur.rowcount > 0
 
-    def list_members(self, workspace_id: str) -> list[WorkspaceMember]:
+    def list_members(
+        self, workspace_id: str, *, scope: TenantScope | None = None
+    ) -> list[WorkspaceMember]:
         """All members of a workspace, ordered by added_at then member_id."""
         if not workspace_id:
             return []
         with self._lock, self._connect() as conn:
+            if self._workspace_row_for_scope(conn, workspace_id, scope) is None:
+                return []
             rows = conn.execute(
                 "SELECT workspace_id, member_id, role, added_at "
                 "FROM workspace_members WHERE workspace_id=? "
@@ -307,14 +391,21 @@ class WorkspaceStore:
             ).fetchall()
         return [_member_from_row(r) for r in rows]
 
-    def get_member_role(self, workspace_id: str, member_id: str) -> str | None:
+    def get_member_role(
+        self,
+        workspace_id: str,
+        member_id: str,
+        *,
+        scope: TenantScope | None = None,
+    ) -> str | None:
         """Return the role for (workspace_id, member_id), or None if not a member."""
         if not workspace_id or not member_id:
             return None
         with self._lock, self._connect() as conn:
+            if self._workspace_row_for_scope(conn, workspace_id, scope) is None:
+                return None
             row = conn.execute(
-                "SELECT role FROM workspace_members "
-                "WHERE workspace_id=? AND member_id=?",
+                "SELECT role FROM workspace_members WHERE workspace_id=? AND member_id=?",
                 (workspace_id, member_id),
             ).fetchone()
         return str(row[0]) if row else None

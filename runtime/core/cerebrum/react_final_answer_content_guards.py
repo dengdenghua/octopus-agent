@@ -28,14 +28,14 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
             "control marker. Produce the actual user-facing result now."
         )
     preparatory_start = re.match(
-        r"^(?:我(?:会|将|先|接下来)|接下来|下一步|先来|准备|"
+        r"^(?:我(?:会|将|先|接下来|这就开始|马上开始|开始)|接下来|下一步|准备|"
         r"let me|i(?:'ll| will| first)|next[,：:]?)",
         visible,
         re.IGNORECASE,
     )
     evidence_action = re.search(
         r"\b(?:grep|read|inspect|check|verify|search|open)\b|"
-        r"(?:核对|检查|读取|再读|查看|搜索|检索|调研|打开|确认|探清|定位|查找)"
+        r"(?:核对|核实|检查|读取|再读|查看|搜索|检索|调研|打开|确认|探清|定位|查找|明确|梳理|审查|评估|开始|过一遍|逐项过)"
         r"(?:[^。.!！；;\n]{0,16})",
         visible,
         re.IGNORECASE,
@@ -67,10 +67,20 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
         visible,
         re.IGNORECASE,
     )
+    # A conclusion that is only *promised* (e.g. "用具体数据支撑结论", "再给出
+    # 结论") is not a delivered conclusion. result_signal above would otherwise
+    # treat the bare word 结论 as a passed check and let a pure preparatory
+    # promise through (regression: trn_514bd9600295430b "我这就开始…支撑结论").
+    deferred_conclusion = re.search(
+        r"(?:支撑|支持|形成|得出|得到|给出|提炼|汇总|归纳|再给)[^。.!！；;\n]{0,12}结论|"
+        r"结论(?:前|之前|就|再|待|尚未|还没|暂未)",
+        visible,
+        re.IGNORECASE,
+    )
     if (
         evidence_action
         and (preparatory_start or future_action)
-        and (failed_attempt or negated_completion or not result_signal)
+        and (failed_attempt or negated_completion or deferred_conclusion or not result_signal)
     ):
         return (
             "The proposed Final Answer only announces a future inspection or "

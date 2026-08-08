@@ -346,6 +346,7 @@ def mount_routers_b(
                 thread_store=ctx.thread_store,
                 reflex_router=ctx.reflex_router,
                 trace_store=getattr(state, "trace_store", None),
+                task_supervisor=getattr(state, "task_supervisor", None),
                 allow_client_auto_approve=_allow_approval_bypass,
                 cowork_group_store=(
                     getattr(ctx.cowork_runtime, "group_store", None)
@@ -376,6 +377,21 @@ def mount_routers_b(
         ctx.realtime_runtime = _realtime_runtime
         ctx.allow_approval_bypass = _allow_approval_bypass
 
+        async def _drain_realtime_runtime() -> None:
+            drain = getattr(_realtime_runtime, "drain_active_turns_for_shutdown", None)
+            if drain is None:
+                return
+            result = await drain(timeout_seconds=3.0)
+            if result.get("requested"):
+                logging.getLogger(__name__).info(
+                    "realtime shutdown drain requested=%s drained=%s remaining=%s",
+                    result.get("requested"),
+                    result.get("drained"),
+                    result.get("remaining"),
+                )
+
+        app.router.add_event_handler("shutdown", _drain_realtime_runtime)
+
         # Static permission policy ("always trust" rules) shares the
         # same JSON file as the realtime gateway uses for filtering, so
         # mount the management router right alongside it.
@@ -402,7 +418,15 @@ def mount_routers_b(
     try:
         from runtime.sensing.gateway.evolution_router import create_evolution_router
 
-        app.include_router(create_evolution_router())
+        app.include_router(
+            create_evolution_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
     except Exception as _evo_exc:
         logging.getLogger(__name__).warning(
             "evolution router failed to mount: %s",

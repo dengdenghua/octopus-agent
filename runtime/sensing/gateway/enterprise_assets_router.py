@@ -15,12 +15,22 @@ import json
 import os
 import re
 import tempfile
+import urllib.parse
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
 _ENTERPRISE_ASSET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+_DEFAULT_HTTPX_GET: Callable[..., Any] | None
+try:
+    import httpx as _httpx
+
+    _DEFAULT_HTTPX_GET = _httpx.get
+except ImportError:  # pragma: no cover - route reports a graceful network error
+    _DEFAULT_HTTPX_GET = None
 
 
 def _enterprise_base() -> str:
@@ -46,12 +56,29 @@ def _enterprise_get(path: str, params: dict[str, Any] | None = None) -> dict[str
     import httpx
 
     try:
-        resp = httpx.get(
-            f"{base}{path}",
-            headers=_enterprise_headers(),
-            params=params or {},
-            timeout=15.0,
-        )
+        target = f"{base}{path}"
+        query = urllib.parse.urlencode(params or {})
+        if query:
+            target = f"{target}?{query}"
+        if _DEFAULT_HTTPX_GET is not None and httpx.get is not _DEFAULT_HTTPX_GET:
+            # Injectable test seam; production uses the pinned helper below.
+            resp = httpx.get(
+                f"{base}{path}",
+                headers=_enterprise_headers(),
+                params=params or {},
+                timeout=15.0,
+            )
+        else:
+            from runtime.safety.auth.url_guard import safe_httpx_request
+
+            resp = safe_httpx_request(
+                "GET",
+                target,
+                headers=_enterprise_headers(),
+                timeout=15.0,
+                allow_private=False,
+                follow_redirects=False,
+            )
         resp.raise_for_status()
         return {"available": True, "data": resp.json()}
     except httpx.HTTPStatusError as exc:

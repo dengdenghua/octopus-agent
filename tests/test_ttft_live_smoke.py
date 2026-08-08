@@ -55,9 +55,7 @@ def _wait_ready(port: int, proc: subprocess.Popen, timeout_s: float = 45.0) -> N
         if proc.poll() is not None:
             raise RuntimeError(f"server exited early (code {proc.returncode})")
         try:
-            with urllib.request.urlopen(
-                f"http://localhost:{port}/openapi.json", timeout=2
-            ) as resp:
+            with urllib.request.urlopen(f"http://localhost:{port}/openapi.json", timeout=2) as resp:
                 if resp.status == 200:
                     return
         except OSError:
@@ -72,8 +70,14 @@ def live_server():
     port = _free_port()
     proc = subprocess.Popen(
         [
-            sys.executable, "-m", "runtime", "serve",
-            "--config", str(CONFIG), "--port", str(port),
+            sys.executable,
+            "-m",
+            "runtime",
+            "serve",
+            "--config",
+            str(CONFIG),
+            "--port",
+            str(port),
         ],
         cwd=ROOT,
         stdout=subprocess.DEVNULL,
@@ -92,8 +96,13 @@ def live_server():
 
 def _run(prompt: str, port: int, *, react: bool = False) -> dict:
     args = Namespace(
-        prompt=prompt, model=MODEL, port=port, react=react,
-        timeout=240, do_assert=True, out="",
+        prompt=prompt,
+        model=MODEL,
+        port=port,
+        react=react,
+        timeout=240,
+        do_assert=True,
+        out="",
     )
     _tl, stats = asyncio.run(run_turn(args))
     return stats

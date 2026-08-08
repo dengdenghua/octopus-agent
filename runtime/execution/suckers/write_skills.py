@@ -26,6 +26,7 @@ from ._write_skills_background import (
     _read_background_text,
     _snapshot_background_metadata,
     _write_background_metadata,
+    recover_background_processes,
 )
 from ._write_skills_common import (
     _BACKGROUND_OUTPUT_CAP,
@@ -332,6 +333,7 @@ def register_git_skills(registry: SkillRegistry) -> int:
 
 
 def register_exec_skill(registry: SkillRegistry) -> int:
+    recover_background_processes()
     registry.register(
         Skill(
             name=EXEC_SKILL_NAME,

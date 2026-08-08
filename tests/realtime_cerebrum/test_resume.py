@@ -363,6 +363,136 @@ def test_react_resumed_emits_thread_status_changed(gateway: Any) -> None:
     assert status_events[0].params["status"]["resumeFromIteration"] == 2
 
 
+def test_plain_continue_resumes_latest_paused_task_and_adds_iteration_budget(
+    tmp_path: Path,
+) -> None:
+    from fastapi import FastAPI
+
+    from runtime.core.cerebrum.pause_control import get_pause_controller
+    from runtime.memory.diagnostics.trace_store import AgentTraceStore
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    thread_id = "th-plain-continue"
+    old_task_id = str(uuid4())
+    task_id = str(uuid4())
+    trace = AgentTraceStore(tmp_path / "trace.sqlite")
+    checkpoint_id = trace.record_checkpoint(
+        task_id=task_id,
+        thread_id=thread_id,
+        checkpoint_type="react",
+        iteration=27,
+        state={
+            "iteration_completed": 27,
+            "max_iterations": 30,
+            "messages_snapshot": [],
+            "steps_snapshot": [],
+            "working_set_snapshot": [{"path": "runtime/example.py"}],
+            "progress_summary": "implementation in progress",
+            "current_phase": "implementation",
+        },
+    )
+    controller = get_pause_controller()
+    for paused_task_id in (old_task_id, task_id):
+        controller.request_pause(
+            paused_task_id,
+            reason="iteration_near_limit",
+            requested_by="system",
+            thread_id=thread_id,
+        )
+        controller.mark_paused(paused_task_id)
+
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=None,
+        logs_root=str(tmp_path / "threads"),
+        trace_store=trace,
+    )
+    app = FastAPI()
+    app.include_router(RealtimeGateway(runtime=runtime, approval_timeout=5.0).router)
+    try:
+        with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+            _set_script([{"type": "react_completed"}])
+            _drive(
+                ws,
+                {
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": "继续"}],
+                    "approvalPolicy": "on-request",
+                },
+            )
+
+        assert str(_LAST_STREAM_KWARGS["resume_task_id"]) == task_id
+        resume_intent = _LAST_SESSION["metadata"]["resume_intent"]
+        assert resume_intent["source"] == "paused_task_continue"
+        assert resume_intent["checkpoint_id"] == checkpoint_id
+        assert resume_intent["iteration"] == 27
+        assert resume_intent["working_set"] == ["runtime/example.py"]
+        assert controller.consume_grant(task_id)["extra_iterations"] == 15
+        assert controller.get_request(old_task_id) is None
+    finally:
+        controller.clear(old_task_id)
+        controller.clear(task_id)
+        trace.close()
+
+
+def test_longer_continue_instruction_does_not_hijack_a_paused_task(
+    tmp_path: Path,
+) -> None:
+    from fastapi import FastAPI
+
+    from runtime.core.cerebrum.pause_control import get_pause_controller
+    from runtime.memory.diagnostics.trace_store import AgentTraceStore
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    thread_id = "th-continue-new-instruction"
+    task_id = str(uuid4())
+    trace = AgentTraceStore(tmp_path / "trace.sqlite")
+    trace.record_checkpoint(
+        task_id=task_id,
+        thread_id=thread_id,
+        checkpoint_type="react",
+        iteration=3,
+        state={"iteration_completed": 3},
+    )
+    controller = get_pause_controller()
+    controller.request_pause(
+        task_id,
+        reason="iteration_near_limit",
+        requested_by="system",
+        thread_id=thread_id,
+    )
+    controller.mark_paused(task_id)
+
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=None,
+        logs_root=str(tmp_path / "threads"),
+        trace_store=trace,
+    )
+    app = FastAPI()
+    app.include_router(RealtimeGateway(runtime=runtime, approval_timeout=5.0).router)
+    try:
+        with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+            _set_script([{"type": "react_completed"}])
+            _drive(
+                ws,
+                {
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": "继续分析另一个新需求"}],
+                    "approvalPolicy": "on-request",
+                },
+            )
+
+        assert _LAST_STREAM_KWARGS["resume_task_id"] is None
+        assert "resume_intent" not in _LAST_SESSION["metadata"]
+        assert controller.is_paused(task_id)
+    finally:
+        controller.clear(task_id)
+        trace.close()
+
+
 def test_confirmed_resume_intent_survives_runtime_restart_when_trace_store_exists(
     tmp_path: Path,
 ) -> None:

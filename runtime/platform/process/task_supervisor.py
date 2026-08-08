@@ -270,6 +270,79 @@ class TaskSupervisor:
         self._remember_lease(record)
         return record
 
+    def recover_stale_turn(
+        self,
+        task_id: str,
+        status: TaskRunStatus | str,
+        *,
+        expected_turn_id: str,
+        reason: str,
+        checkpoint_id: str | int | None = None,
+        metadata_patch: dict[str, Any] | None = None,
+    ) -> TaskRunRecord:
+        """Close or pause a task whose owning realtime turn is known stale.
+
+        A process restart leaves the previous worker's lease looking healthy
+        until its TTL elapses.  Normal ``transition`` must reject that foreign
+        lease, but startup replay has stronger evidence: the matching realtime
+        turn has no live turn lease.  This narrowly-scoped recovery operation
+        verifies the turn identity before releasing the orphaned worker lease.
+        """
+        next_status = status if isinstance(status, TaskRunStatus) else TaskRunStatus(str(status))
+        if next_status not in {*TERMINAL_TASK_STATUSES, TaskRunStatus.PAUSED}:
+            raise ValueError("stale turn recovery may only pause or finish a task")
+        clean_turn_id = str(expected_turn_id or "").strip()
+        if not clean_turn_id:
+            raise ValueError("expected_turn_id is required")
+        now = _now_iso()
+
+        def _mutate(current: TaskRunRecord) -> TaskRunRecord:
+            recorded_turn_id = str(
+                current.origin_task_id or current.metadata.get("turn_id") or ""
+            ).strip()
+            if recorded_turn_id != clean_turn_id:
+                raise ValueError(
+                    f"task {task_id!r} belongs to turn {recorded_turn_id!r}, not {clean_turn_id!r}"
+                )
+            if current.status in TERMINAL_TASK_STATUSES:
+                return current
+            metadata = dict(current.metadata)
+            if isinstance(metadata_patch, dict):
+                metadata.update(metadata_patch)
+            recovery_events = list(metadata.get("stale_turn_recovery_events") or [])
+            recovery_events.append(
+                {
+                    "turn_id": clean_turn_id,
+                    "previous_status": current.status.value,
+                    "previous_holder_id": (
+                        current.lease.holder_id if current.lease is not None else None
+                    ),
+                    "status": next_status.value,
+                    "reason": str(reason or ""),
+                    "recovered_at": now,
+                    "holder_id": self.holder_id,
+                }
+            )
+            metadata["stale_turn_recovery_events"] = recovery_events
+            return current.model_copy(
+                update={
+                    "status": next_status,
+                    "terminal_reason": str(reason or current.terminal_reason),
+                    "latest_checkpoint_id": (
+                        checkpoint_id if checkpoint_id is not None else current.latest_checkpoint_id
+                    ),
+                    "metadata": metadata,
+                    "heartbeat_at": now,
+                    "completed_at": (now if next_status in TERMINAL_TASK_STATUSES else None),
+                    "lease": None,
+                },
+                deep=True,
+            )
+
+        record = self.store.mutate(task_id, _mutate)
+        self._remember_lease(record)
+        return record
+
     def record_approval_decision(
         self,
         task_id: str,

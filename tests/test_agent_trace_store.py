@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -18,6 +19,37 @@ def store(tmp_path: Path) -> AgentTraceStore:
     trace = AgentTraceStore(tmp_path / "trace.sqlite")
     yield trace
     trace.close()
+
+
+def test_old_trace_schema_migrates_before_store_becomes_ready(tmp_path: Path) -> None:
+    from runtime.memory.diagnostics._trace_store_schema import _SCHEMA
+
+    path = tmp_path / "old-trace.sqlite"
+    conn = sqlite3.connect(path)
+    try:
+        # Representative pre-tenant schema: AgentTraceStore must add ownership
+        # columns before it creates scope indexes or serves any request.
+        old_schema = "\n".join(
+            line
+            for line in _SCHEMA.splitlines()
+            if "tenant_id" not in line and "owner_actor_id" not in line
+        )
+        conn.executescript(old_schema)
+        conn.commit()
+    finally:
+        conn.close()
+
+    trace = AgentTraceStore(path)
+    try:
+        status = trace.schema_status()
+        assert status == {
+            "ready": True,
+            "version": 2,
+            "requiredVersion": 2,
+            "missingColumns": {},
+        }
+    finally:
+        trace.close()
 
 
 def test_records_messages_events_approvals_checkpoints_and_token_usage(

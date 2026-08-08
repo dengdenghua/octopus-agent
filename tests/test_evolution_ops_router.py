@@ -33,6 +33,7 @@ from runtime.platform.models import (  # noqa: E402
     Trajectory,
     TrajectoryOutcome,
 )
+from runtime.safety.auth.identity import Identity, IdentityStore  # noqa: E402
 from runtime.sensing.gateway.evolution_ops_router import (  # noqa: E402
     create_evolution_ops_router,
 )
@@ -42,6 +43,40 @@ def _client() -> TestClient:
     app = FastAPI()
     app.include_router(create_evolution_ops_router())
     return TestClient(app)
+
+
+def test_evolution_operator_writes_require_operator_when_auth_enabled() -> None:
+    identities = IdentityStore()
+    identities.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    identities.add(
+        Identity(actor_id="ops", roles=("operator",)),
+        api_key_plaintext="sk-ops",
+    )
+    app = FastAPI()
+    app.include_router(
+        create_evolution_ops_router(identity_store=identities, require_auth=True),
+    )
+    client = TestClient(app)
+    path = "/api/evolution/budget/breaker/reset"
+    payload = {"component": "runtime"}
+
+    assert client.post(path, json=payload).status_code == 401
+    assert (
+        client.post(
+            path,
+            json=payload,
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            path,
+            json=payload,
+            headers={"Authorization": "Bearer sk-ops"},
+        ).status_code
+        == 200
+    )
 
 
 def _client_with_runtime() -> TestClient:

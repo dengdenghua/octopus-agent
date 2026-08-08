@@ -29,6 +29,7 @@ from runtime.projectos.model import (
     ready_tasks,
 )
 from runtime.projectos.store import ProjectStore
+from runtime.safety.auth.scope import TenantScope
 
 MilestoneGenerator = Callable[[str], list[Milestone]]  # (project_goal) -> milestones
 TaskDecomposer = Callable[[Milestone], list[Task]]  # (milestone) -> task DAG
@@ -131,14 +132,22 @@ class ProjectEngine:
         qa_task: QAEvaluator = _default_qa,
         gate_milestone: MilestoneGate = _default_gate,
         assign_agent: AgentAssigner = _default_assign,
+        owner_id: str = "",
+        tenant_id: str = "",
+        scope: TenantScope | None = None,
     ) -> None:
-        self.store = store
+        if scope is None and owner_id and tenant_id:
+            scope = TenantScope(tenant_id=tenant_id, actor_id=owner_id)
+        self.scope = scope
+        self.store = store.with_scope(scope) if scope is not None else store
         self._generate = generate_milestones
         self._decompose = decompose_tasks
         self._execute = execute_task
         self._qa = qa_task
         self._gate = gate_milestone
         self._assign = assign_agent
+        self.owner_id = owner_id
+        self.tenant_id = tenant_id
 
     # ── planning ─────────────────────────────────────────────────────────────
     def plan(self, name: str, goal: str) -> Project:
@@ -150,16 +159,18 @@ class ProjectEngine:
             milestones = stub_generate_milestones(goal)
         if not milestones:
             milestones = stub_generate_milestones(goal)
-        for ms in milestones:
-            self.store.save_milestone(pid, ms)
         project = Project(
             id=pid,
             name=name,
             goal=goal,
             milestone_ids=[m.id for m in milestones],
             status="running",
+            owner_id=self.owner_id,
+            tenant_id=self.tenant_id,
         )
         self.store.save_project(project)
+        for ms in milestones:
+            self.store.save_milestone(pid, ms)
         self._audit(
             project.id,
             "project.planned",

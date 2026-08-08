@@ -77,7 +77,6 @@ def _record_score_safe(
         pass
 
 
-
 def _auto_evolve_tick_safe(agent_id: str, *, every: int = 5, min_total: int = 15) -> None:
     """Every ``every`` turns, run an auto-regression check.
 

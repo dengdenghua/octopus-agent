@@ -33,9 +33,7 @@ ALLOWED_EXECUTION_MODES: dict[str, set[str]] = {
 }
 DEFAULT_BUNDLE_PATH = "benchmarks/results/behavioral-surpass-latest.json"
 DEFAULT_SUITE_MANIFEST_PATH = "benchmarks/behavioral-surpass-suite.json"
-DEFAULT_INFRASTRUCTURE_STATUS_PATH = (
-    "benchmarks/results/behavioral-infrastructure-latest.json"
-)
+DEFAULT_INFRASTRUCTURE_STATUS_PATH = "benchmarks/results/behavioral-infrastructure-latest.json"
 
 
 def compute_behavioral_surpass_evidence(
@@ -369,9 +367,7 @@ def _infrastructure_status(
             payload = {}
     generated_at = _parse_datetime(payload.get("generated_at"))
     age_days = (
-        (current_time - generated_at).total_seconds() / 86_400
-        if generated_at is not None
-        else None
+        (current_time - generated_at).total_seconds() / 86_400 if generated_at is not None else None
     )
     current = bool(
         payload.get("schema") == "octopus.behavioral_infrastructure_failure.v1"

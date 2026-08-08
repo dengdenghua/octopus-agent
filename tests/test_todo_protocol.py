@@ -1,3 +1,6 @@
+from runtime.core.cerebrum.react_guards import _todo_protocol_completion_guard
+from runtime.core.cerebrum.react_parsing import _latest_todo_items
+from runtime.core.cerebrum.react_types import ReActStep
 from runtime.core.cerebrum.todo_protocol import (
     context_mode,
     render_todo_protocol_guidance,
@@ -212,9 +215,7 @@ def test_todo_protocol_keeps_broad_read_only_audit_required() -> None:
 
 def test_todo_protocol_keeps_analysis_with_write_intent_required() -> None:
     # An analysis cue with explicit write intent is not read-only.
-    assert should_require_todo_protocol(
-        "分析一下架构然后修改代码", {"mode": "code"}
-    )
+    assert should_require_todo_protocol("分析一下架构然后修改代码", {"mode": "code"})
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -223,9 +224,6 @@ def test_todo_protocol_keeps_analysis_with_write_intent_required() -> None:
 # analysis follow-ups with no executed write tool.  Research, team
 # coordination, implementation, and write-bearing turns stay hard.
 # ══════════════════════════════════════════════════════════════════
-
-from runtime.core.cerebrum.react_guards import _todo_protocol_completion_guard
-from runtime.core.cerebrum.react_types import ReActStep
 
 
 def _gstep(
@@ -251,12 +249,7 @@ _EDIT_OK = 'edit_file({"path": "foo.py", "old": "a", "new": "b"})'
 
 def test_guard_downgrades_read_only_followup_without_todos() -> None:
     # "不足点呢" with no checklist and no writes: safety net fires.
-    assert (
-        _todo_protocol_completion_guard(
-            [], "this is the analysis.", goal="不足点呢"
-        )
-        is None
-    )
+    assert _todo_protocol_completion_guard([], "this is the analysis.", goal="不足点呢") is None
 
 
 def test_guard_downgrades_read_only_followup_with_stale_todos() -> None:
@@ -264,18 +257,13 @@ def test_guard_downgrades_read_only_followup_with_stale_todos() -> None:
     # the guard downgrades to silent pass.
     steps = [_gstep(1, action=_TODO_OPEN)]
     assert (
-        _todo_protocol_completion_guard(
-            steps, "analysis answer.", goal="解释一下这段代码"
-        )
-        is None
+        _todo_protocol_completion_guard(steps, "analysis answer.", goal="解释一下这段代码") is None
     )
 
 
 def test_guard_still_rejects_implementation_goal_without_todos() -> None:
     # Mutation intent ("修改") is not read-only → guard stays hard.
-    msg = _todo_protocol_completion_guard(
-        [], "done.", goal="修改这个函数的实现"
-    )
+    msg = _todo_protocol_completion_guard([], "done.", goal="修改这个函数的实现")
     assert msg is not None
     assert "todo_write checklist" in msg
 
@@ -308,12 +296,7 @@ def test_guard_rejects_read_only_goal_when_write_tool_ran() -> None:
 
 def test_guard_preserves_help_request_short_circuit() -> None:
     # A help-request final answer still passes through unchanged.
-    assert (
-        _todo_protocol_completion_guard(
-            [], "请确认权限后再继续。", goal="修改这个函数"
-        )
-        is None
-    )
+    assert _todo_protocol_completion_guard([], "请确认权限后再继续。", goal="修改这个函数") is None
 
 
 def test_guard_still_rejects_completed_todos_with_post_todo_toolwork() -> None:
@@ -330,9 +313,7 @@ def test_guard_still_rejects_completed_todos_with_post_todo_toolwork() -> None:
             action_results=[{"ok": True}],
         ),
     ]
-    msg = _todo_protocol_completion_guard(
-        steps, "done.", goal="修改这个函数的实现"
-    )
+    msg = _todo_protocol_completion_guard(steps, "done.", goal="修改这个函数的实现")
     assert msg is not None
     assert "used tools after the latest todo_write" in msg
 
@@ -348,14 +329,8 @@ def test_guard_still_rejects_completed_todos_with_post_todo_toolwork() -> None:
 # tJnjK3LevqUdg97iD0KaSJ (2026-07-28).
 # ══════════════════════════════════════════════════════════════════
 
-from runtime.core.cerebrum.react_parsing import _latest_todo_items
-
-_TODO_DONE_VIA_TASKS = (
-    'todo_write({"tasks": [{"title": "done", "status": "completed"}]})'
-)
-_TODO_OPEN_VIA_TASKS = (
-    'todo_write({"tasks": [{"title": "work", "status": "in_progress"}]})'
-)
+_TODO_DONE_VIA_TASKS = 'todo_write({"tasks": [{"title": "done", "status": "completed"}]})'
+_TODO_OPEN_VIA_TASKS = 'todo_write({"tasks": [{"title": "work", "status": "in_progress"}]})'
 
 
 def test_latest_todo_items_recognizes_tasks_alias() -> None:
@@ -375,9 +350,7 @@ def test_guard_accepts_completed_checklist_via_tasks_alias() -> None:
     # Non-read-only goal so the safety net does NOT fire — the only
     # thing that should let this through is the parser seeing `tasks`.
     assert (
-        _todo_protocol_completion_guard(
-            steps, "调研完成。", goal="调研 Octopus agent 的流式架构"
-        )
+        _todo_protocol_completion_guard(steps, "调研完成。", goal="调研 Octopus agent 的流式架构")
         is None
     )
 
@@ -387,8 +360,6 @@ def test_guard_rejects_open_checklist_via_tasks_alias() -> None:
     # caught as incomplete — confirming the alias fix doesn't weaken
     # the incomplete-items check.
     steps = [_gstep(1, action=_TODO_OPEN_VIA_TASKS, action_results=[{"ok": True}])]
-    msg = _todo_protocol_completion_guard(
-        steps, "done.", goal="调研 Octopus agent 的流式架构"
-    )
+    msg = _todo_protocol_completion_guard(steps, "done.", goal="调研 Octopus agent 的流式架构")
     assert msg is not None
     assert "unfinished checklist items remain" in msg

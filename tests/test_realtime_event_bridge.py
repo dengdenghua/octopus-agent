@@ -65,9 +65,10 @@ def _new_state():
 
 
 def test_strip_paired_block_removes_tag_and_content() -> None:
-    assert strip_leaked_protocol_tags(
-        "hi <ReasoningBlock>secret reasoning</ReasoningBlock> bye"
-    ) == "hi  bye"
+    assert (
+        strip_leaked_protocol_tags("hi <ReasoningBlock>secret reasoning</ReasoningBlock> bye")
+        == "hi  bye"
+    )
 
 
 def test_strip_paired_block_for_all_structural_kinds() -> None:
@@ -96,9 +97,10 @@ def test_strip_individual_opening_and_closing_tags() -> None:
 
 
 def test_strip_tags_with_attributes() -> None:
-    assert strip_leaked_protocol_tags(
-        '<ToolCallBlock id="x" name="read_file">payload</ToolCallBlock>'
-    ) == ""
+    assert (
+        strip_leaked_protocol_tags('<ToolCallBlock id="x" name="read_file">payload</ToolCallBlock>')
+        == ""
+    )
 
 
 def test_strip_backtick_wrapped_tags() -> None:
@@ -110,9 +112,10 @@ def test_strip_backtick_wrapped_tags() -> None:
     # When an opening and closing backtick-wrapped tag both appear, the
     # paired-block pass treats them as a pair (consuming the span
     # between them) — same as the frontend's INTERNAL_PROCESS_BLOCK_RE.
-    assert strip_leaked_protocol_tags(
-        "see `<ReasoningBlock>` leak `</ReasoningBlock>` done"
-    ) == "see  done"
+    assert (
+        strip_leaked_protocol_tags("see `<ReasoningBlock>` leak `</ReasoningBlock>` done")
+        == "see  done"
+    )
 
 
 def test_strip_preserves_normal_prose() -> None:
@@ -140,9 +143,10 @@ def test_strip_does_not_touch_react_prefixes_code_fences_or_json() -> None:
 def test_strip_keeps_surrounding_prose_with_inline_leak() -> None:
     # tool_call is a non-Block tag: only the wrappers are stripped, the
     # inner text survives (matches the frontend per-tag strip behavior).
-    assert strip_leaked_protocol_tags(
-        "The answer is 42 <tool_call>noise</tool_call> and done"
-    ) == "The answer is 42 noise and done"
+    assert (
+        strip_leaked_protocol_tags("The answer is 42 <tool_call>noise</tool_call> and done")
+        == "The answer is 42 noise and done"
+    )
 
 
 # ── append_agent_message integration tests ────────────────────────

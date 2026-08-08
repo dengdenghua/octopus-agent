@@ -550,4 +550,7 @@ class TestFsAuth:
     def test_valid_token_accepted_when_required(self) -> None:
         client = self._client(require_auth=True)
         r = client.get("/api/fs/roots", headers={"Authorization": "Bearer sk-alice"})
-        assert r.status_code == 200
+        # Authentication succeeds, but shared-mode roots also require a
+        # server-owned thread scope.  The direct router has no thread store,
+        # so it must fail closed after the 401 boundary.
+        assert r.status_code == 403

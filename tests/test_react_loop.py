@@ -14,6 +14,7 @@ from runtime.core.cerebrum.react_execution import (
     _build_progress_summary,
     _build_research_progress_summary,
 )
+from runtime.core.cerebrum.react_explicit_reads import _bound_explicit_large_reads
 from runtime.core.cerebrum.react_guards import (
     _completion_phrase_without_todo_guard,
     _goal_requests_code_mutation,
@@ -63,6 +64,7 @@ from runtime.core.cerebrum.react_loop import (
     _stage_model_timeout_s,
     _todo_completion_before_write_guard,
     _todo_prewrite_guard,
+    _todo_reconciliation_guard,
     _unfinished_implementation_recovery_needed,
     get_react_variant_stats,
     pick_react_variant,
@@ -178,6 +180,116 @@ def test_todo_completion_before_write_guard_allows_completion_after_write() -> N
             ['todo_write({"items": [{"content": "Implement", "status": "completed"}]})'],
             [written],
             required=True,
+        )
+        is None
+    )
+
+
+def test_todo_reconciliation_guard_requires_revision_after_successful_write() -> None:
+    plan = ReActStep(
+        iteration=1,
+        action=(
+            'todo_write({"items": [{"id": "implement", "content": "Implement fix", '
+            '"status": "in_progress"}]})'
+        ),
+    )
+    write = ReActStep(
+        iteration=2,
+        action='edit_file({"path": "app.py", "old_text": "a", "new_text": "b"})',
+        observation="(real tool execution succeeded) edit_file",
+        action_results=[{"ok": True}],
+    )
+
+    message = _todo_reconciliation_guard(
+        ['read_file({"path": "app.py"})'],
+        [plan, write],
+        required=True,
+        visible=True,
+    )
+
+    assert message is not None
+    assert "todo-reconciliation-required" in message
+    assert "add/remove/reword/reorder" in message
+
+
+def test_todo_reconciliation_guard_ignores_read_only_evidence() -> None:
+    plan = ReActStep(
+        iteration=1,
+        action=(
+            'todo_write({"items": [{"id": "inspect", "content": "Inspect docs", '
+            '"status": "in_progress"}]})'
+        ),
+    )
+    read = ReActStep(
+        iteration=2,
+        action='read_file({"path": "README.md"})',
+        observation="documentation",
+        action_results=[{"ok": True}],
+    )
+
+    assert (
+        _todo_reconciliation_guard(
+            ['read_file({"path": "docs/guide.md"})'],
+            [plan, read],
+            required=True,
+            visible=True,
+        )
+        is None
+    )
+
+
+def test_todo_reconciliation_guard_allows_revised_plan_after_write() -> None:
+    plan = ReActStep(
+        iteration=1,
+        action=(
+            'todo_write({"items": [{"id": "implement", "content": "Implement fix", '
+            '"status": "in_progress"}]})'
+        ),
+    )
+    write = ReActStep(
+        iteration=2,
+        action='write_text_file({"path": "README.md", "content": "updated"})',
+        observation="(real tool execution succeeded) write_text_file",
+        action_results=[{"ok": True}],
+    )
+    revised_plan = (
+        'todo_write({"items": [{"id": "implement", "content": "Implementation complete", '
+        '"status": "completed"}, {"id": "verify", "content": "Verify docs", '
+        '"status": "in_progress"}]})'
+    )
+
+    assert (
+        _todo_reconciliation_guard(
+            [revised_plan],
+            [plan, write],
+            required=True,
+            visible=True,
+        )
+        is None
+    )
+
+
+def test_todo_reconciliation_guard_keeps_write_verification_chain_atomic() -> None:
+    plan = ReActStep(
+        iteration=1,
+        action=(
+            'todo_write({"items": [{"id": "implement", "content": "Implement fix", '
+            '"status": "in_progress"}]})'
+        ),
+    )
+    write = ReActStep(
+        iteration=2,
+        action='edit_file({"path": "app.py", "old_text": "a", "new_text": "b"})',
+        observation="(real tool execution succeeded) edit_file",
+        action_results=[{"ok": True}],
+    )
+
+    assert (
+        _todo_reconciliation_guard(
+            ['exec_shell({"command": "pytest -q"})'],
+            [plan, write],
+            required=True,
+            visible=True,
         )
         is None
     )
@@ -2321,6 +2433,21 @@ def test_model_large_named_read_is_bounded_before_dispatch(tmp_path: Any) -> Non
     }
 
 
+def test_large_workspace_read_is_bounded_during_code_task(tmp_path: Any) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "large.py").write_text("x\n" * 2_501, encoding="utf-8")
+
+    bounded = _bound_explicit_large_reads(
+        goal="优化前端交互",
+        workspace_path=str(tmp_path),
+        actions=['read_file({"path": "src/large.py"})'],
+        read_only=False,
+    )
+
+    assert bounded == ['read_file({"path": "src/large.py", "offset": 0, "limit": 400})']
+
+
 def test_hidden_reasoning_timeout_retries_once_without_extended_thinking(monkeypatch) -> None:
     from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
 
@@ -2707,6 +2834,32 @@ def test_forced_convergence_max_tokens_honors_config() -> None:
     assert result is not None
     assert result.final_answer == "converged"
     assert router.requests[-1].max_tokens == 4000
+
+
+def test_forced_convergence_completeness_guard_marks_impasse() -> None:
+    """A promise-style placeholder salvaged by forced convergence must be
+    rejected by the completeness guard and recorded as guard_impasse — never
+    as a success (kimi-k3 "我这就开始…支撑结论" regression)."""
+    promise_answer = (
+        "我这就开始深度分析。先把项目的核心代码结构、模块关系、测试覆盖和工程"
+        "质量逐项过一遍，用具体数据支撑结论。"
+    )
+    router = _ScriptedRouter(
+        [
+            'Thought: inspect once\nAction: echo({"text": "evidence"})',
+            promise_answer,
+        ]
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("echo once")
+    intent.user_context["mode"] = "react"
+
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=1))
+
+    assert result is not None
+    assert result.terminated_reason == "guard_impasse"
+    assert result.success is False
+    assert "还不能把这个任务标记为完成" in result.final_answer
 
 
 def test_react_loop_injects_relevant_memory_hub_records(
@@ -3986,15 +4139,15 @@ def test_format_skill_catalog_drops_capability_conditional_tools_for_plain_turn(
         )
 
     out = _format_skill_catalog(reg, goal="hello, 你好")
-    lines = [l for l in out.splitlines() if l.startswith("  - ")]
+    lines = [line for line in out.splitlines() if line.startswith("  - ")]
     # Always-on primitives present and front-loaded.
-    assert any(l.startswith("  - read_file:") for l in lines)
-    assert any(l.startswith("  - web_search:") for l in lines)
-    assert any(l.startswith("  - exec_shell:") for l in lines)
-    assert any(l.startswith("  - search_capabilities:") for l in lines)
+    assert any(line.startswith("  - read_file:") for line in lines)
+    assert any(line.startswith("  - web_search:") for line in lines)
+    assert any(line.startswith("  - exec_shell:") for line in lines)
+    assert any(line.startswith("  - search_capabilities:") for line in lines)
     # Capability-conditional tools must NOT be front-loaded for a plain turn:
     # every always-on primitive precedes every browser/git/delegation tool.
-    idx = {l.split(":")[0].strip().lstrip("- "): i for i, l in enumerate(lines)}
+    idx = {line.split(":")[0].strip().lstrip("- "): i for i, line in enumerate(lines)}
     for always in ("read_file", "web_search", "exec_shell", "search_capabilities"):
         for cond in (
             "browser_navigate",
@@ -4028,8 +4181,8 @@ def test_format_skill_catalog_keeps_browser_tools_for_browser_turn() -> None:
         goal="用浏览器打开页面点击按钮",
         user_context={"mode": "browser"},
     )
-    lines = [l for l in out.splitlines() if l.startswith("  - ")]
-    idx = {l.split(":")[0].strip().lstrip("- "): i for i, l in enumerate(lines)}
+    lines = [line for line in out.splitlines() if line.startswith("  - ")]
+    idx = {line.split(":")[0].strip().lstrip("- "): i for i, line in enumerate(lines)}
     assert "\n  - browser_navigate:" in out
     assert "\n  - live_browser_state:" in out
     # Browser tools come before the generic read_file in a browser turn.
@@ -4662,6 +4815,48 @@ def test_react_todo_protocol_rejects_complex_final_without_checklist() -> None:
     assert result.final_answer == "final"
     assert any("todo-protocol guard" in step.observation for step in result.steps)
     assert any(step.action.startswith("todo_write") for step in result.steps)
+
+
+def test_terminal_delivery_todo_is_fulfilled_by_substantive_final_answer() -> None:
+    from runtime.core.cerebrum.react_todo_protocol_guards import (
+        _todo_protocol_completion_guard,
+    )
+    from runtime.core.cerebrum.react_types import ReActStep
+
+    steps = [
+        ReActStep(
+            iteration=1,
+            action=(
+                'todo_write({"todos": ['
+                '{"title": "核对全部研究证据", "status": "completed"}, '
+                '{"title": "向用户交付最终研究报告", "status": "in_progress"}'
+                "]})"
+            ),
+            observation="checklist updated",
+        )
+    ]
+    final_answer = "# 研究报告\n\n" + ("已核对来源并形成完整结论。" * 12)
+
+    assert _todo_protocol_completion_guard(steps, final_answer) is None
+
+
+def test_non_delivery_incomplete_todo_still_blocks_substantive_final() -> None:
+    from runtime.core.cerebrum.react_todo_protocol_guards import (
+        _todo_protocol_completion_guard,
+    )
+    from runtime.core.cerebrum.react_types import ReActStep
+
+    steps = [
+        ReActStep(
+            iteration=1,
+            action=('todo_write({"todos": [{"title": "验证代码修复", "status": "in_progress"}]})'),
+            observation="checklist updated",
+        )
+    ]
+
+    rejection = _todo_protocol_completion_guard(steps, "结果说明：" + ("尚未验证。" * 20))
+    assert rejection is not None
+    assert "验证代码修复" in rejection
 
 
 def test_react_todo_protocol_requires_update_after_tool_work() -> None:
@@ -5473,7 +5668,7 @@ def test_zero_anchor_answer_after_tool_evidence_finishes_on_first_response() -> 
     )
 
 
-def test_guarded_plain_answer_stops_after_three_unchanged_rejections() -> None:
+def test_guarded_plain_answer_soft_lands_after_one_unchanged_retry() -> None:
     plain_answer = "组件在 idle 和 streaming 两个 phase 会返回 null。"
     router = _ScriptedRouter(
         [
@@ -5491,9 +5686,12 @@ def test_guarded_plain_answer_stops_after_three_unchanged_rejections() -> None:
     events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None
-    assert result.terminated_reason == "guard_impasse"
-    assert result.success is False
-    assert router.calls == 4
+    assert result.terminated_reason == "final_answer_with_warning"
+    assert result.success is True
+    assert result.final_answer.startswith(plain_answer)
+    assert "inspection-evidence guard" in result.final_answer
+    assert "避免继续空转" in result.final_answer
+    assert router.calls == 3
     assert any(event["type"] == "text_delta" for event in events)
 
 
@@ -5965,6 +6163,39 @@ def test_stream_pause_returns_without_force_final_answer() -> None:
     assert result.terminated_reason == "paused"
     assert "暂停" in result.final_answer
     assert router.calls == 0
+
+
+def test_stream_spin_guard_pauses_early_on_blank_reasoning() -> None:
+    """Degraded models that emit only empty reasoning must not burn the
+    whole iteration budget — the model-spin guard pauses the turn early with a
+    clear reason instead of running to the near-limit auto-pause."""
+    from runtime.core.cerebrum.pause_control import get_pause_controller
+
+    ctrl = get_pause_controller()
+    # Three consecutive blank (whitespace-only) responses trigger the spin
+    # guard on the third, then the pause is detected before the fourth call.
+    router = _ScriptedRouter([" ", " ", " ", " ", " "])
+    task_id = ""
+    try:
+        gen = stream_react_loop(
+            _FakeStack(router),
+            _intent("do something"),
+            agent=None,
+            max_iterations=10,
+        )
+        first_event = next(gen)
+        assert first_event["type"] == "react_started"
+        task_id = str(first_event["task_id"])
+        events, result = _drain(gen)
+        events.insert(0, first_event)
+    finally:
+        ctrl.clear(task_id)
+
+    # The spin guard fires after 3 blank rounds — well under the 10-round cap.
+    assert router.calls == 3
+    assert any(e["type"] == "react_paused" for e in events)
+    assert result is not None
+    assert result.terminated_reason == "paused"
 
 
 def test_stream_no_tool_events_on_pure_thought() -> None:
@@ -8144,6 +8375,8 @@ def test_guard_impasse_resets_when_new_actions_land() -> None:
     state: dict = {}
     steps = [ReActStep(iteration=1, action='read_file({"path": "a"})', observation="x")]
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+    assert _note_guard_impasse(state, "inspection-evidence guard", steps) is False
+    assert _note_guard_impasse(state, "implementation-write guard", steps) is False
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
     # The model executed another real action before its next attempt —
     # that is progress, so the counter starts over.
@@ -8161,6 +8394,33 @@ def test_guard_impasse_resets_on_different_guard() -> None:
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
     assert _note_guard_impasse(state, "inspection-evidence guard", steps) is False
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
+
+
+def test_repair_guard_soft_lands_after_one_stalled_retry() -> None:
+    from runtime.core.cerebrum.react_final_answer_guards import (
+        _guard_rejection_outcome,
+        _guard_soft_landing_answer,
+    )
+
+    state: dict = {}
+    steps = [ReActStep(iteration=1, action='read_file({"path": "a"})', observation="x")]
+
+    assert _guard_rejection_outcome(state, "todo-protocol guard", steps) == "retry"
+    assert _guard_rejection_outcome(state, "todo-protocol guard", steps) == "soft_land"
+    delivered = _guard_soft_landing_answer("已完成分析。", "todo-protocol guard")
+    assert delivered.startswith("已完成分析。")
+    assert "避免继续空转" in delivered
+
+
+def test_hard_guard_remains_fail_closed_for_three_stalls() -> None:
+    from runtime.core.cerebrum.react_final_answer_guards import _guard_rejection_outcome
+
+    state: dict = {}
+    steps = [ReActStep(iteration=1, action="none")]
+
+    assert _guard_rejection_outcome(state, "secret-leak guard", steps) == "retry"
+    assert _guard_rejection_outcome(state, "secret-leak guard", steps) == "retry"
+    assert _guard_rejection_outcome(state, "secret-leak guard", steps) == "hard_stop"
 
 
 # ─────────────────────────────────────────────────────────────────

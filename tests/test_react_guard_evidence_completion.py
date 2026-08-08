@@ -14,8 +14,7 @@ from runtime.core.cerebrum.react_types import ReActStep
 
 def test_explicit_source_paths_preserve_named_project_files() -> None:
     goal = (
-        "比较 runtime/protocol/items.py 与 "
-        "frontend/src/core/realtime/items.ts:42，并核对 README.md"
+        "比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts:42，并核对 README.md"
     )
 
     assert _explicit_source_paths(goal) == [
@@ -29,10 +28,7 @@ def test_named_file_guard_reports_every_uncovered_file() -> None:
     message = _code_mode_missing_inspection_tool_guard(
         [],
         "两个定义一致。",
-        goal=(
-            "比较 runtime/protocol/items.py 与 "
-            "frontend/src/core/realtime/items.ts"
-        ),
+        goal=("比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts"),
         file_tools_visible=True,
         grounded_source_paths=frozenset({"runtime/protocol/items.py:100"}),
     )
@@ -47,10 +43,7 @@ def test_named_file_guard_accepts_exact_source_grounding() -> None:
         _code_mode_missing_inspection_tool_guard(
             [],
             "两个定义一致。",
-            goal=(
-                "比较 runtime/protocol/items.py 与 "
-                "frontend/src/core/realtime/items.ts"
-            ),
+            goal=("比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts"),
             file_tools_visible=True,
             grounded_source_paths=frozenset(
                 {
@@ -81,10 +74,7 @@ def test_named_file_guard_accepts_successful_reads_for_each_file() -> None:
         _code_mode_missing_inspection_tool_guard(
             steps,
             "两个定义一致。",
-            goal=(
-                "比较 runtime/protocol/items.py 与 "
-                "frontend/src/core/realtime/items.ts"
-            ),
+            goal=("比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts"),
             file_tools_visible=True,
         )
         is None
@@ -92,9 +82,7 @@ def test_named_file_guard_accepts_successful_reads_for_each_file() -> None:
 
 
 def test_incomplete_final_answer_rejects_future_action_not_result() -> None:
-    message = _incomplete_final_answer_guard(
-        "我先 grep 确认这三个字段在两端的具体定义。"
-    )
+    message = _incomplete_final_answer_guard("我先 grep 确认这三个字段在两端的具体定义。")
 
     assert message is not None
     assert "not a completed answer" in message
@@ -129,6 +117,51 @@ def test_incomplete_final_answer_accepts_concrete_conclusion() -> None:
 
 def test_incomplete_final_answer_accepts_short_concrete_reply() -> None:
     assert _incomplete_final_answer_guard("已思考") is None
+
+
+def test_incomplete_final_answer_rejects_verify_promise_with_no_result() -> None:
+    # Regression: kimi-k3 emitted "我会先核实…然后…做出分析" as its terminal
+    # answer. The verb 核实 was missing from the evidence-action keyword list,
+    # so the guard let a pure preparatory promise pass and the turn completed
+    # without any tool call or concrete finding.
+    message = _incomplete_final_answer_guard(
+        "我会先核实项目当前的开发流程与代码规范配置，"
+        "明确团队在协作与质量控制上的具体约束，"
+        "然后基于这些事实对项目的工程成熟度做出深度分析。"
+    )
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_rejects_start_work_promise_with_supported_conclusion() -> None:
+    # Regression (trn_514bd9600295430b): "我这就开始…逐项过一遍…用具体数据支撑
+    # 结论" announced upcoming work and only promised (not delivered) a
+    # conclusion, yet the bare word 结论 satisfied result_signal and the turn
+    # completed without any real analysis. 开始/过一遍/支撑结论 must be caught.
+    message = _incomplete_final_answer_guard(
+        "我这就开始深度分析。先把项目的核心代码结构、模块关系、测试覆盖和工程"
+        "质量逐项过一遍，用具体数据支撑结论。"
+    )
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_rejects_deferred_conclusion_announcement() -> None:
+    message = _incomplete_final_answer_guard("我先核对两端定义，之后再给出结论。")
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_accepts_delivered_conclusion_still() -> None:
+    # A real delivered conclusion must keep passing even though it contains
+    # the verb 过一遍/开始 and the word 结论.
+    assert (
+        _incomplete_final_answer_guard("结论：我把两端定义过了一遍，开始、字段命名与类型完全一致。")
+        is None
+    )
 
 
 def test_inspection_answer_fragment_guard_rejects_bare_source_line() -> None:

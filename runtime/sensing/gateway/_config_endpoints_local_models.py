@@ -121,8 +121,7 @@ def _register_local_models(router: Any, ctx: _ConfigCtx) -> None:
                 ids = [
                     model_id
                     for m in data["data"]
-                    if isinstance(m, dict)
-                    and isinstance(model_id := m.get("id"), str)
+                    if isinstance(m, dict) and isinstance(model_id := m.get("id"), str)
                 ]
                 return ids, None
             # Ollama native shape · ``models[].name``
@@ -130,8 +129,7 @@ def _register_local_models(router: Any, ctx: _ConfigCtx) -> None:
                 names = [
                     model_name
                     for m in data["models"]
-                    if isinstance(m, dict)
-                    and isinstance(model_name := m.get("name"), str)
+                    if isinstance(m, dict) and isinstance(model_name := m.get("name"), str)
                 ]
                 return names, None
             return [], "unexpected schema"

@@ -14,6 +14,7 @@ All seven are self-gating: when the underlying model / index isn't available,
 they return a clear message instead of failing — so the agent degrades
 gracefully.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

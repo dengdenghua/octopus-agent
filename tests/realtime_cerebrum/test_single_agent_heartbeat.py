@@ -27,9 +27,7 @@ def _install_slow_stream(
     # Fire the keepalive almost immediately so the test stays sub-second.
     # Patch the constant where the consumer loop actually reads it (the
     # drive module holds its own imported binding).
-    monkeypatch.setattr(
-        drive_rs, "_SINGLE_AGENT_HEARTBEAT_INTERVAL_S", interval_s
-    )
+    monkeypatch.setattr(drive_rs, "_SINGLE_AGENT_HEARTBEAT_INTERVAL_S", interval_s)
 
     def slow_stream(*_args: Any, **_kwargs: Any) -> Iterator[dict[str, Any]]:
         # Stall before producing any event — the model "thinking" with no

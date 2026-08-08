@@ -102,12 +102,18 @@ def test_get_workspace_returns_none_for_unknown(store: WorkspaceStore) -> None:
 
 def test_list_workspaces_orders_by_created_at(store: WorkspaceStore) -> None:
     a = store.create_workspace(
-        name="A", mount_type="local", mount_target="/tmp/a",
-        owner_id="u1", created_at=1.0,
+        name="A",
+        mount_type="local",
+        mount_target="/tmp/a",
+        owner_id="u1",
+        created_at=1.0,
     )
     b = store.create_workspace(
-        name="B", mount_type="local", mount_target="/tmp/b",
-        owner_id="u1", created_at=2.0,
+        name="B",
+        mount_type="local",
+        mount_target="/tmp/b",
+        owner_id="u1",
+        created_at=2.0,
     )
     listed = store.list_workspaces()
     assert [w.id for w in listed] == [a.id, b.id]
@@ -117,10 +123,16 @@ def test_list_workspaces_for_user_returns_only_member_workspaces(
     store: WorkspaceStore,
 ) -> None:
     w1 = store.create_workspace(
-        name="w1", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w1",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     w2 = store.create_workspace(
-        name="w2", mount_type="local", mount_target="/y", owner_id="u2",
+        name="w2",
+        mount_type="local",
+        mount_target="/y",
+        owner_id="u2",
     )
     store.add_member(w2.id, "u1", role="viewer")
 
@@ -139,7 +151,10 @@ def test_list_workspaces_for_user_returns_empty_for_empty_id(
 
 def test_delete_workspace_returns_true_then_false(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="x", mount_type="local", mount_target="/x", owner_id="u1",
+        name="x",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     assert store.delete_workspace(ws.id) is True
     # Idempotent — second call returns False (already gone).
@@ -154,21 +169,30 @@ def test_delete_workspace_with_empty_id_returns_false(store: WorkspaceStore) -> 
 def test_create_workspace_rejects_invalid_mount_type(store: WorkspaceStore) -> None:
     with pytest.raises(ValueError, match="mount_type"):
         store.create_workspace(
-            name="x", mount_type="ftp", mount_target="/x", owner_id="u1",
+            name="x",
+            mount_type="ftp",
+            mount_target="/x",
+            owner_id="u1",
         )
 
 
 def test_create_workspace_rejects_empty_name(store: WorkspaceStore) -> None:
     with pytest.raises(ValueError, match="name"):
         store.create_workspace(
-            name=" ", mount_type="local", mount_target="/x", owner_id="u1",
+            name=" ",
+            mount_type="local",
+            mount_target="/x",
+            owner_id="u1",
         )
 
 
 def test_create_workspace_rejects_empty_owner(store: WorkspaceStore) -> None:
     with pytest.raises(ValueError, match="owner_id"):
         store.create_workspace(
-            name="x", mount_type="local", mount_target="/x", owner_id="",
+            name="x",
+            mount_type="local",
+            mount_target="/x",
+            owner_id="",
         )
 
 
@@ -176,8 +200,12 @@ def test_create_workspace_accepts_explicit_id_and_timestamp(
     store: WorkspaceStore,
 ) -> None:
     ws = store.create_workspace(
-        name="x", mount_type="local", mount_target="/x",
-        owner_id="u1", workspace_id="ws-fixed", created_at=12345.0,
+        name="x",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
+        workspace_id="ws-fixed",
+        created_at=12345.0,
     )
     assert ws.id == "ws-fixed"
     assert ws.created_at == 12345.0
@@ -188,7 +216,10 @@ def test_create_workspace_accepts_explicit_id_and_timestamp(
 
 def test_create_workspace_auto_adds_owner_as_member(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="x", mount_type="local", mount_target="/x", owner_id="u1",
+        name="x",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     members = store.list_members(ws.id)
     assert len(members) == 1
@@ -216,7 +247,10 @@ def test_all_mount_types_round_trip(store: WorkspaceStore) -> None:
 
 def test_add_member_and_list(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="w", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     # Owner is auto-added.
     members = store.list_members(ws.id)
@@ -236,7 +270,10 @@ def test_add_member_and_list(store: WorkspaceStore) -> None:
 
 def test_add_member_upserts_role_on_conflict(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="w", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     store.add_member(ws.id, "u2", role="viewer")
     assert store.get_member_role(ws.id, "u2") == "viewer"
@@ -252,7 +289,10 @@ def test_add_member_upserts_role_on_conflict(store: WorkspaceStore) -> None:
 
 def test_get_member_role_returns_none_for_unknown(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="w", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     assert store.get_member_role(ws.id, "ghost") is None
     # Unknown workspace should also return None rather than raise.
@@ -261,7 +301,10 @@ def test_get_member_role_returns_none_for_unknown(store: WorkspaceStore) -> None
 
 def test_remove_member_returns_bool(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="w", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     store.add_member(ws.id, "u2", role="viewer")
     assert store.remove_member(ws.id, "u2") is True
@@ -277,7 +320,10 @@ def test_remove_member_with_empty_ids_returns_false(store: WorkspaceStore) -> No
 
 def test_add_member_rejects_invalid_role(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="w", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     with pytest.raises(ValueError, match="role"):
         store.add_member(ws.id, "u2", role="admin")
@@ -285,7 +331,10 @@ def test_add_member_rejects_invalid_role(store: WorkspaceStore) -> None:
 
 def test_add_member_rejects_empty_member_id(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="w", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     with pytest.raises(ValueError, match="member_id"):
         store.add_member(ws.id, "", role="viewer")
@@ -302,7 +351,10 @@ def test_list_members_returns_empty_for_empty_id(store: WorkspaceStore) -> None:
 
 def test_all_member_roles_round_trip(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="w", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     for role in ("editor", "reviewer", "viewer"):
         store.add_member(ws.id, f"u-{role}", role=role)
@@ -314,7 +366,10 @@ def test_all_member_roles_round_trip(store: WorkspaceStore) -> None:
 
 def test_delete_workspace_cascades_members(store: WorkspaceStore) -> None:
     ws = store.create_workspace(
-        name="w", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     store.add_member(ws.id, "u2", role="editor")
     store.add_member(ws.id, "u3", role="viewer")
@@ -332,10 +387,16 @@ def test_delete_workspace_cascades_members(store: WorkspaceStore) -> None:
 
 def test_delete_workspace_does_not_affect_others(store: WorkspaceStore) -> None:
     w1 = store.create_workspace(
-        name="w1", mount_type="local", mount_target="/x", owner_id="u1",
+        name="w1",
+        mount_type="local",
+        mount_target="/x",
+        owner_id="u1",
     )
     w2 = store.create_workspace(
-        name="w2", mount_type="local", mount_target="/y", owner_id="u1",
+        name="w2",
+        mount_type="local",
+        mount_target="/y",
+        owner_id="u1",
     )
     store.add_member(w2.id, "u2", role="editor")
 
@@ -415,6 +476,7 @@ def test_encrypt_options_does_not_double_encrypt(crypto_enabled: str) -> None:
     once = encrypt_options(options)
     # `once` is a JSON string; parse it and re-encrypt to simulate double-encrypt.
     import json as _json
+
     parsed = _json.loads(once)
     twice = encrypt_options(parsed)
     assert decrypt_options(twice) == options
@@ -438,12 +500,16 @@ def test_encrypt_options_handles_empty_dict(crypto_enabled: str) -> None:
 
 
 def test_workspace_store_round_trips_mount_options_with_crypto(
-    store: WorkspaceStore, crypto_enabled: str,
+    store: WorkspaceStore,
+    crypto_enabled: str,
 ) -> None:
     options = {"username": "bob", "password": "p@ss", "share": "data"}
     ws = store.create_workspace(
-        name="ws", mount_type="smb", mount_target="smb://nas/share",
-        mount_options=options, owner_id="u1",
+        name="ws",
+        mount_type="smb",
+        mount_target="smb://nas/share",
+        mount_options=options,
+        owner_id="u1",
     )
     fetched = store.get_workspace(ws.id)
     assert fetched is not None
@@ -451,7 +517,8 @@ def test_workspace_store_round_trips_mount_options_with_crypto(
 
 
 def test_mount_options_json_on_disk_has_encrypted_password(
-    store: WorkspaceStore, crypto_enabled: str,
+    store: WorkspaceStore,
+    crypto_enabled: str,
 ) -> None:
     """Inspect the raw SQLite column to confirm the secret is not plaintext
     at rest — i.e. the encryption happens before the row is written, not
@@ -459,12 +526,16 @@ def test_mount_options_json_on_disk_has_encrypted_password(
     """
     options = {"password": "secret123", "username": "carol"}
     ws = store.create_workspace(
-        name="ws", mount_type="smb", mount_target="smb://nas/share",
-        mount_options=options, owner_id="u1",
+        name="ws",
+        mount_type="smb",
+        mount_target="smb://nas/share",
+        mount_options=options,
+        owner_id="u1",
     )
     with sqlite3.connect(str(store.db_path)) as conn:
         row = conn.execute(
-            "SELECT mount_options_json FROM workspaces WHERE id=?", (ws.id,),
+            "SELECT mount_options_json FROM workspaces WHERE id=?",
+            (ws.id,),
         ).fetchone()
     raw = row[0]
     assert "secret123" not in raw
@@ -473,18 +544,25 @@ def test_mount_options_json_on_disk_has_encrypted_password(
 
 
 def test_two_workspaces_share_encryption_state(
-    store: WorkspaceStore, crypto_enabled: str,
+    store: WorkspaceStore,
+    crypto_enabled: str,
 ) -> None:
     """Two workspaces created with the same key must both decrypt cleanly."""
     opts1 = {"password": "p1", "tag": "a"}
     opts2 = {"password": "p2", "tag": "b"}
     w1 = store.create_workspace(
-        name="w1", mount_type="local", mount_target="/x",
-        mount_options=opts1, owner_id="u1",
+        name="w1",
+        mount_type="local",
+        mount_target="/x",
+        mount_options=opts1,
+        owner_id="u1",
     )
     w2 = store.create_workspace(
-        name="w2", mount_type="local", mount_target="/y",
-        mount_options=opts2, owner_id="u1",
+        name="w2",
+        mount_type="local",
+        mount_target="/y",
+        mount_options=opts2,
+        owner_id="u1",
     )
     assert store.get_workspace(w1.id).mount_options == opts1
     assert store.get_workspace(w2.id).mount_options == opts2
@@ -508,12 +586,14 @@ def test_workspace_model_round_trip() -> None:
 
 
 def test_workspace_model_defaults_unknown_mount_type_to_local() -> None:
-    ws = Workspace.from_dict({
-        "id": "ws1",
-        "name": "n",
-        "mount_type": "exotic",  # not in VALID_MOUNT_TYPES
-        "mount_target": "/x",
-    })
+    ws = Workspace.from_dict(
+        {
+            "id": "ws1",
+            "name": "n",
+            "mount_type": "exotic",  # not in VALID_MOUNT_TYPES
+            "mount_target": "/x",
+        }
+    )
     assert ws.mount_type == "local"
     assert ws.owner_id == ""
     assert ws.created_at == 0.0
@@ -522,16 +602,21 @@ def test_workspace_model_defaults_unknown_mount_type_to_local() -> None:
 
 def test_workspace_member_model_round_trip() -> None:
     m = WorkspaceMember(
-        workspace_id="ws1", member_id="u1", role="owner", added_at=1.0,
+        workspace_id="ws1",
+        member_id="u1",
+        role="owner",
+        added_at=1.0,
     )
     assert WorkspaceMember.from_dict(m.to_dict()) == m
 
 
 def test_workspace_member_model_defaults_unknown_role_to_viewer() -> None:
-    m = WorkspaceMember.from_dict({
-        "workspace_id": "ws1",
-        "member_id": "u1",
-        "role": "superuser",  # not in VALID_MEMBER_ROLES
-    })
+    m = WorkspaceMember.from_dict(
+        {
+            "workspace_id": "ws1",
+            "member_id": "u1",
+            "role": "superuser",  # not in VALID_MEMBER_ROLES
+        }
+    )
     assert m.role == "viewer"
     assert m.added_at == 0.0

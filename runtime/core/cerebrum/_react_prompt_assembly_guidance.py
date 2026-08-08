@@ -49,7 +49,9 @@ def _assemble_core_guidance(state: _AssemblyState) -> None:
     if isinstance(state.effective_wp, str) and state.effective_wp.strip():
         _effective_wp_text = state.effective_wp.strip()
         _workspace_label = (
-            "个人隔离工作目录" if not (isinstance(state.wp, str) and state.wp.strip()) else "当前工作目录"
+            "个人隔离工作目录"
+            if not (isinstance(state.wp, str) and state.wp.strip())
+            else "当前工作目录"
         )
         state.system_parts.append(
             f"\n{_workspace_label}: {_effective_wp_text}\n"
@@ -65,7 +67,9 @@ def _assemble_core_guidance(state: _AssemblyState) -> None:
                 include_diagnostics=state.is_code_mode,
             )
             if _profile:
-                state.system_parts.append("\n<project-profile>\n" + _profile + "\n</project-profile>")
+                state.system_parts.append(
+                    "\n<project-profile>\n" + _profile + "\n</project-profile>"
+                )
         if state.is_code_mode:
             state.system_parts.append(
                 "\n<code-mode>\n"
@@ -134,7 +138,12 @@ def _assemble_core_guidance(state: _AssemblyState) -> None:
         # going to be more than a couple of rounds. Skipping short / chat turns
         # keeps the system prompt small for them and improves prompt cache hits
         # across turn types.
-        if state.todo_protocol_required or state.is_research_mode or state.is_swarm_mode or state.is_goal_mode:
+        if (
+            state.todo_protocol_required
+            or state.is_research_mode
+            or state.is_swarm_mode
+            or state.is_goal_mode
+        ):
             state.system_parts.append(
                 "\n<long-task>\n"
                 "**深度**: 长任务可以显式配置更高 max_iter; 当前轮始终受传入的 "
@@ -579,7 +588,9 @@ def _assemble_tool_sections(state: _AssemblyState) -> None:
             agent=state.agent,
             user_context=state.user_context,
             goal=state.intent.normalized_goal,
-            include_names=(STRICT_EXPLICIT_READ_TOOL_NAMES if state.strict_explicit_reads else None),
+            include_names=(
+                STRICT_EXPLICIT_READ_TOOL_NAMES if state.strict_explicit_reads else None
+            ),
         )
         if catalog:
             state.file_inspection_tools_visible = "  - read_file:" in catalog

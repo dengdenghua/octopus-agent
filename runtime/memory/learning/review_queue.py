@@ -12,6 +12,7 @@ from typing import Any
 
 from runtime.platform.io import atomic_write_json, read_json_with_backup
 from runtime.platform.io.atomic import _cross_process_lock
+from runtime.safety.auth.scope import TenantScope, row_visible
 
 _SCHEMA = "octopus.review_queue.v1"
 _VALID_STATUSES = {"pending", "promoted", "rejected", "archived"}
@@ -44,6 +45,7 @@ class ReviewQueue:
         review: dict[str, Any],
         *,
         now: datetime | None = None,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
         with self._write_lock():
             payload = self._read()
@@ -54,8 +56,8 @@ class ReviewQueue:
             updated = 0
             touched: list[dict[str, Any]] = []
 
-            for candidate in _items_from_review(review, now_text):
-                existing = _find_item(items, candidate["id"])
+            for candidate in _items_from_review(review, now_text, scope=scope):
+                existing = _find_item(items, candidate["id"], scope=scope)
                 if existing is None:
                     items.append(candidate)
                     touched.append(candidate)
@@ -94,6 +96,7 @@ class ReviewQueue:
         agent_ids: list[str] | None = None,
         tags: list[str] | None = None,
         now: datetime | None = None,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
         with self._write_lock():
             payload = self._read()
@@ -116,6 +119,7 @@ class ReviewQueue:
                 title=clean_title,
                 text=clean_text,
                 metadata=metadata if isinstance(metadata, dict) else {},
+                scope=scope,
             )
             candidate["source"] = _clean_text(source, limit=80) or "manual"
             candidate["source_task_ids"] = _clean_unique_list(source_task_ids, limit=80)
@@ -124,7 +128,7 @@ class ReviewQueue:
             candidate["agent_ids"] = _clean_unique_list(agent_ids, limit=80)
             candidate["tags"] = _merge_unique(candidate["tags"], tags or [])
 
-            existing = _find_item(items, candidate["id"])
+            existing = _find_item(items, candidate["id"], scope=scope)
             created = 0
             updated = 0
             if existing is None:
@@ -157,9 +161,10 @@ class ReviewQueue:
         source_task_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
         with self._lock:
-            rows = list(self._read().get("items") or [])
+            rows = [row for row in self._read().get("items") or [] if row_visible(row, scope)]
         if status:
             rows = [row for row in rows if str(row.get("status") or "") == status]
         if target_bucket:
@@ -187,6 +192,7 @@ class ReviewQueue:
         reason: str = "",
         promoted_to: str | None = None,
         now: datetime | None = None,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
         normalized_id = _clean_text(item_id, limit=80)
         decision = _clean_text(action, limit=40).lower()
@@ -196,7 +202,7 @@ class ReviewQueue:
         with self._write_lock():
             payload = self._read()
             rows = list(payload.get("items") or [])
-            item = _find_item(rows, normalized_id)
+            item = _find_item(rows, normalized_id, scope=scope)
             if item is None:
                 raise KeyError(normalized_id)
 
@@ -225,12 +231,13 @@ class ReviewQueue:
         metadata_patch: dict[str, Any],
         tags: list[str] | None = None,
         now: datetime | None = None,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
         normalized_id = _clean_text(item_id, limit=80)
         with self._write_lock():
             payload = self._read()
             rows = list(payload.get("items") or [])
-            item = _find_item(rows, normalized_id)
+            item = _find_item(rows, normalized_id, scope=scope)
             if item is None:
                 raise KeyError(normalized_id)
             if not isinstance(metadata_patch, dict):
@@ -248,9 +255,9 @@ class ReviewQueue:
             self._write(payload)
         return {"schema": _SCHEMA, "item": item}
 
-    def summary(self) -> dict[str, Any]:
+    def summary(self, *, scope: TenantScope | None = None) -> dict[str, Any]:
         with self._lock:
-            rows = list(self._read().get("items") or [])
+            rows = [row for row in self._read().get("items") or [] if row_visible(row, scope)]
         by_status = Counter(str(row.get("status") or "pending") for row in rows)
         by_priority = Counter(str(row.get("priority") or "P2") for row in rows)
         by_bucket = Counter(str(row.get("target_bucket") or "experience") for row in rows)
@@ -352,6 +359,8 @@ def _normalize_payload(raw: dict[str, Any]) -> dict[str, Any]:
             "tags": _clean_unique_list(item.get("tags"), limit=40),
             "metadata": item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
             "source_hash": _clean_text(item.get("source_hash"), limit=80),
+            "tenant_id": _clean_text(item.get("tenant_id"), limit=160),
+            "owner_actor_id": _clean_text(item.get("owner_actor_id"), limit=160),
         }
         rows.append(normalized)
     payload.update(
@@ -365,7 +374,12 @@ def _normalize_payload(raw: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def _items_from_review(review: dict[str, Any], now_text: str) -> list[dict[str, Any]]:
+def _items_from_review(
+    review: dict[str, Any],
+    now_text: str,
+    *,
+    scope: TenantScope | None = None,
+) -> list[dict[str, Any]]:
     source_task_id = _clean_text(review.get("task_id"), limit=120)
     thread_id = _clean_text(review.get("thread_id"), limit=120)
     turn_id = _clean_text(review.get("turn_id"), limit=120)
@@ -395,6 +409,7 @@ def _items_from_review(review: dict[str, Any], now_text: str) -> list[dict[str, 
                 title=title,
                 text=text,
                 metadata={**evidence, "candidate": item},
+                scope=scope,
             )
         )
     for item in review.get("backlog_candidates") or []:
@@ -426,6 +441,7 @@ def _items_from_review(review: dict[str, Any], now_text: str) -> list[dict[str, 
                     ),
                     "validation_metric": _clean_text(item.get("validation_metric"), limit=600),
                 },
+                scope=scope,
             )
         )
     return rows
@@ -534,6 +550,7 @@ def _new_item(
     title: str,
     text: str,
     metadata: dict[str, Any],
+    scope: TenantScope | None = None,
 ) -> dict[str, Any]:
     item_id = _item_id(
         source_kind=source_kind,
@@ -546,6 +563,8 @@ def _new_item(
         "id": item_id,
         "created_at": now_text,
         "updated_at": now_text,
+        "tenant_id": scope.tenant_id if scope is not None else "",
+        "owner_actor_id": scope.actor_id if scope is not None else "",
         "decided_at": "",
         "source": "task_run_review",
         "source_kind": source_kind,
@@ -598,9 +617,14 @@ def _merge_existing_item(
     existing["metadata"] = metadata
 
 
-def _find_item(items: list[dict[str, Any]], item_id: str) -> dict[str, Any] | None:
+def _find_item(
+    items: list[dict[str, Any]],
+    item_id: str,
+    *,
+    scope: TenantScope | None = None,
+) -> dict[str, Any] | None:
     for item in items:
-        if str(item.get("id") or "") == item_id:
+        if str(item.get("id") or "") == item_id and row_visible(item, scope):
             return item
     return None
 

@@ -4,6 +4,7 @@ write_skills.py.
 Contains the opt-in, dangerous git skills: push / pull / checkout / stash /
 create_pr.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -170,6 +171,7 @@ def _git_create_pr(
         output_cap_bytes=8000,
         sandbox_dir=sandbox_dir,
         allow_network=True,
+        sandbox_required=True,
     )
     if "error" in r and "exit_code" not in r:
         msg = r["error"]

@@ -22,15 +22,15 @@ from runtime.safety.evolution.policy_review_rules import (
 from ._agent_trace_router_stores import (
     RouterDeps,
     _default_promotion_audit_path,
-    _default_proposal_ledger_path,
     _get_promotion_applier,
     _get_store,
     _promotion_plan_has_target,
+    _scope_for_request,
     _source_task_ids_from_promotion_plan,
 )
 
 
-def _promotion_applier(deps: RouterDeps):
+def _promotion_applier(deps: RouterDeps, scope=None):
     return _get_promotion_applier(
         experience_ledger=deps.experience_ledger,
         experience_ledger_path=deps.experience_ledger_path,
@@ -38,16 +38,19 @@ def _promotion_applier(deps: RouterDeps):
         review_queue_path=deps.review_queue_path,
         promotion_audit_path=deps.promotion_audit_path,
         proposal_ledger_path=deps.proposal_ledger_path,
+        scope=scope,
     )
 
 
 def register_promotion_endpoints(router, deps: RouterDeps) -> None:
     @router.post("/api/agent-trace/review-queue/promotions/plan")
     def api_agent_trace_review_queue_promotion_plan(
+        request: Request,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         body = payload or {}
-        plan = _promotion_applier(deps).plan(
+        scope = _scope_for_request(request)
+        plan = _promotion_applier(deps, scope).plan(
             item_id=body.get("item_id"),
             target=body.get("target"),
             limit=int(body.get("limit") or 50),
@@ -58,6 +61,7 @@ def register_promotion_endpoints(router, deps: RouterDeps) -> None:
             source_task_ids,
             min_cases=int(body.get("min_replay_cases") or 1),
             min_score=float(body.get("min_replay_score") or 1.0),
+            scope=scope,
         )
         return plan
 
@@ -68,7 +72,8 @@ def register_promotion_endpoints(router, deps: RouterDeps) -> None:
     ) -> dict[str, Any]:
         actor = deps.auth(request, force=True)
         body = payload or {}
-        applier = _promotion_applier(deps)
+        scope = _scope_for_request(request)
+        applier = _promotion_applier(deps, scope)
         limit = int(body.get("limit") or 50)
         plan = applier.plan(
             item_id=body.get("item_id"),
@@ -84,6 +89,7 @@ def register_promotion_endpoints(router, deps: RouterDeps) -> None:
             source_task_ids,
             min_cases=min_cases,
             min_score=min_score,
+            scope=scope,
         )
         if (
             _promotion_plan_has_target(plan, "policy_review")
@@ -139,12 +145,13 @@ def register_promotion_endpoints(router, deps: RouterDeps) -> None:
 
     @router.get("/api/agent-trace/review-queue/promotions/audit")
     def api_agent_trace_review_queue_promotion_audit(
+        request: Request,
         item_id: str | None = Query(default=None),
         target: str | None = Query(default=None),
         limit: int = Query(default=100, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
-        return _promotion_applier(deps).audit(
+        return _promotion_applier(deps, _scope_for_request(request)).audit(
             item_id=item_id,
             target=target,
             limit=limit,
@@ -152,15 +159,16 @@ def register_promotion_endpoints(router, deps: RouterDeps) -> None:
         )
 
     @router.get("/api/agent-trace/review-queue/promotions/audit/summary")
-    def api_agent_trace_review_queue_promotion_audit_summary() -> dict[str, Any]:
-        return _promotion_applier(deps).audit_summary()
+    def api_agent_trace_review_queue_promotion_audit_summary(request: Request) -> dict[str, Any]:
+        return _promotion_applier(deps, _scope_for_request(request)).audit_summary()
 
     @router.get("/api/agent-trace/policy-review/rule-drafts")
     def api_agent_trace_policy_review_rule_drafts(
+        request: Request,
         limit: int = Query(default=100, ge=1, le=1000),
     ) -> dict[str, Any]:
         report = build_policy_review_rule_drafts(
-            ledger_path=deps.proposal_ledger_path or _default_proposal_ledger_path(),
+            ledger_path=_promotion_applier(deps, _scope_for_request(request)).proposal_ledger._path,
             limit=limit,
         )
         report["verified"] = sum(
@@ -175,13 +183,14 @@ def register_promotion_endpoints(router, deps: RouterDeps) -> None:
         request: Request,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        scope = _scope_for_request(request)
         actor = deps.auth(request, force=True) or "local_operator"
         body = payload or {}
         draft_id = str(body.get("draft_id") or "").strip()
         if not draft_id:
             raise HTTPException(400, "draft_id is required")
         report = build_policy_review_rule_drafts(
-            ledger_path=deps.proposal_ledger_path or _default_proposal_ledger_path(),
+            ledger_path=_promotion_applier(deps, scope).proposal_ledger._path,
             limit=int(body.get("limit") or 100),
         )
         draft = next(

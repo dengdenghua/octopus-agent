@@ -37,6 +37,43 @@ _FUTURE_READ_INTENT_RE = re.compile(
     r"\b(?:read|open|inspect)\b|(?:读取|查看|打开)",
     re.IGNORECASE,
 )
+_STRUCTURED_READ_SUFFIXES = {
+    ".csv",
+    ".docx",
+    ".gif",
+    ".ipynb",
+    ".jpeg",
+    ".jpg",
+    ".pdf",
+    ".png",
+    ".pptx",
+    ".tsv",
+    ".webp",
+    ".xlsx",
+}
+_MAX_UNRANGED_TEXT_LINES = 2000
+
+
+def _text_file_needs_range(path: Path) -> bool:
+    """Return whether an ordinary text read should start with a slice.
+
+    The byte threshold catches normal large source files cheaply.  The bounded
+    line probe also catches generated/config files that exceed the reader's
+    2,000-line contract while remaining smaller than 100 KiB.
+    """
+
+    if path.suffix.lower() in _STRUCTURED_READ_SUFFIXES:
+        return False
+    try:
+        if path.stat().st_size > 100 * 1024:
+            return True
+        with path.open("r", encoding="utf-8") as handle:
+            return any(
+                line_number > _MAX_UNRANGED_TEXT_LINES
+                for line_number, _line in enumerate(handle, start=1)
+            )
+    except (OSError, UnicodeDecodeError):
+        return False
 
 
 def _narrow_command_direct_answer(
@@ -154,15 +191,17 @@ def _bound_explicit_large_reads(
     actions: list[str],
     read_only: bool,
 ) -> list[str]:
-    """Add a first-slice range to user-named oversized read_file calls."""
+    """Add a first slice to oversized workspace text reads before dispatch.
 
-    if not read_only or not workspace_path or not actions:
-        return actions
-    requested = {
-        match.group(0).replace("\\", "/").lstrip("./")
-        for match in _EXPLICIT_READ_RECOVERY_PATH_RE.finditer(goal or "")
-    }
-    if not requested:
+    This originally covered only explicitly named files in read-only turns.
+    That left ordinary code tasks to execute a guaranteed-to-fail unbounded
+    read, then spend another model round discovering the same pagination
+    contract.  Apply the bound to every workspace-contained ``read_file``;
+    explicit read scope is still enforced separately by its own guard.
+    """
+
+    del goal, read_only  # retained in the public signature for compatibility
+    if not workspace_path or not actions:
         return actions
     try:
         root = Path(workspace_path).expanduser().resolve()
@@ -176,22 +215,13 @@ def _bound_explicit_large_reads(
             continue
         name, args = parsed
         path = args.get("path") if isinstance(args, dict) else None
-        if (
-            name != "read_file"
-            or not isinstance(path, str)
-            or path.replace("\\", "/").lstrip("./") not in requested
-            or "offset" in args
-            or "limit" in args
-        ):
+        if name != "read_file" or not isinstance(path, str) or "offset" in args or "limit" in args:
             bounded.append(action)
             continue
         try:
             candidate = (root / path).resolve()
-            oversized = (
-                candidate.is_relative_to(root)
-                and candidate.is_file()
-                and candidate.stat().st_size > 100 * 1024
-            )
+            oversized = candidate.is_relative_to(root) and candidate.is_file()
+            oversized = oversized and _text_file_needs_range(candidate)
         except (OSError, RuntimeError):
             oversized = False
         if not oversized:

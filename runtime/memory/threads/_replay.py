@@ -93,6 +93,14 @@ def _apply_event(
             status=TurnStatus.IN_PROGRESS,
             startedAt=evt.ts,
             params=params,
+            objectiveId=(
+                evt.payload.get("objectiveId")
+                if isinstance(evt.payload.get("objectiveId"), str)
+                else evt.turn_id
+            ),
+            taskId=(
+                evt.payload.get("taskId") if isinstance(evt.payload.get("taskId"), str) else None
+            ),
         )
         turns.append(turn)
         by_id[turn.id] = turn
@@ -101,13 +109,18 @@ def _apply_event(
         turn = by_id.get(evt.turn_id or "")
         if turn:
             # evt.payload["status"] is a string from JSON ("completed", "failed").
-            # Convert to TurnStatus enum properly to avoid Pydantic serializer
-            # warnings. Default to COMPLETED if missing/malformed.
-            status_str = str(evt.payload.get("status", "completed")).upper()
+            # A missing or future status is not evidence of success.  Keep the
+            # replay fail-closed so schema drift cannot manufacture completed
+            # tasks after refresh.
+            status_str = str(evt.payload.get("status", "failed")).upper()
             try:
                 turn.status = TurnStatus[status_str]
             except KeyError:
-                turn.status = TurnStatus.COMPLETED
+                turn.status = TurnStatus.FAILED
+                turn.error = {
+                    "message": f"unknown persisted turn status: {status_str.lower()}",
+                    "code": "unknown_turn_status",
+                }
             turn.completed_at = evt.ts
             turn.error = evt.payload.get("error")
         return
@@ -236,6 +249,14 @@ def _order_replayed_timeline(turn: Turn) -> None:
 
 
 def _apply_turn_update(turn: Turn, payload: dict[str, Any]) -> None:
+    if isinstance(payload.get("objectiveId"), str):
+        turn.objective_id = payload["objectiveId"]
+    if isinstance(payload.get("taskId"), str):
+        turn.task_id = payload["taskId"]
+    if isinstance(payload.get("checkpointId"), int):
+        turn.checkpoint_id = payload["checkpointId"]
+    if isinstance(payload.get("outcomeReason"), str):
+        turn.outcome_reason = payload["outcomeReason"]
     grounding_raw = payload.get("grounding")
     if isinstance(grounding_raw, list):
         grounding: list[GroundingSource] = []

@@ -226,7 +226,9 @@ def _register_local_partners(
                         id=str(spec["id"]),
                         agent_id=agent_id,
                         status=str(readiness.get("readiness_status") or "not_ready"),
-                        message=str(readiness.get("readiness_message") or "local partner is not ready"),
+                        message=str(
+                            readiness.get("readiness_message") or "local partner is not ready"
+                        ),
                     )
                 )
                 continue

@@ -45,6 +45,7 @@ binding the tests monkeypatch stays the one the factory resolves):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -503,66 +504,73 @@ def create_meta_router(
             except ValueError as exc:
                 raise HTTPException(400, str(exc)) from exc
 
-        try:
-            import httpx as _httpx
-        except ImportError as e:
-            raise HTTPException(500, "httpx required for skill install") from e
-
-        # follow_redirects=False on the transport; safe_httpx_get
-        # re-validates the next hop through check_url if we ever
-        # enable follow_redirects. We keep it off so the network
-        # topology of an outbound skill install stays one hop, one
-        # check.
-        try:
-            r = safe_httpx_get(url, timeout=30.0, follow_redirects=False)
-            r.raise_for_status()
-        except ValueError as exc:
-            raise HTTPException(400, f"url rejected: {exc}") from exc
-        except (_httpx.HTTPError, ConnectionError, TimeoutError) as exc:
-            raise HTTPException(502, f"download failed: {exc}") from exc
-        if len(r.content) > 50 * 1024 * 1024:
-            raise HTTPException(413, "archive too large (>50MB)")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp = Path(tmpdir)
-            archive = tmp / "skill.zip"
-            archive.write_bytes(r.content)
-            extract_dir = tmp / "extracted"
-            extract_dir.mkdir(parents=True, exist_ok=True)
-            # Use the hardened extractor (zip-slip + symlink-component +
-            # size caps) instead of ``shutil.unpack_archive`` which has
-            # none of those defenses.
+        # The download + extract + install chain is all blocking
+        # (sync httpx, zip extraction, directory copy). Offload it to a
+        # worker thread so the event loop isn't frozen for the ~30s
+        # network timeout. HTTPException propagates through to_thread.
+        def _do_install_blocking() -> dict[str, Any]:
             try:
-                from runtime.execution.suckers.hub.installer import (
-                    ArchiveSafetyError,
-                    safe_extract_zip,
-                )
+                import httpx as _httpx
+            except ImportError as e:
+                raise HTTPException(500, "httpx required for skill install") from e
 
-                safe_extract_zip(r.content, extract_dir)
-            except ArchiveSafetyError as exc:
-                raise HTTPException(400, f"unsafe archive: {exc}") from exc
-            except (OSError, ValueError) as exc:
-                raise HTTPException(400, f"unpack failed: {exc}") from exc
-
-            skill_dirs = list(extract_dir.rglob("SKILL.md"))
-            if not skill_dirs:
-                raise HTTPException(400, "no SKILL.md found in archive")
-            skill_root = skill_dirs[0].parent
-            skill_name = name_override or skill_root.name
+            # follow_redirects=False on the transport; safe_httpx_get
+            # re-validates the next hop through check_url if we ever
+            # enable follow_redirects. We keep it off so the network
+            # topology of an outbound skill install stays one hop, one
+            # check.
             try:
-                target = _install_public_skill_dir(skill_root, skill_name)
-                skill_name = target.name
-            except FileExistsError as exc:
-                raise HTTPException(409, str(exc)) from exc
-            except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
-                raise HTTPException(400, str(exc)) from exc
-            except OSError as exc:
-                raise HTTPException(
-                    500,
-                    f"skill install failed: {type(exc).__name__}: {exc}",
-                ) from exc
+                r = safe_httpx_get(url, timeout=30.0, follow_redirects=False)
+                r.raise_for_status()
+            except ValueError as exc:
+                raise HTTPException(400, f"url rejected: {exc}") from exc
+            except (_httpx.HTTPError, ConnectionError, TimeoutError) as exc:
+                raise HTTPException(502, f"download failed: {exc}") from exc
+            if len(r.content) > 50 * 1024 * 1024:
+                raise HTTPException(413, "archive too large (>50MB)")
 
-        return {"ok": True, "name": skill_name, "path": str(target)}
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp = Path(tmpdir)
+                archive = tmp / "skill.zip"
+                archive.write_bytes(r.content)
+                extract_dir = tmp / "extracted"
+                extract_dir.mkdir(parents=True, exist_ok=True)
+                # Use the hardened extractor (zip-slip + symlink-component +
+                # size caps) instead of ``shutil.unpack_archive`` which has
+                # none of those defenses.
+                try:
+                    from runtime.execution.suckers.hub.installer import (
+                        ArchiveSafetyError,
+                        safe_extract_zip,
+                    )
+
+                    safe_extract_zip(r.content, extract_dir)
+                except ArchiveSafetyError as exc:
+                    raise HTTPException(400, f"unsafe archive: {exc}") from exc
+                except (OSError, ValueError) as exc:
+                    raise HTTPException(400, f"unpack failed: {exc}") from exc
+
+                skill_dirs = list(extract_dir.rglob("SKILL.md"))
+                if not skill_dirs:
+                    raise HTTPException(400, "no SKILL.md found in archive")
+                skill_root = skill_dirs[0].parent
+                skill_name = name_override or skill_root.name
+                try:
+                    target = _install_public_skill_dir(skill_root, skill_name)
+                    skill_name = target.name
+                except FileExistsError as exc:
+                    raise HTTPException(409, str(exc)) from exc
+                except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
+                    raise HTTPException(400, str(exc)) from exc
+                except OSError as exc:
+                    raise HTTPException(
+                        500,
+                        f"skill install failed: {type(exc).__name__}: {exc}",
+                    ) from exc
+
+            return {"ok": True, "name": skill_name, "path": str(target)}
+
+        return await asyncio.to_thread(_do_install_blocking)
 
     @router.delete("/api/skills/{skill_name}/uninstall")
     def api_uninstall_skill(request: Request, skill_name: str) -> dict[str, Any]:

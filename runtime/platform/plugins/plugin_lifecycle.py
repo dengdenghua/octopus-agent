@@ -78,7 +78,9 @@ def install_local_plugin(
             )
             smoke = candidate.get("smoke") if isinstance(candidate.get("smoke"), dict) else {}
             if smoke.get("ok") is not True:
-                raise ValueError("plugin smoke gate failed: " + "; ".join(smoke.get("issues") or []))
+                raise ValueError(
+                    "plugin smoke gate failed: " + "; ".join(smoke.get("issues") or [])
+                )
             provenance = (
                 smoke.get("content_provenance")
                 if isinstance(smoke.get("content_provenance"), dict)
@@ -170,7 +172,9 @@ def rollback_plugin_transaction(
             try:
                 backup.relative_to(backup_root)
             except ValueError:
-                raise ValueError("plugin lifecycle history contains an unsafe backup path") from None
+                raise ValueError(
+                    "plugin lifecycle history contains an unsafe backup path"
+                ) from None
         retained = root / ".lifecycle" / "replaced" / uuid.uuid4().hex / plugin_id
         if destination.exists():
             retained.parent.mkdir(parents=True, exist_ok=True)

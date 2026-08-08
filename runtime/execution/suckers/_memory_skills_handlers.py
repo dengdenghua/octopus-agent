@@ -401,6 +401,13 @@ def register_memory_skills(registry: SkillRegistry) -> int:
         )
     )
 
+    # ── count of the always-registered skills above ───────
+    # remember / recall / note_user / diary_write /
+    # update_soul / list_soul_history / revert_soul /
+    # recall_scores / analyze_soul_impact /
+    # auto_regression_check / deep_reflect / deep_evolve
+    total = 12
+
     # KG query · on-demand knowledge graph lookup
     try:
         from runtime.execution.suckers.kg_skill import register_kg_skill
@@ -409,12 +416,17 @@ def register_memory_skills(registry: SkillRegistry) -> int:
     except Exception:  # noqa: BLE001
         pass  # KG module optional
 
-    # remember / recall / note_user / diary_write /
-    # update_soul / list_soul_history / revert_soul /
-    # recall_scores / analyze_soul_impact /
-    # auto_regression_check /
-    # deep_reflect / deep_evolve (+ optional kg_query)
-    return 12
+    # Cross-thread history · lets the agent read PAST conversations.
+    # `recall` reads saved MEMORY.md facts; these read real transcripts,
+    # which is the only way around per-thread context isolation.
+    try:
+        from runtime.execution.suckers.history_skill import register_history_skill
+
+        total += register_history_skill(registry)
+    except Exception:  # noqa: BLE001
+        pass  # thread store optional (pure in-memory / test stacks)
+
+    return total
 
 
 __all__ = ["register_memory_skills"]

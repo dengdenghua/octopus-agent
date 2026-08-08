@@ -265,9 +265,9 @@ def create_uploads_router(
     def _auth(request: Request) -> str | None:
         if require_auth and identity_store is None:
             raise HTTPException(401, "auth required")
-        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+        from runtime.safety.auth.principal import resolve_principal
 
-        return _resolve_actor(
+        principal = resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -275,6 +275,13 @@ def create_uploads_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        if principal is not None:
+            request.state.upload_principal = principal
+        return principal.actor_id if principal is not None else None
+
+    def _tenant(request: Request) -> str | None:
+        principal = getattr(getattr(request, "state", None), "upload_principal", None)
+        return getattr(principal, "tenant_id", None)
 
     def _require_thread_access(
         request: Request,
@@ -283,12 +290,17 @@ def create_uploads_router(
         allow_create: bool = False,
     ) -> str | None:
         actor = _auth(request)
+        tenant = _tenant(request)
         if thread_store is None or not hasattr(thread_store, "get"):
             return actor
         thread = thread_store.get(thread_id)
         if thread is None:
             if allow_create and hasattr(thread_store, "ensure_thread"):
-                metadata = {"owner_actor_id": actor} if actor is not None else None
+                metadata = (
+                    {"owner_actor_id": actor, "tenant_id": tenant or ""}
+                    if actor is not None
+                    else None
+                )
                 thread_store.ensure_thread(thread_id, metadata=metadata)
                 return actor
             if actor is not None:
@@ -296,8 +308,17 @@ def create_uploads_router(
             return actor
         metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else {}
         owner = metadata.get("owner_actor_id") or metadata.get("actor_id")
-        if actor is not None and owner and owner != actor:
-            raise HTTPException(404, f"thread not found: {thread_id}")
+        if actor is not None:
+            # Legacy threads without an owner cannot be safely attributed to
+            # a tenant.  Do not let the first authenticated caller claim or
+            # read them; they need an explicit migration/admin path.
+            stored_tenant = str(metadata.get("tenant_id") or "").strip()
+            if tenant and not tenant.startswith("legacy:") and stored_tenant != tenant:
+                raise HTTPException(404, f"thread not found: {thread_id}")
+            if tenant and stored_tenant and stored_tenant != tenant:
+                raise HTTPException(404, f"thread not found: {thread_id}")
+            if not owner or owner != actor:
+                raise HTTPException(404, f"thread not found: {thread_id}")
         return actor
 
     @router.post(
@@ -322,7 +343,7 @@ def create_uploads_router(
             safe_name = _safe_upload_filename(upload.filename)
             target = upload_dir / safe_name
             data = await _read_upload_limited(upload)
-            _write_upload_bytes(target, data)
+            await asyncio.to_thread(_write_upload_bytes, target, data)
             ext = target.suffix.lstrip(".") or None
             # OOXML/PDF parsing is CPU/file-format work. Keep it off FastAPI's
             # event loop so one large deck does not stall realtime traffic.

@@ -178,8 +178,18 @@ def register_gepa_runs(_reflex_admin: Any, *, stack: Any) -> None:
         _reflex_admin,
         [
             ("GET", "/api/evolution/gepa/runs", "/api/evolution/forge/runs", _gepa_runs),
-            ("GET", "/api/evolution/gepa/runs.csv", "/api/evolution/forge/runs.csv", _gepa_runs_csv),
-            ("GET", "/api/evolution/gepa/addendums", "/api/evolution/forge/addendums", _gepa_addendums),
+            (
+                "GET",
+                "/api/evolution/gepa/runs.csv",
+                "/api/evolution/forge/runs.csv",
+                _gepa_runs_csv,
+            ),
+            (
+                "GET",
+                "/api/evolution/gepa/addendums",
+                "/api/evolution/forge/addendums",
+                _gepa_addendums,
+            ),
             (
                 "GET",
                 "/api/evolution/gepa/addendums.csv",

@@ -98,12 +98,15 @@ def _make_file_op(
 
 # ── list_rewind_points ───────────────────────────────────────
 
+
 def test_list_rewind_points_filters_by_task() -> None:
-    journal = _FakeJournal([
-        _make_checkpoint("task-a", "2024-01-01T00:00:00Z", 1),
-        _make_checkpoint("task-b", "2024-01-01T00:01:00Z", 1),
-        _make_checkpoint("task-a", "2024-01-01T00:02:00Z", 2),
-    ])
+    journal = _FakeJournal(
+        [
+            _make_checkpoint("task-a", "2024-01-01T00:00:00Z", 1),
+            _make_checkpoint("task-b", "2024-01-01T00:01:00Z", 1),
+            _make_checkpoint("task-a", "2024-01-01T00:02:00Z", 2),
+        ]
+    )
     points = list_rewind_points(journal, "task-a")
     assert [p.iteration for p in points] == [1, 2]
     assert all(p.task_id == "task-a" for p in points)
@@ -115,17 +118,22 @@ def test_list_rewind_points_empty_for_unknown_task() -> None:
 
 
 def test_list_rewind_points_extracts_working_set_paths() -> None:
-    journal = _FakeJournal([
-        _make_checkpoint(
-            "task-a", "t", 1,
-            working_set=[{"path": "a.py"}, {"path": "b.py"}],
-        ),
-    ])
+    journal = _FakeJournal(
+        [
+            _make_checkpoint(
+                "task-a",
+                "t",
+                1,
+                working_set=[{"path": "a.py"}, {"path": "b.py"}],
+            ),
+        ]
+    )
     points = list_rewind_points(journal, "task-a")
     assert points[0].working_set_paths == ("a.py", "b.py")
 
 
 # ── rewind_to_checkpoint ─────────────────────────────────────
+
 
 def test_rewind_raises_when_iteration_not_found(tmp_path: Path) -> None:
     journal = _FakeJournal([_make_checkpoint("task-a", "t", 1)])
@@ -140,18 +148,24 @@ def test_rewind_dry_run_does_not_modify_files(tmp_path: Path) -> None:
     target_file = tmp_path / "out.txt"
     target_file.write_text("v2")
 
-    journal = _FakeJournal([
-        _make_checkpoint("task-a", "t1", 1, working_set=[{"path": "out.txt"}]),
-        _make_file_op(
-            "task-a", "t2", "out.txt",
-            content_before="v1",
-            content_after="v2",
-        ),
-        _make_checkpoint("task-a", "t3", 2),
-    ])
+    journal = _FakeJournal(
+        [
+            _make_checkpoint("task-a", "t1", 1, working_set=[{"path": "out.txt"}]),
+            _make_file_op(
+                "task-a",
+                "t2",
+                "out.txt",
+                content_before="v1",
+                content_after="v2",
+            ),
+            _make_checkpoint("task-a", "t3", 2),
+        ]
+    )
 
     result = rewind_to_checkpoint(
-        journal, "task-a", 1,
+        journal,
+        "task-a",
+        1,
         project_root=str(tmp_path),
         dry_run=True,
     )
@@ -167,18 +181,24 @@ def test_rewind_restores_previous_file_state(tmp_path: Path) -> None:
     v1, v2 = "v1", "v2"
     target_file.write_text(v2)  # current state matches the post-write hash
 
-    journal = _FakeJournal([
-        _make_checkpoint("task-a", "t1", 1, working_set=[{"path": "out.txt"}]),
-        _make_file_op(
-            "task-a", "t2", "out.txt",
-            content_before=v1,
-            content_after=v2,
-        ),
-        _make_checkpoint("task-a", "t3", 2),
-    ])
+    journal = _FakeJournal(
+        [
+            _make_checkpoint("task-a", "t1", 1, working_set=[{"path": "out.txt"}]),
+            _make_file_op(
+                "task-a",
+                "t2",
+                "out.txt",
+                content_before=v1,
+                content_after=v2,
+            ),
+            _make_checkpoint("task-a", "t3", 2),
+        ]
+    )
 
     result = rewind_to_checkpoint(
-        journal, "task-a", 1,
+        journal,
+        "task-a",
+        1,
         project_root=str(tmp_path),
         dry_run=False,
     )
@@ -195,18 +215,24 @@ def test_rewind_skips_file_with_hash_mismatch(tmp_path: Path) -> None:
     target_file = tmp_path / "out.txt"
     target_file.write_text("independent-edit")  # neither v1 nor v2
 
-    journal = _FakeJournal([
-        _make_checkpoint("task-a", "t1", 1),
-        _make_file_op(
-            "task-a", "t2", "out.txt",
-            content_before="v1",
-            content_after="v2",
-        ),
-        _make_checkpoint("task-a", "t3", 2),
-    ])
+    journal = _FakeJournal(
+        [
+            _make_checkpoint("task-a", "t1", 1),
+            _make_file_op(
+                "task-a",
+                "t2",
+                "out.txt",
+                content_before="v1",
+                content_after="v2",
+            ),
+            _make_checkpoint("task-a", "t3", 2),
+        ]
+    )
 
     result = rewind_to_checkpoint(
-        journal, "task-a", 1,
+        journal,
+        "task-a",
+        1,
         project_root=str(tmp_path),
         dry_run=False,
     )
@@ -222,26 +248,34 @@ def test_rewind_only_applies_events_after_target_checkpoint(tmp_path: Path) -> N
     a_path.write_text("a-after")
     b_path.write_text("b-after")
 
-    journal = _FakeJournal([
-        # iter 1 checkpoint at t1
-        _make_checkpoint("task-a", "t1", 1),
-        # file_op AT t1 (should be considered "before or equal" → skipped)
-        _make_file_op(
-            "task-a", "t1", "a.txt",
-            content_before="a-before",
-            content_after="a-after",
-        ),
-        # file_op AFTER t1 — this should be rolled back
-        _make_file_op(
-            "task-a", "t2", "b.txt",
-            content_before="b-before",
-            content_after="b-after",
-        ),
-        _make_checkpoint("task-a", "t3", 2),
-    ])
+    journal = _FakeJournal(
+        [
+            # iter 1 checkpoint at t1
+            _make_checkpoint("task-a", "t1", 1),
+            # file_op AT t1 (should be considered "before or equal" → skipped)
+            _make_file_op(
+                "task-a",
+                "t1",
+                "a.txt",
+                content_before="a-before",
+                content_after="a-after",
+            ),
+            # file_op AFTER t1 — this should be rolled back
+            _make_file_op(
+                "task-a",
+                "t2",
+                "b.txt",
+                content_before="b-before",
+                content_after="b-after",
+            ),
+            _make_checkpoint("task-a", "t3", 2),
+        ]
+    )
 
     result = rewind_to_checkpoint(
-        journal, "task-a", 1,
+        journal,
+        "task-a",
+        1,
         project_root=str(tmp_path),
         dry_run=False,
     )
@@ -253,31 +287,35 @@ def test_rewind_only_applies_events_after_target_checkpoint(tmp_path: Path) -> N
 
 def test_rewind_collects_non_reversible_warnings(tmp_path: Path) -> None:
     """Shell / deploy / push actions between checkpoints surface as warnings."""
-    journal = _FakeJournal([
-        _make_checkpoint("task-a", "t1", 1),
-        # A non-reversible shell step after t1 (sucker_id match).
-        _FakeEvent(
-            event_id="step-1",
-            event_type="step",
-            task_id="task-a",
-            ts="t2",
-            sucker_id="exec_shell",
-            action="rm -rf /tmp/scratch",
-        ),
-        # A potentially destructive action by command text alone.
-        _FakeEvent(
-            event_id="step-2",
-            event_type="step",
-            task_id="task-a",
-            ts="t3",
-            sucker_id="",
-            action="git push --force origin main",
-        ),
-        _make_checkpoint("task-a", "t4", 2),
-    ])
+    journal = _FakeJournal(
+        [
+            _make_checkpoint("task-a", "t1", 1),
+            # A non-reversible shell step after t1 (sucker_id match).
+            _FakeEvent(
+                event_id="step-1",
+                event_type="step",
+                task_id="task-a",
+                ts="t2",
+                sucker_id="exec_shell",
+                action="rm -rf /tmp/scratch",
+            ),
+            # A potentially destructive action by command text alone.
+            _FakeEvent(
+                event_id="step-2",
+                event_type="step",
+                task_id="task-a",
+                ts="t3",
+                sucker_id="",
+                action="git push --force origin main",
+            ),
+            _make_checkpoint("task-a", "t4", 2),
+        ]
+    )
 
     result = rewind_to_checkpoint(
-        journal, "task-a", 1,
+        journal,
+        "task-a",
+        1,
         project_root=str(tmp_path),
         dry_run=True,
     )
@@ -286,11 +324,15 @@ def test_rewind_collects_non_reversible_warnings(tmp_path: Path) -> None:
 
 
 def test_rewind_result_to_dict_round_trip(tmp_path: Path) -> None:
-    journal = _FakeJournal([
-        _make_checkpoint("task-a", "t1", 1, working_set=[{"path": "x.py"}]),
-    ])
+    journal = _FakeJournal(
+        [
+            _make_checkpoint("task-a", "t1", 1, working_set=[{"path": "x.py"}]),
+        ]
+    )
     result = rewind_to_checkpoint(
-        journal, "task-a", 1,
+        journal,
+        "task-a",
+        1,
         project_root=str(tmp_path),
         dry_run=True,
     )

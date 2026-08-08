@@ -26,6 +26,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -267,6 +268,8 @@ class TeamRunner:
                     context or {},
                     result,
                 )
+            elif topology.protocol == CoordinationProtocol.PARALLEL:
+                self._run_parallel(topology, task, context or {}, result)
             else:  # pragma: no cover - guard for future protocols
                 raise ValueError(f"unknown protocol: {topology.protocol}")
             # Mark success when no role recorded an error and we have output.
@@ -376,6 +379,85 @@ class TeamRunner:
         if last_gen is not None:
             result.final_output = last_gen.output
 
+    # ── Parallel protocol ────────────────────────────────────
+
+    def _run_parallel(
+        self,
+        topology: TeamTopology,
+        task: str,
+        context: dict[str, Any],
+        result: TeamRunResult,
+    ) -> None:
+        """Run roles in canonical order, fanning out multi-replica roles.
+
+        Roles with ``parallel_replicas > 1`` (e.g. a researcher pool) are
+        launched concurrently — one sub-agent per replica — each receiving
+        the same prior context plus its own ``replica_index``/``replica_count``.
+        Single-replica roles (planner, critic, synthesizer) run once and
+        their output feeds the next role, mirroring ``_run_sequential``.
+
+        A failing replica never aborts the pipeline: its ``RoleOutput`` keeps
+        the error for observability, its partial output (if any) still feeds
+        the synthesizer, and the remaining replicas keep running.
+        """
+        prior_outputs: list[RoleOutput] = []
+        for role in _SEQUENTIAL_ORDER:
+            spec = topology.agents.get(role)
+            if spec is None:
+                continue
+            replicas = spec.parallel_replicas or 1
+            if replicas <= 1:
+                prompt = self._compose_prompt(role, task, prior_outputs)
+                role_out = self._invoke_role(role, spec, prompt, context, topology)
+                result.role_outputs.append(role_out)
+                prior_outputs.append(role_out)
+                if role_out.error and role != Role.CRITIC:
+                    # A critic lane is advisory; anything else is a hard
+                    # failure that would poison downstream convergence.
+                    return
+                continue
+
+            base_prompt = self._compose_prompt(role, task, prior_outputs)
+            self._emit(
+                {
+                    "type": "team_parallel_start",
+                    "topology": topology.name,
+                    "role": str(role),
+                    "agent_id": spec.agent_id,
+                    "replicas": replicas,
+                }
+            )
+            with ThreadPoolExecutor(
+                max_workers=replicas,
+                thread_name_prefix=f"team-par-{role}",
+            ) as pool:
+                futures = [
+                    pool.submit(
+                        self._invoke_role,
+                        role,
+                        spec,
+                        base_prompt,
+                        context,
+                        topology,
+                        replica_index=index + 1,
+                        replica_count=replicas,
+                    )
+                    for index in range(replicas)
+                ]
+                for future in futures:
+                    role_out = future.result()
+                    result.role_outputs.append(role_out)
+                    prior_outputs.append(role_out)
+        self._emit(
+            {
+                "type": "team_parallel_end",
+                "topology": topology.name,
+            }
+        )
+        if prior_outputs:
+            # Final output = last successful role (the synthesizer).
+            result.final_output = prior_outputs[-1].output
+
     # ── Helpers ──────────────────────────────────────────────
 
     def _invoke_role(
@@ -385,6 +467,8 @@ class TeamRunner:
         prompt: str,
         context: dict[str, Any],
         topology: TeamTopology,
+        replica_index: int | None = None,
+        replica_count: int | None = None,
     ) -> RoleOutput:
         start = time.monotonic()
         merged_ctx = {
@@ -392,8 +476,15 @@ class TeamRunner:
             "team_topology": topology.name,
             "team_role": str(role),
         }
+        if replica_index is not None:
+            merged_ctx["team_replica_index"] = replica_index
+            merged_ctx["team_replica_count"] = replica_count or 1
         if spec.system_addendum:
-            merged_ctx["system_addendum"] = spec.system_addendum
+            merged_ctx["system_addendum"] = _render_replica_addendum(
+                spec.system_addendum,
+                replica_index=replica_index,
+                replica_count=replica_count,
+            )
         if spec.model:
             merged_ctx["model"] = spec.model
         if spec.temperature is not None:
@@ -634,6 +725,28 @@ class TeamRunner:
             f"Task:\n{task}\n\n"
             f"Candidate answer:\n{generator_output}"
         )
+
+
+def _render_replica_addendum(
+    addendum: str,
+    *,
+    replica_index: int | None,
+    replica_count: int | None,
+) -> str:
+    """Fill ``{replica_index}`` / ``{replica_count}`` placeholders in a
+    role's system addendum.
+
+    Used by the ``parallel`` protocol so a multi-replica role's prompt can
+    tell each concurrent copy which slice of the work it owns (e.g. a
+    researcher pool of 3, where replica 2 researches the 2nd sub-problem).
+    Only the named placeholders are substituted — any other braces in the
+    addendum are left untouched (``.format`` would reject them).
+    """
+    if replica_index is None:
+        return addendum
+    return addendum.replace("{replica_index}", str(replica_index)).replace(
+        "{replica_count}", str(replica_count or 1)
+    )
 
 
 __all__ = [

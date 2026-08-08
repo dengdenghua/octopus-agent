@@ -145,6 +145,22 @@ class PluginHub:
         3. Instantiate, build ``ModuleContext``, call ``on_load()``
         """
         with self._lock_internal:
+            # PluginHub imports arbitrary third-party Python into the API
+            # process and gives it SkillRegistry, ChannelManager, FastAPI and
+            # EventBus handles.  There is no worker boundary today, so a
+            # shared/commercial deployment must fail closed instead of
+            # treating operator-only lifecycle routes as process isolation.
+            from runtime.safety.sandboxing.sandbox import commercial_execution_mode
+
+            if commercial_execution_mode():
+                _LOG.error(
+                    "Plugin %s rejected: in-process plugin loading is disabled "
+                    "in shared/commercial mode until an isolated worker runtime "
+                    "is configured",
+                    name,
+                )
+                return None
+
             if name in self._plugins:
                 return self._plugins[name]
 
@@ -323,6 +339,14 @@ class PluginHub:
 
     def start(self, name: str) -> bool:
         """Start a loaded plugin (calls on_start)."""
+        from runtime.safety.sandboxing.sandbox import commercial_execution_mode
+
+        if commercial_execution_mode():
+            _LOG.error(
+                "Plugin %s rejected: in-process plugin start is disabled in shared/commercial mode",
+                name,
+            )
+            return False
         instance = self._plugins.get(name)
         ctx = self._contexts.get(name)
         if instance is None or ctx is None:
@@ -382,7 +406,7 @@ class PluginHub:
         if self._bundled_dir is not None:
             try:
                 Path(ctx.plugin_dir).relative_to(self._bundled_dir)
-            except ValueError:
+            except ValueError:  # noqa: BLE001 — expected when plugin is outside bundled directory
                 pass
             else:
                 _LOG.warning("Bundled plugin config is read-only: %s", name)

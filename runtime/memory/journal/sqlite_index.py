@@ -34,6 +34,8 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     ts           TEXT,
+    tenant_id    TEXT,
+    owner_actor_id TEXT,
     event_type   TEXT,
     session_id   TEXT,
     agent_id     TEXT,
@@ -46,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
 CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent_id);
 CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id);
+CREATE INDEX IF NOT EXISTS idx_events_scope ON events(tenant_id, owner_actor_id);
 
 CREATE TABLE IF NOT EXISTS state (
     jsonl_path        TEXT PRIMARY KEY,
@@ -110,6 +113,16 @@ class JournalIndex:
         self._conn.execute("PRAGMA synchronous=NORMAL;")
         # Lazy schema creation — idempotent thanks to IF NOT EXISTS.
         self._conn.executescript(_SCHEMA)
+        columns = {
+            str(row[1]) for row in self._conn.execute("PRAGMA table_info(events)").fetchall()
+        }
+        if "tenant_id" not in columns:
+            self._conn.execute("ALTER TABLE events ADD COLUMN tenant_id TEXT")
+        if "owner_actor_id" not in columns:
+            self._conn.execute("ALTER TABLE events ADD COLUMN owner_actor_id TEXT")
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_scope ON events(tenant_id, owner_actor_id)"
+        )
 
     # ── Indexing ─────────────────────────────────────────────
 
@@ -196,13 +209,17 @@ class JournalIndex:
                         session_id = data.get("session_id")
                     agent_id = data.get("agent_id")
                     task_id = data.get("task_id")
+                    tenant_id = data.get("tenant_id")
+                    owner_actor_id = data.get("owner_actor_id") or data.get("actor")
 
                     self._conn.execute(
-                        "INSERT INTO events(ts, event_type, session_id, "
+                        "INSERT INTO events(ts, tenant_id, owner_actor_id, event_type, session_id, "
                         "agent_id, task_id, payload) "
-                        "VALUES(?, ?, ?, ?, ?, ?)",
+                        "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             ts,
+                            str(tenant_id) if tenant_id is not None else None,
+                            str(owner_actor_id) if owner_actor_id is not None else None,
                             event_type,
                             str(session_id) if session_id is not None else None,
                             str(agent_id) if agent_id is not None else None,
@@ -249,6 +266,7 @@ class JournalIndex:
         session_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: Any = None,
     ) -> list[dict]:
         """Return matching event payloads, oldest-first.
 
@@ -272,6 +290,9 @@ class JournalIndex:
         if session_id is not None:
             clauses.append("session_id = ?")
             params.append(session_id)
+        if scope is not None and not getattr(scope, "allow_cross_tenant", False):
+            clauses.extend(["tenant_id = ?", "owner_actor_id = ?"])
+            params.extend([scope.tenant_id, scope.actor_id])
 
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         sql = "SELECT payload FROM events" + where + " ORDER BY id ASC LIMIT ? OFFSET ?"  # nosec B608 — WHERE built from ? placeholders; values parameterized
@@ -291,7 +312,7 @@ class JournalIndex:
                 continue
         return out
 
-    def stats(self) -> dict:
+    def stats(self, *, scope: Any = None) -> dict:
         """Return a small summary suitable for dashboards.
 
         Shape::
@@ -303,13 +324,31 @@ class JournalIndex:
             }
         """
         with self._lock:
-            total_row = self._conn.execute("SELECT COUNT(*) AS c FROM events").fetchone()
+            scoped = scope is not None and not getattr(scope, "allow_cross_tenant", False)
+            scope_params: tuple[Any, ...] = ()
+            if scoped:
+                scope_params = (scope.tenant_id, scope.actor_id)
+                total_sql = (
+                    "SELECT COUNT(*) AS c FROM events WHERE tenant_id = ? AND owner_actor_id = ?"
+                )
+                by_type_sql = (
+                    "SELECT event_type, COUNT(*) AS c FROM events "
+                    "WHERE tenant_id = ? AND owner_actor_id = ? AND "
+                    "event_type IS NOT NULL GROUP BY event_type"
+                )
+            else:
+                total_sql = "SELECT COUNT(*) AS c FROM events"
+                by_type_sql = (
+                    "SELECT event_type, COUNT(*) AS c FROM events "
+                    "WHERE event_type IS NOT NULL GROUP BY event_type"
+                )
+            total_row = self._conn.execute(total_sql, scope_params).fetchone()
             total = int(total_row["c"]) if total_row else 0
 
             by_type: dict[str, int] = {}
             for r in self._conn.execute(
-                "SELECT event_type, COUNT(*) AS c FROM events "
-                "WHERE event_type IS NOT NULL GROUP BY event_type"
+                by_type_sql,
+                scope_params,
             ).fetchall():
                 by_type[str(r["event_type"])] = int(r["c"])
 

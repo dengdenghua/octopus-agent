@@ -123,6 +123,7 @@ def _todo_write(
     #      entire payload as a string, so we parse it to see whether
     #      it carries a todo-shaped list.
     if not raw and extra:
+
         def _looks_like_todos(v: Any) -> bool:
             if isinstance(v, list) and v:
                 return True
@@ -185,7 +186,9 @@ def _todo_write(
         matching_previous_ids = previous_ids_by_content.get(content_key, [])
         item_id = (
             explicit_id
-            or (matching_previous_ids[occurrence] if occurrence < len(matching_previous_ids) else "")
+            or (
+                matching_previous_ids[occurrence] if occurrence < len(matching_previous_ids) else ""
+            )
             or _todo_item_id(content, occurrence)
         )
         status = t.get("status", "pending")
@@ -285,17 +288,14 @@ def _search_skills_for_registry(registry: SkillRegistry):
         # silently returns every skill, the model thinks the search
         # succeeded, and it can loop on the same wrong shape.
         if not query and extra:
-            misplaced = sorted(
-                k for k, v in extra.items()
-                if isinstance(v, str) and v.strip()
-            )
+            misplaced = sorted(k for k, v in extra.items() if isinstance(v, str) and v.strip())
             if misplaced:
                 return {
                     "ok": False,
                     "error": (
                         f"search_skills received a query under unrecognized "
                         f"key(s) {misplaced}, but 'query' is empty. "
-                        f"Re-issue as search_skills(query=\"...\")."
+                        f'Re-issue as search_skills(query="...").'
                     ),
                 }
         q = str(query or "").strip().lower()

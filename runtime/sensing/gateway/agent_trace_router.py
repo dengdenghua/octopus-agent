@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ._agent_trace_router_approvals import register_approvals_endpoints
 from ._agent_trace_router_promotion import register_promotion_endpoints
@@ -31,19 +31,37 @@ def create_agent_trace_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> APIRouter:
-    router = APIRouter(tags=["agent-trace"])
 
     def _auth(request: Request, *, force: bool = False) -> str | None:
-        from .openai_gateway_router import _resolve_actor
+        from runtime.safety.auth.principal import require_operator, resolve_principal
 
-        return _resolve_actor(
+        effective_require_auth = bool(require_auth or (force and identity_store is not None))
+        if effective_require_auth and identity_store is None:
+            raise HTTPException(401, "identity store required for agent-trace auth")
+
+        principal = resolve_principal(
             request,
             identity_store,
-            True if force and identity_store is not None else require_auth,
+            effective_require_auth,
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        if effective_require_auth:
+            require_operator(
+                request,
+                identity_store,
+                True,
+                jwt_secret=jwt_secret,
+                jwt_issuer=jwt_issuer,
+                jwt_audience=jwt_audience,
+            )
+        return principal.actor_id if principal is not None else None
+
+    def _auth_dep(request: Request) -> None:
+        _auth(request)
+
+    router = APIRouter(tags=["agent-trace"], dependencies=[Depends(_auth_dep)])
 
     deps = RouterDeps(
         store=store,

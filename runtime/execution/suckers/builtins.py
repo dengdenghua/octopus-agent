@@ -307,6 +307,9 @@ def _read_file_text(
         return {"error": "offset must be >= 0"}
     if limit is not None and limit < 0:
         return {"error": "limit must be >= 0"}
+    requested_limit = limit
+    if limit is not None:
+        limit = min(limit, MAX_READ_LINES_WITHOUT_RANGE)
     size = p.stat().st_size
 
     if offset or limit is not None:
@@ -326,7 +329,7 @@ def _read_file_text(
         except OSError as exc:
             return {"error": f"read_failed: {exc}", "size": size}
         truncated = bool(limit is not None and line_count > offset + limit)
-        return {
+        result = {
             "path": str(p.resolve()),
             "size": size,
             "truncated": truncated,
@@ -335,25 +338,37 @@ def _read_file_text(
             "limit": limit,
             "lines_read": len(collected),
         }
+        if requested_limit != limit:
+            result["requested_limit"] = requested_limit
+            result["limit_clamped"] = True
+        return result
 
-    if size > max_bytes:
-        try:
-            with p.open("r", encoding="utf-8") as f:
-                for line_idx, _line in enumerate(f, start=1):
-                    if line_idx > MAX_READ_LINES_WITHOUT_RANGE:
-                        return {
-                            "error": (
-                                "file has more than 2000 lines; call read_file "
-                                "again with offset and limit"
-                            ),
-                            "path": str(p.resolve()),
-                            "size": size,
+    try:
+        with p.open("r", encoding="utf-8") as f:
+            for line_idx, _line in enumerate(f, start=1):
+                if line_idx > MAX_READ_LINES_WITHOUT_RANGE:
+                    # Do not force a second model round merely to discover the
+                    # pagination contract. Return a useful, bounded first page
+                    # on both the ReAct and native tool paths.
+                    first_page = _read_file_text(
+                        p,
+                        max_bytes=max_bytes,
+                        offset=0,
+                        limit=400,
+                    )
+                    first_page.update(
+                        {
+                            "auto_bounded": True,
                             "line_limit": MAX_READ_LINES_WITHOUT_RANGE,
+                            "total_lines_at_least": line_idx,
+                            "pagination_hint": ("continue with offset=400 and an explicit limit"),
                         }
-        except UnicodeDecodeError:
-            return {"error": "non-utf8 content", "size": size}
-        except OSError:  # noqa: BLE001 — best-effort line-count probe; the byte-read path below surfaces real I/O errors
-            pass
+                    )
+                    return first_page
+    except UnicodeDecodeError:
+        return {"error": "non-utf8 content", "size": size}
+    except OSError:  # noqa: BLE001 — best-effort line-count probe; the byte-read path below surfaces real I/O errors
+        pass
 
     to_read = min(size, max_bytes)
     content = p.read_bytes()[:to_read]

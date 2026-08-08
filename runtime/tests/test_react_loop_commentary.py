@@ -18,6 +18,7 @@ from tests.test_react_loop import (
     _ScriptedRouter,
 )
 
+
 def test_missing_public_update_does_not_manufacture_commentary() -> None:
     """A missing checkpoint yields tool activity without canned assistant prose."""
     router = _ScriptedRouter(

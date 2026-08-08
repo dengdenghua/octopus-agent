@@ -9,6 +9,7 @@ level (``_call_agent_parallel`` / ``_call_agent_vote`` / ``_check_absolute_cap``
 monkeypatch is still observed at call time — the same pattern used by
 ``_delegation_skills_agent`` / ``_write_skills_background``.
 """
+
 from __future__ import annotations
 
 import contextlib

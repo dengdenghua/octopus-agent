@@ -175,7 +175,8 @@ async def _drive_reflection_fast_path(
             if emitter.is_turn_interrupted(turn.id):
                 if not cancel_source.is_cancelled:
                     cancel_source.cancel(reason="user interrupted turn")
-                turn.status = TurnStatus.INTERRUPTED
+                turn.status = TurnStatus.CANCELLED
+                turn.outcome_reason = "user_cancelled"
                 if not turn.interrupt_reason:
                     with contextlib.suppress(Exception):
                         reason = emitter.get_interrupt_reason(turn.id)

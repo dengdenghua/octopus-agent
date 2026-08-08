@@ -232,7 +232,10 @@ class TestMemoryRouterAuth:
         from runtime.safety.auth import Identity, IdentityStore
 
         store = IdentityStore()
-        store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+        store.add(
+            Identity(actor_id="alice", roles=("operator",)),
+            api_key_plaintext="sk-alice",
+        )
         app = FastAPI()
         app.include_router(
             create_memory_router(

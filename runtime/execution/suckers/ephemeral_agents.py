@@ -710,11 +710,7 @@ def _compose_system_prompt(
         )
     workspace_path = (context or {}).get("workspace_path")
     delivery_roles = {"generator", "implementer", "synthesizer"}
-    if (
-        role.id in delivery_roles
-        and isinstance(workspace_path, str)
-        and workspace_path.strip()
-    ):
+    if role.id in delivery_roles and isinstance(workspace_path, str) and workspace_path.strip():
         try:
             workspace_root = Path(workspace_path).expanduser().resolve()
             task_path = (workspace_root / "TASK.md").resolve()

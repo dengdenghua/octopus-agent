@@ -46,6 +46,7 @@ class CoordinationProtocol(StrEnum):
 
     SEQUENTIAL = "sequential"
     EVALUATOR_OPTIMIZER = "evaluator_optimizer"
+    PARALLEL = "parallel"
 
 
 @dataclass(frozen=True)
@@ -64,10 +65,18 @@ class AgentSpec:
     model: str | None = None
     temperature: float | None = None
     system_addendum: str | None = None
+    # Number of concurrent copies of this role to run under the
+    # ``parallel`` protocol. ``1`` means "run once, the default".
+    # A value > 1 fans the role out into that many parallel sub-agent
+    # invocations, each receiving the same prior context plus its own
+    # replica index (see ``team_runner._run_parallel``).
+    parallel_replicas: int = 1
 
     def __post_init__(self) -> None:
         if not self.agent_id:
             raise ValueError("AgentSpec.agent_id is required")
+        if self.parallel_replicas < 1:
+            raise ValueError("AgentSpec.parallel_replicas must be ≥ 1")
 
 
 @dataclass(frozen=True)
@@ -127,6 +136,15 @@ class TeamTopology:
             if Role.EVALUATOR not in self.agents:
                 raise ValueError(
                     "evaluator_optimizer protocol requires an evaluator",
+                )
+        elif self.protocol == CoordinationProtocol.PARALLEL:
+            if Role.PLANNER not in self.agents:
+                raise ValueError(
+                    "parallel protocol requires a planner",
+                )
+            if Role.SYNTHESIZER not in self.agents:
+                raise ValueError(
+                    "parallel protocol requires a synthesizer to converge",
                 )
         if not 0.0 <= self.quality_threshold <= 1.0:
             raise ValueError("quality_threshold must be in [0, 1]")

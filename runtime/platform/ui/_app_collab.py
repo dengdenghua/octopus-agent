@@ -57,6 +57,20 @@ def mount_collaboration(
         )
     )
 
+    # Same-origin Storage gateway.  Browsers use /api/storage/v1/* on the
+    # agent; the private 8767 service and its bearer token remain server-side.
+    from runtime.sensing.gateway.storage_proxy_router import create_storage_proxy_router
+
+    app.include_router(
+        create_storage_proxy_router(
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
+    )
+
     # CLI-team · detect installed coding CLIs (Claude/Codex/Trae/Qoder) + run them as a team
     # in isolated worktrees, diff-first review.
     from runtime.sensing.gateway.cli_team_router import create_cli_team_router

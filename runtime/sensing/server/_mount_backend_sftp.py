@@ -15,6 +15,8 @@ import posixpath
 from pathlib import Path
 from typing import Any
 
+from runtime.sensing.server._ssh_security import paramiko_disabled_algorithms
+
 from ._mount_backend_errors import BackendUnavailableError
 from ._mount_backend_types import DirEntry, FileStat, MountBackend, stat_is_dir
 
@@ -104,6 +106,7 @@ class SftpMountBackend(MountBackend):
             "timeout": self.connect_timeout,
             "allow_agent": False,
             "look_for_keys": False,
+            "disabled_algorithms": paramiko_disabled_algorithms(),
         }
         if self.user:
             connect_kwargs["username"] = self.user

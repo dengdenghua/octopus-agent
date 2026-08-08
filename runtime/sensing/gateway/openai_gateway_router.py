@@ -19,7 +19,9 @@ from ._openai_gateway_router_ratelimit import _PerActorRateLimiter
 from ._openai_gateway_router_run import _run_chat
 from ._openai_gateway_router_synthesize import (
     _maybe_reflex_chat,
-    synthesize_reply,
+)
+from ._openai_gateway_router_synthesize import (
+    synthesize_reply as synthesize_reply,
 )
 from .openai_gateway.context_manager import (
     _extract_goal,
@@ -258,6 +260,12 @@ def create_openai_router(
         messages: list[Any],
         actor: str | None,
     ) -> Any:
+        principal = getattr(getattr(request, "state", None), "principal", None)
+        tenant_id = getattr(principal, "tenant_id", None)
+        owner_actor_id = getattr(principal, "actor_id", None) or actor
+        from runtime.safety.auth.scope import scope_from_principal
+
+        memory_tenant_scope = scope_from_principal(principal)
         conversation_messages = _normalize_conversation_messages(messages)
         from runtime.memory.users.profile import (
             memories_from_messages,
@@ -296,7 +304,7 @@ def create_openai_router(
                 relevant_memory_texts,
             )
 
-            memory_config = read_config()
+            memory_config = read_config(memory_tenant_scope)
             if allow_memory_write and memory_config.get("auto_capture_enabled", True):
                 memory_scope = (
                     "project"
@@ -317,6 +325,7 @@ def create_openai_router(
                             scope=memory_scope,
                             agent_id=agent_name_for_memory or None,
                             project=project_for_memory or None,
+                            tenant_scope=memory_tenant_scope,
                         )
                         is not None
                     ):
@@ -327,6 +336,7 @@ def create_openai_router(
                     limit=8,
                     agent_id=agent_name_for_memory or None,
                     project=project_for_memory or None,
+                    scope=memory_tenant_scope,
                 )
         except (OSError, ValueError) as _e:
             _logger = logging.getLogger(__name__)
@@ -410,6 +420,8 @@ def create_openai_router(
                 with journal_context(
                     agent_id=_mix_agent_ctx,
                     conversation_id=conversation_id,
+                    tenant_id=tenant_id,
+                    owner_actor_id=owner_actor_id,
                 ):
                     mix_result = run_mix_chat(
                         stack,
@@ -474,6 +486,8 @@ def create_openai_router(
                     agent=selected_agent,
                     agent_id=agent_id_for_ctx,
                     conversation_id=conversation_id,
+                    tenant_id=tenant_id,
+                    owner_actor_id=owner_actor_id,
                     stream_mode=stream_mode,
                 ),
                 media_type="text/event-stream",
@@ -483,6 +497,8 @@ def create_openai_router(
             with journal_context(
                 agent_id=agent_id_for_ctx,
                 conversation_id=conversation_id,
+                tenant_id=tenant_id,
+                owner_actor_id=owner_actor_id,
             ):
                 response = _run_chat(
                     stack,
@@ -494,6 +510,7 @@ def create_openai_router(
                     agent=selected_agent,
                     force_deep=force_deep,
                     conversation_id=conversation_id,
+                    tenant_id=tenant_id,
                 )
         finally:
             _molili_actor_ctx.reset(_molili_token)

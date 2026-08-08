@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from runtime.core.cerebrum.react_types import ReActResult
 from runtime.execution.loops._controller_helpers import (
     _PRODUCT_LOOP_MODES,
@@ -14,7 +16,11 @@ from runtime.execution.loops.models import (
     VerifierResult,
 )
 from runtime.platform.process.session import Session, session_scope
-from runtime.safety.approval.cancellation import CancellationToken, scoped_cancellation
+from runtime.safety.approval.cancellation import (
+    CancellationSource,
+    CancellationToken,
+    scoped_cancellation,
+)
 
 
 class LoopControllerAttemptMixin:
@@ -77,34 +83,74 @@ class LoopControllerAttemptMixin:
             metadata["task_supervisor_holder_id"] = self.task_supervisor.holder_id
             metadata["task_supervisor_lease_ttl_seconds"] = self.task_supervisor.lease_ttl_seconds
             metadata["enforce_executor_approval"] = True
-        with (
-            session_scope(
-                Session(
-                    actor=run.owner_id,
-                    thread_id=thread_id,
-                    metadata=metadata,
-                )
-            ),
-            scoped_cancellation(cancellation_token or CancellationToken.none()),
-        ):
-            runner_kwargs = {
-                "stack": self.stack,
-                "intent": intent,
-                "agent": None,
-                "model": run.policy.model,
-                "max_iterations": run.policy.max_iterations,
-                "thread_id": thread_id,
-            }
-            if self.react_runner is None:
-                runner_kwargs.update(
-                    {
-                        "max_tokens_budget": run.policy.max_tokens_budget,
-                        "max_usd_budget": run.policy.max_usd_budget,
-                    }
-                )
-            return runner(
-                **runner_kwargs,
+        # One ReAct attempt can outlive the default supervisor lease TTL.
+        # Heartbeat from a separate daemon thread while the attempt is in
+        # flight; otherwise another worker can take over the same run and
+        # workspace even though this attempt is still executing.
+        attempt_source = CancellationSource()
+        parent_token = cancellation_token or CancellationToken.none()
+        unlink_parent = parent_token.on_cancelled(
+            lambda reason: attempt_source.cancel(reason=reason or "parent cancelled"),
+        )
+        heartbeat_stop = threading.Event()
+        heartbeat_interval = 0.0
+        if self.task_supervisor is not None:
+            heartbeat_interval = max(
+                0.1,
+                min(self.task_supervisor.lease_ttl_seconds / 3.0, 30.0),
             )
+
+        def _heartbeat_loop() -> None:
+            while heartbeat_interval > 0 and not heartbeat_stop.wait(heartbeat_interval):
+                if not self._supervisor_heartbeat(run.run_id):
+                    # The attempt is no longer authoritative. Cooperative
+                    # model/tool code must stop before the replacement worker
+                    # can touch the workspace.
+                    attempt_source.cancel(reason="task supervisor lease lost")
+                    return
+
+        heartbeat_thread: threading.Thread | None = None
+        if heartbeat_interval > 0:
+            heartbeat_thread = threading.Thread(
+                target=_heartbeat_loop,
+                name=f"loop-lease-heartbeat-{run.run_id[:12]}",
+                daemon=True,
+            )
+            heartbeat_thread.start()
+        try:
+            with (
+                session_scope(
+                    Session(
+                        actor=run.owner_id,
+                        thread_id=thread_id,
+                        metadata=metadata,
+                    )
+                ),
+                scoped_cancellation(attempt_source.token),
+            ):
+                runner_kwargs = {
+                    "stack": self.stack,
+                    "intent": intent,
+                    "agent": None,
+                    "model": run.policy.model,
+                    "max_iterations": run.policy.max_iterations,
+                    "thread_id": thread_id,
+                }
+                if self.react_runner is None:
+                    runner_kwargs.update(
+                        {
+                            "max_tokens_budget": run.policy.max_tokens_budget,
+                            "max_usd_budget": run.policy.max_usd_budget,
+                        }
+                    )
+                return runner(
+                    **runner_kwargs,
+                )
+        finally:
+            heartbeat_stop.set()
+            if heartbeat_thread is not None:
+                heartbeat_thread.join(timeout=max(1.0, heartbeat_interval + 0.5))
+            unlink_parent()
 
     def _check_for_cancellation(
         self,

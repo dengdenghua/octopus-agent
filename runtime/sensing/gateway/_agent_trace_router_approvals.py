@@ -123,9 +123,7 @@ def register_approvals_endpoints(router, deps: RouterDeps) -> None:
 
     @router.get("/api/agent-trace/checkpoints/{checkpoint_id}/resume-proposal")
     def api_agent_trace_resume_proposal(checkpoint_id: int) -> dict[str, Any]:
-        proposal = _get_store(store=deps.store, db_path=deps.db_path).resume_proposal(
-            checkpoint_id
-        )
+        proposal = _get_store(store=deps.store, db_path=deps.db_path).resume_proposal(checkpoint_id)
         if proposal is None:
             raise HTTPException(404, "checkpoint not found")
         return {"proposal": proposal}

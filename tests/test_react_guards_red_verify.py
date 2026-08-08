@@ -143,6 +143,4 @@ class TestRedVerificationGuard:
             _step(2, action=PYTEST, observation="3 failed, 10 passed"),
         ]
         help_final = "I'm blocked and need your input: which config key should win?"
-        assert (
-            _red_verification_observation_guard(steps, help_final, is_code_mode=True) is None
-        )
+        assert _red_verification_observation_guard(steps, help_final, is_code_mode=True) is None

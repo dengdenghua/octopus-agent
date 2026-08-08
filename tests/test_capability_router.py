@@ -88,6 +88,4 @@ def test_code_ui_regression_excludes_desktop_bridge_from_activation() -> None:
         "browser_extract",
         "browser_wait",
     )
-    assert not any(
-        name.startswith("live_browser_") for name in activation.priority_skills
-    )
+    assert not any(name.startswith("live_browser_") for name in activation.priority_skills)

@@ -89,6 +89,9 @@ CHECKS: tuple[AgentLoopCheck, ...] = (
             "runtime/sensing/gateway/realtime_turn_lifecycle.py",
             "tests/test_realtime_cerebrum.py",
             "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator/index.tsx",
+            "frontend/src/components/workspace/agent-workbench-panel.tsx",
+            "frontend/src/components/workspace/agent-workbench-snapshot.ts",
         ),
         required_terms=(
             "turn/plan/updated",

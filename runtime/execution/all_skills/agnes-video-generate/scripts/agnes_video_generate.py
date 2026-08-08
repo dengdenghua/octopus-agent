@@ -293,8 +293,11 @@ def poll_video(
         api_key = api_key or cfg.api_key
         base_url = (base_url or cfg.base_url).rstrip("/")
 
-    poll_url = f"{base_url}/contents/generations/tasks/{task_id}" if _is_volcano(base_url) \
+    poll_url = (
+        f"{base_url}/contents/generations/tasks/{task_id}"
+        if _is_volcano(base_url)
         else f"{base_url}/videos/{task_id}"
+    )
     headers = {"Authorization": f"Bearer {api_key}"}
     try:
         resp = requests.get(poll_url, headers=headers, timeout=30)

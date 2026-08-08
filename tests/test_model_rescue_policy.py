@@ -45,12 +45,18 @@ def test_custom_model_fallback_prefers_strongest_untried_tool_model(
         lambda: SimpleNamespace(custom_models_path=config_path),
     )
 
-    assert next_custom_model_fallback(
-        "agnes-2.0-flash",
-        {"agnes-2.0-flash"},
-    ) == "kimi-k2.7-code"
-    assert next_custom_model_fallback(
-        "agnes-2.0-flash",
-        {"agnes-2.0-flash", "kimi-k2.7-code"},
-        require_tool_use=False,
-    ) == "reasoning-pro"
+    assert (
+        next_custom_model_fallback(
+            "agnes-2.0-flash",
+            {"agnes-2.0-flash"},
+        )
+        == "kimi-k2.7-code"
+    )
+    assert (
+        next_custom_model_fallback(
+            "agnes-2.0-flash",
+            {"agnes-2.0-flash", "kimi-k2.7-code"},
+            require_tool_use=False,
+        )
+        == "reasoning-pro"
+    )

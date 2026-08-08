@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from runtime import __version__
 from runtime.platform.process.paths import app_paths, project_root
@@ -34,6 +34,30 @@ from ._health_helpers import (
     _project_version,
 )
 
+_PROCESS_STARTED_AT = datetime.now(UTC)
+
+
+def _lifecycle_generation() -> dict[str, Any]:
+    """Identify the loaded lifecycle build and detect stale dev processes."""
+
+    root = project_root(Path(__file__))
+    files = (
+        Path(__file__),
+        root / "runtime/protocol/items.py",
+        root / "runtime/sensing/gateway/realtime_turn_lifecycle.py",
+        root / "runtime/core/cerebrum/pause_control.py",
+    )
+    source_mtime_ns = max(
+        (path.stat().st_mtime_ns for path in files if path.exists()),
+        default=0,
+    )
+    started_ns = int(_PROCESS_STARTED_AT.timestamp() * 1_000_000_000)
+    return {
+        "processStartedAt": _PROCESS_STARTED_AT.isoformat(),
+        "sourceMtimeNs": source_mtime_ns,
+        "restartRequired": source_mtime_ns > started_ns,
+    }
+
 
 def create_health_router(
     *,
@@ -46,21 +70,64 @@ def create_health_router(
     frontend_host: str | None = None,
     frontend_port: int | None = None,
     frontend_proxy_target: str | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
     """Create ``/api/health`` and ``/api/status`` endpoints."""
     router = APIRouter(tags=["health"])
+
+    def _capability_auth(request: Request) -> None:
+        from runtime.safety.auth.principal import require_operator
+
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
 
     @router.get("/api/health")
     def api_health() -> dict[str, Any]:
         out: dict[str, Any] = {
             "status": "ok",
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "skills": len(state.registry),
             "journal_events": -1,
             "agents": 0,
             "channels": [],
             "groups": 0,
+            "lifecycle": _lifecycle_generation(),
         }
+        trace_store = getattr(state, "trace_store", None)
+        if trace_store is None:
+            trace_store_path = getattr(state, "trace_store_path", None)
+            if trace_store_path is not None:
+                try:
+                    from runtime.memory.diagnostics.trace_store import AgentTraceStore
+
+                    trace_store = AgentTraceStore(trace_store_path)
+                except Exception as exc:  # noqa: BLE001
+                    out["status"] = "degraded"
+                    out["lifecycle"]["traceStore"] = {
+                        "ready": False,
+                        "error": str(exc)[:240],
+                    }
+        if trace_store is not None and hasattr(trace_store, "schema_status"):
+            try:
+                out["lifecycle"]["traceStore"] = trace_store.schema_status()
+                if not out["lifecycle"]["traceStore"].get("ready", False):
+                    out["status"] = "degraded"
+            except Exception as exc:  # noqa: BLE001
+                out["status"] = "degraded"
+                out["lifecycle"]["traceStore"] = {
+                    "ready": False,
+                    "error": str(exc)[:240],
+                }
         try:
             out["journal_events"] = len(state.journal.read_all())
         except (OSError, ImportError, AttributeError):
@@ -138,7 +205,7 @@ def create_health_router(
             frontend_proxy_target=frontend_proxy_target,
         )
 
-    @router.post("/api/capabilities/enable")
+    @router.post("/api/capabilities/enable", dependencies=[Depends(_capability_auth)])
     def api_capabilities_enable(payload: dict[str, Any]) -> dict[str, Any]:
         """Hot-load a skill group that was excluded at startup.
 

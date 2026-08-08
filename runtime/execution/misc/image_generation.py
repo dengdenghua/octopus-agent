@@ -144,10 +144,7 @@ def _generate_with_agnes(
     # agnes-image-2.1-flash supports both text→image and image→image,
     # so we use the same model regardless of whether reference images are present.
     # AGNES_IMAGE_REFERENCE_MODEL remains as an escape hatch for explicit overrides.
-    model = (
-        os.getenv("AGNES_IMAGE_REFERENCE_MODEL", "").strip()
-        or agnes_config["model"]
-    )
+    model = os.getenv("AGNES_IMAGE_REFERENCE_MODEL", "").strip() or agnes_config["model"]
     size = os.getenv("AGNES_IMAGE_SIZE", "").strip() or "1024x1536"
     avatar_size = os.getenv("AGNES_AVATAR_IMAGE_SIZE", "").strip() or "512x512"
     timeout = int(os.getenv("OCTOPUS_IMAGE_GEN_TIMEOUT_SECONDS") or "180")

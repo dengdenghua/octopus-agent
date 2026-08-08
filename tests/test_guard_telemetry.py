@@ -212,6 +212,30 @@ class TestEvaluateGuardsRecorder:
         ctx = GuardContext(steps=steps, final_answer="ok", is_code_mode=False)
         assert evaluate_guards(ctx) is None
 
+    def test_loop_recorder_deduplicates_same_candidate(self, tmp_path: Path) -> None:
+        import runtime.core.cerebrum.react_loop_controls as controls
+
+        controls._reset_guard_telemetry_for_tests()
+        controls._GUARD_TELEMETRY_SINGLETON = GuardTelemetry(path=tmp_path / "deduped.jsonl")
+        controls._GUARD_TELEMETRY_INIT_DONE = True
+        recorder_a = controls._guard_hit_recorder(
+            dedupe_key="task:1:candidate",
+            goal="inspect code",
+            iteration=1,
+        )
+        recorder_b = controls._guard_hit_recorder(
+            dedupe_key="task:1:candidate",
+            goal="inspect code",
+            iteration=1,
+        )
+        assert recorder_a is not None and recorder_b is not None
+
+        recorder_a("todo-protocol guard", "protocol")
+        recorder_b("todo-protocol guard", "protocol")
+
+        assert controls._GUARD_TELEMETRY_SINGLETON.stats()["total"] == 1
+        controls._reset_guard_telemetry_for_tests()
+
     def test_non_code_final_answer_security_guard_runs(self) -> None:
         ctx = GuardContext(
             steps=[],

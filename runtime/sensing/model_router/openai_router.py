@@ -407,9 +407,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
             # Let the model decide · default "auto" means tools
             # are available but not required · matches Anthropic
             # default behavior and works for agentic loops.
-            payload["tool_choice"] = (
-                "required" if request.require_tool_use else "auto"
-            )
+            payload["tool_choice"] = "required" if request.require_tool_use else "auto"
         # Some compatible reasoning models deliberate by default even when
         # ``thinking`` is omitted.  Let callers bound that work without also
         # enabling a vendor-specific thinking envelope.

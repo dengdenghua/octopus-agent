@@ -28,8 +28,9 @@ def _flatten_turns_to_messages(
 
     Rules:
       * userMessage     → ``HumanMessage``
-      * reasoning+plan  → folded into ``additional_kwargs`` of the next
-                          ``AIMessage`` in the same turn
+      * public reasoning summary + plan → folded into ``additional_kwargs``
+                          of the next ``AIMessage`` in the same turn; raw
+                          provider reasoning content is never copied
       * agentMessage    → ``AIMessage`` (Thought/Action/Observation
                           prefixes pass through; the frontend's
                           ``splitReactTrace`` handles cleanup at render
@@ -55,7 +56,12 @@ def _flatten_turns_to_messages(
     todos: list[dict[str, Any]] | None = None
 
     for turn in turns:
-        turn_failed = turn.status in (TurnStatus.FAILED, TurnStatus.INTERRUPTED)
+        turn_failed = turn.status in (
+            TurnStatus.FAILED,
+            TurnStatus.PAUSED,
+            TurnStatus.CANCELLED,
+            TurnStatus.INTERRUPTED,
+        )
         # When not including failed drafts, drop every intermediate AI
         # message (commentary / reasoning / tool chain) of a failed turn
         # up front. The user prompt and any trailing error item are still
@@ -78,7 +84,9 @@ def _flatten_turns_to_messages(
                         {
                             "type": "ai",
                             "id": getattr(item, "id", None),
-                            "content": f"[上一轮任务失败。] {message}" if message else "[上一轮任务失败。]",
+                            "content": f"[上一轮任务失败。] {message}"
+                            if message
+                            else "[上一轮任务失败。]",
                             "additional_kwargs": {
                                 "error": {
                                     "message": message,
@@ -113,9 +121,9 @@ def _flatten_turns_to_messages(
                     if not isinstance(existing_kwargs, dict):
                         existing_kwargs = {}
                         message["additional_kwargs"] = existing_kwargs
-                    incoming_reasoning = incoming_kwargs.get("reasoning_content")
+                    incoming_reasoning = incoming_kwargs.get("public_reasoning_summary")
                     if isinstance(incoming_reasoning, str) and incoming_reasoning.strip():
-                        existing_reasoning = existing_kwargs.get("reasoning_content")
+                        existing_reasoning = existing_kwargs.get("public_reasoning_summary")
                         parts = [
                             part
                             for part in (
@@ -124,7 +132,7 @@ def _flatten_turns_to_messages(
                             )
                             if part.strip()
                         ]
-                        existing_kwargs["reasoning_content"] = "\n\n".join(parts)
+                        existing_kwargs["public_reasoning_summary"] = "\n\n".join(parts)
                     if "thinking_plan" in incoming_kwargs:
                         existing_kwargs["thinking_plan"] = incoming_kwargs["thinking_plan"]
                 if tool_calls:
@@ -182,13 +190,12 @@ def _flatten_turns_to_messages(
                     }
                 )
             elif t == "reasoning":
-                content = getattr(item, "content", "") or ""
-                if content:
-                    pending_reasoning.append(content)
-                else:
-                    summary = getattr(item, "summary", None) or []
-                    if summary:
-                        pending_reasoning.append("\n".join(summary))
+                # ``content`` contains provider chain-of-thought and is
+                # intentionally excluded from every user-facing legacy
+                # snapshot. ``summary`` is the protocol's explicit public lane.
+                summary = getattr(item, "summary", None) or []
+                if summary:
+                    pending_reasoning.append("\n".join(summary))
             elif t == "plan":
                 pending_plan = getattr(item, "text", "") or pending_plan
             elif t == "commandExecution":
@@ -270,7 +277,16 @@ def _flatten_turns_to_messages(
                         if isinstance(entry, dict)
                         else getattr(entry, "status", "pending")
                     )
-                    snapshot.append({"content": title or "", "status": status or "pending"})
+                    snapshot.append(
+                        {
+                            "content": title or "",
+                            "status": status or "pending",
+                            "objective_id": getattr(item, "objective_id", None)
+                            or turn.objective_id,
+                            "task_id": getattr(item, "task_id", None) or turn.task_id,
+                            "turn_id": turn.id,
+                        }
+                    )
                 todos = snapshot
             elif t == "error":
                 flush_trailing_ai(turn.status)
@@ -362,7 +378,7 @@ def _build_ai_kwargs(
 ) -> dict[str, Any]:
     kw: dict[str, Any] = {}
     if reasoning:
-        kw["reasoning_content"] = "\n\n".join(reasoning)
+        kw["public_reasoning_summary"] = "\n\n".join(reasoning)
     if plan is not None:
         kw["thinking_plan"] = plan
     return kw

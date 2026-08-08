@@ -6,6 +6,7 @@ only on the standard library.  The parent module re-imports them so existing
 callers (``from code_intelligence_skills import _build_index`` etc.) keep
 working.
 """
+
 from __future__ import annotations
 
 import ast

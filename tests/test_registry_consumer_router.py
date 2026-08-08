@@ -20,6 +20,7 @@ from octopus_runtime.client import (  # noqa: E402
 )
 from octopus_runtime.materialize import materialize_skill  # noqa: E402
 from runtime.sensing.gateway.registry_consumer_router import (  # noqa: E402
+    _install_registry_plugin_bundle,
     create_registry_consumer_router,
 )
 
@@ -114,6 +115,55 @@ def _tar_bytes(files: dict[str, str]) -> bytes:
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
     return out.getvalue()
+
+
+def test_registry_plugin_bundle_manual_extraction_is_bounded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import runtime.platform.plugins.plugin_lifecycle as lifecycle
+    import runtime.sensing.gateway.registry_consumer_router as registry_router
+
+    bundle = _tar_bytes(
+        {
+            "safe-plugin/.codex-plugin/plugin.json": json.dumps(
+                {"id": "safe-plugin", "name": "Safe Plugin", "version": "1.0.0"}
+            ),
+            "safe-plugin/README.md": "bounded extraction",
+        }
+    )
+    asset = RegistryAsset(
+        id="plugin/safe-plugin",
+        type="plugin",
+        kind="code",
+        name="Safe Plugin",
+        description="safe",
+        bundle=BundleRef(ref="bundle.tar.gz"),
+    )
+    captured: dict[str, str] = {}
+
+    def fake_install(source: Path, **_kwargs):
+        captured["readme"] = (source / "README.md").read_text(encoding="utf-8")
+        return {"ok": True}
+
+    monkeypatch.setattr(lifecycle, "install_local_plugin", fake_install)
+    result = _install_registry_plugin_bundle(
+        asset,
+        client=FakeBundleClient(bundle),
+        plugin_root=tmp_path / "plugins",
+        publisher_trust_store_path=None,
+    )
+    assert result == {"ok": True}
+    assert captured["readme"] == "bounded extraction"
+
+    monkeypatch.setattr(registry_router, "_MAX_PLUGIN_UNCOMPRESSED_BYTES", 8)
+    with pytest.raises(ValueError, match="expands beyond"):
+        _install_registry_plugin_bundle(
+            asset,
+            client=FakeBundleClient(bundle),
+            plugin_root=tmp_path / "plugins",
+            publisher_trust_store_path=None,
+        )
 
 
 @pytest.fixture
@@ -263,11 +313,14 @@ def test_plugins_are_browsable_and_install_as_prompt_capabilities(
     skill_md = tmp_path / "skills" / "plugin-browser-tool" / "SKILL.md"
     assert skill_md.is_file()
     assert "plugin manifest" in skill_md.read_text(encoding="utf-8")
-    assert json.loads(
-        (tmp_path / "skills" / "plugin-browser-tool" / "PLUGIN.json").read_text(
-            encoding="utf-8"
-        )
-    )["execution"] == "prompt-only"
+    assert (
+        json.loads(
+            (tmp_path / "skills" / "plugin-browser-tool" / "PLUGIN.json").read_text(
+                encoding="utf-8"
+            )
+        )["execution"]
+        == "prompt-only"
+    )
 
 
 def test_materialize_skill_rejects_unsafe_registry_slug(tmp_path) -> None:

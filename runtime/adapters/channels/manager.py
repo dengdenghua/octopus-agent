@@ -34,9 +34,9 @@ class ChannelRoutingError(RuntimeError):
 # delivery (订阅推送) should be pushed back to. ContextVars propagate to
 # child tasks/threads spawned within the turn, so skills called by the
 # planner can read it via ``current_channel_target()``.
-_current_channel_target: contextvars.ContextVar[
-    tuple[str, str] | None
-] = contextvars.ContextVar("ch_current_channel_target", default=None)
+_current_channel_target: contextvars.ContextVar[tuple[str, str] | None] = contextvars.ContextVar(
+    "ch_current_channel_target", default=None
+)
 
 
 def current_channel_target() -> tuple[str, str] | None:

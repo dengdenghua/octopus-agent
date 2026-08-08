@@ -29,9 +29,10 @@ never raises — it returns ``None`` / ``{"ok": False, ...}`` on any miss.
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import os
 import sqlite3
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,27 @@ from .image_semantic_index import (  # noqa: F401  (re-exported for convenience)
 
 _VIDEO_EXTS = frozenset({".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".webm"})
 _DEFAULT_DB = Path("data/video_index.db")
+
+
+def tenant_video_db_path(scope: Any | None = None) -> Path:
+    """Return an index path isolated to one verified tenant/actor scope.
+
+    The legacy process-local path is retained only for single-user mode.  A
+    shared deployment must pass a resolved ``TenantScope``; callers cannot
+    select this path from a request body or query parameter.
+    """
+
+    if scope is None:
+        return _DEFAULT_DB
+    tenant_id = str(getattr(scope, "tenant_id", "") or "").strip()
+    actor_id = str(getattr(scope, "actor_id", "") or "").strip()
+    if not tenant_id or not actor_id:
+        return _DEFAULT_DB
+    from runtime.platform.process.paths import app_paths
+
+    suffix = hashlib.sha256(f"{tenant_id}:{actor_id}".encode()).hexdigest()[:32]
+    return app_paths().data_dir / "tenants" / suffix / "video_index.db"
+
 
 # Disabled flag is read from the *video* env var (independent of the image one).
 def _disabled() -> bool:
@@ -77,16 +99,11 @@ def hardware_accel() -> dict[str, Any]:
     ort = _img.ort_providers()
     return {
         "ort_providers": ort,
-        "gpu_requested": any(
-            "CUDA" in p or "TensorRT" in p or "GPU" in p for p in ort
-        ),
+        "gpu_requested": any("CUDA" in p or "TensorRT" in p or "GPU" in p for p in ort),
         "embed_quantization": _img.embed_quantization(),
-        "whisper_device": os.environ.get("OCTOPUS_WHISPER_DEVICE", "cpu").strip().lower()
-        or "cpu",
-        "whisper_compute": os.environ.get("OCTOPUS_WHISPER_COMPUTE", "int8").strip()
-        or "int8",
-        "whisper_model": os.environ.get("OCTOPUS_WHISPER_MODEL", "small").strip()
-        or "small",
+        "whisper_device": os.environ.get("OCTOPUS_WHISPER_DEVICE", "cpu").strip().lower() or "cpu",
+        "whisper_compute": os.environ.get("OCTOPUS_WHISPER_COMPUTE", "int8").strip() or "int8",
+        "whisper_model": os.environ.get("OCTOPUS_WHISPER_MODEL", "small").strip() or "small",
     }
 
 
@@ -564,9 +581,7 @@ def group_video_faces(
     if not rows:
         return None
     faces = [
-        (str(video), float(ts), v)
-        for video, ts, blob in rows
-        if len(v := _blob_to_vec(blob)) > 0
+        (str(video), float(ts), v) for video, ts, blob in rows if len(v := _blob_to_vec(blob)) > 0
     ]
     if not faces:
         return None
@@ -591,9 +606,7 @@ def group_video_faces(
         {
             "person": idx,
             "count_faces": len(g),
-            "appearances": [
-                {"video_path": v, "time_sec": round(ts, 3)} for v, ts in g
-            ],
+            "appearances": [{"video_path": v, "time_sec": round(ts, 3)} for v, ts in g],
         }
         for idx, g in enumerate(groups)
         if g
@@ -620,8 +633,7 @@ def search_video_by_speech(
         conn = sqlite3.connect(str(path))
         try:
             rows = conn.execute(
-                "SELECT video_path, start_sec, end_sec, text, confidence "
-                "FROM video_transcript"
+                "SELECT video_path, start_sec, end_sec, text, confidence FROM video_transcript"
             ).fetchall()
         finally:
             conn.close()
@@ -690,9 +702,23 @@ def classify_video(
             continue
     if not vecs:
         return None
-    label_list = list(labels) if labels else [
-        "风景", "人物", "城市", "旅行", "美食", "夜景", "运动", "会议", "户外", "室内", "其他",
-    ]
+    label_list = (
+        list(labels)
+        if labels
+        else [
+            "风景",
+            "人物",
+            "城市",
+            "旅行",
+            "美食",
+            "夜景",
+            "运动",
+            "会议",
+            "户外",
+            "室内",
+            "其他",
+        ]
+    )
     try:
         text_vecs = list(text_model.embed(label_list))
     except Exception:  # noqa: BLE001
@@ -703,9 +729,7 @@ def classify_video(
             agg[i] += _cosine(vec, tv)
     agg = [s / len(vecs) for s in agg]
     scored = sorted(zip(label_list, agg, strict=False), key=lambda t: -t[1])
-    return [
-        {"label": label, "score": round(s, 4)} for label, s in scored[: max(1, int(top_k))]
-    ]
+    return [{"label": label, "score": round(s, 4)} for label, s in scored[: max(1, int(top_k))]]
 
 
 def extract_frame_jpeg(video_path: str | Path, time_sec: float = 0.0) -> bytes | None:
@@ -716,8 +740,9 @@ def extract_frame_jpeg(video_path: str | Path, time_sec: float = 0.0) -> bytes |
     as ``image/jpeg``. Returns ``None`` on any failure (self-gated — never
     raises; ``av`` import is guarded)."""
     try:
-        import av
         from io import BytesIO
+
+        import av
     except ImportError:
         return None
     target = max(0.0, float(time_sec))
@@ -779,11 +804,10 @@ def ocr_video_keyframes(
                 video, max_frames=max_frames, min_interval_sec=min_interval_sec
             )
             for time_sec, pil in keyframes:
-                tmp = None
+                tmp_path = ""
                 try:
-                    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                    tmp_path = tmp.name
-                    tmp.close()
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                        tmp_path = tmp.name
                     pil.save(tmp_path, "PNG")
                     ocr = _img.ocr_image(tmp_path, db_path=db_path)
                     if ocr is None:
@@ -801,11 +825,9 @@ def ocr_video_keyframes(
                 except Exception:  # noqa: BLE001
                     continue
                 finally:
-                    if tmp is not None:
-                        try:
-                            os.unlink(tmp.name)
-                        except OSError:
-                            pass
+                    if tmp_path:
+                        with contextlib.suppress(OSError):
+                            os.unlink(tmp_path)
         if not hits:
             return None
         hits.sort(key=lambda h: -h["score"])

@@ -176,9 +176,9 @@ def test_publisher_trust_endpoints_rotate_revoke_and_audit(tmp_path: Path) -> No
     initial = client.get("/api/plugins/publisher-trust")
     assert initial.status_code == 200
     assert initial.json()["active_key_count"] == 1
-    assert initial.json()["publishers"][0]["keys"][0][
-        "public_key_fingerprint"
-    ].startswith("sha256:")
+    assert initial.json()["publishers"][0]["keys"][0]["public_key_fingerprint"].startswith(
+        "sha256:"
+    )
     assert "public_key" not in initial.json()["publishers"][0]["keys"][0]
 
     rejected = client.post(

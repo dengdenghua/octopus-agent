@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import Field
@@ -10,7 +10,7 @@ from runtime.core.nerves.bus import NervesEvent
 
 class SensorEvent(NervesEvent):
     sensor_id: str = ""
-    detected_at: datetime = Field(default_factory=datetime.utcnow)
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class FileChanged(SensorEvent):

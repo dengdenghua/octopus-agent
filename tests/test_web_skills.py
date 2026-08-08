@@ -288,6 +288,7 @@ class TestTavilySearch:
 class TestWebSearchRouting:
     def test_routes_to_tavily_when_key_set(self, monkeypatch):
         monkeypatch.delenv("WEB_SEARCH_BACKEND", raising=False)
+        monkeypatch.delenv("DOUBAO_SEARCH_API_KEY", raising=False)
         monkeypatch.setenv("TAVILY_API_KEY", "fake-test-key")
         client = _MockClient(
             post_response=_MockResponse(
@@ -300,6 +301,7 @@ class TestWebSearchRouting:
 
     def test_routes_to_ddg_when_no_key(self, monkeypatch):
         monkeypatch.delenv("WEB_SEARCH_BACKEND", raising=False)
+        monkeypatch.delenv("DOUBAO_SEARCH_API_KEY", raising=False)
         monkeypatch.delenv("TAVILY_API_KEY", raising=False)
         monkeypatch.delenv("BRAVE_API_KEY", raising=False)
         monkeypatch.delenv("SERPER_API_KEY", raising=False)
@@ -399,6 +401,7 @@ class TestResolveBackend:
     def test_priority_order(self, monkeypatch):
         for k in (
             "WEB_SEARCH_BACKEND",
+            "DOUBAO_SEARCH_API_KEY",
             "TAVILY_API_KEY",
             "BRAVE_API_KEY",
             "SERPER_API_KEY",
@@ -414,6 +417,8 @@ class TestResolveBackend:
         assert _resolve_backend() == "brave"
         monkeypatch.setenv("TAVILY_API_KEY", "k")
         assert _resolve_backend() == "tavily"
+        monkeypatch.setenv("DOUBAO_SEARCH_API_KEY", "k")
+        assert _resolve_backend() == "doubao"
 
     def test_explicit_backend_arg_overrides_env(self, monkeypatch):
         monkeypatch.setenv("TAVILY_API_KEY", "tk")

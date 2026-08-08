@@ -8,6 +8,7 @@ participants represent real people who may join through invite links.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -203,6 +204,7 @@ def create_team_rooms_router(
     lock = Lock()
     teams: dict[str, TeamRoomWire] = _load_state(path)
     live_sockets: dict[str, dict[str, WebSocket]] = {}
+    socket_loops: dict[str, dict[str, asyncio.AbstractEventLoop]] = {}
 
     def _auth(request: Any) -> str | None:
         from .openai_gateway_router import _resolve_actor
@@ -336,21 +338,39 @@ def create_team_rooms_router(
         *,
         exclude: str | None = None,
     ) -> None:
-        sockets = list(live_sockets.get(team_id, {}).items())
+        with lock:
+            sockets = [
+                (
+                    participant_id,
+                    socket,
+                    socket_loops.get(team_id, {}).get(participant_id),
+                )
+                for participant_id, socket in live_sockets.get(team_id, {}).items()
+            ]
         dead: list[str] = []
-        for participant_id, socket in sockets:
+        current_loop = asyncio.get_running_loop()
+        for participant_id, socket, owner_loop in sockets:
             if exclude and participant_id == exclude:
                 continue
             try:
-                await socket.send_json(payload)
-            except (ConnectionError, TimeoutError, OSError):
+                if owner_loop is None or owner_loop is current_loop:
+                    await socket.send_json(payload)
+                elif owner_loop.is_closed():
+                    dead.append(participant_id)
+                else:
+                    sent = asyncio.run_coroutine_threadsafe(socket.send_json(payload), owner_loop)
+                    await asyncio.wrap_future(sent)
+            except (ConnectionError, TimeoutError, OSError, RuntimeError):
                 dead.append(participant_id)
         if dead:
             with lock:
                 room = live_sockets.get(team_id)
+                loops = socket_loops.get(team_id)
                 if room:
                     for participant_id in dead:
                         room.pop(participant_id, None)
+                        if loops:
+                            loops.pop(participant_id, None)
 
     async def _broadcast_presence(team_id: str) -> None:
         with lock:
@@ -706,6 +726,7 @@ def create_team_rooms_router(
     ) -> dict[str, Any]:
         actor = _require_member(request, team_id)
         socket: WebSocket | None = None
+        socket_loop: asyncio.AbstractEventLoop | None = None
         with lock:
             team = teams.get(team_id)
             if team is None:
@@ -748,10 +769,16 @@ def create_team_rooms_router(
             )
             teams[team_id] = team
             socket = live_sockets.get(team_id, {}).pop(participant_id, None)
+            socket_loop = socket_loops.get(team_id, {}).pop(participant_id, None)
             _save()
         if socket is not None:
             with contextlib.suppress(Exception):
-                await socket.close(code=4403)
+                current_loop = asyncio.get_running_loop()
+                if socket_loop is None or socket_loop is current_loop:
+                    await socket.close(code=4403)
+                elif not socket_loop.is_closed():
+                    closed = asyncio.run_coroutine_threadsafe(socket.close(code=4403), socket_loop)
+                    await asyncio.wrap_future(closed)
         await _broadcast_team_update(team_id, team)
         await _broadcast_presence(team_id)
         return {"ok": True, "team": team.model_dump(), "participant_id": participant_id}
@@ -846,6 +873,7 @@ def create_team_rooms_router(
         teams=teams,
         lock=lock,
         live_sockets=live_sockets,
+        socket_loops=socket_loops,
         auth=_auth,
         save=_save,
         broadcast=_broadcast,

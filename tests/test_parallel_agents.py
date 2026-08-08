@@ -1135,6 +1135,110 @@ def test_process_isolation_hard_terminates_stuck_runner_and_reuses_capacity() ->
         orchestrator.shutdown(wait=False)
 
 
+def test_auto_isolation_uses_process_for_picklable_runner() -> None:
+    orchestrator = ParallelAgentOrchestrator(
+        max_concurrency=1,
+        task_runner=_isolated_process_runner,
+    )
+    try:
+        batch = orchestrator.dispatch(
+            [DispatchTaskInput(task_id="auto-process", description="healthy-process")]
+        )
+        for _ in range(200):
+            snapshot = orchestrator.get_batch(batch.batch_id)
+            assert snapshot is not None
+            if snapshot.completed_at is not None:
+                break
+            time.sleep(0.01)
+
+        assert snapshot.completed_at is not None
+        assert snapshot.results[0].status == "completed"
+        assert snapshot.results[0].worker_isolation == "process"
+        assert snapshot.results[0].worker_isolation_reason is None
+    finally:
+        orchestrator.shutdown(wait=False)
+
+
+def test_parallel_event_log_is_bounded_and_recovery_reports_replay_gap() -> None:
+    def noisy_runner(description, *, subagent_name, context=None, cancel_event=None):
+        emit = (context or {}).get("emit_tool_event")
+        assert callable(emit)
+        for index in range(80):
+            emit(
+                tool_name="noise",
+                status="completed",
+                output_preview=f"event-{index}",
+                artifact_paths=["artifacts/first.txt"] if index == 0 else [],
+            )
+        return "done"
+
+    orchestrator = ParallelAgentOrchestrator(
+        max_concurrency=1,
+        task_runner=noisy_runner,
+        event_log_limit=32,
+    )
+    try:
+        batch = orchestrator.dispatch([DispatchTaskInput(task_id="noisy", description="noisy")])
+        for _ in range(200):
+            snapshot = orchestrator.get_batch(batch.batch_id)
+            assert snapshot is not None
+            if snapshot.completed_at is not None:
+                break
+            time.sleep(0.01)
+
+        assert snapshot.completed_at is not None
+        assert len(snapshot.event_log) == 32
+        assert snapshot.event_log_truncated is True
+        assert snapshot.event_log_dropped_count > 0
+        assert snapshot.event_log[0].sequence > 1
+        assert snapshot.event_log[-1].type == "batch_complete"
+        assert snapshot.completion_receipt["artifact_count"] == 1
+        assert snapshot.results[0].worker_isolation == "thread"
+        assert (
+            snapshot.results[0].worker_isolation_reason
+            == "auto_fallback_unpicklable_runner_or_context"
+        )
+
+        recovery = orchestrator.recovery_snapshot(batch.batch_id)
+        assert recovery is not None
+        assert recovery.event_sequence["event_log_limit_reached"] is True
+        assert recovery.event_sequence["dropped_event_count"] == snapshot.event_log_dropped_count
+        assert recovery.event_sequence["first_sequence"] == snapshot.event_log[0].sequence
+        assert recovery.artifact_paths == ["artifacts/first.txt"]
+    finally:
+        orchestrator.shutdown(wait=False)
+
+
+def test_completed_parallel_batches_are_evicted_with_task_index() -> None:
+    orchestrator = ParallelAgentOrchestrator(
+        max_concurrency=1,
+        task_runner=lambda description, **kwargs: "done",
+        completed_batch_limit=1,
+    )
+    try:
+        first = orchestrator.dispatch([DispatchTaskInput(task_id="first", description="first")])
+        for _ in range(200):
+            first_snapshot = orchestrator.get_batch(first.batch_id)
+            assert first_snapshot is not None
+            if first_snapshot.completed_at is not None:
+                break
+            time.sleep(0.01)
+        second = orchestrator.dispatch([DispatchTaskInput(task_id="second", description="second")])
+        for _ in range(200):
+            second_snapshot = orchestrator.get_batch(second.batch_id)
+            if second_snapshot is not None and second_snapshot.completed_at is not None:
+                break
+            time.sleep(0.01)
+
+        # The first batch may finish before the second dispatch, but eviction
+        # is evaluated when a new batch enters the bounded in-memory store.
+        assert orchestrator.get_batch(first.batch_id) is None
+        assert orchestrator.get_task_owner("first") is None
+        assert orchestrator.get_batch(second.batch_id) is not None
+    finally:
+        orchestrator.shutdown(wait=False)
+
+
 def test_cancel_grace_closes_batch_when_runner_ignores_signal() -> None:
     started = threading.Event()
     release = threading.Event()

@@ -6,6 +6,8 @@ import time
 from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any
 
+from runtime.core.cerebrum import _react_loop_reexports as _reexports
+from runtime.core.cerebrum._react_loop_reexports import *  # noqa: F403
 from runtime.core.cerebrum.react_action_outcomes import (
     _action_batch_fingerprint,
     _deduplicate_actions,
@@ -14,105 +16,35 @@ from runtime.core.cerebrum.react_action_outcomes import (
     _retry_safe_affinity,
     _tool_call_succeeded,
 )
-from runtime.core.cerebrum.react_browser_iteration import (
-    _browser_operation_requested,
-    _browser_task_iteration_limit,
-    _code_task_iteration_limit,
-    _ensure_browser_operation_skills,
-    _narrow_research_iteration_limit,
-)
 from runtime.core.cerebrum.react_checkpointing import (
     _auto_checkpoint_and_evaluate_step,
-    _checkpoint_interval,
-    _checkpoint_mirror,
-    _mirror_checkpoint,
-    _rehydrate_messages_from_steps,
-    _reset_checkpoint_mirror_for_tests,
-    _should_auto_checkpoint,
-)
-from runtime.core.cerebrum.react_context import (
-    _build_code_agent_mode_prompt,
-    _build_code_context_prelude,
-    _build_personal_agent_mode_prompt,
-    _build_project_signals_prompt,
-    _build_user_message_content,
-    _build_workflow_preset_prompt,
-    _format_skill_catalog,
-    _image_blocks_from_attachments,
-    _looks_like_image_attachment,
 )
 from runtime.core.cerebrum.react_convergence import (
     EvidenceConvergence,
 )
 from runtime.core.cerebrum.react_execution import (
-    _background_task_info_from_observation,
-    _beak_step_effective_success,
     _build_research_progress_summary,
-    _execute_action_via_beak,
-    _format_background_task_heartbeat,
-    _has_unrecovered_beak_failure,
-    _is_scoped_artifact_write,
-    _normalized_tool_call_from_react_action,
-    _persist_react_trajectory,
     _phase_6d_dispatch_and_observe,
     _phase_6g_housekeeping,
-    _react_completion_receipt,
-    _reset_kg_throttle_for_tests,
-    _skill_available_in_executor,
-    _tool_event_extras_from_beak_step,
-)
-from runtime.core.cerebrum.react_explicit_reads import (
-    _explicit_no_tool_goal,
-    _explicit_read_only_goal,
-    _recover_explicit_read_actions,
 )
 from runtime.core.cerebrum.react_final_answer_guards import (
-    _final_answer_needs_pre_emit_guard,
-    _guard_reason_for_user,
-    _note_guard_impasse,
     _phase_6e_guards_and_step_emit,
-    _record_rejected_step,
-    _unfinished_implementation_recovery_needed,
-)
-from runtime.core.cerebrum.react_guards import (
-    _code_mode_completion_guard,
-    _completion_phrase_without_todo_guard,
-    _explicit_source_paths,
-    _failed_verification_followup_guard,
-    _goal_requests_code_mutation,
-    _redundant_green_verification_guard,
-    _unverified_write_followup_guard,
 )
 from runtime.core.cerebrum.react_in_flight_nudges import (
     _apply_in_flight_nudges,
 )
 from runtime.core.cerebrum.react_loop_controls import (
-    _CONTEXT_PRESSURE_NUDGE,
     _cancel_pause_guard,
-    _disabled_guard_labels,
-    _disabled_guards_from_yaml,
-    _estimate_context_fullness,
-    _guard_hit_recorder,
-    _long_task_budget_limits,
-    _reset_disabled_set_for_tests,
-    _reset_guard_telemetry_for_tests,
-    _reset_react_variants_for_tests,
-    get_react_variant_stats,
-    pick_react_variant,
-    record_react_variant_result,
+)
+from runtime.core.cerebrum.react_loop_controls import (
+    get_react_variant_stats as get_react_variant_stats,
 )
 from runtime.core.cerebrum.react_loop_state import (
     _LoopControl,
     _LoopState,
 )
 from runtime.core.cerebrum.react_model_deadlines import (
-    _MODEL_STREAM_DEADLINE,
-    _collect_model_stream_text_with_deadline,
-    _finish_reason_is_length_limited,
-    _iter_model_stream_with_deadline,
     _model_iteration_timeout_s,
-    _stage_model_timeout_s,
-    _stage_update_timeout_fallback,
 )
 from runtime.core.cerebrum.react_model_stream import (
     _phase_6b_model_stream,
@@ -120,19 +52,6 @@ from runtime.core.cerebrum.react_model_stream import (
 from runtime.core.cerebrum.react_parallel_dispatch import (
     _WRITE_TOOLS,
     _dispatch_parallel_actions,
-)
-from runtime.core.cerebrum.react_parsing import (
-    _escape_md_brackets,
-    _extract_final_answer,
-    _is_format_violation,
-    _looks_like_special_tool_envelope,
-    _looks_like_unfinished_work,
-    _parse_action,
-    _parse_reasoning_action_fallback,
-    _parse_step,
-    _placeholder_observation,
-    _safe_for_streamdown,
-    _summarize_observation,
 )
 from runtime.core.cerebrum.react_phase_6c import (
     _phase_6c_parse_and_guard,
@@ -143,21 +62,15 @@ from runtime.core.cerebrum.react_prompt_assembly import (
     _resolve_turn_bootstrap,
 )
 from runtime.core.cerebrum.react_public_updates import (
-    _observed_read_fallback_update,
-    _safe_public_update,
     _stream_public_evidence_narrative,
 )
 from runtime.core.cerebrum.react_quiet_evidence import (
     _quiet_evidence_checkpoint_due,
-    _quiet_evidence_targets,
     _result_checkpoint_is_meaningful,
     _should_accumulate_quiet_evidence,
 )
 from runtime.core.cerebrum.react_resume import (
-    _build_resume_context_prompt,
-    _compute_resume_state,
     _resume_or_register_turn,
-    _ResumeState,
 )
 from runtime.core.cerebrum.react_terminal import (
     _finalize_react_turn,
@@ -165,11 +78,6 @@ from runtime.core.cerebrum.react_terminal import (
 from runtime.core.cerebrum.react_types import (
     ReActResult,
     ReActStep,
-    _native_tool_calls_missing_required_args,
-)
-from runtime.core.cerebrum.todo_protocol import (
-    _todo_completion_before_write_guard,
-    _todo_prewrite_guard,
 )
 from runtime.platform.config.builder import StackProtocol
 from runtime.platform.config.schema import (
@@ -186,102 +94,13 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-# Backward-compat re-export surface for tests/test_react_loop.py and friends.
-# The helpers live in the satellite modules and are re-exported directly from
-# this module (previously via a ``_react_loop_reexports`` relay module, which
-# is now inlined). ``__all__`` enumerates the full importable surface so that
-# ruff never treats the re-exported imports as unused.
-__all__ = [
+# Backward-compatible helper surface plus the actual loop entry points.
+__all__ = _reexports.__all__ + [
     "ReActResult",
     "ReActStep",
-    "_CONTEXT_PRESSURE_NUDGE",
-    "_MODEL_STREAM_DEADLINE",
-    "_ResumeState",
     "_WRITE_TOOLS",
-    "_background_task_info_from_observation",
-    "_beak_step_effective_success",
-    "_browser_operation_requested",
-    "_browser_task_iteration_limit",
-    "_build_code_agent_mode_prompt",
-    "_build_code_context_prelude",
-    "_build_personal_agent_mode_prompt",
-    "_build_project_signals_prompt",
-    "_build_resume_context_prompt",
-    "_build_user_message_content",
-    "_build_workflow_preset_prompt",
-    "_checkpoint_interval",
-    "_checkpoint_mirror",
-    "_code_mode_completion_guard",
-    "_code_task_iteration_limit",
-    "_collect_model_stream_text_with_deadline",
-    "_completion_phrase_without_todo_guard",
-    "_compute_resume_state",
-    "_disabled_guard_labels",
-    "_disabled_guards_from_yaml",
     "_dispatch_parallel_actions",
-    "_ensure_browser_operation_skills",
-    "_escape_md_brackets",
-    "_estimate_context_fullness",
-    "_execute_action_via_beak",
-    "_explicit_no_tool_goal",
-    "_explicit_read_only_goal",
-    "_explicit_source_paths",
-    "_extract_final_answer",
-    "_failed_verification_followup_guard",
-    "_final_answer_needs_pre_emit_guard",
     "_finalize_react_turn",
-    "_finish_reason_is_length_limited",
-    "_format_background_task_heartbeat",
-    "_format_skill_catalog",
-    "_goal_requests_code_mutation",
-    "_guard_hit_recorder",
-    "_guard_reason_for_user",
-    "_has_unrecovered_beak_failure",
-    "_image_blocks_from_attachments",
-    "_is_format_violation",
-    "_is_scoped_artifact_write",
-    "_iter_model_stream_with_deadline",
-    "_long_task_budget_limits",
-    "_looks_like_image_attachment",
-    "_looks_like_special_tool_envelope",
-    "_looks_like_unfinished_work",
-    "_mirror_checkpoint",
-    "_narrow_research_iteration_limit",
-    "_native_tool_calls_missing_required_args",
-    "_normalized_tool_call_from_react_action",
-    "_note_guard_impasse",
-    "_observed_read_fallback_update",
-    "_parse_action",
-    "_parse_reasoning_action_fallback",
-    "_parse_step",
-    "_persist_react_trajectory",
-    "_placeholder_observation",
-    "_quiet_evidence_targets",
-    "_react_completion_receipt",
-    "_record_rejected_step",
-    "_recover_explicit_read_actions",
-    "_redundant_green_verification_guard",
-    "_rehydrate_messages_from_steps",
-    "_reset_checkpoint_mirror_for_tests",
-    "_reset_disabled_set_for_tests",
-    "_reset_guard_telemetry_for_tests",
-    "_reset_kg_throttle_for_tests",
-    "_reset_react_variants_for_tests",
-    "_safe_for_streamdown",
-    "_safe_public_update",
-    "_should_auto_checkpoint",
-    "_skill_available_in_executor",
-    "_stage_model_timeout_s",
-    "_stage_update_timeout_fallback",
-    "_summarize_observation",
-    "_todo_completion_before_write_guard",
-    "_todo_prewrite_guard",
-    "_tool_event_extras_from_beak_step",
-    "_unfinished_implementation_recovery_needed",
-    "_unverified_write_followup_guard",
-    "get_react_variant_stats",
-    "pick_react_variant",
-    "record_react_variant_result",
     "run_react_loop",
     "stream_react_loop",
 ]
@@ -307,45 +126,11 @@ def stream_react_loop(
     reasoning_effort: str | None = None,
     steering_drain: Callable[[], list[str]] | None = None,
 ) -> Generator[dict[str, Any], None, ReActResult | None]:
-    # ╔══════════════════════════════════════════════════════════════════╗
-    # ║ stream_react_loop · navigation map (comment-only).               ║
-    # ║ This function is now the orchestration skeleton; each phase      ║
-    # ║ body lives in a satellite module (pure moves, no rewrites):      ║
-    # ║                                                                  ║
-    # ║   PHASE 1–2 · turn bootstrap          react_prompt_assembly      ║
-    # ║       → _resolve_turn_bootstrap                                  ║
-    # ║   PHASE 3   · prompt + messages       react_prompt_assembly      ║
-    # ║       → _assemble_prompt_and_messages                            ║
-    # ║   PHASE 4/4.5 · start events,         react_prompt_assembly      ║
-    # ║       auto-delegate → _emit_turn_start_events                    ║
-    # ║   PHASE 5   · pause/resume/grant      react_resume               ║
-    # ║       → _resume_or_register_turn                                 ║
-    # ║       (plain inits, steering/model closures, realtime preface    ║
-    # ║        stay here — closures keep react_loop monkeypatch points)  ║
-    # ║   PHASE 6   · main iteration loop (call sites in this function)  ║
-    # ║       6a cancel/pause guard        react_loop_controls           ║
-    # ║          → _cancel_pause_guard                                   ║
-    # ║       6b LLM call + streaming      react_model_stream            ║
-    # ║          → _phase_6b_model_stream                                ║
-    # ║       6c parse / format guard      react_phase_6c                ║
-    # ║          → _phase_6c_parse_and_guard                             ║
-    # ║       6d dispatch + observation    react_execution               ║
-    # ║          → _phase_6d_dispatch_and_observe                        ║
-    # ║       6e in-flight nudges          react_in_flight_nudges        ║
-    # ║          → _apply_in_flight_nudges                               ║
-    # ║       6e guards + step emit        react_final_answer_guards     ║
-    # ║          → _phase_6e_guards_and_step_emit                        ║
-    # ║       6f auto-checkpoint + eval    react_checkpointing           ║
-    # ║          → _auto_checkpoint_and_evaluate_step                    ║
-    # ║       6g housekeeping              react_execution               ║
-    # ║          → _phase_6g_housekeeping                                ║
-    # ║   PHASE 7+8 · terminal + finalize     react_terminal             ║
-    # ║       → _finalize_react_turn                                     ║
-    # ║                                                                  ║
-    # ║ Phases exchange per-turn data through _LoopState (see            ║
-    # ║ react_loop_state) and _LoopControl; scalars are synced           ║
-    # ║ local→state→local at each call site ("mailbox" pattern).         ║
-    # ╚══════════════════════════════════════════════════════════════════╝
+    # Orchestration map: bootstrap/prompt → react_prompt_assembly; resume →
+    # react_resume; model streaming → react_model_stream; parse →
+    # react_phase_6c; dispatch/housekeeping → react_execution; guards →
+    # react_final_answer_guards; checkpoint → react_checkpointing; terminal →
+    # react_terminal. Phases exchange state through _LoopState/_LoopControl.
 
     # Config-driven ReAct tunables (budget.model_iteration_timeout_s /
     # budget.convergence_max_tokens). Read off the stack when present; the
@@ -354,8 +139,7 @@ def stream_react_loop(
     _budget = getattr(_cfg, "budget", None) if _cfg is not None else None
     _model_iteration_timeout_s_config = (
         float(_budget.model_iteration_timeout_s)
-        if _budget is not None
-        and getattr(_budget, "model_iteration_timeout_s", None) is not None
+        if _budget is not None and getattr(_budget, "model_iteration_timeout_s", None) is not None
         else None
     )
     _convergence_max_tokens = int(
@@ -582,7 +366,7 @@ def stream_react_loop(
                 _subrouter = router._resolve(next_model)
                 if _subrouter is not router:
                     _resolved_model = getattr(_subrouter, "default_model", None) or next_model
-            except (AttributeError, TypeError):
+            except (AttributeError, TypeError):  # noqa: BLE001 — optional router introspection
                 pass
         _wants_thinking = _supports_thinking(_resolved_model)
         _max_tokens_per_iter = 4096 if _wants_thinking else 8000
@@ -708,12 +492,20 @@ def stream_react_loop(
         throughput_interval_s=_throughput_interval_s,
         throughput_last_emit=_throughput_last_emit,
         consecutive_llm_errors=consecutive_llm_errors,
+        iteration_base_limit=max_iterations,
+        iteration_limit=max_iterations,
         terminated_reason=terminated_reason,
         final_answer=final_answer,
         final_answer_emitted=final_answer_emitted,
     )
 
-    for i in range(resume_from_iter, max_iterations):
+    def _iteration_indices() -> Any:
+        iteration = resume_from_iter
+        while iteration < max_iterations:
+            yield iteration
+            iteration += 1
+
+    for i in _iteration_indices():
         # ── PHASE 6a · cancel / pause guard ────────────────────────────
         _guard_terminated_reason = yield from _cancel_pause_guard(
             iteration=i,
@@ -847,6 +639,7 @@ def stream_react_loop(
             return None
         if _loop_ctrl is _LoopControl.BREAK:
             break
+        assert step is not None, "phase 6c must produce a ReAct step before execution"
         # ── PHASE 6d · action dispatch + observation ───────────────────
         state.maybe_final = maybe_final
         state.terminated_reason = terminated_reason
@@ -1000,6 +793,10 @@ def stream_react_loop(
         _force_convergence_next = state.force_convergence_next
         _length_limit_should_continue = state.length_limit_should_continue
         messages = state.messages
+        # ``_iteration_indices`` closes over this local, so a productive turn
+        # can continue immediately after a bounded extension without creating
+        # a new task or waiting for a user-authored "继续" turn.
+        max_iterations = max(max_iterations, state.iteration_limit)
         if _loop_ctrl is _LoopControl.BREAK:
             break
 

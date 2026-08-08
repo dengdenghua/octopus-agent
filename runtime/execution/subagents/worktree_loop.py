@@ -107,15 +107,21 @@ def shell_worktree_worker(
 
     def _worker(path: str, task: Any) -> None:
         env = {**os.environ, "OCTOPUS_WORKTREE_TASK": str(task)}
-        subprocess.run(
+        from runtime.platform.process.tree import run_capture
+
+        result = run_capture(
             argv,
             cwd=path,
             env=env,
             timeout=timeout_s,
-            check=True,
-            capture_output=True,
-            text=True,
         )
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                argv,
+                output=result.stdout,
+                stderr=result.stderr,
+            )
 
     return _worker
 

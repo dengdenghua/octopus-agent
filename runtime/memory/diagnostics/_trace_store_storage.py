@@ -11,25 +11,26 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .trace_store import AgentTraceStore
 
+from runtime.safety.auth.scope import TenantScope
+
 from ._trace_store_models import (
     ApprovalDecision,
     TaskRunStatus,
     _clean_str,
-    _evaluate_task_run_replay_case,
     _json_dumps,
     _json_loads,
     _now_iso,
-    _replay_gate_from_evaluations,
     _task_run_from_rows,
-    _task_run_replay_case_from_review,
-    _task_run_review_from_loop_checkpoint,
-    _task_run_review_from_run,
 )
 from ._trace_store_recovery import (
     _resume_proposal_from_checkpoint,
     _sanitize_resume_intent,
 )
+from ._trace_store_replay_storage import _TraceStoreReplayMixin
 from ._trace_store_schema import _SCHEMA
+from ._trace_store_sql import _TraceStoreSqlMixin
+
+TRACE_SCHEMA_VERSION = 2
 
 
 def _optional_str(value: Any) -> str | None:
@@ -51,7 +52,7 @@ def _decode_row(
     return out
 
 
-class _TraceStoreStorageMixin:
+class _TraceStoreStorageMixin(_TraceStoreSqlMixin, _TraceStoreReplayMixin):
     """SQLite-backed read model for agent trace facts."""
 
     def __init__(self, db_path: str | Path) -> None:
@@ -67,7 +68,84 @@ class _TraceStoreStorageMixin:
         self._conn.execute("PRAGMA journal_mode=WAL;")
         self._conn.execute("PRAGMA synchronous=NORMAL;")
         self._conn.execute("PRAGMA foreign_keys=ON;")
+        # Scope indexes are deliberately created only *after* the additive
+        # migration below. Older production databases have these tables but
+        # not tenant_id/owner_actor_id; putting the indexes in ``_SCHEMA``
+        # makes SQLite abort executescript before ALTER TABLE can run.
         self._conn.executescript(_SCHEMA)
+        self._ensure_scope_columns()
+        self._conn.execute(f"PRAGMA user_version={TRACE_SCHEMA_VERSION}")
+
+    def schema_status(self) -> dict[str, Any]:
+        """Return an explicit readiness receipt for lifecycle persistence."""
+
+        required = {"tenant_id", "owner_actor_id"}
+        tables = (
+            "messages",
+            "agui_events",
+            "approvals",
+            "agent_checkpoints",
+            "llm_token_usage",
+            "resume_requests",
+        )
+        missing: dict[str, list[str]] = {}
+        with self._lock:
+            version = int(self._conn.execute("PRAGMA user_version").fetchone()[0])
+            for table in tables:
+                columns = {
+                    str(row[1])
+                    for row in self._conn.execute(f"PRAGMA table_info({table})").fetchall()
+                }
+                absent = sorted(required - columns)
+                if absent:
+                    missing[table] = absent
+        return {
+            "ready": version >= TRACE_SCHEMA_VERSION and not missing,
+            "version": version,
+            "requiredVersion": TRACE_SCHEMA_VERSION,
+            "missingColumns": missing,
+        }
+
+    def _ensure_scope_columns(self) -> None:
+        """Migrate pre-Phase-1 trace databases without rewriting history."""
+        tables = (
+            "messages",
+            "agui_events",
+            "approvals",
+            "agent_checkpoints",
+            "llm_token_usage",
+            "resume_requests",
+        )
+        with self._lock:
+            for table in tables:
+                columns = {
+                    str(row[1])
+                    for row in self._conn.execute(f"PRAGMA table_info({table})").fetchall()
+                }
+                if "tenant_id" not in columns:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN tenant_id TEXT")
+                if "owner_actor_id" not in columns:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN owner_actor_id TEXT")
+                self._conn.execute(
+                    f"CREATE INDEX IF NOT EXISTS idx_{table}_scope "
+                    f"ON {table}(tenant_id, owner_actor_id, id)"
+                )
+
+    @staticmethod
+    def _scope_values(
+        scope: TenantScope | None,
+        tenant_id: str | None,
+        owner_actor_id: str | None,
+    ) -> tuple[str | None, str | None]:
+        if scope is not None:
+            return scope.tenant_id, scope.actor_id
+        return _optional_str(tenant_id), _optional_str(owner_actor_id)
+
+    @staticmethod
+    def _scope_filters(scope: TenantScope | None) -> dict[str, str | None]:
+        if scope is None or scope.allow_cross_tenant:
+            return {}
+        return {"tenant_id": scope.tenant_id, "owner_actor_id": scope.actor_id}
 
     def record_message(
         self,
@@ -79,13 +157,19 @@ class _TraceStoreStorageMixin:
         agent_id: str | None = None,
         metadata: dict[str, Any] | None = None,
         ts: str | None = None,
+        tenant_id: str | None = None,
+        owner_actor_id: str | None = None,
+        scope: TenantScope | None = None,
     ) -> int:
+        tenant_id, owner_actor_id = self._scope_values(scope, tenant_id, owner_actor_id)
         with self._lock:
             cur = self._conn.execute(
-                "INSERT INTO messages(ts, thread_id, turn_id, agent_id, role, content, metadata) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO messages(ts, tenant_id, owner_actor_id, thread_id, turn_id, agent_id, role, content, metadata) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     ts or _now_iso(),
+                    tenant_id,
+                    owner_actor_id,
                     _clean_str(thread_id),
                     _optional_str(turn_id),
                     _optional_str(agent_id),
@@ -107,14 +191,20 @@ class _TraceStoreStorageMixin:
         agent_id: str | None = None,
         item_id: str | None = None,
         ts: str | None = None,
+        tenant_id: str | None = None,
+        owner_actor_id: str | None = None,
+        scope: TenantScope | None = None,
     ) -> int:
+        tenant_id, owner_actor_id = self._scope_values(scope, tenant_id, owner_actor_id)
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO agui_events("
-                "ts, thread_id, turn_id, task_id, agent_id, item_id, event_type, payload"
-                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                "ts, tenant_id, owner_actor_id, thread_id, turn_id, task_id, agent_id, item_id, event_type, payload"
+                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     ts or _now_iso(),
+                    tenant_id,
+                    owner_actor_id,
                     _optional_str(thread_id),
                     _optional_str(turn_id),
                     _optional_str(task_id),
@@ -138,6 +228,9 @@ class _TraceStoreStorageMixin:
         mode: str = "",
         metadata: dict[str, Any] | None = None,
         ts: str | None = None,
+        tenant_id: str | None = None,
+        owner_actor_id: str | None = None,
+        scope: TenantScope | None = None,
     ) -> int:
         payload = {
             "schema": "octopus.task_run.started.v1",
@@ -154,6 +247,9 @@ class _TraceStoreStorageMixin:
             task_id=task_id,
             agent_id=agent_id,
             ts=ts,
+            tenant_id=tenant_id,
+            owner_actor_id=owner_actor_id,
+            scope=scope,
         )
 
     def record_task_run_finished(
@@ -168,10 +264,14 @@ class _TraceStoreStorageMixin:
         reason: str = "",
         metadata: dict[str, Any] | None = None,
         ts: str | None = None,
+        tenant_id: str | None = None,
+        owner_actor_id: str | None = None,
+        scope: TenantScope | None = None,
     ) -> int:
         event_type = {
             "completed": "TASK_RUN_COMPLETED",
             "failed": "TASK_RUN_FAILED",
+            "paused": "TASK_RUN_PAUSED",
             "interrupted": "TASK_RUN_INTERRUPTED",
             "cancelled": "TASK_RUN_CANCELLED",
         }.get(status, "TASK_RUN_FINISHED")
@@ -190,6 +290,9 @@ class _TraceStoreStorageMixin:
             task_id=task_id,
             agent_id=agent_id,
             ts=ts,
+            tenant_id=tenant_id,
+            owner_actor_id=owner_actor_id,
+            scope=scope,
         )
 
     def record_approval(
@@ -207,17 +310,23 @@ class _TraceStoreStorageMixin:
         metadata: dict[str, Any] | None = None,
         requested_at: str | None = None,
         decided_at: str | None = None,
+        tenant_id: str | None = None,
+        owner_actor_id: str | None = None,
+        scope: TenantScope | None = None,
     ) -> int:
+        tenant_id, owner_actor_id = self._scope_values(scope, tenant_id, owner_actor_id)
         requested = requested_at or _now_iso()
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO approvals("
-                "requested_at, decided_at, thread_id, turn_id, task_id, agent_id, "
+                "requested_at, decided_at, tenant_id, owner_actor_id, thread_id, turn_id, task_id, agent_id, "
                 "tool_name, tool_call_id, args_preview, decision, reason, metadata"
-                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     requested,
                     decided_at or requested,
+                    tenant_id,
+                    owner_actor_id,
                     _optional_str(thread_id),
                     _optional_str(turn_id),
                     _optional_str(task_id),
@@ -244,14 +353,20 @@ class _TraceStoreStorageMixin:
         iteration: int = 0,
         summary: str = "",
         ts: str | None = None,
+        tenant_id: str | None = None,
+        owner_actor_id: str | None = None,
+        scope: TenantScope | None = None,
     ) -> int:
+        tenant_id, owner_actor_id = self._scope_values(scope, tenant_id, owner_actor_id)
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO agent_checkpoints("
-                "ts, task_id, thread_id, turn_id, agent_id, checkpoint_type, iteration, summary, state"
-                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "ts, tenant_id, owner_actor_id, task_id, thread_id, turn_id, agent_id, checkpoint_type, iteration, summary, state"
+                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     ts or _now_iso(),
+                    tenant_id,
+                    owner_actor_id,
                     _clean_str(task_id),
                     _optional_str(thread_id),
                     _optional_str(turn_id),
@@ -281,16 +396,22 @@ class _TraceStoreStorageMixin:
         is_local: bool = False,
         metadata: dict[str, Any] | None = None,
         ts: str | None = None,
+        tenant_id: str | None = None,
+        owner_actor_id: str | None = None,
+        scope: TenantScope | None = None,
     ) -> int:
+        tenant_id, owner_actor_id = self._scope_values(scope, tenant_id, owner_actor_id)
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO llm_token_usage("
-                "ts, task_id, thread_id, turn_id, agent_id, iteration, model, "
+                "ts, tenant_id, owner_actor_id, task_id, thread_id, turn_id, agent_id, iteration, model, "
                 "input_tokens, output_tokens, thinking_tokens, cached_tokens, cost_usd, "
                 "is_local, metadata"
-                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     ts or _now_iso(),
+                    tenant_id,
+                    owner_actor_id,
                     _optional_str(task_id),
                     _optional_str(thread_id),
                     _optional_str(turn_id),
@@ -319,14 +440,20 @@ class _TraceStoreStorageMixin:
         confirmed_at: str | None = None,
         consumed_at: str | None = None,
         ts: str | None = None,
+        tenant_id: str | None = None,
+        owner_actor_id: str | None = None,
+        scope: TenantScope | None = None,
     ) -> int:
+        tenant_id, owner_actor_id = self._scope_values(scope, tenant_id, owner_actor_id)
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO resume_requests("
-                "ts, thread_id, checkpoint_id, task_id, status, intent, confirmed_at, consumed_at"
-                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                "ts, tenant_id, owner_actor_id, thread_id, checkpoint_id, task_id, status, intent, confirmed_at, consumed_at"
+                ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     ts or _now_iso(),
+                    tenant_id,
+                    owner_actor_id,
                     _clean_str(thread_id),
                     int(checkpoint_id or 0),
                     _optional_str(task_id),
@@ -346,14 +473,17 @@ class _TraceStoreStorageMixin:
         agent_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
+        filters = {
+            "thread_id": thread_id,
+            "turn_id": turn_id,
+            "agent_id": agent_id,
+        }
+        filters.update(self._scope_filters(scope))
         rows = self._query(
             "messages",
-            filters={
-                "thread_id": thread_id,
-                "turn_id": turn_id,
-                "agent_id": agent_id,
-            },
+            filters=filters,
             limit=limit,
             offset=offset,
         )
@@ -369,16 +499,19 @@ class _TraceStoreStorageMixin:
         event_type: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
+        filters = {
+            "thread_id": thread_id,
+            "turn_id": turn_id,
+            "task_id": task_id,
+            "agent_id": agent_id,
+            "event_type": event_type,
+        }
+        filters.update(self._scope_filters(scope))
         rows = self._query(
             "agui_events",
-            filters={
-                "thread_id": thread_id,
-                "turn_id": turn_id,
-                "task_id": task_id,
-                "agent_id": agent_id,
-                "event_type": event_type,
-            },
+            filters=filters,
             limit=limit,
             offset=offset,
         )
@@ -395,17 +528,20 @@ class _TraceStoreStorageMixin:
         decision: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
+        filters = {
+            "thread_id": thread_id,
+            "turn_id": turn_id,
+            "task_id": task_id,
+            "agent_id": agent_id,
+            "tool_call_id": tool_call_id,
+            "decision": decision,
+        }
+        filters.update(self._scope_filters(scope))
         rows = self._query(
             "approvals",
-            filters={
-                "thread_id": thread_id,
-                "turn_id": turn_id,
-                "task_id": task_id,
-                "agent_id": agent_id,
-                "tool_call_id": tool_call_id,
-                "decision": decision,
-            },
+            filters=filters,
             limit=limit,
             offset=offset,
         )
@@ -419,14 +555,17 @@ class _TraceStoreStorageMixin:
         agent_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
+        filters = {
+            "task_id": task_id,
+            "thread_id": thread_id,
+            "agent_id": agent_id,
+        }
+        filters.update(self._scope_filters(scope))
         rows = self._query(
             "llm_token_usage",
-            filters={
-                "task_id": task_id,
-                "thread_id": thread_id,
-                "agent_id": agent_id,
-            },
+            filters=filters,
             limit=limit,
             offset=offset,
         )
@@ -442,12 +581,14 @@ class _TraceStoreStorageMixin:
         status: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
         filters: dict[str, str | None] = {}
         if thread_id is not None:
             filters["thread_id"] = thread_id
         if status is not None:
             filters["status"] = status
+        filters.update(self._scope_filters(scope))
         rows = self._query(
             "resume_requests",
             filters=filters,
@@ -465,8 +606,9 @@ class _TraceStoreStorageMixin:
         self,
         *,
         thread_id: str,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any] | None:
-        rows = self.resume_requests(thread_id=thread_id, status="pending", limit=1)
+        rows = self.resume_requests(thread_id=thread_id, status="pending", limit=1, scope=scope)
         return rows[0] if rows else None
 
     def confirm_resume_request(
@@ -475,8 +617,9 @@ class _TraceStoreStorageMixin:
         thread_id: str,
         checkpoint_id: int,
         confirmation_text: str = "",
+        scope: TenantScope | None = None,
     ) -> dict[str, Any] | None:
-        request = self.latest_pending_resume_request(thread_id=thread_id)
+        request = self.latest_pending_resume_request(thread_id=thread_id, scope=scope)
         if request is None or int(request.get("checkpoint_id") or 0) != int(checkpoint_id or 0):
             return None
         intent = _sanitize_resume_intent(request.get("intent"))
@@ -508,26 +651,20 @@ class _TraceStoreStorageMixin:
             checkpoint_id=checkpoint_id,
             status="confirmed",
             limit=1,
+            scope=scope,
         )
         return confirmed_rows[0] if confirmed_rows else None
 
-    def consume_resume_request(self, request_id: int) -> dict[str, Any] | None:
+    def consume_resume_request(
+        self, request_id: int, *, scope: TenantScope | None = None
+    ) -> dict[str, Any] | None:
+        scope_filters = self._scope_filters(scope)
         with self._lock:
             # Atomic single-consumer transition: the ``status != 'consumed'``
             # guard means only ONE connection's UPDATE matches the row, so a
             # racing second consume gets rowcount 0 and returns None instead of
             # re-running the resume (TOCTOU double-consume).
-            cur = self._conn.execute(
-                "UPDATE resume_requests SET status = ?, consumed_at = ? "
-                "WHERE id = ? AND status != ?",
-                ("consumed", _now_iso(), int(request_id), "consumed"),
-            )
-            if cur.rowcount == 0:
-                return None  # no such request, or already consumed elsewhere
-            updated = self._conn.execute(
-                "SELECT * FROM resume_requests WHERE id = ?",
-                (int(request_id),),
-            ).fetchone()
+            updated = self._consume_resume_request_locked(request_id, _now_iso(), scope_filters)
         return _decode_row(updated, json_fields=("intent",)) if updated is not None else None
 
     def checkpoints(
@@ -540,16 +677,19 @@ class _TraceStoreStorageMixin:
         checkpoint_type: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
+        filters = {
+            "task_id": task_id,
+            "thread_id": thread_id,
+            "turn_id": turn_id,
+            "agent_id": agent_id,
+            "checkpoint_type": checkpoint_type,
+        }
+        filters.update(self._scope_filters(scope))
         rows = self._query(
             "agent_checkpoints",
-            filters={
-                "task_id": task_id,
-                "thread_id": thread_id,
-                "turn_id": turn_id,
-                "agent_id": agent_id,
-                "checkpoint_type": checkpoint_type,
-            },
+            filters=filters,
             limit=limit,
             offset=offset,
         )
@@ -560,12 +700,17 @@ class _TraceStoreStorageMixin:
         *,
         task_id: str,
         checkpoint_type: str | None = None,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any] | None:
         clauses = ["task_id = ?"]
         params: list[Any] = [task_id]
         if checkpoint_type is not None:
             clauses.append("checkpoint_type = ?")
             params.append(checkpoint_type)
+        scope_filters = self._scope_filters(scope)
+        for key, value in scope_filters.items():
+            clauses.append(f"{key} = ?")
+            params.append(value)
         sql = (
             "SELECT * FROM agent_checkpoints WHERE "  # nosec B608 — WHERE built from ? placeholders; values parameterized
             + " AND ".join(clauses)
@@ -575,16 +720,18 @@ class _TraceStoreStorageMixin:
             row = self._conn.execute(sql, params).fetchone()
         return _decode_row(row, json_fields=("state",)) if row is not None else None
 
-    def checkpoint_by_id(self, checkpoint_id: int) -> dict[str, Any] | None:
+    def checkpoint_by_id(
+        self, checkpoint_id: int, *, scope: TenantScope | None = None
+    ) -> dict[str, Any] | None:
+        scope_filters = self._scope_filters(scope)
         with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM agent_checkpoints WHERE id = ?",
-                (int(checkpoint_id),),
-            ).fetchone()
+            row = self._scoped_row_by_id_locked("agent_checkpoints", checkpoint_id, scope_filters)
         return _decode_row(row, json_fields=("state",)) if row is not None else None
 
-    def resume_proposal(self, checkpoint_id: int) -> dict[str, Any] | None:
-        checkpoint = self.checkpoint_by_id(checkpoint_id)
+    def resume_proposal(
+        self, checkpoint_id: int, *, scope: TenantScope | None = None
+    ) -> dict[str, Any] | None:
+        checkpoint = self.checkpoint_by_id(checkpoint_id, scope=scope)
         if checkpoint is None:
             return None
         return _resume_proposal_from_checkpoint(checkpoint)
@@ -599,6 +746,7 @@ class _TraceStoreStorageMixin:
         checkpoint_type: str | None = None,
         limit: int = 5,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
         checkpoints = self.checkpoints(
             task_id=task_id,
@@ -608,19 +756,20 @@ class _TraceStoreStorageMixin:
             checkpoint_type=checkpoint_type,
             limit=limit,
             offset=offset,
+            scope=scope,
         )
         return [_resume_proposal_from_checkpoint(checkpoint) for checkpoint in checkpoints]
 
-    def task_run(self, task_id: str) -> dict[str, Any] | None:
+    def task_run(self, task_id: str, *, scope: TenantScope | None = None) -> dict[str, Any] | None:
         task_id = _clean_str(task_id)
         if not task_id:
             return None
-        events = self.events(task_id=task_id, limit=10000)
-        checkpoints = self.checkpoints(task_id=task_id, limit=10000)
-        token_rows = self.token_usage(task_id=task_id, limit=10000)
+        events = self.events(task_id=task_id, limit=10000, scope=scope)
+        checkpoints = self.checkpoints(task_id=task_id, limit=10000, scope=scope)
+        token_rows = self.token_usage(task_id=task_id, limit=10000, scope=scope)
         if not events and not checkpoints and not token_rows:
             return None
-        approvals = self._approvals_for_task(task_id)
+        approvals = self._approvals_for_task(task_id, scope=scope)
         return _task_run_from_rows(
             task_id=task_id,
             events=events,
@@ -639,6 +788,7 @@ class _TraceStoreStorageMixin:
         status: TaskRunStatus | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
         rows = self._task_run_ids(
             thread_id=thread_id,
@@ -646,10 +796,18 @@ class _TraceStoreStorageMixin:
             agent_id=agent_id,
             limit=limit if status is None else None,
             offset=offset if status is None else 0,
+            scope=scope,
         )
         runs: list[dict[str, Any]] = []
         for row in rows:
-            run = self.task_run(str(row["task_id"]))
+            # Keep the unscoped call shape compatible with integrations that
+            # instrument ``task_run``; authenticated callers still receive
+            # the explicit scope below.
+            run = (
+                self.task_run(str(row["task_id"]))
+                if scope is None
+                else self.task_run(str(row["task_id"]), scope=scope)
+            )
             if run is None:
                 continue
             if status is not None and run.get("status") != status:
@@ -662,161 +820,6 @@ class _TraceStoreStorageMixin:
         end = start + max(0, int(limit or 0))
         return runs[start:end]
 
-    def task_run_review(self, task_id: str) -> dict[str, Any] | None:
-        run = self.task_run(task_id)
-        if run is None:
-            return None
-        loop_checkpoint = self.latest_checkpoint(
-            task_id=str(run["task_id"]),
-            checkpoint_type="loop_run",
-        )
-        if isinstance(loop_checkpoint, dict):
-            return _task_run_review_from_loop_checkpoint(run, loop_checkpoint)
-        approvals = self._approvals_for_task(str(run["task_id"]))
-        return _task_run_review_from_run(run, approvals)
-
-    def task_run_replay_case(self, task_id: str) -> dict[str, Any] | None:
-        review = self.task_run_review(task_id)
-        if review is None:
-            return None
-        return _task_run_replay_case_from_review(review)
-
-    def evaluate_task_run_replay_case(self, task_id: str) -> dict[str, Any] | None:
-        replay_case = self.task_run_replay_case(task_id)
-        if replay_case is None:
-            return None
-        return _evaluate_task_run_replay_case(replay_case)
-
-    def task_run_replay_cases(
-        self,
-        *,
-        thread_id: str | None = None,
-        turn_id: str | None = None,
-        agent_id: str | None = None,
-        status: TaskRunStatus | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> dict[str, Any]:
-        if status is None:
-            rows = self._task_run_ids(
-                thread_id=thread_id,
-                turn_id=turn_id,
-                agent_id=agent_id,
-                limit=limit,
-                offset=offset,
-            )
-            task_ids = [str(row["task_id"]) for row in rows]
-        else:
-            runs = self.task_runs(
-                thread_id=thread_id,
-                turn_id=turn_id,
-                agent_id=agent_id,
-                status=status,
-                limit=limit,
-                offset=offset,
-            )
-            task_ids = [str(run.get("task_id") or "") for run in runs]
-        cases = [
-            case for task_id in task_ids if (case := self.task_run_replay_case(task_id)) is not None
-        ]
-        return {
-            "schema": "octopus.task_run_replay_case_corpus.v1",
-            "cases": cases,
-            "total": len(cases),
-            "limit": limit,
-            "offset": offset,
-        }
-
-    def evaluate_task_run_replay_cases(
-        self,
-        *,
-        thread_id: str | None = None,
-        turn_id: str | None = None,
-        agent_id: str | None = None,
-        status: TaskRunStatus | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> dict[str, Any]:
-        corpus = self.task_run_replay_cases(
-            thread_id=thread_id,
-            turn_id=turn_id,
-            agent_id=agent_id,
-            status=status,
-            limit=limit,
-            offset=offset,
-        )
-        evaluations = [
-            _evaluate_task_run_replay_case(case)
-            for case in corpus.get("cases", [])
-            if isinstance(case, dict)
-        ]
-        passed = sum(1 for item in evaluations if item.get("passed") is True)
-        failed = sum(1 for item in evaluations if item.get("passed") is False)
-        return {
-            "schema": "octopus.task_run_replay_evaluation_corpus.v1",
-            "passed": passed,
-            "failed": failed,
-            "total": len(evaluations),
-            "limit": limit,
-            "offset": offset,
-            "evaluations": evaluations,
-        }
-
-    def replay_gate(
-        self,
-        *,
-        thread_id: str | None = None,
-        turn_id: str | None = None,
-        agent_id: str | None = None,
-        status: TaskRunStatus | None = None,
-        min_cases: int = 1,
-        min_score: float = 1.0,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> dict[str, Any]:
-        corpus = self.evaluate_task_run_replay_cases(
-            thread_id=thread_id,
-            turn_id=turn_id,
-            agent_id=agent_id,
-            status=status,
-            limit=limit,
-            offset=offset,
-        )
-        evaluations = [item for item in corpus.get("evaluations", []) if isinstance(item, dict)]
-        return _replay_gate_from_evaluations(
-            evaluations,
-            min_cases=min_cases,
-            min_score=min_score,
-            filters={
-                "thread_id": thread_id,
-                "turn_id": turn_id,
-                "agent_id": agent_id,
-                "status": status,
-                "limit": limit,
-                "offset": offset,
-            },
-        )
-
-    def replay_gate_for_task_ids(
-        self,
-        task_ids: list[str],
-        *,
-        min_cases: int = 1,
-        min_score: float = 1.0,
-    ) -> dict[str, Any]:
-        clean_task_ids = [task_id for task_id in dict.fromkeys(task_ids) if task_id]
-        evaluations = [
-            evaluation
-            for task_id in clean_task_ids
-            if (evaluation := self.evaluate_task_run_replay_case(task_id)) is not None
-        ]
-        return _replay_gate_from_evaluations(
-            evaluations,
-            min_cases=min_cases,
-            min_score=min_score,
-            filters={"task_ids": clean_task_ids},
-        )
-
     def stats(
         self,
         *,
@@ -824,7 +827,9 @@ class _TraceStoreStorageMixin:
         task_id: str | None = None,
         agent_id: str | None = None,
         turn_id: str | None = None,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
+        scope_filters = self._scope_filters(scope)
         with self._lock:
             counts = {
                 "messages": self._count_locked(
@@ -833,7 +838,8 @@ class _TraceStoreStorageMixin:
                         "thread_id": thread_id,
                         "turn_id": turn_id,
                         "agent_id": agent_id,
-                    },
+                    }
+                    | scope_filters,
                 ),
                 "events": self._count_locked(
                     "agui_events",
@@ -842,7 +848,8 @@ class _TraceStoreStorageMixin:
                         "turn_id": turn_id,
                         "task_id": task_id,
                         "agent_id": agent_id,
-                    },
+                    }
+                    | scope_filters,
                 ),
                 "approvals": self._count_locked(
                     "approvals",
@@ -851,7 +858,8 @@ class _TraceStoreStorageMixin:
                         "turn_id": turn_id,
                         "task_id": task_id,
                         "agent_id": agent_id,
-                    },
+                    }
+                    | scope_filters,
                 ),
                 "checkpoints": self._count_locked(
                     "agent_checkpoints",
@@ -860,7 +868,8 @@ class _TraceStoreStorageMixin:
                         "turn_id": turn_id,
                         "task_id": task_id,
                         "agent_id": agent_id,
-                    },
+                    }
+                    | scope_filters,
                 ),
                 "token_usage": self._count_locked(
                     "llm_token_usage",
@@ -869,13 +878,15 @@ class _TraceStoreStorageMixin:
                         "turn_id": turn_id,
                         "task_id": task_id,
                         "agent_id": agent_id,
-                    },
+                    }
+                    | scope_filters,
                 ),
                 "resume_requests": self._count_locked(
                     "resume_requests",
                     {
                         "thread_id": thread_id,
-                    },
+                    }
+                    | scope_filters,
                 ),
             }
             token_where, token_params = self._where_params(
@@ -885,6 +896,7 @@ class _TraceStoreStorageMixin:
                     "task_id": task_id,
                     "agent_id": agent_id,
                 }
+                | scope_filters
             )
             token_row = self._conn.execute(
                 "SELECT "  # nosec B608 — WHERE built from ? placeholders; values parameterized
@@ -907,36 +919,6 @@ class _TraceStoreStorageMixin:
             },
         }
 
-    def _where_params(self, filters: dict[str, str | None]) -> tuple[str, list[Any]]:
-        clauses: list[str] = []
-        params: list[Any] = []
-        for key, value in filters.items():
-            if value is None:
-                continue
-            clauses.append(f"{key} = ?")
-            params.append(value)
-        where = " WHERE " + " AND ".join(clauses) if clauses else ""
-        return where, params
-
-    def _query(
-        self,
-        table: str,
-        *,
-        filters: dict[str, str | None],
-        limit: int,
-        offset: int,
-    ) -> list[sqlite3.Row]:
-        where, params = self._where_params(filters)
-        sql = f"SELECT * FROM {table}{where} ORDER BY id ASC LIMIT ? OFFSET ?"  # nosec B608 — table is internal literal; values parameterized
-        params.extend([max(0, int(limit or 0)), max(0, int(offset or 0))])
-        with self._lock:
-            return list(self._conn.execute(sql, params).fetchall())
-
-    def _count_locked(self, table: str, filters: dict[str, str | None] | None = None) -> int:
-        where, params = self._where_params(filters or {})
-        row = self._conn.execute(f"SELECT COUNT(*) AS c FROM {table}{where}", params).fetchone()  # nosec B608 — table is internal literal; values parameterized
-        return int(row["c"]) if row else 0
-
     def _task_run_ids(
         self,
         *,
@@ -945,6 +927,7 @@ class _TraceStoreStorageMixin:
         agent_id: str | None = None,
         limit: int | None = None,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> list[sqlite3.Row]:
         parts: list[str] = []
         params: list[Any] = []
@@ -954,6 +937,7 @@ class _TraceStoreStorageMixin:
                 ("thread_id", thread_id),
                 ("turn_id", turn_id),
                 ("agent_id", agent_id),
+                *self._scope_filters(scope).items(),
             ):
                 if value is not None:
                     clauses.append(f"{key} = ?")
@@ -973,10 +957,12 @@ class _TraceStoreStorageMixin:
         with self._lock:
             return list(self._conn.execute(sql, params).fetchall())
 
-    def _approvals_for_task(self, task_id: str) -> list[dict[str, Any]]:
+    def _approvals_for_task(
+        self, task_id: str, *, scope: TenantScope | None = None
+    ) -> list[dict[str, Any]]:
         rows = self._query(
             "approvals",
-            filters={"task_id": task_id},
+            filters={"task_id": task_id} | self._scope_filters(scope),
             limit=10000,
             offset=0,
         )

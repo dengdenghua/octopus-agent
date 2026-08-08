@@ -95,8 +95,8 @@ def test_flatten_merges_post_final_trace_items_into_delivered_answer() -> None:
     assert len(messages) == 2
     ai = messages[1]
     assert ai["content"].startswith("# Report")
-    assert "collect initial evidence" in ai["additional_kwargs"]["reasoning_content"]
-    assert "todo-protocol guard" in ai["additional_kwargs"]["reasoning_content"]
+    assert "reasoning_content" not in ai["additional_kwargs"]
+    assert "public_reasoning_summary" not in ai["additional_kwargs"]
     assert [tool["name"] for tool in ai["tool_calls"]] == ["todo_write"]
 
 
@@ -211,7 +211,7 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert [phase["status"] for phase in final_snapshot["phases"]] == [
         "done",
         "done",
-        "done",
+        "pending",
     ]
 
     turn = out["response"].result["turn"]

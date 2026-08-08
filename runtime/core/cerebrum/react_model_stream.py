@@ -51,12 +51,19 @@ from runtime.platform.models.rescue_policy import is_retryable_model_error
 
 _logger = logging.getLogger(__name__)
 
+# Plain, unanchored prose is ambiguous while the provider is still streaming:
+# it can be a normal chat answer, or the beginning of a leaked ReAct/system
+# transcript whose markers arrive a few chunks later. Buffer a modest prefix
+# before exposing it. This keeps ordinary long answers progressive while
+# giving the protocol-echo detector enough text to make a safe decision.
+_ZERO_ANCHOR_STREAM_GATE_CHARS = 120
+
 
 def _phase_6b_model_stream(
     state: _LoopState,
     *,
     i: int,
-    model_iteration_timeout_s: Callable[[], float],
+    model_iteration_timeout_s: Callable[[float | None], float],
     model_iteration_timeout_s_config: float | None = None,
     try_react_model_failover: Callable[[str], str | None],
 ) -> Generator[dict, None, _LoopControl]:
@@ -430,12 +437,14 @@ def _phase_6b_model_stream(
                                 _final_stream_started = True
                                 _visible_stream_state["chars"] = len(answer_so_far)
                         elif (
-                            len(joined) >= 20
+                            len(joined) >= _ZERO_ANCHOR_STREAM_GATE_CHARS
                             and not _native_orientation_emitted
                             and not _THOUGHT_RE.match(joined.lstrip())
                             and not _ACTION_RE.match(joined.lstrip())
-                            and not _looks_like_observation_echo(joined[:80])
-                            and not joined.lstrip().startswith(("<tool_call>", "<tool_invocation", "<function=", "<final_answer"))
+                            and not _looks_like_observation_echo(joined)
+                            and not joined.lstrip().startswith(
+                                ("<tool_call>", "<tool_invocation", "<function=", "<final_answer")
+                            )
                             and not _looks_like_special_tool_envelope(joined[:100])
                         ):
                             # Zero-anchor chat-style answer: model is

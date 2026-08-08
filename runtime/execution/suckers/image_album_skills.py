@@ -14,6 +14,7 @@ All seven are self-gating: when the underlying model / index isn't available
 or ``OCTOPUS_IMAGE_SEMANTIC=0``, they return a clear message instead of
 failing — so the agent degrades gracefully.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -140,7 +141,11 @@ def _image_train_category(
     result = _idx.train_category(name, image_paths, db_path=_idx_db(directory))
     if result is None:
         return _not_ready("category training")
-    return {"name": result.get("name"), "examples": result.get("examples"), "vector_dim": result.get("vector_dim")}
+    return {
+        "name": result.get("name"),
+        "examples": result.get("examples"),
+        "vector_dim": result.get("vector_dim"),
+    }
 
 
 def _not_ready(feature: str) -> dict[str, Any]:

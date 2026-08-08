@@ -74,6 +74,11 @@ class JournalEvent(BaseModel):
     task_id: TaskId | None = None
     arm_id: ArmId | None = None
     actor: str | None = None
+    # Tenant ownership is part of the event envelope so JSONL and every
+    # derived read model carry the same authorization context.  Existing
+    # events omit these fields and are treated as legacy during migration.
+    tenant_id: str | None = None
+    owner_actor_id: str | None = None
     agent_id: str | None = None
     conversation_id: str | None = None
     ts: datetime = Field(default_factory=now_utc)

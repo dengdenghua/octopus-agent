@@ -18,6 +18,8 @@ def register_mcp_tools_as_skills(
     include_golden_tests: bool = True,
     require_trust: bool = True,
     server_name: str | None = None,
+    tenant_id: str | None = None,
+    trust_store: Any = None,
 ) -> list[str]:
     registered: list[str] = []
     tools = client.list_tools()
@@ -44,9 +46,12 @@ def register_mcp_tools_as_skills(
             )
             return []
         if inferred_name:
-            from .trust import get_trust_store
+            if trust_store is None:
+                from .trust import get_trust_store
 
-            store = get_trust_store()
+                store = get_trust_store(tenant_id)
+            else:
+                store = trust_store
             tool_names = [t.name for t in tools]
             if not store.is_approved(inferred_name, tool_names):
                 import logging
@@ -83,6 +88,7 @@ def register_mcp_tools_as_skills(
             affinity=["mcp", "external"],
             cost_profile="mid",
             trusted_source=f"mcp://{tool.server_name}/{tool.name}",
+            tenant_id=tenant_id,
             handler=handler,
             tests=tests,
         )

@@ -333,6 +333,15 @@ def wire_stack(
             index_enabled=_index_enabled,
         )
         app.state.thread_store = thread_store
+        # Hand the live store to the history_search / history_read skills so
+        # they query the same in-memory state the gateway serves, instead of
+        # building a second read-only store off disk.
+        try:
+            from runtime.execution.suckers.history_skill import set_default_thread_store
+
+            set_default_thread_store(thread_store)
+        except Exception:  # noqa: BLE001 — skill module optional
+            pass
         # Defer: feed stack.config.mcp_servers into the mcp_router
         # factory so the router owns the initial-seed logic instead
         # of doing it twice (once here, once inside the factory).

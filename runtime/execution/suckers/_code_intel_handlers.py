@@ -10,6 +10,7 @@ bottom of the file.  When this module is loaded, ``code_intelligence_skills``
 is already in ``sys.modules`` with all handlers defined, so the imports below
 succeed.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

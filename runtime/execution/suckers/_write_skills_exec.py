@@ -3,9 +3,11 @@
 Contains ``exec_shell`` / ``background_exec`` / ``read_background_output`` /
 ``kill_background_exec`` (and their shell aliases) and ``ipython``.
 """
+
 from __future__ import annotations
 
 import contextlib
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +24,7 @@ from ._write_skills_background import (
     _read_background_metadata,
     _snapshot_background_metadata,
     _write_background_metadata,
+    background_process_identity_matches,
 )
 from ._write_skills_common import (
     _DEFAULT_EXEC_TIMEOUT_S,
@@ -97,6 +100,7 @@ def _exec_shell(
         timeout=timeout_s,
         output_cap_bytes=_EXEC_OUTPUT_CAP,
         sandbox_dir=sandbox_dir,
+        sandbox_required=True,
     )
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
@@ -138,6 +142,34 @@ def _background_exec(
         return {"error": parse_error}
     assert argv is not None
 
+    from runtime.safety.sandboxing.sandbox import process_sandbox_required
+
+    if sandbox_dir is None and process_sandbox_required():
+        from runtime.platform.process.streaming import execution_policy_snapshot
+
+        return {
+            "error": (
+                "sandbox_violation: shared/commercial background execution "
+                "requires a workspace sandbox and hard process backend"
+            ),
+            "argv": argv,
+            "execution_policy": execution_policy_snapshot(
+                sandbox_requested=False,
+                workspace=None,
+                cwd=cwd,
+                backend="direct",
+                hard=False,
+                allow_network=False,
+                env_mode="scrubbed",
+                process_group=True,
+                timeout_s=None,
+                result={
+                    "status": "sandbox_violation",
+                    "error_type": "sandbox_violation",
+                },
+            ),
+        }
+
     if cwd is not None:
         resolved_cwd, err = _ensure_sandbox(cwd, sandbox_dir)
         if err:
@@ -163,6 +195,7 @@ def _background_exec(
         from runtime.safety.sandboxing.sandbox import (
             SandboxPolicy,
             SandboxViolation,
+            effective_process_sandbox_mode,
             select_process_backend,
         )
 
@@ -175,7 +208,12 @@ def _background_exec(
         run_env = policy.env_for()
         env_mode = "allowlist"
         try:
-            choice = select_process_backend()
+            if os.environ.get("OCTOPUS_PROCESS_SANDBOX") or os.environ.get(
+                "OCTOPUS_DEPLOYMENT_MODE"
+            ):
+                choice = select_process_backend(effective_process_sandbox_mode())
+            else:
+                choice = select_process_backend()
             argv, run_env, transformed_cwd = choice.backend.transform(
                 list(argv),
                 run_env,
@@ -183,7 +221,18 @@ def _background_exec(
                 policy,
             )
         except SandboxViolation as exc:
-            return {"error": f"sandbox_violation: {exc}", "argv": argv}
+            return {
+                "error": f"sandbox_violation: {exc}",
+                "argv": argv,
+                "execution_policy": _background_execution_policy(
+                    sandbox_requested=True,
+                    sandbox_workspace=sandbox_workspace,
+                    cwd=cwd_str,
+                    sandbox_backend=sandbox_backend,
+                    sandbox_hard=sandbox_hard,
+                    env_mode=env_mode,
+                ),
+            }
         cwd_str = str(transformed_cwd)
         sandbox_backend = choice.name
         sandbox_hard = choice.hard
@@ -208,13 +257,11 @@ def _background_exec(
     try:
         from runtime.platform.process.tree import process_group_kwargs
 
-        stdout_fh = paths["stdout"].open("w", encoding="utf-8", errors="replace")
-        stderr_fh = paths["stderr"].open("w", encoding="utf-8", errors="replace")
         proc = subprocess.Popen(
             argv,
             stdin=subprocess.DEVNULL,
-            stdout=stdout_fh,
-            stderr=stderr_fh,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             cwd=cwd_str,
             env=run_env,
@@ -226,11 +273,6 @@ def _background_exec(
         return {"error": f"command not found: {e}", "argv": argv}
     except OSError as e:
         return {"error": f"exec_failed: {e}", "argv": argv}
-    finally:
-        with contextlib.suppress(UnboundLocalError, OSError):
-            stdout_fh.close()
-        with contextlib.suppress(UnboundLocalError, OSError):
-            stderr_fh.close()
 
     task = _BackgroundProcess(
         task_id=task_id,
@@ -290,6 +332,13 @@ def _kill_background_exec(
         except (TypeError, ValueError):
             pid = 0
         if pid > 0:
+            if not background_process_identity_matches(metadata):
+                return {
+                    "error": "process_identity_mismatch: refusing to kill a reused or foreign pid",
+                    "task_id": task_id,
+                    "status": "unknown",
+                    "pid": pid,
+                }
             from runtime.platform.process.tree import terminate_pid_tree
 
             with contextlib.suppress(Exception):
@@ -337,6 +386,7 @@ def _ipython(
         timeout=timeout_s,
         output_cap_bytes=_EXEC_OUTPUT_CAP,
         sandbox_dir=sandbox_dir,
+        sandbox_required=True,
     )
     if "error" in r and "exit_code" not in r:
         return _error_with_execution_policy(f"exec_failed: {r['error']}", r)

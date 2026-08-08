@@ -93,9 +93,7 @@ def _drive(ws: Any, thread_id: str, text: str = "hi") -> list[Notification]:
     while True:
         msg = decode_message(ws.receive_text())
         if isinstance(msg, JsonRpcRequest):
-            ws.send_text(
-                encode_message(JsonRpcResponse(id=msg.id, result={"action": "accept"}))
-            )
+            ws.send_text(encode_message(JsonRpcResponse(id=msg.id, result={"action": "accept"})))
             continue
         if isinstance(msg, Notification):
             notifications.append(msg)
@@ -169,18 +167,16 @@ def test_full_fetch_returns_sequenced_events_with_ids(gateway: Any) -> None:
 
 def test_live_notification_and_log_line_share_event_id(gateway: Any) -> None:
     notifications = _drive_scripted_turn(gateway, "th-dedupe")
-    notified = [
-        n.params
-        for n in notifications
-        if n.method == "item/agentMessage/delta"
-    ]
+    notified = [n.params for n in notifications if n.method == "item/agentMessage/delta"]
     assert notified, "expected live agentMessage deltas"
     assert all(isinstance(p.get("eventId"), str) for p in notified)
 
     with gateway.websocket_connect("/api/realtime") as ws:
         result = _fetch_events(ws, "th-dedupe")
     logged = [
-        e for e in result["events"] if e["event"] == "item_delta" and e["payload"]["kind"] == "agentMessage"
+        e
+        for e in result["events"]
+        if e["event"] == "item_delta" and e["payload"]["kind"] == "agentMessage"
     ]
     assert {p["eventId"] for p in notified} == {e["eventId"] for e in logged}
     assert "".join(p["delta"] for p in notified) == "hello world"
@@ -289,11 +285,7 @@ def test_coalesce_mode_shrinks_completed_items(gateway: Any) -> None:
         if e["event"] == "item_delta" and e["payload"].get("kind") == "agentMessage"
     ]
     assert deltas == []
-    completed = [
-        e
-        for e in coalesced["events"]
-        if e["event"] == "item_completed"
-    ]
+    completed = [e for e in coalesced["events"] if e["event"] == "item_completed"]
     assert completed
     texts = [
         e["payload"]["item"]["text"]

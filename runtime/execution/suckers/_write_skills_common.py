@@ -4,6 +4,7 @@ Holds the cross-cutting helpers and module constants used by the write / exec /
 git / quality handler submodules.  Kept here so the submodules can import them
 without circular imports.
 """
+
 from __future__ import annotations
 
 import shlex

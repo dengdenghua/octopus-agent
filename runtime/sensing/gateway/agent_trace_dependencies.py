@@ -12,6 +12,7 @@ from runtime.memory.learning.experience_ledger import ExperienceLedger
 from runtime.memory.learning.promotion_applier import PromotionApplier
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.platform.process.paths import app_paths
+from runtime.safety.auth.scope import TenantScope, tenant_scoped_path
 from runtime.safety.evolution.proposal_ledger import ProposalLedger
 
 _STORE_LOCK = threading.Lock()
@@ -46,10 +47,13 @@ def _get_experience_ledger(
     *,
     experience_ledger: ExperienceLedger | None = None,
     experience_ledger_path: Path | None = None,
+    scope: TenantScope | None = None,
 ) -> ExperienceLedger:
     if experience_ledger is not None:
         return experience_ledger
-    target = Path(experience_ledger_path or app_paths().experience_ledger_path)
+    target = tenant_scoped_path(
+        Path(experience_ledger_path or app_paths().experience_ledger_path), scope
+    )
     global _EXPERIENCE_INSTANCE, _EXPERIENCE_PATH
     with _EXPERIENCE_LOCK:
         if _EXPERIENCE_INSTANCE is None or target != _EXPERIENCE_PATH:
@@ -62,10 +66,11 @@ def _get_review_queue(
     *,
     review_queue: ReviewQueue | None = None,
     review_queue_path: Path | None = None,
+    scope: TenantScope | None = None,
 ) -> ReviewQueue:
     if review_queue is not None:
         return review_queue
-    target = Path(review_queue_path or app_paths().review_queue_path)
+    target = tenant_scoped_path(Path(review_queue_path or app_paths().review_queue_path), scope)
     global _REVIEW_QUEUE_INSTANCE, _REVIEW_QUEUE_PATH
     with _REVIEW_QUEUE_LOCK:
         if _REVIEW_QUEUE_INSTANCE is None or target != _REVIEW_QUEUE_PATH:
@@ -82,28 +87,38 @@ def _get_promotion_applier(
     review_queue_path: Path | None = None,
     promotion_audit_path: Path | None = None,
     proposal_ledger_path: Path | None = None,
+    scope: TenantScope | None = None,
 ) -> PromotionApplier:
     return PromotionApplier(
         review_queue=_get_review_queue(
             review_queue=review_queue,
             review_queue_path=review_queue_path,
+            scope=scope,
         ),
         experience_ledger=_get_experience_ledger(
             experience_ledger=experience_ledger,
             experience_ledger_path=experience_ledger_path,
+            scope=scope,
         ),
-        proposal_ledger=ProposalLedger(proposal_ledger_path or app_paths().proposal_ledger_path),
-        audit_path=promotion_audit_path or app_paths().promotion_audit_path,
+        proposal_ledger=ProposalLedger(
+            tenant_scoped_path(proposal_ledger_path or app_paths().proposal_ledger_path, scope)
+        ),
+        audit_path=tenant_scoped_path(
+            promotion_audit_path or app_paths().promotion_audit_path, scope
+        ),
+        scope=scope,
     )
 
 
 def _source_task_ids_from_promotion_plan(plan: dict[str, Any]) -> list[str]:
     out: list[str] = []
-    actions = plan.get("actions") if isinstance(plan.get("actions"), list) else []
+    raw_actions = plan.get("actions")
+    actions = raw_actions if isinstance(raw_actions, list) else []
     for action in actions:
         if not isinstance(action, dict):
             continue
-        item = action.get("item") if isinstance(action.get("item"), dict) else {}
+        raw_item = action.get("item")
+        item = raw_item if isinstance(raw_item, dict) else {}
         source_task_ids = item.get("source_task_ids")
         if not isinstance(source_task_ids, list):
             continue
@@ -115,7 +130,8 @@ def _source_task_ids_from_promotion_plan(plan: dict[str, Any]) -> list[str]:
 
 
 def _promotion_plan_has_target(plan: dict[str, Any], target: str) -> bool:
-    actions = plan.get("actions") if isinstance(plan.get("actions"), list) else []
+    raw_actions = plan.get("actions")
+    actions = raw_actions if isinstance(raw_actions, list) else []
     return any(
         isinstance(action, dict)
         and action.get("action") == "apply"
@@ -127,8 +143,10 @@ def _promotion_plan_has_target(plan: dict[str, Any], target: str) -> bool:
 def _queue_repeated_trust_denials(
     summary: dict[str, Any], *, review_queue: ReviewQueue, min_occurrences: int
 ) -> dict[str, Any]:
-    by_tool = summary.get("by_tool") if isinstance(summary.get("by_tool"), dict) else {}
-    recent = summary.get("recent") if isinstance(summary.get("recent"), list) else []
+    raw_by_tool = summary.get("by_tool")
+    by_tool = raw_by_tool if isinstance(raw_by_tool, dict) else {}
+    raw_recent = summary.get("recent")
+    recent = raw_recent if isinstance(raw_recent, list) else []
     touched: list[dict[str, Any]] = []
     created = updated = 0
     for tool_name, count in sorted(by_tool.items(), key=lambda item: str(item[0])):

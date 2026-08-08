@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Literal, cast
 
 from runtime.execution.tool_engine import (
     normalize_tool_lifecycle_event,
@@ -30,8 +30,9 @@ def agentic_stream_event_to_react_event(
     if kind == "reasoning":
         return {"type": "thinking_delta", "delta": str(delta or "")}
     if kind in {"tool_start", "tool_end"} and isinstance(delta, dict):
+        lifecycle_kind = cast(Literal["tool_start", "tool_end"], kind)
         return tool_lifecycle_event_to_react_event(
-            normalize_tool_lifecycle_event(kind, delta, origin="native")
+            normalize_tool_lifecycle_event(lifecycle_kind, delta, origin="native")
         )
     if kind == "stats" and isinstance(delta, dict):
         return {"type": "throughput", "usage": delta}

@@ -136,7 +136,6 @@ def _execute_tool_call(
     return (result.rendered, result.is_error)
 
 
-
 def _is_semantic_error(output: Any) -> bool:
     """Return True when a skill's output structurally signals failure.
 
@@ -155,7 +154,6 @@ def _is_semantic_error(output: Any) -> bool:
     but possible signal of a warning the skill wants to surface.
     """
     return output_signals_error(output)
-
 
 
 def _recover_named_xml_tool_calls(

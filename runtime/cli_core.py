@@ -15,7 +15,6 @@ from runtime.core.nerves.reflex import (
 )
 from runtime.execution.arms import Arm, ArmPool
 from runtime.execution.suckers import SkillRegistry
-from runtime.execution.suckers.builtins import register_builtins
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.hemolymph import ContextComposer
 from runtime.memory.journal import InMemoryJournal, Journal

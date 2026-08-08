@@ -256,6 +256,7 @@ def _crawl_site(
                     timeout_ms=timeout_ms,
                     max_bytes=max_bytes,
                     user_agent=user_agent,
+                    allow_private=allow_private,
                 )
                 if render_mode == "auto" and _should_try_browser_fallback(fetched):
                     page, browser_runtime, browser_err = _ensure_browser_page(
@@ -367,13 +368,28 @@ def _fetch_page(
     timeout_ms: int,
     max_bytes: int,
     user_agent: str,
+    allow_private: bool = False,
 ) -> _FetchResult:
     try:
-        resp = client.get(
-            url,
-            timeout=timeout_ms / 1000,
-            headers={"User-Agent": user_agent},
-        )
+        if HTTPX_AVAILABLE and isinstance(client, httpx.Client):
+            from runtime.safety.auth.url_guard import safe_httpx_request
+
+            resp = safe_httpx_request(
+                "GET",
+                url,
+                timeout=timeout_ms / 1000,
+                headers={"User-Agent": user_agent},
+                allow_private=allow_private,
+                follow_redirects=False,
+            )
+        else:
+            # Injected clients are test/dedicated transport seams; production
+            # httpx clients take the pinned-IP path above.
+            resp = client.get(
+                url,
+                timeout=timeout_ms / 1000,
+                headers={"User-Agent": user_agent},
+            )
     except Exception as exc:  # noqa: BLE001
         return _FetchResult(url, None, "", "", f"http_error: {type(exc).__name__}: {exc}")
 
@@ -622,11 +638,23 @@ def _robots_can_fetch(
             parser = RobotFileParser()
             parser.set_url(robots_url)
             try:
-                resp = client.get(
-                    robots_url,
-                    timeout=timeout_ms / 1000,
-                    headers={"User-Agent": user_agent},
-                )
+                if HTTPX_AVAILABLE and isinstance(client, httpx.Client):
+                    from runtime.safety.auth.url_guard import safe_httpx_request
+
+                    resp = safe_httpx_request(
+                        "GET",
+                        robots_url,
+                        timeout=timeout_ms / 1000,
+                        headers={"User-Agent": user_agent},
+                        allow_private=allow_private,
+                        follow_redirects=False,
+                    )
+                else:
+                    resp = client.get(
+                        robots_url,
+                        timeout=timeout_ms / 1000,
+                        headers={"User-Agent": user_agent},
+                    )
                 if getattr(resp, "status_code", 0) == 200:
                     parser.parse((resp.text or "").splitlines())
                     cache[origin] = parser

@@ -52,9 +52,7 @@ def room_store(tmp_path: Path) -> RoomMessageStore:
 
 
 def _make_org(store: OrgStore, *, name: str = "Acme", owner_id: str = "owner-1"):
-    return store.create_organization(
-        name=name, owner_id=owner_id, organization_id="org-test"
-    )
+    return store.create_organization(name=name, owner_id=owner_id, organization_id="org-test")
 
 
 def _make_channel(
@@ -248,9 +246,7 @@ def test_sync_removes_departed_channel_member_from_group(
 # ─── 4. send / read channel messages ───────────────────────────────────────
 
 
-def test_send_and_read_channel_message(
-    org_store: OrgStore, room_store: RoomMessageStore
-) -> None:
+def test_send_and_read_channel_message(org_store: OrgStore, room_store: RoomMessageStore) -> None:
     """send_channel_message appends a message that channel_history reads back
     with the correct participant / display_name / text."""
     _make_org(org_store)
@@ -274,9 +270,7 @@ def test_send_and_read_channel_message(
     assert msg["text"] == "hello channel"
 
 
-def test_channel_messages_persist_across_restart(
-    org_store: OrgStore, tmp_path: Path
-) -> None:
+def test_channel_messages_persist_across_restart(org_store: OrgStore, tmp_path: Path) -> None:
     """Reconstructing the RoomMessageStore on the same base_dir recovers the
     channel's messages (simulates a restart)."""
     _make_org(org_store)

@@ -101,7 +101,10 @@ def _app() -> FastAPI:
 
 def _secured_app() -> FastAPI:
     store = IdentityStore()
-    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store.add(
+        Identity(actor_id="alice", roles=("operator",)),
+        api_key_plaintext="sk-alice",
+    )
     app = FastAPI()
     app.include_router(
         create_computer_router(

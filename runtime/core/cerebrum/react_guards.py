@@ -439,6 +439,44 @@ GUARD_REGISTRY: list[GuardSpec] = [
 ]
 
 
+# Detection and enforcement are deliberately separate. A detector answers
+# "is this worth mentioning?"; it must not automatically gain authority to
+# fail the user's task. Security/integrity findings remain fail-closed,
+# contract findings get one bounded repair opportunity in the loop, and
+# style-quality findings are telemetry/advice only.
+_ADVISORY_GUARD_CATEGORIES = frozenset({"test-quality", "code-smell"})
+_ADVISORY_GUARD_LABELS = frozenset(
+    {
+        "inspection-answer-fragment guard",
+    }
+)
+_HARD_GUARD_LABELS = frozenset(
+    {
+        "secret-leak guard",
+        "destructive-call guard",
+        "dynamic-exec guard",
+        "shell-injection guard",
+        "unsafe-deser guard",
+        "path-boundary decode guard",
+        "citation-grounding guard",
+        "final-answer completeness guard",
+        "implementation-write guard",
+        "tool-result guard",
+        "false-verification guard",
+        "red-verification guard",
+    }
+)
+
+
+def guard_disposition(label: str, category: str | None = None) -> str:
+    """Return ``hard``, ``repair`` or ``advisory`` for a guard finding."""
+    if label in _HARD_GUARD_LABELS or category == "security":
+        return "hard"
+    if label in _ADVISORY_GUARD_LABELS or category in _ADVISORY_GUARD_CATEGORIES:
+        return "advisory"
+    return "repair"
+
+
 def evaluate_guards(
     ctx: GuardContext,
     *,
@@ -493,6 +531,12 @@ def evaluate_guards(
             if recorder is not None:
                 with contextlib.suppress(Exception):
                     recorder(spec.label, spec.category)
+            # Preserve custom-registry behavior for external callers. Policy
+            # applies to the built-in production registry: quality/style
+            # findings still produce telemetry but cannot consume another
+            # model iteration or block delivery.
+            if registry is None and guard_disposition(spec.label, spec.category) == "advisory":
+                continue
             return (spec.label, msg)
     return None
 
@@ -503,6 +547,7 @@ __all__ = [
     "GuardSpec",
     "GUARD_REGISTRY",
     "evaluate_guards",
+    "guard_disposition",
     # ── Goal-intent / evidence-path analysis (re-exported) ──
     "_explicit_source_paths",
     "_explicitly_requested_tool_names",

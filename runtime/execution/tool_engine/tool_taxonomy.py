@@ -47,19 +47,25 @@ from typing import Any, Literal
 # so downstream consumers (TUI grouping, ACP rendering, permission
 # audits) share one vocabulary.
 ToolKind = Literal[
-    "Read",       # pure read: read_file / search / list
-    "Edit",       # write/edit/create/delete files
-    "Execute",    # shell / subprocess / arm execution
+    "Read",  # pure read: read_file / search / list
+    "Edit",  # write/edit/create/delete files
+    "Execute",  # shell / subprocess / arm execution
     "WebSearch",  # http / crawler / browser_read
-    "Subagent",   # spawn_subagent / cowork dispatch
-    "MCP",        # MCP server tools
-    "Other",      # everything else (notebook, git, etc.)
+    "Subagent",  # spawn_subagent / cowork dispatch
+    "MCP",  # MCP server tools
+    "Other",  # everything else (notebook, git, etc.)
 ]
 
 # affinity tags that imply a side-effecting tool.
-_SIDE_EFFECT_AFFINITIES = frozenset({
-    "write", "edit", "exec", "delete", "dangerous",
-})
+_SIDE_EFFECT_AFFINITIES = frozenset(
+    {
+        "write",
+        "edit",
+        "exec",
+        "delete",
+        "dangerous",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -72,7 +78,7 @@ class ToolTaxonomy:
     """
 
     kind: ToolKind
-    namespace: str          # "builtin" / "skill.public" / "mcp" / custom
+    namespace: str  # "builtin" / "skill.public" / "mcp" / custom
     readonly: bool
     version: int = 1
     # Free-form tags passed through from ``Skill.affinity`` for
@@ -114,6 +120,7 @@ def reset_overrides() -> None:
 
 
 # ── Classification helpers ───────────────────────────────────
+
 
 def _derive_namespace(trusted_source: str) -> str:
     """Map ``trusted_source`` URI to a stable namespace.
@@ -163,7 +170,12 @@ def _derive_kind(
         return "WebSearch"
     if "browser_interact" in affinity:
         return "Execute"
-    if "file" in affinity or name_lower.startswith("read_") or name_lower.startswith("list_") or name_lower.startswith("search_"):
+    if (
+        "file" in affinity
+        or name_lower.startswith("read_")
+        or name_lower.startswith("list_")
+        or name_lower.startswith("search_")
+    ):
         return "Read"
     return "Other"
 

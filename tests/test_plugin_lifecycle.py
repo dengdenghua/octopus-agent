@@ -47,9 +47,7 @@ def _plugin(root: Path, version: str, *, release_evidence: bool = False) -> Path
 def _installed_version(root: Path) -> str:
     return str(
         json.loads(
-            (root / "research" / ".codex-plugin" / "plugin.json").read_text(
-                encoding="utf-8"
-            )
+            (root / "research" / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
         )["version"]
     )
 

@@ -40,6 +40,7 @@ class PeriodicTask:
     jitter_s: float = 0.0
     run_on_start: bool = False
     cron_expr: CronExpression | None = None
+    allow_overlap: bool = True
     _next_ts: float = 0.0
     stats: TaskStats = field(init=False)
 
@@ -101,15 +102,28 @@ class BackgroundRunner:
                 return
             self._state = "stopped"
         self._stop_event.set()
+        deadline = time.monotonic() + max(0.0, timeout)
         if self._thread is not None:
-            self._thread.join(timeout=timeout)
+            self._thread.join(timeout=max(0.0, deadline - time.monotonic()))
             self._thread = None
         if self._pool is not None:
-            try:
-                self._pool.shutdown(wait=True, cancel_futures=False)
-            except Exception:  # noqa: BLE001
-                _logger.warning("BackgroundRunner pool shutdown timed out · forcing")
-                self._pool.shutdown(wait=False, cancel_futures=True)
+            # A running Python thread cannot be force-killed safely.  Wait for
+            # cooperative callbacks only within the caller's total budget;
+            # then return without allowing shutdown to hang deployment on a
+            # stuck callback.  Futures not yet started are cancelled.
+            in_flight = 0
+            while time.monotonic() < deadline:
+                with self._lock:
+                    in_flight = sum(t.stats.in_flight for t in self._tasks)
+                if in_flight == 0:
+                    break
+                time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
+            if in_flight > 0:
+                _logger.warning(
+                    "BackgroundRunner stopping with %d callback(s) still running",
+                    in_flight,
+                )
+            self._pool.shutdown(wait=False, cancel_futures=True)
             self._pool = None
 
     def __enter__(self) -> BackgroundRunner:
@@ -174,6 +188,10 @@ class BackgroundRunner:
                 callback=callback,
                 run_on_start=run_on_start,
                 cron_expr=cron,
+                # A cron expression identifies a business job.  Re-running
+                # it while the previous invocation is still active can
+                # duplicate external side effects (deploys, emails, writes).
+                allow_overlap=False,
             )
             if run_on_start:
                 task._next_ts = time.monotonic()
@@ -217,6 +235,13 @@ class BackgroundRunner:
             self._stop_event.wait(timeout=wait_s)
 
     def _execute(self, task: PeriodicTask) -> None:
+        with self._lock:
+            if not task.allow_overlap and task.stats.in_flight > 0:
+                # Move the schedule forward even when skipping. Otherwise a
+                # slow cron callback would be selected on every scheduler
+                # loop iteration and spin at 100% CPU.
+                self._reschedule(task)
+                return
         if self._pool is None:
             self._invoke(task)
             self._reschedule(task)  # Implementation note.

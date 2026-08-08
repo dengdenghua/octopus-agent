@@ -8,6 +8,7 @@ produces the terminal wording when the loop deadlocks against a guard.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from collections.abc import Callable, Generator
@@ -195,13 +196,14 @@ def _final_answer_needs_pre_emit_guard(
         return True
     if _detect_dynamic_exec_in_payload(_strip_code_fences(body)):
         return True
-    if not is_code_mode and (
-        _detect_shell_injection_in_payload(body)
-        or _detect_unsafe_deser_in_payload(body)
-        or _detect_destructive_calls_in_payload(body)
-    ):
-        return True
-    return False
+    return bool(
+        not is_code_mode
+        and (
+            _detect_shell_injection_in_payload(body)
+            or _detect_unsafe_deser_in_payload(body)
+            or _detect_destructive_calls_in_payload(body)
+        )
+    )
 
 
 def _evaluate_final_answer_guards(
@@ -225,6 +227,9 @@ def _evaluate_final_answer_guards(
         evaluate_guards,
     )
 
+    candidate_digest = hashlib.sha256(final_answer.encode("utf-8", errors="ignore")).hexdigest()[
+        :16
+    ]
     return evaluate_guards(
         GuardContext(
             steps=steps + [step],
@@ -238,13 +243,27 @@ def _evaluate_final_answer_guards(
             browser_operation_mode=browser_operation_mode,
             grounded_source_paths=grounded_source_paths,
         ),
-        recorder=_guard_hit_recorder(),
+        recorder=_guard_hit_recorder(
+            dedupe_key=f"{id(steps)}:{step.iteration}:{candidate_digest}",
+            goal=goal,
+            iteration=step.iteration,
+            metadata={
+                "candidate_digest": candidate_digest,
+                "step_count": len(steps) + 1,
+            },
+        ),
         disabled_labels=_disabled_guard_labels(),
         categories=categories,
     )
 
 
-def _note_guard_impasse(state: dict, label: str, steps: list) -> bool:
+def _note_guard_impasse(
+    state: dict,
+    label: str,
+    steps: list,
+    *,
+    rejection_limit: int = 3,
+) -> bool:
     """Track repeated same-guard rejections; True when the loop is stuck.
 
     A guard pushing back is healthy — the model does more work and returns
@@ -267,7 +286,29 @@ def _note_guard_impasse(state: dict, label: str, steps: list) -> bool:
         state["count"] = state.get("count", 0) + 1
     else:
         state.update(label=label, progress=progress, count=1)
-    return state["count"] >= 3
+    return state["count"] >= rejection_limit
+
+
+def _guard_rejection_outcome(state: dict, label: str, steps: list) -> str:
+    """Return ``retry``, ``soft_land`` or ``hard_stop`` for a rejection."""
+    from runtime.core.cerebrum.react_guards import guard_disposition
+
+    disposition = guard_disposition(label)
+    limit = 3 if disposition == "hard" else 2
+    if not _note_guard_impasse(state, label, steps, rejection_limit=limit):
+        return "retry"
+    return "hard_stop" if disposition == "hard" else "soft_land"
+
+
+def _guard_soft_landing_answer(candidate: str, label: str) -> str:
+    """Deliver useful work after one failed quality-contract repair."""
+    body = (candidate or "").strip()
+    note = (
+        "\n\n---\n"
+        f"质量提示：「{label}」仍缺少结构化执行证据。"
+        "系统已完成一次修复尝试；为避免继续空转，现交付已有结果。"
+    )
+    return f"{body}{note}" if body else note.lstrip()
 
 
 def _guard_impasse_final_answer(label: str, message: str) -> str:
@@ -369,6 +410,7 @@ def _phase_6e_guards_and_step_emit(
     intent = state.intent
     steps = state.steps
     step = state.step
+    assert step is not None, "phase 6e requires a parsed ReAct step"
     react_task_id = state.react_task_id
     _working_set = state.working_set
     _guard_impasse_state = state.guard_impasse_state
@@ -451,7 +493,13 @@ def _phase_6e_guards_and_step_emit(
             )
             if _guard_hit is not None:
                 _guard_label, _guard_message = _guard_hit
-                if _note_guard_impasse(_guard_impasse_state, _guard_label, steps):
+                _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
+                if _guard_outcome == "soft_land":
+                    final_answer = _guard_soft_landing_answer(maybe_final, _guard_label)
+                    terminated_reason = "final_answer_with_warning"
+                    steps.append(step)
+                    return _LoopControl.BREAK
+                if _guard_outcome == "hard_stop":
                     # Same guard, three rejections, zero new action-bearing
                     # steps in between: pushing back again only burns the
                     # remaining budget and ends in the auto-pause path's

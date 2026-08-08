@@ -8,6 +8,7 @@ lazily via ``delegation_skills`` so a monkeypatch of
 ``delegation_skills._call_agent_vote`` / ``_call_agent_parallel`` is observed
 at call time — the same pattern used by ``_delegation_skills_agent``.
 """
+
 from __future__ import annotations
 
 from typing import Any

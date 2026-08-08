@@ -11,6 +11,7 @@ builds once and passes to a thin ``@router.websocket`` wrapper.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 from collections.abc import Awaitable, Callable
@@ -93,6 +94,11 @@ class TeamRoomWsContext:
     broadcast_presence: Callable[[str], Awaitable[None]]
     broadcast_floor: Callable[[str, TeamRoomWire], Awaitable[None]]
     active_participant: Callable[[str, str], TeamParticipantWire | None]
+    # A TestClient connection, embedded server, or multi-loop host may own
+    # different sockets from different event loops. Broadcasts must schedule
+    # each send on the loop that accepted that socket; directly awaiting a
+    # foreign-loop socket intermittently deadlocks both loops.
+    socket_loops: dict[str, dict[str, asyncio.AbstractEventLoop]] = field(default_factory=dict)
     # Twin speaking (optional injection — keeps the gateway a leaf): when the
     # floor lands on a participant who bound a digital-twin agent
     # (``speak_mode == "twin"``), the handler asks this callback for a line
@@ -256,6 +262,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
     teams = ctx.teams
     lock = ctx.lock
     live_sockets = ctx.live_sockets
+    socket_loops = ctx.socket_loops
     _auth = ctx.auth
     _save = ctx.save
     _broadcast = ctx.broadcast
@@ -297,6 +304,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
     display_name = ws.query_params.get("display_name") or "Guest"
     thread_id = (ws.query_params.get("thread_id") or "").strip() or None
     now = _now()
+    owner_loop = asyncio.get_running_loop()
     ready_payload: dict[str, Any] | None = None
     reject_reason: str | None = None
     with lock:
@@ -344,6 +352,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 )
                 teams[team_id] = team
                 live_sockets.setdefault(team_id, {})[participant_id] = ws
+                socket_loops.setdefault(team_id, {})[participant_id] = owner_loop
                 _save()
                 ready_payload = {
                     "type": "ready",
@@ -596,6 +605,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
             room = live_sockets.get(team_id)
             if room and room.get(participant_id) is ws:
                 room.pop(participant_id, None)
+                socket_loops.get(team_id, {}).pop(participant_id, None)
             current = teams.get(team_id)
             if current is not None:
                 left_at = _now()

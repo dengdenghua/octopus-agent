@@ -42,6 +42,20 @@ def test_extracts_docx_paragraphs() -> None:
     assert result.text == "First paragraph\nSecond paragraph"
 
 
+def test_rejects_xml_entities_inside_ooxml() -> None:
+    data = _archive(
+        {
+            "word/document.xml": (
+                '<!DOCTYPE doc [<!ENTITY injected "should-not-expand">]>'
+                '<w:document xmlns:w="urn:test"><w:body><w:p><w:t>'
+                "&injected;</w:t></w:p></w:body></w:document>"
+            )
+        }
+    )
+
+    assert extract_document_text(data, "docx") is None
+
+
 def test_extracts_xlsx_shared_and_inline_strings() -> None:
     data = _archive(
         {

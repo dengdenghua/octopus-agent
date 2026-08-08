@@ -84,7 +84,7 @@ class _MockMountBackend(MountBackend):
             if prefix:
                 if not stripped.startswith(prefix + "/"):
                     continue
-                rest = stripped[len(prefix) + 1:]
+                rest = stripped[len(prefix) + 1 :]
             else:
                 rest = stripped
             if not rest:
@@ -685,9 +685,7 @@ def test_local_path_inside_allowed_roots_still_works(
 
     store = WorkspaceStore(db_path=tmp_path / "ws.db")
     app = FastAPI()
-    app.include_router(
-        create_fs_router(workspace_store=store)
-    )
+    app.include_router(create_fs_router(workspace_store=store))
     client = TestClient(app)
 
     r = client.get("/api/fs/read", params={"path": str(f)})

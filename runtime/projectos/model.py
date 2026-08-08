@@ -116,6 +116,8 @@ class Project:
     milestone_ids: list[str] = field(default_factory=list)
     current_ms: str | None = None
     status: ProjectStatus = "planning"
+    owner_id: str = ""
+    tenant_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -132,6 +134,8 @@ class Project:
             status=status
             if status in ("planning", "running", "blocked", "done", "failed")
             else "planning",
+            owner_id=str(raw.get("owner_id") or ""),
+            tenant_id=str(raw.get("tenant_id") or ""),
         )
 
 

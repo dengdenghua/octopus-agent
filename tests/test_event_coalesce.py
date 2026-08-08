@@ -22,7 +22,6 @@ from runtime.protocol.items import (
     FileChangeItem,
     FileHunk,
     McpToolCallItem,
-    ReasoningItem,
     Turn,
     TurnStatus,
 )
@@ -30,10 +29,7 @@ from runtime.protocol.items import (
 
 def _replay(events: list[tuple[int, LoggedEvent]]) -> list[dict]:
     snapshot = EventLogSnapshot(events=tuple(events), cursor=len(events))
-    return [
-        turn.model_dump(by_alias=True, mode="json")
-        for turn in snapshot.replay()
-    ]
+    return [turn.model_dump(by_alias=True, mode="json") for turn in snapshot.replay()]
 
 
 def _build_log(path: Path) -> EventLog:
@@ -99,9 +95,7 @@ def _build_log(path: Path) -> EventLog:
         ),
     )
     for pct in (10, 40, 90):
-        log.item_delta(
-            "th", "t2", "m2", "mcpToolProgress", {"percent": pct, "updatedAt": "t"}
-        )
+        log.item_delta("th", "t2", "m2", "mcpToolProgress", {"percent": pct, "updatedAt": "t"})
     # Hunks pass through untouched.
     log.item_started(
         "th", "t2", FileChangeItem(id="f2", status="inProgress", changes=[], grantRoot=None)
@@ -115,8 +109,13 @@ def _build_log(path: Path) -> EventLog:
             "path": "a.ts",
             "op": "create",
             "hunk": FileHunk(
-                id="h1", oldStart=0, oldLines=0, newStart=1, newLines=1,
-                body="+x", decision="pending",
+                id="h1",
+                oldStart=0,
+                oldLines=0,
+                newStart=1,
+                newLines=1,
+                body="+x",
+                decision="pending",
             ).model_dump(by_alias=True),
         },
     )
@@ -141,8 +140,7 @@ def test_coalesce_shrinks_and_preserves_semantics(tmp_path: Path) -> None:
     kinds = [event.event for _, event in coalesced]
     # The completed item's start + 4 pre-completion deltas are gone...
     message_deltas = [
-        e for _, e in coalesced
-        if e.event == "item_delta" and e.payload.get("itemId") == "a1"
+        e for _, e in coalesced if e.event == "item_delta" and e.payload.get("itemId") == "a1"
     ]
     # ...but the late post-completion delta survives.
     assert len(message_deltas) == 1
@@ -150,8 +148,7 @@ def test_coalesce_shrinks_and_preserves_semantics(tmp_path: Path) -> None:
 
     # In-progress command output merges into ONE concatenated delta.
     command_deltas = [
-        e for _, e in coalesced
-        if e.event == "item_delta" and e.payload.get("itemId") == "c2"
+        e for _, e in coalesced if e.event == "item_delta" and e.payload.get("itemId") == "c2"
     ]
     assert len(command_deltas) == 1
     assert command_deltas[0].payload["delta"] == "line1\nline2\nline3\n"
@@ -159,8 +156,7 @@ def test_coalesce_shrinks_and_preserves_semantics(tmp_path: Path) -> None:
 
     # MCP progress collapses to the latest absolute patch.
     progress = [
-        e for _, e in coalesced
-        if e.event == "item_delta" and e.payload.get("itemId") == "m2"
+        e for _, e in coalesced if e.event == "item_delta" and e.payload.get("itemId") == "m2"
     ]
     assert len(progress) == 1
     assert progress[0].payload["delta"]["percent"] == 90

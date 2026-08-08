@@ -135,6 +135,7 @@ class _FakeExecutor:
 
 class _FakePlanner:
     """Planner stub that records injected rules / memories."""
+
     def __init__(self) -> None:
         self.injected_rules: list[Any] | None = None
         self.injected_memories: list[Any] | None = None
@@ -301,6 +302,7 @@ def patched_stages(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     # test imported the real submodule. Patch the attribute too so the fake
     # wins regardless of import order in full-suite runs.
     import runtime.safety.recovery as _recovery_pkg
+
     monkeypatch.setattr(_recovery_pkg, "forge_auto_tick", fake_fat, raising=False)
 
     # SkillForge — leave registry in place so the stage runs the happy path
@@ -440,6 +442,7 @@ def test_tick_once_stage_failure_does_not_short_circuit(
     contract: a stage-1 failure surfaces as ``summary["rules"] == "err"``
     but later stages still write their output files.
     """
+
     # Make RuleExtractor.extract() blow up
     class _ExplodingRuleExtractor:
         def __init__(self, *, journal: Any) -> None:

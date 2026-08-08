@@ -190,6 +190,17 @@ def test_exchange_code_posts_and_parses(monkeypatch: pytest.MonkeyPatch) -> None
     assert resp["access_token"] == "AT"
 
 
+def test_token_endpoint_ssrf_is_rejected_before_exchange() -> None:
+    with pytest.raises(ValueError, match="url_guard rejected"):
+        oauth.exchange_code(
+            token_url="http://127.0.0.1:8000/token",
+            code="C",
+            code_verifier="V",
+            client_id="cid",
+            redirect_uri="http://cb",
+        )
+
+
 def test_bearer_for_server_none_when_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

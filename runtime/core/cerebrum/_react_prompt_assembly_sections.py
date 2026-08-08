@@ -109,9 +109,7 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
     state.is_code_mode = _wm.is_code
     _goal = str(state.intent.normalized_goal or state.intent.raw or "")
     state.read_only_turn = _explicit_read_only_goal(_goal)
-    state.observed_read_sequence = state.read_only_turn and _explicit_observed_read_sequence(
-        _goal
-    )
+    state.observed_read_sequence = state.read_only_turn and _explicit_observed_read_sequence(_goal)
     state.observed_read_groups = (
         ordered_explicit_read_groups(_goal) if state.observed_read_sequence else ()
     )
@@ -197,12 +195,11 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
         frozenset() if state.observed_read_sequence else state.grounded_source_paths
     )
     state.browser_regression_enabled = bool(
-        _uc.get("browser_regression_enabled")
-        or _metadata.get("browser_regression_enabled")
+        _uc.get("browser_regression_enabled") or _metadata.get("browser_regression_enabled")
     )
-    state.browser_regression_preview_url = _uc.get("browser_regression_preview_url") or _metadata.get(
+    state.browser_regression_preview_url = _uc.get(
         "browser_regression_preview_url"
-    )
+    ) or _metadata.get("browser_regression_preview_url")
     _runtime_surfaces = _uc.get("runtime_surfaces") or _metadata.get("runtime_surfaces")
     _browser_surface_value = (
         str(_uc.get("browser_surface") or _metadata.get("browser_surface") or "").strip().lower()
@@ -264,12 +261,7 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
     state.mode_contract_value = _wm.mode_contract
     state.personal_mode_value = _wm.personal_mode
     state.project_signals = _wm.project_signals
-    state.is_swarm_mode = state.mode_value in {
-        "swarm",
-        "swarms",
-        "agent_swarm",
-        "agent-swarm",
-    } or state.capability_mode_value in {"swarm", "swarms", "agent_swarm", "agent-swarm"}
+    state.is_swarm_mode = _wm.is_swarm
     if state.is_swarm_mode and state.max_iterations < 100:
         state.max_iterations = 100
     state.max_iterations = _browser_task_iteration_limit(

@@ -30,6 +30,9 @@ from runtime.platform.models import ParsedIntent
 from runtime.platform.process.streaming import stream_run
 from runtime.safety.approval.cancellation import current_cancellation_token
 from runtime.safety.auth import TrustEngine
+from runtime.sensing.gateway._tool_bridge_loop import (
+    _native_plan_reconciliation_milestones,
+)
 from runtime.sensing.gateway.tool_bridge import stream_agentic_fallback
 from runtime.sensing.model_router.models import (
     ModelResponse,
@@ -44,6 +47,36 @@ def _agent():
         capabilities={"code_mode_unlock": True},
         soul="",
     )
+
+
+def test_native_plan_reconciliation_detects_only_successful_post_todo_milestones() -> None:
+    calls = [
+        ToolCall(id="todo", name="todo_write", input={"items": []}),
+        ToolCall(id="write", name="edit_file", input={"path": "app.py"}),
+        ToolCall(id="verify", name="run_tests", input={}),
+        ToolCall(id="read", name="read_file", input={"path": "app.py"}),
+    ]
+    blocks = [
+        {"tool_use_id": "todo", "content": "ok"},
+        {"tool_use_id": "write", "content": "ok"},
+        {"tool_use_id": "verify", "content": "failed", "is_error": True},
+        {"tool_use_id": "read", "content": "source"},
+    ]
+
+    assert _native_plan_reconciliation_milestones(calls, blocks) == ["workspace/document write"]
+
+
+def test_native_plan_reconciliation_ignores_milestones_before_latest_todo() -> None:
+    calls = [
+        ToolCall(id="write", name="edit_file", input={"path": "README.md"}),
+        ToolCall(id="todo", name="todo_write", input={"items": []}),
+    ]
+    blocks = [
+        {"tool_use_id": "write", "content": "ok"},
+        {"tool_use_id": "todo", "content": "ok"},
+    ]
+
+    assert _native_plan_reconciliation_milestones(calls, blocks) == []
 
 
 def _slow_sum_handler(a: int = 0, b: int = 0, sleep_ms: int = 80) -> dict:
@@ -563,8 +596,7 @@ def test_steering_abandons_an_idle_model_stream_without_waiting_for_timeout() ->
         for message in router.requests[1].messages
     )
     assert any(
-        message.role == "system"
-        and "LIVE USER FOLLOW-UP — HIGH PRIORITY" in str(message.content)
+        message.role == "system" and "LIVE USER FOLLOW-UP — HIGH PRIORITY" in str(message.content)
         for message in router.requests[1].messages
     )
     visible = "".join(str(event[1]) for event in events if event[0] == "text")

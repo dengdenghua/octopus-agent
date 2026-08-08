@@ -18,12 +18,12 @@ from runtime.core.cerebrum.react_parsing import (
     extract_streamable_thought,
 )
 from tests.test_react_loop import (
+    _build_stack_with_executor,
     _ChunkedCapturingRouter,
     _drain,
     _FakeStack,
-    _ScriptedRouter,
-    _build_stack_with_executor,
     _intent,
+    _ScriptedRouter,
 )
 
 
@@ -35,9 +35,7 @@ def _extract_all(chunks: list[str]) -> str:
     joined = ""
     for chunk in chunks:
         joined += chunk
-        text, cursor, in_thought = extract_streamable_thought(
-            joined, cursor, in_thought
-        )
+        text, cursor, in_thought = extract_streamable_thought(joined, cursor, in_thought)
         out.append(text)
     return "".join(out)
 
@@ -89,9 +87,7 @@ def test_action_block_and_tool_envelope_never_emitted() -> None:
 
 
 def test_multiple_thought_segments_skip_intervening_action() -> None:
-    out = _extract_all(
-        ["Thought: aaa\nAction: none\nThought: bbb\nFinal Answer: ccc"]
-    )
+    out = _extract_all(["Thought: aaa\nAction: none\nThought: bbb\nFinal Answer: ccc"])
     assert out == "aaabbb"
 
 
@@ -186,13 +182,9 @@ def test_native_thinking_suppresses_text_thought_extraction() -> None:
                 ),
             )
 
-    router = _NativeThinkingRouter(
-        ["Thought: 文本思考\nAction: none\n\nFinal Answer: 好了"]
-    )
+    router = _NativeThinkingRouter(["Thought: 文本思考\nAction: none\n\nFinal Answer: 好了"])
     events, result = _drain(
-        stream_react_loop(
-            _FakeStack(router), _intent("测试"), agent=None, max_iterations=2
-        )
+        stream_react_loop(_FakeStack(router), _intent("测试"), agent=None, max_iterations=2)
     )
 
     assert result is not None and result.final_answer == "好了"

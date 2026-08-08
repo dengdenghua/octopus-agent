@@ -86,9 +86,7 @@ def _build_mentions_autocomplete(
     # ── Agents ───────────────────────────────────────────
     if (category_filter in {"all", "agent"}) and (not type_prefix or type_prefix == "agent"):
         try:
-            agents_iter = (
-                list(registry.iter_agents()) if hasattr(registry, "iter_agents") else []
-            )
+            agents_iter = list(registry.iter_agents()) if hasattr(registry, "iter_agents") else []
         except (AttributeError, TypeError):
             agents_iter = []
         # Surface thread's active agents first when thread_id given
@@ -164,9 +162,7 @@ def _build_mentions_autocomplete(
         and len(items) < max_items
     ):
         try:
-            skill_iter = (
-                list(registry.iter_skills()) if hasattr(registry, "iter_skills") else []
-            )
+            skill_iter = list(registry.iter_skills()) if hasattr(registry, "iter_skills") else []
         except (AttributeError, TypeError):
             skill_iter = []
         for skill in skill_iter:

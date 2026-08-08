@@ -169,7 +169,11 @@ class _ReactBridgeState:
     def prose_status_for_turn(turn_status: TurnStatus) -> ItemStatus:
         """Map the authoritative turn outcome onto any still-open prose."""
 
-        if turn_status == TurnStatus.INTERRUPTED:
+        if turn_status in {
+            TurnStatus.INTERRUPTED,
+            TurnStatus.PAUSED,
+            TurnStatus.CANCELLED,
+        }:
             return ItemStatus.INTERRUPTED
         if turn_status == TurnStatus.FAILED:
             return ItemStatus.FAILED
@@ -799,10 +803,7 @@ class _ReactBridgeState:
             self.commentary_message = None
         if self.reasoning is not None:
             self.reasoning.status = status
-            if (
-                self.reasoning_started_monotonic is not None
-                and self.reasoning.duration_ms is None
-            ):
+            if self.reasoning_started_monotonic is not None and self.reasoning.duration_ms is None:
                 self.reasoning.duration_ms = max(
                     0,
                     int((time.monotonic() - self.reasoning_started_monotonic) * 1000),

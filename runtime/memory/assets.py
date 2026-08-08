@@ -168,9 +168,7 @@ def asset_trace(asset: MemoryAsset) -> dict[str, Any]:
         "source": asdict(asset.provenance),
         "parent_ids": list(asset.provenance.parent_ids),
         "trace_complete": bool(
-            asset.provenance.source_id
-            or asset.provenance.source_uri
-            or asset.provenance.evidence
+            asset.provenance.source_id or asset.provenance.source_uri or asset.provenance.evidence
         ),
     }
 

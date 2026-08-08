@@ -255,6 +255,7 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "tests/test_browser_desktop_repair_recipes.py",
             "frontend/src/components/workspace/replay-panel.tsx",
             "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator/index.tsx",
         ),
         required_terms=(
             "octopus.browser_session_recovery_proof.v1",

@@ -3,6 +3,7 @@
 Contains the shared ``_run_git`` runner plus the read-only / local write git
 skills (status / diff / log / add / commit / branch).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -44,6 +45,7 @@ def _run_git(
         output_cap_bytes=_GIT_OUTPUT_CAP,
         sandbox_dir=sandbox_dir,
         allow_network=allow_network,
+        sandbox_required=True,
     )
     if "error" in r and "exit_code" not in r:
         msg = r["error"]

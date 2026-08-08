@@ -204,7 +204,12 @@ def test_realtime_ws_requires_auth_when_enabled(
     monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
     ff.reload()
     store = IdentityStore()
-    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    # Remote backend realtime is a control-plane proxy and therefore requires
+    # operator/admin, not merely an authenticated ordinary tenant user.
+    store.add(
+        Identity(actor_id="alice", roles=("operator",)),
+        api_key_plaintext="sk-alice",
+    )
     app = FastAPI()
     app.include_router(
         create_remote_backends_router(

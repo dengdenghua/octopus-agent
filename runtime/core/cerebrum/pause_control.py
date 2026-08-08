@@ -22,6 +22,7 @@ PauseReason = Literal[
     "user_request",  # Implementation note.
     "budget_near_limit",  # Implementation note.
     "iteration_near_limit",  # Implementation note.
+    "model_spinning",  # Implementation note.
     "client_disconnect",  # Implementation note.
     "external",  # Implementation note.
 ]
@@ -81,6 +82,9 @@ def _default_store_path() -> Path:
     return app_paths().data_dir / "pause_state.json"
 
 
+_USE_DEFAULT_STORE = object()
+
+
 class PauseController:
     # Expire granted iteration/token/usd extensions and pending resume
     # handoffs after this long, so a crashed task can't leak dicts
@@ -93,7 +97,12 @@ class PauseController:
     # and the yellow "waiting" light in the sidebar is pure noise.
     _PAUSE_TTL_SECONDS = 7 * 24 * 3600
 
-    def __init__(self, *, store_path: Path | None = None, autoload: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        store_path: Path | None | object = _USE_DEFAULT_STORE,
+        autoload: bool = True,
+    ) -> None:
         self._lock = RLock()
         self._pending: dict[str, PauseRequest] = {}
         self._paused: dict[str, PauseRequest] = {}
@@ -102,7 +111,14 @@ class PauseController:
         self._pending_resumes: dict[str, str] = {}
         self._pending_resumes_ts: dict[str, float] = {}
         self._active: dict[str, ActiveTask] = {}
-        self._store_path: Path | None = store_path or _default_store_path()
+        self._store_path: Path | None
+        if store_path is _USE_DEFAULT_STORE:
+            self._store_path = _default_store_path()
+        elif store_path is None:
+            self._store_path = None
+        else:
+            assert isinstance(store_path, (str, Path))
+            self._store_path = Path(store_path)
         if autoload and self._store_path is not None:
             self._load()
 
@@ -133,12 +149,52 @@ class PauseController:
         removed = 0
         for bucket in (self._pending, self._paused):
             stale_keys = [
-                k
-                for k, req in bucket.items()
-                if req.requested_at < cutoff or not req.thread_id
+                k for k, req in bucket.items() if req.requested_at < cutoff or not req.thread_id
             ]
             for k in stale_keys:
                 bucket.pop(k, None)
+                removed += 1
+        return removed
+
+    def _deduplicate_system_pauses_locked(self) -> int:
+        """Keep one newest automatic pause per thread across both buckets.
+
+        This is a load-time migration as well as a runtime invariant.  Merely
+        deduplicating new writes leaves old production files permanently
+        ambiguous and makes "Continue" select by accident.
+        """
+
+        newest: dict[str, tuple[str, float]] = {}
+        for bucket in (self._pending, self._paused):
+            for task_id, request in bucket.items():
+                if not (
+                    request.thread_id
+                    and request.requested_by == "system"
+                    and request.reason
+                    in {
+                        "iteration_near_limit",
+                        "budget_near_limit",
+                        "model_spinning",
+                    }
+                ):
+                    continue
+                current = newest.get(request.thread_id)
+                if current is None or request.requested_at > current[1]:
+                    newest[request.thread_id] = (task_id, request.requested_at)
+
+        removed = 0
+        for bucket in (self._pending, self._paused):
+            stale = [
+                task_id
+                for task_id, request in bucket.items()
+                if request.thread_id in newest
+                and request.requested_by == "system"
+                and request.reason
+                in {"iteration_near_limit", "budget_near_limit", "model_spinning"}
+                and newest[request.thread_id][0] != task_id
+            ]
+            for task_id in stale:
+                bucket.pop(task_id, None)
                 removed += 1
         return removed
 
@@ -173,6 +229,7 @@ class PauseController:
             # persisted file stays clean and /api/tasks doesn't serve
             # yellow-light data for threads that finished long ago.
             removed = self._gc_stale_pauses_locked()
+            removed += self._deduplicate_system_pauses_locked()
             if removed:
                 _log.info(
                     "pause_control: GC'd %d stale pause record(s) on load",
@@ -221,6 +278,28 @@ class PauseController:
             agent_id=agent_id,
         )
         with self._lock:
+            # A thread can have only one live system-generated iteration
+            # boundary. Older releases created a new task when the user typed
+            # "继续", leaving several equivalent yellow pause records for the
+            # same conversation. Collapse only those automatic records here;
+            # explicit user pauses remain independent.
+            if (
+                reason in {"iteration_near_limit", "budget_near_limit", "model_spinning"}
+                and requested_by == "system"
+                and thread_id
+            ):
+                for bucket in (self._pending, self._paused):
+                    duplicates = [
+                        existing_id
+                        for existing_id, existing in bucket.items()
+                        if existing_id != task_id
+                        and existing.thread_id == thread_id
+                        and existing.reason
+                        in {"iteration_near_limit", "budget_near_limit", "model_spinning"}
+                        and existing.requested_by == "system"
+                    ]
+                    for existing_id in duplicates:
+                        bucket.pop(existing_id, None)
             if task_id not in self._paused:
                 self._pending[task_id] = req
             self._persist_locked()
@@ -356,9 +435,7 @@ class PauseController:
                 # sees a Continue button, but we stamp it with the checkpoint
                 # time (not now()) so the TTL GC can sweep it if abandoned.
                 ckpt_ts = float(
-                    getattr(ckpt, "timestamp", 0)
-                    or getattr(ckpt, "created_at", 0)
-                    or time.time()
+                    getattr(ckpt, "timestamp", 0) or getattr(ckpt, "created_at", 0) or time.time()
                 )
                 self._pending[tid] = PauseRequest(
                     task_id=tid,
@@ -414,6 +491,12 @@ class PauseController:
             task = self._active.get(task_id)
             if task is not None:
                 task.current_iteration = iteration
+
+    def update_active_iteration_limit(self, task_id: str, max_iterations: int) -> None:
+        with self._lock:
+            task = self._active.get(task_id)
+            if task is not None:
+                task.max_iterations = max(0, int(max_iterations))
 
     def update_active_usage(
         self,

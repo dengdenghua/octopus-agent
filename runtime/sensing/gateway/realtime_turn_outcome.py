@@ -8,7 +8,6 @@ turns contribute to the evolution proposal ledger.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -26,6 +25,7 @@ from runtime.protocol import (
     TurnParams,
     VerificationItem,
 )
+from runtime.safety.auth.scope import TenantScope, tenant_scoped_path
 from runtime.sensing.gateway.realtime_turn_input import (
     _agent_id_from_params,
     _preview_text,
@@ -598,7 +598,7 @@ def _record_task_run_started(
 ) -> None:
     if runtime._trace_store is None:
         return
-    with contextlib.suppress(Exception):
+    try:
         runtime._trace_store.record_task_run_started(
             task_id=turn.id,
             thread_id=turn.thread_id,
@@ -607,52 +607,155 @@ def _record_task_run_started(
             title=_preview_text(text, limit=80),
             goal=text,
             mode=_turn_mode(params) or "react",
+            scope=_turn_scope(turn),
             metadata={
                 "topology_id": getattr(params, "topology_id", None),
                 "model": getattr(params, "model", None),
                 "planning_mode": bool(getattr(params, "planning_mode", False)),
             },
         )
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("trace store start failed for %s: %s", turn.id, exc)
 
 
-def _record_task_run_finished(runtime: CerebrumRuntime, turn: Turn) -> None:
-    if runtime._trace_store is None:
-        return
+def _record_task_run_finished(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    *,
+    recover_stale_lease: bool = False,
+) -> None:
     status_value = str(getattr(turn.status, "value", turn.status) or "").lower()
     if status_value in {"in_progress", "in-progress", "pending", ""}:
         return
     status = {
         "completed": "completed",
         "failed": "failed",
+        "paused": "paused",
         "interrupted": "interrupted",
         "cancelled": "cancelled",
         "canceled": "cancelled",
     }.get(status_value, "unknown")
-    with contextlib.suppress(Exception):
+    supervisor = getattr(runtime, "_task_supervisor", None)
+    if supervisor is not None:
+        try:
+            from runtime.platform.process._task_supervisor_models import TaskRunStatus
+
+            supervisor_status = "disconnected" if status == "interrupted" else status
+            supervisor_status = supervisor_status if supervisor_status != "unknown" else "failed"
+            supervisor_task_id = turn.task_id or turn.id
+            metadata = {
+                "objective_id": turn.objective_id,
+                "react_task_id": turn.task_id,
+                "turn_id": turn.id,
+                "error": turn.error,
+            }
+            if supervisor.store.get(supervisor_task_id) is None:
+                params = cast(TurnParams, turn.params)
+                supervisor.start_task(
+                    task_id=supervisor_task_id,
+                    kind="realtime_objective",
+                    owner_id=getattr(params, "owner_actor_id", None),
+                    thread_id=turn.thread_id,
+                    mode=_turn_mode(params) or "direct",
+                    origin_task_id=turn.id,
+                    metadata=metadata,
+                    status=TaskRunStatus(supervisor_status),
+                )
+            elif recover_stale_lease:
+                supervisor.recover_stale_turn(
+                    supervisor_task_id,
+                    supervisor_status,
+                    expected_turn_id=turn.id,
+                    reason=turn.outcome_reason or status_value,
+                    checkpoint_id=turn.checkpoint_id,
+                    metadata_patch=metadata,
+                )
+            else:
+                supervisor.transition(
+                    supervisor_task_id,
+                    supervisor_status,
+                    reason=turn.outcome_reason or status_value,
+                    checkpoint_id=turn.checkpoint_id,
+                    metadata_patch=metadata,
+                )
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning(
+                "task supervisor finish failed for %s: %s", turn.task_id or turn.id, exc
+            )
+    if runtime._trace_store is None:
+        return
+    try:
         runtime._trace_store.record_task_run_finished(
+            # Trace task-run identity is the transport attempt (turn id).
+            # The durable ReAct/objective id is carried in payload metadata
+            # and on Turn.taskId; mixing both ids in one event stream creates
+            # a phantom never-finished run for every turn.
             task_id=turn.id,
             thread_id=turn.thread_id,
             turn_id=turn.id,
             agent_id=_agent_id_from_params(cast(TurnParams, turn.params)),
             status=status,
             reason=status_value,
+            scope=_turn_scope(turn),
             metadata={
                 "item_count": len(getattr(turn, "items", []) or []),
                 "error": getattr(turn, "error", None),
             },
         )
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("trace store finish failed for %s: %s", turn.id, exc)
 
 
 def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[str, Any]) -> None:
+    kind = str(evt.get("type") or "")
+    if kind == "react_started":
+        supervisor = getattr(runtime, "_task_supervisor", None)
+        supervisor_task_id = str(evt.get("task_id") or "").strip()
+        if supervisor is not None and supervisor_task_id:
+            try:
+                params = cast(TurnParams, turn.params)
+                goal = next(
+                    (
+                        str(getattr(item, "text", "") or "").strip()
+                        for item in turn.items
+                        if str(getattr(item, "type", ""))
+                        in {"userMessage", "ItemType.USER_MESSAGE"}
+                        and str(getattr(item, "text", "") or "").strip()
+                    ),
+                    "",
+                )
+                supervisor.start_task(
+                    task_id=supervisor_task_id,
+                    kind="realtime_objective",
+                    owner_id=getattr(params, "owner_actor_id", None),
+                    thread_id=turn.thread_id,
+                    title=_preview_text(goal, limit=80),
+                    goal=goal,
+                    mode=_turn_mode(params) or "react",
+                    workspace_path=getattr(params, "cwd", None),
+                    origin_task_id=turn.id,
+                    metadata={
+                        "objective_id": supervisor_task_id,
+                        "turn_id": turn.id,
+                        "agent_id": _agent_id_from_params(params),
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning(
+                    "task supervisor react start failed for %s: %s",
+                    supervisor_task_id,
+                    exc,
+                )
     if runtime._trace_store is None:
         return
-    kind = str(evt.get("type") or "")
     event_type = {
+        "react_started": "TASK_RUN_STARTED",
         "tool_start": "TOOL_CALL_START",
         "tool_end": "TOOL_CALL_END",
         "tool_background": "TOOL_CALL_BACKGROUND",
         "react_completed": "REACT_COMPLETED",
         "react_cancelled": "REACT_CANCELLED",
+        "react_paused": "TASK_RUN_PAUSED",
         "react_error": "REACT_ERROR",
     }.get(kind)
     if event_type is None:
@@ -671,7 +774,7 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
         payload["event_kind"] = kind
     elif "tool_name" in payload and "tool" not in payload:
         payload["tool"] = payload.get("tool_name")
-    with contextlib.suppress(Exception):
+    try:
         runtime._trace_store.record_event(
             event_type=event_type,
             payload=payload,
@@ -680,7 +783,10 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
             task_id=turn.id,
             agent_id=_agent_id_from_params(cast(TurnParams, turn.params)),
             item_id=str(evt.get("tool_call_id") or evt.get("item_id") or "") or None,
+            scope=_turn_scope(turn),
         )
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("trace event %s failed for %s: %s", event_type, turn.id, exc)
 
 
 def _record_failed_turn_proposal(
@@ -702,7 +808,8 @@ def _record_failed_turn_proposal(
     try:
         from runtime.safety.evolution.proposal_ledger import ProposalLedger
 
-        ledger = ProposalLedger(runtime._proposal_ledger_path)
+        scope = _turn_scope(turn)
+        ledger = ProposalLedger(tenant_scoped_path(runtime._proposal_ledger_path, scope))
         metadata = _failed_turn_metadata(
             turn,
             intent=intent,
@@ -714,6 +821,7 @@ def _record_failed_turn_proposal(
             proposer="realtime_cerebrum",
             model=_turn_model(turn),
             metadata=metadata,
+            scope=scope,
         )
     except Exception as exc:  # noqa: BLE001
         _logger.debug("failed-turn proposal record skipped: %s", exc, exc_info=True)
@@ -730,13 +838,24 @@ def _record_successful_turn_example(
     try:
         from runtime.safety.evolution.proposal_ledger import ProposalLedger
 
+        scope = _turn_scope(turn)
         metadata = _successful_turn_metadata(turn, intent=intent)
-        ProposalLedger(runtime._proposal_ledger_path).propose(
+        ProposalLedger(tenant_scoped_path(runtime._proposal_ledger_path, scope)).propose(
             kind="turn_success",
             description=_successful_turn_description(metadata),
             proposer="realtime_cerebrum",
             model=_turn_model(turn),
             metadata=metadata,
+            scope=scope,
         )
     except Exception as exc:  # noqa: BLE001
         _logger.debug("successful-turn example record skipped: %s", exc, exc_info=True)
+
+
+def _turn_scope(turn: Turn) -> TenantScope | None:
+    params = getattr(turn, "params", None)
+    tenant_id = str(getattr(params, "tenant_id", None) or "").strip()
+    actor_id = str(getattr(params, "owner_actor_id", None) or "").strip()
+    if not tenant_id or not actor_id:
+        return None
+    return TenantScope(tenant_id=tenant_id, actor_id=actor_id)

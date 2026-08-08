@@ -31,6 +31,8 @@ from runtime.platform.io.lease import (
     LeaseNotFoundError,
     LeaseStore,
 )
+from runtime.safety.auth.principal import CurrentPrincipal, resolve_principal
+from runtime.safety.auth.scope import scope_from_principal
 from runtime.sensing.server.mount_backend import (
     MountBackendRegistry,
     default_registry,
@@ -111,10 +113,8 @@ def create_workspace_api_router(
     leases = lease_store or LeaseStore()
     backend_registry = registry or default_registry
 
-    def _auth(request: Request) -> None:
-        from runtime.adapters.web_auth import _resolve_actor
-
-        _resolve_actor(
+    def _principal(request: Request) -> CurrentPrincipal | None:
+        principal = resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -122,15 +122,104 @@ def create_workspace_api_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        if principal is not None:
+            request.state.workspace_principal = principal
+        return principal
+
+    def _auth(request: Request) -> None:
+        _principal(request)
 
     def _auth_dep(request: Request) -> None:
         _auth(request)
+
+    def _scoped_store(request: Request) -> WorkspaceStore:
+        principal = _principal(request)
+        if principal is None:
+            return store
+        return store.with_scope(
+            scope_from_principal(
+                principal,
+                allow_cross_tenant=bool(principal.roles.intersection({"admin", "operator"})),
+            )
+        )
+
+    def _scoped_leases(request: Request) -> LeaseStore:
+        principal = _principal(request)
+        if principal is None:
+            return leases
+        return leases.with_scope(
+            scope_from_principal(
+                principal,
+                allow_cross_tenant=bool(principal.roles.intersection({"admin", "operator"})),
+            )
+        )
 
     def _workspace_or_404(workspace_id: str):
         ws = store.get_workspace(workspace_id)
         if ws is None:
             raise HTTPException(404, f"workspace {workspace_id!r} not found")
         return ws
+
+    def _workspace_access(
+        request: Request,
+        workspace_id: str,
+        *,
+        action: str = "read",
+    ) -> tuple[Any, CurrentPrincipal | None]:
+        """Load a workspace, then authorize against its persisted ACL."""
+        principal = _principal(request)
+        scoped_store = _scoped_store(request)
+        ws = scoped_store.get_workspace(workspace_id)
+        if ws is None:
+            raise HTTPException(404, f"workspace {workspace_id!r} not found")
+        if principal is None:
+            return ws, None
+
+        global_operator = bool(principal.roles.intersection({"admin", "operator"}))
+        explicit_workspace_tenant = bool(ws.tenant_id and not ws.tenant_id.startswith("legacy:"))
+        explicit_principal_tenant = bool(
+            principal.tenant_id and not principal.tenant_id.startswith("legacy:")
+        )
+        if (
+            (explicit_workspace_tenant or explicit_principal_tenant)
+            and ws.tenant_id != principal.tenant_id
+            and not global_operator
+        ):
+            # Legacy and other-tenant workspaces are indistinguishable
+            # from missing resources to ordinary principals.
+            raise HTTPException(404, f"workspace {workspace_id!r} not found")
+
+        role = scoped_store.get_member_role(workspace_id, principal.actor_id)
+        if role is None:
+            # Hide workspace existence from non-members.
+            raise HTTPException(404, f"workspace {workspace_id!r} not found")
+        if action == "admin" and role != "owner" and not global_operator:
+            raise HTTPException(403, "workspace owner or operator role required")
+        if (
+            action == "write"
+            and role not in {"owner", "editor", "reviewer"}
+            and not global_operator
+        ):
+            raise HTTPException(403, "workspace write membership required")
+        return ws, principal
+
+    def _lease_or_404(request: Request, lease_id: str):
+        for lease in _scoped_leases(request).list_active():
+            if lease.lease_id == lease_id:
+                return lease
+        raise HTTPException(404, f"lease {lease_id!r} not found")
+
+    def _require_lease_owner(
+        request: Request,
+        lease: Any,
+        principal: CurrentPrincipal | None,
+    ) -> None:
+        if principal is None:
+            return
+        if lease.holder_id != principal.actor_id and not principal.roles.intersection(
+            {"admin", "operator"}
+        ):
+            raise HTTPException(403, "lease holder or operator role required")
 
     def _bad_request(exc: ValueError) -> HTTPException:
         return HTTPException(400, str(exc))
@@ -163,18 +252,22 @@ def create_workspace_api_router(
     # ─── Workspace CRUD ────────────────────────────────────────────────────
 
     @router.post("/api/workspaces", dependencies=[Depends(_auth_dep)])
-    async def create_workspace(body: CreateWorkspaceBody) -> dict[str, Any]:
+    async def create_workspace(request: Request, body: CreateWorkspaceBody) -> dict[str, Any]:
         """Create a workspace. The mount must be reachable first."""
         _require_flag()
+        principal = _principal(request)
+        owner_id = body.owner_id
+        if principal is not None:
+            if body.owner_id != principal.actor_id:
+                raise HTTPException(403, "owner_id must match the authenticated actor")
+            owner_id = principal.actor_id
         if body.mount_type not in VALID_MOUNT_TYPES:
             raise HTTPException(
                 400,
                 f"invalid mount_type {body.mount_type!r}; "
                 f"expected one of {sorted(VALID_MOUNT_TYPES)}",
             )
-        ok, detail = await _test_connection(
-            body.mount_type, body.mount_target, body.mount_options
-        )
+        ok, detail = await _test_connection(body.mount_type, body.mount_target, body.mount_options)
         if not ok:
             raise HTTPException(
                 400,
@@ -186,52 +279,64 @@ def create_workspace_api_router(
                 },
             )
         try:
-            ws = store.create_workspace(
+            ws = _scoped_store(request).create_workspace(
                 name=body.name,
                 mount_type=body.mount_type,
                 mount_target=body.mount_target,
                 mount_options=body.mount_options,
-                owner_id=body.owner_id,
+                owner_id=owner_id,
+                tenant_id=principal.tenant_id if principal is not None else "",
             )
         except ValueError as exc:
             raise _bad_request(exc) from exc
         # Pre-warm the backend cache so the first health/list_dir call
         # doesn't pay the connection cost.
         with contextlib.suppress(Exception):  # noqa: BLE001 — pre-warm is best-effort
-            backend_registry.get_or_create(
-                ws.id, ws.mount_type, ws.mount_target, ws.mount_options
-            )
+            backend_registry.get_or_create(ws.id, ws.mount_type, ws.mount_target, ws.mount_options)
         return {"workspace": ws.to_dict()}
 
     @router.get("/api/workspaces", dependencies=[Depends(_auth_dep)])
     def list_workspaces(
+        request: Request,
         user_id: str = Query(default=""),
     ) -> dict[str, Any]:
         """List workspaces accessible to ``user_id``."""
         _require_flag()
-        workspaces = store.list_workspaces_for_user(user_id) if user_id else store.list_workspaces()
+        principal = _principal(request)
+        if principal is not None:
+            if user_id and user_id != principal.actor_id:
+                raise HTTPException(403, "user_id must match the authenticated actor")
+            workspaces = _scoped_store(request).list_workspaces_for_user(
+                principal.actor_id,
+                tenant_id=(
+                    principal.tenant_id if not principal.tenant_id.startswith("legacy:") else None
+                ),
+            )
+        else:
+            workspaces = (
+                store.list_workspaces_for_user(user_id) if user_id else store.list_workspaces()
+            )
         return {"workspaces": [ws.to_dict() for ws in workspaces]}
 
     @router.get(
         "/api/workspaces/{workspace_id}",
         dependencies=[Depends(_auth_dep)],
     )
-    def get_workspace(workspace_id: str) -> dict[str, Any]:
+    def get_workspace(request: Request, workspace_id: str) -> dict[str, Any]:
         """Get a single workspace by id."""
         _require_flag()
-        ws = _workspace_or_404(workspace_id)
+        ws, _ = _workspace_access(request, workspace_id)
         return {"workspace": ws.to_dict()}
 
     @router.delete(
         "/api/workspaces/{workspace_id}",
         dependencies=[Depends(_auth_dep)],
     )
-    def delete_workspace(workspace_id: str) -> dict[str, Any]:
+    def delete_workspace(request: Request, workspace_id: str) -> dict[str, Any]:
         """Delete a workspace. Cascades to members."""
         _require_flag()
-        if store.get_workspace(workspace_id) is None:
-            raise HTTPException(404, f"workspace {workspace_id!r} not found")
-        store.delete_workspace(workspace_id)
+        _workspace_access(request, workspace_id, action="admin")
+        _scoped_store(request).delete_workspace(workspace_id)
         backend_registry.invalidate(workspace_id)
         return {"ok": True, "workspace_id": workspace_id}
 
@@ -241,31 +346,26 @@ def create_workspace_api_router(
         "/api/workspaces/{workspace_id}/members",
         dependencies=[Depends(_auth_dep)],
     )
-    def list_members(workspace_id: str) -> dict[str, Any]:
+    def list_members(request: Request, workspace_id: str) -> dict[str, Any]:
         _require_flag()
-        _workspace_or_404(workspace_id)
-        members = store.list_members(workspace_id)
+        _workspace_access(request, workspace_id)
+        members = _scoped_store(request).list_members(workspace_id)
         return {"members": [m.to_dict() for m in members]}
 
     @router.post(
         "/api/workspaces/{workspace_id}/members",
         dependencies=[Depends(_auth_dep)],
     )
-    def add_member(
-        workspace_id: str, body: AddMemberBody
-    ) -> dict[str, Any]:
+    def add_member(request: Request, workspace_id: str, body: AddMemberBody) -> dict[str, Any]:
         _require_flag()
-        _workspace_or_404(workspace_id)
+        _workspace_access(request, workspace_id, action="admin")
         if body.role not in VALID_MEMBER_ROLES:
             raise HTTPException(
                 400,
-                f"invalid role {body.role!r}; "
-                f"expected one of {sorted(VALID_MEMBER_ROLES)}",
+                f"invalid role {body.role!r}; expected one of {sorted(VALID_MEMBER_ROLES)}",
             )
         try:
-            member = store.add_member(
-                workspace_id, body.member_id, role=body.role
-            )
+            member = _scoped_store(request).add_member(workspace_id, body.member_id, role=body.role)
         except ValueError as exc:
             raise _bad_request(exc) from exc
         return {"member": member.to_dict()}
@@ -274,12 +374,10 @@ def create_workspace_api_router(
         "/api/workspaces/{workspace_id}/members/{member_id}",
         dependencies=[Depends(_auth_dep)],
     )
-    def remove_member(
-        workspace_id: str, member_id: str
-    ) -> dict[str, Any]:
+    def remove_member(request: Request, workspace_id: str, member_id: str) -> dict[str, Any]:
         _require_flag()
-        _workspace_or_404(workspace_id)
-        removed = store.remove_member(workspace_id, member_id)
+        _workspace_access(request, workspace_id, action="admin")
+        removed = _scoped_store(request).remove_member(workspace_id, member_id)
         if not removed:
             raise HTTPException(
                 404,
@@ -294,15 +392,20 @@ def create_workspace_api_router(
         dependencies=[Depends(_auth_dep)],
     )
     def acquire_lease(
-        workspace_id: str, body: AcquireLeaseBody
+        request: Request, workspace_id: str, body: AcquireLeaseBody
     ) -> dict[str, Any]:
         _require_flag()
-        _workspace_or_404(workspace_id)
+        _, principal = _workspace_access(request, workspace_id, action="write")
+        holder_id = body.holder_id
+        if principal is not None:
+            if body.holder_id != principal.actor_id:
+                raise HTTPException(403, "holder_id must match the authenticated actor")
+            holder_id = principal.actor_id
         try:
-            lease = leases.acquire(
+            lease = _scoped_leases(request).acquire(
                 workspace_id=workspace_id,
                 file_path=body.file_path,
-                holder_id=body.holder_id,
+                holder_id=holder_id,
                 ttl_seconds=body.ttl_seconds,
                 kind=body.kind,
             )
@@ -311,7 +414,9 @@ def create_workspace_api_router(
                 409,
                 {
                     "error": "lease_conflict",
-                    "conflict": exc.lease.to_dict() if hasattr(exc.lease, "to_dict") else _lease_dict(exc.lease),
+                    "conflict": exc.lease.to_dict()
+                    if hasattr(exc.lease, "to_dict")
+                    else _lease_dict(exc.lease),
                     "holder_id": exc.lease.holder_id,
                     "file_path": exc.lease.file_path,
                     "expires_at": exc.lease.expires_at,
@@ -325,10 +430,14 @@ def create_workspace_api_router(
         "/api/workspaces/{workspace_id}/lease/{lease_id}",
         dependencies=[Depends(_auth_dep)],
     )
-    def release_lease(workspace_id: str, lease_id: str) -> dict[str, Any]:
+    def release_lease(request: Request, workspace_id: str, lease_id: str) -> dict[str, Any]:
         _require_flag()
-        _workspace_or_404(workspace_id)
-        released = leases.release(lease_id)
+        _, principal = _workspace_access(request, workspace_id, action="write")
+        lease = _lease_or_404(request, lease_id)
+        if lease.workspace_id != workspace_id:
+            raise HTTPException(404, f"lease {lease_id!r} not found")
+        _require_lease_owner(request, lease, principal)
+        released = _scoped_leases(request).release(lease_id)
         if not released:
             raise HTTPException(404, f"lease {lease_id!r} not found")
         return {"ok": True, "lease_id": lease_id}
@@ -338,14 +447,19 @@ def create_workspace_api_router(
         dependencies=[Depends(_auth_dep)],
     )
     def renew_lease(
+        request: Request,
         workspace_id: str,
         lease_id: str,
         body: RenewLeaseBody,
     ) -> dict[str, Any]:
         _require_flag()
-        _workspace_or_404(workspace_id)
+        _, principal = _workspace_access(request, workspace_id, action="write")
+        lease = _lease_or_404(request, lease_id)
+        if lease.workspace_id != workspace_id:
+            raise HTTPException(404, f"lease {lease_id!r} not found")
+        _require_lease_owner(request, lease, principal)
         try:
-            lease = leases.renew(lease_id, ttl_seconds=body.ttl_seconds)
+            lease = _scoped_leases(request).renew(lease_id, ttl_seconds=body.ttl_seconds)
         except LeaseNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:
@@ -356,10 +470,10 @@ def create_workspace_api_router(
         "/api/workspaces/{workspace_id}/leases",
         dependencies=[Depends(_auth_dep)],
     )
-    def list_leases(workspace_id: str) -> dict[str, Any]:
+    def list_leases(request: Request, workspace_id: str) -> dict[str, Any]:
         _require_flag()
-        _workspace_or_404(workspace_id)
-        active = leases.list_active(workspace_id=workspace_id)
+        _workspace_access(request, workspace_id)
+        active = _scoped_leases(request).list_active(workspace_id=workspace_id)
         return {"leases": [_lease_dict(lease) for lease in active]}
 
     # ─── Health ────────────────────────────────────────────────────────────
@@ -368,10 +482,10 @@ def create_workspace_api_router(
         "/api/workspaces/{workspace_id}/health",
         dependencies=[Depends(_auth_dep)],
     )
-    async def health(workspace_id: str) -> dict[str, Any]:
+    async def health(request: Request, workspace_id: str) -> dict[str, Any]:
         """Re-probe the workspace's mount connection."""
         _require_flag()
-        ws = _workspace_or_404(workspace_id)
+        ws, _ = _workspace_access(request, workspace_id)
         try:
             backend = backend_registry.get_or_create(
                 ws.id, ws.mount_type, ws.mount_target, ws.mount_options

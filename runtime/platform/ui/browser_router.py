@@ -1,9 +1,4 @@
-"""Browser session and relay compatibility router for the UI app.
-
-The bulk of the implementation (relay/session state and helpers) lives in
-``_browser_router_helpers``; this module only wires up the router and its
-endpoint handlers. Pure structural split — no logic changes.
-"""
+"""Browser session and relay compatibility router for the UI app."""
 
 from __future__ import annotations
 
@@ -12,15 +7,10 @@ import contextlib
 import html
 import json
 import math
-import os
-import platform
 import re
-import subprocess
-import sys
 import time
 import urllib.error
 import uuid
-from pathlib import Path
 from typing import Any
 
 from fastapi import (
@@ -37,6 +27,8 @@ from starlette.requests import HTTPConnection
 
 from runtime.platform.process.paths import app_paths
 from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
+from runtime.platform.ui._browser_artifact_path import resolve_browser_artifact_path
+from runtime.platform.ui._browser_desktop_helpers import browser_system_info, open_extension_folder
 from runtime.platform.ui._browser_router_helpers import (
     _SESSION_SENTINEL_NAME,
     _BrowserBackend,
@@ -44,6 +36,7 @@ from runtime.platform.ui._browser_router_helpers import (
     mark_session_closed,
     secure_profile_dir,
 )
+from runtime.safety.auth.principal import require_operator, resolve_principal
 from runtime.safety.replay.browser_desktop_replay import browser_session_replay_identity
 
 __all__ = [
@@ -69,14 +62,13 @@ def create_browser_router(
     entry). They previously had NO auth at all — inconsistent with the other
     routers that honour ``require_auth``. The router-level dependency below
     closes that gap: when ``require_auth`` is off (default / single-user dev)
-    ``_resolve_actor`` is a no-op so local preview is unchanged; when auth is
-    enabled it enforces 401 across every browser endpoint.
+    the dependency is a no-op so local preview is unchanged; when auth is
+    enabled it enforces 401 across every browser endpoint and the handlers
+    bind sessions/relay state to the verified Principal.
     """
 
     def _auth_dep(request: HTTPConnection) -> None:
-        from runtime.adapters.web_auth import _resolve_actor
-
-        _resolve_actor(  # AUTH-OK: actor-agnostic
+        resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -106,24 +98,93 @@ def create_browser_router(
         browser_session_center=browser_session_center,
     )
 
+    def _principal(request: HTTPConnection) -> Any:
+        return getattr(getattr(request, "state", None), "principal", None)
+
+    def _owned_session(
+        request: HTTPConnection,
+        session_id: str,
+        *,
+        missing_ok: bool = False,
+    ) -> dict[str, Any] | None:
+        session = backend.browser_sessions.get(session_id)
+        if session is None:
+            if missing_ok:
+                return None
+            raise HTTPException(404, f"browser session not found: {session_id}")
+        if require_auth:
+            principal = _principal(request)
+            owner = str(session.get("owner_actor_id") or "")
+            if principal is None or not owner or owner != principal.actor_id:
+                # Browser profiles contain cookies and may represent a real
+                # logged-in user. Hide existence as well as contents.
+                raise HTTPException(404, f"browser session not found: {session_id}")
+        return session
+
+    def _ensure_owned_session(
+        request: HTTPConnection,
+        session_id: str,
+        *,
+        headless: bool | None = None,
+        project_id: str | None = None,
+        profile_id: str | None = None,
+    ) -> dict[str, Any]:
+        principal = _principal(request)
+        requested_profile = backend.browser_session_center._normalize_profile_id(
+            profile_id or project_id or session_id
+        )
+        if require_auth and principal is not None:
+            for other in backend.browser_sessions.values():
+                if other.get("profile_id") != requested_profile:
+                    continue
+                if other.get("owner_actor_id") != principal.actor_id:
+                    raise HTTPException(409, "browser profile is owned by another actor")
+        existing = _owned_session(request, session_id, missing_ok=True)
+        if existing is not None:
+            return backend._ensure_browser_session(
+                session_id,
+                headless=headless,
+                project_id=project_id,
+                profile_id=profile_id,
+            )
+        session = backend._ensure_browser_session(
+            session_id,
+            headless=headless,
+            project_id=project_id,
+            profile_id=profile_id,
+        )
+        if require_auth:
+            if principal is None:
+                raise HTTPException(401, "authenticated browser principal required")
+            session["owner_actor_id"] = principal.actor_id
+            session["tenant_id"] = principal.tenant_id
+        return session
+
+    def _require_relay_owner(request: HTTPConnection) -> Any:
+        if not require_auth:
+            return None
+        principal = _principal(request)
+        if principal is None:
+            raise HTTPException(401, "authenticated browser principal required")
+        owner = str(backend.browser_relay_state.get("owner_actor_id") or "")
+        if owner and owner != principal.actor_id:
+            raise HTTPException(404, "browser relay not found")
+        backend.browser_relay_state.setdefault("owner_actor_id", principal.actor_id)
+        backend.browser_relay_state.setdefault("tenant_id", principal.tenant_id)
+        return principal
+
     # ─── Filesystem helpers for desktop workspace pages ───────────────
     @router.get("/api/browser/system-info")
     def api_browser_system_info() -> dict[str, Any]:
-        system = {
-            "os": platform.system(),
-            "os_version": platform.version(),
-            "os_release": platform.release(),
-            "architecture": platform.machine() or platform.architecture()[0],
-            "python_version": sys.version.split()[0],
-        }
-        return {"system": system, "browsers": backend._detect_browsers()}
+        return browser_system_info(backend._detect_browsers)
 
     @router.post("/api/browser/launch")
-    def api_browser_launch(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_launch(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "").strip()
         if not session_id:
             raise HTTPException(400, "session_id is required")
-        session = backend._ensure_browser_session(
+        session = _ensure_owned_session(
+            request,
             session_id,
             headless=bool(body.get("headless", backend.browser_config_state["headless"])),
             project_id=backend._session_project_id(session_id, body),
@@ -136,9 +197,12 @@ def create_browser_router(
         }
 
     @router.get("/api/browser/session/status")
-    def api_browser_session_status(session_id: str = Query(default="default")) -> dict[str, Any]:
+    def api_browser_session_status(
+        request: Request,
+        session_id: str = Query(default="default"),
+    ) -> dict[str, Any]:
         try:
-            session = backend.browser_session_center.get(session_id)
+            session = _owned_session(request, session_id, missing_ok=True)
             snapshot = (
                 backend.browser_session_center.snapshot(session)
                 if session is not None
@@ -150,18 +214,25 @@ def create_browser_router(
 
     @router.get("/api/browser/session/health")
     def api_browser_session_health(
+        request: Request,
         session_id: str = Query(default="default"),
         limit: int = Query(default=10, ge=1, le=100),
     ) -> dict[str, Any]:
         try:
+            # Health is also the recovery discovery endpoint: a genuinely
+            # missing session must return a structured ``session_missing``
+            # report instead of a generic 404. Ownership mismatches in auth
+            # mode still raise 404 inside ``_owned_session``.
+            _owned_session(request, session_id, missing_ok=True)
             return backend.browser_session_center.health_report(session_id, limit=limit)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
     @router.post("/api/browser/session/ensure")
-    def api_browser_session_ensure(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_session_ensure(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "default").strip()
-        session = backend._ensure_browser_session(
+        session = _ensure_owned_session(
+            request,
             session_id,
             headless=body.get("headless") if "headless" in body else None,
             project_id=backend._session_project_id(session_id, body),
@@ -171,11 +242,12 @@ def create_browser_router(
         return {"status": "ready", "session": backend.browser_session_center.snapshot(session)}
 
     @router.post("/api/browser/session/viewport")
-    def api_browser_session_viewport(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_session_viewport(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "default").strip()
         if not session_id:
             raise HTTPException(400, "session_id is required")
-        session = backend._ensure_browser_session(
+        session = _ensure_owned_session(
+            request,
             session_id,
             headless=body.get("headless") if "headless" in body else None,
             project_id=backend._session_project_id(session_id, body),
@@ -215,16 +287,18 @@ def create_browser_router(
         }
 
     @router.post("/api/browser/session/reset")
-    def api_browser_session_reset(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_session_reset(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "default").strip()
         if not session_id:
             raise HTTPException(400, "session_id is required")
+        _owned_session(request, session_id, missing_ok=True)
         session = backend.browser_session_center.pop(session_id)
         if session is not None:
             backend._close_real_browser_session(session)
         relaunch = bool(body.get("relaunch", False))
         if relaunch:
-            session = backend._ensure_browser_session(
+            session = _ensure_owned_session(
+                request,
                 session_id,
                 headless=body.get("headless") if "headless" in body else None,
                 project_id=backend._session_project_id(session_id, body),
@@ -243,14 +317,15 @@ def create_browser_router(
         }
 
     @router.post("/api/browser/navigate")
-    def api_browser_navigate(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_navigate(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "").strip()
         url = str(body.get("url") or "").strip()
         if not session_id:
             raise HTTPException(400, "session_id is required")
         if not url:
             raise HTTPException(400, "url is required")
-        session = backend._ensure_browser_session(
+        session = _ensure_owned_session(
+            request,
             session_id,
             project_id=backend._session_project_id(session_id, body),
             profile_id=backend._session_profile_id(session_id, body),
@@ -258,16 +333,14 @@ def create_browser_router(
         return backend._navigate_browser_session(session, url)
 
     @router.post("/api/browser/action")
-    def api_browser_action(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_action(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "").strip()
         action = str(body.get("action") or "").strip()
         if not session_id:
             raise HTTPException(400, "session_id is required")
         if not action:
             raise HTTPException(400, "action is required")
-        session = backend.browser_sessions.get(session_id)
-        if session is None:
-            raise HTTPException(404, f"browser session not found: {session_id}")
+        session = _owned_session(request, session_id)
         if action == "back":
             return backend._move_browser_history(session, -1)
         if action == "forward":
@@ -406,28 +479,22 @@ def create_browser_router(
         }
 
     @router.get("/api/browser/screenshot/base64")
-    def api_browser_screenshot_base64(session_id: str) -> dict[str, Any]:
-        session = backend.browser_sessions.get(session_id)
-        if session is None:
-            raise HTTPException(404, f"browser session not found: {session_id}")
+    def api_browser_screenshot_base64(request: Request, session_id: str) -> dict[str, Any]:
+        session = _owned_session(request, session_id)
         backend._record_browser_action(session, "screenshot", str(session.get("current_url") or ""))
         return backend._browser_screenshot_payload(session)
 
     @router.get("/api/browser/page-info")
-    def api_browser_page_info(session_id: str) -> dict[str, Any]:
-        session = backend.browser_sessions.get(session_id)
-        if session is None:
-            raise HTTPException(404, f"browser session not found: {session_id}")
+    def api_browser_page_info(request: Request, session_id: str) -> dict[str, Any]:
+        session = _owned_session(request, session_id)
         return {
             "url": str(session.get("current_url") or ""),
             "title": str(session.get("current_title") or ""),
         }
 
     @router.get("/api/browser/extract-text")
-    def api_browser_extract_text(session_id: str) -> dict[str, Any]:
-        session = backend.browser_sessions.get(session_id)
-        if session is None:
-            raise HTTPException(404, f"browser session not found: {session_id}")
+    def api_browser_extract_text(request: Request, session_id: str) -> dict[str, Any]:
+        session = _owned_session(request, session_id)
         url = str(session.get("current_url") or "")
         title = str(session.get("current_title") or "")
         text = ""
@@ -454,7 +521,7 @@ def create_browser_router(
                     allow_private=False,
                 )
                 html_text = raw.decode("utf-8", errors="replace")
-                text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", html_text)
+                text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html_text)
                 text = re.sub(r"(?s)<[^>]+>", " ", text)
                 text = html.unescape(re.sub(r"\s+", " ", text)).strip()
             except (ValueError, urllib.error.URLError, TimeoutError, OSError):
@@ -470,29 +537,38 @@ def create_browser_router(
         }
 
     @router.get("/api/browser/sessions")
-    def api_browser_sessions() -> dict[str, Any]:
-        sessions = backend.browser_session_center.list_snapshots()
+    def api_browser_sessions(request: Request) -> dict[str, Any]:
+        principal = _principal(request)
+        visible_sessions = backend.browser_sessions.values()
+        if require_auth:
+            visible_sessions = [
+                session
+                for session in visible_sessions
+                if principal is not None and session.get("owner_actor_id") == principal.actor_id
+            ]
+        sessions = [
+            backend.browser_session_center.snapshot(session) for session in visible_sessions
+        ]
+        sessions.sort(key=lambda item: item["last_activity"], reverse=True)
         return {"sessions": sessions, "count": len(sessions)}
 
     @router.get("/api/browser/action-log")
     def api_browser_action_log(
+        request: Request,
         session_id: str,
         limit: int = Query(default=50, ge=1, le=500),
     ) -> dict[str, Any]:
-        session = backend.browser_sessions.get(session_id)
-        if session is None:
-            raise HTTPException(404, f"browser session not found: {session_id}")
+        session = _owned_session(request, session_id)
         actions = list(session.get("actions", []))[-limit:]
         return {"actions": actions}
 
     @router.get("/api/browser/session/replay-case")
     def api_browser_session_replay_case(
+        request: Request,
         session_id: str,
         limit: int = Query(default=100, ge=1, le=500),
     ) -> dict[str, Any]:
-        session = backend.browser_sessions.get(session_id)
-        if session is None:
-            raise HTTPException(404, f"browser session not found: {session_id}")
+        session = _owned_session(request, session_id)
         actions = list(session.get("actions", []))[-limit:]
         health = backend.browser_session_center.health_report(session_id, limit=min(limit, 100))
         identity = browser_session_replay_identity(
@@ -514,13 +590,20 @@ def create_browser_router(
         }
 
     @router.post("/api/browser/session/replay-case/queue")
-    def api_browser_session_replay_case_queue(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_session_replay_case_queue(
+        request: Request,
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "default").strip()
         if not session_id:
             raise HTTPException(400, "session_id is required")
         limit = int(body.get("limit") or 100)
         limit = max(1, min(500, limit))
-        replay_case = api_browser_session_replay_case(session_id=session_id, limit=limit)
+        replay_case = api_browser_session_replay_case(
+            request=request,
+            session_id=session_id,
+            limit=limit,
+        )
         if not replay_case.get("replay_ready"):
             raise HTTPException(409, "browser replay case has no actions to review")
         queued = backend._queue_browser_replay_case(
@@ -536,10 +619,11 @@ def create_browser_router(
         }
 
     @router.post("/api/browser/close")
-    def api_browser_close(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_close(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "").strip()
         if not session_id:
             raise HTTPException(400, "session_id is required")
+        _owned_session(request, session_id, missing_ok=True)
         session = backend.browser_session_center.pop(session_id)
         if session is not None:
             backend._close_real_browser_session(session)
@@ -550,7 +634,15 @@ def create_browser_router(
         return backend.browser_config_state
 
     @router.put("/api/browser/config")
-    def api_browser_config_update(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_config_update(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
         allowed_modes = {"playwright", "extension", "cdp"}
         persist_policy = False
         for key in (
@@ -594,13 +686,12 @@ def create_browser_router(
         return backend.browser_config_state
 
     @router.get("/api/browser/relay/status")
-    def api_browser_relay_status() -> dict[str, Any]:
+    def api_browser_relay_status(request: Request) -> dict[str, Any]:
+        _require_relay_owner(request)
         extension_path = backend._resolve_browser_extension_path()
         manifest = extension_path / "manifest.json"
         last_seen = int(backend.browser_relay_state.get("last_seen") or 0)
-        connected = bool(
-            manifest.exists() and last_seen and (backend._now_ts() - last_seen) <= 15
-        )
+        connected = bool(manifest.exists() and last_seen and (backend._now_ts() - last_seen) <= 15)
         backend.browser_relay_state["connected"] = connected
         return {
             "connected": connected,
@@ -619,7 +710,8 @@ def create_browser_router(
         }
 
     @router.post("/api/browser/relay/heartbeat")
-    def api_browser_relay_heartbeat(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_relay_heartbeat(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_relay_owner(request)
         pending = backend._apply_relay_heartbeat(body)
         return {
             "ok": True,
@@ -630,6 +722,11 @@ def create_browser_router(
 
     @router.websocket("/api/browser/relay/ws")
     async def api_browser_relay_ws(websocket: WebSocket) -> None:
+        try:
+            _require_relay_owner(websocket)
+        except HTTPException as exc:
+            await websocket.close(code=4403 if exc.status_code == 404 else 4401)
+            return
         await websocket.accept()
         with backend.browser_relay_queue_lock:
             backend.browser_relay_state["push_connections"] = (
@@ -682,7 +779,8 @@ def create_browser_router(
                 )
 
     @router.post("/api/browser/relay/control")
-    def api_browser_relay_control(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_relay_control(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_relay_owner(request)
         action = str(body.get("action") or "").strip()
         if action in {"stop", "interrupt"}:
             interrupt = backend._record_relay_interrupt(
@@ -690,7 +788,11 @@ def create_browser_router(
                 source=str(body.get("source") or "side_panel"),
                 detail={"active_tab": backend._relay_active_tab_snapshot()},
             )
-            return {"ok": True, "interrupt": interrupt, "control": backend._relay_control_snapshot()}
+            return {
+                "ok": True,
+                "interrupt": interrupt,
+                "control": backend._relay_control_snapshot(),
+            }
         if action in {"resume", "clear_interrupt"}:
             backend._clear_relay_interrupt()
             return {"ok": True, "control": backend._relay_control_snapshot()}
@@ -699,7 +801,8 @@ def create_browser_router(
         raise HTTPException(400, "action must be one of stop, interrupt, resume, clear_interrupt")
 
     @router.post("/api/browser/relay/command")
-    def api_browser_relay_command(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_relay_command(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_relay_owner(request)
         last_seen = int(backend.browser_relay_state.get("last_seen") or 0)
         if not last_seen or (backend._now_ts() - last_seen) > 15:
             raise HTTPException(409, "browser relay extension is not connected")
@@ -788,7 +891,8 @@ def create_browser_router(
         raise HTTPException(504, "browser relay command timed out")
 
     @router.post("/api/browser/relay/result")
-    def api_browser_relay_result(body: dict[str, Any]) -> dict[str, Any]:
+    def api_browser_relay_result(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_relay_owner(request)
         try:
             backend._apply_relay_result(body)
         except ValueError:
@@ -804,11 +908,13 @@ def create_browser_router(
 
     @router.get("/api/browser/relay/bookmarklet-poll")
     def api_browser_relay_bookmarklet_poll(
+        request: Request,
         callback: str = Query(""),
         version: str = Query("bookmarklet"),
         url: str = Query(""),
         title: str = Query(""),
     ) -> Response:
+        _require_relay_owner(request)
         if not re.fullmatch(r"[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*", callback):
             raise HTTPException(400, "invalid callback")
         backend.browser_relay_state["connected"] = True
@@ -840,50 +946,50 @@ def create_browser_router(
             raise HTTPException(400, "invalid relay result") from exc
         if not isinstance(body, dict):
             raise HTTPException(400, "invalid relay result")
-        return api_browser_relay_result(body)
+        return api_browser_relay_result(request, body)
 
     @router.post("/api/browser/open-extension-folder")
-    def api_browser_open_extension_folder() -> dict[str, Any]:
+    def api_browser_open_extension_folder(request: Request) -> dict[str, Any]:
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
         extension_path = backend._resolve_browser_extension_path()
-        try:
-            if os.name == "nt":
-                os.startfile(str(extension_path))  # type: ignore[attr-defined]
-            elif sys.platform == "darwin":
-                # macOS has no xdg-open; the file opener is `open`.
-                subprocess.Popen(["open", str(extension_path)])
-            else:
-                subprocess.Popen(["xdg-open", str(extension_path)])
-        except (OSError, ValueError):  # noqa: BLE001 — browser session cleanup; best-effort
-            pass
-        return {"opened": True, "path": str(extension_path)}
+        return open_extension_folder(extension_path)
 
     @router.get("/api/browser/extension-path")
-    def api_browser_extension_path() -> dict[str, Any]:
+    def api_browser_extension_path(request: Request) -> dict[str, Any]:
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
         extension_path = backend._resolve_browser_extension_path()
         return {"path": str(extension_path), "exists": extension_path.exists()}
 
     @router.get("/api/browser-artifacts/{filename}")
-    def serve_browser_artifact(filename: str) -> Any:
-        """Serve a browser screenshot saved by ``live_browser_screenshot``.
-
-        Files land in ``data/browser_artifacts/<filename>``. Only ``.png``
-        files are served (screenshots only); directory traversal is
-        blocked by the simple name check.
-        """
-        from fastapi import HTTPException
-        from fastapi.responses import FileResponse
-
-        from runtime.execution.suckers.browser_act_skills import (
-            _artifacts_root,
+    def serve_browser_artifact(request: Request, filename: str) -> Any:
+        principal = _principal(request)
+        fpath = resolve_browser_artifact_path(
+            filename,
+            principal=principal,
+            require_auth=require_auth,
+            authorize_legacy=lambda: require_operator(
+                request,
+                identity_store,
+                require_auth,
+                jwt_secret=jwt_secret,
+                jwt_issuer=jwt_issuer,
+                jwt_audience=jwt_audience,
+            ),
         )
-
-        # Prevent path traversal
-        clean = Path(filename).name
-        if not clean.endswith(".png") or "/" in filename or "\\" in filename:
-            raise HTTPException(404, "not found")
-        fpath = _artifacts_root() / clean
-        if not fpath.is_file():
-            raise HTTPException(404, "artifact not found")
         return FileResponse(str(fpath), media_type="image/png")
 
     return router

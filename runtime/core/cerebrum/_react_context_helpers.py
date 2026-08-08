@@ -438,9 +438,7 @@ def _format_skill_catalog(
     _labels = set(activation.labels)
     _browser_cap = bool(_labels & {"browser-ui", "external-chrome", "code-ui-regression"})
     _uc_for_browser = user_context if isinstance(user_context, dict) else {}
-    _browser_surface = str(
-        _uc_for_browser.get("browser_surface") or ""
-    ).strip().lower()
+    _browser_surface = str(_uc_for_browser.get("browser_surface") or "").strip().lower()
     _browser_cap = _browser_cap or _browser_surface in {"browser", "chrome"}
     _git_cap = bool(_labels & {"code", "files"})
     _delegation_cap = bool(_labels & {"delegation", "swarm"})
@@ -528,11 +526,7 @@ def _format_skill_catalog(
             else []
         ),
         # High-level document/research workflows — only for research turns.
-        *(
-            ["deep-research", "report-writing", "docx"]
-            if _research_cap
-            else []
-        ),
+        *(["deep-research", "report-writing", "docx"] if _research_cap else []),
     ]
     priority_set = set(priority)
     names = [n for n in priority if n in names] + [n for n in names if n not in priority_set]

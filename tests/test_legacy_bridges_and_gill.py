@@ -28,9 +28,11 @@ class _HookRegistry:
 
 def test_signal_bridge_install_is_idempotent(monkeypatch):
     emitted = []
-    monkeypatch.setattr(event_bridge, "get_eventbus", lambda: SimpleNamespace(
-        emit=lambda *args, **kwargs: emitted.append((args, kwargs))
-    ))
+    monkeypatch.setattr(
+        event_bridge,
+        "get_eventbus",
+        lambda: SimpleNamespace(emit=lambda *args, **kwargs: emitted.append((args, kwargs))),
+    )
     signal_bus = _SignalBus()
 
     event_bridge.bridge_signal_bus_to_eventbus(signal_bus)
@@ -43,9 +45,11 @@ def test_signal_bridge_install_is_idempotent(monkeypatch):
 
 def test_typed_and_hook_bridges_are_idempotent(monkeypatch):
     emitted = []
-    monkeypatch.setattr(event_bridge, "get_eventbus", lambda: SimpleNamespace(
-        emit=lambda *args, **kwargs: emitted.append((args, kwargs))
-    ))
+    monkeypatch.setattr(
+        event_bridge,
+        "get_eventbus",
+        lambda: SimpleNamespace(emit=lambda *args, **kwargs: emitted.append((args, kwargs))),
+    )
     typed = TypedEventBus()
     typed.AgentAdded = AgentAdded
     event_bridge.bridge_typed_bus_to_eventbus(typed)

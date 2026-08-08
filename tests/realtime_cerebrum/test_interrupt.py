@@ -72,7 +72,7 @@ def test_turn_interrupt_kills_in_flight_subprocess(
 ) -> None:
     """End-to-end: client sends turn/interrupt while a tool is running
     a long subprocess → stream_run sees cancellation → proc killed →
-    tool_end carries status=cancelled → turn.status = interrupted."""
+        tool_end carries status=cancelled → turn.status = cancelled."""
     import sys
     import time
 
@@ -181,13 +181,14 @@ def test_turn_interrupt_kills_in_flight_subprocess(
     # propagate through the async watcher + stream_run kill path.
     assert elapsed < 3.0, f"interrupt took {elapsed:.1f}s, expected < 3s"
     assert tool_completed_naturally["flag"] is False
-    assert final.result["turn"]["status"] == "interrupted"
+    assert final.result["turn"]["status"] == "cancelled"
 
 
 def test_thread_resume_closes_stale_in_progress_turn(tmp_path: Path) -> None:
     from fastapi import FastAPI
 
     from runtime.memory.threads.event_log import EventLog
+    from runtime.platform.process.task_supervisor import TaskRunStatus, TaskSupervisor
     from runtime.protocol.items import ItemStatus, Turn, TurnParams, UserMessageItem
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
@@ -207,11 +208,38 @@ def test_thread_resume_closes_stale_in_progress_turn(tmp_path: Path) -> None:
     log.turn_started("stale-thread", turn)
     log.item_started("stale-thread", turn.id, user_item)
     log.item_completed("stale-thread", turn.id, user_item)
+    turn.task_id = "stale-react-task"
+    turn.objective_id = turn.task_id
+    log.turn_updated(
+        turn.thread_id,
+        turn.id,
+        objective_id=turn.objective_id,
+        task_id=turn.task_id,
+    )
+
+    old_supervisor = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="dead-worker",
+        lease_ttl_seconds=300,
+    )
+    old_supervisor.start_task(
+        task_id=turn.task_id,
+        kind="realtime_objective",
+        thread_id=turn.thread_id,
+        origin_task_id=turn.id,
+        metadata={"turn_id": turn.id},
+    )
+    new_supervisor = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="recovery-worker",
+        lease_ttl_seconds=300,
+    )
 
     runtime = CerebrumRuntime(
         stack=object(),
         agent=object(),
         logs_root=str(logs_root),
+        task_supervisor=new_supervisor,
     )
     gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
     app = FastAPI()
@@ -236,6 +264,53 @@ def test_thread_resume_closes_stale_in_progress_turn(tmp_path: Path) -> None:
 
     replayed = log.replay()
     assert replayed[0].status.value == "failed"
+    recovered_task = new_supervisor.store.get("stale-react-task")
+    assert recovered_task is not None
+    assert recovered_task.status == TaskRunStatus.FAILED
+    assert recovered_task.lease is None
+    assert (
+        recovered_task.metadata["stale_turn_recovery_events"][-1]["previous_holder_id"]
+        == "dead-worker"
+    )
+
+
+def test_thread_resume_preserves_checkpoint_backed_stale_turn_as_paused(
+    tmp_path: Path,
+) -> None:
+    from runtime.core.cerebrum.pause_control import get_pause_controller
+    from runtime.memory.threads.event_log import EventLog
+    from runtime.protocol.items import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+    logs_root = tmp_path / "threads"
+    log = EventLog(logs_root / "stale-paused.jsonl")
+    turn = Turn(threadId="stale-paused")
+    log.thread_started(turn.thread_id)
+    log.turn_started(turn.thread_id, turn)
+
+    controller = get_pause_controller()
+    controller.request_pause(
+        "react-task-paused",
+        reason="iteration_near_limit",
+        requested_by="system",
+        note="checkpoint saved",
+        thread_id=turn.thread_id,
+    )
+    controller.mark_paused("react-task-paused")
+    try:
+        runtime = CerebrumRuntime(
+            stack=object(),
+            agent=object(),
+            logs_root=str(logs_root),
+        )
+        resumed = runtime._resume_turns(log)
+
+        assert resumed[0].status.value == "paused"
+        assert resumed[0].task_id == "react-task-paused"
+        assert resumed[0].outcome_reason == "iteration_near_limit"
+        assert log.replay()[0].status.value == "paused"
+    finally:
+        controller.clear("react-task-paused")
 
 
 @pytest.mark.asyncio()

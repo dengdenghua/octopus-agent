@@ -167,6 +167,7 @@ class _TaskEntry:
     replacement_generation: int | None = None
     late_result_ignored_at: datetime | None = None
     worker_isolation: str = "thread"
+    worker_isolation_reason: str | None = None
     worker_process: Any = None
     process_cancel_event: Any = None
     process_messages: Any = None
@@ -194,6 +195,7 @@ class _TaskEntry:
             replacement_generation=self.replacement_generation,
             late_result_ignored_at=_iso(self.late_result_ignored_at),
             worker_isolation=self.worker_isolation,
+            worker_isolation_reason=self.worker_isolation_reason,
         )
 
 
@@ -213,6 +215,8 @@ class _BatchEntry:
     subscribers: list[tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = field(default_factory=list)
     event_log: list[Any] = field(default_factory=list)
     event_sequence: int = 0
+    event_log_dropped_count: int = 0
+    artifact_paths_by_task: dict[str, list[str]] = field(default_factory=dict)
     # Owner enforcement: set by dispatch() from the calling actor's id.
     # ``None`` means "no owner recorded" — for batches created before
     # ownership tracking was added, or in single-user dev mode where
@@ -231,11 +235,7 @@ class _BatchEntry:
         return list(self.plan.validation_warnings) if self.plan is not None else []
 
     def artifact_count(self) -> int:
-        return sum(
-            len(event.artifact_paths)
-            for event in self.event_log
-            if getattr(event, "artifact_paths", None)
-        )
+        return sum(len(paths) for paths in self.artifact_paths_by_task.values())
 
     def completion_receipt(self) -> dict[str, object]:
         return build_completion_receipt(
@@ -272,6 +272,8 @@ class _BatchEntry:
             conflicts=list(self.conflicts),
             plan=self.plan,
             event_log=list(self.event_log),
+            event_log_truncated=self.event_log_dropped_count > 0,
+            event_log_dropped_count=self.event_log_dropped_count,
             completion_receipt=self.completion_receipt(),
             file_write_observability=file_write_lease_snapshot(
                 self.runtime_session_metadata,
@@ -376,6 +378,7 @@ def _task_row(entry: _TaskEntry) -> dict[str, object]:
         "replacement_generation": entry.replacement_generation,
         "late_result_ignored": entry.late_result_ignored_at is not None,
         "worker_isolation": entry.worker_isolation,
+        "worker_isolation_reason": entry.worker_isolation_reason,
     }
 
 
@@ -466,13 +469,14 @@ def _build_recovery_snapshot(
     event_types: dict[str, int] = {}
     first_sequence: int | None = None
     last_sequence: int | None = None
+    for task_id, paths in batch.artifact_paths_by_task.items():
+        bucket = artifacts_by_task.setdefault(task_id, [])
+        bucket.extend(path for path in paths if path not in bucket)
     for event in batch.event_log:
         event_types[event.type] = event_types.get(event.type, 0) + 1
         sequence = event.sequence or 0
         if sequence > 0:
-            first_sequence = (
-                sequence if first_sequence is None else min(first_sequence, sequence)
-            )
+            first_sequence = sequence if first_sequence is None else min(first_sequence, sequence)
             last_sequence = sequence if last_sequence is None else max(last_sequence, sequence)
         if event.task_id and event.artifact_paths:
             bucket = artifacts_by_task.setdefault(event.task_id, [])
@@ -487,9 +491,7 @@ def _build_recovery_snapshot(
                 all_artifacts.append(path)
 
     failed_task_ids = [
-        entry.task_id
-        for entry in batch.tasks.values()
-        if entry.status in {"failed", "timed_out"}
+        entry.task_id for entry in batch.tasks.values() if entry.status in {"failed", "timed_out"}
     ]
     cancelled_task_ids = [
         entry.task_id for entry in batch.tasks.values() if entry.status == "cancelled"
@@ -546,6 +548,7 @@ def _build_recovery_snapshot(
                 replacement_generation=entry.replacement_generation,
                 late_result_ignored_at=_iso(entry.late_result_ignored_at),
                 worker_isolation=entry.worker_isolation,
+                worker_isolation_reason=entry.worker_isolation_reason,
             )
             for entry in batch.tasks.values()
         ],
@@ -553,6 +556,8 @@ def _build_recovery_snapshot(
         plan=batch.plan,
         event_sequence={
             "event_count": len(batch.event_log),
+            "event_log_limit_reached": batch.event_log_dropped_count > 0,
+            "dropped_event_count": batch.event_log_dropped_count,
             "first_sequence": first_sequence,
             "last_sequence": last_sequence,
             "next_after_sequence": last_sequence or 0,

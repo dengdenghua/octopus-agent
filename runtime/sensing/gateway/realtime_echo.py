@@ -180,6 +180,7 @@ class EchoRuntime:
         if not emitter.is_turn_interrupted(turn.id):
             return False
         turn.status = TurnStatus.INTERRUPTED
+        turn.outcome_reason = "user_cancelled"
         log.turn_completed(turn.thread_id, turn.id, turn.status, error=None)
         await emitter.notify(
             ServerMethod.TURN_COMPLETED,
@@ -223,6 +224,7 @@ class EchoRuntime:
             },
         )
         turn.status = TurnStatus.INTERRUPTED
+        turn.outcome_reason = "user_cancelled"
         log.turn_completed(turn.thread_id, turn.id, turn.status, error=None)
         await emitter.notify(
             ServerMethod.TURN_COMPLETED,

@@ -99,6 +99,10 @@ class MCPServerConfigEntry(BaseModel):
     url: str = ""
     headers: dict[str, str] = Field(default_factory=dict)
     name_prefix: str | None = None  # Implementation note.
+    # Required for a shared/commercial stdio server. The server process is
+    # launched inside this operator-selected workspace by the hard process
+    # sandbox; it is never inferred from a model-supplied path.
+    sandbox_dir: str | None = None
 
 
 class SafetyConfig(BaseModel):
@@ -129,6 +133,30 @@ class SafetyConfig(BaseModel):
     # single-user host opt in with ``safety.allow_client_approval_bypass:
     # true``.
     allow_client_approval_bypass: bool | None = None
+
+
+class ExecutionConfig(BaseModel):
+    """Deployment-level execution isolation contract.
+
+    ``local`` preserves the desktop/developer default.  Shared modes are
+    consumed by ``serve`` before the runtime is built, so a commercial
+    deployment cannot accidentally rely on the legacy soft subprocess path.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    deployment_mode: Literal["local", "shared", "commercial", "production", "server"] = "local"
+    process_sandbox: Literal[
+        "auto",
+        "soft",
+        "direct",
+        "off",
+        "strict",
+        "bwrap",
+        "bubblewrap",
+        "seatbelt",
+        "sandbox-exec",
+    ] = "auto"
 
 
 class LearnConfig(BaseModel):
@@ -349,6 +377,7 @@ class AgentConfig(BaseModel):
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
     immunity: ImmunityConfig = Field(default_factory=ImmunityConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
+    execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     learn: LearnConfig = Field(default_factory=LearnConfig)
     credential_pool: CredentialPoolConfig = Field(default_factory=CredentialPoolConfig)
     hot_cache: HotCacheConfig = Field(default_factory=HotCacheConfig)

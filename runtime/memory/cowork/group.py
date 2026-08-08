@@ -31,9 +31,7 @@ MemberRole = Literal["participant", "observer"]
 GrantScope = Literal["all", "from_join", "range", "summary"]
 GroupMode = Literal["chat", "cluster", "swarm", "project"]
 
-EventAction = Literal[
-    "invite", "leave", "mute", "unmute", "mode", "room_link", "workspace_link"
-]
+EventAction = Literal["invite", "leave", "mute", "unmute", "mode", "room_link", "workspace_link"]
 
 DEFAULT_MODE: GroupMode = "chat"
 # "project" is the milestone-driven collaboration mode — there is no separate
@@ -104,7 +102,13 @@ class MemberEvent:
     def from_dict(cls, raw: dict) -> MemberEvent:
         action = raw.get("action")
         if action not in (
-            "invite", "leave", "mute", "unmute", "mode", "room_link", "workspace_link"
+            "invite",
+            "leave",
+            "mute",
+            "unmute",
+            "mode",
+            "room_link",
+            "workspace_link",
         ):
             raise ValueError(f"unknown member event action: {action!r}")
         mode = raw.get("mode")

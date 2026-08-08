@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from runtime.safety.auth.scope import TenantScope
+
 MemoryKind = Literal[
     "fact",
     "memory_md",
@@ -38,6 +40,7 @@ class MemoryQuery:
     team_id: str | None = None
     include_global: bool = True
     limit: int = 12
+    tenant_scope: TenantScope | None = None
 
 
 class MemoryHub:
@@ -96,11 +99,25 @@ class MemoryHub:
             return []
 
         try:
-            memory = user_store.read_memory()
+            scope = query.tenant_scope
+            if scope is None:
+                try:
+                    from runtime.memory.journal.journal_context import (
+                        current_owner_actor_id,
+                        current_tenant_id,
+                    )
+
+                    tenant_id = current_tenant_id()
+                    actor_id = current_owner_actor_id()
+                    if tenant_id and actor_id:
+                        scope = TenantScope(tenant_id, actor_id)
+                except (ImportError, RuntimeError):
+                    scope = None
+            memory = user_store.read_memory(scope)
         except (OSError, TypeError, ValueError):
             return []
         try:
-            config = user_store.read_config()
+            config = user_store.read_config(scope)
         except (OSError, TypeError, ValueError, AttributeError):
             config = {}
         if not config.get("enabled", True) or not config.get(

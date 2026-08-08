@@ -84,6 +84,55 @@ def _unregister_active_turn(runtime: CerebrumRuntime, turn_id: str) -> None:
     _remove_active_turn_lease(runtime, turn_id)
 
 
+async def _drain_active_turns_for_shutdown(
+    runtime: CerebrumRuntime,
+    *,
+    timeout_seconds: float = 3.0,
+) -> dict[str, Any]:
+    """Request checkpointed pauses and briefly drain live turns on shutdown."""
+    from runtime.core.cerebrum.pause_control import get_pause_controller
+
+    active_turns = list(runtime._active_turns.values())
+    if not active_turns:
+        return {"requested": [], "drained": [], "remaining": []}
+
+    controller = get_pause_controller()
+    react_by_thread: dict[str, list[Any]] = {}
+    for active in controller.list_active():
+        react_by_thread.setdefault(active.thread_id, []).append(active)
+
+    requested: list[str] = []
+    target_turn_ids: set[str] = set()
+    for turn, _log in active_turns:
+        candidates = react_by_thread.get(turn.thread_id, [])
+        task_id = str(turn.task_id or "").strip()
+        if not task_id and len(candidates) == 1:
+            task_id = candidates[0].task_id
+        if not task_id:
+            continue
+        matching = next((item for item in candidates if item.task_id == task_id), None)
+        controller.request_pause(
+            task_id,
+            reason="external",
+            requested_by="server_shutdown",
+            note="服务关闭前自动暂停；将在模型安全边界保存 checkpoint",
+            thread_id=turn.thread_id,
+            agent_id=matching.agent_id if matching is not None else "",
+        )
+        requested.append(task_id)
+        target_turn_ids.add(turn.id)
+
+    deadline = time.monotonic() + max(0.0, float(timeout_seconds))
+    while target_turn_ids.intersection(runtime._active_turns) and time.monotonic() < deadline:
+        await asyncio.sleep(0.05)
+    remaining_turn_ids = sorted(target_turn_ids.intersection(runtime._active_turns))
+    return {
+        "requested": requested,
+        "drained": sorted(target_turn_ids.difference(remaining_turn_ids)),
+        "remaining": remaining_turn_ids,
+    }
+
+
 def _active_turn_lease_path(runtime: CerebrumRuntime, turn_id: str) -> Path:
     digest = hashlib.sha256(turn_id.encode("utf-8")).hexdigest()
     return runtime._active_turn_lease_root / f"{digest}.json"

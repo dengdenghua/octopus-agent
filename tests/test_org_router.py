@@ -38,9 +38,7 @@ def _client(
 ) -> TestClient:
     store = OrgStore(db_path=tmp_path / "org.db")
     app = FastAPI()
-    app.include_router(
-        create_org_router(org_store=store, identity_store=identity_store)
-    )
+    app.include_router(create_org_router(org_store=store, identity_store=identity_store))
     return TestClient(app)
 
 
@@ -69,9 +67,7 @@ def test_create_org_and_owner_auto_member(tmp_path: Path) -> None:
     assert org["owner_id"] == "alice"
     assert org["id"]
 
-    members = client.get(
-        f"/api/orgs/{org['id']}/members", headers=_auth("alice")
-    ).json()["members"]
+    members = client.get(f"/api/orgs/{org['id']}/members", headers=_auth("alice")).json()["members"]
     assert len(members) == 1
     assert members[0]["member_id"] == "alice"
     assert members[0]["role"] == "owner"
@@ -79,9 +75,7 @@ def test_create_org_and_owner_auto_member(tmp_path: Path) -> None:
 
 def test_create_org_rejects_missing_name(tmp_path: Path) -> None:
     client = _client(tmp_path, identity_store=_identity_store())
-    r = client.post(
-        "/api/orgs", json={"name": "", "owner_id": "alice"}, headers=_auth("alice")
-    )
+    r = client.post("/api/orgs", json={"name": "", "owner_id": "alice"}, headers=_auth("alice"))
     assert r.status_code == 400
 
 
@@ -108,15 +102,11 @@ def test_create_and_query_department_and_channel(tmp_path: Path) -> None:
     assert ch["name"] == "general"
     assert ch["department_id"] == dept["id"]
 
-    depts = client.get(
-        f"/api/orgs/{org['id']}/departments", headers=_auth("alice")
-    ).json()
+    depts = client.get(f"/api/orgs/{org['id']}/departments", headers=_auth("alice")).json()
     assert depts["count"] == 1
     assert depts["departments"][0]["id"] == dept["id"]
 
-    channels = client.get(
-        f"/api/orgs/{org['id']}/channels", headers=_auth("alice")
-    ).json()
+    channels = client.get(f"/api/orgs/{org['id']}/channels", headers=_auth("alice")).json()
     assert channels["count"] == 1
     assert channels["channels"][0]["id"] == ch["id"]
 
@@ -156,14 +146,15 @@ def test_org_admin_can_add_member_and_build_channel(tmp_path: Path) -> None:
     assert r3.status_code == 403
 
     # bob cannot delete the org or create a department.
-    assert client.delete(
-        f"/api/orgs/{org['id']}", headers=_auth("bob")
-    ).status_code == 403
-    assert client.post(
-        f"/api/orgs/{org['id']}/departments",
-        json={"name": "X"},
-        headers=_auth("bob"),
-    ).status_code == 403
+    assert client.delete(f"/api/orgs/{org['id']}", headers=_auth("bob")).status_code == 403
+    assert (
+        client.post(
+            f"/api/orgs/{org['id']}/departments",
+            json={"name": "X"},
+            headers=_auth("bob"),
+        ).status_code
+        == 403
+    )
 
 
 # ─── 4. 频道 ACL:非成员访问频道 403、成员可访问 ─────────────────────────────
@@ -186,10 +177,7 @@ def test_channel_acl_non_member_forbidden_member_allowed(tmp_path: Path) -> None
     # bob is not in the channel ACL → cannot read it.
     assert client.get(f"/api/channels/{ch['id']}", headers=_auth("bob")).status_code == 403
     # bob cannot list the channel's members either.
-    assert (
-        client.get(f"/api/channels/{ch['id']}/members", headers=_auth("bob")).status_code
-        == 403
-    )
+    assert client.get(f"/api/channels/{ch['id']}/members", headers=_auth("bob")).status_code == 403
 
     # alice (channel owner) can read it.
     assert client.get(f"/api/channels/{ch['id']}", headers=_auth("alice")).status_code == 200
@@ -332,12 +320,7 @@ def test_anonymous_write_forbidden(tmp_path: Path) -> None:
         ).status_code
         == 403
     )
-    assert (
-        client.post(
-            f"/api/orgs/{org['id']}/channels", json={"name": "x"}
-        ).status_code
-        == 403
-    )
+    assert client.post(f"/api/orgs/{org['id']}/channels", json={"name": "x"}).status_code == 403
     assert client.delete(f"/api/orgs/{org['id']}").status_code == 403
 
 

@@ -291,12 +291,11 @@ def health_check(
     target = backend.url.rstrip("/") + "/api/health"
     try:
         if http_client is None:
-            import httpx
+            from runtime.safety.auth.url_guard import safe_httpx_request
 
-            with httpx.Client(timeout=timeout_seconds) as client:
-                resp = client.get(target)
-                ok = 200 <= resp.status_code < 300
-                detail = None if ok else f"HTTP {resp.status_code}"
+            resp = safe_httpx_request("GET", target, timeout=timeout_seconds)
+            ok = 200 <= resp.status_code < 300
+            detail = None if ok else f"HTTP {resp.status_code}"
         else:
             resp = http_client.get(target, timeout=timeout_seconds)
             ok = 200 <= getattr(resp, "status_code", 0) < 300
@@ -338,10 +337,14 @@ def proxy_request(
     target = backend.url.rstrip("/") + "/" + path.lstrip("/")
     try:
         if http_client is None:
-            import httpx
+            from runtime.safety.auth.url_guard import safe_httpx_request
 
-            with httpx.Client(timeout=timeout_seconds) as client:
-                resp = client.request(method, target, json=json)
+            resp = safe_httpx_request(
+                method,
+                target,
+                json=json,
+                timeout=timeout_seconds,
+            )
         else:
             resp = http_client.request(
                 method,
@@ -438,9 +441,23 @@ async def proxy_websocket(
     ``send(text: str)`` / ``recv() -> str`` / ``close()``.
     """
     upstream_url = _to_ws_url(backend.url, path)
+    from urllib.parse import urlparse
+
+    from runtime.safety.auth.url_guard import check_url
+
+    parsed_upstream = urlparse(upstream_url)
+    http_equivalent = parsed_upstream._replace(
+        scheme="https" if parsed_upstream.scheme == "wss" else "http"
+    ).geturl()
+    verdict = check_url(http_equivalent, allow_private=False) if upstream_factory is None else None
+    if verdict is not None and not verdict.allow:
+        await client_ws.send_text(_ws_error_envelope(f"url_guard rejected: {verdict.reason}"))
+        await client_ws.close(code=1008)
+        return
 
     # Lazy-import websockets (heavy dep, server-only).
     if upstream_factory is None:
+        assert verdict is not None
         try:
             import websockets  # type: ignore[import-not-found]
         except ImportError as exc:
@@ -451,7 +468,13 @@ async def proxy_websocket(
             )
             await client_ws.close(code=1011)
             raise RuntimeError("websockets package required") from exc
-        connect = websockets.connect(upstream_url, max_size=None)
+        connect_kwargs: dict[str, Any] = {"max_size": None, "proxy": None}
+        if verdict.resolved_ip:
+            # websockets uses ``host`` for the TCP dial target while retaining
+            # the URI hostname for the WebSocket Host/SNI identity. This pins
+            # the connection to the address that passed the guard.
+            connect_kwargs["host"] = verdict.resolved_ip
+        connect = websockets.connect(upstream_url, **connect_kwargs)
     else:
         connect = upstream_factory(upstream_url)
 

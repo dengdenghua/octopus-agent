@@ -10,15 +10,15 @@ from __future__ import annotations
 
 import contextlib
 import threading
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from runtime.memory.diagnostics.trace_store import AgentTraceStore
 from runtime.memory.learning.experience_ledger import ExperienceLedger
 from runtime.memory.learning.promotion_applier import PromotionApplier
 from runtime.memory.learning.review_queue import ReviewQueue
+from runtime.safety.auth.scope import TenantScope, scope_from_request, tenant_scoped_path
 from runtime.safety.evolution.proposal_ledger import ProposalLedger
 
 _STORE_LOCK = threading.Lock()
@@ -30,6 +30,10 @@ _EXPERIENCE_PATH: Path | None = None
 _REVIEW_QUEUE_LOCK = threading.Lock()
 _REVIEW_QUEUE_INSTANCE: ReviewQueue | None = None
 _REVIEW_QUEUE_PATH: Path | None = None
+
+
+def _scope_for_request(request: Any) -> TenantScope | None:
+    return scope_from_request(request)
 
 
 def _default_db_path() -> Path:
@@ -85,14 +89,16 @@ def _get_experience_ledger(
     *,
     experience_ledger: ExperienceLedger | None = None,
     experience_ledger_path: Path | None = None,
+    scope: TenantScope | None = None,
 ) -> ExperienceLedger:
     if experience_ledger is not None:
         return experience_ledger
-    target = (
+    base_target = (
         Path(experience_ledger_path)
         if experience_ledger_path is not None
         else _default_experience_ledger_path()
     )
+    target = tenant_scoped_path(base_target, scope)
     global _EXPERIENCE_INSTANCE, _EXPERIENCE_PATH
     with _EXPERIENCE_LOCK:
         if _EXPERIENCE_INSTANCE is None or target != _EXPERIENCE_PATH:
@@ -105,12 +111,14 @@ def _get_review_queue(
     *,
     review_queue: ReviewQueue | None = None,
     review_queue_path: Path | None = None,
+    scope: TenantScope | None = None,
 ) -> ReviewQueue:
     if review_queue is not None:
         return review_queue
-    target = (
+    base_target = (
         Path(review_queue_path) if review_queue_path is not None else _default_review_queue_path()
     )
+    target = tenant_scoped_path(base_target, scope)
     global _REVIEW_QUEUE_INSTANCE, _REVIEW_QUEUE_PATH
     with _REVIEW_QUEUE_LOCK:
         if _REVIEW_QUEUE_INSTANCE is None or target != _REVIEW_QUEUE_PATH:
@@ -127,20 +135,30 @@ def _get_promotion_applier(
     review_queue_path: Path | None = None,
     promotion_audit_path: Path | None = None,
     proposal_ledger_path: Path | None = None,
+    scope: TenantScope | None = None,
 ) -> PromotionApplier:
     return PromotionApplier(
         review_queue=_get_review_queue(
             review_queue=review_queue,
             review_queue_path=review_queue_path,
+            scope=scope,
         ),
         experience_ledger=_get_experience_ledger(
             experience_ledger=experience_ledger,
             experience_ledger_path=experience_ledger_path,
+            scope=scope,
         ),
         proposal_ledger=ProposalLedger(
-            proposal_ledger_path or _default_proposal_ledger_path(),
+            tenant_scoped_path(
+                proposal_ledger_path or _default_proposal_ledger_path(),
+                scope,
+            ),
         ),
-        audit_path=promotion_audit_path or _default_promotion_audit_path(),
+        audit_path=tenant_scoped_path(
+            promotion_audit_path or _default_promotion_audit_path(),
+            scope,
+        ),
+        scope=scope,
     )
 
 
@@ -250,6 +268,10 @@ def _queue_repeated_trust_denials(
     }
 
 
+class _AuthResolver(Protocol):
+    def __call__(self, request: Any, *, force: bool = False) -> str | None: ...
+
+
 @dataclass
 class RouterDeps:
     """Container of the dependencies threaded through the endpoint handlers."""
@@ -268,6 +290,4 @@ class RouterDeps:
     jwt_secret: str | None = None
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
-    auth: Callable[[Any, bool], str | None] = field(
-        default=lambda request, force=False, **_: None
-    )
+    auth: _AuthResolver = field(default=lambda request, force=False, **_: None)

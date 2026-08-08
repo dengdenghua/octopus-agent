@@ -9,6 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from runtime.safety.auth.identity import Identity, IdentityStore
 from runtime.sensing.gateway.journal_router import create_journal_router
 
 
@@ -142,3 +143,57 @@ def test_stats_after_reindex(client: TestClient) -> None:
     stats = client.get("/api/journal/stats").json()
     assert stats["total"] == 10
     assert "task_started" in stats["by_type"]
+
+
+def test_authenticated_journal_queries_are_tenant_scoped(tmp_path: Path) -> None:
+    jsonl = tmp_path / "scoped.jsonl"
+    rows = [
+        {
+            "event_type": "token_usage",
+            "tenant_id": "tenant-a",
+            "owner_actor_id": "alice",
+            "conversation_id": "a",
+        },
+        {
+            "event_type": "token_usage",
+            "tenant_id": "tenant-b",
+            "owner_actor_id": "bob",
+            "conversation_id": "b",
+        },
+    ]
+    jsonl.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    identities = IdentityStore()
+    identities.add(
+        Identity(actor_id="alice", metadata={"tenant_id": "tenant-a"}),
+        api_key_plaintext="alice-key",
+    )
+    identities.add(
+        Identity(actor_id="bob", metadata={"tenant_id": "tenant-b"}),
+        api_key_plaintext="bob-key",
+    )
+    app = FastAPI()
+    app.include_router(
+        create_journal_router(
+            db_path=tmp_path / "scoped.sqlite",
+            default_jsonl_path=jsonl,
+            identity_store=identities,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    assert (
+        client.post(
+            "/api/journal/reindex", headers={"Authorization": "Bearer alice-key"}
+        ).status_code
+        == 200
+    )
+    rows = client.get(
+        "/api/journal/events",
+        headers={"Authorization": "Bearer alice-key"},
+    ).json()["events"]
+    assert [row["owner_actor_id"] for row in rows] == ["alice"]
+    bob_rows = client.get(
+        "/api/journal/events",
+        headers={"Authorization": "Bearer bob-key"},
+    ).json()["events"]
+    assert [row["owner_actor_id"] for row in bob_rows] == ["bob"]

@@ -7,6 +7,8 @@ for a single-machine user, starting two services by hand is friction. This
 supervisor lets ``octopus serve`` ALSO bring storage up as a child process,
 opt-in via ``OCTOPUS_STORAGE_AUTOSTART`` — one command for them, while everyone
 else still runs storage standalone and points ``OCTOPUS_STORAGE_URL`` at it.
+The browser-facing API is consolidated under octopus-agent's
+``/api/storage/v1/*`` proxy, so port 8767 remains private in co-launch mode.
 
 Best-effort + graceful: disabled / already running / binary not found / fails to
 start → log + skip; the agent runs fine and ``search_documents`` degrades to

@@ -43,24 +43,9 @@ _RUNNER: SubAgentRunner | None = None
 _REGISTRY: SubagentRegistry | None = None
 
 
-# ── Sub-agent concurrency guard ──────────────────────────────
-#
-# Each call_subagent() holds a slot for the WHOLE time its child runs (the
-# call is on the stack — inline, or awaiting the inner timeout executor), so a
-# parent→child→grandchild chain holds one slot PER LEVEL. A single global cap
-# therefore bounds BOTH the depth and the width of the concurrently-executing
-# subagent tree, regardless of its shape, without threading a depth counter
-# through every spawn path. This bounds the runaway-tree resource/cost vector
-# (a malicious or buggy agent recursively spawning subagents, each with its
-# own per-task budget). Fail-closed: over the cap, refuse to spawn.
-#
-# A cumulative COST ceiling across the tree (charging every subagent's spend
-# against one shared pool, then hard-stopping) is a SEPARATE, policy-gated
-# knob — the session-level TokenBudgetTracker exists but is intentionally not
-# wired with a hard ceiling here, since the right cap is a deployment decision.
-#
-# Default 64 is generous (no legit workflow needs that many SIMULTANEOUS
-# agents); override via OCTOPUS_MAX_ACTIVE_SUBAGENTS.
+# Each child holds one global slot for its lifetime, so the same cap bounds
+# both width and recursive depth. The deployment can override the generous
+# fail-closed default through OCTOPUS_MAX_ACTIVE_SUBAGENTS.
 def _default_max_active_subagents() -> int:
     raw = os.environ.get("OCTOPUS_MAX_ACTIVE_SUBAGENTS", "").strip()
     if raw:
@@ -730,6 +715,7 @@ def call_subagent(
         )
         return _augment(_reject)
     try:
+        slot_release_deferred = False
         # Preserve the direct-call path for non-request callers that have no
         # cancellable parent. Live turns use a worker even without an explicit
         # timeout, allowing the caller to return promptly when the user
@@ -744,6 +730,22 @@ def call_subagent(
         # thread is stuck (Python threads cannot be killed cleanly).
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         future = executor.submit(_do_call_with_schema)
+
+        def _defer_slot_until_worker_finishes() -> None:
+            """Keep the global slot occupied while a timed-out thread unwinds.
+
+            ``future.cancel()`` cannot stop a thread that already started.
+            Releasing the slot in that case lets a retry spawn alongside the
+            old worker, so two generations can write the same workspace.
+            The callback is safe when the future has already completed:
+            ``add_done_callback`` invokes it synchronously in that case.
+            """
+            nonlocal slot_release_deferred
+            if slot_release_deferred or future.done():
+                return
+            slot_release_deferred = True
+            future.add_done_callback(lambda _future: _release_subagent_slot())
+
         deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
         try:
             while True:
@@ -752,6 +754,7 @@ def call_subagent(
                 # out of the redirected parent turn.
                 if _child_source.is_cancelled:
                     future.cancel()
+                    _defer_slot_until_worker_finishes()
                     reason = _child_source.token.reason or "parent cancelled"
                     elapsed = max(0.0, time.time() - _spawn_started_at)
                     _cancel_event = {
@@ -809,6 +812,7 @@ def call_subagent(
             # co-operative shutdown even on running tasks.
             _child_source.cancel(reason="subagent timeout")
             future.cancel()
+            _defer_slot_until_worker_finishes()
             rounds = _rounds_state["max_round"]
             _log.warning(
                 "subagent %s timed out after %ss (rounds_completed=%d)",
@@ -855,7 +859,11 @@ def call_subagent(
             executor.shutdown(wait=False)
     finally:
         _unlink_parent()
-        _release_subagent_slot()
+        # A monitored worker that timed out/cancelled while already running
+        # owns the slot until its thread actually exits.  This prevents a
+        # retry from running concurrently with the old generation.
+        if not slot_release_deferred:
+            _release_subagent_slot()
 
 
 def _dispatch(

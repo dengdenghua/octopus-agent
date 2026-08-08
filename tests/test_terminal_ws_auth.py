@@ -25,8 +25,14 @@ from runtime.sensing.gateway.terminal_router import ShellSession, mount_terminal
 
 def _store() -> IdentityStore:
     store = IdentityStore()
-    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
-    store.add(Identity(actor_id="bob"), api_key_plaintext="sk-bob")
+    store.add(
+        Identity(actor_id="alice", roles=("operator",)),
+        api_key_plaintext="sk-alice",
+    )
+    store.add(
+        Identity(actor_id="bob", roles=("operator",)),
+        api_key_plaintext="sk-bob",
+    )
     return store
 
 

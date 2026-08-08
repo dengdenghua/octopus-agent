@@ -82,17 +82,22 @@ def _fetch_url(
         }
 
     close_after = False
-    if client is None:
-        if not HTTPX_AVAILABLE:
-            return {"error": "httpx not installed"}
-        client = httpx.Client(
-            timeout=timeout_ms / 1000,
-            follow_redirects=False,  # Implementation note.
-        )
-        close_after = True
+    pinned_fetch = client is None
+    if client is None and not HTTPX_AVAILABLE:
+        return {"error": "httpx not installed"}
 
     try:
-        resp = client.get(url)
+        if pinned_fetch:
+            from runtime.safety.auth.url_guard import safe_httpx_get
+
+            resp = safe_httpx_get(
+                url,
+                timeout=timeout_ms / 1000,
+                allow_private=allow_private,
+                follow_redirects=False,
+            )
+        else:
+            resp = client.get(url)
     except Exception as e:  # noqa: BLE001
         return {"error": f"http_error: {type(e).__name__}: {e}"}
     finally:
@@ -150,6 +155,8 @@ def _resolve_backend() -> str:
     explicit = (os.environ.get("WEB_SEARCH_BACKEND") or "").strip().lower()
     if explicit:
         return explicit
+    if os.environ.get("DOUBAO_SEARCH_API_KEY"):
+        return "doubao"
     if os.environ.get("TAVILY_API_KEY"):
         return "tavily"
     if os.environ.get("BRAVE_API_KEY"):
@@ -182,6 +189,11 @@ def _web_search(
         close_after = True
 
     try:
+        if chosen == "doubao":
+            key = os.environ.get("DOUBAO_SEARCH_API_KEY", "")
+            if not key:
+                return {"error": "doubao_missing_key", "results": []}
+            return _doubao_search(client, key, query, max_results)
         if chosen == "tavily":
             key = os.environ.get("TAVILY_API_KEY", "")
             if not key:
@@ -208,6 +220,60 @@ def _web_search(
     finally:
         if close_after:
             client.close()
+
+
+def _doubao_search(client: Any, api_key: str, query: str, max_results: int) -> dict[str, Any]:
+    """豆包搜索 (Doubao Search) — 火山引擎为 AI Agent 构建的联网搜索服务。
+
+    使用 Global 版端点 (``search_api/global_search``)，覆盖全球站点、每条结果带
+    ``ContentTokenCount`` 等对 Agent 友好的字段。返回字段参考官方文档与开源实现
+    huashu-doubao-search。
+    """
+    endpoint = "https://open.feedcoopapi.com/search_api/global_search"
+    try:
+        r = client.post(
+            endpoint,
+            json={
+                "query": query,
+                "doc_count": max_results,
+                "max_snippet_length": 600,
+                "max_image_count_per_doc": 0,
+            },
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"doubao_error: {type(e).__name__}: {e}", "results": []}
+
+    meta_err = (data.get("ResponseMetadata") or {}).get("Error")
+    if meta_err:
+        return {
+            "error": f"doubao_api_error: {str(meta_err.get('Message') or meta_err)[:300]}",
+            "results": [],
+        }
+
+    docs = (data.get("Result") or {}).get("Documents") or []
+    results: list[dict[str, str]] = []
+    for item in docs[:max_results]:
+        snippets: list[str] = []
+        for part in item.get("Snippet") or []:
+            if part.get("Type") == "text" and part.get("Text"):
+                snippets.append(str(part["Text"]).strip())
+        doc_info = item.get("DocumentInfo") or {}
+        results.append(
+            {
+                "title": item.get("Title") or "",
+                "url": item.get("Url") or "",
+                "snippet": "\n".join(snippets)[:400],
+                "host": (item.get("HostInfo") or {}).get("Hostname") or "",
+                "publish_time": doc_info.get("PublishTime") or "",
+            }
+        )
+    return {"query": query, "backend": "doubao", "results": results}
 
 
 def _tavily_search(client: Any, api_key: str, query: str, max_results: int) -> dict[str, Any]:
@@ -596,7 +662,7 @@ def register_web_skills(registry: SkillRegistry) -> int:
             description=(
                 "用途: 网上检索 — 任何「需要谷歌一下」的查询 (新闻、价格、定义、X 的现状、近期事件、产品对比) 都走这里；返回结构化 [{title, url, snippet}]。\n"
                 "何时不用: 已经知道具体 URL 直接读用 fetch_url；不要用 exec_shell 跑 curl/wget 拿 HTML (没法解析)；查本地代码/配置用 grep_text 或 glob_files。\n"
-                "关键参数: query (必填); max_results (默认 5); backend (可选, 留空时按环境变量自动选 tavily/brave/serper/searxng/ddg)。\n"
+                "关键参数: query (必填); max_results (默认 5); backend (可选, 留空时按环境变量自动选 doubao/tavily/brave/serper/searxng/ddg)。\n"
                 '示例: web_search({"query": "langgraph 0.2 release notes", "max_results": 5})'
             ),
             affinity=["web", "search"],

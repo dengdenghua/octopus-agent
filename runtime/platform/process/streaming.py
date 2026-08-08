@@ -173,6 +173,7 @@ def stream_run(
     on_timeout: Callable[[subprocess.Popen[str]], None] | None = None,
     sandbox_dir: str | None = None,
     allow_network: bool = False,
+    sandbox_required: bool = False,
 ) -> dict[str, Any]:
     """Run ``argv`` as a subprocess, streaming output as it arrives.
 
@@ -210,10 +211,31 @@ def stream_run(
             result=result,
         )
 
+    from runtime.safety.sandboxing.sandbox import (
+        SandboxViolation,
+        effective_process_sandbox_mode,
+        process_sandbox_required,
+    )
+
+    # High-risk callers (shell, git, quality checks and verification) opt in
+    # to this gate.  It closes the most dangerous legacy path: a commercial
+    # request reaching stream_run without the executor having injected a
+    # workspace sandbox.  Remote backend wrappers intentionally do not opt
+    # in because their argv is already a docker/kubectl/ssh control command.
+    if sandbox_required and sandbox_dir is None and process_sandbox_required():
+        return {
+            "error": (
+                "sandbox_violation: shared/commercial execution requires a "
+                "workspace sandbox and hard process backend"
+            ),
+            "execution_policy": _policy_snapshot(
+                result={"status": "sandbox_violation", "error_type": "sandbox_violation"}
+            ),
+        }
+
     if sandbox_dir is not None:
         from runtime.safety.sandboxing.sandbox import (
             SandboxPolicy,
-            SandboxViolation,
             select_process_backend,
         )
 
@@ -261,7 +283,15 @@ def stream_run(
         run_env = policy.env_for()
         env_mode = "allowlist"
         try:
-            choice = select_process_backend()
+            # Preserve the zero-argument seam used by embedders/tests when no
+            # deployment override is configured.  Commercial/explicit modes
+            # go through the mode-aware selector so they cannot downgrade.
+            if os.environ.get("OCTOPUS_PROCESS_SANDBOX") or os.environ.get(
+                "OCTOPUS_DEPLOYMENT_MODE"
+            ):
+                choice = select_process_backend(effective_process_sandbox_mode())
+            else:
+                choice = select_process_backend()
             run_argv, run_env, transformed_cwd = choice.backend.transform(
                 list(argv),
                 run_env,

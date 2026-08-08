@@ -58,9 +58,7 @@ def _router_with_tool_first(final_chunks: list[str]):
                 return
             for piece in final_chunks:
                 yield ModelStreamEvent(type="text_delta", delta=piece)
-            yield ModelStreamEvent(
-                type="done", final=ModelResponse(text="".join(final_chunks))
-            )
+            yield ModelStreamEvent(type="done", final=ModelResponse(text="".join(final_chunks)))
 
     return Router()
 
@@ -149,13 +147,9 @@ def test_pretool_prose_streaming_skips_duplicate_checkpoint(tmp_path) -> None:
     # The streamed narration is only the holdback-safe prefix.
     second_tool_at = kinds.index("tool_start", kinds.index("tool_start") + 1)
     pre_second_tool_texts = [
-        str(delta)
-        for kind, delta, _final in events[:second_tool_at]
-        if kind == "text"
+        str(delta) for kind, delta, _final in events[:second_tool_at] if kind == "text"
     ]
-    assert "".join(pre_second_tool_texts) == prose[
-        : len(prose) - _NATIVE_TEXT_STREAM_TAIL_MARGIN
-    ]
+    assert "".join(pre_second_tool_texts) == prose[: len(prose) - _NATIVE_TEXT_STREAM_TAIL_MARGIN]
     # Final answer round delivers in full.
     assert _texts(events)[-1].endswith(answer[-10:])
 
@@ -216,13 +210,9 @@ def test_tool_use_before_text_still_skips_duplicate_checkpoint(tmp_path) -> None
     kinds = [event[0] for event in events]
     second_tool_at = kinds.index("tool_start", kinds.index("tool_start") + 1)
     pre_second_tool_texts = [
-        str(delta)
-        for kind, delta, _final in events[:second_tool_at]
-        if kind == "text"
+        str(delta) for kind, delta, _final in events[:second_tool_at] if kind == "text"
     ]
-    assert "".join(pre_second_tool_texts) == prose[
-        : len(prose) - _NATIVE_TEXT_STREAM_TAIL_MARGIN
-    ]
+    assert "".join(pre_second_tool_texts) == prose[: len(prose) - _NATIVE_TEXT_STREAM_TAIL_MARGIN]
     # No condensed checkpoint re-publishing the same narration.
     commentary = [str(e[1]) for e in events if e[0] == "commentary"]
     assert not any("归档页正文" in c for c in commentary)

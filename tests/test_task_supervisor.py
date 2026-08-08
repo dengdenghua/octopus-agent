@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +15,46 @@ from runtime.platform.process.task_supervisor import (
     TaskSupervisorStore,
     task_lease_health,
 )
+from runtime.protocol import Turn, TurnParams, TurnStatus
+from runtime.sensing.gateway.realtime_turn_outcome import (
+    _record_react_trace_event,
+    _record_task_run_finished,
+)
+
+
+def test_realtime_react_lifecycle_projects_to_task_supervisor(tmp_path):
+    supervisor = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="realtime-worker",
+        lease_ttl_seconds=30,
+    )
+    runtime = SimpleNamespace(_task_supervisor=supervisor, _trace_store=None)
+    params = TurnParams(threadId="thread-1", input=[], cwd=str(tmp_path))
+    turn = Turn(id="turn-1", threadId="thread-1", params=params)
+
+    _record_react_trace_event(
+        runtime,
+        turn,
+        {"type": "react_started", "task_id": "react-task-1"},
+    )
+    started = supervisor.store.get("react-task-1")
+    assert started is not None
+    assert started.status == TaskRunStatus.RUNNING
+    assert started.origin_task_id == "turn-1"
+
+    turn.task_id = "react-task-1"
+    turn.objective_id = "react-task-1"
+    turn.status = TurnStatus.PAUSED
+    turn.checkpoint_id = 7
+    turn.outcome_reason = "iteration_limit"
+    _record_task_run_finished(runtime, turn)
+
+    paused = supervisor.store.get("react-task-1")
+    assert paused is not None
+    assert paused.status == TaskRunStatus.PAUSED
+    assert paused.latest_checkpoint_id == 7
+    assert paused.terminal_reason == "iteration_limit"
+    assert paused.metadata["turn_id"] == "turn-1"
 
 
 def test_task_supervisor_persists_lifecycle_and_releases_terminal_lease(tmp_path):
@@ -59,6 +100,43 @@ def test_task_supervisor_persists_lifecycle_and_releases_terminal_lease(tmp_path
     assert reloaded is not None
     assert reloaded.status == TaskRunStatus.COMPLETED
     assert reloaded.latest_checkpoint_id == 42
+
+
+def test_stale_turn_recovery_is_identity_scoped_and_releases_foreign_lease(tmp_path):
+    worker = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="dead-worker",
+        lease_ttl_seconds=300,
+    )
+    worker.start_task(
+        task_id="task-stale",
+        kind="realtime_objective",
+        origin_task_id="turn-stale",
+        metadata={"turn_id": "turn-stale"},
+    )
+    recovery = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="recovery-worker",
+        lease_ttl_seconds=300,
+    )
+
+    with pytest.raises(ValueError, match="not 'different-turn'"):
+        recovery.recover_stale_turn(
+            "task-stale",
+            TaskRunStatus.FAILED,
+            expected_turn_id="different-turn",
+            reason="stale_in_progress_turn",
+        )
+
+    recovered = recovery.recover_stale_turn(
+        "task-stale",
+        TaskRunStatus.FAILED,
+        expected_turn_id="turn-stale",
+        reason="stale_in_progress_turn",
+    )
+    assert recovered.status == TaskRunStatus.FAILED
+    assert recovered.lease is None
+    assert recovered.terminal_reason == "stale_in_progress_turn"
 
 
 def test_task_supervisor_terminal_transition_is_idempotent_and_non_downgrading(tmp_path):

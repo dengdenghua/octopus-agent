@@ -281,9 +281,7 @@ async def _drive_project_os(
                     reason=str(control.get("reason") or ""),
                     cascade=bool(control.get("cascade", True)),
                 )
-                intervention_events = [
-                    str(event) for event in (intervention.get("events") or [])
-                ]
+                intervention_events = [str(event) for event in (intervention.get("events") or [])]
                 if any(
                     event.startswith(
                         (

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from runtime.platform.i18n import set_lang
@@ -53,6 +54,56 @@ class TestServeBasics:
     def setup_method(self) -> None:
         set_lang("en")
 
+    def test_commercial_execution_config_requires_hard_backend(self, monkeypatch):
+        from runtime.cli_serve import _prepare_execution_security
+        from runtime.platform.config import AgentConfig
+        from runtime.safety.sandboxing import sandbox as sandbox_mod
+
+        monkeypatch.delenv("OCTOPUS_DEPLOYMENT_MODE", raising=False)
+        monkeypatch.delenv("OCTOPUS_PROCESS_SANDBOX", raising=False)
+        monkeypatch.setattr(sandbox_mod.BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(sandbox_mod.SeatbeltBackend, "available", staticmethod(lambda: False))
+
+        error, previous = _prepare_execution_security(
+            AgentConfig.model_validate({"execution": {"deployment_mode": "commercial"}})
+        )
+
+        assert "execution security check failed" in (error or "")
+        assert previous == {}
+        assert "OCTOPUS_DEPLOYMENT_MODE" not in os.environ
+
+    def test_execution_config_and_environment_conflict_fails_closed(self, monkeypatch):
+        from runtime.cli_serve import _prepare_execution_security
+        from runtime.platform.config import AgentConfig
+
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+        error, previous = _prepare_execution_security(
+            AgentConfig.model_validate({"execution": {"deployment_mode": "commercial"}})
+        )
+
+        assert "conflicts" in (error or "")
+        assert previous == {}
+
+    def test_commercial_execution_rejects_explicit_soft_sandbox(self, monkeypatch):
+        from runtime.cli_serve import _prepare_execution_security
+        from runtime.platform.config import AgentConfig
+
+        monkeypatch.delenv("OCTOPUS_DEPLOYMENT_MODE", raising=False)
+        monkeypatch.delenv("OCTOPUS_PROCESS_SANDBOX", raising=False)
+        error, previous = _prepare_execution_security(
+            AgentConfig.model_validate(
+                {
+                    "execution": {
+                        "deployment_mode": "commercial",
+                        "process_sandbox": "soft",
+                    }
+                }
+            )
+        )
+
+        assert "cannot use a soft/direct" in (error or "")
+        assert previous == {}
+
     def test_serve_starts_and_stops_cleanly(self, tmp_path: Path, monkeypatch, capsys):
         cfg = _write_cfg(tmp_path)
 
@@ -103,13 +154,16 @@ class TestServeBasics:
 
         from runtime.cli import run_serve
 
-        assert run_serve(
-            config_path=cfg,
-            host="127.0.0.1",
-            port=9092,
-            learn_interval_s=0,
-            color=False,
-        ) == 0
+        assert (
+            run_serve(
+                config_path=cfg,
+                host="127.0.0.1",
+                port=9092,
+                learn_interval_s=0,
+                color=False,
+            )
+            == 0
+        )
         assert calls == ["start", "heartbeat"]
         assert "local knowledge storage: ready" in capsys.readouterr().out
 

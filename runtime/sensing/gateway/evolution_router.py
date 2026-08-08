@@ -8,12 +8,13 @@ from runtime.safety.evolution.agent_competitor_scorecard import (
 )
 
 try:
-    from fastapi import APIRouter, HTTPException, Query, Request
+    from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
 
+from runtime.safety.auth.principal import require_operator
 from runtime.sensing.gateway._evolution_helpers import (
     _actor_from_request,
     _kimi_swarm_provider_caller,
@@ -59,11 +60,37 @@ __all__ = [
 _LOG = logging.getLogger("octopus.siphon.evolution_router")
 
 
-def create_evolution_router() -> Any:
+def create_evolution_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     if not FASTAPI_AVAILABLE:
         return APIRouter() if FASTAPI_AVAILABLE else None
 
-    router = APIRouter(prefix="/api/evolution", tags=["evolution"])
+    def _operator_dep(request: Request) -> None:
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    # Evolution is a control plane: it can inspect and mutate proposals,
+    # canaries, policy rules, forge state, and runtime behavior. In shared
+    # deployments every endpoint therefore requires an authenticated operator
+    # or admin. ``require_auth=False`` preserves the explicit local single-user
+    # development mode used by the standalone unit-router tests.
+    router = APIRouter(
+        prefix="/api/evolution",
+        tags=["evolution"],
+        dependencies=[Depends(_operator_dep)],
+    )
 
     @router.get("/codex-gap")
     def get_codex_gap() -> dict[str, Any]:

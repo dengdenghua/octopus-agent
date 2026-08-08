@@ -63,6 +63,53 @@ def terminate_pid_tree(
     return _pid_exited(pid, kill_wait_s)
 
 
+def run_capture(
+    argv: list[str],
+    *,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+    timeout: float | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a command with captured output and descendant-safe timeout cleanup.
+
+    This is the bounded-output counterpart for callers that need the familiar
+    ``CompletedProcess`` contract. Unlike ``subprocess.run(timeout=...)``, a
+    timeout terminates the process group/session before reaping the direct
+    child, so shells and CLI descendants do not survive the request.
+    """
+    proc = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        **process_group_kwargs(),
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        terminate_process_tree(proc, grace_s=0.2, kill_wait_s=0.5)
+        try:
+            stdout, stderr = proc.communicate(timeout=1.0)
+        except subprocess.TimeoutExpired as final_exc:
+            with contextlib.suppress(OSError):
+                proc.kill()
+            stdout, stderr = proc.communicate()
+            if not stdout:
+                stdout = final_exc.stdout or exc.stdout or ""
+            if not stderr:
+                stderr = final_exc.stderr or exc.stderr or ""
+        raise subprocess.TimeoutExpired(
+            cmd=argv,
+            timeout=exc.timeout,
+            output=stdout or exc.stdout,
+            stderr=stderr or exc.stderr,
+        ) from exc
+    return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
+
+
 def _wait_exited(proc: subprocess.Popen[Any], timeout_s: float) -> bool:
     try:
         proc.wait(timeout=timeout_s)

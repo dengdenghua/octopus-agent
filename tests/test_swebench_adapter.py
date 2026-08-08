@@ -130,8 +130,10 @@ def test_write_predictions_creates_parent_dirs(tmp_path: Path) -> None:
 def test_load_existing_predictions_from_file(tmp_path: Path) -> None:
     path = tmp_path / "existing.jsonl"
     path.write_text(
-        json.dumps({"instance_id": "a", "model": "m", "prediction": "x"}) + "\n"
-        + json.dumps({"instance_id": "b", "model": "m", "prediction": "y"}) + "\n"
+        json.dumps({"instance_id": "a", "model": "m", "prediction": "x"})
+        + "\n"
+        + json.dumps({"instance_id": "b", "model": "m", "prediction": "y"})
+        + "\n"
     )
     ids = load_existing_predictions(path)
     assert ids == {"a", "b"}
@@ -145,9 +147,11 @@ def test_load_existing_predictions_missing_file(tmp_path: Path) -> None:
 def test_load_existing_predictions_skips_bad_json(tmp_path: Path) -> None:
     path = tmp_path / "bad.jsonl"
     path.write_text(
-        json.dumps({"instance_id": "good", "prediction": "x"}) + "\n"
+        json.dumps({"instance_id": "good", "prediction": "x"})
+        + "\n"
         + "not json at all\n"
-        + json.dumps({"instance_id": "also_good", "prediction": "y"}) + "\n"
+        + json.dumps({"instance_id": "also_good", "prediction": "y"})
+        + "\n"
     )
     ids = load_existing_predictions(path)
     assert ids == {"good", "also_good"}

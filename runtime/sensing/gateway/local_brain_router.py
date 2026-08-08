@@ -8,7 +8,6 @@ and reports; it never installs or restarts anything.
 
 from __future__ import annotations
 
-import ipaddress
 from typing import Any
 
 try:
@@ -23,14 +22,6 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
-
-def _is_loopback_request(request: Request) -> bool:
-    """Storage's bearer token must never leave the local machine."""
-    host = getattr(getattr(request, "client", None), "host", "") or ""
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return host.lower() == "localhost"
 
 def create_local_brain_router(
     *,
@@ -72,22 +63,10 @@ def create_local_brain_router(
 
     @router.post("/api/local-brain/storage/start")
     def api_local_brain_storage_start(request: Request) -> dict[str, Any]:
-        """Start/probe Storage and provide its ephemeral local-session token.
-
-        The storage service deliberately requires a bearer token.  A browser
-        reload clears its sessionStorage, so a local, authenticated bridge is
-        required to reconnect without weakening Storage itself.  The token is
-        never persisted by this API and is refused for non-loopback callers.
-        """
+        """Start/probe Storage and return its same-origin gateway path."""
         _auth(request)
-        if not _is_loopback_request(request):
-            raise HTTPException(403, "storage credentials are local-only")
 
-        from runtime.execution.suckers.storage_skills import (
-            _base_url,
-            _storage_token,
-            storage_alive,
-        )
+        from runtime.execution.suckers.storage_skills import storage_alive
         from runtime.sensing.gateway.storage_supervisor import maybe_start_storage
 
         status = maybe_start_storage()
@@ -95,10 +74,10 @@ def create_local_brain_router(
         return {
             "ok": available,
             "status": status,
-            "base_url": _base_url(),
-            # The frontend keeps this in sessionStorage only.  Do not return a
-            # token until the loopback storage service has actually responded.
-            "auth_token": _storage_token() if available else None,
+            "base_url": "/api/storage",
+            # Storage credentials stay inside octopus-agent.  Keep the field
+            # for older clients while deliberately returning no secret.
+            "auth_token": None,
         }
 
     return router

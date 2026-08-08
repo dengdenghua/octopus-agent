@@ -141,7 +141,8 @@ def mount_routers_a(
     )
 
     # ─── Project OS · milestone-driven project execution ──
-    # GET /api/projects/* (state/report, public) + POST plan/tick/run (auth).
+    # GET /api/projects/* is authenticated and owner/tenant scoped in shared
+    # mode; POST plan/tick/run and other mutations use the same Principal.
     # LLM hooks when a model router is available, else deterministic stubs.
     from runtime.projectos.store import ProjectStore
     from runtime.sensing.gateway.projects_router import create_projects_router
@@ -164,6 +165,7 @@ def mount_routers_a(
                 if ctx.cowork_runtime is not None
                 else None
             ),
+            thread_store=ctx.thread_store,
             model_router=project_model_router,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
@@ -456,7 +458,16 @@ def mount_routers_a(
         create_account_usage_router,
     )
 
-    app.include_router(create_account_usage_router(journal=state.journal))
+    app.include_router(
+        create_account_usage_router(
+            journal=state.journal,
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
+    )
 
     # Evolution operator-console fallback routes. The real Reflex/RecipeForge
     # admin router registers many of these paths earlier when available; this

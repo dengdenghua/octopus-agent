@@ -36,6 +36,8 @@ class TestSchemaDefaults:
         assert cfg.local_auth.allow_any_username is False
         assert cfg.intel_sources == []
         assert cfg.mcp_servers == []
+        assert cfg.execution.deployment_mode == "local"
+        assert cfg.execution.process_sandbox == "auto"
 
     def test_immunity_default_excludes_wildcard_mcp(self):
         # SECURITY: the yaml-driven default must match the TrustEngine
@@ -102,6 +104,18 @@ class TestLoadFromDict:
     def test_invalid_schema_raises(self):
         with pytest.raises(ConfigLoadError):
             load_from_dict({"planner": {"type": "invalid_type"}})
+
+    def test_execution_contract_is_typed(self):
+        cfg = load_from_dict(
+            {
+                "execution": {
+                    "deployment_mode": "commercial",
+                    "process_sandbox": "strict",
+                }
+            }
+        )
+        assert cfg.execution.deployment_mode == "commercial"
+        assert cfg.execution.process_sandbox == "strict"
 
 
 class TestEnvInterpolation:

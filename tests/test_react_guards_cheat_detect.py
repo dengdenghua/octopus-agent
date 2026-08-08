@@ -144,9 +144,9 @@ def safe_path(root: Path, user_path: str) -> Path:
                     'edit_file({"path":"file_service.py",'
                     '"old_string":"decoded = unquote(user_path)",'
                     '"new_string":"decoded = user_path\\n    for _round in range(6):\\n'
-                    '        next_decoded = unquote(decoded)\\n'
-                    '        if next_decoded == decoded:\\n            break\\n'
-                    '        decoded = next_decoded\\n    else:\\n'
+                    "        next_decoded = unquote(decoded)\\n"
+                    "        if next_decoded == decoded:\\n            break\\n"
+                    "        decoded = next_decoded\\n    else:\\n"
                     '        raise PathBoundaryError(user_path)"})'
                 ),
             ),
@@ -258,7 +258,7 @@ class TestHasSuccessfulVerificationObservation:
             _step(
                 1,
                 action=(
-                    "exec_shell({\"command\": \"node -e 'let fail = 0; "
+                    'exec_shell({"command": "node -e \'let fail = 0; '
                     "if (!check()) fail++; process.exit(fail > 0 ? 1 : 0);'\"})"
                 ),
                 observation="4/4 tests passed",
@@ -267,10 +267,7 @@ class TestHasSuccessfulVerificationObservation:
         fake_green = [
             _step(
                 1,
-                action=(
-                    "exec_shell({\"command\": \"node -e 'console.log(4); "
-                    "process.exit(0);'\"})"
-                ),
+                action=('exec_shell({"command": "node -e \'console.log(4); process.exit(0);\'"})'),
                 observation="4/4 tests passed",
             ),
         ]
@@ -408,9 +405,7 @@ class TestCodeModeMissingWriteGuard:
             ),
         ],
     )
-    def test_explicit_no_write_request_does_not_trigger_write_guard(
-        self, goal: str
-    ) -> None:
+    def test_explicit_no_write_request_does_not_trigger_write_guard(self, goal: str) -> None:
         assert _code_mode_missing_write_guard([], "Report complete.", goal=goal) is None
 
 
@@ -527,7 +522,11 @@ class TestFalseVerificationClaimGuardOutcomes:
         # failed the turn.
         steps = [
             _step(1, action='exec_shell({"command": "ls"})', observation="src/ tests/"),
-            _step(2, action='read_text_file({"path":"README.md"})', observation="跨语言一致性测试已通过"),
+            _step(
+                2,
+                action='read_text_file({"path":"README.md"})',
+                observation="跨语言一致性测试已通过",
+            ),
         ]
         assert (
             _false_verification_claim_guard(
@@ -714,10 +713,7 @@ with self._cv:
         steps = [
             _step(
                 1,
-                action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.BAD)}}})'
-                ),
+                action=(f'write_text_file({{"path":"cache.py","content":{json.dumps(self.BAD)}}})'),
             )
         ]
 
@@ -823,10 +819,7 @@ else:
         steps = [
             _step(
                 1,
-                action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.BAD)}}})'
-                ),
+                action=(f'write_text_file({{"path":"cache.py","content":{json.dumps(self.BAD)}}})'),
             )
         ]
 
@@ -844,16 +837,12 @@ else:
         steps = [
             _step(
                 1,
-                action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.BAD)}}})'
-                ),
+                action=(f'write_text_file({{"path":"cache.py","content":{json.dumps(self.BAD)}}})'),
             ),
             _step(
                 2,
                 action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.GOOD)}}})'
+                    f'write_text_file({{"path":"cache.py","content":{json.dumps(self.GOOD)}}})'
                 ),
             ),
         ]
@@ -925,10 +914,7 @@ return value
         steps = [
             _step(
                 1,
-                action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.BAD)}}})'
-                ),
+                action=(f'write_text_file({{"path":"cache.py","content":{json.dumps(self.BAD)}}})'),
             )
         ]
 
@@ -946,16 +932,12 @@ return value
         steps = [
             _step(
                 1,
-                action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.BAD)}}})'
-                ),
+                action=(f'write_text_file({{"path":"cache.py","content":{json.dumps(self.BAD)}}})'),
             ),
             _step(
                 2,
                 action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.GOOD)}}})'
+                    f'write_text_file({{"path":"cache.py","content":{json.dumps(self.GOOD)}}})'
                 ),
             ),
         ]
@@ -1122,10 +1104,7 @@ return value
         steps = [
             _step(
                 1,
-                action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.BAD)}}})'
-                ),
+                action=(f'write_text_file({{"path":"cache.py","content":{json.dumps(self.BAD)}}})'),
             )
         ]
 
@@ -1143,16 +1122,12 @@ return value
         steps = [
             _step(
                 1,
-                action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.BAD)}}})'
-                ),
+                action=(f'write_text_file({{"path":"cache.py","content":{json.dumps(self.BAD)}}})'),
             ),
             _step(
                 2,
                 action=(
-                    'write_text_file({"path":"cache.py",'
-                    f'"content":{json.dumps(self.GOOD)}}})'
+                    f'write_text_file({{"path":"cache.py","content":{json.dumps(self.GOOD)}}})'
                 ),
             ),
         ]

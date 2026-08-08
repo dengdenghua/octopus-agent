@@ -431,11 +431,18 @@ def _stream_chat_wrapped(
     agent: Any = None,
     agent_id: str | None = None,
     conversation_id: str | None = None,
+    tenant_id: str | None = None,
+    owner_actor_id: str | None = None,
     stream_mode: str = "full",
 ):
     import json
 
-    from runtime.memory.journal.journal_context import _AGENT_ID, _CONVERSATION_ID
+    from runtime.memory.journal.journal_context import (
+        _AGENT_ID,
+        _CONVERSATION_ID,
+        _OWNER_ACTOR_ID,
+        _TENANT_ID,
+    )
     from runtime.sensing.model_router.actor_context import current_actor as _molili_actor_ctx
 
     # ContextVars are shared across coroutines that reuse the same
@@ -445,6 +452,8 @@ def _stream_chat_wrapped(
     # identity leak. Capture the tokens and reset in ``finally``.
     _agent_token = _AGENT_ID.set(agent_id)
     _convo_token = _CONVERSATION_ID.set(conversation_id)
+    _tenant_token = _TENANT_ID.set(tenant_id)
+    _owner_token = _OWNER_ACTOR_ID.set(owner_actor_id)
     _actor_token = _molili_actor_ctx.set(actor) if actor else None
     try:
         meta_chunk = {
@@ -468,6 +477,7 @@ def _stream_chat_wrapped(
             agent=agent,
             stream_mode=stream_mode,
             conversation_id=conversation_id,
+            tenant_id=tenant_id,
         )
     finally:
         try:  # noqa: SIM105
@@ -476,6 +486,11 @@ def _stream_chat_wrapped(
             pass
         try:  # noqa: SIM105
             _CONVERSATION_ID.reset(_convo_token)
+        except Exception:  # noqa: BLE001 — ContextVar.reset on a foreign token raises; benign on hand-off
+            pass
+        try:  # noqa: SIM105
+            _TENANT_ID.reset(_tenant_token)
+            _OWNER_ACTOR_ID.reset(_owner_token)
         except Exception:  # noqa: BLE001 — ContextVar.reset on a foreign token raises; benign on hand-off
             pass
         if _actor_token is not None:
@@ -496,8 +511,15 @@ def _stream_chat(
     keepalive_interval_s: float = 15.0,
     stream_mode: str = "full",
     conversation_id: str | None = None,
+    tenant_id: str | None = None,
 ):
     import json
+
+    from runtime.safety.approval.cancellation import (
+        CancellationSource,
+        current_cancellation_token,
+        scoped_cancellation,
+    )
 
     cid = f"chatcmpl-{uuid4().hex[:16]}"
     created = int(time.time())
@@ -565,6 +587,17 @@ def _stream_chat(
     done = threading.Event()
     result_holder: dict[str, Any] = {}
     seen_event_ids: set[str] = set()
+    # The SSE consumer and the runtime worker are different execution
+    # contexts.  Keep an explicit source here so closing the generator
+    # reaches the real worker thread; closing a Starlette response alone
+    # cannot interrupt a Python thread.
+    stream_cancel = CancellationSource()
+    parent_cancel = current_cancellation_token()
+
+    def _cancel_from_parent(reason: str) -> None:
+        stream_cancel.cancel(reason=reason or "parent cancelled")
+
+    unlink_parent_cancel = parent_cancel.on_cancelled(_cancel_from_parent)
 
     def _enqueue_event(event: Any) -> None:
         with contextlib.suppress(queue.Full):
@@ -607,12 +640,18 @@ def _stream_chat(
             # for the same fix.
             from runtime.platform.process.session import Session, session_scope
 
-            with session_scope(
-                Session(
-                    actor=actor,
-                    thread_id=conversation_id,
-                    metadata={"enforce_executor_approval": True},
-                )
+            with (
+                scoped_cancellation(stream_cancel.token),
+                session_scope(
+                    Session(
+                        actor=actor,
+                        thread_id=conversation_id,
+                        metadata={
+                            "enforce_executor_approval": True,
+                            "tenant_id": tenant_id,
+                        },
+                    )
+                ),
             ):
                 traj = stack.runtime.run(
                     graph,
@@ -691,8 +730,21 @@ def _stream_chat(
             yield _frame({}, "stop" if success else "failed")
         yield "data: [DONE]\n\n"
     finally:
+        # A client disconnect invokes generator teardown.  Trip cancellation
+        # before waiting so stream_run, model adapters, and cooperative tools
+        # stop at their next cancellation probe.  The bounded join is
+        # deliberate: a non-cooperative third-party SDK must not make request
+        # teardown hang forever.
+        stream_cancel.cancel(reason="stream consumer teardown")
+        unlink_parent_cancel()
         if unsubscribe is not None:
-            unsubscribe()
+            with contextlib.suppress(Exception):
+                unsubscribe()
+        worker.join(timeout=2.0)
+        if worker.is_alive():
+            logging.getLogger(__name__).warning(
+                "openai SSE worker did not stop within teardown grace period"
+            )
 
 
 def _reflex_stream_frames(completion: dict[str, Any], model: str):

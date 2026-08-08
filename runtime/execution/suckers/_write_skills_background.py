@@ -7,6 +7,7 @@ Note: ``_snapshot_background_metadata`` resolves ``_probe_process`` lazily via
 ``runtime.execution.suckers.write_skills`` so that tests monkeypatching
 ``write_skills._probe_process`` still observe the patched function at call time.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -101,6 +102,22 @@ class _BackgroundProcess:
         self.stdout_path = stdout_path
         self.stderr_path = stderr_path
         self.metadata_path = metadata_path
+        self._output_threads: list[threading.Thread] = []
+        for stream_name, stream, path in (
+            ("stdout", self.proc.stdout, self.stdout_path),
+            ("stderr", self.proc.stderr, self.stderr_path),
+        ):
+            if stream is None:
+                continue
+            path.touch(exist_ok=True)
+            thread = threading.Thread(
+                target=self._drain_output,
+                args=(stream, path),
+                daemon=True,
+                name=f"background-exec-{task_id}-{stream_name}",
+            )
+            self._output_threads.append(thread)
+            thread.start()
         self._persist(exit_code=None)
         self._wait_thread = threading.Thread(
             target=self._wait_and_persist,
@@ -110,8 +127,6 @@ class _BackgroundProcess:
         self._wait_thread.start()
 
     def _metadata(self, *, exit_code: int | None) -> dict[str, Any]:
-        raw_stdout = _read_background_text(self.stdout_path)
-        raw_stderr = _read_background_text(self.stderr_path)
         if self.cancelled:
             status = "cancelled"
         elif exit_code is None:
@@ -131,10 +146,11 @@ class _BackgroundProcess:
                 status=status,
                 exit_code=exit_code,
                 started_at=self.started_at,
-                stdout_truncated=len(raw_stdout) > _BACKGROUND_OUTPUT_CAP,
-                stderr_truncated=len(raw_stderr) > _BACKGROUND_OUTPUT_CAP,
+                stdout_truncated=_background_file_truncated(self.stdout_path),
+                stderr_truncated=_background_file_truncated(self.stderr_path),
             ),
             "pid": self.proc.pid,
+            "process_group_id": _process_group_id(self.proc.pid),
             "started_at": self.started_at,
             "cancelled": self.cancelled,
             "exit_code": exit_code,
@@ -154,7 +170,34 @@ class _BackgroundProcess:
             exit_code = self.proc.wait()
         except Exception:  # noqa: BLE001
             return
+        for thread in self._output_threads:
+            thread.join(timeout=2.0)
         self._persist(exit_code=exit_code)
+
+    @staticmethod
+    def _drain_output(stream: Any, path: Path) -> None:
+        """Drain a child pipe while retaining only a bounded file tail."""
+        try:
+            with path.open("r+b") as handle:
+                for line in iter(stream.readline, ""):
+                    if not line:
+                        break
+                    handle.seek(0, os.SEEK_END)
+                    handle.write(line.encode("utf-8", errors="replace"))
+                    handle.flush()
+                    end = handle.tell()
+                    if end > _BACKGROUND_OUTPUT_CAP:
+                        handle.seek(max(0, end - _BACKGROUND_OUTPUT_CAP))
+                        tail = handle.read(_BACKGROUND_OUTPUT_CAP)
+                        handle.seek(0)
+                        handle.write(tail)
+                        handle.truncate()
+                        handle.seek(0, os.SEEK_END)
+        except (OSError, ValueError):
+            return
+        finally:
+            with contextlib.suppress(Exception):
+                stream.close()
 
     def snapshot(self) -> dict[str, Any]:
         exit_code = self.proc.poll()
@@ -167,6 +210,8 @@ class _BackgroundProcess:
         else:
             status = "failed"
         if exit_code is not None:
+            for thread in self._output_threads:
+                thread.join(timeout=2.0)
             self._persist(exit_code=exit_code)
 
         raw_stdout = _read_background_text(self.stdout_path)
@@ -176,8 +221,8 @@ class _BackgroundProcess:
             status=status,
             exit_code=exit_code,
             started_at=self.started_at,
-            stdout_truncated=len(raw_stdout) > _BACKGROUND_OUTPUT_CAP,
-            stderr_truncated=len(raw_stderr) > _BACKGROUND_OUTPUT_CAP,
+            stdout_truncated=_background_file_truncated(self.stdout_path),
+            stderr_truncated=_background_file_truncated(self.stderr_path),
         )
         return {
             "task_id": self.task_id,
@@ -191,8 +236,8 @@ class _BackgroundProcess:
             "running": status == "running",
             "stdout": raw_stdout[:_BACKGROUND_OUTPUT_CAP],
             "stderr": raw_stderr[:_BACKGROUND_OUTPUT_CAP],
-            "stdout_truncated": len(raw_stdout) > _BACKGROUND_OUTPUT_CAP,
-            "stderr_truncated": len(raw_stderr) > _BACKGROUND_OUTPUT_CAP,
+            "stdout_truncated": _background_file_truncated(self.stdout_path),
+            "stderr_truncated": _background_file_truncated(self.stderr_path),
             "started_at": self.started_at,
         }
 
@@ -251,10 +296,30 @@ def _read_background_metadata(task_id: str) -> dict[str, Any] | None:
 
 def _read_background_text(path: Path) -> str:
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        with path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - _BACKGROUND_OUTPUT_CAP))
+            data = handle.read(_BACKGROUND_OUTPUT_CAP)
     except OSError:
         return ""
-    return text[:_BACKGROUND_OUTPUT_CAP]
+    return data.decode("utf-8", errors="replace")
+
+
+def _background_file_truncated(path: Path) -> bool:
+    try:
+        return path.stat().st_size >= _BACKGROUND_OUTPUT_CAP
+    except OSError:
+        return False
+
+
+def _process_group_id(pid: int) -> int | None:
+    if os.name == "nt" or pid <= 0:
+        return None
+    try:
+        return os.getpgid(pid)
+    except OSError:
+        return None
 
 
 def _probe_process(pid: int | None) -> tuple[bool, int | None]:
@@ -360,8 +425,8 @@ def _snapshot_background_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         status=status,
         exit_code=exit_code,
         started_at=_optional_float(metadata.get("started_at")),
-        stdout_truncated=len(raw_stdout) > _BACKGROUND_OUTPUT_CAP,
-        stderr_truncated=len(raw_stderr) > _BACKGROUND_OUTPUT_CAP,
+        stdout_truncated=_background_file_truncated(stdout_path),
+        stderr_truncated=_background_file_truncated(stderr_path),
     )
     return {
         "task_id": task_id,
@@ -372,12 +437,76 @@ def _snapshot_background_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         "sandbox_hard": bool(metadata.get("sandbox_hard")),
         "execution_policy": execution_policy,
         "pid": pid,
+        "process_group_id": metadata.get("process_group_id"),
         "exit_code": exit_code,
         "running": status == "running",
         "stdout": raw_stdout[:_BACKGROUND_OUTPUT_CAP],
         "stderr": raw_stderr[:_BACKGROUND_OUTPUT_CAP],
-        "stdout_truncated": len(raw_stdout) > _BACKGROUND_OUTPUT_CAP,
-        "stderr_truncated": len(raw_stderr) > _BACKGROUND_OUTPUT_CAP,
+        "stdout_truncated": _background_file_truncated(stdout_path),
+        "stderr_truncated": _background_file_truncated(stderr_path),
         "started_at": metadata.get("started_at"),
+        "recovery_state": metadata.get("recovery_state"),
         "recovered": True,
     }
+
+
+def recover_background_processes() -> dict[str, int]:
+    """Scan persisted background jobs and converge stale metadata.
+
+    A restarted service cannot reconstruct ``Popen`` handles, but it can
+    safely observe processes launched in their own process groups. Live jobs
+    are marked as externally adopted and remain pollable; dead jobs are
+    recorded as exited/unknown instead of remaining indefinitely ``running``.
+    No process is killed during startup.
+    """
+
+    stats = {"scanned": 0, "adopted": 0, "converged": 0, "unknown": 0}
+    try:
+        candidates = list(_background_root().iterdir())
+    except OSError:
+        return stats
+    for task_dir in candidates:
+        if not task_dir.is_dir():
+            continue
+        try:
+            metadata = json.loads((task_dir / "metadata.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(metadata, dict) or not metadata.get("task_id"):
+            continue
+        stats["scanned"] += 1
+        if metadata.get("cancelled") or metadata.get("exit_code") is not None:
+            continue
+        try:
+            pid = int(metadata.get("pid") or 0)
+        except (TypeError, ValueError):
+            pid = 0
+        running, exit_code = _probe_process(pid)
+        if running:
+            metadata["recovery_state"] = "adopted_external"
+            stats["adopted"] += 1
+        else:
+            if exit_code is not None:
+                metadata["exit_code"] = exit_code
+                metadata["recovery_state"] = "orphaned_process_exited"
+                stats["converged"] += 1
+            else:
+                metadata["recovery_state"] = "orphaned_process_missing"
+                stats["unknown"] += 1
+        metadata["recovered_at"] = time.time()
+        with contextlib.suppress(Exception):
+            _write_background_metadata(task_dir / "metadata.json", metadata)
+    return stats
+
+
+def background_process_identity_matches(metadata: dict[str, Any]) -> bool:
+    """Fail closed if a recovered PID no longer belongs to our process group."""
+
+    if os.name == "nt":
+        return True
+    try:
+        pid = int(metadata.get("pid") or 0)
+        expected = int(metadata.get("process_group_id") or pid)
+        return pid > 0 and os.getpgid(pid) == expected and expected == pid
+    except (OSError, TypeError, ValueError):
+        return False

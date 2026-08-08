@@ -131,10 +131,10 @@ def create_evolution_ops_router(
     The write endpoints in this router (skill proposal approve/reject,
     forge run/apply, forge auto-tick enable, MCP proposal install,
     breaker reset, etc.) materially mutate registry state and can
-    install code from network-supplied recipes. They are **always
-    auth-gated**: even when ``require_auth`` is False at the global
-    level, these write paths require the caller to present a valid
-    Bearer token resolved by ``identity_store``.
+    install code from network-supplied recipes. In authenticated mode,
+    these control-plane paths require an operator/admin identity. The
+    explicit local ``require_auth=False`` mode remains available for
+    isolated desktop and test runtimes.
     """
     require_fastapi(__name__)
 
@@ -142,26 +142,26 @@ def create_evolution_ops_router(
     local_suppressed_skill_proposals: set[str] = set()
 
     def _require_actor(request: Any) -> str | None:
-        """Resolve the caller. Force-on for write endpoints regardless
-        of the global ``require_auth`` flag — these routes mutate
-        registry state and accept network-supplied recipe payloads.
-        """
+        """Require an operator for writes when shared auth is enabled."""
         try:
-            from runtime.sensing.gateway.openai_gateway import _resolve_actor
+            from runtime.safety.auth.principal import require_operator
 
-            return _resolve_actor(
+            principal = require_operator(
                 request,
                 identity_store,
-                True,
+                require_auth,
                 jwt_secret=jwt_secret,
                 jwt_issuer=jwt_issuer,
                 jwt_audience=jwt_audience,
                 jwt_leeway_seconds=jwt_leeway_seconds,
             )
+            return principal.actor_id if principal is not None else None
         except HTTPException:
             raise
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(401, "auth required") from exc
+            if require_auth:
+                raise HTTPException(401, "auth required") from exc
+            return None
 
     @router.get("/api/evolution/overview")
     def evolution_overview() -> dict[str, Any]:

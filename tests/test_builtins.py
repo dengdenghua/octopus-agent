@@ -83,6 +83,32 @@ class TestReadFile:
         assert r["content"] == "b\n"
         assert r["lines_read"] == 1
 
+    def test_clamps_requested_range_to_reader_line_cap(self, tmp_path: Path):
+        path = tmp_path / "many-lines.txt"
+        path.write_text("x\n" * 2_500, encoding="utf-8")
+
+        r = _read_file(path=str(path), offset=0, limit=5_000)
+
+        assert r["lines_read"] == 2_000
+        assert r["limit"] == 2_000
+        assert r["requested_limit"] == 5_000
+        assert r["limit_clamped"] is True
+        assert r["truncated"] is True
+
+    def test_unbounded_large_line_count_returns_first_page(self, tmp_path: Path):
+        path = tmp_path / "many-short-lines.txt"
+        path.write_text("x\n" * 2_500, encoding="utf-8")
+
+        r = _read_file(path=str(path))
+
+        assert "error" not in r
+        assert r["auto_bounded"] is True
+        assert r["lines_read"] == 400
+        assert r["limit"] == 400
+        assert r["truncated"] is True
+        assert r["total_lines_at_least"] == 2_001
+        assert "offset=400" in r["pagination_hint"]
+
     def test_missing_file(self):
         r = _read_file(path="/nope/nope/nope")
         assert "error" in r

@@ -49,7 +49,9 @@ def test_browser_completion_guard_accepts_executed_form_and_frame_evidence() -> 
     ctx = _context(
         [
             _step(1, 'browser_type({"selector":"#role","value":"Administrator"})', "selected"),
-            _step(2, 'browser_type({"selector":"#bio","value":"Building reliable agents."})', "typed"),
+            _step(
+                2, 'browser_type({"selector":"#bio","value":"Building reliable agents."})', "typed"
+            ),
             _step(3, 'browser_upload({"selector":"#avatar","path":"profile.txt"})', "uploaded"),
             _step(4, 'browser_click({"selector":"#submit"})', "clicked"),
             _step(

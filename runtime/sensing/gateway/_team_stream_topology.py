@@ -420,7 +420,8 @@ async def _drive_team_topology(
             if emitter.is_turn_interrupted(turn.id):
                 if not cancel_source.is_cancelled:
                     cancel_source.cancel(reason="user interrupted turn")
-                turn.status = TurnStatus.INTERRUPTED
+                turn.status = TurnStatus.CANCELLED
+                turn.outcome_reason = "user_cancelled"
                 # Keep draining so the producer can finish cleanly
                 # (and emit its final None sentinel) — don't break
                 # mid-queue or the worker hangs on its put().
@@ -606,7 +607,8 @@ async def _drive_team_topology(
     # If the watcher tripped cancellation, prefer that over the
     # natural success/fail outcome — the user explicitly stopped.
     if cancel_source.is_cancelled:
-        turn.status = TurnStatus.INTERRUPTED
+        turn.status = TurnStatus.CANCELLED
+        turn.outcome_reason = "user_cancelled"
     elif run_result.success:
         turn.status = TurnStatus.COMPLETED
     else:

@@ -82,6 +82,47 @@ def test_timeout_returns_timeout_status():
     assert "rounds_completed" in result
 
 
+def test_timeout_keeps_slot_until_noncooperative_worker_exits(monkeypatch):
+    """A timed-out Python thread cannot be killed, so its capacity slot
+    must remain occupied until it really unwinds; otherwise a retry can run
+    concurrently and mutate the same workspace."""
+    import runtime.execution.subagents.bridge as bridge
+    from runtime.execution.subagents.bridge import active_subagent_count, call_subagent
+
+    release = threading.Event()
+    started = threading.Event()
+
+    def _stuck_runner(prompt, *, subagent_name, context):
+        started.set()
+        release.wait(timeout=2)
+        return "late result"
+
+    # The preceding timeout regression intentionally uses a non-cooperative
+    # two-second runner; wait for that retired generation before lowering the
+    # global cap for this isolated assertion.
+    deadline = time.monotonic() + 3
+    while active_subagent_count() != 0 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert active_subagent_count() == 0
+    monkeypatch.setattr(bridge, "MAX_ACTIVE_SUBAGENTS", 1)
+    _install_runner(_stuck_runner)
+    result = call_subagent(
+        agent_id="coder",
+        prompt="do something",
+        timeout_seconds=0.05,
+    )
+
+    assert started.wait(timeout=1)
+    assert result["status"] == "timeout"
+    assert active_subagent_count() == 1
+
+    release.set()
+    deadline = time.monotonic() + 2
+    while active_subagent_count() != 0 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert active_subagent_count() == 0
+
+
 # ─── test 2: fast runner completes normally ───────────────────────────────────
 
 

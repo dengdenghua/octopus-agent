@@ -38,6 +38,7 @@ from .models import BatchStreamEvent
 from .process_worker import (
     close_process_messages,
     poll_process_message,
+    process_runner_compatible,
     spawn_process_runner,
     terminate_process,
 )
@@ -110,8 +111,17 @@ class _SchedulerMixin:
 
         output: str | None = None
         error: str | None = None
-        isolation = str(run_context.get("subagent_worker_isolation") or "thread").strip()
+        isolation = str(
+            run_context.get("subagent_worker_isolation") or self._default_worker_isolation
+        ).strip()
+        isolation_reason: str | None = None
+        if isolation == "auto":
+            compatible = process_runner_compatible(runner=self._runner, context=run_context)
+            isolation = "process" if compatible else "thread"
+            if not compatible:
+                isolation_reason = "auto_fallback_unpicklable_runner_or_context"
         entry.worker_isolation = "process" if isolation == "process" else "thread"
+        entry.worker_isolation_reason = isolation_reason
         if entry.worker_isolation == "process":
             output, error = self._invoke_process_runner(entry, run_context)
         else:
@@ -510,6 +520,7 @@ class _SchedulerMixin:
             },
         )
         self._broadcast_locked(batch, ev)
+        self._prune_completed_batches_locked()
 
     def _fail_unrunnable_plan_locked(self, batch: Any) -> bool:
         issues = _unrunnable_plan_issues(batch)

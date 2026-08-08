@@ -97,7 +97,6 @@ from runtime._cli_parser import _build_parser, _normalize_cli_argv
 from runtime.platform.i18n import set_lang
 
 
-
 def main(argv: list[str] | None = None) -> int:
     """CLI entrypoint for ``octopus-agent``.
 

@@ -152,3 +152,83 @@ def test_thread_state_owner_metadata_blocks_other_actor() -> None:
 
     assert ok.status_code == 200
     assert denied.status_code == 404
+
+
+def test_thread_create_and_update_cannot_spoof_owner_metadata() -> None:
+    from runtime.safety.auth import Identity, IdentityStore
+
+    identity_store = IdentityStore()
+    identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store = ThreadStateStore()
+    app = FastAPI()
+    app.include_router(
+        create_thread_state_router(
+            store=store,
+            identity_store=identity_store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer sk-alice"}
+
+    created = client.post(
+        "/api/threads",
+        headers=headers,
+        json={"metadata": {"owner_actor_id": "bob"}, "values": {"title": "x"}},
+    )
+    assert created.status_code == 200
+    thread_id = created.json()["thread_id"]
+    assert store.get(thread_id)["metadata"]["owner_actor_id"] == "alice"
+
+    updated = client.post(
+        f"/api/threads/{thread_id}/state",
+        headers=headers,
+        json={"metadata": {"owner_actor_id": "bob", "label": "kept"}},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["metadata"]["owner_actor_id"] == "alice"
+    assert updated.json()["metadata"]["label"] == "kept"
+
+
+def test_thread_state_enforces_explicit_tenant_metadata() -> None:
+    from runtime.safety.auth import Identity, IdentityStore
+
+    identities = IdentityStore()
+    identities.add(
+        Identity(actor_id="alice", metadata={"tenant_id": "tenant-a"}),
+        api_key_plaintext="sk-alice-tenant",
+    )
+    identities.add(
+        Identity(actor_id="bob", metadata={"tenant_id": "tenant-b"}),
+        api_key_plaintext="sk-bob-tenant",
+    )
+    store = ThreadStateStore()
+    store.ensure_thread(
+        "tenant-thread",
+        metadata={"owner_actor_id": "alice", "tenant_id": "tenant-a"},
+        values={"title": "private"},
+    )
+    app = FastAPI()
+    app.include_router(
+        create_thread_state_router(
+            store=store,
+            identity_store=identities,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    assert (
+        client.get(
+            "/api/threads/tenant-thread",
+            headers={"Authorization": "Bearer sk-alice-tenant"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/api/threads/tenant-thread",
+            headers={"Authorization": "Bearer sk-bob-tenant"},
+        ).status_code
+        == 404
+    )

@@ -129,9 +129,7 @@ def coalesce_events(
         if kind == "item_delta":
             item_id = payload.get("itemId")
             delta_kind = payload.get("kind")
-            boundary = (
-                completion_seq.get(item_id) if isinstance(item_id, str) else None
-            )
+            boundary = completion_seq.get(item_id) if isinstance(item_id, str) else None
             if boundary is not None and sequence < boundary:
                 continue  # the completed snapshot carries the full content
             if (

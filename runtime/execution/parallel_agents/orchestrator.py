@@ -75,10 +75,22 @@ class ParallelAgentOrchestrator(OwnershipMixin, _SchedulerMixin):
         max_concurrency: int = 4,
         task_runner: TaskRunner | None = None,
         splitter: Callable[..., SplitResult] | None = None,
+        event_log_limit: int = 2048,
+        completed_batch_limit: int = 512,
+        worker_isolation: str = "auto",
     ) -> None:
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be >= 1")
+        if event_log_limit < 32:
+            raise ValueError("event_log_limit must be >= 32")
+        if completed_batch_limit < 1:
+            raise ValueError("completed_batch_limit must be >= 1")
+        if worker_isolation not in {"auto", "thread", "process"}:
+            raise ValueError("worker_isolation must be one of: auto, thread, process")
         self._max_concurrency = max_concurrency
+        self._event_log_limit = event_log_limit
+        self._completed_batch_limit = completed_batch_limit
+        self._default_worker_isolation = worker_isolation
         self._pool = ThreadPoolExecutor(
             max_workers=max_concurrency,
             thread_name_prefix="parallel-agent",
@@ -190,6 +202,7 @@ class ParallelAgentOrchestrator(OwnershipMixin, _SchedulerMixin):
         should_start_scheduler = True
         with self._lock:
             self._batches[batch_id] = batch
+            self._prune_completed_batches_locked()
             for tid in entries:
                 self._task_index[tid] = batch_id
             self._publish_stage_change_locked(
@@ -283,7 +296,7 @@ class ParallelAgentOrchestrator(OwnershipMixin, _SchedulerMixin):
 
     def cancel_all(self) -> bool:
         with self._lock:
-            for batch in self._batches.values():
+            for batch in list(self._batches.values()):
                 for entry in batch.tasks.values():
                     if entry.status in _TERMINAL_TASK_STATUSES:
                         continue
@@ -426,6 +439,32 @@ class ParallelAgentOrchestrator(OwnershipMixin, _SchedulerMixin):
         if self._closed:
             raise RuntimeError("orchestrator is closed")
 
+    def _prune_completed_batches_locked(self) -> None:
+        """Keep terminal batch state bounded without evicting live work.
+
+        Completed batches are intentionally retained for a while because the
+        UI may fetch the final report after the worker has finished. Once the
+        configured retention is exceeded, the oldest terminal batches are
+        removed together with their task-index entries. Batches with an active
+        stream subscriber are pinned until that subscriber disconnects.
+        """
+        completed = sorted(
+            (
+                batch
+                for batch in self._batches.values()
+                if batch.completed_at is not None and not batch.subscribers
+            ),
+            key=lambda batch: batch.created_at,
+        )
+        overflow = len(completed) - self._completed_batch_limit
+        if overflow <= 0:
+            return
+        for batch in completed[:overflow]:
+            self._batches.pop(batch.batch_id, None)
+            for task_id in batch.tasks:
+                if self._task_index.get(task_id) == batch.batch_id:
+                    self._task_index.pop(task_id, None)
+
     def _publish_task_update_locked(
         self,
         batch: _BatchEntry,
@@ -461,6 +500,7 @@ class ParallelAgentOrchestrator(OwnershipMixin, _SchedulerMixin):
                 "worker_state": entry.worker_state,
                 "replacement_generation": entry.replacement_generation,
                 "worker_isolation": entry.worker_isolation,
+                "worker_isolation_reason": entry.worker_isolation_reason,
                 **(
                     {"subagent_route_decision": entry.route_decision}
                     if entry.route_decision is not None
@@ -511,6 +551,15 @@ class ParallelAgentOrchestrator(OwnershipMixin, _SchedulerMixin):
         ev.sequence = batch.event_sequence
         ev.created_at = _iso(_now())
         batch.event_log.append(ev)
+        if ev.artifact_paths:
+            bucket = batch.artifact_paths_by_task.setdefault(ev.task_id or "__batch__", [])
+            for path in ev.artifact_paths:
+                if path not in bucket:
+                    bucket.append(path)
+        overflow = len(batch.event_log) - self._event_log_limit
+        if overflow > 0:
+            del batch.event_log[:overflow]
+            batch.event_log_dropped_count += overflow
         dead: list[tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = []
         for queue, loop in batch.subscribers:
             try:

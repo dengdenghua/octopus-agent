@@ -79,8 +79,7 @@ class GillCache:
             if context_key is not None and context_key != self.retrieved_context_key:
                 return []
             if max_age_s is not None and (
-                self.last_retrieved_ts <= 0
-                or (time.time() - self.last_retrieved_ts) >= max_age_s
+                self.last_retrieved_ts <= 0 or (time.time() - self.last_retrieved_ts) >= max_age_s
             ):
                 return []
             return list(self.retrieved_memory)

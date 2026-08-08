@@ -29,6 +29,8 @@ from .journal import (
 from .journal_context import (
     current_agent_id,
     current_conversation_id,
+    current_owner_actor_id,
+    current_tenant_id,
     journal_context,
 )
 from .progress import (
@@ -77,6 +79,8 @@ __all__ = [
     "all_task_progress",
     "current_agent_id",
     "current_conversation_id",
+    "current_owner_actor_id",
+    "current_tenant_id",
     "journal_context",
     "resume_info",
     "task_progress_snapshot",

@@ -43,6 +43,11 @@ def mount_health(
             frontend_host=frontend_host,
             frontend_port=frontend_port,
             frontend_proxy_target=frontend_proxy_target,
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
         )
     )
 

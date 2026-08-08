@@ -23,7 +23,6 @@ import pytest
 from runtime.core.cerebrum import checkpoint_integrity, pause_control, react_resume
 from runtime.core.cerebrum.react_resume import _resume_or_register_turn
 
-
 # ─────────────────────────────────────────────────────────────
 # 1. Chaos injection matrix — the integrity gate must reject
 #    every corrupt shape with a precise error.
@@ -122,13 +121,13 @@ def _resume_or_register(
     raises ``ValueError`` (corrupt), asserting the observable fallback."""
     pause = _FakePause()
 
-    monkeypatch.setattr(
-        pause_control, "get_pause_controller", lambda: pause
-    )
+    monkeypatch.setattr(pause_control, "get_pause_controller", lambda: pause)
     monkeypatch.setattr(
         react_resume,
         "_compute_resume_state",
-        load_impl if load_impl is not None else lambda *a, **k: (_ for _ in ()).throw(ValueError("corrupt")),
+        load_impl
+        if load_impl is not None
+        else lambda *a, **k: (_ for _ in ()).throw(ValueError("corrupt")),
     )
     monkeypatch.setattr(react_resume, "reset_injection_taint", lambda: None)
     monkeypatch.setattr(react_resume, "set_injection_gate_handled", lambda _v: None)
@@ -166,8 +165,7 @@ def test_chaos_corrupt_checkpoint_falls_back_to_fresh_run(monkeypatch, caplog):
 
     # Observable downgrade: a WARNING named the task + reason.
     assert any(
-        "resume checkpoint rejected" in r.message and "task-1" in r.message
-        for r in caplog.records
+        "resume checkpoint rejected" in r.message and "task-1" in r.message for r in caplog.records
     )
 
 

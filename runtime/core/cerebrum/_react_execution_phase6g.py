@@ -34,6 +34,9 @@ from runtime.core.cerebrum.react_convergence import (
 from runtime.core.cerebrum.react_explicit_reads import (
     _bound_explicit_large_reads,
 )
+from runtime.core.cerebrum.react_final_answer_content_guards import (
+    _incomplete_final_answer_guard,
+)
 from runtime.core.cerebrum.react_guards import (
     _code_semantic_followup_guard,
     _goal_requests_code_mutation,
@@ -54,11 +57,72 @@ from runtime.core.cerebrum.react_types import (
 from runtime.core.cerebrum.todo_protocol import (
     _todo_completion_before_write_guard,
     _todo_prewrite_guard,
+    _todo_reconciliation_guard,
 )
 from runtime.platform.models import Step
 from runtime.platform.models.llm import Message
 
 _logger = logging.getLogger(__name__)
+
+# Number of consecutive "blank" iterations (no tool call, no observation,
+# no meaningful thought, no final answer) before the model-spin guard pauses
+# the turn with a clear reason instead of letting the loop burn through all
+# remaining iterations up to the generic near-limit auto-pause.
+_SPIN_BAIL_AT = 3
+_MAX_AUTO_ITERATION_EXTENSIONS = 2
+
+
+def _step_has_successful_tool_evidence(step: ReActStep) -> bool:
+    """Return whether one step added successful, externally grounded work."""
+    if step.action_results:
+        return any(result.get("ok") is True for result in step.action_results)
+    action = (step.action or "").strip().lower()
+    observation = (step.observation or "").strip()
+    return bool(action and action not in {"none", "n/a"} and observation and observation != "N/A")
+
+
+def _is_making_iteration_progress(state: _LoopState) -> bool:
+    """Conservatively detect progress before extending a turn in place.
+
+    Successful tool receipts are the strongest available signal. Requiring
+    more than one distinct recent action prevents a single repeated search or
+    verifier from turning the bounded extension into an unbounded loop.
+    """
+    if (
+        state.consecutive_spin_iterations
+        or state.consecutive_same_failed_actions >= 2
+        or state.consecutive_same_noop_actions >= 2
+    ):
+        return False
+    recent = state.steps[-5:]
+    productive = [step for step in recent if _step_has_successful_tool_evidence(step)]
+    if len(productive) < 3:
+        return False
+    fingerprints = {
+        " ".join((step.action or "").split()).casefold()
+        for step in productive
+        if (step.action or "").strip()
+    }
+    return len(fingerprints) >= 2
+
+
+def _auto_extend_iteration_limit(state: _LoopState, max_iterations: int) -> int:
+    """Return a bounded extended limit when the recent trajectory is healthy."""
+    if state.iteration_extensions_used >= _MAX_AUTO_ITERATION_EXTENSIONS:
+        return max_iterations
+    if not _is_making_iteration_progress(state):
+        return max_iterations
+    base_limit = state.iteration_base_limit or max_iterations
+    extension = max(10, base_limit // 2)
+    extended_limit = max_iterations + extension
+    state.iteration_base_limit = base_limit
+    state.iteration_limit = extended_limit
+    state.iteration_extensions_used += 1
+    task_id = str(state.react_task_id or "")
+    if task_id:
+        with contextlib.suppress(Exception):
+            state.pause_controller.update_active_iteration_limit(task_id, extended_limit)
+    return extended_limit
 
 
 def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) -> _LoopControl:
@@ -80,6 +144,7 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
     thread_id = state.thread_id
     resp = state.resp
     step = state.step
+    assert step is not None, "phase 6g requires a parsed ReAct step"
     _pause = state.pause_controller
     # Scalar pulls — original local names; pushed back in the finally.
     planning_mode = state.planning_mode
@@ -102,6 +167,7 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
     _final_delta_emitted_this_iteration = state.final_delta_emitted_this_iteration
     text = state.text
     _agent_id_for_pause = state.agent_id_for_pause
+    _consecutive_spin_iterations = state.consecutive_spin_iterations
     try:
         # Mid-turn plan exit: model called exit_plan_mode and user approved.
         # Switch from "plan only" to "execute" without ending the turn.
@@ -183,6 +249,61 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
             terminated_reason = "final_answer"
             return _LoopControl.BREAK
 
+        # ── Model-spin guard ─────────────────────────────────────────
+        # A step that carries no tool call, no observation, no meaningful
+        # thought and no final answer is "blank". When the upstream model
+        # degrades into emitting only empty reasoning (spaces/whitespace)
+        # it burns through every remaining iteration until the near-limit
+        # auto-pause fires. Detect the runaway early and pause with a clear
+        # reason so the user can switch models instead of waiting it out.
+        #
+        # A degraded model (e.g. kimi-k3) often pairs that empty reasoning
+        # with a *promise-style* final answer ("我这就开始…支撑结论") that the
+        # completeness guard rejects. Such a ``maybe_final`` is not real work
+        # and must NOT reset the spin counter — otherwise the spin guard never
+        # fires and the model churns to the generic near-limit pause.
+        _has_real_obs = bool(
+            step.observation and step.observation.strip() and step.observation != "N/A"
+        )
+        _spin_relevant_final = bool(
+            maybe_final and _incomplete_final_answer_guard(maybe_final) is None
+        )
+        _is_blank_step = (
+            not step.actions
+            and not _has_real_obs
+            and not (step.thought and step.thought.strip())
+            and not (text and text.strip())
+            and not _spin_relevant_final
+        )
+        if _is_blank_step:
+            _consecutive_spin_iterations += 1
+        else:
+            _consecutive_spin_iterations = 0
+        state.consecutive_spin_iterations = _consecutive_spin_iterations
+
+        if (
+            _consecutive_spin_iterations >= _SPIN_BAIL_AT
+            and react_task_id is not None
+            and not _pause.is_pause_requested(str(react_task_id))
+        ):
+            _logger.warning(
+                "react_loop spin-guard at iter %d · task %s · %d consecutive blank steps",
+                i + 1,
+                react_task_id,
+                _consecutive_spin_iterations,
+            )
+            _pause.request_pause(
+                task_id=str(react_task_id),
+                reason="model_spinning",
+                requested_by="system",
+                note=(
+                    f"模型空转 · 连续 {_consecutive_spin_iterations} 轮未产出有效动作，"
+                    f"已自动暂停 · 可切换模型或补充信息后继续"
+                ),
+                thread_id=thread_id or "",
+                agent_id=_agent_id_for_pause,
+            )
+
         if (
             react_task_id is not None
             and max_iterations >= 15
@@ -190,24 +311,36 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
             and not _pause.is_pause_requested(str(react_task_id))
         ):
             remaining = max_iterations - (i + 1)
-            _logger.info(
-                "react_loop auto-pause at iter %d · task %s · %d left · "
-                "will checkpoint next loop top",
-                i + 1,
-                react_task_id,
-                remaining,
-            )
-            _pause.request_pause(
-                task_id=str(react_task_id),
-                reason="iteration_near_limit",
-                requested_by="system",
-                note=(
-                    f"自动暂停 · 已跑 {i + 1}/{max_iterations} 轮 · "
-                    f"剩余 {remaining} 轮 · 点继续并加预算可接续"
-                ),
-                thread_id=thread_id or "",
-                agent_id=_agent_id_for_pause,
-            )
+            _extended_limit = _auto_extend_iteration_limit(state, max_iterations)
+            if _extended_limit > max_iterations:
+                _logger.info(
+                    "react_loop auto-extended at iter %d · task %s · %d -> %d (%d/%d grants)",
+                    i + 1,
+                    react_task_id,
+                    max_iterations,
+                    _extended_limit,
+                    state.iteration_extensions_used,
+                    _MAX_AUTO_ITERATION_EXTENSIONS,
+                )
+            else:
+                _logger.info(
+                    "react_loop auto-pause at iter %d · task %s · %d left · "
+                    "will checkpoint next loop top",
+                    i + 1,
+                    react_task_id,
+                    remaining,
+                )
+                _pause.request_pause(
+                    task_id=str(react_task_id),
+                    reason="iteration_near_limit",
+                    requested_by="system",
+                    note=(
+                        f"自动暂停 · 已跑 {i + 1}/{max_iterations} 轮 · "
+                        f"剩余 {remaining} 轮 · 点继续并加预算可接续"
+                    ),
+                    thread_id=thread_id or "",
+                    agent_id=_agent_id_for_pause,
+                )
 
         _assistant_content = text
         if _native_mode and not _assistant_content and step.action:
@@ -489,6 +622,20 @@ def _phase_6d_pre_dispatch_guards(
             step.actions = []
             tool_action_requested = False
             maybe_final = None
+    if tool_action_requested:
+        _todo_reconciliation_message = _todo_reconciliation_guard(
+            step.actions or [step.action],
+            steps,
+            required=_todo_protocol_required,
+            visible=_todo_protocol_visible,
+        )
+        if _todo_reconciliation_message:
+            observation = _todo_reconciliation_message
+            step.observation = observation
+            step.action = ""
+            step.actions = []
+            tool_action_requested = False
+            maybe_final = None
     if _is_code_mode and tool_action_requested:
         # A deterministic source-level concurrency defect is stronger
         # evidence than another green/red probe.  Do not let providers
@@ -509,8 +656,7 @@ def _phase_6d_pre_dispatch_guards(
                 _is_code_write_step(_candidate_step) for _candidate_step in _candidate_steps
             )
             _candidate_has_verifier = any(
-                _has_code_verification([_candidate_step])
-                for _candidate_step in _candidate_steps
+                _has_code_verification([_candidate_step]) for _candidate_step in _candidate_steps
             )
             if _candidate_has_verifier and not _candidate_has_write:
                 observation = (

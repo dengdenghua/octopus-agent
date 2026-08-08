@@ -18,6 +18,13 @@ class MCPServerConfig(BaseModel):
     transport: Literal["stdio", "http", "sse"] = "stdio"
     url: str = ""
     headers: dict[str, str] = Field(default_factory=dict)
+    # Operator-selected workspace used by the hard stdio launcher in shared
+    # deployments. None preserves local development behavior only.
+    sandbox_dir: str | None = None
+    # Tenant binding is carried with the client so OAuth lookup cannot fall
+    # back to a process-global token when the same server name is used by
+    # multiple tenants.
+    tenant_id: str | None = None
     trust_level: str = "public"  # "public" | "custom" | "external"
     timeout_ms: int = Field(default=30_000, gt=0)
 

@@ -318,7 +318,9 @@ def create_loop_router(
 
         cancel_at = datetime.now(UTC).isoformat()
 
-        def _cancel_run(current: LoopRun, _cancel_at: str = cancel_at, _reason: str = reason) -> LoopRun:
+        def _cancel_run(
+            current: LoopRun, _cancel_at: str = cancel_at, _reason: str = reason
+        ) -> LoopRun:
             return current.model_copy(
                 update={
                     "status": LoopRunStatus.CANCELLED,

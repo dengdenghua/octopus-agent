@@ -97,8 +97,7 @@ def test_codex_cli_runner_classifies_stream_disconnect_as_infrastructure(
         {
             "type": "error",
             "message": (
-                "Reconnecting... 5/5 (stream disconnected before completion: "
-                "tls handshake eof)"
+                "Reconnecting... 5/5 (stream disconnected before completion: tls handshake eof)"
             ),
         }
     )
@@ -126,8 +125,7 @@ def test_codex_cli_runner_classifies_stream_disconnect_as_infrastructure(
             "error": {
                 "type": "error",
                 "message": (
-                    "Reconnecting... 5/5 (stream disconnected before completion: "
-                    "tls handshake eof)"
+                    "Reconnecting... 5/5 (stream disconnected before completion: tls handshake eof)"
                 ),
             },
         }

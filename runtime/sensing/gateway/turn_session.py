@@ -126,9 +126,7 @@ def build_turn_metadata(
         runtime_surfaces = stored_meta.get("runtime_surfaces")
     if isinstance(runtime_surfaces, list):
         clean_surfaces = [
-            item.strip()
-            for item in runtime_surfaces
-            if isinstance(item, str) and item.strip()
+            item.strip() for item in runtime_surfaces if isinstance(item, str) and item.strip()
         ]
         if clean_surfaces:
             metadata["runtime_surfaces"] = clean_surfaces
@@ -138,9 +136,7 @@ def build_turn_metadata(
         allowed_write_paths = stored_meta.get("allowed_write_paths")
     if isinstance(allowed_write_paths, list):
         clean_write_paths = [
-            item.strip()
-            for item in allowed_write_paths
-            if isinstance(item, str) and item.strip()
+            item.strip() for item in allowed_write_paths if isinstance(item, str) and item.strip()
         ]
         if clean_write_paths:
             metadata["allowed_write_paths"] = clean_write_paths

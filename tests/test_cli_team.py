@@ -87,9 +87,7 @@ def test_one_member_failure_is_isolated(tmp_path: Path) -> None:
             return LocalPartnerResult(
                 ok=False,
                 error=(
-                    "Codex CLI 需要登录或授权\n"
-                    "建议：请打开原生 CLI。\n\n"
-                    "原始错误：\nnot logged in"
+                    "Codex CLI 需要登录或授权\n建议：请打开原生 CLI。\n\n原始错误：\nnot logged in"
                 ),
                 raw_error="not logged in",
                 exit_code=1,
@@ -221,9 +219,7 @@ def test_cli_team_next_action_handles_entitlement_and_version_failures(tmp_path:
 
     assert out["ok"] is False
     assert out["next_action"] == "fix_cli_setup_and_retry"
-    assert {
-        group["failure_kind"]: group["label"] for group in out["recovery_groups"]
-    } == {
+    assert {group["failure_kind"]: group["label"] for group in out["recovery_groups"]} == {
         "entitlement": "账号权益",
         "version": "版本不兼容",
     }
@@ -245,9 +241,11 @@ def test_detect_installed_partners(monkeypatch) -> None:
     monkeypatch.setattr(
         ct.shutil,
         "which",
-        lambda c: f"/usr/bin/{c}"
-        if c in ("claude", "codex", "trae-cli", "qodercli", "codebuddy")
-        else None,
+        lambda c: (
+            f"/usr/bin/{c}"
+            if c in ("claude", "codex", "trae-cli", "qodercli", "codebuddy")
+            else None
+        ),
     )
     mems = ct.detect_installed_partners()
     assert {m["partner_id"] for m in mems} == {
@@ -280,6 +278,7 @@ def test_detect_uses_login_shell_path_when_service_path_is_minimal(
     monkeypatch, tmp_path: Path
 ) -> None:
     from runtime.execution.agents import cli_team as ct
+    from runtime.execution.agents import local_partner_discovery as lpd
     from runtime.sensing.gateway import agents_local_partner as alp
 
     custom_bin = tmp_path / "custom-bin"
@@ -290,17 +289,19 @@ def test_detect_uses_login_shell_path_when_service_path_is_minimal(
     shell = tmp_path / "fake-shell"
     shell.write_text(
         "#!/bin/sh\n"
-        "if [ \"$1\" = \"-lc\" ]; then\n"
+        'if [ "$1" = "-lc" ]; then\n'
         f"  PATH='{custom_bin}:'\"$PATH\"\n"
         "  export PATH\n"
-        "  eval \"$2\"\n"
+        '  eval "$2"\n'
         "fi\n"
     )
     shell.chmod(0o755)
     alp._login_shell_path.cache_clear()
+    lpd._login_shell_path.cache_clear()
     monkeypatch.setenv("SHELL", str(shell))
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     monkeypatch.setattr(ct.shutil, "which", lambda _c: None)
+    monkeypatch.setattr(lpd, "_common_local_bin_entries", lambda: [])
 
     mems = ct.detect_installed_partners()
 
@@ -310,6 +311,7 @@ def test_detect_uses_login_shell_path_when_service_path_is_minimal(
         "command": str(claude.resolve()),
     } in mems
     alp._login_shell_path.cache_clear()
+    lpd._login_shell_path.cache_clear()
 
 
 def test_cli_team_skill_judges_a_winner(monkeypatch) -> None:

@@ -15,6 +15,7 @@ consumers:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -93,14 +94,21 @@ def create_organizations_router(
     router = APIRouter(tags=["organizations"])
 
     def _auth(request: Any, *, force: bool = False) -> str | None:
-        """Resolve actor; mutation endpoints force-auth."""
+        """Resolve actor; mutation endpoints force-auth when identity is configured.
+
+        ``force`` only enforces authentication once an identity store is wired
+        (shared deployment). In local/single-user mode (no identity store,
+        ``require_auth=False``) mutations degrade to an anonymous actor so the
+        control plane stays usable; the caller treats ``None`` as autonomous.
+        """
+        effective_auth = require_auth or (force and identity_store is not None)
         try:
             from runtime.sensing.gateway.openai_gateway import _resolve_actor
 
             return _resolve_actor(
                 request,
                 identity_store,
-                require_auth or force,
+                effective_auth,
                 jwt_secret=jwt_secret,
                 jwt_issuer=jwt_issuer,
                 jwt_audience=jwt_audience,
@@ -108,7 +116,7 @@ def create_organizations_router(
         except HTTPException:
             raise
         except Exception as exc:  # noqa: BLE001
-            if require_auth or force:
+            if effective_auth:
                 raise HTTPException(401, "auth required") from exc
             return None
 
@@ -154,40 +162,49 @@ def create_organizations_router(
     ) -> dict[str, Any]:
         # Mutation: force-auth regardless of global require_auth.
         actor = _auth(request, force=True)
-        proposals = merged_topology_proposals(
-            _load_proposals(),
-            registry=load_registry(),
-            review_queue_path=app_paths().review_queue_path,
-            subagent_policy_path=app_paths().subagent_policy_path,
-        )["proposals"]
-        if idx < 0 or idx >= len(proposals):
-            raise HTTPException(404, f"proposal index out of range: {idx}")
-        raw = proposals[idx]
-        try:
-            proposal = Proposal(
-                kind=str(raw["kind"]),
-                base_topology=str(raw["base_topology"]),
-                bucket=str(raw.get("bucket") or "default"),
-                detail=raw.get("detail") or {},
-                confidence=float(raw.get("confidence") or 0.0),
-                rationale=str(raw.get("rationale") or ""),
+
+        def _do_promote_blocking() -> dict[str, Any]:
+            # Sync file IO (proposals, registry, review/subagent policy
+            # paths) plus the forge promotion run are offloaded to the
+            # thread pool so the event loop stays responsive.
+            proposals = merged_topology_proposals(
+                _load_proposals(),
+                registry=load_registry(),
+                review_queue_path=app_paths().review_queue_path,
+                subagent_policy_path=app_paths().subagent_policy_path,
+            )["proposals"]
+            if idx < 0 or idx >= len(proposals):
+                raise HTTPException(404, f"proposal index out of range: {idx}")
+            raw = proposals[idx]
+            try:
+                proposal = Proposal(
+                    kind=str(raw["kind"]),
+                    base_topology=str(raw["base_topology"]),
+                    bucket=str(raw.get("bucket") or "default"),
+                    detail=raw.get("detail") or {},
+                    confidence=float(raw.get("confidence") or 0.0),
+                    rationale=str(raw.get("rationale") or ""),
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                raise HTTPException(400, f"malformed proposal: {exc}") from exc
+            forge = TopologyForge(
+                agent_registry=agent_registry,
+                subagent_policy_path=app_paths().subagent_policy_path,
             )
-        except (KeyError, TypeError, ValueError) as exc:
-            raise HTTPException(400, f"malformed proposal: {exc}") from exc
-        forge = TopologyForge(
-            agent_registry=agent_registry,
-            subagent_policy_path=app_paths().subagent_policy_path,
-        )
-        # The actor's identity becomes the approver — promoting via
-        # an authenticated UI counts as human-signed (HATCHLING).
-        result = forge.promote(proposal, approver=actor)
-        return {
-            "accepted": result.accepted,
-            "reason": result.reason,
-            "new_topology": (
-                _topology_payload(result.new_topology) if result.new_topology is not None else None
-            ),
-        }
+            # The actor's identity becomes the approver — promoting via
+            # an authenticated UI counts as human-signed (HATCHLING).
+            result = forge.promote(proposal, approver=actor)
+            return {
+                "accepted": result.accepted,
+                "reason": result.reason,
+                "new_topology": (
+                    _topology_payload(result.new_topology)
+                    if result.new_topology is not None
+                    else None
+                ),
+            }
+
+        return await asyncio.to_thread(_do_promote_blocking)
 
     # ── GET /api/organizations/topology-performance ───────
 

@@ -36,11 +36,23 @@ from typing import Any
 from urllib import request as urllib_request
 
 from runtime.platform.io import atomic_write_bytes, atomic_write_json
+from runtime.safety.auth.url_guard import check_url, safe_httpx_request
 
 _logger = logging.getLogger(__name__)
 
 _PENDING_TTL = 600.0  # authorize→callback round-trip window (10 min)
 _REFRESH_SKEW = 60.0  # refresh when within 60s of expiry
+_DEFAULT_URLOPEN = urllib_request.urlopen
+
+
+def _guard_oauth_url(url: str) -> None:
+    # Unit tests replace urlopen with a hermetic fake and use non-resolvable
+    # placeholder hosts. Production always performs DNS resolution here; the
+    # actual production request is then made through the pinned-IP helper.
+    resolve_dns = urllib_request.urlopen is _DEFAULT_URLOPEN
+    verdict = check_url(url, allow_private=False, resolve_dns=resolve_dns)
+    if not verdict.allow:
+        raise ValueError(f"url_guard rejected: {verdict.reason}")
 
 
 # ── PKCE + URL ───────────────────────────────────────────
@@ -79,6 +91,20 @@ def build_authorize_url(
 
 def _post_form(url: str, data: dict[str, str], timeout: float = 30.0) -> dict[str, Any]:
     body = urllib.parse.urlencode(data).encode("utf-8")
+    _guard_oauth_url(url)
+    if urllib_request.urlopen is _DEFAULT_URLOPEN:
+        response = safe_httpx_request(
+            "POST",
+            url,
+            data=body,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+            },
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return json.loads(response.content.decode("utf-8"))
     req = urllib_request.Request(
         url,
         data=body,
@@ -88,7 +114,7 @@ def _post_form(url: str, data: dict[str, str], timeout: float = 30.0) -> dict[st
             "Accept": "application/json",
         },
     )
-    with urllib_request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — token endpoint  # nosec B310 — audited HTTPS token endpoint
+    with urllib_request.urlopen(req, timeout=timeout) as resp:  # nosec B310  # noqa: S310 — guarded hermetic test seam; production uses pinned helper
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -145,9 +171,12 @@ class _Tokens:
     client_id: str = ""
 
 
-def _store_path() -> Path:
+def _store_path(tenant_id: str | None = None) -> Path:
     home = os.environ.get("OCTOPUS_HOME")
     base = Path(home) if home else (Path.home() / ".octopus")
+    if tenant_id:
+        digest = hashlib.sha256(tenant_id.encode("utf-8")).hexdigest()[:32]
+        base = base / "tenants" / digest
     base.mkdir(parents=True, exist_ok=True)
     return base / "mcp_oauth.json"
 
@@ -181,8 +210,17 @@ def _token_cipher() -> Any:
 class MCPOAuthStore:
     """Thread-safe, JSON-backed per-server OAuth token + pending-flow store."""
 
-    def __init__(self, path: Path | str | None = None) -> None:
-        self._path = Path(path) if path else _store_path()
+    def __init__(
+        self,
+        path: Path | str | None = None,
+        *,
+        tenant_id: str | None = None,
+        create_parent: bool = True,
+    ) -> None:
+        self.tenant_id = str(tenant_id).strip() if tenant_id else None
+        self._path = Path(path) if path else _store_path(self.tenant_id)
+        if create_parent:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._pending: dict[str, _Pending] = {}
         self._tokens: dict[str, _Tokens] = {}
@@ -295,6 +333,14 @@ class MCPOAuthStore:
         client_id: str,
     ) -> str:
         state = secrets.token_urlsafe(32)
+        # The callback is intentionally unauthenticated.  Bind the opaque
+        # state to the tenant store so it cannot fall back to another
+        # tenant's OAuth token namespace after the browser redirect.
+        if self.tenant_id:
+            tenant_digest = hashlib.sha256(
+                self.tenant_id.encode("utf-8"),
+            ).hexdigest()[:32]
+            state = f"{tenant_digest}.{state}"
         with self._lock:
             self._pending[state] = _Pending(
                 server,
@@ -310,8 +356,10 @@ class MCPOAuthStore:
     def pop_pending(self, state: str) -> _Pending | None:
         with self._lock:
             pend = self._pending.pop(state, None)
+            if pend is None:
+                return None
             self._save()
-            if pend is None or time.time() - pend.created_ts >= _PENDING_TTL:
+            if time.time() - pend.created_ts >= _PENDING_TTL:
                 return None
             return pend
 
@@ -385,35 +433,57 @@ class MCPOAuthStore:
 
 # ── Module singleton ─────────────────────────────────────
 
-_GLOBAL: MCPOAuthStore | None = None
+_GLOBAL_STORES: dict[str, MCPOAuthStore] = {}
 _GLOBAL_LOCK = threading.Lock()
 
 
-def get_oauth_store() -> MCPOAuthStore:
-    global _GLOBAL
-    if _GLOBAL is None:
+def get_oauth_store(tenant_id: str | None = None) -> MCPOAuthStore:
+    """Return the OAuth store for one tenant; no arg is the legacy store."""
+    key = str(tenant_id).strip() if tenant_id else "__legacy__"
+    if key not in _GLOBAL_STORES:
         with _GLOBAL_LOCK:
-            if _GLOBAL is None:
-                _GLOBAL = MCPOAuthStore()
-    return _GLOBAL
+            if key not in _GLOBAL_STORES:
+                _GLOBAL_STORES[key] = MCPOAuthStore(
+                    tenant_id=None if key == "__legacy__" else key,
+                )
+    return _GLOBAL_STORES[key]
 
 
-def bearer_for_server(name: str) -> str | None:
+def get_oauth_store_for_state(state: str) -> MCPOAuthStore:
+    """Resolve a callback state to its tenant-partitioned store.
+
+    The state contains only a non-reversible tenant digest, never the tenant
+    identifier itself.  Unknown/malformed states use the legacy store and
+    will fail the normal single-use lookup.
+    """
+    prefix, separator, _opaque = str(state).partition(".")
+    if (
+        not separator
+        or len(prefix) != 32
+        or any(char not in "0123456789abcdef" for char in prefix.lower())
+    ):
+        return get_oauth_store()
+    home = os.environ.get("OCTOPUS_HOME")
+    base = Path(home) if home else (Path.home() / ".octopus")
+    path = base / "tenants" / prefix / "mcp_oauth.json"
+    return MCPOAuthStore(path=path, create_parent=False)
+
+
+def bearer_for_server(name: str, tenant_id: str | None = None) -> str | None:
     """Valid access token for ``name`` (refreshing if needed), or ``None``.
 
     Never raises — the MCP transport calls this on every connect and must
     degrade to no-auth when there's no token / the store is unavailable.
     """
     try:
-        return get_oauth_store().bearer(name)
+        return get_oauth_store(tenant_id).bearer(name)
     except Exception:  # noqa: BLE001
         return None
 
 
 def reset_oauth_store_for_tests() -> None:
-    global _GLOBAL
     with _GLOBAL_LOCK:
-        _GLOBAL = None
+        _GLOBAL_STORES.clear()
 
 
 __all__ = [
@@ -422,6 +492,7 @@ __all__ = [
     "build_authorize_url",
     "exchange_code",
     "get_oauth_store",
+    "get_oauth_store_for_state",
     "new_pkce",
     "refresh_access",
     "reset_oauth_store_for_tests",

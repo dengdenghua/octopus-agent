@@ -114,8 +114,9 @@ def test_create_organization_rejects_empty_owner(store: OrgStore) -> None:
 
 def test_add_org_member_human_and_agent(store: OrgStore) -> None:
     org = store.create_organization(name="Acme", owner_id="u1")
-    store.add_org_member(org.id, "agent-1", kind="agent", role="member",
-                         display_name="Code Reviewer")
+    store.add_org_member(
+        org.id, "agent-1", kind="agent", role="member", display_name="Code Reviewer"
+    )
     store.add_org_member(org.id, "u2", kind="human", role="admin")
 
     members = store.list_org_members(org.id)
@@ -375,19 +376,28 @@ def test_department_model_round_trip() -> None:
 
 
 def test_org_member_model_round_trip() -> None:
-    m = OrgMember(org_id="org1", member_id="agent-1", kind="agent",
-                  role="member", display_name="Bot", added_at=1.0)
+    m = OrgMember(
+        org_id="org1",
+        member_id="agent-1",
+        kind="agent",
+        role="member",
+        display_name="Bot",
+        added_at=1.0,
+    )
     assert OrgMember.from_dict(m.to_dict()) == m
     # Unknown role coerces to "member".
     assert OrgMember.from_dict({"org_id": "o", "member_id": "x", "role": "boss"}).role == "member"
 
 
 def test_channel_model_round_trip() -> None:
-    c = Channel(id="c1", org_id="org1", name="general", kind="group",
-                department_id="d1", created_at=1.0)
+    c = Channel(
+        id="c1", org_id="org1", name="general", kind="group", department_id="d1", created_at=1.0
+    )
     assert Channel.from_dict(c.to_dict()) == c
     # Unknown kind coerces to "channel".
-    assert Channel.from_dict({"id": "c", "org_id": "o", "name": "n", "kind": "room"}).kind == "channel"
+    assert (
+        Channel.from_dict({"id": "c", "org_id": "o", "name": "n", "kind": "room"}).kind == "channel"
+    )
 
 
 def test_channel_member_model_round_trip() -> None:

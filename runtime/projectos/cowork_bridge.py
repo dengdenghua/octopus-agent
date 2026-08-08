@@ -64,6 +64,8 @@ def engine_for_group(
     *,
     hooks: dict[str, Any] | None = None,
     competence: CompetenceStore | None = None,
+    owner_id: str = "",
+    tenant_id: str = "",
 ) -> ProjectEngine:
     """A ProjectEngine whose task→agent routing uses the cowork thread's roster.
 
@@ -75,7 +77,12 @@ def engine_for_group(
     kwargs.setdefault("generate_milestones", stub_generate_milestones)
     kwargs.setdefault("decompose_tasks", stub_decompose_tasks)
     kwargs["assign_agent"] = nominate_assigner(roster, competence)
-    return ProjectEngine(project_store, **kwargs)
+    return ProjectEngine(
+        project_store,
+        **kwargs,
+        owner_id=owner_id,
+        tenant_id=tenant_id,
+    )
 
 
 def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str, Any] | None:
@@ -316,6 +323,8 @@ def run_project_from_group(
     competence: CompetenceStore | None = None,
     actor: str = "project-os",
     reuse_active: bool = False,
+    owner_id: str = "",
+    tenant_id: str = "",
 ) -> dict[str, Any]:
     """Create a Project OS project from a cowork group and optionally run it.
 
@@ -339,6 +348,8 @@ def run_project_from_group(
         thread_id,
         hooks=hooks,
         competence=competence,
+        owner_id=owner_id,
+        tenant_id=tenant_id,
     )
     project = project_store.project_for_thread(thread_id) if reuse_active else None
     reused = bool(project is not None and project.status not in {"done", "failed"})

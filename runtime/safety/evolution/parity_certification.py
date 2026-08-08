@@ -72,6 +72,9 @@ REQUIREMENTS: tuple[CertificationRequirement, ...] = (
         score_floor=90,
         paths=(
             "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator/index.tsx",
+            "frontend/src/components/workspace/agent-operator/cards/CompetitorScorecardCard.tsx",
+            "frontend/src/components/workspace/agent-operator/cards/ScorecardGapDrilldown.tsx",
             "frontend/src/components/workspace/agent-operator-panel.test.tsx",
         ),
         required_terms=(
@@ -211,6 +214,7 @@ REQUIREMENTS: tuple[CertificationRequirement, ...] = (
             "runtime/safety/replay/browser_pixel_assertions.py",
             "runtime/execution/suckers/browser_act_skills.py",
             "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator/cards/CompetitorScorecardCard.tsx",
             "frontend/src/components/workspace/agent-operator-panel.test.tsx",
             "tests/test_browser_pixel_assertions.py",
             "tests/test_browser_artifact.py",
@@ -245,6 +249,7 @@ REQUIREMENTS: tuple[CertificationRequirement, ...] = (
             "tests/test_browser_desktop_repair_recipes.py",
             "frontend/src/components/workspace/embedded-browser/browser-panel.tsx",
             "frontend/src/components/workspace/replay-panel.tsx",
+            "frontend/src/components/workspace/agent-operator/index.tsx",
             "frontend/src/app/workspace/replay/page.tsx",
         ),
         required_terms=(

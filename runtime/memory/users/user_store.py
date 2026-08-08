@@ -7,6 +7,7 @@ explicitly provided by the user or by an API caller.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,7 @@ from uuid import uuid4
 
 from runtime.platform.io import atomic_write_json
 from runtime.platform.process.paths import app_paths
+from runtime.safety.auth.scope import TenantScope
 
 DEFAULT_MAX_FACTS = 500
 HARD_MAX_FACTS = 2_000
@@ -28,12 +30,22 @@ MAX_LABEL_CHARS = 80
 MAX_SCOPE_VALUE_CHARS = 120
 
 
-def _memory_path() -> Path:
-    return app_paths().user_memory_path
+def _scope_suffix(scope: TenantScope) -> str:
+    return hashlib.sha256(f"{scope.tenant_id}:{scope.actor_id}".encode()).hexdigest()[:32]
 
 
-def _config_path() -> Path:
-    return app_paths().user_memory_config_path
+def _memory_path(scope: TenantScope | None = None) -> Path:
+    base = app_paths().user_memory_path
+    if scope is None or scope.allow_cross_tenant:
+        return base
+    return base.parent / "tenants" / _scope_suffix(scope) / "memory.json"
+
+
+def _config_path(scope: TenantScope | None = None) -> Path:
+    base = app_paths().user_memory_config_path
+    if scope is None or scope.allow_cross_tenant:
+        return base
+    return base.parent / "tenants" / _scope_suffix(scope) / "memory-config.json"
 
 
 def now_iso() -> str:
@@ -59,21 +71,21 @@ def empty_memory() -> dict[str, Any]:
     }
 
 
-def read_memory() -> dict[str, Any]:
-    path = _memory_path()
+def read_memory(scope: TenantScope | None = None) -> dict[str, Any]:
+    path = _memory_path(scope)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return empty_memory()
     except (TypeError, ValueError):
         return empty_memory()
-    return normalize_memory(raw)
+    return normalize_memory(raw, scope=scope)
 
 
-def write_memory(memory: dict[str, Any]) -> dict[str, Any]:
-    normalized = normalize_memory(memory)
+def write_memory(memory: dict[str, Any], *, scope: TenantScope | None = None) -> dict[str, Any]:
+    normalized = normalize_memory(memory, scope=scope)
     normalized["lastUpdated"] = now_iso()
-    path = _memory_path()
+    path = _memory_path(scope)
     atomic_write_json(path, normalized)
     return normalized
 
@@ -96,15 +108,16 @@ def add_fact(
     provenance: dict[str, Any] | None = None,
     title: str | None = None,
     tags: list[str] | None = None,
+    tenant_scope: TenantScope | None = None,
 ) -> dict[str, Any] | None:
-    if not read_config().get("enabled", True):
+    if not read_config(tenant_scope).get("enabled", True):
         return None
     content = _clean_text(content)
     if not content:
         return None
-    memory = read_memory()
+    memory = read_memory(tenant_scope)
     facts = list(memory.get("facts") or [])
-    max_facts = int(read_config().get("max_facts") or DEFAULT_MAX_FACTS)
+    max_facts = int(read_config(tenant_scope).get("max_facts") or DEFAULT_MAX_FACTS)
     scope = _normalize_scope(scope, agent_id=agent_id, project=project)
     clean_agent = _clean_scope_value(agent_id)
     clean_project = _clean_scope_value(project)
@@ -131,7 +144,9 @@ def add_fact(
         "layer": "L1",
         "title": _clean_label(title or content[:MAX_LABEL_CHARS], fallback="Memory"),
         "tags": _clean_string_list(tags or [category]),
-        "owner": _clean_scope_value(owner) or "local-user",
+        "owner": (tenant_scope.actor_id if tenant_scope is not None else _clean_scope_value(owner))
+        or "local-user",
+        "tenant_id": tenant_scope.tenant_id if tenant_scope is not None else "",
         "visibility": _normalize_choice(
             visibility, {"private", "team", "restricted", "agent"}, "private"
         ),
@@ -144,7 +159,7 @@ def add_fact(
         "provenance": _normalize_provenance(provenance, fallback_source=source),
     }
     memory["facts"] = [*facts, fact][-max_facts:]
-    write_memory(memory)
+    write_memory(memory, scope=tenant_scope)
     return fact
 
 
@@ -185,6 +200,7 @@ def search_facts(
     project: str | None = None,
     include_global: bool = True,
     semantic: bool = False,
+    scope: TenantScope | None = None,
 ) -> list[dict[str, Any]]:
     query = _clean_text(query).casefold()
     if not query:
@@ -192,7 +208,7 @@ def search_facts(
     terms = [term for term in query.split() if term]
     scored: list[tuple[float, dict[str, Any]]] = []
     query_tokens = _tokenize(query) if semantic else []
-    for fact in read_memory().get("facts", []):
+    for fact in read_memory(scope).get("facts", []):
         if not isinstance(fact, dict):
             continue
         if not _fact_in_scope(
@@ -228,21 +244,24 @@ def relevant_memory_texts(
     limit: int = 8,
     agent_id: str | None = None,
     project: str | None = None,
+    scope: TenantScope | None = None,
 ) -> list[str]:
-    settings = read_config()
+    settings = read_config(scope)
     if not settings.get("enabled", True) or not settings.get("injection_enabled", True):
         return []
     return [
         str(fact.get("content") or "").strip()
-        for fact in search_facts(query, limit=limit, agent_id=agent_id, project=project)
+        for fact in search_facts(
+            query, limit=limit, agent_id=agent_id, project=project, scope=scope
+        )
         if str(fact.get("content") or "").strip()
     ]
 
 
-def default_config() -> dict[str, Any]:
+def default_config(scope: TenantScope | None = None) -> dict[str, Any]:
     return {
         "enabled": True,
-        "storage_path": str(_memory_path()),
+        "storage_path": str(_memory_path(scope)),
         "auto_capture_enabled": True,
         "debounce_seconds": DEFAULT_DEBOUNCE_SECONDS,
         "max_facts": DEFAULT_MAX_FACTS,
@@ -252,21 +271,21 @@ def default_config() -> dict[str, Any]:
     }
 
 
-def read_config() -> dict[str, Any]:
-    path = _config_path()
+def read_config(scope: TenantScope | None = None) -> dict[str, Any]:
+    path = _config_path(scope)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return default_config()
+        return default_config(scope)
     except (TypeError, ValueError):
-        return default_config()
+        return default_config(scope)
     if not isinstance(raw, dict):
-        return default_config()
-    config = default_config()
+        return default_config(scope)
+    config = default_config(scope)
     config.update(
         {
             "enabled": bool(raw.get("enabled", config["enabled"])),
-            "storage_path": str(_memory_path()),
+            "storage_path": str(_memory_path(scope)),
             "auto_capture_enabled": bool(
                 raw.get("auto_capture_enabled", config["auto_capture_enabled"])
             ),
@@ -286,11 +305,11 @@ def read_config() -> dict[str, Any]:
             ),
         }
     )
-    return read_config_from_raw(config)
+    return read_config_from_raw(config, scope=scope)
 
 
-def write_config(patch: dict[str, Any]) -> dict[str, Any]:
-    config = read_config()
+def write_config(patch: dict[str, Any], *, scope: TenantScope | None = None) -> dict[str, Any]:
+    config = read_config(scope)
     for key in (
         "enabled",
         "auto_capture_enabled",
@@ -302,19 +321,21 @@ def write_config(patch: dict[str, Any]) -> dict[str, Any]:
     ):
         if key in patch:
             config[key] = patch[key]
-    normalized = read_config_from_raw(config)
-    path = _config_path()
+    normalized = read_config_from_raw(config, scope=scope)
+    path = _config_path(scope)
     atomic_write_json(path, normalized)
     return normalized
 
 
-def read_config_from_raw(raw: dict[str, Any]) -> dict[str, Any]:
-    config = default_config()
+def read_config_from_raw(
+    raw: dict[str, Any], *, scope: TenantScope | None = None
+) -> dict[str, Any]:
+    config = default_config(scope)
     config.update(raw)
     config["enabled"] = bool(config.get("enabled", True))
     config["auto_capture_enabled"] = bool(config.get("auto_capture_enabled", True))
     config["injection_enabled"] = bool(config.get("injection_enabled", True))
-    config["storage_path"] = str(_memory_path())
+    config["storage_path"] = str(_memory_path(scope))
     config["debounce_seconds"] = max(
         0,
         min(
@@ -346,7 +367,7 @@ def read_config_from_raw(raw: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-def normalize_memory(raw: Any) -> dict[str, Any]:
+def normalize_memory(raw: Any, *, scope: TenantScope | None = None) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raw = {}
     base = empty_memory()
@@ -371,9 +392,7 @@ def normalize_memory(raw: Any) -> dict[str, Any]:
                 "category": _clean_label(item.get("category") or "context", fallback="context"),
                 "confidence": max(0.0, min(1.0, confidence)),
                 "createdAt": str(item.get("createdAt") or last_updated),
-                "updatedAt": str(
-                    item.get("updatedAt") or item.get("createdAt") or last_updated
-                ),
+                "updatedAt": str(item.get("updatedAt") or item.get("createdAt") or last_updated),
                 "source": _clean_label(item.get("source") or "manual", fallback="manual"),
                 "scope": _normalize_scope(
                     item.get("scope") or "global",
@@ -406,7 +425,13 @@ def normalize_memory(raw: Any) -> dict[str, Any]:
                     fallback="Memory",
                 ),
                 "tags": _clean_string_list(item.get("tags") or [item.get("category")]),
-                "owner": _clean_scope_value(item.get("owner")) or "local-user",
+                "owner": (
+                    scope.actor_id if scope is not None else _clean_scope_value(item.get("owner"))
+                )
+                or "local-user",
+                "tenant_id": scope.tenant_id
+                if scope is not None
+                else _clean_scope_value(item.get("tenant_id")),
                 "visibility": _normalize_choice(
                     item.get("visibility"),
                     {"private", "team", "restricted", "agent"},
@@ -442,7 +467,7 @@ def normalize_memory(raw: Any) -> dict[str, Any]:
                 "earlierContext": _section(history.get("earlierContext"), last_updated),
                 "longTermBackground": _section(history.get("longTermBackground"), last_updated),
             },
-            "facts": facts[-_configured_max_facts() :],
+            "facts": facts[-_configured_max_facts(scope) :],
         }
     )
     return base
@@ -523,9 +548,9 @@ def _coerce_float(value: Any, default: float) -> float:
         return float(default)
 
 
-def _configured_max_facts() -> int:
+def _configured_max_facts(scope: TenantScope | None = None) -> int:
     try:
-        return int(read_config().get("max_facts") or DEFAULT_MAX_FACTS)
+        return int(read_config(scope).get("max_facts") or DEFAULT_MAX_FACTS)
     except (TypeError, ValueError):
         return DEFAULT_MAX_FACTS
 

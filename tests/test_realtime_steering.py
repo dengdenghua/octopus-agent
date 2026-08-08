@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import time
@@ -20,6 +21,45 @@ class _Emitter:
 
     async def notify(self, method: Any, params: dict[str, Any]) -> None:
         self.notifications.append((str(method), params))
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drain_requests_checkpointed_pause_and_waits_for_turn(
+    tmp_path: Path,
+) -> None:
+    from runtime.core.cerebrum.pause_control import get_pause_controller
+
+    runtime = CerebrumRuntime(stack=object(), logs_root=str(tmp_path / "threads"))
+    emitter = _Emitter()
+    log = await runtime._ensure_thread("thread-shutdown", emitter)
+    turn = Turn(thread_id="thread-shutdown", task_id="task-shutdown")
+    log.turn_started(turn.thread_id, turn)
+    runtime._active_turn_ids.add(turn.id)
+    runtime._register_active_turn(turn, log)
+    controller = get_pause_controller()
+    controller.register_active(turn.task_id, thread_id=turn.thread_id, agent_id="general")
+
+    async def _finish_at_safe_boundary() -> None:
+        await asyncio.sleep(0.05)
+        runtime._active_turn_ids.discard(turn.id)
+        runtime._unregister_active_turn(turn.id)
+
+    finisher = asyncio.create_task(_finish_at_safe_boundary())
+    try:
+        result = await runtime.drain_active_turns_for_shutdown(timeout_seconds=0.5)
+        request = controller.get_request(turn.task_id)
+        assert result == {
+            "requested": [turn.task_id],
+            "drained": [turn.id],
+            "remaining": [],
+        }
+        assert request is not None
+        assert request.requested_by == "server_shutdown"
+        assert request.reason == "external"
+    finally:
+        await finisher
+        controller.unregister_active(turn.task_id)
+        controller.clear(turn.task_id)
 
 
 def test_active_turn_lease_recovers_after_state_directory_is_recreated(

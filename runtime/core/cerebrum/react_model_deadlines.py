@@ -22,6 +22,7 @@ _LENGTH_LIMITED_FINISH_REASONS = frozenset(
     {"length", "max_tokens", "max_output_tokens", "output_limit", "token_limit"}
 )
 
+
 def _model_iteration_timeout_s(config_timeout_s: float | None = None) -> float:
     """Wall-clock ceiling for one hidden model-thinking iteration.
 
@@ -264,9 +265,7 @@ def _model_stall_handoff_answer(steps: list[ReActStep]) -> str:
             f"我正在思考下一步，但这一轮响应比较慢。前面已经完成了 {completed_tools} 步操作，"
             "结果都已保留。点击继续，我会从当前进度接着完成。"
         )
-    return (
-        "我正在思考，但这一轮响应比较慢。点击继续，我会重新梳理并给出回复。"
-    )
+    return "我正在思考，但这一轮响应比较慢。点击继续，我会重新梳理并给出回复。"
 
 
 def _finish_reason_is_length_limited(reason: str | None) -> bool:

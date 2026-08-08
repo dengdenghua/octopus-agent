@@ -13,6 +13,7 @@ from runtime.core.cerebrum.react_guards import (
     GuardContext,
     GuardSpec,
     evaluate_guards,
+    guard_disposition,
 )
 from runtime.core.cerebrum.react_types import ReActStep
 
@@ -59,8 +60,35 @@ class TestRegistryShape:
         for spec in GUARD_REGISTRY:
             assert spec.category in valid, f"{spec.label} has bad category {spec.category}"
 
+    def test_guard_policy_separates_safety_contract_and_style(self) -> None:
+        assert guard_disposition("secret-leak guard", "security") == "hard"
+        assert guard_disposition("tool-result guard", "protocol") == "hard"
+        assert guard_disposition("implementation-write guard", "protocol") == "hard"
+        assert guard_disposition("todo-protocol guard", "protocol") == "repair"
+        assert guard_disposition("long-function guard", "code-smell") == "advisory"
+
 
 class TestEvaluateGuards:
+    def test_builtin_advisory_findings_do_not_block(self, monkeypatch) -> None:
+        import runtime.core.cerebrum.react_guards as guard_module
+
+        advisory = GuardSpec(
+            "style-only guard",
+            "code-smell",
+            lambda _ctx: "prefer a smaller function",
+        )
+        monkeypatch.setattr(guard_module, "GUARD_REGISTRY", [advisory])
+        recorded: list[tuple[str, str]] = []
+        ctx = GuardContext(steps=[], final_answer="useful result", is_code_mode=True)
+
+        assert (
+            evaluate_guards(
+                ctx, recorder=lambda label, category: recorded.append((label, category))
+            )
+            is None
+        )
+        assert recorded == [("style-only guard", "code-smell")]
+
     def test_clean_trajectory_returns_none(self) -> None:
         # A simple read-only inspection with a todo checklist completed.
         steps = [

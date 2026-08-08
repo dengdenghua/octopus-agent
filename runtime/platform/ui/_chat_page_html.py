@@ -12,11 +12,6 @@ from ._chat_page_js_chat import _CHAT_JS
 from ._chat_page_js_login import _LOGIN_JS
 from ._chat_page_js_models import _MODELS_JS
 
-_CHAT_HTML = (
-    _HEAD_CSS
-    + _LOGIN_JS
-    + _CHAT_JS
-    + _MODELS_JS
-)
+_CHAT_HTML = _HEAD_CSS + _LOGIN_JS + _CHAT_JS + _MODELS_JS
 
 __all__ = ["_CHAT_HTML"]

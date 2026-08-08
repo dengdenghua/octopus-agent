@@ -55,9 +55,7 @@ def _write_seed(root: Path, *, k: int = 3) -> Path:
         content = json.dumps(payload, sort_keys=True).encode()
         artifact = root / f"artifact-{index}.json"
         artifact.write_bytes(content)
-        artifacts.append(
-            {"path": artifact.name, "sha256": hashlib.sha256(content).hexdigest()}
-        )
+        artifacts.append({"path": artifact.name, "sha256": hashlib.sha256(content).hexdigest()})
     run = root / "run.json"
     run.write_text(
         json.dumps(

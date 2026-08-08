@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import UTC, datetime
 from typing import Any, Literal
+
+from ._trace_store_replay_fingerprint import task_run_replay_fingerprint
 
 ApprovalDecision = Literal[
     "requested", "approved", "rejected", "timeout", "connection_lost", "error"
 ]
 TaskRunStatus = Literal[
     "running",
+    "paused",
     "completed",
     "failed",
     "interrupted",
@@ -27,6 +29,7 @@ _TASK_RUN_TERMINAL_EVENTS: dict[str, TaskRunStatus] = {
     "RUN_FAILED": "failed",
     "REACT_ERROR": "failed",
     "TASK_RUN_INTERRUPTED": "interrupted",
+    "TASK_RUN_PAUSED": "paused",
     "RUN_INTERRUPTED": "interrupted",
     "REACT_CANCELLED": "interrupted",
     "TASK_RUN_CANCELLED": "cancelled",
@@ -133,6 +136,7 @@ def _event_status(event_type: Any, payload: Any | None = None) -> TaskRunStatus 
         status = str(payload.get("status") or "").lower()
         if status in {
             "running",
+            "paused",
             "completed",
             "failed",
             "interrupted",
@@ -720,6 +724,20 @@ def _task_run_findings(
 
     findings: list[dict[str, Any]] = []
     status = str(run.get("status") or "unknown")
+    if status == "paused":
+        findings.append(
+            {
+                "type": "resumable_status",
+                "severity": "info",
+                "title": "Task is paused with resumable state",
+                "evidence": {
+                    "status": status,
+                    "reason": run.get("reason") or "",
+                    "checkpoint_count": run.get("checkpoint_count") or 0,
+                },
+                "recommendation": "Resume the same objective id; do not score this as a failed run.",
+            }
+        )
     if status in {"failed", "interrupted", "cancelled", "unknown"}:
         findings.append(
             {
@@ -844,6 +862,7 @@ def _task_run_review_score(
     status = str(run.get("status") or "unknown")
     score = {
         "completed": 1.0,
+        "paused": 0.5,
         "running": 0.4,
         "failed": 0.2,
         "interrupted": 0.25,
@@ -937,7 +956,7 @@ def _task_run_replay(
                     "reason": payload.get("reason") or payload.get("message") or "",
                 }
             )
-    fingerprint = _task_run_replay_fingerprint(steps)
+    fingerprint = task_run_replay_fingerprint(steps)
     return {
         "schema": "octopus.task_run_replay.v1",
         "fingerprint": fingerprint,
@@ -951,46 +970,6 @@ def _task_run_replay(
             "approval_args_are_previews": True,
         },
     }
-
-
-def _task_run_replay_fingerprint(steps: list[dict[str, Any]]) -> str:
-    normalized: list[dict[str, Any]] = []
-    for step in steps:
-        kind = str(step.get("kind") or "")
-        item: dict[str, Any] = {"kind": kind}
-        if kind in {"tool_start", "tool_end"}:
-            item.update(
-                {
-                    "tool": str(step.get("tool") or ""),
-                    "status": str(step.get("status") or ""),
-                    "is_error": bool(step.get("is_error")),
-                    "input_preview": str(step.get("input_preview") or ""),
-                    "output_preview": str(step.get("output_preview") or ""),
-                }
-            )
-            approval = step.get("approval") if isinstance(step.get("approval"), dict) else {}
-            item["approval"] = {
-                "decision": str(approval.get("decision") or ""),
-                "risk_level": str(approval.get("risk_level") or ""),
-            }
-        elif kind == "task_start":
-            item.update(
-                {
-                    "goal": str(step.get("goal") or ""),
-                    "mode": str(step.get("mode") or ""),
-                }
-            )
-        elif kind == "task_event":
-            item.update(
-                {
-                    "event_type": str(step.get("event_type") or ""),
-                    "status": str(step.get("status") or ""),
-                    "reason": str(step.get("reason") or ""),
-                }
-            )
-        normalized.append(item)
-    payload = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 __all__ = [name for name in globals() if name.startswith("_") and not name.startswith("__")] + [

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from runtime.execution.suckers.lsp_skills import (
     register_lsp_skills,
 )
 from runtime.execution.suckers.registry import SkillRegistry
+from runtime.safety.sandboxing import sandbox as sandbox_mod
 
 
 @pytest.fixture(autouse=True)
@@ -63,6 +65,19 @@ def test_symbol_kind_translation() -> None:
     assert _symbol_kind_name(12) == "Function"
     assert _symbol_kind_name(13) == "Variable"
     assert _symbol_kind_name(99) == "Kind(99)"
+
+
+def test_commercial_lsp_requires_hard_process_sandbox(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
+    monkeypatch.setattr(sandbox_mod.BubblewrapBackend, "available", staticmethod(lambda: False))
+    monkeypatch.setattr(sandbox_mod.SeatbeltBackend, "available", staticmethod(lambda: False))
+
+    client = lsp_skills._LSPClient("python")
+    with pytest.raises(lsp_skills._LSPTransportError, match="sandbox_violation"):
+        client.start([sys.executable], str(tmp_path))
 
 
 # ────────────────────────────────────────────────────────────────────────────

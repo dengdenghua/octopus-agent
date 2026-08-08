@@ -38,6 +38,22 @@ async def _apply_react_event(
 ) -> None:
     runtime._record_react_trace_event(turn, evt)
     kind = evt.get("type")
+    if kind == "react_started":
+        task_id = str(evt.get("task_id") or "").strip() or None
+        if task_id:
+            turn.task_id = task_id
+            # ReAct task identity is the durable objective coordinate.  A
+            # fresh turn starts with its own objective id; a resume keeps the
+            # original ReAct id across UI turns.
+            turn.objective_id = task_id
+            logged_update = log.turn_updated(
+                turn.thread_id,
+                turn.id,
+                objective_id=turn.objective_id,
+                task_id=task_id,
+            )
+            del logged_update
+        return
     if kind == "text_delta":
         await state.append_agent_message(turn, log, emitter, evt.get("delta", ""))
         return
@@ -65,7 +81,10 @@ async def _apply_react_event(
         )
         return
     if kind == "thinking_delta":
-        await state.append_reasoning(turn, log, emitter, evt.get("delta", ""))
+        # Provider thinking tokens are private chain-of-thought. Persisting or
+        # streaming them as a ReasoningItem exposes raw deliberation through
+        # both turn/state APIs and the transcript. User-facing progress travels
+        # through the explicit commentary/public-summary channels instead.
         return
     if kind == "tool_start":
         await state.start_tool(turn, log, emitter, evt)
@@ -89,9 +108,22 @@ async def _apply_react_event(
             emitter,
             status=ItemStatus.INTERRUPTED,
         )
-        turn.status = TurnStatus.INTERRUPTED
+        # The event adapter itself represents a clean turn boundary stop.
+        # Drivers that had to kill in-flight work may already have promoted
+        # the turn to CANCELLED; direct/boundary cancellation remains the
+        # resumable INTERRUPTED protocol state.
+        if turn.status != TurnStatus.CANCELLED:
+            turn.status = TurnStatus.INTERRUPTED
+        turn.outcome_reason = str(evt.get("reason") or "user_cancelled")
         if not turn.interrupt_reason:
             turn.interrupt_reason = "任务被取消"
+        log.turn_updated(
+            turn.thread_id,
+            turn.id,
+            objective_id=turn.objective_id,
+            task_id=turn.task_id,
+            outcome_reason=turn.outcome_reason,
+        )
         return
     if kind == "throughput":
         # Piggyback on thread/tokenUsage/updated — the frontend
@@ -137,9 +169,7 @@ async def _apply_react_event(
             if not validated_sources:
                 return
             turn.grounding = validated_sources
-            sources_payload = [
-                source.model_dump(mode="json") for source in validated_sources
-            ]
+            sources_payload = [source.model_dump(mode="json") for source in validated_sources]
             logged_update = log.turn_updated(
                 turn.thread_id,
                 turn.id,
@@ -160,6 +190,23 @@ async def _apply_react_event(
         return
     if kind == "react_completed":
         success = evt.get("success") is not False
+        # A paused/cancelled turn is already INTERRUPTED (resumable via
+        # Continue). The loop's trailing react_completed carries
+        # success=False for a pause, which must NOT downgrade the resumable
+        # pause into a hard failure — otherwise the sidebar shows "failed"
+        # next to a "当前进度已暂停并保存" message the user can resume.
+        if not success and turn.status in {
+            TurnStatus.INTERRUPTED,
+            TurnStatus.PAUSED,
+            TurnStatus.CANCELLED,
+        }:
+            await state.flush(
+                turn,
+                log,
+                emitter,
+                status=ItemStatus.INTERRUPTED,
+            )
+            return
         await state.flush(
             turn,
             log,
@@ -168,6 +215,25 @@ async def _apply_react_event(
         )
         if not success:
             turn.status = TurnStatus.FAILED
+            reason = str(evt.get("terminated_reason") or "react_failed")
+            turn.outcome_reason = reason
+            receipt = evt.get("completion_receipt")
+            turn.error = {
+                "message": (
+                    str(receipt.get("message") or receipt.get("summary") or reason)
+                    if isinstance(receipt, dict)
+                    else reason
+                ),
+                "code": reason,
+                "details": receipt if isinstance(receipt, dict) else None,
+            }
+            log.turn_updated(
+                turn.thread_id,
+                turn.id,
+                objective_id=turn.objective_id,
+                task_id=turn.task_id,
+                outcome_reason=reason,
+            )
         return
     if kind == "react_paused":
         await state.flush(
@@ -176,7 +242,33 @@ async def _apply_react_event(
             emitter,
             status=ItemStatus.INTERRUPTED,
         )
-        turn.status = TurnStatus.INTERRUPTED
+        turn.status = TurnStatus.PAUSED
+        turn.task_id = str(evt.get("task_id") or turn.task_id or "").strip() or None
+        turn.objective_id = turn.task_id or turn.objective_id
+        try:
+            checkpoint_id = int(evt.get("checkpoint_id") or 0)
+        except (TypeError, ValueError):
+            checkpoint_id = 0
+        if checkpoint_id <= 0 and turn.task_id and runtime._trace_store is not None:
+            with contextlib.suppress(Exception):
+                checkpoint = runtime._trace_store.latest_checkpoint(
+                    task_id=turn.task_id,
+                    checkpoint_type="react",
+                )
+                if isinstance(checkpoint, dict):
+                    checkpoint_id = int(checkpoint.get("id") or 0)
+        turn.checkpoint_id = checkpoint_id if checkpoint_id > 0 else None
+        turn.outcome_reason = str(evt.get("reason") or "system_paused")
+        if not turn.interrupt_reason:
+            turn.interrupt_reason = str(evt.get("note") or "任务已暂停，进度和检查点已保存")
+        log.turn_updated(
+            turn.thread_id,
+            turn.id,
+            objective_id=turn.objective_id,
+            task_id=turn.task_id,
+            checkpoint_id=turn.checkpoint_id,
+            outcome_reason=turn.outcome_reason,
+        )
         return
     if kind == "react_resumed":
         await emitter.notify(
@@ -205,8 +297,19 @@ async def _apply_react_event(
         err = ErrorItem(
             message=str(evt.get("message") or evt.get("kind") or "react error"),
             will_retry=False,
+            error_info={
+                "code": str(evt.get("kind") or "react_error"),
+                "terminal_stage": evt.get("terminal_stage"),
+                "task_id": evt.get("task_id") or turn.task_id,
+            },
         )
         turn.status = TurnStatus.FAILED
+        turn.outcome_reason = str(evt.get("kind") or "react_error")
+        turn.error = {
+            "message": err.message,
+            "code": turn.outcome_reason,
+            "details": err.error_info,
+        }
         turn.items.append(err)
         log.item_started(turn.thread_id, turn.id, err)
         await emitter.notify(

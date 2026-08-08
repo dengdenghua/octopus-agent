@@ -14,15 +14,14 @@ def test_later_assertion_repair_clears_earlier_test_guard_hit() -> None:
         ReActStep(
             iteration=1,
             action=(
-                'write_text_file({"path": '
-                f"{json.dumps(path)}, \"content\": {json.dumps(bad)}}})"
+                f'write_text_file({{"path": {json.dumps(path)}, "content": {json.dumps(bad)}}})'
             ),
         ),
         ReActStep(
             iteration=2,
             action=(
                 'write_text_file({"path": '
-                f"{json.dumps(path)}, \"content\": {json.dumps(repaired)}}})"
+                f'{json.dumps(path)}, "content": {json.dumps(repaired)}}})'
             ),
         ),
     ]

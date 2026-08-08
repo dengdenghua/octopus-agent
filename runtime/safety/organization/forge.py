@@ -47,11 +47,38 @@ def _registry_path() -> Path:
         return Path("data") / "topologies.json"
 
 
+# Cache of the last-loaded registry keyed by resolved path, validated by the
+# file's (mtime_ns, size). Reading the topology file on every deep-research
+# dispatch (and every forge read) is wasted IO when the file hasn't changed;
+# ``save_registry`` writes atomically (new inode / bumped mtime), so a changed
+# mtime or size always forces a reload. Tests that mutate a temp file see the
+# new content because the mtime/size guard trips.
+_REGISTRY_CACHE: dict[Path, tuple[int, int, dict[str, TeamTopology]]] = {}
+
+
+def _invalidate_registry_cache() -> None:
+    _REGISTRY_CACHE.clear()
+
+
 def load_registry(
     *,
     path: Path | str | None = None,
 ) -> dict[str, TeamTopology]:
     target = Path(path) if path else _registry_path()
+    try:
+        stat = target.stat()
+        key = (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        key = (0, 0)
+    cached = _REGISTRY_CACHE.get(target)
+    if cached is not None and cached[0] == key[0] and cached[1] == key[1]:
+        return cached[2]
+    out = _load_registry_uncached(target)
+    _REGISTRY_CACHE[target] = (key[0], key[1], out)
+    return out
+
+
+def _load_registry_uncached(target: Path) -> dict[str, TeamTopology]:
     out: dict[str, TeamTopology] = {}
     if target.is_file():
         import json
@@ -109,6 +136,9 @@ def save_registry(
         "topologies": {fp: t.to_dict() for fp, t in registry.items()},
     }
     atomic_write_json(target, payload)
+    # A successful write bumps the file's mtime, but guard against the
+    # pathological same-size/same-mtime write by dropping the cached entry.
+    _REGISTRY_CACHE.pop(target, None)
 
 
 # ── Mutation appliers ────────────────────────────────────────

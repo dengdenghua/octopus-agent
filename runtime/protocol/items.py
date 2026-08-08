@@ -157,6 +157,8 @@ class TodoListItem(_ItemBase):
     type: Literal[ItemType.TODO_LIST] = ItemType.TODO_LIST
     explanation: str | None = None
     plan: list[TodoEntry] = Field(default_factory=list)
+    objective_id: str | None = Field(default=None, alias="objectiveId")
+    task_id: str | None = Field(default=None, alias="taskId")
 
 
 class AgentPhaseSnapshot(BaseModel):
@@ -448,6 +450,11 @@ Item: TypeAlias = Annotated[
 class TurnStatus(StrEnum):
     IN_PROGRESS = "inProgress"
     COMPLETED = "completed"
+    # A durable, resumable stop.  This is intentionally distinct from a
+    # user cancellation or a transport interruption: PAUSED owns a
+    # checkpoint and can continue the same objective/task identity.
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
     INTERRUPTED = "interrupted"
     FAILED = "failed"
 
@@ -513,6 +520,8 @@ class TurnParams(BaseModel):
     # unknown values are no-ops. See
     # ``runtime.core.cerebrum.output_styles.render_output_style``.
     output_style: str | None = Field(default=None, alias="outputStyle")
+    tenant_id: str | None = Field(default=None, exclude=True)
+    owner_actor_id: str | None = Field(default=None, exclude=True)
 
 
 class Turn(BaseModel):
@@ -534,6 +543,13 @@ class Turn(BaseModel):
         alias="workbenchSnapshot",
     )
     interrupt_reason: str | None = Field(default=None, alias="interruptReason")
+    # Stable lifecycle coordinates.  ``turn.id`` is one UI/transport attempt;
+    # a resumed objective can span several turns while retaining objectiveId
+    # and taskId.
+    objective_id: str | None = Field(default=None, alias="objectiveId")
+    task_id: str | None = Field(default=None, alias="taskId")
+    checkpoint_id: int | None = Field(default=None, alias="checkpointId")
+    outcome_reason: str | None = Field(default=None, alias="outcomeReason")
 
 
 __all__ = [

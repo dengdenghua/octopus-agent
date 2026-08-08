@@ -484,9 +484,7 @@ def retrieve_code_context(
         # rows too, otherwise an old index can reintroduce agent-private chunks
         # even though the fresh BM25 index correctly excludes them.
         semantic = [
-            row
-            for row in semantic
-            if not is_private_agent_context_path(str(row.get("path") or ""))
+            row for row in semantic if not is_private_agent_context_path(str(row.get("path") or ""))
         ]
     if semantic:
         first_chunk: dict[str, dict[str, Any]] = {}

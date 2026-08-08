@@ -22,6 +22,8 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
         title="Operator scorecard drill-down UI",
         paths=(
             "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator/index.tsx",
+            "frontend/src/components/workspace/agent-operator/cards/ScorecardGapDrilldown.tsx",
             "frontend/src/components/workspace/agent-operator-panel.test.tsx",
             "frontend/src/core/agent-trace/api.ts",
         ),
@@ -39,6 +41,7 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
         title="Automation operator surface",
         paths=(
             "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator/index.tsx",
             "frontend/src/components/workspace/agent-operator-panel.test.tsx",
             "frontend/src/core/agent-trace/api.ts",
             "runtime/safety/evolution/automation_radar.py",
@@ -56,6 +59,7 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
         title="E2E surpass operator surface",
         paths=(
             "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator/index.tsx",
             "frontend/src/components/workspace/agent-operator-panel.test.tsx",
             "frontend/src/core/agent-trace/api.ts",
             "runtime/safety/evolution/e2e_surpass_certification.py",
@@ -125,6 +129,7 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
         paths=(
             "frontend/src/components/workspace/replay-panel.tsx",
             "frontend/src/components/workspace/agent-operator-panel.tsx",
+            "frontend/src/components/workspace/agent-operator/index.tsx",
             "frontend/src/components/workspace/agent-operator-panel.test.tsx",
             "frontend/src/app/workspace/replay/page.tsx",
             "frontend/src/core/agent-trace/api.ts",

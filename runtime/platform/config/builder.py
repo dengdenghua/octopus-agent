@@ -284,9 +284,7 @@ def _build_planner(
             )
             if not _has_anthropic_key:
                 self_fallback = build_fallback_router_from_custom_models(p.model)
-                router = ModelDispatchRouter(
-                    fallback=self_fallback or UnconfiguredModelRouter()
-                )
+                router = ModelDispatchRouter(fallback=self_fallback or UnconfiguredModelRouter())
             else:
                 # Wrap the anthropic router in a dispatcher so
                 # ``config_router._register`` can attach user-defined model
@@ -412,6 +410,7 @@ def _register_mcp_server(
         transport=entry.transport,
         url=entry.url,
         headers=dict(entry.headers),
+        sandbox_dir=entry.sandbox_dir,
     )
     client: MCPClient
     try:

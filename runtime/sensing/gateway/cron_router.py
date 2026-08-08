@@ -5,14 +5,15 @@ This router keeps that compatibility layer out of ``app.py`` while sharing
 the same cwd-relative data path as the rest of the platform runtime.
 
 Cron jobs drive arbitrary ``command`` strings on a schedule — full RCE
-once the job fires — so every mutation end-point forces authentication
-and binds the job to the creator's actor id.  A user can only delete
-their own jobs (an identity without ``admin`` role is scoped to its own
-actor); an admin may delete anything.
+once the job fires — so every mutation end-point requires an operator or
+admin identity and binds the job to that actor. Read endpoints remain
+actor-scoped. In single-user local mode with no identity store, existing
+anonymous behavior is retained.
 """
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -85,6 +86,21 @@ def create_cron_router(
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(401, "auth required") from exc
 
+    def _operator_actor(request: Any) -> str | None:
+        """Require control-plane authority for shell-job mutations."""
+        from runtime.safety.auth.principal import require_operator
+
+        force = True if identity_store is not None else require_auth
+        principal = require_operator(
+            request,
+            identity_store,
+            force,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+        return principal.actor_id if principal is not None else None
+
     @router.get("/api/cron")
     @router.get("/api/cron/")
     def api_cron_list(request: Request) -> list[dict[str, Any]]:
@@ -102,7 +118,7 @@ def create_cron_router(
     @router.post("/api/cron")
     @router.post("/api/cron/")
     async def api_cron_create(request: Request) -> dict[str, Any]:
-        actor = _force_auth(request)
+        actor = _operator_actor(request)
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(400, "invalid cron job")
@@ -124,7 +140,7 @@ def create_cron_router(
             raise HTTPException(400, f"invalid cron expression: {exc}") from exc
 
         # A non-admin cannot overwrite a job created by someone else.
-        existing = _read_cron_jobs(path)
+        existing = await asyncio.to_thread(_read_cron_jobs, path)
         for j in existing:
             if j.get("name") != name:
                 continue
@@ -146,12 +162,12 @@ def create_cron_router(
             "creator_actor": actor or "*",
         }
         jobs.append(job)
-        _write_cron_jobs(path, jobs)
+        await asyncio.to_thread(_write_cron_jobs, path, jobs)
         return job
 
     @router.delete("/api/cron/{name}")
     def api_cron_delete(name: str, request: Request) -> dict[str, Any]:
-        actor = _force_auth(request)
+        actor = _operator_actor(request)
         is_admin = _actor_is_admin(identity_store, actor)
         jobs = _read_cron_jobs(path)
         target = next((j for j in jobs if j.get("name") == name), None)

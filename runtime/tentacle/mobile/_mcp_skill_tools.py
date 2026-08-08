@@ -325,10 +325,7 @@ def load_all_skill_tools(skills_root: Path | None = None) -> list[dict[str, Any]
     Returns:
         MCP tool 定义列表（按名称去重，避免跨根重复）
     """
-    if skills_root is not None:
-        roots = [skills_root]
-    else:
-        roots = _find_skills_roots()
+    roots = [skills_root] if skills_root is not None else _find_skills_roots()
 
     tools: list[dict[str, Any]] = []
     seen: set[str] = set()

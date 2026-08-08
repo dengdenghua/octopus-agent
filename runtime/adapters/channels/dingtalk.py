@@ -7,7 +7,7 @@ import json
 import logging
 import time
 import urllib.parse
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from .base import Attachment, Channel, InboundMessage, OutboundMessage, _sanitize_url
@@ -184,7 +184,7 @@ class DingTalkChannel(Channel):
         received_at = None
         if create_at_ms is not None:
             try:
-                received_at = datetime.utcfromtimestamp(int(create_at_ms) / 1000)
+                received_at = datetime.fromtimestamp(int(create_at_ms) / 1000, UTC)
             except (TypeError, ValueError):
                 received_at = None
 

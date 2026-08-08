@@ -204,9 +204,7 @@ def test_todo_write_rejects_serialized_params_string() -> None:
 def test_todo_write_rejects_dict_under_unrecognized_key() -> None:
     # The model may also pass a dict under a wrong key (e.g.
     # ``params={"todo_list": [...]}``).  This must be caught too.
-    result = _todo_write(
-        params={"todo_list": [{"content": "test", "status": "pending"}]}
-    )
+    result = _todo_write(params={"todo_list": [{"content": "test", "status": "pending"}]})
 
     assert result["ok"] is False
     assert "params" in result["error"]

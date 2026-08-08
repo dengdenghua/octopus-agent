@@ -6,6 +6,8 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     ts          TEXT NOT NULL,
+    tenant_id   TEXT,
+    owner_actor_id TEXT,
     thread_id   TEXT NOT NULL,
     turn_id     TEXT,
     agent_id    TEXT,
@@ -21,6 +23,8 @@ CREATE INDEX IF NOT EXISTS idx_trace_messages_agent ON messages(agent_id, id);
 CREATE TABLE IF NOT EXISTS agui_events (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     ts          TEXT NOT NULL,
+    tenant_id   TEXT,
+    owner_actor_id TEXT,
     thread_id   TEXT,
     turn_id     TEXT,
     task_id     TEXT,
@@ -40,6 +44,8 @@ CREATE TABLE IF NOT EXISTS approvals (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     requested_at   TEXT NOT NULL,
     decided_at     TEXT,
+    tenant_id      TEXT,
+    owner_actor_id  TEXT,
     thread_id      TEXT,
     turn_id        TEXT,
     task_id        TEXT,
@@ -59,6 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_trace_approvals_decision ON approvals(decision, i
 CREATE TABLE IF NOT EXISTS agent_checkpoints (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     ts                TEXT NOT NULL,
+    tenant_id         TEXT,
+    owner_actor_id    TEXT,
     task_id           TEXT NOT NULL,
     thread_id         TEXT,
     turn_id           TEXT,
@@ -76,6 +84,8 @@ CREATE INDEX IF NOT EXISTS idx_trace_checkpoints_type ON agent_checkpoints(check
 CREATE TABLE IF NOT EXISTS llm_token_usage (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     ts               TEXT NOT NULL,
+    tenant_id        TEXT,
+    owner_actor_id    TEXT,
     task_id          TEXT,
     thread_id        TEXT,
     turn_id          TEXT,
@@ -98,6 +108,8 @@ CREATE INDEX IF NOT EXISTS idx_trace_tokens_agent ON llm_token_usage(agent_id, i
 CREATE TABLE IF NOT EXISTS resume_requests (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     ts                TEXT NOT NULL,
+    tenant_id         TEXT,
+    owner_actor_id    TEXT,
     thread_id         TEXT NOT NULL,
     checkpoint_id     INTEGER NOT NULL,
     task_id           TEXT,

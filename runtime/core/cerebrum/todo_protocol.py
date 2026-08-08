@@ -11,11 +11,14 @@ from typing import Any
 
 from runtime.core.cerebrum.react_guards import _has_successful_code_write
 from runtime.core.cerebrum.react_parsing import (
+    _has_code_verification,
+    _has_successful_verification_observation,
     _is_code_write_step,
     _latest_todo_items,
     _parse_action,
 )
 from runtime.core.cerebrum.react_types import ReActStep
+from runtime.core.cerebrum.work_mode import SWARM_ALIASES
 
 _SHORT_ACK_RE = re.compile(
     r"^\s*("
@@ -275,10 +278,10 @@ def should_require_todo_protocol(
         capability = user_context.get("capability_mode")
     if capability is None and isinstance(metadata, dict):
         capability = metadata.get("capability_mode")
-    if isinstance(capability, str) and capability.lower() in {"swarm", "swarms", "team", "collab"}:
+    if isinstance(capability, str) and capability.lower() in SWARM_ALIASES | {"team", "collab"}:
         return True
 
-    if mode in {"team", "swarm", "swarms"}:
+    if mode in SWARM_ALIASES | {"team"}:
         return True
     if _is_narrow_local_inspection(text):
         return False
@@ -325,6 +328,11 @@ def render_todo_protocol_guidance(*, required: bool, mode: str = "") -> str:
         "keep at most one `in_progress` item.\n"
         "- Update the checklist when a phase starts, when a phase completes, "
         "and before the final answer after tool work.\n"
+        "- Treat the checklist as mutable: when code, documentation, or tool evidence "
+        "changes the scope, revise item wording, add/remove/reorder items, and keep stable "
+        "IDs for unchanged work instead of preserving an obsolete initial plan.\n"
+        "- After a successful workspace write or verification milestone, make the next "
+        "action todo_write with the full evidence-backed plan before starting more work.\n"
         "- If blocked, update the checklist to show the blocked/incomplete "
         "item and ask the user for the specific missing input."
     )
@@ -400,3 +408,84 @@ def _todo_completion_before_write_guard(
                 "only then mark the checklist completed."
             )
     return None
+
+
+def _todo_reconciliation_guard(
+    actions: list[str],
+    steps: list[ReActStep],
+    *,
+    required: bool,
+    visible: bool,
+) -> str | None:
+    """Require plan reconciliation when execution changes phase.
+
+    The initial checklist is only a hypothesis.  Once execution produces a
+    durable mutation or verification result, the model must publish a fresh
+    full snapshot before moving to a different kind of work.  The current
+    write/repair/verification chain remains uninterrupted: inserting a plan
+    update between an edit and its verifier would weaken, not improve, task
+    completion.  Read-only evidence never triggers this gate either, which
+    avoids the old read→todo→read loop.
+    """
+    if not (required and visible) or not steps or not _latest_todo_items(steps):
+        return None
+
+    parsed_actions = [entry for action in actions if (entry := _parse_action(action))]
+    if any(name == "todo_write" for name, _args in parsed_actions):
+        return None
+
+    # A source/document repair and its verification commands form one atomic
+    # execution phase.  Let the model finish that chain, including multiple
+    # complementary verifiers (tests then lint/typecheck), before requiring a
+    # revised public plan.  The gate below catches the first different tool.
+    candidate_steps = [
+        ReActStep(iteration=index + 1, action=action) for index, action in enumerate(actions)
+    ]
+    if any(_is_code_write_step(step) for step in candidate_steps) or any(
+        _has_code_verification([step]) for step in candidate_steps
+    ):
+        return None
+
+    latest_todo_index = -1
+    for index in range(len(steps) - 1, -1, -1):
+        step_actions = steps[index].actions or (
+            [steps[index].action] if steps[index].action else []
+        )
+        if any(
+            parsed is not None and parsed[0] == "todo_write"
+            for action in step_actions
+            if (parsed := _parse_action(action)) is not None
+        ):
+            latest_todo_index = index
+            break
+    if latest_todo_index < 0:
+        return None
+
+    evidence_steps = steps[latest_todo_index + 1 :]
+    successful_write = any(
+        _is_code_write_step(step)
+        and (
+            any(result.get("ok") is True for result in step.action_results)
+            if step.action_results
+            else bool((step.observation or "").strip())
+            and "failed" not in (step.observation or "").lower()
+            and "error" not in (step.observation or "").lower()
+        )
+        for step in evidence_steps
+    )
+    successful_verification = _has_successful_verification_observation(evidence_steps)
+    if not (successful_write or successful_verification):
+        return None
+
+    milestones = []
+    if successful_write:
+        milestones.append("workspace/document write")
+    if successful_verification:
+        milestones.append("green verification")
+    return (
+        "[todo-reconciliation-required] The runtime paused this phase transition because "
+        f"the plan predates a completed {' and '.join(milestones)} milestone. Call "
+        "todo_write next with the complete revised checklist: mark only evidence-backed "
+        "items completed, select one current item, and add/remove/reword/reorder items when "
+        "the discovered code or documentation changed the scope. Then continue the work."
+    )

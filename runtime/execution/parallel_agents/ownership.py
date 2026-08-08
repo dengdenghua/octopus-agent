@@ -108,7 +108,7 @@ class OwnershipMixin:
         are now terminal.
         """
         with self._lock:  # type: ignore[attr-defined]
-            for batch in self._batches.values():
+            for batch in list(self._batches.values()):
                 if (
                     owner_id is not None
                     and batch.owner_id is not None

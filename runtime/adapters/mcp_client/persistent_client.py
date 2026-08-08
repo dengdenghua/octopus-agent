@@ -116,14 +116,71 @@ class PersistentStdioMCPClient(MCPClient):
         from mcp.client.stdio import StdioServerParameters, stdio_client
 
         self._stack = AsyncExitStack()
-        params = StdioServerParameters(
-            command=self.config.command,
-            args=list(self.config.args),
-            env=dict(self.config.env) if self.config.env else None,
-        )
+        params = self._stdio_parameters(StdioServerParameters)
         read, write = await self._stack.enter_async_context(stdio_client(params))
         self._session = await self._stack.enter_async_context(ClientSession(read, write))
         await self._session.initialize()
+
+    def _stdio_parameters(self, parameter_type: Any) -> Any:
+        """Build SDK parameters, wrapping stdio in the hard process backend.
+
+        The MCP SDK does not expose a launcher callback, but its parameter
+        object accepts the final command/args/env/cwd. Transforming those
+        values before handing them to ``stdio_client`` keeps the SDK protocol
+        handling while putting the server process inside bwrap/Seatbelt.
+        """
+
+        from runtime.safety.sandboxing.sandbox import (
+            SandboxPolicy,
+            SandboxViolation,
+            effective_process_sandbox_mode,
+            process_sandbox_required,
+            select_process_backend,
+        )
+
+        if not process_sandbox_required():
+            return parameter_type(
+                command=self.config.command,
+                args=list(self.config.args),
+                env=dict(self.config.env) if self.config.env else None,
+            )
+
+        if not self.config.sandbox_dir:
+            raise MCPClientError(
+                "sandbox_violation: shared/commercial MCP stdio requires "
+                "an operator-selected sandbox_dir"
+            )
+        from pathlib import Path
+
+        workspace = Path(self.config.sandbox_dir).expanduser().resolve()
+        if not workspace.is_dir():
+            raise MCPClientError(
+                f"sandbox_violation: MCP workspace is not a directory: {workspace}"
+            )
+        from runtime.platform.process.streaming import _sandbox_extra_env
+
+        policy = SandboxPolicy(
+            workspace=workspace,
+            allow_network=False,
+            timeout_s=self.config.timeout_ms / 1000,
+            extra_env=_sandbox_extra_env(self.config.env),
+        )
+        try:
+            choice = select_process_backend(effective_process_sandbox_mode())
+            argv, env, cwd = choice.backend.transform(
+                [self.config.command, *self.config.args],
+                policy.env_for(),
+                workspace,
+                policy,
+            )
+        except SandboxViolation as exc:
+            raise MCPClientError(f"sandbox_violation: {exc}") from exc
+        return parameter_type(
+            command=argv[0],
+            args=argv[1:],
+            env=env,
+            cwd=str(cwd),
+        )
 
     async def _reconnect_async(self) -> None:
         old_stack = self._stack

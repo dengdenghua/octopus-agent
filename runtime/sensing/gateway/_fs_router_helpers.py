@@ -10,7 +10,6 @@ capturing the factory's closure state.
 from __future__ import annotations
 
 import base64
-import os
 import subprocess
 from contextlib import suppress
 from dataclasses import dataclass
@@ -77,6 +76,21 @@ def _scope_roots(
             pass
     _add_scope_root(roots, workspace_path)
 
+    # In shared/authenticated mode a thread's metadata is user-controlled
+    # input at creation time.  Do not let a caller turn that metadata into a
+    # bypass of the process-wide filesystem policy by declaring ``/`` or
+    # another arbitrary host path as its workspace.  Local single-user mode
+    # retains the historical user-chosen-directory behaviour.
+    if ctx.require_auth:
+        safe_roots: list[Path] = []
+        for root in roots:
+            try:
+                _assert_within_allowed_roots(root)
+            except HTTPException:
+                continue
+            safe_roots.append(root)
+        roots = safe_roots
+
     deduped: list[Path] = []
     seen: set[str] = set()
     for root in roots:
@@ -130,6 +144,86 @@ def _assert_in_scope(
             "thread_id": thread_id,
         },
     )
+
+
+def _assert_local_request_scope(
+    ctx: _FsContext,
+    request: Request,
+    *,
+    thread_id: str | None,
+    workspace_path: str | None,
+) -> None:
+    """Require a server-owned thread workspace for authenticated local FS use."""
+    if not ctx.require_auth or getattr(getattr(request, "state", None), "principal", None) is None:
+        return
+    principal = request.state.principal
+    if not thread_id:
+        raise HTTPException(
+            403,
+            {
+                "error": "thread_scope_required",
+                "hint": "authenticated local filesystem access requires thread_id",
+            },
+        )
+    thread = None
+    if ctx.thread_store is not None:
+        if hasattr(ctx.thread_store, "get"):
+            thread = ctx.thread_store.get(thread_id)
+        if thread is None and hasattr(ctx.thread_store, "get_state"):
+            thread = ctx.thread_store.get_state(thread_id)
+    if not isinstance(thread, dict):
+        raise HTTPException(404, f"thread not found: {thread_id}")
+    raw_metadata = thread.get("metadata")
+    metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+    owner = metadata.get("owner_actor_id") or metadata.get("actor_id")
+    if owner != principal.actor_id and not principal.roles.intersection({"admin", "operator"}):
+        raise HTTPException(404, f"thread not found: {thread_id}")
+    if workspace_path:
+        requested = _resolved_path(workspace_path)
+        declared: list[Path] = []
+        _add_scope_root(declared, metadata.get("workspace_path"))
+        extra = metadata.get("extra_workspaces")
+        if isinstance(extra, list):
+            for root in extra:
+                _add_scope_root(declared, root)
+        if not any(_path_in_root(requested, root) for root in declared):
+            raise HTTPException(403, "workspace_path is outside the thread workspace scope")
+
+
+def _require_local_thread_scope(
+    ctx: _FsContext,
+    request: Request,
+    *,
+    thread_id: str | None,
+    workspace_path: str | None = None,
+) -> list[Path]:
+    """Return the server-authorized local roots for an authenticated thread.
+
+    This is used by endpoints that do not operate on a single path first
+    (roots, picker, and import).  They must establish the same owner check as
+    read/write before they can expose or create anything on the host.
+    """
+    _assert_local_request_scope(
+        ctx,
+        request,
+        thread_id=thread_id,
+        workspace_path=workspace_path,
+    )
+    roots = _scope_roots(
+        ctx,
+        thread_id=thread_id,
+        workspace_path=workspace_path,
+    )
+    if ctx.require_auth and not roots:
+        raise HTTPException(
+            403,
+            {
+                "error": "workspace_root_not_allowed",
+                "thread_id": thread_id,
+                "hint": "declare a workspace under OCTOPUS_FS_ALLOWED_ROOTS",
+            },
+        )
+    return roots
 
 
 def _parse_workspace_path(
@@ -202,9 +296,12 @@ def _extract_user_id(
 ) -> str | None:
     """User identity for ACL.
 
-    Resolution order: ``user_id`` query param → ``X-User-Id`` header →
-    ``user_id`` body field (POST endpoints only).
+    In shared mode the verified Principal is authoritative. The legacy query,
+    header, and body forms remain available only for local/dev mode and any
+    supplied value must match the Principal when one is present.
     """
+    principal = getattr(getattr(request, "state", None), "principal", None)
+    principal_actor = getattr(principal, "actor_id", None)
     uid = request.query_params.get("user_id") if request is not None else None
     if not uid and request is not None:
         uid = request.headers.get("X-User-Id") or request.headers.get("x-user-id")
@@ -212,7 +309,13 @@ def _extract_user_id(
         uid = body.get("user_id")
     if isinstance(uid, str):
         uid = uid.strip()
+        if principal_actor and uid and uid != principal_actor:
+            raise HTTPException(403, "user_id must match the authenticated actor")
+        if principal_actor:
+            return principal_actor
         return uid if uid else None
+    if principal_actor:
+        return principal_actor
     return None
 
 
@@ -250,6 +353,11 @@ def _check_acl(
                 "hint": "pass ?user_id= or X-User-Id header",
             },
         )
+    principal = getattr(getattr(request, "state", None), "principal", None)
+    if principal is not None and getattr(principal, "roles", frozenset()).intersection(
+        {"admin", "operator"}
+    ):
+        return "operator"
     role = ctx.workspace_store.get_member_role(workspace_id, user_id)
     if role is None:
         raise HTTPException(
@@ -369,7 +477,7 @@ def _tree_depth_of(entry_path: str, base_path: str) -> int:
         rel = (entry_path or "").strip("/")
         base = (base_path or "").strip("/")
         if base:
-            rel = rel[len(base):].lstrip("/") if rel.startswith(base) else rel
+            rel = rel[len(base) :].lstrip("/") if rel.startswith(base) else rel
         return rel.count("/") if rel else 0
     except Exception:  # noqa: BLE001
         return 0
@@ -380,7 +488,10 @@ def _tree_depth_of(entry_path: str, base_path: str) -> int:
 # / ``.octopus`` / ``logs`` so a remote workspace gets the same noise
 # suppression as a local one.
 _REMOTE_IGNORED_DIRS = {  # noqa: N806 — intentional constant
-    ".git", "node_modules", ".octopus", "logs",
+    ".git",
+    "node_modules",
+    ".octopus",
+    "logs",
 }
 
 
@@ -459,26 +570,11 @@ def _walk_tree(
     return entries
 
 
-def _filesystem_roots() -> list[dict[str, Any]]:
-    candidates: list[Path] = []
-
-    if os.name == "nt":
-        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-            drive = Path(f"{letter}:/")
-            if drive.exists():
-                candidates.append(drive)
-    else:
-        candidates.append(Path("/"))
-
-    candidates.extend(_allowed_fs_roots())
-    with suppress(RuntimeError):
-        candidates.append(Path.home())
-    try:
-        from runtime.platform.process.paths import project_root
-
-        candidates.append(project_root())
-    except (ImportError, OSError, RuntimeError):  # noqa: BLE001
-        candidates.append(Path.cwd())
+def _filesystem_roots(scope_roots: list[Path] | None = None) -> list[dict[str, Any]]:
+    # Never enumerate filesystem roots (/, drive letters, or $HOME).  The
+    # browser may only start at policy roots, or at the already-authorized
+    # workspace roots supplied by the authenticated thread endpoint.
+    candidates = list(scope_roots) if scope_roots is not None else _allowed_fs_roots()
 
     entries: list[dict[str, Any]] = []
     seen: set[str] = set()

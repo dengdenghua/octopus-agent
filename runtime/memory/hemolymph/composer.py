@@ -403,9 +403,7 @@ class ContextComposer:
             )
 
     @staticmethod
-    def memory_cache_key(
-        *, n: int, arm_id: ArmId | None, budget_for_bucket: int
-    ) -> str:
+    def memory_cache_key(*, n: int, arm_id: ArmId | None, budget_for_bucket: int) -> str:
         """Stable identity for a recent-trajectory retrieval window."""
         return f"recent-trajectories:{arm_id or '*'}:{n}:{budget_for_bucket}"
 

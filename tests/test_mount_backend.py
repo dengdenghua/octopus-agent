@@ -522,11 +522,13 @@ async def test_webdav_write_file(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_webdav_list_dir(monkeypatch) -> None:
-    body = _webdav_propfind_response([
-        ("/dav/", True, 0, time.time()),  # collection itself (skipped)
-        ("/dav/foo.txt", False, 11, time.time()),
-        ("/dav/sub", True, 0, time.time()),
-    ])
+    body = _webdav_propfind_response(
+        [
+            ("/dav/", True, 0, time.time()),  # collection itself (skipped)
+            ("/dav/foo.txt", False, 11, time.time()),
+            ("/dav/sub", True, 0, time.time()),
+        ]
+    )
     response = MagicMock()
     response.status_code = 207
     response.content = body
@@ -548,9 +550,11 @@ async def test_webdav_list_dir(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_webdav_stat(monkeypatch) -> None:
-    body = _webdav_propfind_response([
-        ("/dav/foo.txt", False, 42, 1700000000.0),
-    ])
+    body = _webdav_propfind_response(
+        [
+            ("/dav/foo.txt", False, 42, 1700000000.0),
+        ]
+    )
     response = MagicMock()
     response.status_code = 207
     response.content = body
@@ -736,7 +740,11 @@ async def test_s3_list_dir_with_mocked_boto3(monkeypatch) -> None:
         {
             "CommonPrefixes": [{"Prefix": "data/sub1/"}],
             "Contents": [
-                {"Key": "data/a.txt", "Size": 10, "LastModified": MagicMock(timestamp=lambda: 1700000000.0)},
+                {
+                    "Key": "data/a.txt",
+                    "Size": 10,
+                    "LastModified": MagicMock(timestamp=lambda: 1700000000.0),
+                },
             ],
         }
     ]

@@ -155,11 +155,14 @@ def _register_tasks(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> None:
         )
 
         ctrl = get_pause_controller()
+        active = next((item for item in ctrl.list_active() if item.task_id == task_id), None)
         req = ctrl.request_pause(
             task_id=task_id,
             reason=cast(PauseReason, body.reason),
             requested_by="",
             note=body.note,
+            thread_id=active.thread_id if active is not None else "",
+            agent_id=active.agent_id if active is not None else "",
         )
         return {"ok": True, "request": req.to_dict()}
 

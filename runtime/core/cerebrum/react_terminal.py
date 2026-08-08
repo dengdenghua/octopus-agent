@@ -27,8 +27,10 @@ from runtime.core.cerebrum.react_execution import (
 from runtime.core.cerebrum.react_final_answer_guards import (
     _evaluate_final_answer_guards,
     _guard_reason_for_user,
+    _guard_soft_landing_answer,
     _looks_like_observation_echo,
 )
+from runtime.core.cerebrum.react_guards import guard_disposition
 from runtime.core.cerebrum.react_model_deadlines import (
     _MODEL_STREAM_DEADLINE,
     _collect_model_stream_text_with_deadline,
@@ -73,7 +75,7 @@ def _finalize_react_turn(
     browser_operation_mode: bool,
     final_guard_grounded_source_paths: Any,
     final_answer_emitted: bool,
-    model_iteration_timeout_s: Callable[[], float],
+    model_iteration_timeout_s: Callable[[float | None], float],
     model_iteration_timeout_s_config: float | None = None,
     convergence_max_tokens: int = 2000,
 ) -> Generator[dict[str, Any], None, ReActResult | None]:
@@ -229,12 +231,21 @@ def _finalize_react_turn(
                 )
                 if _guard_hit is not None:
                     _guard_label, _guard_message = _guard_hit
-                    _user_guard_message = _guard_reason_for_user(_guard_label, _guard_message)
-                    final_answer = (
-                        "我还不能把这个任务标记为完成。\n\n"
-                        f"[{_guard_label}]\n{_user_guard_message}\n\n"
-                        "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
-                    )
+                    if guard_disposition(_guard_label) == "repair":
+                        # Forced convergence is already the last model call.
+                        # Do not replace a useful report with a generic failure
+                        # merely because a process/evidence contract is still
+                        # imperfect; deliver it with an explicit warning.
+                        final_answer = _guard_soft_landing_answer(final_answer, _guard_label)
+                        terminated_reason = "final_answer_with_warning"
+                    else:
+                        _user_guard_message = _guard_reason_for_user(_guard_label, _guard_message)
+                        final_answer = (
+                            "我还不能把这个任务标记为完成。\n\n"
+                            f"[{_guard_label}]\n{_user_guard_message}\n\n"
+                            "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
+                        )
+                        terminated_reason = "guard_impasse"
         except (AttributeError, TypeError, ValueError) as exc:
             _logger.warning(
                 "react_loop 强制收敛失败 (%s): %s",

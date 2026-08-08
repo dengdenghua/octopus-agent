@@ -210,7 +210,7 @@ def _try_real_research_swarm(kw: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     try:
-        runner = TeamRunner(timeout_seconds=900)
+        runner = TeamRunner(timeout_seconds=1800)
         result = runner.run(
             topology,
             topic,

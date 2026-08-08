@@ -3,6 +3,7 @@
 Contains the shared ``_run_quality_cmd`` runner plus the test / lint / format
 skills and the path-normalization helper.
 """
+
 from __future__ import annotations
 
 import shlex
@@ -44,6 +45,7 @@ def _run_quality_cmd(
         timeout=timeout_s,
         output_cap_bytes=_QUALITY_OUTPUT_CAP,
         sandbox_dir=sandbox_dir,
+        sandbox_required=True,
     )
     if "error" in r and "exit_code" not in r:
         msg = r["error"]

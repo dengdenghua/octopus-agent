@@ -154,10 +154,7 @@ def test_provider_api_key_failure_is_infrastructure_not_agent_behavior() -> None
             "item": {
                 "type": "error",
                 "status": "failed",
-                "message": (
-                    "http_401: 模型 API Key 无效或没有权限 "
-                    "(Incorrect API key provided)"
-                ),
+                "message": ("http_401: 模型 API Key 无效或没有权限 (Incorrect API key provided)"),
             }
         },
     )

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import Counter
 
+from tools.lint import mypy_ratchet
 from tools.lint.mypy_ratchet import _collect_errors
 
 _SAMPLE = """\
@@ -52,3 +53,11 @@ def test_fixed_error_is_baseline_minus_current():
     current: Counter[str] = Counter()  # error was fixed → gone
     assert sum((current - baseline).values()) == 0  # no new
     assert sum((baseline - current).values()) == 1  # one fixed (ratchet down)
+
+
+def test_main_fails_when_mypy_cannot_run(monkeypatch, capsys):
+    monkeypatch.setattr(mypy_ratchet, "_run_mypy", lambda: (1, "python: No module named mypy"))
+    monkeypatch.setattr("sys.argv", ["mypy_ratchet.py"])
+
+    assert mypy_ratchet.main() == 2
+    assert "type ratchet did not run" in capsys.readouterr().err

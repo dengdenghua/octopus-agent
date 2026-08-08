@@ -4,6 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tools.lint import orphan_module_check as check
 from tools.lint.orphan_module_check import (
     _consumed_targets,
     _resolve_relative,
@@ -60,3 +61,17 @@ class TestBaselineGreen:
         assert r.returncode == 0, (
             "orphan-module baseline drifted from reality:\n" + r.stdout + r.stderr
         )
+
+
+def test_runtime_test_modules_are_not_orphan_candidates(tmp_path, monkeypatch):
+    runtime = tmp_path / "runtime"
+    (runtime / "tests").mkdir(parents=True)
+    (runtime / "tests" / "test_example.py").write_text("def test_ok(): pass\n")
+
+    monkeypatch.setattr(check, "_RUNTIME", runtime)
+    monkeypatch.setattr(check, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check, "_CONSUMER_ROOTS", ("runtime",))
+    monkeypatch.setattr(check, "_script_entry_targets", lambda: set())
+    monkeypatch.setattr(check, "_lazy_module_map", lambda: {})
+
+    assert "runtime/tests/test_example.py" not in check._scan()

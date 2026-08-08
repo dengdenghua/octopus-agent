@@ -5,13 +5,7 @@ from pathlib import Path
 
 from runtime.core.cerebrum.react_loop import _stage_model_timeout_s
 
-REACT_LOOP = (
-    Path(__file__).resolve().parents[1]
-    / "runtime"
-    / "core"
-    / "cerebrum"
-    / "react_loop.py"
-)
+REACT_LOOP = Path(__file__).resolve().parents[1] / "runtime" / "core" / "cerebrum" / "react_loop.py"
 
 
 def _constant_dict_keys(node: ast.Dict) -> set[str]:

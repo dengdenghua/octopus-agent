@@ -254,7 +254,10 @@ def test_browser_relay_heartbeat_and_status(client: TestClient) -> None:
 
 def test_browser_relay_websocket_respects_gateway_auth() -> None:
     store = IdentityStore()
-    store.add(Identity(actor_id="extension"), api_key_plaintext="sk-extension")
+    store.add(
+        Identity(actor_id="extension", roles=("operator",)),
+        api_key_plaintext="sk-extension",
+    )
     app = FastAPI()
     app.include_router(create_browser_router(identity_store=store, require_auth=True))
     client = TestClient(app)
@@ -287,6 +290,32 @@ def test_browser_relay_websocket_respects_gateway_auth() -> None:
 
     assert response.status_code == 200
     assert response.json()["extension_version"] == "auth-test"
+
+
+def test_authenticated_browser_sessions_are_owner_bound() -> None:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store.add(Identity(actor_id="bob"), api_key_plaintext="sk-bob")
+    app = FastAPI()
+    app.include_router(create_browser_router(identity_store=store, require_auth=True))
+    client = TestClient(app)
+
+    assert (
+        client.post(
+            "/api/browser/launch",
+            headers={"Authorization": "Bearer sk-alice"},
+            json={"session_id": "alice-session"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/api/browser/page-info",
+            headers={"Authorization": "Bearer sk-bob"},
+            params={"session_id": "alice-session"},
+        ).status_code
+        == 404
+    )
 
 
 def test_browser_relay_command_includes_site_policy(client: TestClient) -> None:

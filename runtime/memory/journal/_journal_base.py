@@ -13,6 +13,7 @@ from runtime.platform.models import (
     TaskId,
     Trajectory,
 )
+from runtime.safety.auth.scope import TenantScope
 
 from ._journal_models import (
     BudgetBreakerResetEvent,
@@ -39,14 +40,27 @@ from ._journal_models import (
     ToolEffectReconciliationEvent,
     TrajectoryEvent,
 )
-from .journal_context import current_agent_id, current_conversation_id
+from .journal_context import (
+    current_agent_id,
+    current_conversation_id,
+    current_owner_actor_id,
+    current_tenant_id,
+)
 
 
 class Journal:
+    def _apply_context(self, event: JournalEvent) -> JournalEvent:
+        updates: dict[str, Any] = {}
+        if event.tenant_id is None and current_tenant_id() is not None:
+            updates["tenant_id"] = current_tenant_id()
+        if event.owner_actor_id is None and current_owner_actor_id() is not None:
+            updates["owner_actor_id"] = current_owner_actor_id()
+        return event.model_copy(update=updates) if updates else event
+
     def write(self, event: JournalEvent) -> None:
         raise NotImplementedError
 
-    def read_all(self) -> list[JournalEvent]:
+    def read_all(self, *, scope: TenantScope | None = None) -> list[JournalEvent]:
         raise NotImplementedError
 
     def subscribe(self, callback: Callable[[JournalEvent], None]) -> Callable[[], None]:
@@ -67,11 +81,25 @@ class Journal:
         del callback  # unused — base journal has no fan-out path
         return lambda: None
 
-    def read_by_task(self, task_id: TaskId) -> list[JournalEvent]:
-        return [e for e in self.read_all() if e.task_id == task_id]
+    def _visible(self, event: JournalEvent, scope: TenantScope | None) -> bool:
+        if scope is None or scope.allow_cross_tenant:
+            return True
+        return bool(
+            event.tenant_id
+            and event.owner_actor_id
+            and event.tenant_id == scope.tenant_id
+            and event.owner_actor_id == scope.actor_id
+        )
 
-    def read_by_type(self, event_type: JournalEventType) -> list[JournalEvent]:
-        return [e for e in self.read_all() if e.event_type == event_type]
+    def read_by_task(
+        self, task_id: TaskId, *, scope: TenantScope | None = None
+    ) -> list[JournalEvent]:
+        return [e for e in self.read_all(scope=scope) if e.task_id == task_id]
+
+    def read_by_type(
+        self, event_type: JournalEventType, *, scope: TenantScope | None = None
+    ) -> list[JournalEvent]:
+        return [e for e in self.read_all(scope=scope) if e.event_type == event_type]
 
     def read_since(self, ts: datetime) -> list[JournalEvent]:
         return [e for e in self.read_all() if e.ts >= ts]

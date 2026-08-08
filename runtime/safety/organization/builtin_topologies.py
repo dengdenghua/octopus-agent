@@ -64,7 +64,7 @@ _CODER = _IMPLEMENTER  # default code-tilted catch-all
 
 _research_swarm = TeamTopology(
     name="research_swarm_v1",
-    protocol=CoordinationProtocol.SEQUENTIAL,
+    protocol=CoordinationProtocol.PARALLEL,
     task_bucket="research-report",
     max_iterations=1,
     quality_threshold=0.6,
@@ -74,20 +74,21 @@ _research_swarm = TeamTopology(
             system_addendum=(
                 "你是研究编排者(architect)。读取用户目标后,把它拆成 3 个互不重叠"
                 "的子问题,覆盖事实/对比/趋势三个维度。把拆解结果通过 "
-                "bb_write('plan', ...) 写入黑板,内容用编号列表呈现,每条 ≤80 字。"
-                "完成后立即结束本轮,不要尝试自己回答。"
+                "bb_write('plan', ...) 写入黑板,内容用编号列表呈现(编号 1/2/3),"
+                "每条 ≤80 字。完成后立即结束本轮,不要尝试自己回答。"
             ),
         ),
         Role.RESEARCHER: AgentSpec(
             agent_id=_RESEARCHER,
+            parallel_replicas=3,
             system_addendum=(
-                "你是并行研究员组(researcher pool)。从黑板 bb_read('plan') 读取 3 "
-                "个子问题,依次用 web_search + fetch_url + web_fetch 调研每一个,"
-                "为每个子问题至少引用 2 个来源。把每条发现通过 "
-                "bb_write('result_<n>', ...) 写入,n 取 1/2/3。保持原文链接,"
-                "不要预先合成。若任务说明证据包已在当前工作区,先 list_cwd 并读取"
-                "这些本地文件,不要改为上网搜索；完成读取后必须先写 result_1/2/3"
-                "再结束,不要只在内部分析里复述。"
+                "你是并行研究员副本 {replica_index}/{replica_count}(researcher "
+                "pool)。从黑板 bb_read('plan') 读取子问题列表,只负责第 "
+                "{replica_index} 个子问题(不要调研其他编号)。用 web_search + "
+                "fetch_url + web_fetch 深入调研这一项,至少引用 2 个来源。"
+                "把发现通过 bb_write('result_{replica_index}', ...) 写入黑板,"
+                "保持原文链接,不要预先合成。若任务说明证据包已在当前工作区,"
+                "先 list_cwd 并读取这些本地文件,不要改为上网搜索。"
             ),
         ),
         Role.CRITIC: AgentSpec(
@@ -125,7 +126,7 @@ _research_swarm = TeamTopology(
             "事实核查员抽查,综合者产出报告。"
         ),
         "builtin": True,
-        "version": "2",
+        "version": "3",
     },
 )
 

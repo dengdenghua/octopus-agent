@@ -37,6 +37,44 @@ class TestSDKMissing:
             PersistentStdioMCPClient(MCPServerConfig(name="x", command="npx"))
 
 
+def test_commercial_mode_requires_operator_selected_stdio_workspace(monkeypatch):
+    from runtime.adapters.mcp_client import persistent_client as mod
+
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
+    monkeypatch.setattr(mod, "STDIO_AVAILABLE", True)
+
+    with pytest.raises(MCPClientError, match="requires.*sandbox_dir"):
+        PersistentStdioMCPClient(MCPServerConfig(name="x", command="npx"))
+
+
+def test_commercial_stdio_parameters_use_selected_hard_backend(tmp_path, monkeypatch):
+    from runtime.safety.sandboxing.sandbox import BackendChoice, DirectBackend
+
+    class TaggingBackend(DirectBackend):
+        def transform(self, argv, env, cwd, policy):  # type: ignore[no-untyped-def]
+            return ["sandbox-wrapper", *argv], env, cwd
+
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
+    monkeypatch.setattr(
+        "runtime.safety.sandboxing.sandbox.select_process_backend",
+        lambda _mode: BackendChoice(TaggingBackend(), "tagged", hard=True),
+    )
+
+    client = PersistentStdioMCPClient.__new__(PersistentStdioMCPClient)
+    client.config = MCPServerConfig(
+        name="x",
+        command="python",
+        args=["server.py"],
+        sandbox_dir=str(tmp_path),
+    )
+    params = client._stdio_parameters(lambda **kwargs: kwargs)
+
+    assert params["command"] == "sandbox-wrapper"
+    assert params["args"] == ["python", "server.py"]
+    assert params["cwd"] == str(tmp_path.resolve())
+    assert params["env"]["HOME"].startswith(str(tmp_path.resolve()))
+
+
 @pytest.mark.skipif(not STDIO_AVAILABLE, reason="mcp SDK required")
 def test_persistent_call_sends_protocol_cancel_notification():
     from runtime.safety.approval.cancellation import (

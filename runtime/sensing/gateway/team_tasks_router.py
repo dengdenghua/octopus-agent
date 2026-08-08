@@ -49,6 +49,7 @@ from runtime.sensing.gateway._team_tasks_helpers import (
     TaskProjection,
     TeamEventBroadcaster,
     _cli_team_artifacts,
+    _fallback_topology,  # noqa: F401 — compatibility re-export
     _jsonable,
     _load_state,
     _local_cli_members,
@@ -61,9 +62,8 @@ from runtime.sensing.gateway._team_tasks_helpers import (
     _runner_result_error,
     _runner_result_success,
     _save_state,
+    _task_input_text,  # noqa: F401 — compatibility re-export
     _team_task_process_timeline,
-    _fallback_topology,
-    _task_input_text,
 )
 from runtime.sensing.gateway._team_tasks_models import (
     CreateTeamTaskRequest,
@@ -136,6 +136,33 @@ def create_team_tasks_router(
     lock = Lock()
     tasks: dict[str, TeamTaskWire] = _load_state(path)
     running: dict[str, CancellationSource] = {}
+
+    # ``running`` is intentionally in-memory, so a process restart cannot
+    # reconstruct the worker thread that owned a persisted running task.
+    # Leaving that record untouched creates a permanent false-positive: the
+    # next /run call returns it as already running forever.  Until checkpoint
+    # resume exists, converge such records to an explicit terminal failure so
+    # operators can retry and the UI can explain what happened.
+    orphaned = False
+    for task_id, task in list(tasks.items()):
+        if task.status != "running":
+            continue
+        metadata = dict(task.metadata)
+        metadata["failure_code"] = "worker_lost_on_restart"
+        metadata["error"] = "task worker was lost when the service restarted"
+        metadata["recovered_at"] = _now()
+        tasks[task_id] = task.model_copy(
+            update={
+                "status": "failed",
+                "updated_at": _now(),
+                "completed_at": _now(),
+                "metadata": metadata,
+            }
+        )
+        orphaned = True
+    if orphaned:
+        _save_state(path, tasks)
+        _LOG.warning("team task startup reconciliation marked orphaned running tasks failed")
 
     def _auth(request: Any) -> str | None:
         from .openai_gateway_router import _resolve_actor

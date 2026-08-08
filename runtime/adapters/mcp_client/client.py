@@ -360,7 +360,7 @@ class HttpMCPClient(MCPClient):
         if "Authorization" not in header_values and "authorization" not in header_values:
             from .oauth import bearer_for_server
 
-            token = bearer_for_server(self.config.name)
+            token = bearer_for_server(self.config.name, self.config.tenant_id)
             if token:
                 header_values["Authorization"] = f"Bearer {token}"
         headers: dict[str, str] | None = header_values or None

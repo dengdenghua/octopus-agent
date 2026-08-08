@@ -16,6 +16,9 @@ from io import BytesIO, StringIO
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
+
 DEFAULT_MAX_EXTRACT_CHARS = 12_000
 _MAX_ARCHIVE_ENTRIES = 4_096
 _MAX_ARCHIVE_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
@@ -162,8 +165,14 @@ def _safe_ooxml(data: bytes) -> zipfile.ZipFile | None:
 
 def _xml_root(archive: zipfile.ZipFile, name: str) -> ET.Element | None:
     try:
-        return ET.fromstring(archive.read(name))
-    except (KeyError, RuntimeError, ET.ParseError, zipfile.BadZipFile):
+        return safe_xml_fromstring(archive.read(name))
+    except (
+        KeyError,
+        RuntimeError,
+        ET.ParseError,
+        DefusedXmlException,
+        zipfile.BadZipFile,
+    ):
         return None
 
 

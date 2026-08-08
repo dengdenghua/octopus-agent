@@ -197,16 +197,47 @@ class _LSPClient:
     # ── lifecycle ─────────────────────────────────────────────────────────
 
     def start(self, server_argv: list[str], workspace_root: str) -> None:
+        spawn_argv = list(server_argv)
+        spawn_env = None
+        spawn_cwd = None
+        from runtime.safety.sandboxing.sandbox import (
+            SandboxPolicy,
+            SandboxViolation,
+            effective_process_sandbox_mode,
+            process_sandbox_required,
+            select_process_backend,
+        )
+
+        if process_sandbox_required():
+            workspace = Path(workspace_root).expanduser().resolve()
+            if not workspace.is_dir():
+                raise _LSPTransportError(f"sandbox workspace is not a directory: {workspace}")
+            policy = SandboxPolicy(
+                workspace=workspace, allow_network=False, timeout_s=self.INIT_TIMEOUT
+            )
+            try:
+                choice = select_process_backend(effective_process_sandbox_mode())
+                spawn_argv, spawn_env, transformed_cwd = choice.backend.transform(
+                    spawn_argv,
+                    policy.env_for(),
+                    workspace,
+                    policy,
+                )
+                spawn_cwd = str(transformed_cwd)
+            except SandboxViolation as exc:
+                raise _LSPTransportError(f"sandbox_violation: {exc}") from exc
         try:
             self._proc = subprocess.Popen(  # noqa: S603 — argv constructed from constants + workspace path
-                server_argv,
+                spawn_argv,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=0,
+                cwd=spawn_cwd,
+                env=spawn_env,
             )
         except (FileNotFoundError, PermissionError, OSError) as exc:
-            raise _LSPTransportError(f"failed to spawn {server_argv[0]!r}: {exc}") from exc
+            raise _LSPTransportError(f"failed to spawn {spawn_argv[0]!r}: {exc}") from exc
 
         self._reader = threading.Thread(
             target=self._read_loop,

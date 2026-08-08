@@ -87,11 +87,10 @@ def test_simple_question_uses_reflection_fast_path(tmp_path: Path) -> None:
     turn = out["response"].result["turn"]
     assert [it["type"] for it in turn["items"]] == [
         "userMessage",
-        "reasoning",
         "agentMessage",
     ]
-    assert turn["items"][1]["content"] == "quick reflection"
-    assert turn["items"][2]["text"] == "4"
+    assert "quick reflection" not in str(turn)
+    assert turn["items"][1]["text"] == "4"
 
 
 def test_reflex_greeting_uses_selected_agent_identity(tmp_path: Path) -> None:
@@ -220,6 +219,36 @@ def test_code_mode_never_uses_text_only_reflection_fast_path(tmp_path: Path) -> 
 
     assert (
         runtime._should_use_reflection_fast_path("fix the failing project tests", params) is False
+    )
+
+
+def test_question_mark_with_resumable_task_bypasses_greeting_fast_path(
+    tmp_path: Path,
+) -> None:
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+    runtime = CerebrumRuntime(
+        stack=SimpleNamespace(planner=SimpleNamespace(router=object())),
+        agent=None,
+        logs_root=str(tmp_path / "threads"),
+    )
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-paused-question",
+            "input": [{"type": "text", "text": "?"}],
+            "approvalPolicy": "never",
+        }
+    )
+
+    assert runtime._should_use_reflection_fast_path("?", params) is True
+    assert (
+        runtime._should_use_reflection_fast_path(
+            "?",
+            params,
+            has_resumable_task=True,
+        )
+        is False
     )
 
 

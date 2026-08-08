@@ -109,12 +109,8 @@ class _RelayBackendMixin:
     def _browser_policy_payload(self) -> dict[str, Any]:
         return {
             "schema": "octopus.browser_relay_site_policy.v1",
-            "relay_allowed_hosts": list(
-                self.browser_config_state.get("relay_allowed_hosts") or []
-            ),
-            "relay_blocked_hosts": list(
-                self.browser_config_state.get("relay_blocked_hosts") or []
-            ),
+            "relay_allowed_hosts": list(self.browser_config_state.get("relay_allowed_hosts") or []),
+            "relay_blocked_hosts": list(self.browser_config_state.get("relay_blocked_hosts") or []),
             "relay_require_allowlist": bool(
                 self.browser_config_state.get("relay_require_allowlist"),
             ),
@@ -125,12 +121,12 @@ class _RelayBackendMixin:
         if not isinstance(payload, dict):
             return
         if "relay_allowed_hosts" in payload:
-            self.browser_config_state["relay_allowed_hosts"] = (
-                self._normalize_relay_host_patterns(payload.get("relay_allowed_hosts"))
+            self.browser_config_state["relay_allowed_hosts"] = self._normalize_relay_host_patterns(
+                payload.get("relay_allowed_hosts")
             )
         if "relay_blocked_hosts" in payload:
-            self.browser_config_state["relay_blocked_hosts"] = (
-                self._normalize_relay_host_patterns(payload.get("relay_blocked_hosts"))
+            self.browser_config_state["relay_blocked_hosts"] = self._normalize_relay_host_patterns(
+                payload.get("relay_blocked_hosts")
             )
         if "relay_require_allowlist" in payload:
             self.browser_config_state["relay_require_allowlist"] = bool(

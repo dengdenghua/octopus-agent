@@ -6,7 +6,7 @@ Mirrors the wire shapes documented at
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 from uuid import uuid4
@@ -109,7 +109,7 @@ class OutboundEvent(BaseModel):
     id: str = Field(default_factory=_new_event_id)
     type: str
     processed_at: str | None = Field(
-        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
+        default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     )
 
 

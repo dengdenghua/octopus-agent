@@ -81,14 +81,16 @@ def create_org_router(
             return None
 
     def _auth(request: Request, *, force: bool = False) -> str | None:
-        # Mutation endpoints force-auth; reads fall back to anonymous.
+        # Mutations always pass through authorization below. Shared auth is
+        # enforced only when configured; anonymous local-mode mutations then
+        # reach the org/channel ACL and correctly fail with 403.
         try:
             from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
 
             return _resolve_actor(
                 request,
                 identity_store,
-                require_auth or force,
+                require_auth,
                 jwt_secret=jwt_secret,
                 jwt_issuer=jwt_issuer,
                 jwt_audience=jwt_audience,
@@ -96,7 +98,7 @@ def create_org_router(
         except HTTPException:
             raise
         except Exception as exc:  # noqa: BLE001
-            if require_auth or force:
+            if require_auth:
                 raise HTTPException(401, "auth required") from exc
             return None
 
@@ -227,9 +229,7 @@ def create_org_router(
         return {"count": len(members), "members": [m.to_dict() for m in members]}
 
     @router.delete("/api/orgs/{org_id}/members/{member_id}")
-    def remove_org_member(
-        org_id: str, member_id: str, request: Request
-    ) -> dict[str, Any]:
+    def remove_org_member(org_id: str, member_id: str, request: Request) -> dict[str, Any]:
         actor = _auth(request, force=True)
         if store.get_organization(org_id) is None:
             raise HTTPException(404, "organization not found")
@@ -279,9 +279,7 @@ def create_org_router(
         return {"count": len(depts), "departments": [d.to_dict() for d in depts]}
 
     @router.delete("/api/orgs/{org_id}/departments/{dept_id}")
-    def delete_department(
-        org_id: str, dept_id: str, request: Request
-    ) -> dict[str, Any]:
+    def delete_department(org_id: str, dept_id: str, request: Request) -> dict[str, Any]:
         actor = _auth(request, force=True)
         if store.get_organization(org_id) is None:
             raise HTTPException(404, "organization not found")
@@ -317,9 +315,7 @@ def create_org_router(
         # The creator (org admin) becomes the channel owner so they can manage
         # the ACL — mirroring create_organization auto-adding its owner.
         if actor is not None:
-            store.add_channel_member(
-                channel.id, actor, role="owner", require_org_member=False
-            )
+            store.add_channel_member(channel.id, actor, role="owner", require_org_member=False)
             _audit(
                 "channel_member_add",
                 actor,
@@ -437,9 +433,7 @@ def create_org_router(
         return {"count": len(members), "members": [m.to_dict() for m in members]}
 
     @router.delete("/api/channels/{channel_id}/members/{member_id}")
-    def remove_channel_member(
-        channel_id: str, member_id: str, request: Request
-    ) -> dict[str, Any]:
+    def remove_channel_member(channel_id: str, member_id: str, request: Request) -> dict[str, Any]:
         actor = _auth(request, force=True)
         if store.get_channel(channel_id) is None:
             raise HTTPException(404, "channel not found")

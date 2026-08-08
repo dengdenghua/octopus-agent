@@ -75,9 +75,10 @@ def create_journal_router(
     def _auth(request: Request) -> str | None:
         if require_auth and identity_store is None:
             raise HTTPException(401, "auth required")
-        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+        from runtime.safety.auth.principal import resolve_principal
+        from runtime.safety.auth.scope import scope_from_principal
 
-        return _resolve_actor(
+        principal = resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -85,6 +86,8 @@ def create_journal_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        request.state.journal_scope = scope_from_principal(principal)
+        return principal.actor_id if principal is not None else None
 
     @router.get("/api/journal/events")
     def list_events(
@@ -105,6 +108,7 @@ def create_journal_router(
             session_id=session_id,
             limit=limit,
             offset=offset,
+            scope=getattr(request.state, "journal_scope", None),
         )
         return {"events": rows, "limit": limit, "offset": offset}
 
@@ -112,7 +116,7 @@ def create_journal_router(
     def get_stats(request: Request) -> dict[str, Any]:
         _auth(request)
         index = _get_index(db_path)
-        return index.stats()
+        return index.stats(scope=getattr(request.state, "journal_scope", None))
 
     @router.post("/api/journal/reindex")
     def reindex(request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:

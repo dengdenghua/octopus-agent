@@ -61,9 +61,7 @@ class _StubBackend(MountBackend):
         self.files[path] = content
 
     async def list_dir(self, path: str, depth: int = 1) -> list[DirEntry]:
-        return [
-            DirEntry(name="dummy.txt", path="dummy.txt", is_dir=False, size=0, modified=0.0)
-        ]
+        return [DirEntry(name="dummy.txt", path="dummy.txt", is_dir=False, size=0, modified=0.0)]
 
     async def stat(self, path: str) -> Any:  # pragma: no cover — unused
         raise FileNotFoundError(path)

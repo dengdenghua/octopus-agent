@@ -324,9 +324,7 @@ def test_guard_impasse_converges_on_real_loop(monkeypatch) -> None:
     )
 
     result = None
-    gen = stream_react_loop(
-        stack, intent, agent=None, model="test-model", max_iterations=30
-    )
+    gen = stream_react_loop(stack, intent, agent=None, model="test-model", max_iterations=30)
     try:
         while True:
             next(gen)

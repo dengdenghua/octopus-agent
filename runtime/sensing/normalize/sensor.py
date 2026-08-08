@@ -4,7 +4,7 @@ import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from .events import SensorEvent
@@ -48,7 +48,7 @@ class EnvSensor(ABC):
         self._publisher(event)
         with self._lock:
             self._events_emitted += 1
-            self._last_emit_at = datetime.utcnow()
+            self._last_emit_at = datetime.now(UTC)
 
     @abstractmethod
     def start(self) -> None:

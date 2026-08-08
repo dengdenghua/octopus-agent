@@ -71,15 +71,13 @@ def _make_bridge_state(
 
         binder = _bind
     agent_id = str(getattr(agent, "agent_id", "") or "").strip()
-    display_name = str(
-        getattr(agent, "display_name", None)
-        or getattr(agent, "name", None)
-        or agent_id
-        or ""
-    ).strip() or None
-    avatar_url = (
-        f"/api/agents/{agent_id}/avatar" if agent_id else None
+    display_name = (
+        str(
+            getattr(agent, "display_name", None) or getattr(agent, "name", None) or agent_id or ""
+        ).strip()
+        or None
     )
+    avatar_url = f"/api/agents/{agent_id}/avatar" if agent_id else None
     return _ReactBridgeState(
         on_background_task_start=_register,
         timeline_binder=binder,
@@ -234,6 +232,41 @@ def _resume_turns(
         and not runtime._has_fresh_active_turn_lease(turn.thread_id, turn.id)
     ]
     for turn in stale:
+        from runtime.core.cerebrum.pause_control import get_pause_controller
+
+        pause_candidates = [
+            request
+            for request in get_pause_controller().list_paused()
+            if request.thread_id == turn.thread_id
+            and (not turn.task_id or request.task_id == turn.task_id)
+        ]
+        if pause_candidates:
+            selected = max(pause_candidates, key=lambda request: request.requested_at)
+            turn.status = TurnStatus.PAUSED
+            turn.task_id = selected.task_id if len(pause_candidates) == 1 else turn.task_id
+            turn.objective_id = turn.task_id or turn.objective_id
+            turn.outcome_reason = (
+                selected.reason if len(pause_candidates) == 1 else "ambiguous_pause_recovery"
+            )
+            turn.interrupt_reason = (
+                selected.note
+                if len(pause_candidates) == 1 and selected.note
+                else "检测到已保存的暂停检查点，可选择对应任务继续"
+            )
+            turn.completed_at = now_utc()
+            for item in turn.items:
+                if item.status == ItemStatus.IN_PROGRESS:
+                    item.status = ItemStatus.INTERRUPTED
+            log.turn_updated(
+                turn.thread_id,
+                turn.id,
+                objective_id=turn.objective_id,
+                task_id=turn.task_id,
+                outcome_reason=turn.outcome_reason,
+            )
+            log.turn_completed(turn.thread_id, turn.id, turn.status)
+            runtime._record_task_run_finished(turn, recover_stale_lease=True)
+            continue
         turn.status = TurnStatus.FAILED
         turn.error = {
             "message": "上次执行在后端重启或连接中断时未完成，已自动结束。请重新发送或点击重试。",
@@ -244,6 +277,7 @@ def _resume_turns(
             if item.status == ItemStatus.IN_PROGRESS:
                 item.status = ItemStatus.FAILED
         log.turn_completed(turn.thread_id, turn.id, turn.status, error=turn.error)
+        runtime._record_task_run_finished(turn, recover_stale_lease=True)
     return turns
 
 
@@ -274,11 +308,32 @@ def _snapshot_to_thread_store(
     try:
         turns = log.replay()
         messages, artifacts, todos = _flatten_turns_to_messages(turns)
+        latest_turn = turns[-1] if turns else None
+        thread_status = (
+            {
+                TurnStatus.IN_PROGRESS: "running",
+                TurnStatus.PAUSED: "paused",
+                TurnStatus.CANCELLED: "cancelled",
+                TurnStatus.INTERRUPTED: "disconnected",
+                TurnStatus.FAILED: "failed",
+                TurnStatus.COMPLETED: "idle",
+            }.get(latest_turn.status, "idle")
+            if latest_turn is not None
+            else "idle"
+        )
         title = _title_from_messages(messages) or ""
         values: dict[str, Any] = {
             "title": title,
             "messages": messages,
             "artifacts": artifacts,
+            "lifecycle": {
+                "status": thread_status,
+                "turn_id": latest_turn.id if latest_turn is not None else None,
+                "objective_id": latest_turn.objective_id if latest_turn is not None else None,
+                "task_id": latest_turn.task_id if latest_turn is not None else None,
+                "checkpoint_id": latest_turn.checkpoint_id if latest_turn is not None else None,
+                "outcome_reason": latest_turn.outcome_reason if latest_turn is not None else None,
+            },
         }
         if todos is not None:
             values["todos"] = todos
@@ -306,11 +361,17 @@ def _snapshot_to_thread_store(
                     if key == "actor_id"
                     else key
                 ] = v
-        store.ensure_thread(thread_id, metadata=metadata, values=values)
+        store.ensure_thread(
+            thread_id,
+            metadata=metadata,
+            values=values,
+            status=thread_status,
+        )
         store.update_state(
             thread_id,
             values=values,
             metadata=metadata if metadata else None,
+            status=thread_status,
         )
     except Exception as exc:  # noqa: BLE001
         _logger.debug(
@@ -321,7 +382,9 @@ def _snapshot_to_thread_store(
         )
 
 
-async def _ensure_thread(runtime: CerebrumRuntime, thread_id: str, emitter: EventEmitter) -> EventLog:
+async def _ensure_thread(
+    runtime: CerebrumRuntime, thread_id: str, emitter: EventEmitter
+) -> EventLog:
     log = runtime._log_for(thread_id)
     async with runtime._lock:
         if thread_id in runtime._known_threads:
@@ -400,6 +463,8 @@ async def _emit_todo_list(
     emitter: EventEmitter,
     item: TodoListItem,
 ) -> None:
+    item.objective_id = turn.objective_id
+    item.task_id = turn.task_id
     turn.items.append(item)
     await runtime._emit_item_started(turn, log, emitter, item)
     item.status = ItemStatus.COMPLETED

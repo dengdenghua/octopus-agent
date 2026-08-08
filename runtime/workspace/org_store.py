@@ -51,6 +51,10 @@ from runtime.workspace.org import (
 
 _LOG = logging.getLogger("octopus.workspace.org_store")
 
+_EXISTS_QUERIES = {
+    ("organizations", "id"): "SELECT 1 FROM organizations WHERE id=?",
+}
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS organizations (
     id         TEXT PRIMARY KEY,
@@ -186,9 +190,10 @@ class OrgStore:
     def _require_exists(
         self, conn: sqlite3.Connection, table: str, pk_col: str, value: str
     ) -> None:
-        row = conn.execute(
-            f"SELECT 1 FROM {table} WHERE {pk_col}=?", (value,)
-        ).fetchone()
+        query = _EXISTS_QUERIES.get((table, pk_col))
+        if query is None:
+            raise ValueError(f"unsupported existence check: {table}.{pk_col}")
+        row = conn.execute(query, (value,)).fetchone()
         if not row:
             raise ValueError(f"{table} {value!r} does not exist")
 
@@ -217,8 +222,7 @@ class OrgStore:
         )
         with self._lock, self._connect() as conn:
             conn.execute(
-                "INSERT INTO organizations(id, name, owner_id, created_at) "
-                "VALUES (?, ?, ?, ?)",
+                "INSERT INTO organizations(id, name, owner_id, created_at) VALUES (?, ?, ?, ?)",
                 (org.id, org.name, org.owner_id, org.created_at),
             )
         self.add_org_member(
@@ -239,8 +243,7 @@ class OrgStore:
     def list_organizations(self) -> list[Organization]:
         with self._lock, self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, name, owner_id, created_at FROM organizations "
-                "ORDER BY created_at, id"
+                "SELECT id, name, owner_id, created_at FROM organizations ORDER BY created_at, id"
             ).fetchall()
         return [_org_from_row(r) for r in rows]
 
@@ -283,13 +286,9 @@ class OrgStore:
                 ).fetchall()
             ]
             for cid in channel_ids:
-                conn.execute(
-                    "DELETE FROM channel_members WHERE channel_id=?", (cid,)
-                )
+                conn.execute("DELETE FROM channel_members WHERE channel_id=?", (cid,))
             for did in dept_ids:
-                conn.execute(
-                    "DELETE FROM channels WHERE department_id=?", (did,)
-                )
+                conn.execute("DELETE FROM channels WHERE department_id=?", (did,))
             conn.execute("DELETE FROM channels WHERE org_id=?", (organization_id,))
             conn.execute("DELETE FROM departments WHERE org_id=?", (organization_id,))
             conn.execute("DELETE FROM org_members WHERE org_id=?", (organization_id,))
@@ -313,9 +312,7 @@ class OrgStore:
         if kind not in VALID_MEMBER_KINDS:
             raise ValueError(f"invalid kind {kind!r}; expected human or agent")
         if role not in VALID_ORG_ROLES:
-            raise ValueError(
-                f"invalid role {role!r}; expected one of {sorted(VALID_ORG_ROLES)}"
-            )
+            raise ValueError(f"invalid role {role!r}; expected one of {sorted(VALID_ORG_ROLES)}")
         if not member_id:
             raise ValueError("member_id is required")
         member = OrgMember(
@@ -408,9 +405,7 @@ class OrgStore:
                     (dept.parent_id, org_id),
                 ).fetchone()
                 if not parent:
-                    raise ValueError(
-                        f"parent department {dept.parent_id!r} not in org {org_id!r}"
-                    )
+                    raise ValueError(f"parent department {dept.parent_id!r} not in org {org_id!r}")
             conn.execute(
                 "INSERT INTO departments(id, org_id, parent_id, name, created_at) "
                 "VALUES (?, ?, ?, ?, ?)",
@@ -423,8 +418,7 @@ class OrgStore:
             return None
         with self._lock, self._connect() as conn:
             row = conn.execute(
-                "SELECT id, org_id, parent_id, name, created_at "
-                "FROM departments WHERE id=?",
+                "SELECT id, org_id, parent_id, name, created_at FROM departments WHERE id=?",
                 (department_id,),
             ).fetchone()
         return _dept_from_row(row) if row else None
@@ -497,9 +491,7 @@ class OrgStore:
                     (channel.department_id, org_id),
                 ).fetchone()
                 if not dept:
-                    raise ValueError(
-                        f"department {channel.department_id!r} not in org {org_id!r}"
-                    )
+                    raise ValueError(f"department {channel.department_id!r} not in org {org_id!r}")
             conn.execute(
                 "INSERT INTO channels(id, org_id, department_id, name, kind, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
@@ -519,8 +511,7 @@ class OrgStore:
             return None
         with self._lock, self._connect() as conn:
             row = conn.execute(
-                "SELECT id, org_id, department_id, name, kind, created_at "
-                "FROM channels WHERE id=?",
+                "SELECT id, org_id, department_id, name, kind, created_at FROM channels WHERE id=?",
                 (channel_id,),
             ).fetchone()
         return _channel_from_row(row) if row else None
@@ -541,14 +532,10 @@ class OrgStore:
         if not channel_id:
             return False
         with self._lock, self._connect() as conn:
-            exists = conn.execute(
-                "SELECT 1 FROM channels WHERE id=?", (channel_id,)
-            ).fetchone()
+            exists = conn.execute("SELECT 1 FROM channels WHERE id=?", (channel_id,)).fetchone()
             if not exists:
                 return False
-            conn.execute(
-                "DELETE FROM channel_members WHERE channel_id=?", (channel_id,)
-            )
+            conn.execute("DELETE FROM channel_members WHERE channel_id=?", (channel_id,))
             conn.execute("DELETE FROM channels WHERE id=?", (channel_id,))
         return True
 
@@ -590,9 +577,7 @@ class OrgStore:
                     (channel[0], member_id),
                 ).fetchone()
                 if not org:
-                    raise ValueError(
-                        f"member {member_id!r} is not a member of org {channel[0]!r}"
-                    )
+                    raise ValueError(f"member {member_id!r} is not a member of org {channel[0]!r}")
             conn.execute(
                 "INSERT INTO channel_members(channel_id, member_id, role, added_at) "
                 "VALUES (?, ?, ?, ?) "

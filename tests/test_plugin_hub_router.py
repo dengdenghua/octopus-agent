@@ -35,7 +35,7 @@ class _FakeHub:
 
 def test_plugin_hub_router_requires_auth_when_enabled() -> None:
     store = IdentityStore()
-    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store.add(Identity(actor_id="alice", roles=("operator",)), api_key_plaintext="sk-alice")
     app = FastAPI()
     app.include_router(
         create_plugin_hub_router(
@@ -54,3 +54,23 @@ def test_plugin_hub_router_requires_auth_when_enabled() -> None:
         ).status_code
         == 200
     )
+
+
+def test_plugin_hub_mutation_requires_operator_role() -> None:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_plugin_hub_router(
+            hub=_FakeHub(),
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/plugin-hub/plugins/demo/load",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert response.status_code == 403

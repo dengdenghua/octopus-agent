@@ -70,6 +70,7 @@ class RpcConnection:
         # after the handshake gate runs. Runtime handlers consult this
         # for thread-ownership scoping.
         self.actor_id: str | None = None
+        self.tenant_id: str | None = None
         # Last thread this connection successfully resumed. The gateway
         # uses it to fan terminal turn events out to sibling
         # connections watching the same thread.

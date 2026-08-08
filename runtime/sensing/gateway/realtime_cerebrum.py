@@ -5,8 +5,8 @@ to the JSON-RPC ``item/*`` protocol. Translation rules:
 
   ``text_delta``           → ``item/agentMessage/delta`` on the active
                              agentMessage item (created lazily).
-  ``thinking_delta``       → ``item/reasoning/textDelta`` on the active
-                             reasoning item (created lazily).
+  ``thinking_delta``       → kept private; public progress uses the explicit
+                             commentary/public-summary channel.
   ``tool_start``           → emits ``item/started`` for a new
                              commandExecution / mcpToolCall item; record
                              the tool call id so subsequent events bind.
@@ -56,15 +56,23 @@ from runtime.protocol import (
 from runtime.safety.approval.approval_gate import (
     ApprovalProvider,
 )
+from runtime.sensing.gateway._event_bridge_tool_items import (
+    _file_change_item_from_tool_evt as _file_change_item_from_tool_evt,
+)
 from runtime.sensing.gateway._realtime_cerebrum_project_os import (
     _drive_project_os,
-    _format_project_os_result,
-    _parse_project_os_control,
+)
+from runtime.sensing.gateway._realtime_cerebrum_project_os import (
+    _format_project_os_result as _format_project_os_result,
+)
+from runtime.sensing.gateway._realtime_cerebrum_project_os import (
+    _parse_project_os_control as _parse_project_os_control,
 )
 from runtime.sensing.gateway._realtime_cerebrum_requests import _handle_request
 from runtime.sensing.gateway._realtime_cerebrum_steering import (
     _active_turn_lease_path,
     _bind_turn_timeline,
+    _drain_active_turns_for_shutdown,
     _drain_turn_steering,
     _has_fresh_active_turn_lease,
     _publish_discovered_steering,
@@ -92,6 +100,12 @@ from runtime.sensing.gateway._realtime_cerebrum_thread import (
     _snapshot_to_thread_store,
     _wrap_with_policy,
 )
+from runtime.sensing.gateway._realtime_react_stream_helpers import (
+    _agentic_stream_event_to_react_event as _agentic_stream_event_to_react_event,
+)
+from runtime.sensing.gateway._realtime_react_stream_helpers import (
+    _should_use_native_tool_loop as _should_use_native_tool_loop,
+)
 
 # ── Split-module compat re-exports ────────────────────────────
 # The helpers below moved out of this file into focused sibling
@@ -115,6 +129,12 @@ from runtime.sensing.gateway.realtime_team_stream import (
     _drive_swarm_mesh,
     _drive_team_topology,
 )
+from runtime.sensing.gateway.realtime_thread_history import (
+    _conversation_messages_for_react as _conversation_messages_for_react,
+)
+from runtime.sensing.gateway.realtime_thread_history import (
+    _flatten_turns_to_messages as _flatten_turns_to_messages,
+)
 from runtime.sensing.gateway.realtime_thread_ops import (
     _handle_hunk_decide,
     _maybe_compact,
@@ -122,8 +142,18 @@ from runtime.sensing.gateway.realtime_thread_ops import (
     _resolve_hunk_path,
     compact_thread,
 )
+from runtime.sensing.gateway.realtime_turn_input import (
+    _build_intent as _build_intent,
+)
+from runtime.sensing.gateway.realtime_turn_input import (
+    _should_default_planning_mode as _should_default_planning_mode,
+)
+from runtime.sensing.gateway.realtime_turn_input import (
+    _should_default_topology as _should_default_topology,
+)
 from runtime.sensing.gateway.realtime_turn_lifecycle import (
     _consume_confirmed_resume_intent,
+    _consume_paused_task_resume_intent,
     _record_pending_resume_intent,
     _start_turn,
 )
@@ -134,28 +164,20 @@ from runtime.sensing.gateway.realtime_turn_outcome import (
     _record_task_run_finished,
     _record_task_run_started,
 )
-from runtime.sensing.gateway._event_bridge_tool_items import (
-    _file_change_item_from_tool_evt,
-)
-from runtime.sensing.gateway._realtime_react_stream_helpers import (
-    _agentic_stream_event_to_react_event,
-    _should_use_native_tool_loop,
-)
-from runtime.sensing.gateway.realtime_thread_history import (
-    _conversation_messages_for_react,
-    _flatten_turns_to_messages,
-)
-from runtime.sensing.gateway.realtime_turn_input import (
-    _build_intent,
-    _should_default_planning_mode,
-    _should_default_topology,
+from runtime.sensing.gateway.realtime_workbench import (
+    _current_workbench_phase as _current_workbench_phase,
 )
 from runtime.sensing.gateway.realtime_workbench import (
-    _current_workbench_phase,
-    _phase_title,
-    _terminal_workbench_phases,
-    _workbench_snapshot,
-    _workbench_status,
+    _phase_title as _phase_title,
+)
+from runtime.sensing.gateway.realtime_workbench import (
+    _terminal_workbench_phases as _terminal_workbench_phases,
+)
+from runtime.sensing.gateway.realtime_workbench import (
+    _workbench_snapshot as _workbench_snapshot,
+)
+from runtime.sensing.gateway.realtime_workbench import (
+    _workbench_status as _workbench_status,
 )
 
 _logger = logging.getLogger(__name__)
@@ -191,6 +213,7 @@ class CerebrumRuntime:
         cowork_group_store: Any = None,
         project_store: Any = None,
         project_os_hooks: dict[str, Any] | None = None,
+        task_supervisor: Any = None,
     ) -> None:
         """Wire a CerebrumRuntime onto an existing octopus stack.
 
@@ -236,6 +259,7 @@ class CerebrumRuntime:
         self._thread_store = thread_store
         self._reflex_router = reflex_router
         self._trace_store = trace_store
+        self._task_supervisor = task_supervisor
         self._cowork_group_store = cowork_group_store
         self._project_store = project_store
         self._project_os_hooks = dict(project_os_hooks or {})
@@ -311,6 +335,16 @@ class CerebrumRuntime:
     def _unregister_active_turn(self, turn_id: str) -> None:
         _unregister_active_turn(self, turn_id)
 
+    async def drain_active_turns_for_shutdown(
+        self,
+        *,
+        timeout_seconds: float = 3.0,
+    ) -> dict[str, Any]:
+        return await _drain_active_turns_for_shutdown(
+            self,
+            timeout_seconds=timeout_seconds,
+        )
+
     def _active_turn_lease_path(self, turn_id: str) -> Path:
         return _active_turn_lease_path(self, turn_id)
 
@@ -375,8 +409,17 @@ class CerebrumRuntime:
     ) -> None:
         _record_task_run_started(self, turn, text=text, params=params)
 
-    def _record_task_run_finished(self, turn: Turn) -> None:
-        _record_task_run_finished(self, turn)
+    def _record_task_run_finished(
+        self,
+        turn: Turn,
+        *,
+        recover_stale_lease: bool = False,
+    ) -> None:
+        _record_task_run_finished(
+            self,
+            turn,
+            recover_stale_lease=recover_stale_lease,
+        )
 
     def _record_react_trace_event(self, turn: Turn, evt: dict[str, Any]) -> None:
         _record_react_trace_event(self, turn, evt)
@@ -531,6 +574,13 @@ class CerebrumRuntime:
     ) -> dict[str, Any] | None:
         return await _consume_confirmed_resume_intent(self, thread_id, text)
 
+    async def _consume_paused_task_resume_intent(
+        self,
+        thread_id: str,
+        text: str,
+    ) -> dict[str, Any] | None:
+        return await _consume_paused_task_resume_intent(self, thread_id, text)
+
     async def handle_request(
         self,
         method: str,
@@ -568,12 +618,16 @@ class CerebrumRuntime:
         params: TurnParams,
         *,
         conversation_messages: list[dict[str, object]] | None = None,
+        has_resumable_task: bool = False,
+        thread_id: str | None = None,
     ) -> bool:
         return _should_use_reflection_fast_path(
             self,
             text,
             params,
             conversation_messages=conversation_messages,
+            has_resumable_task=has_resumable_task,
+            thread_id=thread_id,
         )
 
     async def _drive_reflection_fast_path(

@@ -707,10 +707,7 @@ def _next_stage_action(
             return f"Increase the recommended {next_stage} token budget before rerun."
         return f"Resolve the latest {next_stage} provider failure before rerun."
     if provider_state == "missing":
-        return (
-            "Configure the Kimi K3 custom model, then run the recommended "
-            f"{next_stage} payload."
-        )
+        return f"Configure the Kimi K3 custom model, then run the recommended {next_stage} payload."
     if provider_state == "unknown":
         return f"Check custom model configuration, then run the recommended {next_stage} payload."
     if can_run and isinstance(resume_plan, dict) and resume_plan.get("ready"):

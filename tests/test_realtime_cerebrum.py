@@ -177,8 +177,8 @@ def test_flatten_merges_post_final_trace_items_into_delivered_answer() -> None:
     assert len(messages) == 2
     ai = messages[1]
     assert ai["content"].startswith("# Report")
-    assert "collect initial evidence" in ai["additional_kwargs"]["reasoning_content"]
-    assert "todo-protocol guard" in ai["additional_kwargs"]["reasoning_content"]
+    assert "reasoning_content" not in ai["additional_kwargs"]
+    assert "public_reasoning_summary" not in ai["additional_kwargs"]
     assert [tool["name"] for tool in ai["tool_calls"]] == ["todo_write"]
 
 
@@ -993,7 +993,7 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert [phase["status"] for phase in final_snapshot["phases"]] == [
         "done",
         "done",
-        "done",
+        "pending",
     ]
 
     turn = out["response"].result["turn"]
@@ -2053,11 +2053,10 @@ def test_simple_question_uses_reflection_fast_path(tmp_path: Path) -> None:
     turn = out["response"].result["turn"]
     assert [it["type"] for it in turn["items"]] == [
         "userMessage",
-        "reasoning",
         "agentMessage",
     ]
-    assert turn["items"][1]["content"] == "quick reflection"
-    assert turn["items"][2]["text"] == "4"
+    assert "quick reflection" not in str(turn)
+    assert turn["items"][1]["text"] == "4"
 
 
 def test_chat_mode_tool_intent_bypasses_reflection_fast_path(tmp_path: Path) -> None:
@@ -3118,7 +3117,7 @@ def test_turn_effort_reaches_react_loop(gateway: Any) -> None:
     assert _LAST_SESSION["metadata"]["reasoning_effort"] == "xhigh"
 
 
-def test_thinking_delta_maps_to_reasoning(gateway: Any) -> None:
+def test_private_thinking_delta_is_not_exposed_as_reasoning(gateway: Any) -> None:
     client, _ = gateway
     _set_script(
         [
@@ -3137,14 +3136,12 @@ def test_thinking_delta_maps_to_reasoning(gateway: Any) -> None:
             },
         )
 
-    reasoning_deltas = [
-        n.params["delta"] for n in out["notifications"] if n.method == "item/reasoning/textDelta"
-    ]
-    assert "".join(reasoning_deltas) == "step 1\nstep 2"
+    reasoning_deltas = [n for n in out["notifications"] if n.method == "item/reasoning/textDelta"]
+    assert reasoning_deltas == []
 
     turn = out["response"].result["turn"]
     r_items = [it for it in turn["items"] if it["type"] == "reasoning"]
-    assert r_items[0]["content"] == "step 1\nstep 2"
+    assert r_items == []
 
 
 def test_tool_round_trip_with_approval(gateway: Any) -> None:
@@ -4053,7 +4050,7 @@ def test_turn_interrupt_kills_in_flight_subprocess(
 ) -> None:
     """End-to-end: client sends turn/interrupt while a tool is running
     a long subprocess → stream_run sees cancellation → proc killed →
-    tool_end carries status=cancelled → turn.status = interrupted."""
+    tool_end carries status=cancelled → turn.status = cancelled."""
     import sys
     import time
 
@@ -4162,7 +4159,7 @@ def test_turn_interrupt_kills_in_flight_subprocess(
     # propagate through the async watcher + stream_run kill path.
     assert elapsed < 3.0, f"interrupt took {elapsed:.1f}s, expected < 3s"
     assert tool_completed_naturally["flag"] is False
-    assert final.result["turn"]["status"] == "interrupted"
+    assert final.result["turn"]["status"] == "cancelled"
 
 
 def test_thread_resume_closes_stale_in_progress_turn(tmp_path: Path) -> None:

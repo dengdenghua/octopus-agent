@@ -67,10 +67,10 @@ class _PairingStore:
         bucket = self.pending.get(channel_id)
         if not bucket:
             return
-        cutoff = _t.time() - self._PENDING_TTL_SECONDS
+        cutoff = _t.time() - _PENDING_TTL_SECONDS
         bucket[:] = [e for e in bucket if float(e.get("ts", 0.0)) >= cutoff]
-        if len(bucket) > self._PENDING_MAX_PER_CHANNEL:
-            del bucket[: len(bucket) - self._PENDING_MAX_PER_CHANNEL]
+        if len(bucket) > _PENDING_MAX_PER_CHANNEL:
+            del bucket[: len(bucket) - _PENDING_MAX_PER_CHANNEL]
         if not bucket:
             self.pending.pop(channel_id, None)
 

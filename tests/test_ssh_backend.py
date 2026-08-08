@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from runtime.sensing.server._ssh_security import paramiko_disabled_algorithms
 from runtime.sensing.server.ssh import (
     SshBackend,
     SshSandbox,
@@ -38,6 +39,12 @@ class TestShQuote:
         assert _sh_quote("$VAR") == "'$VAR'"
         assert _sh_quote("`cmd`") == "'`cmd`'"
         assert _sh_quote("a;b") == "'a;b'"
+
+
+def test_paramiko_policy_disables_rsa_sha1() -> None:
+    policy = paramiko_disabled_algorithms()
+    assert policy["keys"] == ["ssh-rsa"]
+    assert policy["pubkeys"] == ["ssh-rsa"]
 
 
 # ═══════════════════════════════════════════════════════════

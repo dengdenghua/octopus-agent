@@ -110,13 +110,13 @@ def _action_batch_fingerprint(actions: list[str]) -> str:
 # where the handler swallows unknown arguments and returns a valid-but-
 # empty result.
 _NOOP_OBSERVATION_RE = re.compile(
-    r'"count"\s*:\s*0'           # {"count": 0, ...}
-    r'|\\?"count\\?"\s*:\s*0'    # escaped form in a serialized string
+    r'"count"\s*:\s*0'  # {"count": 0, ...}
+    r'|\\?"count\\?"\s*:\s*0'  # escaped form in a serialized string
     r'|\btodos\\?"\s*:\s*\[\s*\]'  # "todos": []
     r'|\bresults\\?"\s*:\s*\[\s*\]'  # "results": []
-    r'|No files found'
-    r'|无匹配'
-    r'|未找到',
+    r"|No files found"
+    r"|无匹配"
+    r"|未找到",
     re.IGNORECASE,
 )
 

@@ -7,6 +7,7 @@ HTTP contract thin and delegates all normalization/persistence to
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 try:
@@ -36,14 +37,12 @@ def create_memory_router(
 
     from runtime.memory import user_store
     from runtime.memory.assets import asset_trace, can_read_asset, fact_to_asset
+    from runtime.safety.auth.scope import scope_from_principal
 
     def _auth_dep(request: Request) -> None:
-        # Local memory is effectively an operator control panel. Keep
-        # dev mode open, but when auth is enabled require a valid actor
-        # before exposing or mutating the persisted user memory state.
-        from runtime.adapters.web_auth import _resolve_actor
+        from runtime.safety.auth.principal import resolve_principal
 
-        actor = _resolve_actor(
+        principal = resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -51,24 +50,34 @@ def create_memory_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
-        request.state.memory_actor = actor or "local-user"
+        request.state.memory_scope = scope_from_principal(principal)
+        request.state.memory_actor = principal.actor_id if principal is not None else "local-user"
+
+    def _scope(request: Request) -> Any:
+        return getattr(request.state, "memory_scope", None)
+
+    def _roles(request: Request, requested: str) -> list[str]:
+        principal = getattr(request.state, "principal", None)
+        if require_auth and principal is not None:
+            return sorted(principal.roles)
+        return [part.strip() for part in requested.split(",") if part.strip()]
 
     router = APIRouter(tags=["memory"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/memory")
-    def api_memory_get() -> dict[str, Any]:
-        return user_store.read_memory()
+    def api_memory_get(request: Request) -> dict[str, Any]:
+        return user_store.read_memory(_scope(request))
 
     @router.get("/api/memory/search")
     def api_memory_search(
-        q: str = "", limit: int = Query(20, ge=1, le=100)
+        request: Request, q: str = "", limit: int = Query(20, ge=1, le=100)
     ) -> list[dict[str, Any]]:
         query = " ".join(q.split()).casefold()
         if not query:
             return []
         terms = [term for term in query.split() if term]
         results: list[dict[str, Any]] = []
-        for fact in user_store.read_memory().get("facts", []):
+        for fact in user_store.read_memory(_scope(request)).get("facts", []):
             if not isinstance(fact, dict):
                 continue
             content = str(fact.get("content") or "").casefold()
@@ -96,9 +105,9 @@ def create_memory_router(
     ) -> dict[str, Any]:
         """List legacy and new memories through one governed asset contract."""
         query = " ".join(q.split()).casefold()
-        role_list = [part.strip() for part in roles.split(",") if part.strip()]
+        role_list = _roles(request, roles)
         assets: list[dict[str, Any]] = []
-        for fact in user_store.read_memory().get("facts", []):
+        for fact in user_store.read_memory(_scope(request)).get("facts", []):
             if not isinstance(fact, dict):
                 continue
             asset = fact_to_asset(fact)
@@ -119,12 +128,17 @@ def create_memory_router(
             if visibility and asset.visibility != visibility:
                 continue
             haystack = f"{asset.title} {asset.content} {' '.join(asset.tags)}".casefold()
-            if query and query not in haystack and not all(
-                term in haystack for term in query.split()
+            if (
+                query
+                and query not in haystack
+                and not all(term in haystack for term in query.split())
             ):
                 continue
             assets.append(asset.to_dict())
-        assets.sort(key=lambda item: item.get("updated_at") or item.get("created_at"), reverse=True)
+        assets.sort(
+            key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""),
+            reverse=True,
+        )
         return {"items": assets[:limit], "count": min(len(assets), limit)}
 
     @router.get("/api/memory/assets/{asset_id}/trace")
@@ -135,8 +149,8 @@ def create_memory_router(
         agent_id: str = "",
         roles: str = "",
     ) -> dict[str, Any]:
-        role_list = [part.strip() for part in roles.split(",") if part.strip()]
-        for fact in user_store.read_memory().get("facts", []):
+        role_list = _roles(request, roles)
+        for fact in user_store.read_memory(_scope(request)).get("facts", []):
             if not isinstance(fact, dict) or str(fact.get("id")) != asset_id:
                 continue
             asset = fact_to_asset(fact)
@@ -152,12 +166,12 @@ def create_memory_router(
         raise HTTPException(404, "memory asset not found")
 
     @router.post("/api/memory/reload")
-    def api_memory_reload() -> dict[str, Any]:
-        return user_store.read_memory()
+    def api_memory_reload(request: Request) -> dict[str, Any]:
+        return user_store.read_memory(_scope(request))
 
     @router.delete("/api/memory")
-    def api_memory_clear() -> dict[str, Any]:
-        return user_store.write_memory(user_store.empty_memory())
+    def api_memory_clear(request: Request) -> dict[str, Any]:
+        return user_store.write_memory(user_store.empty_memory(), scope=_scope(request))
 
     @router.post("/api/memory/facts")
     async def api_memory_add_fact(request: Request) -> dict[str, Any]:
@@ -171,7 +185,8 @@ def create_memory_router(
             confidence = float(body.get("confidence", 0.8))
         except Exception:
             confidence = 0.8
-        user_store.add_fact(
+        await asyncio.to_thread(
+            user_store.add_fact,
             content,
             category=str(body.get("category") or "context"),
             confidence=confidence,
@@ -188,15 +203,16 @@ def create_memory_router(
             provenance=body.get("provenance"),
             title=str(body.get("title") or "") or None,
             tags=body.get("tags"),
+            tenant_scope=_scope(request),
         )
-        return user_store.read_memory()
+        return await asyncio.to_thread(user_store.read_memory, _scope(request))
 
     @router.patch("/api/memory/facts/{fact_id}")
     async def api_memory_update_fact(fact_id: str, request: Request) -> dict[str, Any]:
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(400, "invalid memory fact")
-        memory = user_store.read_memory()
+        memory = await asyncio.to_thread(user_store.read_memory, _scope(request))
         found = False
         for fact in memory.get("facts", []):
             if str(fact.get("id")) != fact_id:
@@ -240,11 +256,11 @@ def create_memory_router(
             break
         if not found:
             raise HTTPException(404, "memory fact not found")
-        return user_store.write_memory(memory)
+        return await asyncio.to_thread(user_store.write_memory, memory, scope=_scope(request))
 
     @router.delete("/api/memory/facts/{fact_id}")
     def api_memory_delete_fact(fact_id: str, request: Request) -> dict[str, Any]:
-        memory = user_store.read_memory()
+        memory = user_store.read_memory(_scope(request))
         facts = list(memory.get("facts", []))
         actor = str(getattr(request.state, "memory_actor", "local-user"))
         for fact in facts:
@@ -257,29 +273,29 @@ def create_memory_router(
         if len(next_facts) == len(facts):
             raise HTTPException(404, "memory fact not found")
         memory["facts"] = next_facts
-        return user_store.write_memory(memory)
+        return user_store.write_memory(memory, scope=_scope(request))
 
     @router.get("/api/memory/config")
-    def api_memory_config() -> dict[str, Any]:
-        return user_store.read_config()
+    def api_memory_config(request: Request) -> dict[str, Any]:
+        return user_store.read_config(_scope(request))
 
     @router.put("/api/memory/config")
     async def api_memory_update_config(request: Request) -> dict[str, Any]:
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(400, "invalid memory config")
-        return user_store.write_config(body)
+        return await asyncio.to_thread(user_store.write_config, body, scope=_scope(request))
 
     @router.get("/api/memory/export")
-    def api_memory_export() -> dict[str, Any]:
-        return user_store.read_memory()
+    def api_memory_export(request: Request) -> dict[str, Any]:
+        return user_store.read_memory(_scope(request))
 
     @router.post("/api/memory/import")
     async def api_memory_import(request: Request) -> dict[str, Any]:
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(400, "invalid memory payload")
-        return user_store.write_memory(body)
+        return await asyncio.to_thread(user_store.write_memory, body, scope=_scope(request))
 
     return router
 

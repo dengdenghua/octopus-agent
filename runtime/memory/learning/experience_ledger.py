@@ -3,12 +3,65 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from runtime.memory.hemolymph import embedding_backend
+from runtime.memory.hemolymph.repo_context import _rrf  # reciprocal-rank fusion (ADR-009)
 from runtime.platform.io import atomic_write_json, read_json_with_backup
+from runtime.safety.auth.scope import TenantScope, row_visible
+
+from ._experience_ledger_formatting import (
+    avg as _avg,
+)
+from ._experience_ledger_formatting import (
+    clean_text as _clean_text,
+)
+from ._experience_ledger_formatting import (
+    clean_unique_list as _clean_unique_list,
+)
+from ._experience_ledger_formatting import (
+    higher_priority as _higher_priority,
+)
+from ._experience_ledger_formatting import (
+    iso as _iso,
+)
+from ._experience_ledger_formatting import (
+    merge_unique as _merge_unique,
+)
+from ._experience_ledger_formatting import (
+    next_actions as _next_actions,
+)
+from ._experience_ledger_formatting import (
+    priority as _priority,
+)
+from ._experience_ledger_formatting import (
+    quality_next_actions as _quality_next_actions,
+)
+from ._experience_ledger_formatting import (
+    record_recall_sort_key as _record_recall_sort_key,
+)
+from ._experience_ledger_formatting import (
+    record_sort_key as _record_sort_key,
+)
+from ._experience_ledger_formatting import (
+    source_from_review as _source_from_review,
+)
+from ._experience_ledger_formatting import (
+    tags_for as _tags_for,
+)
+from ._experience_ledger_formatting import (
+    week_start as _week_start,
+)
+from ._experience_ledger_formatting import (
+    weekly_record_sort_key as _weekly_record_sort_key,
+)
+from ._experience_ledger_formatting import (
+    within_week as _within_week,
+)
 
 _SCHEMA = "octopus.experience_ledger.v1"
 _SUMMARY_SCHEMA = "octopus.experience_weekly_summary.v1"
@@ -18,6 +71,19 @@ _CONTRADICTION_SCHEMA = "octopus.experience_contradiction.v1"
 _RECALL_SCHEMA = "octopus.experience_recall.v1"
 _VALID_STATUSES = {"active", "archived", "promoted"}
 _PRIORITY_RANK = {"P0": 0, "P1": 1, "P2": 2}
+
+# Semantic recall fusion. When an embedding backend is available
+# (``runtime.memory.hemolymph.embedding_backend``), each candidate is also scored
+# by cosine similarity to the query; the quality-weighted lexical lane and the
+# semantic lane are then fused by reciprocal-rank fusion (RRF, ADR-009) — the
+# same primitive ``hemolymph.repo_context`` uses for wiki retrieval. RRF combines
+# *ranks*, not magnitudes, so the two lanes fuse without cross-lane scaling, and
+# a single lane degrades to its own order, so recall with no backend behaves
+# exactly like the lexical-only version.
+_EMBED_TRUNCATE = 512
+# A lexically-disjoint record only enters the result if its cosine clears this
+# floor, so near-zero semantic noise never crowds out real lexical hits.
+_SEMANTIC_FLOOR = 0.25
 
 
 class ExperienceLedger:
@@ -31,6 +97,7 @@ class ExperienceLedger:
         review: dict[str, Any],
         *,
         now: datetime | None = None,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
         payload = self._read()
         records = list(payload.get("records") or [])
@@ -40,8 +107,8 @@ class ExperienceLedger:
         updated = 0
         touched: list[dict[str, Any]] = []
 
-        for candidate in _records_from_review(review, now_text):
-            existing = _find_record(records, candidate["id"])
+        for candidate in _records_from_review(review, now_text, scope=scope):
+            existing = _find_record(records, candidate["id"], scope=scope)
             if existing is None:
                 records.append(candidate)
                 touched.append(candidate)
@@ -51,7 +118,7 @@ class ExperienceLedger:
             touched.append(existing)
             updated += 1
 
-        _apply_contradictions(records, touched, now_text)
+        _apply_contradictions(records, touched, now_text, scope=scope)
         payload["records"] = sorted(records, key=_record_sort_key)
         payload["lastUpdated"] = now_text
         self._write(payload)
@@ -76,8 +143,13 @@ class ExperienceLedger:
         now: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
-        rows = [_with_memory_quality(row, now=now) for row in self._read().get("records") or []]
+        rows = [
+            _with_memory_quality(row, now=now)
+            for row in self._read().get("records") or []
+            if row_visible(row, scope)
+        ]
         if status:
             rows = [row for row in rows if str(row.get("status") or "") == status]
         if bucket:
@@ -115,12 +187,15 @@ class ExperienceLedger:
         task_id: str,
         *,
         limit: int = 100,
+        scope: TenantScope | None = None,
     ) -> list[dict[str, Any]]:
         wanted = _clean_text(task_id, limit=120)
         if not wanted:
             return []
         rows: list[dict[str, Any]] = []
         for row in self._read().get("records") or []:
+            if not row_visible(row, scope):
+                continue
             if wanted not in (row.get("source_task_ids") or []):
                 continue
             enriched = _with_memory_quality(row)
@@ -140,49 +215,111 @@ class ExperienceLedger:
         bucket: str | None = None,
         limit: int = 10,
         now: datetime | None = None,
+        scope: TenantScope | None = None,
+        semantic: bool = True,
     ) -> dict[str, Any]:
         """Retrieve replay-cited experience memories for a new task/query.
 
-        This is deliberately deterministic and local: token overlap gives a
-        transparent base score, while memory quality, priority, and replay
-        citation coverage make promoted, replay-backed memories rank higher.
+        Deterministic and local by default: token overlap gives a transparent
+        base score, while memory quality, priority, and replay citation coverage
+        make promoted, replay-backed memories rank higher. When an embedding
+        backend is available (``runtime.memory.hemolymph.embedding_backend``),
+        each candidate is also scored by cosine similarity to the query and the
+        two signals are fused by reciprocal-rank (RRF) — so semantically-related
+        but lexically-disjoint memories can surface. The semantic lane degrades
+        gracefully: if no backend is reachable, recall behaves exactly as the
+        lexical-only version.
         """
         query_text = _clean_text(query, limit=800)
         query_terms = _token_set(query_text)
         threshold = max(0.0, min(1.0, float(min_reliability or 0.0)))
-        rows: list[dict[str, Any]] = []
+        # 1. Collect scope/quality-filtered candidates (cheap; no embedding yet).
+        candidates: list[dict[str, Any]] = []
         for row in self._read().get("records") or []:
+            if not row_visible(row, scope):
+                continue
             if bucket and str(row.get("memory_bucket") or "") != bucket:
                 continue
             enriched = _with_memory_quality(row, now=now)
             quality = enriched.get("memory_quality") or {}
             if str(quality.get("contradiction_status") or "") == "contradicted":
                 continue
-            reliability = float(quality.get("reliability") or 0.0)
-            if reliability < threshold:
+            if float(quality.get("reliability") or 0.0) < threshold:
                 continue
-            matched_terms = sorted(
-                query_terms & _token_set(_record_search_text(enriched)),
-            )[:12]
-            if query_terms and not matched_terms:
-                continue
-            score = _recall_score(enriched, query_terms=query_terms)
-            enriched["recall"] = {
-                "schema": "octopus.experience_recall_score.v1",
-                "score": score,
-                "matched_terms": matched_terms,
-                "citation_coverage": _citation_coverage(enriched),
-            }
-            rows.append(enriched)
+            candidates.append(enriched)
 
-        rows = sorted(
-            rows,
-            key=lambda row: (
-                -float(row.get("recall", {}).get("score") or 0.0),
-                _PRIORITY_RANK.get(str(row.get("priority") or "P2"), 2),
-                str(row.get("last_seen_at") or ""),
-            ),
-        )[: max(1, int(limit))]
+        # 2. Batch semantic scoring (one embed call for query + all candidates).
+        semantic_by_id = self._semantic_scores(query_text, candidates) if semantic else {}
+
+        # 3. Build one ranked lane per signal, then fuse by reciprocal rank
+        #    (RRF). RRF ranks, not magnitudes, so the cosine lane and the
+        #    quality-weighted lexical lane combine without cross-lane scaling.
+        rows: list[dict[str, Any]] = []
+        for row in candidates:
+            semantic_score = semantic_by_id.get(row["id"])
+            matched_terms = sorted(
+                query_terms & _token_set(_record_search_text(row)),
+            )[:12]
+            has_lexical = bool(matched_terms)
+            if semantic_score is not None:
+                eligible = has_lexical or semantic_score >= _SEMANTIC_FLOOR
+            else:
+                eligible = has_lexical
+            if query_terms and not eligible:
+                continue
+            row["recall"] = {
+                "schema": "octopus.experience_recall_score.v1",
+                # ``score`` is an API-facing 0..1 relevance/confidence value.
+                # RRF is deliberately kept separate below because its small
+                # reciprocal-rank values are only meaningful for ordering.
+                "score": _recall_score(
+                    row,
+                    query_terms=query_terms,
+                    semantic_score=semantic_score,
+                ),
+                "matched_terms": matched_terms,
+                "semantic_score": round(semantic_score, 3) if semantic_score is not None else None,
+                "citation_coverage": _citation_coverage(row),
+            }
+            rows.append(row)
+
+        if rows:
+            # Lexical lane ranks eligible records by the quality-weighted lexical
+            # score; the semantic lane ranks those carrying an embedding. A single
+            # lane (no backend) fuses to its own order -> pure lexical recall.
+            lexical_ranking = [
+                row["id"]
+                for row in sorted(
+                    rows,
+                    key=lambda r: (
+                        -_lexical_score(r, query_terms=query_terms),
+                        _PRIORITY_RANK.get(str(r.get("priority") or "P2"), 2),
+                        str(r.get("last_seen_at") or ""),
+                    ),
+                )
+            ]
+            semantic_ranking = [
+                row["id"]
+                for row in sorted(
+                    [r for r in rows if semantic_by_id.get(r["id"]) is not None],
+                    key=lambda r: -float(semantic_by_id.get(r["id"]) or 0.0),
+                )
+            ]
+            rankings = [lexical_ranking]
+            if semantic_ranking:
+                rankings.append(semantic_ranking)
+            fused = _rrf(rankings)
+            for row in rows:
+                row["recall"]["rank_score"] = round(float(fused.get(row["id"], 0.0)), 4)
+            rows = sorted(
+                rows,
+                key=lambda row: (
+                    -float(row.get("recall", {}).get("rank_score") or 0.0),
+                    _PRIORITY_RANK.get(str(row.get("priority") or "P2"), 2),
+                    str(row.get("last_seen_at") or ""),
+                ),
+            )
+        rows = rows[: max(1, int(limit))]
         cited = [
             row
             for row in rows
@@ -191,22 +328,49 @@ class ExperienceLedger:
         return {
             "schema": _RECALL_SCHEMA,
             "query": query_text,
+            "semantic_enabled": bool(semantic_by_id),
             "total": len(rows),
             "records": rows,
             "citation_coverage": round(len(cited) / len(rows), 3) if rows else 0.0,
             "next_actions": _recall_next_actions(rows),
         }
 
+    def _semantic_scores(
+        self, query_text: str, candidates: list[dict[str, Any]]
+    ) -> dict[str, float]:
+        """Return ``{record_id: cosine_similarity_to_query}`` for candidates.
+
+        Returns ``{}`` (no semantic signal) when the embedding backend is
+        unavailable or the embed call fails — callers must treat this as
+        "fall back to lexical scoring".
+        """
+        if not candidates or not embedding_backend.available():
+            return {}
+        texts = [_truncate_for_embed(query_text)] + [
+            _truncate_for_embed(_record_search_text(row)) for row in candidates
+        ]
+        vectors = embedding_backend.embed_texts(texts)
+        if not vectors or len(vectors) != len(texts):
+            return {}
+        query_vec = vectors[0]
+        out: dict[str, float] = {}
+        for row, vec in zip(candidates, vectors[1:], strict=True):
+            out[row["id"]] = _cosine(query_vec, vec)
+        return out
+
     def weekly_summary(
         self,
         *,
         week_start: str | date | None = None,
         now: datetime | None = None,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
         start = _week_start(week_start, now=now)
         end = start + timedelta(days=7)
         rows: list[dict[str, Any]] = []
         for row in self._read().get("records") or []:
+            if not row_visible(row, scope):
+                continue
             if not _within_week(row.get("last_seen_at"), start, end):
                 continue
             enriched = _with_memory_quality(row, now=now)
@@ -237,10 +401,13 @@ class ExperienceLedger:
         *,
         now: datetime | None = None,
         limit: int = 10000,
+        scope: TenantScope | None = None,
     ) -> dict[str, Any]:
-        rows = [_with_memory_quality(row, now=now) for row in self._read().get("records") or []][
-            : max(1, int(limit))
-        ]
+        rows = [
+            _with_memory_quality(row, now=now)
+            for row in self._read().get("records") or []
+            if row_visible(row, scope)
+        ][: max(1, int(limit))]
         total = len(rows)
         contradicted = [
             row for row in rows if row["memory_quality"]["contradiction_status"] == "contradicted"
@@ -337,6 +504,8 @@ def _normalize_payload(raw: dict[str, Any]) -> dict[str, Any]:
             ),
             "created_at": created_at,
             "last_seen_at": last_seen_at,
+            "tenant_id": _clean_text(item.get("tenant_id"), limit=160),
+            "owner_actor_id": _clean_text(item.get("owner_actor_id"), limit=160),
             "occurrences": max(1, int(item.get("occurrences") or 1)),
             "source": _clean_text(item.get("source"), limit=80) or "task_run_review",
             "source_task_ids": source_task_ids,
@@ -364,7 +533,12 @@ def _normalize_payload(raw: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def _records_from_review(review: dict[str, Any], now_text: str) -> list[dict[str, Any]]:
+def _records_from_review(
+    review: dict[str, Any],
+    now_text: str,
+    *,
+    scope: TenantScope | None = None,
+) -> list[dict[str, Any]]:
     source_task_id = _clean_text(review.get("task_id"), limit=120)
     thread_id = _clean_text(review.get("thread_id"), limit=120)
     turn_id = _clean_text(review.get("turn_id"), limit=120)
@@ -393,6 +567,7 @@ def _records_from_review(review: dict[str, Any], now_text: str) -> list[dict[str
                 title=title,
                 text=text,
                 metadata={**evidence, "candidate": item},
+                scope=scope,
             )
         )
     for item in review.get("backlog_candidates") or []:
@@ -423,6 +598,7 @@ def _records_from_review(review: dict[str, Any], now_text: str) -> list[dict[str
                     ),
                     "validation_metric": _clean_text(item.get("validation_metric"), limit=600),
                 },
+                scope=scope,
             )
         )
     return records
@@ -432,8 +608,10 @@ def _apply_contradictions(
     records: list[dict[str, Any]],
     touched: list[dict[str, Any]],
     now_text: str,
+    *,
+    scope: TenantScope | None = None,
 ) -> None:
-    by_id = {str(row.get("id") or ""): row for row in records}
+    by_id = {str(row.get("id") or ""): row for row in records if row_visible(row, scope)}
     for record in touched:
         metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
         candidate = metadata.get("candidate") if isinstance(metadata.get("candidate"), dict) else {}
@@ -611,11 +789,14 @@ def _new_record(
     title: str,
     text: str,
     metadata: dict[str, Any],
+    scope: TenantScope | None = None,
 ) -> dict[str, Any]:
     return {
         "id": _record_id(kind=kind, bucket=memory_bucket, title=title, text=text),
         "created_at": now_text,
         "last_seen_at": now_text,
+        "tenant_id": scope.tenant_id if scope is not None else "",
+        "owner_actor_id": scope.actor_id if scope is not None else "",
         "occurrences": 1,
         "source": "task_run_review",
         "source_task_ids": [source_task_id] if source_task_id else [],
@@ -648,9 +829,14 @@ def _merge_existing_record(
     existing["metadata"] = metadata
 
 
-def _find_record(records: list[dict[str, Any]], record_id: str) -> dict[str, Any] | None:
+def _find_record(
+    records: list[dict[str, Any]],
+    record_id: str,
+    *,
+    scope: TenantScope | None = None,
+) -> dict[str, Any] | None:
     for record in records:
-        if str(record.get("id") or "") == record_id:
+        if str(record.get("id") or "") == record_id and row_visible(record, scope):
             return record
     return None
 
@@ -718,7 +904,13 @@ def _citation_coverage(row: dict[str, Any]) -> float:
     return 1.0 if has_case and has_fingerprint and replayable else 0.0
 
 
-def _recall_score(row: dict[str, Any], *, query_terms: set[str]) -> float:
+def _lexical_score(row: dict[str, Any], *, query_terms: set[str]) -> float:
+    """Quality-weighted lexical signal used as the lexical lane in RRF fusion.
+
+    Combines query/record token overlap with memory quality (reliability,
+    priority, replay-citation coverage) into a single 0..1 score. This lane is
+    *ranked*, not magnitude-blended, so it fuses with the cosine lane via RRF
+    without cross-lane scaling (ADR-009)."""
     record_terms = _token_set(_record_search_text(row))
     overlap = 0.0 if not query_terms else len(query_terms & record_terms) / max(1, len(query_terms))
     quality = row.get("memory_quality") if isinstance(row.get("memory_quality"), dict) else {}
@@ -728,8 +920,40 @@ def _recall_score(row: dict[str, Any], *, query_terms: set[str]) -> float:
         0.72,
     )
     citation = _citation_coverage(row)
-    score = (overlap * 0.48) + (reliability * 0.32) + (priority * 0.1) + (citation * 0.1)
+    return (overlap * 0.48) + (reliability * 0.32) + (priority * 0.1) + (citation * 0.1)
+
+
+def _recall_score(
+    row: dict[str, Any],
+    *,
+    query_terms: set[str],
+    semantic_score: float | None,
+) -> float:
+    """Return the stable, interpretable 0..1 recall relevance score.
+
+    Lexical recall retains its established quality-weighted score contract.
+    When semantic recall is available, a strong cosine match can raise that
+    confidence. Ranking across lanes remains the responsibility of RRF.
+    """
+    lexical_score = _lexical_score(row, query_terms=query_terms)
+    score = max(lexical_score, semantic_score or 0.0)
     return round(min(1.0, max(0.0, score)), 3)
+
+
+def _truncate_for_embed(text: str, limit: int = _EMBED_TRUNCATE) -> str:
+    return (text or "")[:limit]
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    """Cosine similarity in [0, 1]; 0 when either vector is zero-length."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return max(0.0, min(1.0, dot / (norm_a * norm_b)))
 
 
 def _recall_next_actions(rows: list[dict[str, Any]]) -> list[str]:
@@ -741,151 +965,6 @@ def _recall_next_actions(rows: list[dict[str, Any]]) -> list[str]:
     if any(float(row.get("memory_quality", {}).get("reliability") or 0.0) < 0.7 for row in rows):
         actions.append("Review low-reliability recalled memories before reuse.")
     return actions
-
-
-def _source_from_review(review: dict[str, Any]) -> dict[str, str]:
-    return {
-        "task_id": _clean_text(review.get("task_id"), limit=120),
-        "thread_id": _clean_text(review.get("thread_id"), limit=120),
-        "turn_id": _clean_text(review.get("turn_id"), limit=120),
-        "agent_id": _clean_text(review.get("agent_id"), limit=120),
-    }
-
-
-def _record_sort_key(row: dict[str, Any]) -> tuple[int, str, str]:
-    return (
-        _PRIORITY_RANK.get(str(row.get("priority") or "P2"), 2),
-        str(row.get("last_seen_at") or ""),
-        str(row.get("id") or ""),
-    )
-
-
-def _record_recall_sort_key(row: dict[str, Any]) -> tuple[int, float, str, str]:
-    quality = row.get("memory_quality") if isinstance(row.get("memory_quality"), dict) else {}
-    return (
-        _PRIORITY_RANK.get(str(row.get("priority") or "P2"), 2),
-        -float(quality.get("reliability") or 0.0),
-        str(row.get("last_seen_at") or ""),
-        str(row.get("id") or ""),
-    )
-
-
-def _weekly_record_sort_key(row: dict[str, Any]) -> tuple[int, int, str]:
-    return (
-        _PRIORITY_RANK.get(str(row.get("priority") or "P2"), 2),
-        -int(row.get("occurrences") or 1),
-        str(row.get("last_seen_at") or ""),
-    )
-
-
-def _next_actions(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
-    actions: list[dict[str, str]] = []
-    for row in rows[:8]:
-        title = str(row.get("title") or "")
-        priority = _priority(row.get("priority"))
-        bucket = str(row.get("memory_bucket") or "")
-        if bucket == "experiment_backlog":
-            action = f"Run or reject experiment: {title}"
-        elif priority == "P0":
-            action = f"Promote to failure-prevention rule: {title}"
-        else:
-            action = f"Review and classify learning: {title}"
-        actions.append(
-            {
-                "priority": priority,
-                "record_id": str(row.get("id") or ""),
-                "action": action,
-            }
-        )
-    return actions
-
-
-def _quality_next_actions(
-    *,
-    stale_count: int,
-    contradicted_count: int,
-    low_reliability_count: int,
-) -> list[str]:
-    actions: list[str] = []
-    if contradicted_count:
-        actions.append("Archive or explain contradicted memory records before recall.")
-    if stale_count:
-        actions.append("Refresh stale memories with replay-backed evidence.")
-    if low_reliability_count:
-        actions.append(
-            "Require stronger citations before low-reliability memories influence code mode."
-        )
-    return actions
-
-
-def _avg(values: Any) -> float:
-    nums = [float(value) for value in values]
-    return round(sum(nums) / len(nums), 3) if nums else 0.0
-
-
-def _within_week(value: Any, start: date, end: date) -> bool:
-    try:
-        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    seen = dt.date()
-    return start <= seen < end
-
-
-def _week_start(value: str | date | None, *, now: datetime | None) -> date:
-    if isinstance(value, date):
-        return value
-    if isinstance(value, str) and value.strip():
-        try:
-            return date.fromisoformat(value.strip())
-        except ValueError:  # expected · malformed value falls through to the current week
-            pass
-    today = (now or datetime.now(UTC)).date()
-    return today - timedelta(days=today.weekday())
-
-
-def _iso(value: datetime | None = None) -> str:
-    current = value or datetime.now(UTC)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=UTC)
-    return current.astimezone(UTC).isoformat()
-
-
-def _clean_text(value: Any, *, limit: int) -> str:
-    text = " ".join(str(value or "").split()).strip()
-    return text[:limit].rstrip()
-
-
-def _clean_unique_list(value: Any, *, limit: int) -> list[str]:
-    return _merge_unique([], value)[:limit]
-
-
-def _merge_unique(left: Any, right: Any) -> list[str]:
-    out: list[str] = []
-    for collection in (left, right):
-        if not isinstance(collection, list):
-            continue
-        for item in collection:
-            text = _clean_text(item, limit=160)
-            if text and text not in out:
-                out.append(text)
-    return out
-
-
-def _priority(value: Any) -> str:
-    raw = str(value or "P2").upper()
-    return raw if raw in _PRIORITY_RANK else "P2"
-
-
-def _higher_priority(left: Any, right: Any) -> str:
-    left_p = _priority(left)
-    right_p = _priority(right)
-    return left_p if _PRIORITY_RANK[left_p] <= _PRIORITY_RANK[right_p] else right_p
-
-
-def _tags_for(kind: str, priority: str, bucket: str) -> list[str]:
-    tags = [kind, priority, bucket]
-    return [tag for tag in tags if tag]
 
 
 __all__ = ["ExperienceLedger"]

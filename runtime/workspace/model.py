@@ -33,6 +33,7 @@ class Workspace:
     mount_target: str
     mount_options: dict[str, Any] = field(default_factory=dict)
     owner_id: str = ""
+    tenant_id: str = ""
     created_at: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
@@ -50,6 +51,7 @@ class Workspace:
             mount_target=str(raw.get("mount_target") or ""),
             mount_options=dict(raw.get("mount_options") or {}),
             owner_id=str(raw.get("owner_id") or ""),
+            tenant_id=str(raw.get("tenant_id") or ""),
             created_at=float(raw.get("created_at") or 0.0),
         )
 

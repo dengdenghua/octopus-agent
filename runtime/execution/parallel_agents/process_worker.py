@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import pickle
 import queue
 from collections.abc import Callable
 from typing import Any
@@ -76,6 +77,21 @@ def spawn_process_runner(
     return process, cancel_event, messages
 
 
+def process_runner_compatible(
+    *,
+    runner: Callable[..., str],
+    context: dict[str, Any],
+) -> bool:
+    """Return whether the spawn boundary can carry this runner + context."""
+
+    try:
+        pickle.dumps(runner)
+        pickle.dumps(_picklable_context(context))
+    except Exception:  # noqa: BLE001 - compatibility probe must fail closed to thread mode
+        return False
+    return True
+
+
 def poll_process_message(messages: Any, *, timeout: float = 0.02) -> tuple[str, Any] | None:
     try:
         value = messages.get(timeout=timeout)
@@ -125,6 +141,7 @@ def _picklable_context(context: dict[str, Any]) -> dict[str, Any]:
 __all__ = [
     "close_process_messages",
     "poll_process_message",
+    "process_runner_compatible",
     "process_runner_entry",
     "spawn_process_runner",
     "terminate_process",

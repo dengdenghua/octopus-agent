@@ -92,11 +92,7 @@ async def _handle_request(
             runtime._bind_turn_timeline(turn_id, item)
         else:
             previous = max(
-                (
-                    candidate
-                    for candidate in turn.items
-                    if candidate.timeline_sequence is not None
-                ),
+                (candidate for candidate in turn.items if candidate.timeline_sequence is not None),
                 key=lambda candidate: candidate.timeline_sequence or 0,
                 default=None,
             )
@@ -220,9 +216,7 @@ async def _handle_request(
         raw_after = params.get("afterSequence")
         after = (
             raw_after
-            if isinstance(raw_after, int)
-            and not isinstance(raw_after, bool)
-            and raw_after >= 0
+            if isinstance(raw_after, int) and not isinstance(raw_after, bool) and raw_after >= 0
             else 0
         )
         # Stream-id mismatch or an unsafe incremental window (compaction
@@ -239,9 +233,7 @@ async def _handle_request(
         raw_limit = params.get("limit")
         limit = (
             raw_limit
-            if isinstance(raw_limit, int)
-            and not isinstance(raw_limit, bool)
-            and raw_limit > 0
+            if isinstance(raw_limit, int) and not isinstance(raw_limit, bool) and raw_limit > 0
             else None
         )
         coalesce = params.get("mode") == "coalesce"
@@ -286,7 +278,9 @@ async def _handle_request(
         }
     if method == "thread/compact":
         thread_id = runtime._require_thread_id(params.get("threadId"))
-        runtime._require_thread_owner(runtime._log_for(thread_id), getattr(emitter, "actor_id", None))
+        runtime._require_thread_owner(
+            runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
+        )
         return await runtime.compact_thread(thread_id, emitter)
     if method == "thread/list":
         from runtime.memory.threads.event_log import list_threads
@@ -309,7 +303,9 @@ async def _handle_request(
         from runtime.memory.threads.event_log import archive_thread
 
         thread_id = runtime._require_thread_id(params.get("threadId"))
-        runtime._require_thread_owner(runtime._log_for(thread_id), getattr(emitter, "actor_id", None))
+        runtime._require_thread_owner(
+            runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
+        )
         if not archive_thread(runtime._logs_root, thread_id):
             raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
         return {"threadId": thread_id, "archived": True}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -190,10 +191,38 @@ def safe_httpx_get(
     through ``check_url`` on each hop, so a hostile server can't 302
     us to ``http://10.x.y.z``.
     """
+    return safe_httpx_request(
+        "GET",
+        url,
+        timeout=timeout,
+        allow_private=allow_private,
+        follow_redirects=follow_redirects,
+    )
+
+
+def safe_httpx_request(
+    method: str,
+    url: str,
+    *,
+    json: object | None = None,
+    data: Mapping[str, object] | bytes | str | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: float = 30.0,
+    allow_private: bool = False,
+    follow_redirects: bool = False,
+):
+    """Make one rebinding-resistant HTTP request.
+
+    The hostname is resolved and validated once, then the transport connects
+    to that exact approved IP. Redirects are disabled by default; callers that
+    opt in get the same validation and IP pinning on every hop. This helper is
+    intentionally the common path for control-plane proxying and OAuth
+    discovery/token calls.
+    """
     try:
         import httpx
     except ImportError as exc:  # pragma: no cover - caller should check
-        raise RuntimeError("httpx is required for safe_httpx_get") from exc
+        raise RuntimeError("httpx is required for safe_httpx_request") from exc
 
     visited: set[str] = set()
     current_url = url
@@ -229,8 +258,25 @@ def safe_httpx_get(
                 return super().handle_request(request)
 
         transport = _PinnedResolver(host, resolved_ip)
+        request_headers = dict(headers or {})
+        request_headers.setdefault("Host", host)
         with httpx.Client(transport=transport, timeout=timeout, follow_redirects=False) as client:
-            resp = client.get(current_url, headers={"Host": host})
+            if isinstance(data, (bytes, str)):
+                resp = client.request(
+                    method.upper(),
+                    current_url,
+                    headers=request_headers,
+                    json=json,
+                    content=data,
+                )
+            else:
+                resp = client.request(
+                    method.upper(),
+                    current_url,
+                    headers=request_headers,
+                    json=json,
+                    data=data,
+                )
             if not follow_redirects:
                 return resp
             if resp.status_code not in (301, 302, 303, 307, 308):

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime.adapters.instrumentation import trace_stage
+from runtime.sensing.server._ssh_security import paramiko_disabled_algorithms
 
 from .local import BackendAudit, LocalBackend, Sandbox
 
@@ -268,6 +269,7 @@ class SshSandbox(Sandbox):
                 "timeout": m.connect_timeout,
                 "allow_agent": False,
                 "look_for_keys": False,
+                "disabled_algorithms": paramiko_disabled_algorithms(),
             }
             if m.user:
                 connect_kwargs["username"] = m.user

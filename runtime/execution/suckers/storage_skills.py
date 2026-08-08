@@ -6,12 +6,10 @@ OCR + local vectors) and serves source-grounded retrieval over a narrow local
 HTTP API (default ``http://127.0.0.1:8767``). Per the family architecture,
 octopus-agent must NOT own that file index — it CALLS Storage.
 
-The human-facing File Agent UI already talks to Storage directly
-(``frontend/src/core/storage/api.ts``). This adds the *agent-facing* half: a
-skill so the react / work-mode agent can ground a chat turn on the user's own
-documents via Storage's ``/v1/search`` — without octopus-agent ever building a
-document index of its own (that would duplicate Storage and break the family
-boundary).
+The human-facing File Agent UI reaches Storage through octopus-agent's
+same-origin ``/api/storage`` gateway; this module is the *agent-facing* half
+and calls the private service directly. Both paths share the same Storage
+index without octopus-agent ever building a document index of its own.
 
 Best-effort + self-gating: Storage not running / not yet configured → the skill
 returns a clear, actionable message and never crashes the turn. Zero new

@@ -82,6 +82,11 @@ def mount_reflex(
         reflex_router=_reflex_router,
         panel_html=_REFLEX_PANEL_HTML,
         editor_html=_REFLEX_EDITOR_HTML,
+        identity_store=ctx.identity_store,
+        require_auth=ctx.require_auth,
+        jwt_secret=ctx.jwt_secret,
+        jwt_issuer=ctx.jwt_issuer,
+        jwt_audience=ctx.jwt_audience,
     )
 
     ctx.reflex_router = _reflex_router

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 
 from runtime.core.nerves.bus import AbstractEventBus
 
@@ -87,7 +87,7 @@ class SensorManager:
             active = sum(1 for s in self._sensors.values() if s.status().running)
         evt = EnvironmentPing(
             sensor_id="__manager__",
-            detected_at=datetime.utcnow(),
+            detected_at=datetime.now(UTC),
             active_sensor_count=active,
         )
         self._dispatch(evt)

@@ -34,6 +34,10 @@ class Skill(BaseModel):
     affinity: list[str] = Field(default_factory=list)
     cost_profile: CostProfile = "low"
     trusted_source: str = Field(..., min_length=1)  # "builtin://x" / "skill://public/y" / "mcp://z"
+    # Runtime-installed capabilities may belong to one tenant.  ``None``
+    # keeps the built-in/local skill surface process-wide; a populated value
+    # is filtered by the ambient turn session before discovery or execution.
+    tenant_id: str | None = None
     handler: Callable[..., Any]
     tests: list[SkillTestCase] = Field(default_factory=list)
     # ADR-010 · the exclusive resource this skill must hold while running, e.g.
@@ -90,6 +94,48 @@ class SkillRegistry:
         self._state_file: Path | None = None
         self._lock = RLock()
 
+    @staticmethod
+    def _ambient_tenant_id() -> str | None:
+        """Read the server-resolved tenant carried by the active turn.
+
+        The registry is also used by local CLIs and migration tools, where
+        no session exists; those callers intentionally retain the unscoped
+        view.  HTTP-backed agent turns bind a session before planning and
+        execution, making tenant-owned skills invisible outside their tenant.
+        """
+        try:
+            from runtime.platform.process.session import current_session
+
+            session = current_session()
+            value = session.metadata.get("tenant_id") if session is not None else None
+            if not value:
+                # The OpenAI gateway binds journal context before planning;
+                # use it as the synchronous request-thread fallback while a
+                # worker thread is being handed its full Session.
+                from runtime.memory.journal.journal_context import current_tenant_id
+
+                value = current_tenant_id()
+            return str(value).strip() if value else None
+        except (ImportError, AttributeError, TypeError):
+            return None
+
+    @classmethod
+    def _visible_to_ambient_tenant(cls, skill: Skill) -> bool:
+        tenant_id = cls._ambient_tenant_id()
+        return tenant_id is None or skill.tenant_id in (None, tenant_id)
+
+    def _get_visible(self, name: str) -> Skill:
+        lookup_name = self._canonical_lookup(name)
+        try:
+            skill = self._by_name[lookup_name]
+        except KeyError as e:
+            raise SkillNotFound(f"no skill named {name!r}") from e
+        if not self._visible_to_ambient_tenant(skill):
+            # Deliberately use the same error as a missing skill.  This avoids
+            # confirming another tenant's capability names to the caller.
+            raise SkillNotFound(f"no skill named {name!r}")
+        return skill
+
     def register(
         self,
         skill: Skill,
@@ -132,15 +178,15 @@ class SkillRegistry:
 
     def get(self, name: str) -> Skill:
         with self._lock:
-            lookup_name = self._canonical_lookup(name)
-            try:
-                return self._by_name[lookup_name]
-            except KeyError as e:
-                raise SkillNotFound(f"no skill named {name!r}") from e
+            return self._get_visible(name)
 
     def has(self, name: str) -> bool:
         with self._lock:
-            return self._canonical_lookup(name) in self._by_name
+            try:
+                self._get_visible(name)
+            except SkillNotFound:
+                return False
+            return True
 
     @staticmethod
     def _canonical_lookup(name: str) -> str:
@@ -169,11 +215,19 @@ class SkillRegistry:
 
     def list_by_affinity(self, tag: str) -> list[Skill]:
         with self._lock:
-            return [s for s in self._by_name.values() if tag in s.affinity]
+            return [
+                s
+                for s in self._by_name.values()
+                if tag in s.affinity and self._visible_to_ambient_tenant(s)
+            ]
 
     def all_names(self) -> list[str]:
         with self._lock:
-            return list(self._by_name.keys())
+            return [
+                name
+                for name, skill in self._by_name.items()
+                if self._visible_to_ambient_tenant(skill)
+            ]
 
     def last_test_report(self, name: str) -> SkillTestReport | None:
         with self._lock:
@@ -212,6 +266,7 @@ class SkillRegistry:
 
     def is_enabled(self, name: str) -> bool:
         with self._lock:
+            self._get_visible(name)
             return self._enabled.get(name, True)
 
     def set_enabled(self, name: str, enabled: bool) -> None:
@@ -229,11 +284,19 @@ class SkillRegistry:
 
     def list_enabled(self) -> list[str]:
         with self._lock:
-            return [name for name in self._by_name if self.is_enabled(name)]
+            return [
+                name
+                for name, skill in self._by_name.items()
+                if self._visible_to_ambient_tenant(skill) and self.is_enabled(name)
+            ]
 
     def list_disabled(self) -> list[str]:
         with self._lock:
-            return [name for name in self._by_name if not self.is_enabled(name)]
+            return [
+                name
+                for name, skill in self._by_name.items()
+                if self._visible_to_ambient_tenant(skill) and not self.is_enabled(name)
+            ]
 
     # ─── Progressive Disclosure ────────────────────────────────
     # The planner sees a compact skill index (name + one-line
@@ -256,6 +319,8 @@ class SkillRegistry:
         out: list[dict[str, str]] = []
         with self._lock:
             for name, skill in self._by_name.items():
+                if not self._visible_to_ambient_tenant(skill):
+                    continue
                 if only_enabled and not self.is_enabled(name):
                     continue
                 out.append(

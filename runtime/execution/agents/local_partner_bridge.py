@@ -581,7 +581,14 @@ def build_partner_argv(
             exe_name == "code" and "/CodeBuddy.app/" in normalized_command
         ):
             return None
-        return [command, "-p", *(["--model", m] if m else []), "--output-format", "text", prompt_arg]
+        return [
+            command,
+            "-p",
+            *(["--model", m] if m else []),
+            "--output-format",
+            "text",
+            prompt_arg,
+        ]
     return None
 
 
@@ -596,21 +603,30 @@ def _default_runner(
     ``OCTOPUS_BLACKBOARD_DB`` / ``OCTOPUS_TURN_ID`` reach the CLI (letting a
     shell-capable agent read/write the shared blackboard via ``octopus bb``)
     without dropping PATH etc. Raises ``subprocess.TimeoutExpired`` on timeout."""
-    proc = subprocess.run(  # noqa: S603 — argv is a list, shell=False, no user shell string
-        argv,
-        cwd=cwd,
-        env=({**os.environ, **env} if env else None),
-        # Headless partners take the prompt as an argv element, never via stdin.
-        # Without this the child inherits our (non-tty pipe) stdin and CLIs like
-        # Claude Code stall ~3s waiting for piped data ("no stdin data received
-        # in 3s, proceeding without it") before falling back. /dev/null gives an
-        # immediate EOF so they start at once.
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
+    from runtime.platform.process.tree import run_capture
+
+    layered_env = {**os.environ, **env} if env else None
+    # Preserve the long-standing injectable ``subprocess.run`` seam used by
+    # embedders and tests.  Real execution goes through run_capture below;
+    # this branch is only active when that seam has explicitly been replaced.
+    if getattr(subprocess.run, "__module__", "subprocess") != "subprocess":
+        proc = subprocess.run(  # noqa: S603 — compatibility seam, shell=False
+            argv,
+            cwd=cwd,
+            env=layered_env,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    else:
+        proc = run_capture(  # noqa: S603 — argv is a list, shell=False, no user shell string
+            argv,
+            cwd=cwd,
+            env=layered_env,
+            timeout=timeout,
+        )
     return proc.returncode, proc.stdout or "", proc.stderr or ""
 
 

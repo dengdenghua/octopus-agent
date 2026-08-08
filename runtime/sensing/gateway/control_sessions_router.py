@@ -377,7 +377,7 @@ def create_control_sessions_router(
         async def _gen():
             last = after
             try:
-                if session_store.get_session(session_id) is None:
+                if await asyncio.to_thread(session_store.get_session, session_id) is None:
                     yield 'event: error\ndata: {"error":"control session not found"}\n\n'
                     return
             except ValueError as exc:
@@ -386,7 +386,9 @@ def create_control_sessions_router(
             for _ in range(120):
                 if await request.is_disconnected():
                     break
-                events = session_store.events_after(session_id, after=last, limit=100)
+                events = await asyncio.to_thread(
+                    session_store.events_after, session_id, after=last, limit=100
+                )
                 for event in events:
                     last = int(event["seq"])
                     yield f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"

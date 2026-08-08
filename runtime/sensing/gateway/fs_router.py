@@ -16,12 +16,11 @@ Endpoints
 Scope note
 ----------
 
-These endpoints **do not pass through the write-scope resolver**
-from ADR-002 · they accept any path the caller can dereference.
-That's intentional — they serve the UI's file-explorer surface,
-which operates on whatever directory the user opens, not on the
-agent's workspace. Agents writing files go through ``write_skills``
-which DOES participate in scope enforcement.
+In local single-user mode the file browser can keep its historical
+user-chosen-directory behaviour, bounded by ``OCTOPUS_FS_ALLOWED_ROOTS``.
+In authenticated/shared mode every local operation is bound to an owned
+thread workspace and remains inside the configured allowed roots. Remote
+workspaces use their own membership ACL.
 
 If that separation ever changes, add a ``scope`` parameter to
 ``create_fs_router`` and route through ``resolve_write_scope`` at
@@ -57,6 +56,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from runtime.safety.auth.principal import resolve_principal
 from runtime.sensing._fastapi_guard import require_fastapi
 
 from ._fs_router_diff import (
@@ -135,12 +135,10 @@ def create_fs_router(
       routed through ``MountBackend.read_file`` / ``write_file`` /
       ``list_dir`` instead of the local filesystem.
 
-      ACL (Task 7) is enforced on remote-workspace ops only — local-path
-      requests keep the existing fail-closed-to-allowed-roots behaviour
-      so the desktop file browser is unchanged. ``user_id`` is taken from
-      the ``user_id`` query param, then the ``X-User-Id`` header. Write
-      ops require ``owner`` or ``editor``; read ops accept any role;
-      no role → 403.
+      ACL (Task 7) is enforced on remote-workspace ops. In authenticated
+      shared mode local paths additionally require an owned thread scope.
+      ``user_id`` is only a compatibility input in local/dev mode or is
+      checked against the verified Principal; it never overrides identity.
 
       Lease checks (Task 6.3): on writes, if ``holder_id`` is supplied,
       an existing exclusive lease held by *another* holder returns 409
@@ -161,9 +159,7 @@ def create_fs_router(
         # no-op when require_auth is False (returns None without raising),
         # so unauthenticated local-dev use is unchanged; raises 401 when
         # auth is required and no valid actor is presented.
-        from .openai_gateway_router import _resolve_actor
-
-        _resolve_actor(
+        principal = resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -171,6 +167,8 @@ def create_fs_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        if principal is not None:
+            request.state.principal = principal
 
     router = APIRouter(tags=["fs"], dependencies=[Depends(_auth_dep)])
 

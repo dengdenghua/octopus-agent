@@ -119,6 +119,7 @@ def _phase_6d_dispatch_and_observe(
     _observation_is_noop = observation_is_noop
     # Reference-typed aliases — mutations propagate to the main loop.
     step = state.step
+    assert step is not None, "phase 6d requires a parsed ReAct step"
     steps = state.steps
     executed_beak_steps = state.executed_beak_steps
     messages = state.messages

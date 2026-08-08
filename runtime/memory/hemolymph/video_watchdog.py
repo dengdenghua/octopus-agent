@@ -14,14 +14,13 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from pathlib import Path
 from typing import Any
 
 _LOG = logging.getLogger("octopus.video_watchdog")
 
 # Directories that are known to be watched, keyed by normalized path.
-_watchers: dict[str, "VideoWatcher"] = {}
+_watchers: dict[tuple[str, str], VideoWatcher] = {}
 _lock = threading.Lock()
 
 
@@ -49,9 +48,7 @@ class VideoWatcher:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(
-            target=self._run, name="video-watchdog", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run, name="video-watchdog", daemon=True)
         self._thread.start()
         _LOG.info("video watchdog started for %s", self.directory)
 
@@ -97,13 +94,15 @@ def start_watching(
     max_files: int = 100,
 ) -> VideoWatcher:
     """Start a watcher for ``directory`` (idempotent per directory)."""
-    key = str(Path(directory).expanduser().resolve())
+    normalized_directory = str(Path(directory).expanduser().resolve())
+    normalized_db_path = str(Path(db_path).expanduser().resolve()) if db_path else ""
+    key = (normalized_directory, normalized_db_path)
     with _lock:
         existing = _watchers.get(key)
         if existing is not None:
             return existing
         watcher = VideoWatcher(
-            key,
+            normalized_directory,
             interval_sec=interval_sec,
             include_faces=include_faces,
             db_path=db_path,
@@ -114,11 +113,21 @@ def start_watching(
         return watcher
 
 
-def stop_watching(directory: str | Path) -> bool:
+def stop_watching(directory: str | Path, db_path: str | Path | None = None) -> bool:
     """Stop and remove the watcher for ``directory``. Returns True if stopped."""
-    key = str(Path(directory).expanduser().resolve())
+    return _stop_watching(directory, db_path=db_path)
+
+
+def _stop_watching(directory: str | Path, db_path: str | Path | None = None) -> bool:
+    normalized_directory = str(Path(directory).expanduser().resolve())
+    normalized_db_path = str(Path(db_path).expanduser().resolve()) if db_path else ""
+    key = (normalized_directory, normalized_db_path)
     with _lock:
         watcher = _watchers.pop(key, None)
+        if watcher is None and not normalized_db_path:
+            matching = [item for item in _watchers if item[0] == normalized_directory]
+            if len(matching) == 1:
+                watcher = _watchers.pop(matching[0])
     if watcher is None:
         return False
     watcher.stop()

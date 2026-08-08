@@ -35,6 +35,7 @@ def _run_chat(
     agent: Any = None,
     force_deep: bool = False,
     conversation_id: str | None = None,
+    tenant_id: str | None = None,
 ) -> dict[str, Any]:
     task_id = uuid4()
     variant_name: str | None = None
@@ -117,7 +118,10 @@ def _run_chat(
         Session(
             actor=actor,
             thread_id=conversation_id,
-            metadata={"enforce_executor_approval": True},
+            metadata={
+                "enforce_executor_approval": True,
+                "tenant_id": tenant_id,
+            },
         )
     ):
         traj = stack.runtime.run(

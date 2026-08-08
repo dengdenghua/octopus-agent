@@ -26,9 +26,11 @@ from runtime.sensing.model_router.models import (
     ToolCall,
 )
 from tests.test_react_loop import (
+    _build_stack_with_executor,
     _ChunkedCapturingRouter,
     _drain,
-    _build_stack_with_executor,
+)
+from tests.test_react_loop import (
     _intent as _react_intent,
 )
 from tests.test_tool_bridge_scope import _agent, _stack
@@ -141,9 +143,7 @@ def test_native_research_task_event_ordering(tmp_path) -> None:
             yield ModelStreamEvent(type="done", final=ModelResponse(text=synthesis))
 
     events = list(
-        stream_agentic_fallback(
-            _stack(Router()), _native_intent("分析项目", tmp_path), _agent()
-        )
+        stream_agentic_fallback(_stack(Router()), _native_intent("分析项目", tmp_path), _agent())
     )
     kinds = [event[0] for event in events]
     texts = [str(delta) for kind, delta, _ in events if kind == "text"]

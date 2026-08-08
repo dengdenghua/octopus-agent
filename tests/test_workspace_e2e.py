@@ -161,16 +161,12 @@ def test_register_workspace_and_mount(
     assert ws.owner_id == "alice"
 
     # The registry can build a backend for this workspace.
-    backend = registry.get_or_create(
-        ws.id, ws.mount_type, ws.mount_target, ws.mount_options
-    )
+    backend = registry.get_or_create(ws.id, ws.mount_type, ws.mount_target, ws.mount_options)
     assert isinstance(backend, LocalMountBackend)
     assert backend.root_path == mount_root.resolve()
 
     # The backend is cached per workspace (same instance on second call).
-    again = registry.get_or_create(
-        ws.id, ws.mount_type, ws.mount_target, ws.mount_options
-    )
+    again = registry.get_or_create(ws.id, ws.mount_type, ws.mount_target, ws.mount_options)
     assert again is backend
 
     # The mount is real — a file written through the backend lands on disk.
@@ -252,9 +248,7 @@ def test_file_lease_acquire_and_conflict(lease_store: LeaseStore) -> None:
 
 
 @pytest.mark.asyncio
-async def test_file_write_with_lease(
-    lease_store: LeaseStore, mount_root: Path
-) -> None:
+async def test_file_write_with_lease(lease_store: LeaseStore, mount_root: Path) -> None:
     """A holder with an active lease can write to the file via the backend."""
     backend = LocalMountBackend(mount_root)
     lease = lease_store.acquire("ws-1", "config.yaml", "alice", ttl_seconds=60)
@@ -468,9 +462,7 @@ async def test_full_collaboration_flow(tmp_path: Path) -> None:
         owner_id="alice",
         name="Collab Project",
     )
-    backend = registry.get_or_create(
-        ws_id, "local", str(mount_root), {}
-    )
+    backend = registry.get_or_create(ws_id, "local", str(mount_root), {})
     assert isinstance(backend, LocalMountBackend)
     # Verify the mount is reachable.
     assert await backend.test_connection() is True

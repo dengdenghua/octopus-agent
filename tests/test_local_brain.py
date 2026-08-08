@@ -96,15 +96,13 @@ def test_router_exposes_status_route() -> None:
     assert "/api/local-brain/storage/start" in paths
 
 
-def test_storage_start_returns_ephemeral_token_only_to_loopback(monkeypatch) -> None:
+def test_storage_start_returns_same_origin_proxy_without_storage_token(monkeypatch) -> None:
     from runtime.execution.suckers import storage_skills
     from runtime.sensing.gateway import storage_supervisor
     from runtime.sensing.gateway.local_brain_router import create_local_brain_router
 
     monkeypatch.setattr(storage_supervisor, "maybe_start_storage", lambda: "already_running")
     monkeypatch.setattr(storage_skills, "storage_alive", lambda **_kwargs: True)
-    monkeypatch.setattr(storage_skills, "_storage_token", lambda: "test-storage-token")
-    monkeypatch.setattr(storage_skills, "_base_url", lambda: "http://127.0.0.1:8767")
 
     app = FastAPI()
     app.include_router(create_local_brain_router())
@@ -115,6 +113,6 @@ def test_storage_start_returns_ephemeral_token_only_to_loopback(monkeypatch) -> 
     assert response.json() == {
         "ok": True,
         "status": "already_running",
-        "base_url": "http://127.0.0.1:8767",
-        "auth_token": "test-storage-token",
+        "base_url": "/api/storage",
+        "auth_token": None,
     }

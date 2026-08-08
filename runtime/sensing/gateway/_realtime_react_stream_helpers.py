@@ -152,12 +152,24 @@ def _should_use_native_tool_loop(
     intent: ParsedIntent,
     *,
     planning_mode: bool,
+    model: str | None = None,
 ) -> bool:
     """Whether this turn should use protocol-native tool calls first.
 
     ``planning_mode`` is a plan-first prompt nudge, not a plan-only execution
     tier.  Since 2026-05-31 it deliberately leaves tools enabled, so it must
     not downgrade capable models to the legacy text-parsed ReAct path.
+
+    The native loop is only valid when the router actually sends a ``tools``
+    block.  ``OpenAIModelRouter.capabilities`` is hard-coded to
+    ``supports_tool_use=True``, but the payload builder honours the
+    operator's ``supports_tool_use: false`` declaration in
+    ``custom_models.json`` and omits the tool definitions entirely.  When a
+    declared-incompatible model takes the native path anyway, the request
+    carries no tools and the model cannot emit ``tool_calls`` — it degrades
+    into blank/plain-text output and the loop spins.  So when the active
+    model is explicitly declared tool-averse, fall through to the text
+    ReAct loop (which parses ``Action:`` text and still gets work done).
     """
     flag = os.environ.get("OCTOPUS_NATIVE_TOOL_LOOP", "1").strip().lower()
     if flag in {"0", "false", "off", "no"}:
@@ -180,6 +192,17 @@ def _should_use_native_tool_loop(
     router = getattr(getattr(stack, "planner", None), "router", None)
     if executor is None or router is None or not hasattr(router, "call_stream"):
         return False
+
+    # A custom model explicitly declared as tool-averse never takes the
+    # native path — the request would carry no ``tools`` and the loop would
+    # spin on blank output instead of doing work.
+    if model:
+        from runtime.sensing.model_router.custom_model_flags import (
+            model_supports_tool_use,
+        )
+
+        if not model_supports_tool_use(model):
+            return False
 
     caps = getattr(router, "capabilities", None)
     supports = getattr(caps, "supports_tool_use", None)
@@ -234,6 +257,8 @@ def _should_use_reflection_fast_path(
     params: TurnParams,
     *,
     conversation_messages: list[dict[str, object]] | None = None,
+    has_resumable_task: bool = False,
+    thread_id: str | None = None,
 ) -> bool:
     """Route simple, non-tool turns through the reflective direct path."""
     router = getattr(getattr(runtime._stack, "planner", None), "router", None)
@@ -246,6 +271,19 @@ def _should_use_reflection_fast_path(
     capability_mode = str(
         context_payload.get("capability_mode") or metadata.get("capability_mode") or ""
     ).strip()
+    # A short message in a thread with a durable paused task is contextual by
+    # definition.  In particular, punctuation-only probes such as "?" must
+    # reach the agentic path with checkpoint context instead of producing an
+    # unrelated greeting from the direct-chat fast path.
+    if thread_id and not has_resumable_task:
+        with contextlib.suppress(Exception):
+            from runtime.core.cerebrum.pause_control import get_pause_controller
+
+            has_resumable_task = any(
+                request.thread_id == thread_id for request in get_pause_controller().list_paused()
+            )
+    if has_resumable_task:
+        return False
     # Capability-bearing turns must reach an agentic driver.  The direct
     # reflection path cannot inspect a workspace, invoke browser tools, edit
     # files, or produce verifiable side effects.  Previously ``mode=code``

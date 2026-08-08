@@ -268,8 +268,7 @@ def test_structured_evidence_update_precedes_generic_text_and_is_not_dispatched(
     )
 
     assert step.public_update == (
-        "后端 Item 采用 started 到 completed 的统一生命周期；"
-        "接着核对前端是否按 itemId 归并"
+        "后端 Item 采用 started 到 completed 的统一生命周期；接着核对前端是否按 itemId 归并"
     )
     assert step.action == 'read_file({"path": "frontend.ts"})'
 
@@ -298,9 +297,7 @@ def test_explicit_update_in_reasoning_channel_is_recovered_without_leaking_thoug
         iteration=3,
     )
 
-    assert step.public_update == (
-        "第二批确认适配层按 Item 身份保持引用稳定；接着核对滚动容器。"
-    )
+    assert step.public_update == ("第二批确认适配层按 Item 身份保持引用稳定；接着核对滚动容器。")
     assert "内部分析" not in step.public_update
 
 
@@ -601,8 +598,7 @@ def test_every_native_tool_round_requires_a_fresh_public_update() -> None:
     model_updates = [
         event
         for event in events
-        if event.get("type") == "commentary_delta"
-        and event.get("progress_source") == "model"
+        if event.get("type") == "commentary_delta" and event.get("progress_source") == "model"
     ]
     assert [event["delta"] for event in model_updates] == [
         "我先核对后端事件定义，确认时间线的源字段。",
@@ -645,8 +641,7 @@ def test_observed_read_sequence_requires_public_updates_without_ui_flags() -> No
         },
     )
     intent = _intent(
-        "只读按证据顺序先并行读取 backend.py 与 frontend.ts；"
-        "每批证据后自然告诉我确认了什么。"
+        "只读按证据顺序先并行读取 backend.py 与 frontend.ts；每批证据后自然告诉我确认了什么。"
     )
 
     with (
@@ -733,8 +728,7 @@ def test_native_provider_omission_gets_private_safe_public_repair() -> None:
     model_updates = [
         event["delta"]
         for event in events
-        if event.get("type") == "commentary_delta"
-        and event.get("progress_source") == "model"
+        if event.get("type") == "commentary_delta" and event.get("progress_source") == "model"
     ]
     assert "".join(model_updates) == orientation
 

@@ -16,14 +16,67 @@ import re
 from runtime.core.cerebrum.react_code_mode_guards import _has_successful_code_write
 from runtime.core.cerebrum.react_goal_analysis import _final_answer_requests_user_help
 from runtime.core.cerebrum.react_parsing import (
+    _is_code_write_step,
     _latest_todo_items,
     _parse_action,
 )
 from runtime.core.cerebrum.react_types import ReActStep
 
+# Read-only / evidence-gathering tools.  These never mutate the workspace, so
+# a turn that only gathered evidence must not be trapped into a todo_write
+# refresh loop after the task is already complete (the original bug).  Real
+# work tools (echo, exec_shell, write skills, …) are still treated as residue.
+_READ_ONLY_EVIDENCE_TOOLS: frozenset[str] = frozenset(
+    {
+        "file_stats",
+        "glob_files",
+        "grep_text",
+        "list_cwd",
+        "read_file",
+        "read_file_range",
+        "recall",
+        "count_words",
+    }
+)
+
+_TERMINAL_DELIVERY_TODO_RE = re.compile(
+    r"(?:"
+    r"(?:交付|提交|呈现|输出|给出|发送|汇报).{0,12}(?:报告|结果|结论|答案|总结)|"
+    r"(?:报告|结果|结论|答案|总结).{0,12}(?:交付|提交|呈现|输出|发送|汇报)|"
+    r"deliver|present|return|send|provide|report\s+(?:back|results?)|"
+    r"final\s+(?:answer|report|summary|response)"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_terminal_delivery_todo(title: str) -> bool:
+    """Whether emitting the final answer itself fulfills this checklist row."""
+
+    return bool(_TERMINAL_DELIVERY_TODO_RE.search(title or ""))
+
+
+def _is_read_only_evidence_tool(name: str) -> bool:
+    lowered = name.lower()
+    return (
+        lowered in _READ_ONLY_EVIDENCE_TOOLS
+        or lowered.endswith(":read")
+        or lowered.startswith("read_")
+        or lowered.startswith("search")
+        or lowered.startswith("list_")
+        or "web_search" in lowered
+    )
+
 
 def _has_tool_work_after_latest_todo(steps: list[ReActStep]) -> bool:
-    """Whether a real action happened after the latest checklist update."""
+    """Whether real (non-read-only) work happened after the latest checklist update.
+
+    Read-only tools (read_file, web_search, list_cwd, …) are evidence-gathering
+    and must not trap an already-complete task into a todo_write loop.  Any
+    other tool that actually ran and returned an observation (echo, exec_shell,
+    write skills, …) is treated as outstanding work so the checklist stays
+    accurate before the turn reports completion.
+    """
 
     for step in reversed(steps):
         parsed = _parse_action(step.action)
@@ -32,8 +85,12 @@ def _has_tool_work_after_latest_todo(steps: list[ReActStep]) -> bool:
         name, _args = parsed
         if name == "todo_write":
             return False
-        if name.lower() not in {"none", "n/a", ""} and step.observation:
+        if _is_code_write_step(step):
             return True
+        # A non-todo_write, non-code-write tool that actually ran and produced
+        # an observation counts as real work unless it is read-only evidence.
+        if name.lower() not in {"none", "n/a", ""} and step.observation:
+            return not _is_read_only_evidence_tool(name)
     return False
 
 
@@ -93,6 +150,17 @@ def _todo_protocol_completion_guard(
                 or "untitled"
             )
             incomplete.append(title)
+    # The final answer is the side effect for a terminal delivery row.  Making
+    # the model call todo_write *after* it has already produced that answer is
+    # impossible and caused completed research reports to die in a three-strike
+    # guard impasse.  Other incomplete work remains a hard veto.
+    substantive_final = len(final_answer.strip()) >= 80
+    if (
+        substantive_final
+        and incomplete
+        and all(_is_terminal_delivery_todo(title) for title in incomplete)
+    ):
+        incomplete = []
     if incomplete:
         preview = "; ".join(incomplete[:5])
         if len(incomplete) > 5:
@@ -207,5 +275,6 @@ __all__ = [
     "_completion_phrase_without_todo_guard",
     "_has_tool_work_after_latest_todo",
     "_looks_like_completion_phrase",
+    "_is_terminal_delivery_todo",
     "_todo_protocol_completion_guard",
 ]

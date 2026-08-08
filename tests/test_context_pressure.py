@@ -32,7 +32,12 @@ class _Msg:
     role: str = "user"
 
 
-def test_long_context_models_default_to_256k_profile() -> None:
+def test_long_context_models_default_to_256k_profile(monkeypatch) -> None:
+    from runtime.platform.models import custom_model_flags
+
+    # This test covers built-in defaults, independent of an operator's local
+    # custom_models.json overrides.
+    monkeypatch.setattr(custom_model_flags, "model_context_window", lambda _model: None)
     assert context_budget_tokens_for_model("glm-5.2") == 230_400
     assert context_budget_tokens_for_model("deepseek-v4-flash") == 230_400
     assert context_budget_tokens_for_model("deepseek-v4-pro") == 230_400

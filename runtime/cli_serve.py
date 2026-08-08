@@ -7,6 +7,7 @@ helpers used by ``octopus-agent serve``.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 from pathlib import Path
@@ -15,6 +16,112 @@ from typing import Any
 
 def _yellow(enabled: bool, text: str) -> str:
     return f"\x1b[33m{text}\x1b[0m" if enabled else text
+
+
+_LOOPBACK_HOST_ALIASES = {
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "::ffff:127.0.0.1",
+}
+
+
+def _is_loopback_host(host: str) -> bool:
+    """Return whether *host* is an explicitly loopback bind target."""
+    normalized = str(host or "").strip().lower().strip("[]")
+    if normalized in _LOOPBACK_HOST_ALIASES:
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        # Unknown hostnames are treated as network-reachable so the guard
+        # fails closed instead of trusting DNS or local resolver behaviour.
+        return False
+
+
+def _insecure_bind_error(*, host: str, uds: str | None, require_auth: bool) -> str | None:
+    """Describe an unsafe network bind, or return ``None`` when it is safe."""
+    if uds or require_auth or _is_loopback_host(host):
+        return None
+    return (
+        "control-plane auth is OFF while the server is bound to a "
+        f"non-loopback host ({host}); enable 'oct' or 'local_auth', or bind "
+        "127.0.0.1 before starting a network-accessible server"
+    )
+
+
+def _prepare_execution_security(cfg: Any) -> tuple[str | None, dict[str, str | None]]:
+    """Apply and validate the config-backed process isolation contract.
+
+    The returned mapping contains the previous environment values so the
+    caller can restore them after an in-process test or a clean server stop.
+    Production processes normally exit after the server lifetime, but keeping
+    this reversible makes embedded ``run_serve`` callers deterministic.
+    """
+
+    execution = getattr(cfg, "execution", None)
+    configured_deployment = str(getattr(execution, "deployment_mode", "local") or "local")
+    configured_sandbox = str(getattr(execution, "process_sandbox", "auto") or "auto")
+    env_deployment = os.environ.get("OCTOPUS_DEPLOYMENT_MODE")
+    env_sandbox = os.environ.get("OCTOPUS_PROCESS_SANDBOX")
+    commercial_modes = {"shared", "commercial", "production", "server"}
+
+    if configured_deployment in commercial_modes and configured_sandbox in {
+        "soft",
+        "direct",
+        "off",
+    }:
+        return (
+            "commercial execution cannot use a soft/direct process sandbox; "
+            "set execution.process_sandbox=auto/strict or a hard backend",
+            {},
+        )
+
+    if (
+        configured_deployment in commercial_modes
+        and env_deployment
+        and env_deployment.strip().lower() not in commercial_modes
+    ):
+        return (
+            "execution.deployment_mode conflicts with OCTOPUS_DEPLOYMENT_MODE; "
+            "refusing to start with an ambiguous isolation contract",
+            {},
+        )
+
+    previous = {
+        "OCTOPUS_DEPLOYMENT_MODE": env_deployment,
+        "OCTOPUS_PROCESS_SANDBOX": env_sandbox,
+    }
+    if configured_deployment in commercial_modes and not env_deployment:
+        os.environ["OCTOPUS_DEPLOYMENT_MODE"] = configured_deployment
+    if configured_sandbox != "auto" and not env_sandbox:
+        os.environ["OCTOPUS_PROCESS_SANDBOX"] = configured_sandbox
+
+    from runtime.safety.sandboxing.sandbox import (
+        effective_process_sandbox_mode,
+        process_sandbox_required,
+        select_process_backend,
+    )
+
+    if process_sandbox_required():
+        try:
+            select_process_backend(effective_process_sandbox_mode())
+        except Exception as exc:  # noqa: BLE001 — startup must report a stable config error
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            return (f"execution security check failed: {exc}", {})
+    return (None, previous)
+
+
+def _restore_execution_security(previous: dict[str, str | None]) -> None:
+    for key, value in previous.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
 
 
 def maybe_setup_prompt_evolution(
@@ -201,7 +308,11 @@ def register_cron_executor_task(runner: Any, channel_manager_holder: list | None
         """Push a finished cron run back to its recorded IM conversation."""
         if not channel_manager_holder:
             return
-        cm = channel_manager_holder[0] if isinstance(channel_manager_holder, list) and channel_manager_holder else None
+        cm = (
+            channel_manager_holder[0]
+            if isinstance(channel_manager_holder, list) and channel_manager_holder
+            else None
+        )
         if cm is None:
             return
         channel_id = str(record.get("channel_id") or "")
@@ -215,9 +326,7 @@ def register_cron_executor_task(runner: Any, channel_manager_holder: list | None
         try:
             cm.deliver_cron_result(channel_id, thread_id, text)
         except Exception:  # noqa: BLE001 — delivery must never break the cron tick
-            logging.getLogger(__name__).exception(
-                "cron delivery failed for %r", name
-            )
+            logging.getLogger(__name__).exception("cron delivery failed for %r", name)
 
     def _tick() -> None:
         from runtime.execution.cron_executor import run_due_cron_jobs
@@ -343,15 +452,38 @@ def run_serve(
         print(c.red(f"config error: {e}"), file=sys.stderr)
         return 2
 
+    require_ui_auth = bool(
+        getattr(getattr(cfg, "oct", None), "enabled", False)
+        or getattr(getattr(cfg, "local_auth", None), "enabled", False)
+    )
+    bind_error = _insecure_bind_error(
+        host=host,
+        uds=uds,
+        require_auth=require_ui_auth,
+    )
+    if bind_error is not None:
+        print(c.red(f"security error: {bind_error}"), file=sys.stderr)
+        return 2
+
+    execution_error, execution_env_previous = _prepare_execution_security(cfg)
+    if execution_error is not None:
+        print(c.red(f"security error: {execution_error}"), file=sys.stderr)
+        return 2
+
     try:
         import uvicorn
 
         from runtime.platform.ui import create_app
     except ImportError:
+        _restore_execution_security(execution_env_previous)
         print(_("cli.ui.not_installed"), file=sys.stderr)
         return 2
 
-    stack = build_from_config(cfg)
+    try:
+        stack = build_from_config(cfg)
+    except Exception:
+        _restore_execution_security(execution_env_previous)
+        raise
     runner = BackgroundRunner(
         name=f"scheduler-{cfg.name}",
         max_workers=cfg.scheduler.max_workers,
@@ -523,28 +655,6 @@ def run_serve(
     print(c.dim("\u2500" * 60))
     print(f"  config={config_path} \u00b7 planner={cfg.planner.type}")
 
-    # Security: warn loudly when the control plane is bound to a
-    # non-loopback interface with authentication disabled. With
-    # ``cocoloop_require_auth`` off, /api/config, /api/mcp,
-    # /api/remote-backends, /api/gene-locks, /api/permissions \u2026 answer
-    # any caller \u2014 fine on localhost, a real exposure the moment the
-    # bind host is reachable from the network. We warn rather than
-    # refuse so existing local dev workflows are unchanged.
-    _loopback_hosts = {"127.0.0.1", "localhost", "::1", "::ffff:127.0.0.1"}
-    if not uds and not require_ui_auth and host not in _loopback_hosts:
-        import sys as _sys
-
-        print(
-            c.bold(
-                f"\u26a0  SECURITY: control-plane auth is OFF and the server is "
-                f"bound to {host} (non-loopback). /api/* is reachable "
-                f"UNAUTHENTICATED by anyone who can route to this host. Enable "
-                f"'oct' or 'local_auth' in {config_path}, or bind 127.0.0.1, "
-                f"before exposing this."
-            ),
-            file=_sys.stderr,
-        )
-
     _p = cfg.planner
     if _p.type == "llm" and (_p.model.startswith("mock/") or _p.mock_response is not None):
         print(
@@ -612,6 +722,7 @@ def run_serve(
         else:
             uvicorn.run(app, host=host, port=port, log_level="info")
     finally:
+        _restore_execution_security(execution_env_previous)
         runner.stop()
         try:
             from runtime.adapters.mcp_client import close_all_persistent_clients

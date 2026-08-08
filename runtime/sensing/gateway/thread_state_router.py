@@ -36,9 +36,9 @@ def create_thread_state_router(
     router = APIRouter(tags=["threads"])
 
     def _auth(request: Any) -> str | None:
-        from .openai_gateway import _resolve_actor
+        from runtime.safety.auth.principal import resolve_principal
 
-        return _resolve_actor(
+        principal = resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -46,6 +46,13 @@ def create_thread_state_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        if principal is not None:
+            request.state.thread_principal = principal
+        return principal.actor_id if principal is not None else None
+
+    def _tenant(request: Any) -> str | None:
+        principal = getattr(getattr(request, "state", None), "thread_principal", None)
+        return getattr(principal, "tenant_id", None)
 
     def _require_store() -> None:
         if store is None:
@@ -59,17 +66,30 @@ def create_thread_state_router(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
-    def _can_access(thread: dict[str, Any] | None, actor_id: str | None) -> bool:
+    def _can_access(
+        thread: dict[str, Any] | None,
+        actor_id: str | None,
+        tenant_id: str | None = None,
+    ) -> bool:
         if thread is None:
             return False
         raw_metadata = thread.get("metadata")
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        stored_tenant = str(metadata.get("tenant_id") or "").strip()
+        if tenant_id and not tenant_id.startswith("legacy:") and stored_tenant != tenant_id:
+            return False
+        if tenant_id and stored_tenant and stored_tenant != tenant_id:
+            return False
         owner = metadata.get("owner_actor_id") or metadata.get("actor_id")
         return not isinstance(owner, str) or not owner.strip() or owner.strip() == actor_id
 
-    def _get_owned_thread(thread_id: str, actor_id: str | None) -> dict[str, Any] | None:
+    def _get_owned_thread(
+        thread_id: str,
+        actor_id: str | None,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any] | None:
         thread = store.get(thread_id)
-        if not _can_access(thread, actor_id):
+        if not _can_access(thread, actor_id, tenant_id):
             return None
         return thread
 
@@ -84,13 +104,17 @@ def create_thread_state_router(
     @router.post("/api/threads")
     def create_thread(request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:
         actor_id = _auth(request)
+        tenant_id = _tenant(request)
         _require_store()
         payload = body or {}
         raw_metadata = payload.get("metadata")
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         metadata = dict(metadata)
         if actor_id is not None:
-            metadata.setdefault("owner_actor_id", actor_id)
+            # The body may carry presentation metadata, but ownership is
+            # server-derived and cannot be assigned to another actor.
+            metadata["owner_actor_id"] = actor_id
+            metadata["tenant_id"] = tenant_id or ""
         raw_values = payload.get("values")
         values = raw_values if isinstance(raw_values, dict) else {}
         return store.create(metadata=metadata, values=values)
@@ -102,11 +126,12 @@ def create_thread_state_router(
         limit: int = Query(20, ge=1, le=200),  # type: ignore[misc]
     ) -> dict[str, Any]:
         actor_id = _auth(request)
+        tenant_id = _tenant(request)
         _require_store()
         needle = (q or "").strip().lower()
         results: list[dict[str, Any]] = []
         for thread in store.search(limit=500, offset=0):
-            if not _can_access(thread, actor_id):
+            if not _can_access(thread, actor_id, tenant_id):
                 continue
             thread_id = thread.get("thread_id")
             if isinstance(thread_id, str) and _is_archived(thread_id):
@@ -146,11 +171,12 @@ def create_thread_state_router(
     @router.get("/api/threads/{thread_id}")
     def get_thread(request: Request, thread_id: str) -> dict[str, Any]:
         actor_id = _auth(request)
+        tenant_id = _tenant(request)
         _require_store()
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        thread = _get_owned_thread(thread_id, actor_id)
+        thread = _get_owned_thread(thread_id, actor_id, tenant_id)
         if thread is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         return thread
@@ -160,10 +186,11 @@ def create_thread_state_router(
     )
     def delete_thread(request: Request, thread_id: str):
         actor_id = _auth(request)
+        tenant_id = _tenant(request)
         _require_store()
         thread_id = _require_thread_id(thread_id)
         existing = store.get(thread_id)
-        if existing is not None and not _can_access(existing, actor_id):
+        if existing is not None and not _can_access(existing, actor_id, tenant_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
         deleted_state = store.delete(thread_id)
         archived_log = False
@@ -180,13 +207,15 @@ def create_thread_state_router(
         body: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         actor_id = _auth(request)
+        tenant_id = _tenant(request)
         _require_store()
         payload = body or {}
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else None
         metadata = dict(metadata) if metadata is not None else None
         if actor_id is not None:
             metadata = metadata or {}
-            metadata.setdefault("owner_actor_id", actor_id)
+            metadata["owner_actor_id"] = actor_id
+            metadata["tenant_id"] = tenant_id or ""
         limit = int(payload.get("limit", 50) or 50)
         offset = int(payload.get("offset", 0) or 0)
         sort_by = str(payload.get("sortBy") or "updated_at")
@@ -201,18 +230,19 @@ def create_thread_state_router(
         return [
             thread
             for thread in results
-            if _can_access(thread, actor_id)
+            if _can_access(thread, actor_id, tenant_id)
             if not (isinstance(thread.get("thread_id"), str) and _is_archived(thread["thread_id"]))
         ]
 
     @router.get("/api/threads/{thread_id}/state")
     def get_thread_state(request: Request, thread_id: str) -> dict[str, Any]:
         actor_id = _auth(request)
+        tenant_id = _tenant(request)
         _require_store()
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id) is None:
+        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         state = store.get_state(thread_id)
         if state is None:
@@ -226,18 +256,20 @@ def create_thread_state_router(
         body: dict[str, Any],
     ) -> dict[str, Any]:
         actor_id = _auth(request)
+        tenant_id = _tenant(request)
         _require_store()
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id) is None:
+        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         try:
             metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else None
             metadata = dict(metadata) if metadata is not None else None
             if actor_id is not None:
                 metadata = metadata or {}
-                metadata.setdefault("owner_actor_id", actor_id)
+                metadata["owner_actor_id"] = actor_id
+                metadata["tenant_id"] = tenant_id or ""
             return store.update_state(
                 thread_id,
                 values=body.get("values") if isinstance(body.get("values"), dict) else None,
@@ -254,11 +286,12 @@ def create_thread_state_router(
         body: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         actor_id = _auth(request)
+        tenant_id = _tenant(request)
         _require_store()
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             return []
-        if _get_owned_thread(thread_id, actor_id) is None:
+        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
             return []
         payload = body or {}
         limit = int(payload.get("limit", 50) or 50)

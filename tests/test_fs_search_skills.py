@@ -157,6 +157,79 @@ class TestGrepText:
         r = _grep_text(pattern="x", root=str(tmp_path), glob="*.txt", max_matches=1)
         assert len(r["matches"][0]["text"]) <= 500
 
+    def test_default_search_does_not_stop_at_legacy_200_file_boundary(self, tmp_path: Path):
+        for i in range(250):
+            (tmp_path / f"source_{i:03}.txt").write_text("ordinary\n")
+        (tmp_path / "source_249.txt").write_text("unique_large_project_target\n")
+
+        r = _grep_text(
+            pattern="unique_large_project_target",
+            root=str(tmp_path),
+            glob="*.txt",
+        )
+
+        assert r["count"] == 1
+        assert r["matches"][0]["path"] == "source_249.txt"
+        assert r["scanned_files"] == 250
+        assert not r["truncated"]
+
+    def test_generated_dependency_trees_do_not_consume_file_budget(self, tmp_path: Path):
+        dependency_dir = tmp_path / "node_modules" / "package"
+        dependency_dir.mkdir(parents=True)
+        for i in range(20):
+            (dependency_dir / f"dep_{i}.js").write_text("needle\n")
+        (tmp_path / "app.ts").write_text("needle\n")
+
+        r = _grep_text(
+            pattern="needle",
+            root=str(tmp_path),
+            glob="**/*",
+            max_files=1,
+        )
+
+        assert r["count"] == 1
+        assert r["matches"][0]["path"] == "app.ts"
+        assert r["scanned_files"] == 1
+
+    def test_supports_brace_glob_for_mixed_typescript_sources(self, tmp_path: Path):
+        (tmp_path / "component.tsx").write_text("export const target = true\n")
+        (tmp_path / "helper.ts").write_text("export const target = false\n")
+        (tmp_path / "ignored.js").write_text("const target = null\n")
+
+        r = _grep_text(
+            pattern="target",
+            root=str(tmp_path),
+            glob="**/*.{ts,tsx}",
+        )
+
+        assert {match["path"] for match in r["matches"]} == {"component.tsx", "helper.ts"}
+        assert r["scanned_files"] == 2
+
+    def test_accepts_provider_query_and_path_aliases(self, tmp_path: Path):
+        source = tmp_path / "component.tsx"
+        source.write_text("export function referenceTabForBlock() {}\n")
+
+        r = _grep_text(query="referenceTabForBlock", path=str(source))
+
+        assert r["count"] == 1
+        assert r["matches"][0]["path"] == "component.tsx"
+
+    def test_explicit_path_overrides_injected_workspace_root(self, tmp_path: Path):
+        source = tmp_path / "component.tsx"
+        source.write_text("export const exactTarget = true\n")
+        (tmp_path / "unrelated.tsx").write_text("export const exactTarget = false\n")
+
+        r = _grep_text(
+            pattern="exactTarget",
+            root=str(tmp_path),
+            path=str(source),
+        )
+
+        assert r["root"] == str(source.resolve())
+        assert r["scanned_files"] == 1
+        assert r["count"] == 1
+        assert r["matches"][0]["path"] == "component.tsx"
+
 
 # ─── tree ────────────────────────────────────────────────────
 

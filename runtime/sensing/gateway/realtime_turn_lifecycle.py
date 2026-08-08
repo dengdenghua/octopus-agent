@@ -1,15 +1,4 @@
-"""Turn lifecycle orchestration for the realtime runtime.
-
-Split out of ``realtime_cerebrum.py``: the ``start_turn`` controller —
-validation, slash/topology/model routing, thread setup, prompt hooks,
-intent build, resume-intent confirmation, execution dispatch
-(topology / reflection fast path / react) and terminal status
-finalization — plus the pending resume-intent store it consults.
-
-Every function takes the owning ``CerebrumRuntime`` as its first
-argument; cross-method calls go through the runtime so subclass
-overrides keep working.
-"""
+"""Realtime turn validation, dispatch, resume handling, and finalization."""
 
 from __future__ import annotations
 
@@ -35,12 +24,15 @@ from runtime.sensing.gateway._realtime_turn_lifecycle_helpers import (
 )
 from runtime.sensing.gateway._realtime_turn_lifecycle_resume import (
     _consume_confirmed_resume_intent,
+    _consume_paused_task_resume_intent,
     _record_pending_resume_intent,
+    _resume_checkpoint_metadata,
 )
 
 # Re-exported helper names reachable from the old module-level surface.
 __all__ = [
     "_consume_confirmed_resume_intent",
+    "_consume_paused_task_resume_intent",
     "_record_pending_resume_intent",
 ]
 from runtime.sensing.gateway.realtime_approval import GatewayApprovalProvider
@@ -79,21 +71,7 @@ async def _start_turn(
     params: dict[str, Any],
     emitter: EventEmitter,
 ) -> Turn:
-    """Start a new turn in a realtime thread.
-
-    ╔══════════════════════════════════════════════════════════════╗
-    ║ start_turn · navigation (396 lines, async orchestrator).     ║
-    ║                                                              ║
-    ║   PHASE 1 · validation + slash/topology/model routing ~L1226 ║
-    ║   PHASE 2 · thread setup + turn registration          ~L1329 ║
-    ║   PHASE 3 · prompt hooks + user message anchor        ~L1352 ║
-    ║   PHASE 4 · intent build + resume check               ~L1414 ║
-    ║   PHASE 5 · execution dispatch (topology/fast/react)  ~L1458 ║
-    ║   PHASE 6 · status finalization + snapshot            ~L1550 ║
-    ║                                                              ║
-    ║ Extractable: mostly sequential with clear phase boundaries.  ║
-    ╚══════════════════════════════════════════════════════════════╝
-    """
+    """Start and drive one realtime turn through its terminal state."""
     # ── PHASE 1 · validation + slash/topology/model routing ────────
     validated = TurnParams.model_validate(params)
     thread_id = runtime._require_thread_id(validated.thread_id)
@@ -242,6 +220,10 @@ async def _start_turn(
     )
 
     turn = Turn(thread_id=thread_id, params=validated)
+    # Every turn has an objective coordinate from its first emitted snapshot.
+    # ReAct replaces this provisional id with its durable task id as soon as
+    # ``react_started`` arrives; direct/reflection turns keep the turn id.
+    turn.objective_id = turn.id
     # Bound before the try so the escape handler at the bottom can
     # attach the intent when the crash happens after PHASE 4 built it
     # (and pass None for earlier failures — both recorders accept it).
@@ -348,8 +330,49 @@ async def _start_turn(
             intent=intent,
         )
         confirmed_resume_intent = await runtime._consume_confirmed_resume_intent(thread_id, text)
+        if confirmed_resume_intent is None:
+            confirmed_resume_intent = await runtime._consume_paused_task_resume_intent(
+                thread_id,
+                text,
+            )
         if confirmed_resume_intent is not None:
             intent.user_context["resume_intent"] = confirmed_resume_intent
+        else:
+            # Preserve enough durable context for status probes/amendments
+            # without restoring raw model messages.  This prevents a paused
+            # task followed by "?" or "怎么了" from becoming a context-free
+            # greeting while keeping a new objective isolated from old drafts.
+            from runtime.core.cerebrum.pause_control import get_pause_controller
+
+            paused_requests = sorted(
+                (
+                    request
+                    for request in get_pause_controller().list_paused()
+                    if request.thread_id == thread_id
+                ),
+                key=lambda request: request.requested_at,
+                reverse=True,
+            )[:5]
+            paused_contexts: list[dict[str, Any]] = []
+            for paused_request in paused_requests:
+                checkpoint = _resume_checkpoint_metadata(runtime, paused_request.task_id) or {}
+                paused_contexts.append(
+                    {
+                        "task_id": paused_request.task_id,
+                        "objective_id": paused_request.task_id,
+                        "reason": paused_request.reason,
+                        "note": paused_request.note,
+                        "iteration": checkpoint.get("iteration", 0),
+                        "phase": checkpoint.get("phase", ""),
+                        "working_set": checkpoint.get("working_set", []),
+                        "checkpoint_id": checkpoint.get("checkpoint_id", 0),
+                        "resumable": True,
+                    }
+                )
+            if paused_contexts:
+                intent.user_context["paused_tasks_context"] = paused_contexts
+                if len(paused_contexts) == 1:
+                    intent.user_context["paused_task_context"] = paused_contexts[0]
         resume_intent = intent.user_context.get("resume_intent")
         if isinstance(resume_intent, dict) and resume_intent.get("requires_confirmation") is True:
             await runtime._record_pending_resume_intent(thread_id, resume_intent)
@@ -507,6 +530,7 @@ async def _start_turn(
                 text,
                 validated,
                 conversation_messages=cast("list[dict[str, object]] | None", conversation_messages),
+                thread_id=thread_id,
             ):
                 turn_driver = "reflection_fast_path"
                 await runtime._drive_reflection_fast_path(
@@ -558,7 +582,12 @@ async def _start_turn(
         # drivers (reflection, topology, Project OS) may finish one atomic
         # pass without such a boundary; hand any message that arrived during
         # that pass to the normal agent loop before finalizing the same turn.
-        while turn.status not in {TurnStatus.INTERRUPTED, TurnStatus.FAILED}:
+        while turn.status not in {
+            TurnStatus.PAUSED,
+            TurnStatus.CANCELLED,
+            TurnStatus.INTERRUPTED,
+            TurnStatus.FAILED,
+        }:
             # Close intake before the last durable drain. Any steering RPC
             # acknowledged before this lease update is already in the log and
             # must be consumed; any later RPC is rejected instead of being
@@ -590,9 +619,14 @@ async def _start_turn(
             )
 
         # ── PHASE 6 · status finalization + snapshot ───────────────
-        if turn.status == TurnStatus.INTERRUPTED:
-            # Drive-react set this when an interrupt was polled; we
-            # respect it rather than flipping back to completed.
+        if turn.status in {
+            TurnStatus.PAUSED,
+            TurnStatus.CANCELLED,
+            TurnStatus.INTERRUPTED,
+        }:
+            # Preserve the concrete terminal/waiting outcome.  In particular,
+            # a resumable checkpoint must never be flattened back to completed
+            # or to a generic transport interruption.
             log.turn_completed(thread_id, turn.id, turn.status)
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
@@ -854,6 +888,16 @@ async def _start_turn(
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
 
+        background_tasks = runtime._thread_background_tasks.get(thread_id, [])
+        if any(not task.done() for task in background_tasks):
+            turn.outcome_reason = "completed_with_background"
+            log.turn_updated(
+                thread_id,
+                turn.id,
+                objective_id=turn.objective_id,
+                task_id=turn.task_id,
+                outcome_reason=turn.outcome_reason,
+            )
         turn.status = TurnStatus.COMPLETED
         log.turn_completed(thread_id, turn.id, turn.status)
         runtime._record_successful_turn_example(turn, intent=intent)

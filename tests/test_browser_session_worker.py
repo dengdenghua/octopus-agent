@@ -235,7 +235,7 @@ def test_public_browser_actions_reuse_current_page_when_url_is_omitted(tmp_path)
                     "<option>Free</option><option>Pro</option></select>"
                     "<input id='avatar' type='file'>"
                     "<button id='save' "
-                    "onclick=\"document.body.dataset.saved="
+                    'onclick="document.body.dataset.saved='
                     "document.querySelector('#name').value\">Save</button>"
                 ),
             )
@@ -250,19 +250,23 @@ def test_public_browser_actions_reuse_current_page_when_url_is_omitted(tmp_path)
         assert uploaded["file_name"] == "profile.txt"
         assert clicked["clicked"] == "#save"
         assert "Save" in body["content"]
-        saved = get_browser_session_pool().get_or_create(
-            "thr:thr_action_persist_test"
-        ).submit(lambda page: page.get_attribute("body", "data-saved"))
+        saved = (
+            get_browser_session_pool()
+            .get_or_create("thr:thr_action_persist_test")
+            .submit(lambda page: page.get_attribute("body", "data-saved"))
+        )
         assert saved == "Acme Labs"
-        plan = get_browser_session_pool().get_or_create(
-            "thr:thr_action_persist_test"
-        ).submit(lambda page: page.input_value("#plan"))
+        plan = (
+            get_browser_session_pool()
+            .get_or_create("thr:thr_action_persist_test")
+            .submit(lambda page: page.input_value("#plan"))
+        )
         assert plan == "Pro"
-        file_name = get_browser_session_pool().get_or_create(
-            "thr:thr_action_persist_test"
-        ).submit(
-            lambda page: page.locator("#avatar").evaluate(
-                "element => element.files[0].name"
+        file_name = (
+            get_browser_session_pool()
+            .get_or_create("thr:thr_action_persist_test")
+            .submit(
+                lambda page: page.locator("#avatar").evaluate("element => element.files[0].name")
             )
         )
         assert file_name == "profile.txt"

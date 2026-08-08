@@ -569,15 +569,21 @@ def test_endpoints_return_403_when_flag_off(
     assert client.delete("/api/workspaces/anything").status_code == 403
     # Members
     assert client.get("/api/workspaces/anything/members").status_code == 403
-    assert client.post(
-        "/api/workspaces/anything/members",
-        json={"member_id": "x", "role": "viewer"},
-    ).status_code == 403
+    assert (
+        client.post(
+            "/api/workspaces/anything/members",
+            json={"member_id": "x", "role": "viewer"},
+        ).status_code
+        == 403
+    )
     # Lease
-    assert client.post(
-        "/api/workspaces/anything/lease",
-        json={"file_path": "f", "holder_id": "x"},
-    ).status_code == 403
+    assert (
+        client.post(
+            "/api/workspaces/anything/lease",
+            json={"file_path": "f", "holder_id": "x"},
+        ).status_code
+        == 403
+    )
     assert client.get("/api/workspaces/anything/leases").status_code == 403
     # Health
     assert client.post("/api/workspaces/anything/health").status_code == 403

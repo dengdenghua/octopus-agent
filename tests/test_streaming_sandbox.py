@@ -145,6 +145,45 @@ def test_stream_run_strict_mode_rejects_without_hard_backend(
     assert result["execution_policy"]["result"]["error_type"] == "sandbox_violation"
 
 
+def test_commercial_mode_rejects_unconfined_high_risk_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
+
+    result = stream_run(
+        [sys.executable, "-c", "print('must not run')"],
+        timeout=10,
+        sandbox_required=True,
+    )
+
+    assert result["error"].startswith("sandbox_violation:")
+    assert "workspace sandbox" in result["error"]
+    assert result["execution_policy"]["sandbox_requested"] is False
+    assert result["execution_policy"]["result"]["status"] == "sandbox_violation"
+
+
+def test_commercial_mode_cannot_downgrade_to_soft_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
+    monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "soft")
+    monkeypatch.setattr(sandbox_mod.BubblewrapBackend, "available", staticmethod(lambda: False))
+    monkeypatch.setattr(sandbox_mod.SeatbeltBackend, "available", staticmethod(lambda: False))
+
+    result = stream_run(
+        [sys.executable, "-c", "print('must not run')"],
+        timeout=10,
+        sandbox_dir=str(tmp_path),
+        sandbox_required=True,
+    )
+
+    assert "strict process sandbox requested" in result["error"]
+    assert result["execution_policy"]["backend"] == "direct"
+    assert result["execution_policy"]["result"]["status"] == "sandbox_violation"
+
+
 def test_stream_run_uses_selected_backend(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

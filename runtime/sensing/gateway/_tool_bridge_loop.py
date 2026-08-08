@@ -107,6 +107,30 @@ def _rescue_policy_names() -> tuple[Any, Any]:
     return _tb._is_provider_unavailable_error, _tb._next_custom_model_fallback
 
 
+def _native_plan_reconciliation_milestones(
+    calls: list[ToolCall],
+    result_blocks: list[dict[str, Any]],
+) -> list[str]:
+    """Return successful write/verification milestones after the last todo."""
+    last_todo_index = max(
+        (index for index, call in enumerate(calls) if call.name == "todo_write"),
+        default=-1,
+    )
+    milestones: list[str] = []
+    for index, (call, block) in enumerate(zip(calls, result_blocks, strict=True)):
+        if index <= last_todo_index or block.get("is_error"):
+            continue
+        if (
+            call.name in _CODE_MUTATION_TOOLS or _is_shell_mutation(call)
+        ) and "workspace/document write" not in milestones:
+            milestones.append("workspace/document write")
+        if (
+            call.name in _CODE_VERIFICATION_TOOLS or _is_shell_verification(call)
+        ) and "green verification" not in milestones:
+            milestones.append("green verification")
+    return milestones
+
+
 def stream_agentic_fallback(
     stack: Any,
     intent: ParsedIntent,
@@ -1991,6 +2015,25 @@ def stream_agentic_fallback(
                 content=tool_result_blocks,
             )
         )
+        _plan_milestones = _native_plan_reconciliation_milestones(
+            round_tool_calls,
+            tool_result_blocks,
+        )
+        if _todo_protocol_required and _has_todo_write and _plan_milestones:
+            messages.append(
+                Message(
+                    role="user",
+                    content=(
+                        "[SYSTEM CHECK - dynamic plan reconciliation checkpoint]\n"
+                        f"Completed milestone: {', '.join(_plan_milestones)}. "
+                        "Finish the current write/repair/verification chain, then before "
+                        "switching to a different phase call `todo_write` with the complete "
+                        "revised checklist. Mark only evidence-backed items complete; preserve "
+                        "stable IDs for unchanged work; add, remove, reword, or reorder items "
+                        "when the discovered code or documentation changed the scope."
+                    ),
+                )
+            )
         if _tool_batch_redirected:
             _append_pending_steering()
             continue

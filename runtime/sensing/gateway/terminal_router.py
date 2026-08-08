@@ -447,20 +447,24 @@ def mount_terminal_routes(
                 required_audience=jwt_audience,
             )
             if identity is not None:
+                if require_auth and not set(identity.roles).intersection({"admin", "operator"}):
+                    raise PermissionError("operator role required")
                 return identity.actor_id
             if require_auth:
                 raise PermissionError("invalid jwt")
         identity = identity_store.verify_api_key(token)
         if identity is not None:
+            if require_auth and not set(identity.roles).intersection({"admin", "operator"}):
+                raise PermissionError("operator role required")
             return identity.actor_id
         if require_auth:
             raise PermissionError("invalid token")
         return None
 
     def _auth_http(request: Request) -> str | None:
-        from .openai_gateway_router import _resolve_actor
+        from runtime.safety.auth.principal import require_operator, resolve_principal
 
-        return _resolve_actor(
+        principal = resolve_principal(
             request,
             identity_store,
             require_auth,
@@ -468,6 +472,16 @@ def mount_terminal_routes(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
+        if require_auth:
+            require_operator(
+                request,
+                identity_store,
+                require_auth,
+                jwt_secret=jwt_secret,
+                jwt_issuer=jwt_issuer,
+                jwt_audience=jwt_audience,
+            )
+        return principal.actor_id if principal is not None else None
 
     @app.post("/api/terminal/kill/{session_id}")
     async def terminal_kill(session_id: str, request: Request) -> dict[str, bool]:

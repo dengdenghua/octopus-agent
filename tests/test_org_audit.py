@@ -95,15 +95,11 @@ def test_append_verify_list_export(tmp_path: Path) -> None:
         audit_chain_secret=SECRET,
     )
 
-    verified = verify_org_audit_chain(
-        audit_chain_path=chain, audit_chain_secret=SECRET
-    )
+    verified = verify_org_audit_chain(audit_chain_path=chain, audit_chain_secret=SECRET)
     assert verified["ok"] is True
     assert verified["entries_checked"] == 2
 
-    events = list_org_audit_events(
-        audit_chain_path=chain, audit_chain_secret=SECRET
-    )
+    events = list_org_audit_events(audit_chain_path=chain, audit_chain_secret=SECRET)
     assert [e["event_type"] for e in events] == [
         "channel_member_remove",
         "org_member_add",
@@ -126,9 +122,7 @@ def test_append_verify_list_export(tmp_path: Path) -> None:
         == "alice"
     )
 
-    bundle = export_org_audit_bundle(
-        audit_chain_path=chain, audit_chain_secret=SECRET
-    )
+    bundle = export_org_audit_bundle(audit_chain_path=chain, audit_chain_secret=SECRET)
     assert bundle["schema"] == "octopus.org_audit_export.v1"
     assert bundle["chain"]["line_count"] == 2
     assert bundle["integrity"]["ok"] is True
@@ -180,9 +174,7 @@ def test_tamper_detection(tmp_path: Path) -> None:
     lines[0] = json.dumps(first, ensure_ascii=False)
     chain.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    verified = verify_org_audit_chain(
-        audit_chain_path=chain, audit_chain_secret=SECRET
-    )
+    verified = verify_org_audit_chain(audit_chain_path=chain, audit_chain_secret=SECRET)
     assert verified["ok"] is False
     assert verified["broken_at"] == 0
 
@@ -210,9 +202,7 @@ def test_delete_record_breaks_chain(tmp_path: Path) -> None:
     lines = chain.read_text(encoding="utf-8").splitlines()[1:]
     chain.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    verified = verify_org_audit_chain(
-        audit_chain_path=chain, audit_chain_secret=SECRET
-    )
+    verified = verify_org_audit_chain(audit_chain_path=chain, audit_chain_secret=SECRET)
     assert verified["ok"] is False
 
 
@@ -229,18 +219,14 @@ def test_router_records_org_and_member_audit(tmp_path: Path) -> None:
         headers=_auth("alice"),
     )
 
-    events = list_org_audit_events(
-        audit_chain_path=chain, audit_chain_secret=SECRET
-    )
+    events = list_org_audit_events(audit_chain_path=chain, audit_chain_secret=SECRET)
     types = [e["event_type"] for e in events]
     # org creation + owner auto-member + bob add.
     assert "org_create" in types
     assert "org_member_add" in types
     # Every event carries the actor (who did it).
     assert all(e["actor"] for e in events)
-    assert verify_org_audit_chain(
-        audit_chain_path=chain, audit_chain_secret=SECRET
-    )["ok"]
+    assert verify_org_audit_chain(audit_chain_path=chain, audit_chain_secret=SECRET)["ok"]
 
 
 def test_router_records_channel_acl_audit(tmp_path: Path) -> None:
@@ -262,13 +248,9 @@ def test_router_records_channel_acl_audit(tmp_path: Path) -> None:
         json={"member_id": "bob", "role": "member"},
         headers=_auth("alice"),
     )
-    client.delete(
-        f"/api/channels/{ch['id']}/members/bob", headers=_auth("alice")
-    )
+    client.delete(f"/api/channels/{ch['id']}/members/bob", headers=_auth("alice"))
 
-    events = list_org_audit_events(
-        audit_chain_path=chain, audit_chain_secret=SECRET
-    )
+    events = list_org_audit_events(audit_chain_path=chain, audit_chain_secret=SECRET)
     types = [e["event_type"] for e in events]
     # channel create + owner auto membership + bob grant + bob remove.
     assert "org_channel_create" in types
@@ -278,9 +260,7 @@ def test_router_records_channel_acl_audit(tmp_path: Path) -> None:
     remove = next(e for e in events if e["event_type"] == "channel_member_remove")
     assert remove["channel_id"] == ch["id"]
     assert remove["target"] == "bob"
-    assert verify_org_audit_chain(
-        audit_chain_path=chain, audit_chain_secret=SECRET
-    )["ok"]
+    assert verify_org_audit_chain(audit_chain_path=chain, audit_chain_secret=SECRET)["ok"]
 
 
 def test_router_audit_does_not_break_when_chain_missing(tmp_path: Path) -> None:
@@ -290,9 +270,7 @@ def test_router_audit_does_not_break_when_chain_missing(tmp_path: Path) -> None:
     app = FastAPI()
     app.include_router(create_org_router(org_store=store))
     client = TestClient(app)
-    org = client.post(
-        "/api/orgs", json={"name": "Acme", "owner_id": "alice"}
-    ).json()
+    org = client.post("/api/orgs", json={"name": "Acme", "owner_id": "alice"}).json()
     assert org["name"] == "Acme"
 
 
@@ -318,9 +296,7 @@ def test_org_member_role_change_captures_before_after(tmp_path: Path) -> None:
 
     change = next(
         e
-        for e in list_org_audit_events(
-            audit_chain_path=chain, audit_chain_secret=SECRET
-        )
+        for e in list_org_audit_events(audit_chain_path=chain, audit_chain_secret=SECRET)
         if e["event_type"] == "org_member_role_change"
     )
     assert change["target"] == "bob"
@@ -355,9 +331,7 @@ def test_channel_member_role_change_captures_before_after(tmp_path: Path) -> Non
 
     change = next(
         e
-        for e in list_org_audit_events(
-            audit_chain_path=chain, audit_chain_secret=SECRET
-        )
+        for e in list_org_audit_events(audit_chain_path=chain, audit_chain_secret=SECRET)
         if e["event_type"] == "channel_member_role_change"
     )
     assert change["channel_id"] == ch["id"]
