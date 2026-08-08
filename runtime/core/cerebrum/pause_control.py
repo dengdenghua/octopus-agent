@@ -40,6 +40,7 @@ class ActiveTask:
     cost_usd: float = 0.0
     max_tokens: int = BUDGET_DEFAULT_MAX_TOKENS  # Implementation note.
     max_usd: float = BUDGET_DEFAULT_MAX_USD
+    max_wall_time_seconds: float = 0.0  # 0 = no wall-clock limit
 
     def to_dict(self) -> dict:
         return {
@@ -53,7 +54,15 @@ class ActiveTask:
             "cost_usd": self.cost_usd,
             "max_tokens": self.max_tokens,
             "max_usd": self.max_usd,
+            "max_wall_time_seconds": self.max_wall_time_seconds,
         }
+
+    def is_wall_time_exceeded(self) -> bool:
+        """Check if task has exceeded its wall-clock time limit."""
+        if self.max_wall_time_seconds <= 0:
+            return False
+        elapsed = time.time() - self.started_at
+        return elapsed >= self.max_wall_time_seconds
 
 
 @dataclass
@@ -96,6 +105,10 @@ class PauseController:
     # If a user hasn't clicked Continue in 7 days, they're not coming back,
     # and the yellow "waiting" light in the sidebar is pure noise.
     _PAUSE_TTL_SECONDS = 7 * 24 * 3600
+    # Active task records older than this are considered stale and GC'd.
+    # A task running for 24 hours straight either hung or leaked — either
+    # way it should be cleaned from the active dict to prevent memory bloat.
+    _ACTIVE_TASK_TTL_SECONDS = 24 * 3600
 
     def __init__(
         self,
@@ -155,6 +168,18 @@ class PauseController:
                 bucket.pop(k, None)
                 removed += 1
         return removed
+
+    def _gc_stale_active_locked(self) -> int:
+        """Remove stale active task records:
+        - Records older than _ACTIVE_TASK_TTL_SECONDS (hung or leaked)
+        Returns the number of records removed.
+        """
+        now = time.time()
+        cutoff = now - self._ACTIVE_TASK_TTL_SECONDS
+        stale_keys = [task_id for task_id, task in self._active.items() if task.started_at < cutoff]
+        for task_id in stale_keys:
+            self._active.pop(task_id, None)
+        return len(stale_keys)
 
     def _deduplicate_system_pauses_locked(self) -> int:
         """Keep one newest automatic pause per thread across both buckets.
@@ -278,6 +303,23 @@ class PauseController:
             agent_id=agent_id,
         )
         with self._lock:
+            # Deduplicate: if this exact task_id already has a pause request
+            # (pending or paused), update it instead of creating a duplicate.
+            # This prevents multiple "Continue" buttons for the same task.
+            existing = self._pending.get(task_id) or self._paused.get(task_id)
+            if existing is not None:
+                # Update the existing request with new metadata but keep
+                # the original requested_at timestamp so TTL GC works correctly.
+                existing.reason = reason
+                existing.requested_by = requested_by
+                existing.note = note
+                if thread_id:
+                    existing.thread_id = thread_id
+                if agent_id:
+                    existing.agent_id = agent_id
+                self._persist_locked()
+                return existing
+
             # A thread can have only one live system-generated iteration
             # boundary. Older releases created a new task when the user typed
             # "继续", leaving several equivalent yellow pause records for the
@@ -475,8 +517,15 @@ class PauseController:
         max_iterations: int = 0,
         max_tokens: int = BUDGET_DEFAULT_MAX_TOKENS,
         max_usd: float = BUDGET_DEFAULT_MAX_USD,
+        max_wall_time_seconds: float = 0.0,
+        carry_tokens: int = 0,
+        carry_cost_usd: float = 0.0,
     ) -> None:
         with self._lock:
+            # ``carry_tokens`` / ``carry_cost_usd`` seed the counters with
+            # historical spend from a resumed run so a paused+resumed long
+            # task keeps an accurate cumulative budget instead of restarting
+            # from zero.
             self._active[task_id] = ActiveTask(
                 task_id=task_id,
                 thread_id=thread_id,
@@ -484,6 +533,9 @@ class PauseController:
                 max_iterations=max_iterations,
                 max_tokens=max_tokens,
                 max_usd=max_usd,
+                max_wall_time_seconds=max_wall_time_seconds,
+                tokens_spent=max(0, int(carry_tokens)),
+                cost_usd=max(0.0, float(carry_cost_usd)),
             )
 
     def update_active_iteration(self, task_id: str, iteration: int) -> None:
@@ -519,6 +571,8 @@ class PauseController:
 
     def list_active(self) -> list[ActiveTask]:
         with self._lock:
+            # Opportunistically GC stale active tasks on read
+            self._gc_stale_active_locked()
             return list(self._active.values())
 
     def is_pause_requested(self, task_id: str | None) -> bool:
@@ -526,6 +580,41 @@ class PauseController:
             return False
         with self._lock:
             return task_id in self._pending or task_id in self._paused
+
+    def check_active_task_limits(self, task_id: str) -> tuple[bool, str]:
+        """Check if an active task has exceeded any resource limit.
+
+        Returns (exceeded, reason) where reason is empty string if not exceeded.
+        This is called per-iteration in the ReAct loop guard.
+
+        Checks in order:
+        1. Wall-clock time (if max_wall_time_seconds > 0)
+        2. Token budget (if tokens_spent >= max_tokens)
+        3. Cost budget (if cost_usd >= max_usd)
+        4. Iteration count (if current_iteration >= max_iterations)
+        """
+        with self._lock:
+            task = self._active.get(task_id)
+            if task is None:
+                return False, ""
+
+            # Wall-clock limit
+            if task.is_wall_time_exceeded():
+                return True, "wall_time_limit"
+
+            # Token budget limit
+            if task.max_tokens > 0 and task.tokens_spent >= task.max_tokens:
+                return True, "token_budget_exceeded"
+
+            # Cost budget limit
+            if task.max_usd > 0 and task.cost_usd >= task.max_usd:
+                return True, "cost_budget_exceeded"
+
+            # Iteration limit
+            if task.max_iterations > 0 and task.current_iteration >= task.max_iterations:
+                return True, "iteration_limit_exceeded"
+
+            return False, ""
 
     def is_paused(self, task_id: str | None) -> bool:
         if not task_id:

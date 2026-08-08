@@ -9,6 +9,7 @@ submodules.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +27,57 @@ from runtime.sensing.gateway.realtime_gateway import EventEmitter
 if TYPE_CHECKING:
     from runtime.protocol import Turn
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+
+def _start_orchestrator_bridge(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    log: EventLog,
+    emitter: EventEmitter,
+    batch_id: str,
+) -> None:
+    """Subscribe to a parallel batch and render its tasks as subagent tiles.
+
+    Spawns a self-terminating task that streams ``batch_id``'s
+    ``task_update`` events onto ``turn`` as ``SubagentItem``s. The task is
+    tracked on ``runtime`` so the turn driver can cancel it on teardown and
+    it is not garbage-collected mid-subscription.
+    """
+    from runtime.core.cerebrum.agent_auto_parallel import (
+        get_auto_parallel_orchestrator,
+    )
+    from runtime.sensing.gateway._realtime_orchestrator_bridge import (
+        bridge_orchestrator_batch,
+    )
+
+    tasks: set[asyncio.Task[Any]] | None = getattr(runtime, "_orchestrator_bridge_tasks", None)
+    if tasks is None:
+        tasks = set()
+        runtime._orchestrator_bridge_tasks = tasks  # type: ignore[attr-defined]
+
+    async def _run() -> None:
+        try:
+            await bridge_orchestrator_batch(
+                get_auto_parallel_orchestrator(),
+                batch_id,
+                turn,
+                log,
+                emitter,
+            )
+        finally:
+            tasks.discard(asyncio.current_task())
+            with contextlib.suppress(Exception):
+                await emitter.notify(
+                    ServerMethod.TURN_HEARTBEAT,
+                    {
+                        "threadId": turn.thread_id,
+                        "turnId": turn.id,
+                        "role": "parallel",
+                    },
+                )
+
+    task = asyncio.create_task(_run())
+    tasks.add(task)
 
 
 async def _apply_react_event(
@@ -53,6 +105,15 @@ async def _apply_react_event(
                 task_id=task_id,
             )
             del logged_update
+        return
+    if kind == "auto_parallel_batch":
+        # The auto-parallel short-circuit dispatched a parallel batch. Bridge
+        # its orchestrator event stream onto the turn so the workbench renders
+        # each sub-task as a live tile instead of showing a blank gap until
+        # the batch finishes.
+        batch_id = str(evt.get("batch_id") or "").strip()
+        if batch_id:
+            _start_orchestrator_bridge(runtime, turn, log, emitter, batch_id)
         return
     if kind == "text_delta":
         await state.append_agent_message(turn, log, emitter, evt.get("delta", ""))

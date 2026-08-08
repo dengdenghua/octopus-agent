@@ -392,6 +392,19 @@ def main(argv: list[str] | None = None) -> int:
             color=color,
         )
 
+    if args.command == "guard-health":
+        from runtime.cli_guard_health import run_guard_health
+
+        return run_guard_health(
+            telemetry_path=args.telemetry,
+            top=args.top,
+            noisy=args.noisy,
+            unjudged=args.unjudged,
+            recommend=args.recommend,
+            min_precision=args.min_precision,
+            tuning_threshold=args.tuning_threshold,
+        )
+
     return 2
 
 

@@ -47,6 +47,7 @@ _CLI_COMMANDS = frozenset(
         "skills",
         "bb",
         "plugins",
+        "guard-health",
     }
 )
 
@@ -772,5 +773,14 @@ def _build_parser() -> argparse.ArgumentParser:
     plugins_sub.add_parser("discover", help="Discover available plugins.")
     plugins_load = plugins_sub.add_parser("load", help="Load a plugin by name.")
     plugins_load.add_argument("name", help="plugin name")
+
+    guardp = sub.add_parser("guard-health", help="Diagnose guard system health and precision.")
+    guardp.add_argument("--telemetry", default=None, help="path to guard_hits.jsonl")
+    guardp.add_argument("--top", type=int, default=10, help="show top N guards by hit count")
+    guardp.add_argument("--noisy", action="store_true", help="show only noisy guards (precision < 50%%)")
+    guardp.add_argument("--unjudged", action="store_true", help="show guards with ≥20 hits but no verdicts")
+    guardp.add_argument("--recommend", action="store_true", help="show actionable recommendations")
+    guardp.add_argument("--min-precision", type=float, default=0.5, help="precision threshold for noise")
+    guardp.add_argument("--tuning-threshold", type=int, default=20, help="min hits to consider for tuning")
 
     return parser
