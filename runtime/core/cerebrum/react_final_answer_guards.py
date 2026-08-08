@@ -220,6 +220,7 @@ def _evaluate_final_answer_guards(
     browser_operation_mode: bool = False,
     grounded_source_paths: frozenset[str] = frozenset(),
     categories: frozenset[str] | set[str] | None = None,
+    model: str = "",
 ) -> tuple[str, str] | None:
     """Run the final-answer guard registry for regular and salvage paths."""
     from runtime.core.cerebrum.react_guards import (
@@ -242,6 +243,7 @@ def _evaluate_final_answer_guards(
             goal=goal,
             browser_operation_mode=browser_operation_mode,
             grounded_source_paths=grounded_source_paths,
+            model=model,
         ),
         recorder=_guard_hit_recorder(
             dedupe_key=f"{id(steps)}:{step.iteration}:{candidate_digest}",
@@ -250,6 +252,7 @@ def _evaluate_final_answer_guards(
             metadata={
                 "candidate_digest": candidate_digest,
                 "step_count": len(steps) + 1,
+                "model": model,
             },
         ),
         disabled_labels=_disabled_guard_labels(),

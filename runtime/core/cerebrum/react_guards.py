@@ -481,7 +481,7 @@ def evaluate_guards(
     ctx: GuardContext,
     *,
     registry: list[GuardSpec] | None = None,
-    recorder: Callable[[str, str], None] | None = None,
+    recorder: Callable[[str, str, str], None] | None = None,  # Now takes message too
     disabled_labels: frozenset[str] | set[str] | None = None,
     categories: frozenset[str] | set[str] | None = None,
 ) -> tuple[str, str] | None:
@@ -491,7 +491,7 @@ def evaluate_guards(
     Mirrors the old chain's short-circuit semantics exactly: the
     highest-priority guard that returns a non-empty message wins.
 
-    ``recorder`` (optional) is called as ``recorder(label, category)``
+    ``recorder`` (optional) is called as ``recorder(label, category, message)``
     for the firing guard — this is the P1 evolution-loop telemetry
     hook. It is wrapped so a recorder failure can never break the
     ReAct loop. Defaults to None (no telemetry) so the hot path and
@@ -508,7 +508,19 @@ def evaluate_guards(
     ``categories`` (optional) narrows evaluation to coarse guard groups.
     Salvage paths use this to skip mutation-specific quality checks while
     retaining security, protocol-completeness, and research-grounding gates.
+
+    Model-aware routing: if ctx.model is set, code-smell guards are only
+    applied to cheap models (Haiku, Flash, mini). Premium models (Opus,
+    Sonnet) skip code-smell guards as they rarely make basic mistakes.
     """
+    # Model-aware category filtering
+    if ctx.model and categories is None:
+        from runtime.core.cerebrum.guard_model_policy import guard_categories_for_model
+
+        # Default categories that always apply
+        base_categories = {"security", "protocol", "verification", "evidence", "other"}
+        categories = guard_categories_for_model(ctx.model, base_categories=base_categories)
+
     specs = registry if registry is not None else GUARD_REGISTRY
     if registry is None and (categories is None or "security" in categories):
         final_answer_hit = _final_answer_security_guard(ctx)
@@ -517,7 +529,7 @@ def evaluate_guards(
             if not disabled_labels or label not in disabled_labels:
                 if recorder is not None:
                     with contextlib.suppress(Exception):
-                        recorder(label, "security")
+                        recorder(label, "security", message)
                 return (label, message)
     for spec in specs:
         if not spec.enabled:
@@ -530,7 +542,7 @@ def evaluate_guards(
         if msg:
             if recorder is not None:
                 with contextlib.suppress(Exception):
-                    recorder(spec.label, spec.category)
+                    recorder(spec.label, spec.category, msg)
             # Preserve custom-registry behavior for external callers. Policy
             # applies to the built-in production registry: quality/style
             # findings still produce telemetry but cannot consume another

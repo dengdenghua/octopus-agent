@@ -44,8 +44,8 @@ def _guard_hit_recorder(
     goal: str = "",
     iteration: int | None = None,
     metadata: dict[str, Any] | None = None,
-) -> Callable[[str, str], None] | None:
-    """Return a ``recorder(label, category)`` callable, or None when
+) -> Callable[[str, str, str], None] | None:
+    """Return a ``recorder(label, category, message)`` callable, or None when
     telemetry is disabled / unavailable."""
     global _GUARD_TELEMETRY_SINGLETON, _GUARD_TELEMETRY_INIT_DONE
     import os
@@ -66,7 +66,7 @@ def _guard_hit_recorder(
         return None
     goal_digest = hashlib.sha256(goal.encode("utf-8", errors="ignore")).hexdigest()[:16]
 
-    def _record_once(label: str, category: str) -> None:
+    def _record_once(label: str, category: str, message: str) -> None:
         if dedupe_key:
             hit_key = (dedupe_key, label, category)
             with _GUARD_TELEMETRY_SEEN_LOCK:
@@ -75,12 +75,15 @@ def _guard_hit_recorder(
                 if len(_GUARD_TELEMETRY_SEEN) >= _GUARD_TELEMETRY_SEEN_LIMIT:
                     _GUARD_TELEMETRY_SEEN.clear()
                 _GUARD_TELEMETRY_SEEN.add(hit_key)
+        # Merge message into metadata for telemetry enrichment
+        enriched_metadata = dict(metadata) if metadata else {}
+        enriched_metadata["message"] = message
         sink.record(
             label,
             category,
             goal_digest=goal_digest,
             iteration=iteration,
-            metadata=metadata,
+            metadata=enriched_metadata,
         )
 
     return _record_once
@@ -285,23 +288,29 @@ def _long_task_budget_limits(
     *,
     is_research_mode: bool,
     is_swarm_mode: bool,
+    is_code_mode: bool = False,
     max_tokens_budget: int,
     max_usd_budget: float,
 ) -> tuple[int, float, float]:
-    """Return accounting limits and pause threshold for this ReAct turn."""
+    """Return accounting limits and pause threshold for this ReAct turn.
+
+    Capability-enhancing (not limiting): research / swarm / complex code
+    tasks get expanded ceilings so long tasks are not cut off mid-synthesis.
+    """
+    # 复杂代码/研究/多 Agent 任务自动扩容预算，避免长任务被预算硬切断。
     if is_swarm_mode:
-        return (
-            max(max_tokens_budget, 250_000),
-            max(max_usd_budget, 5.0),
-            0.95,
-        )
-    if is_research_mode:
-        return (
-            max(max_tokens_budget, 150_000),
-            max(max_usd_budget, 3.0),
-            0.95,
-        )
-    return max_tokens_budget, max_usd_budget, 0.8
+        base_tokens, base_usd = 250_000, 5.0
+    elif is_research_mode:
+        base_tokens, base_usd = 150_000, 3.0
+    elif is_code_mode:
+        base_tokens, base_usd = 150_000, 3.0
+    else:
+        base_tokens, base_usd = max_tokens_budget, max_usd_budget
+    return (
+        max(max_tokens_budget, base_tokens),
+        max(max_usd_budget, base_usd),
+        0.95 if (is_swarm_mode or is_research_mode or is_code_mode) else 0.8,
+    )
 
 
 _REACT_SPLITTER: ABSplitter | None = None
@@ -406,14 +415,39 @@ def _cancel_pause_guard(
     except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001 — cancellation subsystem unavailable; proceed normally
         pass
 
+    # Wall-time limit check — runs before explicit pause requests so
+    # a runaway task gets auto-paused even without a user action. Only
+    # wall-time is auto-pausing here: token/cost budget overruns are the
+    # elastic budget's concern (warn-only by default, pause only when the
+    # user opts into ``budget_auto_pause``), so they must NOT hard-stop the
+    # loop from this guard.
+    task_id_str = str(react_task_id) if react_task_id else ""
+    if task_id_str:
+        exceeded, reason = pause_controller.check_active_task_limits(task_id_str)
+        if exceeded and reason == "wall_time_limit":
+            _logger.warning(
+                "react_loop wall-time limit exceeded at iteration %d (task %s) — auto-pausing",
+                iteration,
+                react_task_id,
+            )
+            # Auto-request pause so the normal pause flow handles checkpoint/journal
+            pause_controller.request_pause(
+                task_id=task_id_str,
+                reason="external",
+                requested_by="system",
+                note=f"wall-time limit exceeded ({reason})",
+                thread_id=getattr(pause_controller.get_request(task_id_str), "thread_id", ""),
+                agent_id=getattr(pause_controller.get_request(task_id_str), "agent_id", ""),
+            )
+
     # User follow-ups are durable, high-priority inputs. Consume them at
     # the first model-safe boundary so the next response acknowledges the
     # user before the original task continues.
     append_pending_live_steering()
 
-    if pause_controller.is_pause_requested(str(react_task_id) if react_task_id else None):
+    if pause_controller.is_pause_requested(task_id_str):
         terminated_reason = "paused"
-        req_meta = pause_controller.get_request(str(react_task_id))
+        req_meta = pause_controller.get_request(task_id_str)
         _logger.info(
             "react_loop paused at iteration %d (task %s) — checkpoint written",
             iteration,
@@ -444,19 +478,19 @@ def _cancel_pause_guard(
                 )
             try:
                 journal.write_task_paused(
-                    task_id=str(react_task_id) if react_task_id else "",
+                    task_id=task_id_str,
                     reason=req_meta.reason if req_meta else "external",
                     requested_by=req_meta.requested_by if req_meta else "",
                     iteration=iteration,
                 )
             except (AttributeError, ImportError):
                 _logger.debug("pause journal write failed", exc_info=True)
-        pause_controller.mark_paused(str(react_task_id) if react_task_id else "")
-        pause_controller.unregister_active(str(react_task_id) if react_task_id else "")
+        pause_controller.mark_paused(task_id_str)
+        pause_controller.unregister_active(task_id_str)
         yield {
             "type": "react_paused",
             "iteration": iteration,
-            "task_id": str(react_task_id) if react_task_id else None,
+            "task_id": task_id_str or None,
             "reason": req_meta.reason if req_meta else "external",
             "note": req_meta.note if req_meta else "",
         }

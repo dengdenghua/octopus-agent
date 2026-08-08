@@ -631,20 +631,18 @@ def _phase_6b_model_stream(
                 tokens_delta=_tok,
                 cost_delta=_cost,
             )
-            if (
-                _budget_auto_pause_enabled
-                and _updated is not None
-                and react_task_id is not None
-                and not _pause.is_pause_requested(str(react_task_id))
-            ):
+            # 弹性预算：无论是否启用自动暂停，都在超限时记录告警统计。
+            # 仅当用户显式开启 budget_auto_pause 时才真正发起暂停（reason=
+            # budget_near_limit）；默认关闭则只告警、不阻塞长任务。
+            if react_task_id is not None and _updated is not None:
                 _token_pct = (
                     _updated.tokens_spent / _updated.max_tokens if _updated.max_tokens > 0 else 0
                 )
                 _usd_pct = _updated.cost_usd / _updated.max_usd if _updated.max_usd > 0 else 0
                 if _token_pct >= _budget_pause_threshold or _usd_pct >= _budget_pause_threshold:
-                    _logger.info(
-                        "react_loop budget auto-pause · task %s · "
-                        "tokens %d/%d (%.0f%%) · usd %.3f/%.3f (%.0f%%)",
+                    _logger.warning(
+                        "react_loop budget above threshold · task %s · "
+                        "tokens %d/%d (%.0f%%) · usd %.3f/%.3f (%.0f%%) · %s",
                         react_task_id,
                         _updated.tokens_spent,
                         _updated.max_tokens,
@@ -652,22 +650,27 @@ def _phase_6b_model_stream(
                         _updated.cost_usd,
                         _updated.max_usd,
                         _usd_pct * 100,
+                        "auto-pausing" if _budget_auto_pause_enabled else "warning only",
                     )
-                    _pause.request_pause(
-                        task_id=str(react_task_id),
-                        reason="budget_near_limit",
-                        requested_by="system",
-                        note=(
-                            f"自动暂停 · tokens {_updated.tokens_spent:,}/"
-                            f"{_updated.max_tokens:,} "
-                            f"({int(_token_pct * 100)}%) · "
-                            f"${_updated.cost_usd:.3f}/"
-                            f"${_updated.max_usd:.3f} "
-                            f"({int(_usd_pct * 100)}%) · 加预算继续"
-                        ),
-                        thread_id=thread_id or "",
-                        agent_id=_agent_id_for_pause,
-                    )
+                    if (
+                        _budget_auto_pause_enabled
+                        and not _pause.is_pause_requested(str(react_task_id))
+                    ):
+                        _pause.request_pause(
+                            task_id=str(react_task_id),
+                            reason="budget_near_limit",
+                            requested_by="system",
+                            note=(
+                                f"自动暂停 · tokens {_updated.tokens_spent:,}/"
+                                f"{_updated.max_tokens:,} "
+                                f"({int(_token_pct * 100)}%) · "
+                                f"${_updated.cost_usd:.3f}/"
+                                f"${_updated.max_usd:.3f} "
+                                f"({int(_usd_pct * 100)}%) · 加预算继续"
+                            ),
+                            thread_id=thread_id or "",
+                            agent_id=_agent_id_for_pause,
+                        )
         except (AttributeError, TypeError):
             _logger.debug("budget check failed", exc_info=True)
         return _LoopControl.CONTINUE

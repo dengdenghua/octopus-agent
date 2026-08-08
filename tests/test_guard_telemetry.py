@@ -172,16 +172,17 @@ class TestEvaluateGuardsRecorder:
             ),
         ]
         ctx = GuardContext(steps=steps, final_answer="done", is_code_mode=True)
-        recorded: list[tuple[str, str]] = []
-        hit = evaluate_guards(ctx, recorder=lambda label, cat: recorded.append((label, cat)))
+        recorded: list[tuple[str, str, str]] = []
+        hit = evaluate_guards(ctx, recorder=lambda label, cat, msg: recorded.append((label, cat, msg)))
         assert hit is not None
-        assert recorded == [("secret-leak guard", "security")]
+        label, message = hit
+        assert recorded == [(label, "security", message)]
 
     def test_recorder_not_called_when_clean(self) -> None:
         steps = [_step(1, action='read_file({"path": "runtime/foo.py"})')]
         ctx = GuardContext(steps=steps, final_answer="reviewed", is_code_mode=False)
-        recorded: list[tuple[str, str]] = []
-        hit = evaluate_guards(ctx, recorder=lambda label, cat: recorded.append((label, cat)))
+        recorded: list[tuple[str, str, str]] = []
+        hit = evaluate_guards(ctx, recorder=lambda label, cat, msg: recorded.append((label, cat, msg)))
         assert hit is None
         assert recorded == []
 
@@ -230,8 +231,8 @@ class TestEvaluateGuardsRecorder:
         )
         assert recorder_a is not None and recorder_b is not None
 
-        recorder_a("todo-protocol guard", "protocol")
-        recorder_b("todo-protocol guard", "protocol")
+        recorder_a("todo-protocol guard", "protocol", "message text")
+        recorder_b("todo-protocol guard", "protocol", "message text")
 
         assert controls._GUARD_TELEMETRY_SINGLETON.stats()["total"] == 1
         controls._reset_guard_telemetry_for_tests()

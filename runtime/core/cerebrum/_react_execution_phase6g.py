@@ -286,23 +286,58 @@ def _phase_6g_housekeeping(state: _LoopState, *, i: int, max_iterations: int) ->
             and react_task_id is not None
             and not _pause.is_pause_requested(str(react_task_id))
         ):
-            _logger.warning(
-                "react_loop spin-guard at iter %d · task %s · %d consecutive blank steps",
-                i + 1,
-                react_task_id,
-                _consecutive_spin_iterations,
-            )
-            _pause.request_pause(
-                task_id=str(react_task_id),
-                reason="model_spinning",
-                requested_by="system",
-                note=(
-                    f"模型空转 · 连续 {_consecutive_spin_iterations} 轮未产出有效动作，"
-                    f"已自动暂停 · 可切换模型或补充信息后继续"
-                ),
-                thread_id=thread_id or "",
-                agent_id=_agent_id_for_pause,
-            )
+            # Capability-enhancing spin escalation: instead of pausing a
+            # spinning turn immediately, first force a context-compression
+            # pass, then attempt a model switch. Only when both fail to break
+            # the spin do we pause with a clear reason.
+            _spin_stage = state.spin_escalation_stage
+            if _spin_stage == 0:
+                # Stage 1: force convergence/compression on the next iteration.
+                _force_convergence_next = True
+                state.spin_escalation_stage = 1
+                _consecutive_spin_iterations = 0
+                state.consecutive_spin_iterations = 0
+                _logger.warning(
+                    "react_loop spin-guard stage 1·compress at iter %d · task %s · "
+                    "%d consecutive blank steps",
+                    i + 1,
+                    react_task_id,
+                    _consecutive_spin_iterations,
+                )
+            elif _spin_stage == 1:
+                # Stage 2: request a model switch; the main loop consumes the
+                # flag before the next LLM call.
+                state.spin_model_switch_requested = True
+                state.spin_escalation_stage = 2
+                _consecutive_spin_iterations = 0
+                state.consecutive_spin_iterations = 0
+                _logger.warning(
+                    "react_loop spin-guard stage 2·switch-model at iter %d · task %s · "
+                    "%d consecutive blank steps",
+                    i + 1,
+                    react_task_id,
+                    _consecutive_spin_iterations,
+                )
+            else:
+                # Stage 3: exhausted escalation — pause with a clear reason so
+                # the user can intervene instead of burning remaining iterations.
+                _logger.warning(
+                    "react_loop spin-guard at iter %d · task %s · %d consecutive blank steps",
+                    i + 1,
+                    react_task_id,
+                    _consecutive_spin_iterations,
+                )
+                _pause.request_pause(
+                    task_id=str(react_task_id),
+                    reason="model_spinning",
+                    requested_by="system",
+                    note=(
+                        f"模型空转 · 连续 {_consecutive_spin_iterations} 轮未产出有效动作，"
+                        f"已自动暂停 · 可切换模型或补充信息后继续"
+                    ),
+                    thread_id=thread_id or "",
+                    agent_id=_agent_id_for_pause,
+                )
 
         if (
             react_task_id is not None

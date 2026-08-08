@@ -78,16 +78,16 @@ class TestEvaluateGuards:
             lambda _ctx: "prefer a smaller function",
         )
         monkeypatch.setattr(guard_module, "GUARD_REGISTRY", [advisory])
-        recorded: list[tuple[str, str]] = []
+        recorded: list[tuple[str, str, str]] = []
         ctx = GuardContext(steps=[], final_answer="useful result", is_code_mode=True)
 
         assert (
             evaluate_guards(
-                ctx, recorder=lambda label, category: recorded.append((label, category))
+                ctx, recorder=lambda label, category, msg: recorded.append((label, category, msg))
             )
             is None
         )
-        assert recorded == [("style-only guard", "code-smell")]
+        assert recorded == [("style-only guard", "code-smell", "prefer a smaller function")]
 
     def test_clean_trajectory_returns_none(self) -> None:
         # A simple read-only inspection with a todo checklist completed.

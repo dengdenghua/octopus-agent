@@ -228,6 +228,7 @@ def _finalize_react_turn(
                     goal=goal,
                     browser_operation_mode=browser_operation_mode,
                     grounded_source_paths=final_guard_grounded_source_paths,
+                    model=effective_model,
                 )
                 if _guard_hit is not None:
                     _guard_label, _guard_message = _guard_hit

@@ -314,10 +314,13 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
     ) = _long_task_budget_limits(
         is_research_mode=state.is_research_mode,
         is_swarm_mode=state.is_swarm_mode,
+        is_code_mode=state.is_code_mode,
         max_tokens_budget=state.max_tokens_budget,
         max_usd_budget=state.max_usd_budget,
     )
-    state.budget_auto_pause_enabled = state.is_goal_mode or bool(
+    # 弹性预算：默认不自动暂停。仅当用户显式开启 budget_auto_pause 时才在
+    # 超限时暂停；否则超限只记录告警、不阻塞长任务（能力增强而非限制）。
+    state.budget_auto_pause_enabled = bool(
         _uc.get("budget_auto_pause")
         or _metadata.get("budget_auto_pause")
         or state.intent.flags.get("budget_auto_pause", False)

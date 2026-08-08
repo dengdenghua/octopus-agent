@@ -130,6 +130,15 @@ class _LoopState:
     # (e.g. degraded reasoning producing only whitespace). Used by the
     # model-spin guard to stop burning iterations early.
     consecutive_spin_iterations: int = 0
+    # Capability-enhancing spin escalation: before pausing a spinning turn,
+    # first force a context-compression pass, then attempt a model switch.
+    # ``0`` = not yet escalated · ``1`` = compression forced · ``2`` = model
+    # switch requested · ``3`` = exhausted, fall back to pause.
+    spin_escalation_stage: int = 0
+    # Set by the spin guard (phase 6g) when it decides the next escalation is
+    # a model switch. The main loop consumes it after the cancel/pause guard
+    # (before the next LLM call) and calls the model-failover closure.
+    spin_model_switch_requested: bool = False
     # ── emit · terminal accumulators (synced in/out) ──
     final_answer: str | None = None
     terminated_reason: str = "max_iter"

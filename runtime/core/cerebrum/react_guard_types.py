@@ -35,6 +35,7 @@ class GuardContext:
     goal: str = ""
     browser_operation_mode: bool = False
     grounded_source_paths: frozenset[str] = frozenset()
+    model: str = ""  # New: model name for model-aware guard routing
 
 
 @dataclass(frozen=True)

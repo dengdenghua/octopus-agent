@@ -93,17 +93,17 @@ class TestDisabledLabels:
             final_answer="x",
             is_code_mode=True,
         )
-        recorded: list[tuple[str, str]] = []
+        recorded: list[tuple[str, str, str]] = []
         # guard-a is disabled, guard-b will fire and SHOULD be recorded.
         hit = evaluate_guards(
             ctx,
             registry=fake_registry,
-            recorder=lambda lab, cat: recorded.append((lab, cat)),
+            recorder=lambda lab, cat, msg: recorded.append((lab, cat, msg)),
             disabled_labels={"guard-a"},
         )
         assert hit == ("guard-b", "boom")
         # Only guard-b is recorded; guard-a is NOT.
-        assert recorded == [("guard-b", "code-smell")]
+        assert recorded == [("guard-b", "code-smell", "boom")]
 
     def test_empty_disabled_set_is_noop(
         self,

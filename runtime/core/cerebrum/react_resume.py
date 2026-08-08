@@ -89,6 +89,32 @@ def _resume_context_text(value: Any, limit: int) -> str:
     return text[: max(0, limit - 3)] + "..."
 
 
+def _carry_prior_spend(stack: Any, resume_task_id: Any) -> tuple[int, float]:
+    """Sum historical token/cost spend for a task from the journal.
+
+    Run AFTER ``_resume_or_register_turn`` registers the task but guards the
+    carry so a missing journal degrades to (0, 0.0) instead of failing resume.
+    """
+    if resume_task_id is None:
+        return 0, 0.0
+    journal = getattr(stack, "journal", None)
+    if journal is None or not hasattr(journal, "read_by_task"):
+        return 0, 0.0
+    try:
+        events = journal.read_by_task(str(resume_task_id))
+    except (AttributeError, TypeError, ValueError):  # noqa: BLE001
+        return 0, 0.0
+    total_tokens = 0
+    total_cost = 0.0
+    for event in events:
+        if getattr(event, "event_type", "") != "token_usage":
+            continue
+        total_tokens += max(0, int(getattr(event, "input_tokens", 0) or 0))
+        total_tokens += max(0, int(getattr(event, "output_tokens", 0) or 0))
+        total_cost += max(0.0, float(getattr(event, "cost_usd", 0.0) or 0.0))
+    return total_tokens, total_cost
+
+
 def _load_resume_checkpoint_snapshot(
     stack: StackProtocol,
     intent: ParsedIntent,
@@ -349,6 +375,9 @@ def _resume_or_register_turn(
 
     _pause = get_pause_controller()
     _agent_id_for_pause = str(getattr(agent, "agent_id", "") or "")
+    # Resume a paused long task with its historical spend carried over so the
+    # cumulative budget stays accurate instead of restarting from zero.
+    _carry_tokens, _carry_cost = _carry_prior_spend(stack, resume_task_id)
     _pause.register_active(
         str(react_task_id),
         thread_id=thread_id or "",
@@ -356,6 +385,8 @@ def _resume_or_register_turn(
         max_iterations=max_iterations,
         max_tokens=active_max_tokens_budget,
         max_usd=active_max_usd_budget,
+        carry_tokens=_carry_tokens,
+        carry_cost_usd=_carry_cost,
     )
     steps: list[ReActStep] = []
     # Clear any prompt-injection taint from a prior turn in this context,

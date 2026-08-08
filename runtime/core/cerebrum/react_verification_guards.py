@@ -19,6 +19,7 @@ from runtime.core.cerebrum.react_parsing import (
     _has_language_specific_verification,
     _has_successful_verification_observation,
     _has_test_write,
+    _has_verification_requiring_code_write,
     _has_wire_contract_test_write,
     _is_code_write_step,
     _latest_verification_observation_is_red,
@@ -635,11 +636,11 @@ def _false_verification_claim_guard(
     # fact it read from the repo (README, CI config) rather than claiming
     # it ran the verifier itself. Only force verification when the agent
     # actually modified code — mirroring the red-verification guard, which
-    # is gated on _has_code_write for the same reason. Without this gate a
-    # pure research/analysis answer is rejected 3x here, the final answer
-    # stays buffered (the "streaming silences for hundreds of seconds"
-    # symptom), and the turn dies on a guard impasse.
-    if not _has_code_write(steps):
+    # is gated on _has_verification_requiring_code_write for the same reason.
+    # Without this gate a pure research/analysis answer is rejected 3x here,
+    # the final answer stays buffered (the "streaming silences for hundreds
+    # of seconds" symptom), and the turn dies on a guard impasse.
+    if not _has_verification_requiring_code_write(steps):
         return None
     if _has_successful_verification_observation(steps):
         return None

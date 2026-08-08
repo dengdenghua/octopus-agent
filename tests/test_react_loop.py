@@ -1250,7 +1250,39 @@ def test_long_research_budget_gets_enough_runway() -> None:
     assert threshold == 0.95
 
 
+def test_budget_usage_accounting_auto_pauses_when_opted_in() -> None:
+    # 能力增强型调度：普通任务默认不自动暂停（超限仅告警、不阻塞长任务）。
+    # 仅当用户显式开启 budget_auto_pause 时才真正暂停，作为最终兜底而不是默认行为。
+    router = _ScriptedRouter(
+        [
+            'Thought: gather evidence\nAction: echo({"text": "done"})\n',
+            "Final Answer: report delivered",
+        ],
+        usage=[(99, 5), (0, 0)],
+    )
+    stack = _build_stack_with_executor(router)
+    intent = _intent("echo once")
+    intent.user_context["budget_auto_pause"] = True
+
+    events, result = _drain(
+        stream_react_loop(
+            stack,
+            intent,
+            agent=None,
+            thread_id="budget-opted-in",
+            max_iterations=3,
+            max_tokens_budget=100,
+        )
+    )
+
+    assert result is not None
+    assert result.terminated_reason == "paused"
+    assert any(event["type"] == "react_paused" for event in events)
+
+
 def test_budget_usage_accounting_does_not_auto_pause_by_default() -> None:
+    """能力增强：未显式开启 budget_auto_pause 时，预算超限只记录告警而不暂停，
+    避免长任务在合成答案前被预算硬切断。"""
     router = _ScriptedRouter(
         [
             'Thought: gather evidence\nAction: echo({"text": "done"})\n',
@@ -1271,7 +1303,8 @@ def test_budget_usage_accounting_does_not_auto_pause_by_default() -> None:
         )
     )
 
-    assert result is not None and result.success
+    assert result is not None
+    assert result.terminated_reason == "final_answer"
     assert result.final_answer == "report delivered"
     assert not any(event["type"] == "react_paused" for event in events)
 
@@ -6165,16 +6198,15 @@ def test_stream_pause_returns_without_force_final_answer() -> None:
     assert router.calls == 0
 
 
-def test_stream_spin_guard_pauses_early_on_blank_reasoning() -> None:
-    """Degraded models that emit only empty reasoning must not burn the
-    whole iteration budget — the model-spin guard pauses the turn early with a
-    clear reason instead of running to the near-limit auto-pause."""
+def test_stream_spin_guard_escalates_then_pauses_on_blank_reasoning() -> None:
+    """能力增强型无进展升级：模型持续空转时，spin guard 不立即暂停，而是先
+    强制压缩上下文、再请求切换模型，最后在升级耗尽时才暂停。避免任务在第一次
+    空白轮就被打断，也避免烧光整个迭代预算。"""
     from runtime.core.cerebrum.pause_control import get_pause_controller
 
     ctrl = get_pause_controller()
-    # Three consecutive blank (whitespace-only) responses trigger the spin
-    # guard on the third, then the pause is detected before the fourth call.
-    router = _ScriptedRouter([" ", " ", " ", " ", " "])
+    # 三次升级阶段 × 每次连续 3 轮空白 = 第 9 轮触发暂停。给出足够空白以耗尽升级。
+    router = _ScriptedRouter([" ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "])
     task_id = ""
     try:
         gen = stream_react_loop(
@@ -6191,8 +6223,8 @@ def test_stream_spin_guard_pauses_early_on_blank_reasoning() -> None:
     finally:
         ctrl.clear(task_id)
 
-    # The spin guard fires after 3 blank rounds — well under the 10-round cap.
-    assert router.calls == 3
+    # Spin guard 在耗尽升级后于第 9 轮暂停——仍远低于 10 轮上限。
+    assert router.calls == 9
     assert any(e["type"] == "react_paused" for e in events)
     assert result is not None
     assert result.terminated_reason == "paused"
