@@ -51,7 +51,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def register_mcp_tools_as_skills(registry, client, name_prefix, include_golden_tests, require_trust, server_name)` |  |
+| func | `def register_mcp_tools_as_skills(registry, client, name_prefix, include_golden_tests, require_trust, server_name, tenant_id, trust_store)` |  |
 
 ### `client.py`
 
@@ -74,8 +74,9 @@ tier: "standard"
 | func | `def exchange_code(token_url, code, code_verifier, client_id, redirect_uri)` |  |
 | func | `def refresh_access(token_url, refresh_token, client_id)` |  |
 | class | `class MCPOAuthStore` | Thread-safe, JSON-backed per-server OAuth token + pending-flow store. |
-| func | `def get_oauth_store()` |  |
-| func | `def bearer_for_server(name)` | Valid access token for ``name`` (refreshing if needed), or ``None``. |
+| func | `def get_oauth_store(tenant_id)` | Return the OAuth store for one tenant; no arg is the legacy store. |
+| func | `def get_oauth_store_for_state(state)` | Resolve a callback state to its tenant-partitioned store. |
+| func | `def bearer_for_server(name, tenant_id)` | Valid access token for ``name`` (refreshing if needed), or ``None``. |
 | func | `def reset_oauth_store_for_tests()` |  |
 
 ### `oauth_discovery.py`
@@ -99,7 +100,7 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class TrustEntry` |  |
 | class | `class MCPTrustStore` | Thread-safe JSON-backed approval registry. |
-| func | `def get_trust_store()` | Lazy singleton · first call reads (or creates) the JSON. |
+| func | `def get_trust_store(tenant_id)` | Return the approval store isolated to ``tenant_id``. |
 | func | `def reset_trust_store_for_tests()` | Drop the singleton · tests use this to isolate from user's real ~/.octopus directory (pair with monkeypatching $OCTOPUS_HOME). |
 
 ### `types.py`

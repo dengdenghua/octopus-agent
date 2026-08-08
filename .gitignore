@@ -85,6 +85,9 @@ appliance-auth.json
 
 # Local Octopus state / reversible cleanup archives.
 # Do not ignore .octopus/plugins wholesale: bundled release plugins may live there.
+.octopus-home/
+.octopus-tmp/
+.octopus-work/
 .octopus/*.json
 .octopus/*.jsonl
 .octopus/*.bak
@@ -138,6 +141,7 @@ frontend/lint-output*.txt
 frontend/src/styles/tailwind-prebuilt.css
 frontend/node_modules/
 frontend/dist/
+frontend/dist-next/
 frontend/.vite/
 frontend/.next/
 
@@ -225,3 +229,7 @@ runtime/execution/all_skills/.preinstalled
 # 停止打包:技能由 octopus_runtime bootstrap 从 registry 同步(full-bundle 整目录),不再提交
 /skills/public/*/
 .trae/tmp/
+
+# Local assistant/IDE state generated during development.
+.workbuddy/
+.trae/skills/

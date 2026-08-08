@@ -59,6 +59,14 @@ as a repository-root child.
 | `SECURITY.md` | Private vulnerability-reporting policy |
 | `.git-blame-ignore-revs` | Mechanical commits skipped by `git blame` (repo-wide format sweeps) |
 
+## Repository Tooling
+
+| Path | Purpose |
+|---|---|
+| `package.json` | Root-only JavaScript tooling and git-hook dependencies |
+| `pnpm-lock.yaml` | Reproducible lockfile for root JavaScript tooling |
+| `commitlint.config.js` | Conventional-commit policy used by commitlint and Husky |
+
 ## Local State
 
 These paths are not source. They may exist during development, but should not be

@@ -9,7 +9,7 @@ tier: "core"
 
 > 自动从仓库结构提取。Octopus · The Open-Source Multi-Agent AI Workspace.
 
-Octopus-Agent 是一个自托管的 agent runtime，用来规划、执行、观察和改进任务。
+> v0.2.0 Beta · Apache-2.0
 
 ## 仓库结构
 
@@ -26,7 +26,7 @@ Octopus-Agent 是一个自托管的 agent runtime，用来规划、执行、观�
 
 ## 规模
 
-- Python 模块：**1198** 个（runtime/）
-- TSX 组件：**488** 个（frontend/src）
-- 后端测试：**670** 个
+- Python 模块：**1216** 个（runtime/）
+- TSX 组件：**526** 个（frontend/src）
+- 后端测试：**681** 个
 

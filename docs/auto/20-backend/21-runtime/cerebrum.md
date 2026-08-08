@@ -32,6 +32,7 @@ tier: "core"
 | `_react_execution_phase6g.py` | PHASE 6g + 6d — loop-tail housekeeping and pre-dispatch guard cluster for the ReAct loop. |
 | `_react_execution_progress.py` | Working-set / phase / progress-summary helpers and trajectory persistence + planner learning throttles for the ReAct loop. |
 | `_react_execution_results.py` | Tool-result / observation shaping for the ReAct loop. |
+| `_react_loop_reexports.py` | Lazy compatibility exports for helpers historically owned by react_loop. |
 | `_react_parsing_codequality.py` | Code-quality detectors for ReAct write steps. |
 | `_react_parsing_core.py` | Core ReAct text parsing + incremental Thought streaming. |
 | `_react_parsing_testquality.py` | Test-correctness + production-hygiene detectors for ReAct write steps. |
@@ -276,6 +277,7 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
+| func | `def guard_disposition(label, category)` | Return ``hard``, ``repair`` or ``advisory`` for a guard finding. |
 | func | `def evaluate_guards(ctx, registry, recorder, disabled_labels, categories)` | Walk the registry in priority order; return the first ``(label, message)`` that fires, or ``None`` if all pass. |
 
 ### `react_loop.py`
@@ -412,7 +414,7 @@ tier: "core"
 
 ## Who imports this
 
-**47** file(s) reference this package:
+**50** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -448,13 +450,13 @@ tier: "core"
   - `runtime/safety/recovery/gepa_bridge.py`
   - `runtime/safety/recovery/workflow_applier.py`
   - `runtime/safety/validation/trust_signal.py`
-- **`runtime/sensing/`** · 19 file(s)
+- **`runtime/sensing/`** · 22 file(s)
   - `runtime/sensing/gateway/_agents_endpoints.py`
   - `runtime/sensing/gateway/_agents_endpoints_conversations.py`
   - `runtime/sensing/gateway/_agents_endpoints_tasks.py`
   - `runtime/sensing/gateway/_config_endpoints_system.py`
   - `runtime/sensing/gateway/_observability_journal.py`
-  - _… and 14 more_
+  - _… and 17 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/mobile/cerebrum_adapter.py`

@@ -84,6 +84,10 @@ ROOT_ALLOWLIST: set[str] = {
     "MANIFEST.in",
     "mkdocs.yml",
     "Makefile",
+    # ── Repository tooling ──────────────────────────────────
+    "package.json",
+    "pnpm-lock.yaml",
+    "commitlint.config.js",
     # ── Documentation ───────────────────────────────────────
     "README.md",
     "README.en.md",

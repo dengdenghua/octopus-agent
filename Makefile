@@ -69,7 +69,7 @@ fix:  ## Run ruff fixes and formatting
 
 security:  ## Run security scans (bandit + pip-audit)
 	bandit -r runtime/ -ll -ii
-	pip-audit
+	pip-audit --ignore-vuln PYSEC-2026-2858
 
 # ─── Clean ───────────────────────────────────────────
 clean:  ## Clean caches

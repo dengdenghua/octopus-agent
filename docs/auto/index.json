@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generated_at": "2026-08-04T07:01:06+00:00",
-  "files_analyzed": 44,
+  "generated_at": "2026-08-08T09:59:04+00:00",
+  "files_analyzed": 45,
   "tree": [
     {
       "type": "doc",
@@ -228,6 +228,11 @@
             },
             {
               "type": "doc",
+              "title": "🐙 章鱼助手",
+              "path": "20-backend/26-agents/octopus.md"
+            },
+            {
+              "type": "doc",
               "title": "🌐 Claude Code 伙伴",
               "path": "20-backend/26-agents/registry_local_claude_code.md"
             },
@@ -354,6 +359,11 @@
       "type": "imports"
     },
     {
+      "from": "20-backend/21-runtime/suckers.md",
+      "to": "20-backend/25-adapters/channels.md",
+      "type": "imports"
+    },
+    {
       "from": "20-backend/21-runtime/tool-engine.md",
       "to": "20-backend/21-runtime/suckers.md",
       "type": "imports"
@@ -421,6 +431,11 @@
     {
       "from": "20-backend/23-memory/hemolymph.md",
       "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/23-memory/journal.md",
+      "to": "20-backend/22-safety/auth.md",
       "type": "imports"
     },
     {
@@ -516,6 +531,11 @@
     {
       "from": "20-backend/25-adapters/mcp.md",
       "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/25-adapters/mcp.md",
+      "to": "20-backend/22-safety/auth.md",
       "type": "imports"
     }
   ]

@@ -32,48 +32,48 @@ graph LR
   sensing[sensing]
   adapters[adapters]
   platform[platform]
-  sensing -- 125 --> platform
+  sensing -- 126 --> platform
   safety -- 83 --> platform
-  execution -- 76 --> platform
-  sensing -- 74 --> memory
-  sensing -- 66 --> execution
-  sensing -- 56 --> safety
+  sensing -- 83 --> safety
+  execution -- 80 --> platform
+  sensing -- 75 --> memory
+  sensing -- 67 --> execution
   core -- 54 --> platform
-  memory -- 52 --> platform
-  execution -- 44 --> safety
+  memory -- 53 --> platform
+  execution -- 45 --> safety
   sensing -- 38 --> protocol
-  sensing -- 36 --> adapters
-  sensing -- 26 --> core
-  platform -- 25 --> safety
-  execution -- 23 --> memory
+  sensing -- 32 --> adapters
+  platform -- 29 --> safety
+  sensing -- 29 --> core
+  execution -- 26 --> memory
   core -- 21 --> safety
   safety -- 21 --> memory
   platform -- 19 --> sensing
   core -- 18 --> execution
   platform -- 18 --> execution
   execution -- 16 --> core
-  platform -- 14 --> memory
+  memory -- 16 --> safety
+  platform -- 15 --> memory
   safety -- 14 --> adapters
   platform -- 13 --> core
   core -- 11 --> memory
-  platform -- 10 --> adapters
-  execution -- 8 --> adapters
+  adapters -- 10 --> safety
+  execution -- 9 --> adapters
+  platform -- 9 --> adapters
   safety -- 8 --> execution
-  memory -- 7 --> safety
+  adapters -- 7 --> platform
   safety -- 7 --> core
   sensing -- 7 --> projectos
-  adapters -- 6 --> platform
-  adapters -- 6 --> safety
   memory -- 6 --> protocol
   _cli_commands.py -- 5 --> memory
   _cli_commands.py -- 5 --> platform
+  cli_serve.py -- 5 --> safety
   core -- 5 --> adapters
   memory -- 5 --> execution
   adapters -- 4 --> sensing
   cli_core.py -- 4 --> execution
   cli_run.py -- 4 --> execution
   cli_serve.py -- 4 --> adapters
-  cli_serve.py -- 4 --> safety
   platform -- 4 --> tentacle
   research -- 4 --> platform
   cli_core.py -- 3 --> core
@@ -84,6 +84,7 @@ graph LR
   memory -- 3 --> core
   platform -- 3 --> cli
   sensing -- 3 --> workspace
+  tests -- 3 --> memory
   tour.py -- 3 --> core
   tour.py -- 3 --> safety
   workspace -- 3 --> platform

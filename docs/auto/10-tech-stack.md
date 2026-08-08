@@ -11,9 +11,11 @@ tier: "standard"
 
 ## 后端（Python）
 
+- `defusedxml>=0.7.1`
 - `fastembed>=0.8.0`
 - `insightface>=1.0.1`
 - `opencv-python-headless>=5.0.0.93`
+- `pillow>=12.3.0`
 - `pydantic>=2.12.0`
 - `rapidocr-onnxruntime>=1.3.0`
 
@@ -29,6 +31,7 @@ tier: "standard"
 - `@codemirror/merge`
 - `@codemirror/state`
 - `@codemirror/view`
+- `@fontsource/inter`
 - `@radix-ui/react-avatar`
 - `@radix-ui/react-collapsible`
 - `@radix-ui/react-dialog`
@@ -43,6 +46,5 @@ tier: "standard"
 - `@radix-ui/react-tabs`
 - `@radix-ui/react-toggle`
 - `@radix-ui/react-toggle-group`
-- `@radix-ui/react-tooltip`
-- … 共 66 个依赖
+- … 共 65 个依赖
 

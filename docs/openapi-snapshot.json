@@ -512,6 +512,28 @@
             },
             "title": "Relative Paths",
             "type": "array"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "workspace_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Path"
           }
         },
         "required": [
@@ -6080,6 +6102,195 @@
           "workspace"
         ],
         "title": "VerifyRunRequest",
+        "type": "object"
+      },
+      "VideoClassifyRequest": {
+        "properties": {
+          "directory": {
+            "default": ".",
+            "title": "Directory",
+            "type": "string"
+          },
+          "top_k": {
+            "default": 5,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "VideoClassifyRequest",
+        "type": "object"
+      },
+      "VideoFaceSearchRequest": {
+        "properties": {
+          "directory": {
+            "default": ".",
+            "title": "Directory",
+            "type": "string"
+          },
+          "image_path": {
+            "default": "",
+            "title": "Image Path",
+            "type": "string"
+          },
+          "top_k": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "VideoFaceSearchRequest",
+        "type": "object"
+      },
+      "VideoImageSearchRequest": {
+        "properties": {
+          "directory": {
+            "default": ".",
+            "title": "Directory",
+            "type": "string"
+          },
+          "image_path": {
+            "default": "",
+            "title": "Image Path",
+            "type": "string"
+          },
+          "top_k": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "VideoImageSearchRequest",
+        "type": "object"
+      },
+      "VideoIndexRequest": {
+        "properties": {
+          "directory": {
+            "default": ".",
+            "title": "Directory",
+            "type": "string"
+          },
+          "include_faces": {
+            "default": true,
+            "title": "Include Faces",
+            "type": "boolean"
+          },
+          "include_transcript": {
+            "default": false,
+            "title": "Include Transcript",
+            "type": "boolean"
+          },
+          "incremental": {
+            "default": false,
+            "title": "Incremental",
+            "type": "boolean"
+          },
+          "interval_sec": {
+            "default": 60.0,
+            "maximum": 3600.0,
+            "minimum": 10.0,
+            "title": "Interval Sec",
+            "type": "number"
+          },
+          "max_files": {
+            "default": 100,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Files",
+            "type": "integer"
+          },
+          "watch": {
+            "default": false,
+            "title": "Watch",
+            "type": "boolean"
+          }
+        },
+        "title": "VideoIndexRequest",
+        "type": "object"
+      },
+      "VideoOcrRequest": {
+        "properties": {
+          "directory": {
+            "default": ".",
+            "title": "Directory",
+            "type": "string"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
+          },
+          "top_k": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "VideoOcrRequest",
+        "type": "object"
+      },
+      "VideoSearchRequest": {
+        "properties": {
+          "directory": {
+            "default": ".",
+            "title": "Directory",
+            "type": "string"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
+          },
+          "top_k": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "VideoSearchRequest",
+        "type": "object"
+      },
+      "VideoSpeechSearchRequest": {
+        "properties": {
+          "directory": {
+            "default": ".",
+            "title": "Directory",
+            "type": "string"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "title": "VideoSpeechSearchRequest",
+        "type": "object"
+      },
+      "VideoWatchRequest": {
+        "properties": {
+          "directory": {
+            "default": ".",
+            "title": "Directory",
+            "type": "string"
+          },
+          "interval_sec": {
+            "default": 60.0,
+            "maximum": 3600.0,
+            "minimum": 10.0,
+            "title": "Interval Sec",
+            "type": "number"
+          }
+        },
+        "title": "VideoWatchRequest",
         "type": "object"
       },
       "WorkspaceDirEntry": {
@@ -23544,6 +23755,22 @@
               ],
               "title": "Default Path"
             }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
           }
         ],
         "responses": {
@@ -23755,6 +23982,24 @@
     "/api/fs/roots": {
       "get": {
         "operationId": "api_fs_roots_api_fs_roots_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -23765,6 +24010,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Api Fs Roots",
@@ -23925,6 +24180,38 @@
               "default": ".",
               "title": "Path",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace_path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workspace Path"
             }
           }
         ],
@@ -26034,7 +26321,7 @@
     },
     "/api/local-brain/storage/start": {
       "post": {
-        "description": "Start/probe Storage and provide its ephemeral local-session token.\n\nThe storage service deliberately requires a bearer token.  A browser\nreload clears its sessionStorage, so a local, authenticated bridge is\nrequired to reconnect without weakening Storage itself.  The token is\nnever persisted by this API and is refused for non-loopback callers.",
+        "description": "Start/probe Storage and return its same-origin gateway path.",
         "operationId": "api_local_brain_storage_start_api_local_brain_storage_start_post",
         "responses": {
           "200": {
@@ -33459,6 +33746,248 @@
         ]
       }
     },
+    "/api/storage/{storage_path}": {
+      "delete": {
+        "operationId": "proxy_storage_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storage_path",
+            "required": true,
+            "schema": {
+              "title": "Storage Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Proxy Storage Delete"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Storage",
+        "tags": [
+          "storage"
+        ]
+      },
+      "get": {
+        "operationId": "proxy_storage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storage_path",
+            "required": true,
+            "schema": {
+              "title": "Storage Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Proxy Storage Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Storage",
+        "tags": [
+          "storage"
+        ]
+      },
+      "head": {
+        "operationId": "proxy_storage_head",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storage_path",
+            "required": true,
+            "schema": {
+              "title": "Storage Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Proxy Storage Head"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Storage",
+        "tags": [
+          "storage"
+        ]
+      },
+      "patch": {
+        "operationId": "proxy_storage_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storage_path",
+            "required": true,
+            "schema": {
+              "title": "Storage Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Proxy Storage Patch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Storage",
+        "tags": [
+          "storage"
+        ]
+      },
+      "post": {
+        "operationId": "proxy_storage_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storage_path",
+            "required": true,
+            "schema": {
+              "title": "Storage Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Proxy Storage Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Storage",
+        "tags": [
+          "storage"
+        ]
+      },
+      "put": {
+        "operationId": "proxy_storage_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storage_path",
+            "required": true,
+            "schema": {
+              "title": "Storage Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Proxy Storage Put"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proxy Storage",
+        "tags": [
+          "storage"
+        ]
+      }
+    },
     "/api/stream": {
       "get": {
         "operationId": "api_stream_api_stream_get",
@@ -38952,6 +39481,556 @@
         "summary": "Livez",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/media/video/classify": {
+      "post": {
+        "description": "Zero-shot tag every indexed video in a directory.",
+        "operationId": "video_classify_media_video_classify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoClassifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Classify Media Video Classify Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Classify",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/cover": {
+      "get": {
+        "description": "Return a JPEG frame of a video at a given time (as image/jpeg).",
+        "operationId": "video_cover_media_video_cover_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "video_path",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Video Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "time_sec",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "title": "Time Sec",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "directory",
+            "required": false,
+            "schema": {
+              "default": ".",
+              "title": "Directory",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Cover",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/faces": {
+      "get": {
+        "description": "Group indexed faces into person clusters across videos.",
+        "operationId": "video_faces_media_video_faces_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "required": false,
+            "schema": {
+              "default": ".",
+              "title": "Directory",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "threshold",
+            "required": false,
+            "schema": {
+              "default": 0.45,
+              "title": "Threshold",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Faces Media Video Faces Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Faces",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/hardware": {
+      "get": {
+        "description": "Report configured hardware-acceleration settings (ORT providers, whisper).",
+        "operationId": "video_hardware_media_video_hardware_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Hardware Media Video Hardware Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Video Hardware",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/index": {
+      "post": {
+        "description": "Build (or rebuild) the video keyframe index for a directory.\n\nWith ``incremental=true`` only new/changed files are processed; with\n``watch=true`` a background watcher keeps the directory up to date.",
+        "operationId": "video_index_media_video_index_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoIndexRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Index Media Video Index Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Index",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/ocr": {
+      "post": {
+        "description": "OCR video keyframes and match a text query against the text.",
+        "operationId": "video_ocr_media_video_ocr_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoOcrRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Ocr Media Video Ocr Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Ocr",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/search": {
+      "post": {
+        "description": "Find video keyframes semantically closest to a text query.",
+        "operationId": "video_search_media_video_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Search Media Video Search Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Search",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/search/face": {
+      "post": {
+        "description": "Find video keyframes containing the same face as an image.",
+        "operationId": "video_search_face_media_video_search_face_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoFaceSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Search Face Media Video Search Face Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Search Face",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/search/image": {
+      "post": {
+        "description": "Find video keyframes visually closest to an image file.",
+        "operationId": "video_search_image_media_video_search_image_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoImageSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Search Image Media Video Search Image Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Search Image",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/search/speech": {
+      "post": {
+        "description": "Find video transcript segments containing a text query.",
+        "operationId": "video_search_speech_media_video_search_speech_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoSpeechSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Search Speech Media Video Search Speech Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Search Speech",
+        "tags": [
+          "media",
+          "media"
+        ]
+      }
+    },
+    "/media/video/watch": {
+      "delete": {
+        "description": "Stop the background watcher for a directory.",
+        "operationId": "video_unwatch_media_video_watch_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "required": false,
+            "schema": {
+              "default": ".",
+              "title": "Directory",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Unwatch Media Video Watch Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Unwatch",
+        "tags": [
+          "media",
+          "media"
+        ]
+      },
+      "post": {
+        "description": "Start a background watcher for a directory (auto incremental index).",
+        "operationId": "video_watch_media_video_watch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoWatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Video Watch Media Video Watch Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Video Watch",
+        "tags": [
+          "media",
+          "media"
         ]
       }
     },

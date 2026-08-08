@@ -104,7 +104,7 @@ async def run_turn(args: argparse.Namespace) -> tuple[Timeline, dict]:
         while not done:
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=args.timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 tl.mark("TIMEOUT waiting for events")
                 break
             env = json.loads(raw)

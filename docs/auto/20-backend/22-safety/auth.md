@@ -25,6 +25,8 @@ tier: "core"
 - `ToolCallGuardrailController`
 - `ToolCallSignature`
 - `TrustEngine`
+- `CurrentPrincipal`
+- `TenantScope`
 - `URLVerdict`
 - `check_file_write`
 - `check_path`
@@ -34,7 +36,13 @@ tier: "core"
 - `encode_jwt_hs256`
 - `hash_api_key`
 - `is_safe_path`
+- `require_operator`
+- `require_roles`
+- `resolve_principal`
+- `scope_from_principal`
+- `scope_from_request`
 - `is_safe_url`
+- `safe_httpx_request`
 - `is_safe_write`
 - `strip_model_controlled_overrides`
 - `verify_jwt_hs256`
@@ -50,6 +58,8 @@ tier: "core"
 | `identity.py` | — |
 | `path_denylist.py` | User-defined path denylist — Marvis-style "不可读取文件夹". |
 | `path_guard.py` | — |
+| `principal.py` | Request principal resolution and role gates for shared deployments. |
+| `scope.py` | Small, framework-independent tenant scope primitives. |
 | `tool_guardrails.py` | — |
 | `trust_engine.py` | — |
 | `url_guard.py` | — |
@@ -118,6 +128,26 @@ tier: "core"
 | func | `def check_path(path, sandbox_dir, allow_sensitive, must_exist)` |  |
 | func | `def is_safe_path(path, sandbox_dir, allow_sensitive)` |  |
 
+### `principal.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class CurrentPrincipal` | Verified request identity used by authorization decisions. |
+| func | `def resolve_principal(request, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, jwt_leeway_seconds)` | Resolve a principal from a known API key or a registered JWT subject. |
+| func | `def require_roles(request, identity_store, require_auth, allowed_roles, jwt_secret, jwt_issuer, jwt_audience, jwt_leeway_seconds)` | Require one of *allowed_roles* when shared authentication is active. |
+| func | `def require_operator(request, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, jwt_leeway_seconds)` | Require an ``operator`` or ``admin`` role for control-plane changes. |
+
+### `scope.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class TenantScope` | The minimum ownership context required by a tenant-aware store. |
+| func | `def scope_from_principal(principal, allow_cross_tenant)` |  |
+| func | `def scope_from_request(request, allow_cross_tenant)` | Read only the server-resolved principal from request state. |
+| func | `def require_scope(scope)` |  |
+| func | `def row_visible(row, scope, owner_field)` | Return whether a persisted row may be returned to ``scope``. |
+| func | `def tenant_scoped_path(base_path, scope)` | Return a filesystem partition for one tenant/owner scope. |
+
 ### `tool_guardrails.py`
 
 | Kind | Symbol | Doc |
@@ -144,15 +174,19 @@ tier: "core"
 | func | `def is_safe_url(url, allow_private)` |  |
 | func | `def safe_urlopen(url, timeout, read_cap_bytes, allow_private)` | Fetch ``url`` with rebinding-proof host pinning. |
 | func | `def safe_httpx_get(url, timeout, allow_private, follow_redirects)` | Rebinding-proof GET via httpx when the dep is available. |
+| func | `def safe_httpx_request(method, url, json, data, headers, timeout, allow_private, follow_redirects)` | Make one rebinding-resistant HTTP request. |
 
 
 ## Who imports this
 
-**27** file(s) reference this package:
+**72** file(s) reference this package:
 
-- **`runtime/adapters/`** · 2 file(s)
+- **`runtime/adapters/`** · 5 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
   - `runtime/adapters/integrations/oct/router_auth.py`
+  - `runtime/adapters/mcp_client/oauth.py`
+  - `runtime/adapters/mcp_client/oauth_discovery.py`
+  - `runtime/adapters/web_auth.py`
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
@@ -164,16 +198,34 @@ tier: "core"
   - `runtime/execution/suckers/_write_skills_common.py`
   - `runtime/execution/suckers/browser_skills.py`
   - _… and 9 more_
-- **`runtime/platform/`** · 4 file(s)
+- **`runtime/memory/`** · 9 file(s)
+  - `runtime/memory/diagnostics/_trace_store_replay_storage.py`
+  - `runtime/memory/diagnostics/_trace_store_storage.py`
+  - `runtime/memory/journal/_journal_base.py`
+  - `runtime/memory/journal/journal.py`
+  - `runtime/memory/learning/experience_ledger.py`
+  - _… and 4 more_
+- **`runtime/platform/`** · 7 file(s)
   - `runtime/platform/config/builder.py`
+  - `runtime/platform/io/lease.py`
   - `runtime/platform/ui/_app_setup.py`
   - `runtime/platform/ui/_browser_helper_nav.py`
   - `runtime/platform/ui/browser_router.py`
-- **`runtime/sensing/`** · 4 file(s)
+  - _… and 2 more_
+- **`runtime/projectos/`** · 2 file(s)
+  - `runtime/projectos/engine.py`
+  - `runtime/projectos/store.py`
+- **`runtime/safety/`** · 1 file(s)
+  - `runtime/safety/evolution/proposal_ledger.py`
+- **`runtime/sensing/`** · 30 file(s)
+  - `runtime/sensing/gateway/_agent_trace_router_stores.py`
   - `runtime/sensing/gateway/_config_endpoints_security.py`
   - `runtime/sensing/gateway/_observability_rollback_panels.py`
-  - `runtime/sensing/gateway/meta_router.py`
-  - `runtime/sensing/gateway/stub_router.py`
+  - `runtime/sensing/gateway/account_usage_router.py`
+  - `runtime/sensing/gateway/agent_trace_dependencies.py`
+  - _… and 25 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
+- **`runtime/workspace/`** · 1 file(s)
+  - `runtime/workspace/store.py`
 

@@ -84,6 +84,7 @@ _CONSUMER_EXCLUDE: tuple[str, ...] = (
 # importable module, so "nobody imports them" is expected, not a smell.
 _CANDIDATE_EXCLUDE: tuple[str, ...] = (
     *_CONSUMER_EXCLUDE,
+    "/tests/",  # test modules are consumers, never production orphan candidates
     "all_skills",  # generated/scaffolded skill packages
     "agent_market_sources",  # bundled agent skill scripts (subprocess assets)
     "/apks/",  # mobile build artifacts
@@ -246,7 +247,7 @@ def _scan() -> set[str]:
         lazy_resolved: set[str] = set()
         for target in consumed:
             if target.startswith("runtime.platform."):
-                short = target[len("runtime.platform."):]
+                short = target[len("runtime.platform.") :]
                 if short in lazy_map:
                     lazy_resolved.add(lazy_map[short])
         consumed |= lazy_resolved

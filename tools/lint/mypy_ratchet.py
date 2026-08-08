@@ -47,14 +47,14 @@ _CHECK_PATHS: tuple[str, ...] = (
 _ERROR_RE = re.compile(r"^(?P<path>[^:]+):\d+: error: (?P<msg>.*?)(?:  \[(?P<code>[\w-]+)\])?$")
 
 
-def _run_mypy() -> str:
+def _run_mypy() -> tuple[int, str]:
     proc = subprocess.run(
         [sys.executable, "-m", "mypy", *_CHECK_PATHS, "--no-error-summary", "--no-color-output"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
     )
-    return proc.stdout + proc.stderr
+    return proc.returncode, proc.stdout + proc.stderr
 
 
 def _collect_errors(output: str) -> Counter[str]:
@@ -110,7 +110,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    current = _collect_errors(_run_mypy())
+    returncode, output = _run_mypy()
+    current = _collect_errors(output)
+    # mypy returns 1 both for normal type findings and for invocation failures
+    # such as an unavailable module.  An unavailable checker must never look
+    # like a clean empty result and silently disable the ratchet.
+    if returncode not in {0, 1} or (returncode == 1 and not current):
+        print("mypy invocation failed; type ratchet did not run:", file=sys.stderr)
+        print(output.strip() or f"mypy exited with status {returncode}", file=sys.stderr)
+        return 2
 
     if args.write_baseline:
         _write_baseline(current)

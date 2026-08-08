@@ -213,7 +213,10 @@ jobs:
         # nosec markers with a reason comment.
         run: bandit -r runtime/ -ll -ii
       - name: pip-audit
-        run: pip install -e ".[dev,web,serve]" && pip-audit
+        # Paramiko 4.0.0 has no fixed release for PYSEC-2026-2858; both
+        # Paramiko connection paths disable ssh-rsa/SHA-1 explicitly. The
+        # exception is documented and time-bounded in docs/security/.
+        run: pip install -e ".[dev,web,serve]" && pip-audit --ignore-vuln PYSEC-2026-2858
 
   frontend:
     name: Frontend lint + build

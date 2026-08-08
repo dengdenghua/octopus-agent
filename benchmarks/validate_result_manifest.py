@@ -22,6 +22,9 @@ def validate_manifest(path: Path) -> dict[str, int]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema") != "octopus.behavioral_result_manifest.v1":
         raise ValueError("unsupported result manifest schema")
+    status = str(payload.get("status") or "")
+    if status != "authoritative_assembled_case_results":
+        raise ValueError(f"manifest is not authoritative: {status or 'missing status'}")
     expected_k = int(payload.get("k") or 0)
     artifact_root = path.parent / str(payload.get("artifact_root") or ".")
     cases = payload.get("cases")

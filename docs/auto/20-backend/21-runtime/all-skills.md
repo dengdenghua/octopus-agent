@@ -33,8 +33,8 @@ runtime.execution.all_skills · unified skill catalog.
 
 | Module | Summary |
 | --- | --- |
-| `agnes-image-generate/scripts/agnes_image_generate.py` | Agnes AI image generation skill. |
-| `agnes-video-generate/scripts/agnes_video_generate.py` | Agnes AI video generation skill (async). |
+| `agnes-image-generate/scripts/agnes_image_generate.py` | AI image generation skill — dual-provider (Volcano / Agnes). |
+| `agnes-video-generate/scripts/agnes_video_generate.py` | AI video generation skill (async) — dual-provider (Volcano / Agnes). |
 | `agnes-video-poll/scripts/agnes_video_poll.py` | Standalone skill entry for polling an Agnes video task. |
 | `api-doc-gen/scripts/generate_api_doc.py` | Generate OpenAPI 3.0 spec from source code route definitions. |
 | `auto-hypothesis-test/scripts/statistical_test_suite.py` | statistical_test_suite.py — 根据数据自动选择统计检验并输出通俗解读 |
@@ -114,7 +114,7 @@ runtime.execution.all_skills · unified skill catalog.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class AgnesConfig` | Runtime config resolved from env vars. |
-| func | `def generate_image(prompt, model, size, n, image, api_key, base_url, extra)` | Generate one or more images via Agnes AI's OpenAI-compatible endpoint. |
+| func | `def generate_image(prompt, model, size, n, image, api_key, base_url, extra)` | Generate one or more images via Volcano or Agnes. |
 
 ### `agnes-video-generate/scripts/agnes_video_generate.py`
 

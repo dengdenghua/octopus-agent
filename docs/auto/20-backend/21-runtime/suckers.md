@@ -98,6 +98,7 @@ Suckers = skill pool.
 | `ephemeral_runner.py` | LLM-backed runner for ephemeral sub-agent roles. |
 | `forged_persistence.py` | — |
 | `fs_search_skills.py` | — |
+| `history_skill.py` | history_skill · cross-thread conversation history retrieval. |
 | `hub/installer.py` | — |
 | `image_album_skills.py` | Image album skills (local AI photo library). |
 | `image_search_backends.py` | Image-search provider backends for the kimi-compat skill group. |
@@ -121,6 +122,7 @@ Suckers = skill pool.
 | `testing.py` | — |
 | `verdict_repair.py` | Verdict-gated repair loop — the closed-loop orchestration octopus lacked. |
 | `verify_skills.py` | Project verification · detect project type and run checks. |
+| `video_album_skills.py` | Video album skills (local AI video library). |
 | `web_skills.py` | — |
 | `write_skills.py` | — |
 
@@ -151,6 +153,13 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_memory_skills(registry)` | Register remember / recall / note_user / diary_write. |
+
+### `_write_skills_background.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def recover_background_processes()` | Scan persisted background jobs and converge stale metadata. |
+| func | `def background_process_identity_matches(metadata)` | Fail closed if a recovered PID no longer belongs to our process group. |
 
 ### `agent_doc_skills.py`
 
@@ -401,6 +410,13 @@ Suckers = skill pool.
 | --- | --- | --- |
 | func | `def register_fs_search_skills(registry)` | Register glob_files / grep_text / tree / read_file_range. |
 
+### `history_skill.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def set_default_thread_store(store)` | Inject the runtime's live ThreadStateStore (called at app boot). |
+| func | `def register_history_skill(registry)` |  |
+
 ### `hub/installer.py`
 
 | Kind | Symbol | Doc |
@@ -561,6 +577,12 @@ Suckers = skill pool.
 | func | `def detect_project(workspace)` |  |
 | func | `def run_checks(profile, timeout_per_check, max_output, sandbox_dir)` |  |
 
+### `video_album_skills.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def register_video_album_skills(registry)` |  |
+
 ### `web_skills.py`
 
 | Kind | Symbol | Doc |
@@ -580,7 +602,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**60** file(s) reference this package:
+**62** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -614,8 +636,8 @@ Suckers = skill pool.
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
   - `runtime/platform/ui/_app_stack.py`
+  - `runtime/platform/ui/_browser_artifact_path.py`
   - `runtime/platform/ui/app.py`
-  - `runtime/platform/ui/browser_router.py`
   - `runtime/platform/ui/state.py`
 - **`runtime/research/`** · 2 file(s)
   - `runtime/research/pipeline.py`
@@ -627,13 +649,15 @@ Suckers = skill pool.
   - `runtime/safety/hooks/tool_edge_hooks.py`
   - `runtime/safety/recovery/intel_collector.py`
   - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 21 file(s)
+- **`runtime/sensing/`** · 22 file(s)
   - `runtime/sensing/gateway/_agent_world_helpers.py`
   - `runtime/sensing/gateway/_meta_mentions.py`
   - `runtime/sensing/gateway/_realtime_react_stream_drive.py`
   - `runtime/sensing/gateway/_realtime_react_stream_helpers.py`
   - `runtime/sensing/gateway/_team_stream_group_fanout.py`
-  - _… and 16 more_
+  - _… and 17 more_
+- **`runtime/tests/`** · 1 file(s)
+  - `runtime/tests/test_history_skill.py`
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

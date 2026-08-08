@@ -25,6 +25,3 @@ runtime/sensing/gateway/realtime_turn_support.py
 runtime/tentacle/dashboard_support.py
 runtime/tentacle/mobile/_mcp_sse.py
 runtime/tentacle/mobile/mcp_transports.py
-runtime/tests/conftest.py
-runtime/tests/test_react_loop_commentary.py
-runtime/tests/test_realtime_workbench.py

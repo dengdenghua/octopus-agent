@@ -2,9 +2,8 @@
 
 ## 当前结果入口
 
-当前 Octopus 严格 k=3 的唯一权威索引是
-`benchmarks/octopus-k3-latest.json`。它汇总 14 个最终逐项产物：
-14/14 case 达到 3/3，总计 42/42 trial，`pass^k = 100%`。
+当前 Octopus 严格 k=3 的结果索引是
+`benchmarks/octopus-k3-latest.json` 当前标记为 `evidence_missing`：清单引用的逐项产物未随仓库提交，因此不得作为权威成绩或发布证据。重新运行固定套件、保存并校验全部产物后，才能将状态恢复为 `authoritative_assembled_case_results`。
 
 读取当前成绩时必须遵守以下规则：
 

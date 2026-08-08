@@ -3,17 +3,17 @@
   "suite_id": "same-task-head-to-head-v1",
   "system_id": "octopus",
   "k": 3,
-  "status": "authoritative_assembled_case_results",
+  "status": "evidence_missing",
   "artifact_root": "results",
   "generated_at": "2026-07-20T00:00:00+08:00",
   "single_frozen_run": false,
   "aggregate": {
     "case_count": 14,
-    "cases_pass_pow_k": 14,
-    "trial_passes": 42,
+    "cases_pass_pow_k": 0,
+    "trial_passes": 0,
     "trial_total": 42,
-    "pass_at_k": 1.0,
-    "pass_pow_k": 1.0
+    "pass_at_k": 0.0,
+    "pass_pow_k": 0.0
   },
   "cases": [
     {"id": "coding.concurrent-cache", "passes": 3, "artifact": "octopus-concurrent-cache-strict-k3-v34.json"},

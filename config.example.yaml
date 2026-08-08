@@ -273,20 +273,6 @@ safety:
   # hard safety blocks still escalate risky operations independently.
   allow_client_approval_bypass: false
 
-  # ─── Process sandbox backend (exec_shell / verify / git / quality) ───
-  # Runtime env var only: OCTOPUS_PROCESS_SANDBOX controls the
-  # subprocess backend used once a tool has a sandbox_dir.
-  #
-  # Values:
-  #   auto      default; use bwrap on Linux or sandbox-exec on macOS when available
-  #   soft      direct subprocess + cwd/env/network soft policy
-  #   strict    require a hard backend; reject execution if unavailable
-  #   bwrap     require Linux bubblewrap
-  #   seatbelt  require macOS sandbox-exec
-  #
-  # Recommended production setting for Code Mode:
-  #   OCTOPUS_PROCESS_SANDBOX=strict
-
   # Examples — uncomment to disable persistently in this project:
   # disabled_guards:
   #   - magic-number guard
@@ -328,3 +314,16 @@ safety:
     # Examples:
     # magic-number guard: false   # turn off
     # weak-test guard: true       # explicit on (overrides any blanket off)
+
+execution:
+  # local keeps the single-user desktop/developer contract. For a networked
+  # commercial service use shared/commercial/production/server; serve then
+  # requires a hard process sandbox and refuses startup when unavailable.
+  deployment_mode: local
+  # auto selects the best backend; commercial modes still fail closed if the
+  # host has no hard backend. Use strict/bwrap/seatbelt to pin one explicitly.
+  process_sandbox: auto
+
+  # ─── Process sandbox backend (exec_shell / verify / git / quality) ───
+  # Runtime env var OCTOPUS_PROCESS_SANDBOX can override this in deployments.
+  # Values: auto, soft, strict, bwrap, seatbelt.

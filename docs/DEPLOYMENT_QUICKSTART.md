@@ -30,6 +30,11 @@ docker compose up -d
 docker compose logs -f octopus-agent
 ```
 
+For a commercial/shared deployment, set `execution.deployment_mode` to
+`commercial` (or `shared`) in `config.yaml`. `serve` performs a startup check
+for a hard process sandbox and refuses to run when bwrap/Seatbelt is missing.
+Local development keeps the default `local` mode.
+
 Stop it with:
 
 ```bash

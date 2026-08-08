@@ -164,6 +164,7 @@ tier: "standard"
 | `loop_router.py` | — |
 | `lsp_router.py` | Thin HTTP wrapper around the registered LSP skills. |
 | `mcp_router.py` | MCP router · declare / enable / disable MCP servers at runtime. |
+| `media_router.py` | Media (video understanding) web API. |
 | `memory_router.py` | Local memory compatibility API. |
 | `meta_router.py` | Meta router · feedback / skills / auth-provider listing. |
 | `meta_skill_router.py` | FastAPI router for the 能力包 / Meta-Skill catalog. |
@@ -198,7 +199,7 @@ tier: "standard"
 | `realtime_thread_history.py` | Realtime turn ↔ legacy conversation history adapters. |
 | `realtime_thread_ops.py` | Thread maintenance operations for the realtime runtime. |
 | `realtime_turn_input.py` | Turn-input shaping for the realtime runtime. |
-| `realtime_turn_lifecycle.py` | Turn lifecycle orchestration for the realtime runtime. |
+| `realtime_turn_lifecycle.py` | Realtime turn validation, dispatch, resume handling, and finalization. |
 | `realtime_turn_outcome.py` | Turn outcome inspection for the realtime runtime. |
 | `realtime_turn_routing.py` | Turn-routing helpers for the realtime runtime. |
 | `realtime_turn_support.py` | Observable-output, cowork-context, and resume-intent helpers. |
@@ -210,6 +211,7 @@ tier: "standard"
 | `searxng_supervisor.py` | One-click local SearXNG for the private web-search backend. |
 | `skill_market_router.py` | — |
 | `slash_command_expansion.py` | Slash-command expansion for realtime chat input. |
+| `storage_proxy_router.py` | Same-origin gateway for the private octopus-storage service. |
 | `storage_supervisor.py` | Optional co-launch of the octopus-storage sibling service. |
 | `streaming_journal.py` | — |
 | `stub_router.py` | — |
@@ -394,7 +396,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_account_usage_router(journal)` |  |
+| func | `def create_account_usage_router(journal, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `agent_market_sources/financial-services/agent-plugins/model-builder/skills/dcf-model/scripts/validate_dcf.py`
 
@@ -670,7 +672,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_evolution_router()` |  |
+| func | `def create_evolution_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `fs_router.py`
 
@@ -735,6 +737,20 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class McpRouter` | Package the router with the state dicts callers need to introspect. Keeps the external ``app.include_router`` pattern while still giving app |
 | func | `def create_mcp_router(registry, initial_mcp_servers, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Build the MCP router. |
+
+### `media_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class VideoIndexRequest(BaseModel)` |  |
+| class | `class VideoWatchRequest(BaseModel)` |  |
+| class | `class VideoSearchRequest(BaseModel)` |  |
+| class | `class VideoFaceSearchRequest(BaseModel)` |  |
+| class | `class VideoClassifyRequest(BaseModel)` |  |
+| class | `class VideoSpeechSearchRequest(BaseModel)` |  |
+| class | `class VideoImageSearchRequest(BaseModel)` |  |
+| class | `class VideoOcrRequest(BaseModel)` |  |
+| func | `def create_media_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `memory_router.py`
 
@@ -830,7 +846,7 @@ tier: "standard"
 | class | `class RecoverBody(BaseModel)` |  |
 | class | `class TaskInterventionBody(BaseModel)` |  |
 | class | `class FromGroupBody(BaseModel)` |  |
-| func | `def create_projects_router(store, group_store, collaboration_store, model_router, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Create the ``/api/projects/*`` router. |
+| func | `def create_projects_router(store, group_store, collaboration_store, thread_store, model_router, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Create the ``/api/projects/*`` router. |
 
 ### `prompts_router.py`
 
@@ -951,6 +967,12 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def maybe_expand_slash_command(goal)` | Expand a leading ``/<name>`` command into its configured template. |
+
+### `storage_proxy_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def create_storage_proxy_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, http_client)` |  |
 
 ### `storage_supervisor.py`
 

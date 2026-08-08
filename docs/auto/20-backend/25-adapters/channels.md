@@ -201,6 +201,7 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class ChannelRoutingError(RuntimeError)` |  |
+| func | `def current_channel_target()` | Return the ``(channel_id, thread_id)`` of the current IM turn, if any. |
 | class | `class ChannelManager` |  |
 
 ### `matrix.py`
@@ -336,10 +337,12 @@ tier: "standard"
 
 ## Who imports this
 
-**3** file(s) reference this package:
+**4** file(s) reference this package:
 
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
+- **`runtime/execution/`** · 1 file(s)
+  - `runtime/execution/suckers/cron_skills.py`
 - **`runtime/sensing/`** · 2 file(s)
   - `runtime/sensing/gateway/_channels_constructors.py`
   - `runtime/sensing/gateway/channels_router.py`

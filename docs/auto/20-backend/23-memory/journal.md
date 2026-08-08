@@ -48,6 +48,8 @@ tier: "core"
 - `all_task_progress`
 - `current_agent_id`
 - `current_conversation_id`
+- `current_owner_actor_id`
+- `current_tenant_id`
 - `journal_context`
 - `resume_info`
 - `task_progress_snapshot`
@@ -120,7 +122,9 @@ tier: "core"
 | --- | --- | --- |
 | func | `def current_agent_id()` |  |
 | func | `def current_conversation_id()` |  |
-| func | `def journal_context(agent_id, conversation_id)` |  |
+| func | `def current_tenant_id()` |  |
+| func | `def current_owner_actor_id()` |  |
+| func | `def journal_context(agent_id, conversation_id, tenant_id, owner_actor_id)` |  |
 
 ### `progress.py`
 
@@ -153,7 +157,7 @@ tier: "core"
 
 ## Who imports this
 
-**47** file(s) reference this package:
+**49** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -169,16 +173,17 @@ tier: "core"
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/resume_cli.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 6 file(s)
+- **`runtime/execution/`** · 7 file(s)
   - `runtime/execution/suckers/_ephemeral_events.py`
   - `runtime/execution/suckers/browser_act_skills.py`
+  - `runtime/execution/suckers/registry.py`
   - `runtime/execution/swarm/runtime.py`
   - `runtime/execution/tool_engine/_executor_fileops.py`
-  - `runtime/execution/tool_engine/effect_receipts.py`
-  - `runtime/execution/tool_engine/executor.py`
-- **`runtime/memory/`** · 2 file(s)
+  - _… and 2 more_
+- **`runtime/memory/`** · 3 file(s)
   - `runtime/memory/hemolymph/composer.py`
   - `runtime/memory/learning/promotion_applier.py`
+  - `runtime/memory/runtime_state/hub.py`
 - **`runtime/platform/`** · 3 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/ui/app.py`

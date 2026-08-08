@@ -174,6 +174,8 @@ print(resp.choices[0].message.content)
 - 不可信 skill 强制走 `SubprocessBackend`（Unix 下加 RLIMIT_AS / RLIMIT_CPU）
 - 把 `/data` 设独立 volume · 不与源代码目录共享
 - 公开部署请在外层加 nginx / cloudflare · 本项目未内置 auth
+- 商业/共享部署必须在 `config.yaml` 设置 `execution.deployment_mode: commercial`
+  或 `shared`；启动时会检查硬进程 sandbox，不满足条件直接拒绝服务。
 
 ## 生产检查清单
 
