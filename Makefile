@@ -1,4 +1,4 @@
-.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration production-readiness verify-local verify-full-stack lint lint-invariants lint-mypy lint-ruff format fix clean tree \
+.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration test-sharded production-readiness verify-local verify-full-stack lint lint-invariants lint-mypy lint-ruff format fix clean tree \
         security \
         dev bootstrap-skills \
         up up-full down logs restart ps rebuild \
@@ -6,6 +6,14 @@
         frontend-install frontend-dev frontend-build frontend-clean frontend-typecheck \
         dev-full dev-full-example \
         openapi-snapshot frontend-types
+
+# ─── Toolchain ───────────────────────────────────────
+# Prefer the project venv over whatever `python` resolves to on PATH. Without
+# this, targets run against an unrelated interpreter that lacks the dev deps —
+# e.g. `lint-mypy` failed with "No module named mypy" while .venv had mypy
+# installed, so the type ratchet silently never ran and `make lint` died.
+# Override with `make PYTHON=/path/to/python <target>`.
+PYTHON ?= $(shell if [ -x .venv/bin/python ]; then printf '%s' .venv/bin/python; else printf '%s' python; fi)
 
 # ─── Install ─────────────────────────────────────────
 install:  ## Install development dependencies
@@ -15,23 +23,26 @@ install-all:  ## Install all optional dependencies
 	pip install -e ".[dev,all]"
 
 quickstart:  ## Bootstrap local config and run environment checks
-	python -m runtime quickstart --non-interactive
+	$(PYTHON) -m runtime quickstart --non-interactive
 
 quickstart-serve:  ## Bootstrap local config and start the FastAPI service
-	python -m runtime quickstart --non-interactive --serve
+	$(PYTHON) -m runtime quickstart --non-interactive --serve
 
 # ─── Test ────────────────────────────────────────────
 test:  ## Run pytest with coverage
-	pytest --cov=runtime --cov=tools -v
+	$(PYTHON) -m pytest --cov=runtime --cov=tools -v
 
 test-fast:  ## Run pytest without coverage
-	pytest -q
+	$(PYTHON) -m pytest -q
 
 test-unit:  ## Run unit tests excluding slow and integration tests
-	pytest -m "not slow and not integration" -v
+	$(PYTHON) -m pytest -m "not slow and not integration" -v
 
 test-integration:  ## Run integration tests
-	pytest -m integration -v
+	$(PYTHON) -m pytest -m integration -v
+
+test-sharded:  ## Run unit tests in sequential shards (works around the macOS 26 allocator SIGTRAP)
+	PYTHON="$(PYTHON)" bash scripts/test_sharded.sh $(SHARD_SIZE)
 
 production-readiness:  ## Run the production readiness gate with isolated runtime state
 	@mkdir -p $${OCTOPUS_READINESS_DATA_DIR:-test-results/production-readiness/data}
@@ -51,25 +62,25 @@ verify-full-stack:  ## Run the FastAPI + Vite localhost/127 smoke only
 lint: lint-invariants lint-mypy lint-ruff  ## Run all linters
 
 lint-invariants:  ## Run Octopus invariant checks (active: LINT-02/03/04/05/09)
-	python -m tools.lint.invariant_check runtime/ tests/
+	$(PYTHON) -m tools.lint.invariant_check runtime/ tests/
 
 lint-mypy:  ## Run the mypy ratchet (no NEW type errors on hot packages)
-	python tools/lint/mypy_ratchet.py
+	$(PYTHON) tools/lint/mypy_ratchet.py
 
 lint-ruff:  ## Run ruff
-	ruff check runtime/ tests/ tools/
-	ruff format --check runtime/ tests/ tools/
+	$(PYTHON) -m ruff check runtime/ tests/ tools/
+	$(PYTHON) -m ruff format --check runtime/ tests/ tools/
 
 format:  ## Run ruff format
-	ruff format runtime/ tests/ tools/
+	$(PYTHON) -m ruff format runtime/ tests/ tools/
 
 fix:  ## Run ruff fixes and formatting
-	ruff check --fix runtime/ tests/ tools/
-	ruff format runtime/ tests/ tools/
+	$(PYTHON) -m ruff check --fix runtime/ tests/ tools/
+	$(PYTHON) -m ruff format runtime/ tests/ tools/
 
 security:  ## Run security scans (bandit + pip-audit)
-	bandit -r runtime/ -ll -ii
-	pip-audit --ignore-vuln PYSEC-2026-2858
+	$(PYTHON) -m bandit -r runtime/ -ll -ii
+	$(PYTHON) -m pip_audit --ignore-vuln PYSEC-2026-2858
 
 # ─── Clean ───────────────────────────────────────────
 clean:  ## Clean caches
@@ -85,13 +96,13 @@ clean:  ## Clean caches
 # Implementation note.
 # ─── Registry · 停止打包(registry 为单一事实源,启动前按 lockfile 同步技能)───
 bootstrap-skills:  ## Sync registry skills from skills.lock.json → skills/public (run before serve)
-	python -m octopus_runtime bootstrap --lockfile skills.lock.json --skills-dir skills/public
+	$(PYTHON) -m octopus_runtime bootstrap --lockfile skills.lock.json --skills-dir skills/public
 
 # Implementation note.
 dev:  ## Run local development server with config.local.yaml and .env
 	@test -f config.local.yaml || { echo "ERROR: config.local.yaml 不存在 · 先建一份真 LLM 配置（可参考 config.example.yaml 然后改 model + mock_response=null）"; exit 1; }
 	@test -f .env || { echo "ERROR: .env 不存在 · 填 ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL 等"; exit 1; }
-	python -m runtime serve --config config.local.yaml --port 8000
+	$(PYTHON) -m runtime serve --config config.local.yaml --port 8000
 
 # Implementation note.
 up:  ## Start the minimal single-container compose stack
@@ -161,7 +172,7 @@ frontend-clean:  ## Clean frontend build outputs
 
 # ─── OpenAPI contract ────────────────────────────────
 openapi-snapshot:  ## Regenerate docs/openapi-snapshot.json
-	OCTOPUS_OPENAPI_WRITE=1 pytest tests/test_openapi_snapshot.py -q
+	OCTOPUS_OPENAPI_WRITE=1 $(PYTHON) -m pytest tests/test_openapi_snapshot.py -q
 
 frontend-types:  ## Generate TypeScript types from the OpenAPI snapshot
 	cd frontend && pnpm exec openapi-typescript ../docs/openapi-snapshot.json -o src/core/api/openapi-types.ts
