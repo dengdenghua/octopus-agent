@@ -103,8 +103,8 @@ class Tentacle(Protocol):
 
 | 触手 | 形态 | 状态 | 文档 |
 |---|---|---|---|
-| **MobileDevice** | Android 设备（基于 Octopus Mobile 改造）| ✅ Phase 0 | [mobile.md](mobile.md) |
-| **DesktopDevice** | 本地桌面自指 | ⏳ 计划 | [desktop.md](desktop.md) |
+| **MobileDevice** | Android 设备（基于 Octopus Mobile 改造）| ✅ Phase 0 | 见 octopus-mobile 仓库 |
+| **DesktopDevice** | 本地桌面自指 | ⏳ 计划 | 规划中 |
 
 ## 未来触手
 

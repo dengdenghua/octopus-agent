@@ -23,7 +23,7 @@ genome/
 
 📜 详见：
 - [genome.md](../../genome.md) — 理论模型
-- [protocols/genome.md](../protocols/genome.md) — 工程协议（CRDT / Patch / Shadow / Canary）
+- [protocols/genome.md](../../protocols/genome.md) — 工程协议（CRDT / Patch / Shadow / Canary）
 
 ### 💾 Part 2 · 长时经验（"海马体"角色）
 存放 trajectories、checkpoint、知识 —— 给 Regeneration 喂原料。

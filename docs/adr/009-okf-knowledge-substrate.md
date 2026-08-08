@@ -103,7 +103,7 @@ Conformance deltas (what "adopt OKF" concretely means here):
   retriever high-signal fields to index instead of raw body. Keep
   `index.json` as a derived artifact if the frontend needs it.
 - **Markdown links as edges.** Pages cross-link via relative markdown
-  links (`[customers](/tables/customers.md)`-style). The tree gains a
+  links (markdown format like "customers → tables/customers.md"). The tree gains a
   graph. The Claude-Code memory's `[[name]]` style is the same idea; emit
   both if terseness for the author matters, but the portable form is the
   relative link.

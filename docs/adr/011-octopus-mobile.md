@@ -57,7 +57,7 @@ octopus-agent 已有 `desktop_operator_arm` —— 用 pyautogui / 屏幕截图 
 3. **协议选择**：JSON-RPC 2.0 over WebSocket
    - 复用 octopus-agent 现有 envelope（`item/*`, `cocoloop/*`）
    - 新增 `device/*` 和 `tool/*` 两个 namespace
-   - 详见 [protocol.md](../../mobile/protocol.md)
+   - 详见独立仓库 `octopus-mobile` 的 protocol.md
 
 4. **设备启动模式**：三种并存（LOCAL_ONLY / RPC_ONLY / DUAL）
    - LOCAL_ONLY：跟现在 Octopus Mobile 完全一样，断网时仍能用
@@ -85,7 +85,7 @@ octopus-agent 已有 `desktop_operator_arm` —— 用 pyautogui / 屏幕截图 
 | 函数 | — | `connect`, `execute`, `heartbeat` |
 | 日志 | — | "Device connected" ✅（"Tentacle connected" ❌）|
 
-详见 [naming.md](../../naming.md) 第 5-8 行"2026 learning-curve amendment"。
+详见 [naming.md](../naming.md) 第 5-8 行"2026 learning-curve amendment"。
 
 ## Alternatives considered
 
@@ -187,7 +187,7 @@ octopus-agent 已有 `desktop_operator_arm` —— 用 pyautogui / 屏幕截图 
 4. **测试覆盖稀释** → Android 集成 test 单独 tag，CI 分段跑
 5. **包大小 +80-100MB**（如启用浏览器内核）→ 动态下载，仅打包 arm64
 
-### 关键不变量（受 [invariants.md](../../invariants.md) 约束）
+### 关键不变量（受 [invariants.md](../invariants.md) 约束）
 
 - INV-1：所有 touch 操作必须经过 Safety / Approval Gate（关键操作）
 - INV-2：Octopus Mobile 自身的安全规则 10 条必须保留（prompt 层兜底）
@@ -195,7 +195,7 @@ octopus-agent 已有 `desktop_operator_arm` —— 用 pyautogui / 屏幕截图 
 
 ## Implementation Phases
 
-详见 [roadmap.md](../../roadmap.md) 阶段 5「触手期 / 跨端期」。
+详见 [roadmap.md](../roadmap.md) 阶段 5「触手期 / 跨端期」。
 
 | Phase | 周期 | 目标 |
 |---|---|---|
@@ -210,10 +210,10 @@ octopus-agent 已有 `desktop_operator_arm` —— 用 pyautogui / 屏幕截图 
 
 ## References
 
-- [architecture.md](../../mobile/architecture.md) — 完整架构设计
-- [protocol.md](../../mobile/protocol.md) — 协议规范
-- [skills.md](../../mobile/skills.md) — 30 个移动技能
-- [browser-integration.md](../../mobile/browser-integration.md) — 浏览器内核集成
-- [architecture/organs/tentacle.md](../../architecture/organs/tentacle.md) — 触手器官说明
+- architecture.md — 完整架构设计（见 octopus-mobile 仓库）
+- protocol.md — 协议规范（见 octopus-mobile 仓库）
+- skills.md — 30 个移动技能（见 octopus-mobile 仓库）
+- browser-integration.md — 浏览器内核集成（见 octopus-mobile 仓库）
+- [architecture/organs/tentacle.md](../architecture/organs/tentacle.md) — 触手器官说明
 - [Octopus Mobile 源码](https://github.com/octopus-agent/octopus-mobile) — Android 端实现参考
 - ADR-001 — 双轨命名契约

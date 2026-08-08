@@ -2,7 +2,7 @@
 
 > **章鱼伸出去的物理触手 · 让 AI 真正"操控"你的手机与桌面**
 
-Octopus Mobile 是 [octopus-agent](../README.md) 的**移动端与跨端编排层**。
+Octopus Mobile 是 [octopus-agent](../../README.md) 的**移动端与跨端编排层**。
 它让章鱼的中枢（Cerebrum）能**真实操控** Android 设备、桌面设备，并
 实现"**手机+电脑+多手机**"的混合编排任务。
 
@@ -69,13 +69,15 @@ Octopus Mobile 是 [octopus-agent](../README.md) 的**移动端与跨端编排�
 
 ## 📂 目录索引
 
-| 文档 | 内容 |
-|---|---|
-| [architecture.md](architecture.md) | 三层三端架构、混合编排杀手锏场景 |
-| [protocol.md](protocol.md) | JSON-RPC 2.0 协议详细规范（device/* namespace） |
-| [skills.md](skills.md) | 30+ 移动技能的 SKILL.md 体系 |
-| [browser-integration.md](browser-integration.md) | 浏览器内核集成方案（Kiwi 思路 + CDP） |
-| [getting-started.md](getting-started.md) | 5 分钟跑通"Runtime 控制手机点一下" |
+> **注意**：详细的移动端文档在独立的 `octopus-mobile` 仓库中。本文档提供跨端编排的架构概览。
+
+| 文档 | 内容 | 状态 |
+|---|---|---|
+| architecture.md | 三层三端架构、混合编排杀手锏场景 | 见 octopus-mobile 仓库 |
+| protocol.md | JSON-RPC 2.0 协议详细规范（device/* namespace） | 见 octopus-mobile 仓库 |
+| skills.md | 30+ 移动技能的 SKILL.md 体系 | 见 octopus-mobile 仓库 |
+| browser-integration.md | 浏览器内核集成方案（Kiwi 思路 + CDP） | 见 octopus-mobile 仓库 |
+| getting-started.md | 5 分钟跑通"Runtime 控制手机点一下" | 规划中 |
 
 补充：
 - 仿生学：[../architecture/organs/tentacle.md](../architecture/organs/tentacle.md) — "触手"器官的设计哲学

@@ -339,7 +339,7 @@ $ python -m runtime status
 
 | 文档 | 看它当你想知道 |
 |---|---|
-| [README.md](README.md) | 项目速览 + 当前状态 |
+| [README.md](../README.md) | 项目速览 + 当前状态 |
 | **[getting-started.md](getting-started.md)** | **本文 · 上手 + 常用示例** |
 | [vision/biomimetic-architecture.md](vision/biomimetic-architecture.md) | 仿生理论（章鱼器官 / 神经节 / 免疫）|
 | [six-modules.md](six-modules.md) | 六大能力模块（长任务 / 工作流 / 技能 / KG / 记忆 / 上下文）|
@@ -347,7 +347,7 @@ $ python -m runtime status
 | [invariants.md](invariants.md) | 139 条不变量清单 |
 | [standards.md](standards.md) | MCP / A2A / OTel 对接规范 |
 | [naming.md](naming.md) | 双轨命名契约（bio name / engineering name）|
-| [CHANGELOG.md](CHANGELOG.md) | 版本历史 |
+| [CHANGELOG.md](../CHANGELOG.md) | 版本历史 |
 | `protocols/*.md` | 14 个协议规范（digestion / reflex / swarm ...）|
 | `tools/lint/` | 10 条静态不变量 lint |
 
