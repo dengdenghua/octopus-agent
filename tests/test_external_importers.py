@@ -58,6 +58,28 @@ def test_collect_external_session_failures_reads_jsonl_error(tmp_path) -> None:
     assert "failed to edit file" in failures[0]["last_error"]
 
 
+def test_source_name_prefers_filename_over_ancestor_dir() -> None:
+    """A vendor hint on the file wins over one on an ancestor directory.
+
+    Regression: ``_source_name`` substring-matched the whole joined path with
+    ``claude`` checked first, so anything under an unrelated ``claude``-ish
+    ancestor (a scratch dir, a ``~/claude-backup/`` export folder) was mislabeled.
+    """
+    from pathlib import Path
+
+    from runtime.safety.recovery.external_importers import _source_name
+
+    # Synthetic absolute paths — a real tmp_path may itself sit under a
+    # vendor-ish scratch dir (e.g. /private/tmp/claude-501), which is exactly
+    # the ancestor-match case under test.
+    root = Path("/data/exports")
+    assert _source_name(root / "claude-backup" / "copilot-history.jsonl") == "copilot_session"
+    assert _source_name(root / "claude-backup" / "hermes-log.jsonl") == "hermes_session"
+    # Directory-level hints still apply when the filename carries none.
+    assert _source_name(root / ".claude" / "session.json") == "claude_session"
+    assert _source_name(root / "misc" / "session.json") == "external_session"
+
+
 def test_import_external_sessions_reads_text_transcript(tmp_path) -> None:
     session = tmp_path / "chat.md"
     session.write_text(

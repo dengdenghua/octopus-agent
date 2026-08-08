@@ -425,15 +425,27 @@ def _small_metadata(payload: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+_SOURCE_VENDORS: tuple[tuple[str, str], ...] = (
+    ("claude", "claude_session"),
+    ("copilot", "copilot_session"),
+    ("hermes", "hermes_session"),
+)
+
+
 def _source_name(path: Path) -> str:
-    lowered = [part.lower() for part in path.parts]
-    joined = "/".join(lowered)
-    if ".claude" in joined or "claude" in joined:
-        return "claude_session"
-    if "copilot" in joined:
-        return "copilot_session"
-    if "hermes" in joined:
-        return "hermes_session"
+    """Name the originating tool, giving the most specific path part priority.
+
+    Matching walks from the filename outwards so a vendor hint on the file
+    itself wins over one on an ancestor directory. Without that ordering an
+    unrelated ancestor (a ``/tmp/claude-501`` scratch dir, a ``~/claude-backup/``
+    folder holding exports from another tool) would relabel every session under
+    it, because the old implementation substring-matched the whole joined path
+    with ``claude`` checked first.
+    """
+    for part in reversed([p.lower() for p in path.parts]):
+        for needle, source in _SOURCE_VENDORS:
+            if needle in part:
+                return source
     return "external_session"
 
 
