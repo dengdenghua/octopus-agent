@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="bodyGrad" cx="40%" cy="35%" r="50%">
+      <stop offset="0%" stop-color="#C4B5FD"/>
+      <stop offset="40%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#4C1D95"/>
+    </radialGradient>
+  </defs>
+  <!-- Tentacles -->
+  <g fill="url(#bodyGrad)" opacity="0.9">
+    <path d="M40 88 Q20 100 25 118 Q35 120 42 108 Q48 98 52 90Z"/>
+    <path d="M52 92 Q40 110 48 122 Q58 124 60 110 Q62 98 58 92Z"/>
+    <path d="M64 94 Q62 115 70 124 Q80 122 76 108 Q74 96 68 94Z"/>
+    <path d="M76 92 Q88 112 84 122 Q76 124 72 110 Q68 98 74 92Z"/>
+    <path d="M88 88 Q108 100 103 118 Q93 120 86 108 Q80 98 76 90Z"/>
+  </g>
+  <!-- Body -->
+  <ellipse cx="64" cy="60" rx="32" ry="34" fill="url(#bodyGrad)"/>
+  <!-- Highlight -->
+  <ellipse cx="54" cy="46" rx="12" ry="10" fill="white" opacity="0.35"/>
+  <!-- Eyes -->
+  <ellipse cx="52" cy="60" rx="7" ry="8" fill="#FEFCE8"/>
+  <ellipse cx="76" cy="60" rx="7" ry="8" fill="#FEFCE8"/>
+  <circle cx="54" cy="61" r="4" fill="#1e1b4b"/>
+  <circle cx="78" cy="61" r="4" fill="#1e1b4b"/>
+  <circle cx="52.5" cy="59" r="1.5" fill="white"/>
+  <circle cx="76.5" cy="59" r="1.5" fill="white"/>
+  <!-- Mouth -->
+  <path d="M58 74 Q64 80 70 74" stroke="#3B0764" stroke-width="2" fill="none" stroke-linecap="round"/>
+</svg>

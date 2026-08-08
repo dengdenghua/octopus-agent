@@ -1,0 +1,39 @@
+[gd_scene load_steps=3 format=3 uid="uid://b8xk7m2vq3cy"]
+
+[ext_resource type="Script" path="res://scripts/Pet.gd" id="1_pet"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_body"]
+radius = 0.55
+height = 1.1
+radial_segments = 32
+rings = 24
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_body"]
+radius = 0.46
+
+[node name="Pet" type="Node3D"]
+script = ExtResource("1_pet")
+
+[node name="BodyOutline" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1.15, 0, 0, 0, 0.95, 0, 0, -0.01)
+
+[node name="Body" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1.15, 0, 0, 0, 0.95, 0, 0, 0)
+mesh = SubResource("SphereMesh_body")
+
+[node name="BodyCollision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1.15, 0, 0, 0, 0.95, 0, 0, 0)
+shape = SubResource("SphereShape3D_body")
+
+[node name="BodyBelly" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.65, 0, 0, 0, 0.5, 0, 0, 0, 0.7, 0, -0.165, 0.3025)
+
+[node name="LeftEye" type="Node3D" parent="."]
+
+[node name="RightEye" type="Node3D" parent="."]
+
+[node name="Mouth" type="MeshInstance3D" parent="."]
+
+[node name="BlushL" type="MeshInstance3D" parent="."]
+
+[node name="BlushR" type="MeshInstance3D" parent="."]

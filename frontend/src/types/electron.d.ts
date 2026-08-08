@@ -247,6 +247,29 @@ export interface OctopusElectronAPI {
     setActiveTab: (webContentsId: number | null) => void;
   };
 
+  pet: {
+    /** Start the Godot desktop pet sidecar process. */
+    start: () => Promise<{ ok: boolean; reason?: string; alreadyRunning?: boolean }>;
+    /** Stop the Godot desktop pet sidecar process. */
+    stop: () => Promise<{ ok: boolean }>;
+    isRunning: () => Promise<{ ok: boolean; running: boolean }>;
+    /** Map an agent run state to a pet event and send it. */
+    sendEvent: (
+      state:
+        | "idle"
+        | "thinking"
+        | "working"
+        | "waiting_user"
+        | "success"
+        | "error",
+    ) => Promise<{ ok: boolean; running?: boolean; reason?: string }>;
+    /** Send a raw agent event type (e.g. "agent.thinking"). */
+    sendRaw: (
+      type: string,
+      extra?: Record<string, unknown>,
+    ) => Promise<{ ok: boolean; running?: boolean; reason?: string }>;
+  };
+
   on: (
     channel:
       | "app:update-downloaded"

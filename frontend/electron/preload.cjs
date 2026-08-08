@@ -97,6 +97,14 @@ const api = {
     openDevTools: invoke("window:openDevTools"),
   },
 
+  pet: {
+    start: invoke("pet:start"),
+    stop: invoke("pet:stop"),
+    isRunning: invoke("pet:isRunning"),
+    sendEvent: invoke("pet:sendEvent"),
+    sendRaw: invoke("pet:sendRaw"),
+  },
+
   bridge: {
     setActiveTab: (webContentsId) =>
       ipcRenderer.send("bridge:setActiveTab", webContentsId),

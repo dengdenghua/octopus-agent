@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://octopuspet0000001"]
+
+[ext_resource type="Script" path="res://scripts/OctopusPet.gd" id="1_octo"]
+
+[node name="OctopusPet" type="Node3D"]
+script = ExtResource("1_octo")

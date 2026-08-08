@@ -1,0 +1,52 @@
+; Engine configuration file for Octopus Pet Sidecar (Godot 4.3)
+; 3D desktop pet that runs as a transparent always-on-top window
+
+config_version=5
+
+[application]
+
+config/name="Octopus Pet"
+config/description="Desktop pet sidecar for Octopus AI assistant"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+boot_splash/show_image=false
+
+[display]
+
+window/size/viewport_width=2560
+window/size/viewport_height=1440
+window/size/mode=0
+window/per_pixel_transparency/allowed=true
+window/transparent_background=true
+window/borderless=true
+window/always_on_top=true
+window/exit_code=0
+window/mouse_passthrough=true
+window/vsync/vsync_mode=1
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=1
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="forward_plus"
+environment/defaults/default_clear_color=Color(0, 0, 0, 0)
+anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/msaa_2d=0
+lights_and_shadows/filter/soft_shadows_quality=0
+environment/ssao/ssao_quality=0
+environment/ssil/enabled=false
+environment/sdfgi/enabled=false
+environment/volumetric_fog/enabled=false
+environment/glow/enabled=true
+environment/glow/intensity=0.6
+environment/glow/mix_mode=1
+environment/glow/hdr_threshold=1.2
+environment/glow/hdr_scale=1.5
+environment/glow/bloom=0.5
+environment/tonemap/mode=0
+environment/tonemap/exposure=1.0
+environment/tonemap/white=1.0
+
+[physics]
+
+common/physics_ticks_per_second=60

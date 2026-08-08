@@ -23,6 +23,7 @@ const {
   killBackend,
   ensureOptionalDeps,
 } = require("./backend-runtime.cjs");
+const petSidecar = require("./pet-sidecar.cjs");
 
 const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
 const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
@@ -452,6 +453,27 @@ function registerIpc() {
     return { ok: true };
   });
 
+  // pet sidecar (Godot desktop pet)
+  const petEnabled = () => process.env.OCTOPUS_PET_DISABLED !== "1";
+  handle("pet:start", () => (petEnabled() ? petSidecar.startPet() : { ok: false, reason: "pet disabled" }));
+  handle("pet:stop", () => {
+    petSidecar.stopPet();
+    return { ok: true };
+  });
+  handle("pet:isRunning", () => ({ ok: true, running: petSidecar.isPetRunning() }));
+  handle("pet:sendEvent", (_e, state) => {
+    if (!petEnabled()) return { ok: false, reason: "pet disabled" };
+    const event = petSidecar.petEventForAgentState(state);
+    if (!event) return { ok: false, reason: `unknown agent state: ${state}` };
+    const sent = petSidecar.sendPetEvent(event.type, { intensity: event.intensity });
+    return { ok: sent, running: petSidecar.isPetRunning() };
+  });
+  handle("pet:sendRaw", (_e, type, extra) => {
+    if (!petEnabled()) return { ok: false, reason: "pet disabled" };
+    const sent = petSidecar.sendPetEvent(type, extra);
+    return { ok: sent, running: petSidecar.isPetRunning() };
+  });
+
   // desktop organizer
   handle("desktop:listItems", async () => {
     try {
@@ -835,6 +857,14 @@ if (!app.requestSingleInstanceLock()) {
     await loadEnabledExtensions();
     watchDesktop();
 
+    // Launch the Godot desktop pet sidecar (honest no-op when not resolvable).
+    if (process.env.OCTOPUS_PET_DISABLED !== "1") {
+      const res = petSidecar.startPet();
+      if (!res.ok && res.reason) {
+        console.warn("[octopus] pet sidecar not started:", res.reason);
+      }
+    }
+
     if (process.env.OCTOPUS_SMOKE === "1") {
       mainWindow.webContents.once("did-finish-load", () => {
         console.log("SMOKE OK:", mainWindow.webContents.getURL());
@@ -858,5 +888,8 @@ if (!app.requestSingleInstanceLock()) {
 
   // Clean up the packaged backend child process on quit (also covers
   // window-all-closed → app.quit() on non-macOS).
-  app.on("before-quit", killBackend);
+  app.on("before-quit", () => {
+    killBackend();
+    petSidecar.shutdown();
+  });
 }
