@@ -3500,6 +3500,11 @@ export const koKR: Translations = {
       chatFontSizeSmall: "작게",
       chatFontSizeMedium: "중간 (기본값)",
       chatFontSizeLarge: "크게",
+      conversationDetailLevelTitle: "대화 세부 수준",
+      conversationDetailLevelDescription: "대화 중 표시할 중간 활동량을 제어합니다.",
+      conversationDetailLevelLow: "낮음 - 최소 보기",
+      conversationDetailLevelMedium: "중간 - 균형",
+      conversationDetailLevelHigh: "높음 - 상세",
       cornerRadiusTitle: "모서리 반경",
       cornerRadiusDescription:
         "모든 둥근 모서리에 적용되는 전역 배율입니다. 샤프는 코드 에디터 느낌, 캡슐은 더 친근한 느낌입니다.",

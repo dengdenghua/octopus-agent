@@ -52,6 +52,13 @@ def _launch_chromium(playwright: Any, **kwargs: Any):
     except Exception as exc:  # noqa: BLE001 — any launch failure is environmental
         if "executable doesn't exist" not in str(exc).lower():
             raise
+    # Playwright prefers the separate chromium_headless_shell download; the
+    # full browser can do the same job when only that one is installed.
+    try:
+        return playwright.chromium.launch(**{**kwargs, "channel": "chromium"})
+    except Exception as exc:  # noqa: BLE001 — still environmental
+        if "executable doesn't exist" not in str(exc).lower():
+            raise
         print(
             f"chromium binary is missing for this playwright build. Install: {_INSTALL_HINT}",
             file=sys.stderr,

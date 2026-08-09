@@ -8,7 +8,7 @@ from playwright.sync_api import expect, sync_playwright
 from benchmarks.eval_harness import Trajectory
 from benchmarks.fixed_suite_fixtures import prepare_fixture_suite
 from benchmarks.fixture_grading import LiveIsolatedFixture
-from tests.conftest import requires_chromium
+from tests.conftest import chromium_launch_kwargs, requires_chromium
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -55,7 +55,7 @@ def test_dynamic_crud_fixture_is_live_and_satisfiable(tmp_path) -> None:
     case.setup()
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(**chromium_launch_kwargs())
             page = browser.new_page()
             page.goto(fixture.url())
             trajectory.append("tool_start", tool_name="browser_navigate")
@@ -104,7 +104,7 @@ def test_rich_editor_upload_fixture_is_live_and_satisfiable(tmp_path) -> None:
     case.setup()
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(**chromium_launch_kwargs())
             page = browser.new_page()
             page.goto(fixture.url())
             trajectory.append("tool_start", tool_name="browser_navigate")

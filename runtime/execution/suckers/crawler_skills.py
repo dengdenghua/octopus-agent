@@ -13,6 +13,9 @@ from typing import Any
 from urllib.parse import urldefrag, urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
+from runtime.execution.suckers.browser_launch import (
+    launch_chromium,
+)
 from runtime.platform.io import atomic_write_text
 from runtime.platform.process.paths import app_paths
 from runtime.safety.auth.path_guard import check_path
@@ -418,7 +421,7 @@ def _ensure_browser_page(
         return None, runtime, "playwright not installed"
     try:
         pw = sync_playwright().start()
-        browser = pw.chromium.launch(headless=True)
+        browser = launch_chromium(pw.chromium, headless=True)
         context = browser.new_context(user_agent=user_agent)
         new_page = context.new_page()
         runtime = _BrowserRuntime(

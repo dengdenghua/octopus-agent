@@ -86,7 +86,7 @@ export function PermissionIndicator({
             type="button"
             data-testid="permission-mode-trigger"
             className={cn(
-              "flex items-center gap-1.5 text-xs font-medium transition-all duration-base",
+              "flex items-center gap-1.5 text-xs font-medium transition-colors duration-base",
               isBypassMode
                 ? "h-8 px-1.5 text-warning hover:text-warning dark:hover:text-warning"
                 : compact

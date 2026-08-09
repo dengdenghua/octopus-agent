@@ -3321,6 +3321,11 @@ export const zhCN: Translations = {
       chatFontSizeSmall: "小",
       chatFontSizeMedium: "中（默认）",
       chatFontSizeLarge: "大",
+      conversationDetailLevelTitle: "对话细节级别",
+      conversationDetailLevelDescription: "控制对话过程中显示多少中间步骤。",
+      conversationDetailLevelLow: "低 - 简洁视图",
+      conversationDetailLevelMedium: "中 - 平衡",
+      conversationDetailLevelHigh: "高 - 详细",
       cornerRadiusTitle: "圆角尺寸",
       cornerRadiusDescription:
         "应用于所有圆角的全局系数。锐利更像代码编辑器，胶囊更圆润友好。",

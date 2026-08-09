@@ -26,30 +26,36 @@ export function RunDurationBadge({
           : t.publicThinkingStatus.processing;
   const elapsedSeconds = Math.floor((vitals?.elapsedMs ?? 0) / 1000);
 
+  // Tone follows the run state machine (red = disconnected, yellow = slow,
+  // green = working/waiting) instead of a fixed accent colour.
+  const tone =
+    phase === "disconnected"
+      ? "text-destructive"
+      : phase === "slow"
+        ? "text-warning"
+        : "text-success";
+  const dot =
+    phase === "disconnected"
+      ? "bg-destructive"
+      : phase === "slow"
+        ? "bg-warning"
+        : "bg-success";
+
   return (
     <div
       aria-live="polite"
       aria-label={`${statusLabel} ${elapsedSeconds}s`}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2.5 text-xs text-primary/85",
+        "inline-flex shrink-0 items-center gap-1.5 text-xs",
+        tone,
         className,
       )}
       data-testid="run-duration-badge"
       role="status"
     >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "size-1.5 rounded-full",
-          phase === "slow"
-            ? "bg-warning"
-            : phase === "disconnected"
-              ? "bg-destructive"
-              : "animate-pulse bg-primary",
-        )}
-      />
+      <span aria-hidden="true" className={cn("size-1.5 rounded-full", dot)} />
       <span className="max-w-24 truncate">{statusLabel}</span>
-      <span className="tabular-nums text-primary/65">{elapsedSeconds}s</span>
+      <span className="tabular-nums opacity-70">{elapsedSeconds}s</span>
     </div>
   );
 }

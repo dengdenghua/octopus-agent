@@ -328,17 +328,41 @@ def _chromium_unavailable_reason() -> str | None:
     package, so "installed package, missing or stale binary" is a real state —
     and in it those tests failed instead of skipping, which reads as a product
     regression rather than an unprovisioned machine.
+
+    Playwright's default headless launch wants the separate
+    ``chromium_headless_shell`` build, so a machine that has the full chromium
+    but not the shell would skip everything for no good reason. Falling back to
+    ``channel="chromium"`` runs the tests for real instead.
     """
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         return "playwright is not installed"
-    try:
-        with sync_playwright() as playwright:
-            playwright.chromium.launch(headless=True).close()
-    except Exception as exc:  # noqa: BLE001 — any launch failure means unusable
-        return f"chromium cannot launch: {str(exc).splitlines()[0][:160]}"
-    return None
+    last: str | None = None
+    for channel in (None, "chromium"):
+        kwargs = {"headless": True}
+        if channel:
+            kwargs["channel"] = channel
+        try:
+            with sync_playwright() as playwright:
+                playwright.chromium.launch(**kwargs).close()
+            _LAUNCH_KWARGS.clear()
+            _LAUNCH_KWARGS.update(kwargs)
+            return None
+        except Exception as exc:  # noqa: BLE001 — any launch failure means unusable
+            last = str(exc).splitlines()[0][:160]
+    return f"chromium cannot launch: {last}"
+
+
+# Populated by the probe above with the kwargs that actually worked, so tests
+# launching their own browser can match it instead of rediscovering the shell
+# fallback themselves.
+_LAUNCH_KWARGS: dict[str, object] = {}
+
+
+def chromium_launch_kwargs() -> dict[str, object]:
+    """Launch kwargs known to work here. Call ``requires_chromium()`` first."""
+    return dict(_LAUNCH_KWARGS) or {"headless": True}
 
 
 def requires_chromium() -> None:

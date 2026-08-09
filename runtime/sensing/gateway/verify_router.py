@@ -11,6 +11,10 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
+from runtime.execution.suckers.browser_launch import (
+    launch_chromium,
+)
+
 try:
     from fastapi import APIRouter, HTTPException, Request
     from pydantic import BaseModel
@@ -176,7 +180,7 @@ def _run_browser_regression_checks(body: Any) -> list[Any]:
     page_errors: list[str] = []
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=not visible_cursor)
+            browser = launch_chromium(pw.chromium, headless=not visible_cursor)
             try:
                 page = browser.new_page(viewport={"width": 1280, "height": 800})
                 page.on(

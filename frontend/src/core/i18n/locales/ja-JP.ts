@@ -3558,6 +3558,11 @@ export const jaJP: Translations = {
       chatFontSizeSmall: "小",
       chatFontSizeMedium: "中（デフォルト）",
       chatFontSizeLarge: "大",
+      conversationDetailLevelTitle: "会話の詳細レベル",
+      conversationDetailLevelDescription: "会話中に表示する中間活動の量を制御します。",
+      conversationDetailLevelLow: "低 - 最小表示",
+      conversationDetailLevelMedium: "中 - バランス",
+      conversationDetailLevelHigh: "高 - 詳細",
       cornerRadiusTitle: "角丸のサイズ",
       cornerRadiusDescription:
         "すべての角丸に適用されるグローバル倍率。シャープはコードエディタ風、ピルはより親しみやすい印象になります。",

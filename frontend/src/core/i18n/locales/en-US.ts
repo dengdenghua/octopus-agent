@@ -3569,6 +3569,12 @@ export const enUS: Translations = {
       chatFontSizeSmall: "Small",
       chatFontSizeMedium: "Medium (default)",
       chatFontSizeLarge: "Large",
+      conversationDetailLevelTitle: "Conversation detail",
+      conversationDetailLevelDescription:
+        "Control how much intermediate activity is shown during conversations.",
+      conversationDetailLevelLow: "Low - Minimal view",
+      conversationDetailLevelMedium: "Medium - Balanced",
+      conversationDetailLevelHigh: "High - Verbose",
       cornerRadiusTitle: "Corner radius",
       cornerRadiusDescription:
         "Global multiplier applied to every rounded corner. Crisp feels more code-editor, pill feels friendlier.",

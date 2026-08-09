@@ -134,7 +134,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import type { ReasoningEffort } from "@/core/threads";
 import {
   normalizePermissionMode,
-  permissionRuntimeConfig,
   type PermissionMode,
 } from "@/core/permissions";
 import { startDeepResearch, type ResearchJob } from "@/core/research/api";
@@ -3389,11 +3388,14 @@ function RealtimePageContent({
 
   const handlePermissionModeChange = useCallback(
     (permissionMode: PermissionMode) => {
-      const permissionRuntime = permissionRuntimeConfig(permissionMode);
+      // The composer shortcut changes ONLY the permission axis; the execution
+      // environment stays independent (controlled in Settings → Sandbox). A
+      // bypass mode implies auto-approval, anything else asks on request.
       setSettings("context", {
         ...settings.context,
-        permission_mode: permissionRuntime.mode,
-        execution_environment: permissionRuntime.execution_environment,
+        permission_mode: permissionMode,
+        approval_policy:
+          permissionMode === "bypassPermissions" ? "never" : "on-request",
       });
     },
     [setSettings, settings.context],
@@ -3597,7 +3599,6 @@ function RealtimePageContent({
                     <div className="flex flex-col gap-2">
                       {isNewThread ? (
                         <Welcome
-                          mode={effectiveMode}
                           agent={activeAgent}
                           agentName={effectiveAgentId}
                         />

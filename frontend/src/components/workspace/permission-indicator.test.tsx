@@ -36,21 +36,21 @@ describe("<PermissionIndicator />", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByTestId("permission-mode-option-default"),
-    ).toHaveTextContent("Ask first");
+    ).toHaveTextContent("Default");
     expect(
       screen.getByTestId("permission-mode-option-acceptEdits"),
-    ).toHaveTextContent("Auto-edit files");
-    expect(screen.getByText("Auto-edit files")).toBeInTheDocument();
+    ).toHaveTextContent("Accept edits");
+    expect(screen.getByText("Accept edits")).toBeInTheDocument();
     expect(screen.getAllByText("Full access").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText("Plan only")).not.toBeInTheDocument();
 
     expect(
       screen.getByText(
-        "Create and edit files automatically; still ask before commands, deletions, and Git actions.",
+        "File changes run automatically; commands still ask for approval.",
       ),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Auto-edit files"));
+    fireEvent.click(screen.getByText("Accept edits"));
 
     await waitFor(() => {
       expect(onModeChange).toHaveBeenCalledWith("acceptEdits");
@@ -89,7 +89,7 @@ describe("<PermissionIndicator />", () => {
     );
 
     openPermissionMenu(
-      screen.getByRole("button", { name: "Permissions: Ask first" }),
+      screen.getByRole("button", { name: "Permissions: Default" }),
     );
 
     const confirmItem = await screen.findByTestId(
@@ -101,7 +101,7 @@ describe("<PermissionIndicator />", () => {
     ).not.toBeInTheDocument();
 
     expect(
-      screen.getByText("Read freely; ask before performing high-risk actions."),
+      screen.getByText("Any write or command asks for your approval first. Safest option."),
     ).toBeInTheDocument();
   });
 });

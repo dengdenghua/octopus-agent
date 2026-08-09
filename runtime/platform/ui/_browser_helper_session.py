@@ -14,6 +14,9 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from runtime.execution.suckers.browser_launch import (
+    launch_persistent_chromium,
+)
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.platform.process.paths import app_paths
 from runtime.platform.ui._browser_helper_profile import (
@@ -101,7 +104,8 @@ class _SessionBackendMixin:
             profile_dir = self._browser_profile_dir(session)
             session["recovered_from_crash"] = mark_session_active(profile_dir)
             viewport_width, viewport_height = self._session_viewport(session)
-            context = playwright.chromium.launch_persistent_context(
+            context = launch_persistent_chromium(
+                playwright.chromium,
                 user_data_dir=str(profile_dir),
                 executable_path=executable_path,
                 headless=bool(session.get("headless", True)),

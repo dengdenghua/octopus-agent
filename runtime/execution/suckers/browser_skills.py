@@ -4,6 +4,10 @@ import contextlib
 import threading
 from typing import Any
 
+from runtime.execution.suckers.browser_launch import (
+    launch_chromium,
+)
+
 try:
     from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
 
@@ -299,7 +303,7 @@ def _with_page(
 
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
+            browser = launch_chromium(pw.chromium, headless=True)
             try:
                 ctx = browser.new_context()
                 new_page = ctx.new_page()

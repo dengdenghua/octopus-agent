@@ -2901,6 +2901,11 @@ export interface Translations {
       chatFontSizeSmall: string;
       chatFontSizeMedium: string;
       chatFontSizeLarge: string;
+      conversationDetailLevelTitle: string;
+      conversationDetailLevelDescription: string;
+      conversationDetailLevelLow: string;
+      conversationDetailLevelMedium: string;
+      conversationDetailLevelHigh: string;
       cornerRadiusTitle: string;
       cornerRadiusDescription: string;
       cornerCrisp: string;

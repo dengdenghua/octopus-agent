@@ -15,6 +15,7 @@ import {
   SettingsIcon,
   SearchIcon,
   XIcon,
+  BoxIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -70,6 +71,8 @@ const importMcp = () =>
   }));
 const importSession = () =>
   import("@/components/workspace/settings/session-settings-page");
+const importSandbox = () =>
+  import("@/components/workspace/settings/sandbox-settings-page");
 
 const AboutSettingsPage = lazy(importAbout);
 const AccountSettingsPage = lazy(importAccount);
@@ -82,6 +85,7 @@ const PrivacySettingsPage = lazy(importPrivacy);
 const AutomationSettingsPage = lazy(importAutomation);
 const McpSettingsPage = lazy(importMcp);
 const SessionSettingsPage = lazy(importSession);
+const SandboxSettingsPage = lazy(importSandbox);
 
 // Run every chunk import in parallel the first time the dialog opens.
 // Browsers dedupe the ``import()`` calls against cache, so repeated opens
@@ -104,6 +108,7 @@ function preloadSettingsPages(): void {
     importAutomation,
     importMcp,
     importSession,
+    importSandbox,
   ].forEach((fn) => {
     fn().catch((e) => {
       swallow(e);
@@ -130,7 +135,8 @@ type SettingsSection =
   | "notification"
   | "observability"
   | "about"
-  | "session";
+  | "session"
+  | "sandbox";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -451,6 +457,21 @@ export function SettingsDialog(props: SettingsDialogProps) {
           "自动新起会话",
         ],
       },
+      {
+        id: "sandbox",
+        label: t.settings.sections.sandbox,
+        icon: BoxIcon,
+        keywords: [
+          "sandbox",
+          "execution",
+          "permission",
+          "沙箱",
+          "执行",
+          "权限",
+          "完全访问",
+          ...t.settings.dialog.sectionKeywords.sandbox,
+        ],
+      },
     ];
 
     return all;
@@ -466,6 +487,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     t.settings.sections.about,
     t.settings.sections.observability,
     t.settings.sections.privacy,
+    t.settings.sections.sandbox,
     t.settings.dialog.sectionKeywords,
   ]);
   const [settingsQuery, setSettingsQuery] = useState("");
@@ -725,6 +747,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {hasSettingsResults && activeSection === "privacy" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <PrivacySettingsPage />
+                </Suspense>
+              )}
+              {hasSettingsResults && activeSection === "sandbox" && (
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <SandboxSettingsPage />
                 </Suspense>
               )}
               {hasSettingsResults && activeSection === "notification" && (

@@ -30,6 +30,11 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from runtime.execution.suckers.browser_launch import (
+    launch_chromium,
+    launch_persistent_chromium,
+)
+
 _OP_TIMEOUT_S = 60.0
 _IDLE_TTL_S = 300.0
 _REAP_INTERVAL_S = 30.0
@@ -56,7 +61,8 @@ def _default_page_factory(headless: bool) -> tuple[Any, Callable[[], None]]:
     # the security posture are unchanged.
     profile = os.environ.get("OCTOPUS_BROWSER_PROFILE", "").strip()
     if profile:
-        context = pw.chromium.launch_persistent_context(
+        context = launch_persistent_chromium(
+            pw.chromium,
             user_data_dir=profile,
             headless=headless,
         )
@@ -70,7 +76,7 @@ def _default_page_factory(headless: bool) -> tuple[Any, Callable[[], None]]:
 
         return page, _close_ctx
 
-    browser = pw.chromium.launch(headless=headless)
+    browser = launch_chromium(pw.chromium, headless=headless)
     page = browser.new_context().new_page()
 
     def _close() -> None:
