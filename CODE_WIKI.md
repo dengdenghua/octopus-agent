@@ -422,7 +422,7 @@ Client (frontend / channel adapter)
 | Learning | `memory/learning/` | `ExperienceLedger`/`ReviewQueue`/`TurnScore`/`PromotionApplier`/`HoldoutEntry`/`GatePolicy` |
 | Threads | `memory/threads/` | `ThreadStateStore`/`EventLog`/`SessionIndex`/`LlmSummariserConfig`/`CompactionPolicy` |
 | Skills Lib | `memory/skills_lib/` | `SkillCurator`/`MetaSkill`/`MetaStep`/`MetaEdge`/`AmbientScheduler` |
-| Runtime State | `memory/runtime_state/` | `Blackboard`/`SqliteBlackboard`/`MemoryHub`/`SessionHotCache`/`ContextCompressor` |
+| Runtime State | `memory/runtime_state/` | `Blackboard`/`SqliteBlackboard`/`MemoryHub`/`SessionHotCache` |
 | Users | `memory/users/` | `MentionHistoryStore`/`MentionStat` + 函数式 `profile.py`/`user_store.py`/`distill_user_memory()` |
 | Diagnostics | `memory/diagnostics/` | 错误分类/追踪存储/wiki 编译 |
 

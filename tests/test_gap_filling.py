@@ -1,4 +1,4 @@
-"""Unit tests for gap-filling modules: budget, credentials, skill_usage, error_classifier, context_compressor."""
+"""Unit tests for gap-filling modules: budget, credentials, skill_usage, error_classifier."""
 
 from __future__ import annotations
 
@@ -11,10 +11,6 @@ from runtime.memory.diagnostics.error_classifier import (
     ErrorCategory,
     RecoveryAction,
     classify_error,
-)
-from runtime.memory.runtime_state.context_compressor import (
-    CompressorConfig,
-    ContextCompressor,
 )
 from runtime.platform.budget.iteration_budget import (
     IterationBudget,
@@ -448,59 +444,3 @@ class TestErrorClassifier:
     def test_exception_input(self):
         result = classify_error(ValueError("Rate limit hit"))
         assert result.category == ErrorCategory.RATE_LIMIT
-
-
-# ═══════════════════════════════════════════════════════════
-# ContextCompressor
-# ═══════════════════════════════════════════════════════════
-
-
-class TestContextCompressor:
-    def test_no_compression_needed(self):
-        comp = ContextCompressor(CompressorConfig(max_chars=10000))
-        msgs = [
-            {"role": "system", "content": "You are helpful"},
-            {"role": "user", "content": "Hello"},
-        ]
-        result = comp.compress(msgs)
-        assert len(result) == 2
-
-    def test_compression_preserves_system(self):
-        comp = ContextCompressor(CompressorConfig(max_chars=50, preserve_recent_n=1))
-        msgs = [
-            {"role": "system", "content": "Important system prompt"},
-            {"role": "user", "content": "First message that is quite long to exceed limit"},
-            {"role": "assistant", "content": "Response also quite long to exceed the limit"},
-            {"role": "user", "content": "Recent message"},
-        ]
-        result = comp.compress(msgs)
-        roles = [m["role"] for m in result]
-        assert "system" in roles
-
-    def test_compression_with_report(self):
-        comp = ContextCompressor(
-            CompressorConfig(max_chars=50, preserve_recent_n=1, summary_max_chars=200)
-        )
-        msgs = [
-            {"role": "system", "content": "System"},
-            {"role": "user", "content": "A" * 2000},
-            {"role": "assistant", "content": "B" * 2000},
-            {"role": "user", "content": "C" * 2000},
-            {"role": "assistant", "content": "D" * 2000},
-            {"role": "user", "content": "Recent"},
-        ]
-        result, report = comp.compress_with_report(msgs)
-        assert report.original_chars > report.compressed_chars
-        assert report.ratio < 1.0
-
-    def test_summary_truncation(self):
-        comp = ContextCompressor(
-            CompressorConfig(max_chars=1, summary_max_chars=100, preserve_recent_n=0)
-        )
-        msgs = [
-            {"role": "user", "content": "A" * 200},
-            {"role": "assistant", "content": "B" * 200},
-        ]
-        result = comp.compress(msgs)
-        total = sum(len(m["content"]) for m in result)
-        assert total < 500

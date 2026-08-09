@@ -13,8 +13,7 @@
   skills_lib/     → 技能库管理（skill_library / skill_curator / meta_skill /
                     ambient_suggestions / ambient_suggestions_scheduler）
   runtime_state/  → 运行时缓存与会话态（hot_cache / blackboard / hub /
-                    context_compressor / scope_paths / file_transactions /
-                    process_timeline）
+                    scope_paths / file_transactions / process_timeline）
   users/          → 用户存储与画像（user_store / user_preferences /
                     profile / mention_history）
   diagnostics/    → 诊断与追溯（trace_store / error_classifier /
@@ -42,7 +41,6 @@ from .learning import (  # noqa: F401
 )
 from .runtime_state import (  # noqa: F401
     blackboard,
-    context_compressor,
     file_transactions,
     hot_cache,
     hub,
