@@ -42,6 +42,7 @@ tier: "core"
 | `_react_prompt_assembly_guidance.py` | System-prompt guidance + tool / capability / skill-catalog sections for the PHASE 3 assembly. |
 | `_react_prompt_assembly_sections.py` | Early PHASE 3 sections: date / public-orientation / work-mode / read-only / grounding / browser-operation / iteration & budget / todo-protocol resolution. |
 | `_react_prompt_assembly_state.py` | Shared mutable assembly state for the PHASE 3 prompt-assembly split, plus the final ``messages`` composition and the memory / identity / team-roster sections. |
+| `_visibility_trace.py` | 决策点 → 依据 → 结论 的可见性 trace（visibility trace）记录模块。 |
 | `agent_auto_delegate.py` | Auto-delegate to pinned agents on the first ReAct step. |
 | `agent_auto_parallel.py` | Auto-decompose + run subtasks in parallel for the first ReAct turn. |
 | `ai_mode.py` | AI Mode — Marvis-style two-mode wrapper over the 3-tier router. |
@@ -96,6 +97,7 @@ tier: "core"
 | `react_todo_protocol_guards.py` | Todo-protocol and completion-phrase guards. |
 | `react_types.py` | — |
 | `react_verification_guards.py` | Verification-completeness guards for ReAct code-mode turns. |
+| `reply_styles.py` | Reply-style registry: user-facing response decoration is a selectable dimension, mirroring WorkBuddy's ``style/`` template set (professional / friendly / socratic / ...). The content here is behaviour guidance injected into the system prompt as a ``<reply-style>`` section — separate from the core ca |
 | `resume_cli.py` | CLI for inspecting + driving ReAct checkpoint resume (P3 long-task durability). |
 | `rewind.py` | Turn-scoped rewind · roll a task back to a prior checkpoint anchor. |
 | `rules_persistence.py` | — |
@@ -132,6 +134,18 @@ tier: "core"
 | --- | --- | --- |
 | func | `def extract_streamable_thought(joined, cursor, in_thought, tail_margin)` | Pull newly decodable Thought prose out of a growing LLM buffer. |
 
+### `_visibility_trace.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class VisibilityEntry` | 单个决策点的可见性记录：决策点 → 结论 → 依据。 |
+| class | `class VisibilityTrace` | 线程安全的决策 trace 容器。 |
+| func | `def new_trace()` | 创建新的 trace 实例（turn 构建期由调用方持有并显式传入决策函数）。 |
+| func | `def active_trace()` | 返回当前上下文中的默认 trace；未设置时返回 None。 |
+| func | `def set_active_trace(trace)` | 把默认 trace 槽位设到当前上下文；返回可传给 reset_active_trace 的 token。 |
+| func | `def reset_active_trace(token)` | 撤销 set_active_trace 的副作用；token 为 None 时 no-op。绝不抛出。 |
+| func | `def record_visibility(decision_point, conclusion, basis, **details)` | 经当前上下文的默认槽位记录；未设置时 no-op。绝不抛出。 |
+
 ### `agent_auto_delegate.py`
 
 | Kind | Symbol | Doc |
@@ -144,10 +158,11 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class AutoParallelPlan` | A resolved decomposition plan, or empty when no split fits. |
+| func | `def build_thread_memory_summary(user_context, max_turns, max_chars)` | Best-effort cross-turn memory summary from the conversation history. |
 | func | `def plan_auto_parallel(goal, context, max_subtasks, model_name)` | Decide whether this goal should be auto-decomposed and run in parallel. |
 | func | `def set_auto_parallel_orchestrator(orchestrator)` | Inject the orchestrator used for dispatch (tests / app wiring). |
 | func | `def get_auto_parallel_orchestrator()` | Return the shared orchestrator, creating one wired to real sub-agents. |
-| func | `def run_auto_parallel(plan, thread_id, model_name, context, owner_id, timeout_s, on_batch_started)` | Dispatch the plan's subtasks in parallel and aggregate the results. |
+| func | `def run_auto_parallel(plan, thread_id, turn_id, model_name, context, owner_id, timeout_s, on_batch_started)` | Dispatch the plan's subtasks in parallel and aggregate the results. |
 
 ### `ai_mode.py`
 
@@ -335,6 +350,13 @@ tier: "core"
 | class | `class ReActStep` |  |
 | class | `class ReActResult` |  |
 | class | `class ReActRecipe` |  |
+
+### `reply_styles.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def reply_style_prompt(style)` | Return the ``<reply-style>`` section for ``style``, or ``None`` when the style is unset/unknown (the assembly layer then injects nothing). |
+| func | `def is_reply_style(name)` | True when ``name`` is a registered style. |
 
 ### `resume_cli.py`
 

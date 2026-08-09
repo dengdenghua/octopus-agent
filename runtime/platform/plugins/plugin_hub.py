@@ -120,10 +120,14 @@ class PluginHub:
                 if pname in seen:
                     continue
                 seen.add(pname)
+                # ``display_name``(可选,中文/本地化名)折进 ``name`` 供前端展示;
+                # ``id`` 永远是 ASCII 模块名(import 与生命周期 API 用它)。
+                display = str(manifest_data.get("display_name") or "").strip()
                 results.append(
                     {
                         "id": pname,
-                        "name": pname,
+                        "name": display or pname,
+                        "display_name": display,
                         "version": manifest_data.get("version", "0.1.0"),
                         "description": manifest_data.get("description", ""),
                         "author": manifest_data.get("author", ""),
@@ -449,7 +453,10 @@ class PluginHub:
             result.append(
                 {
                     "id": pname,
-                    "name": getattr(instance, "name", pname),
+                    "name": (
+                        getattr(instance, "display_name", "") or getattr(instance, "name", pname)
+                    ),
+                    "display_name": getattr(instance, "display_name", "") or "",
                     "version": getattr(instance, "version", "0.1.0"),
                     "description": getattr(instance, "description", ""),
                     "author": getattr(instance, "author", ""),

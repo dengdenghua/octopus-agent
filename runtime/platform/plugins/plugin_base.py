@@ -125,6 +125,7 @@ class ModulePlugin(ABC):  # noqa: B024
 
     # ── Metadata (class-level defaults, overridden by plugin.yaml) ──
     name: str = "unnamed-module"
+    display_name: str = ""
     version: str = "0.1.0"
     description: str = ""
     author: str = ""

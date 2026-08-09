@@ -287,6 +287,8 @@ export interface HubCapability {
 export interface HubPluginInfo {
   id: string;
   name: string;
+  /** Optional localized display name (e.g. 中文插件名); falls back to `name`. */
+  display_name?: string;
   version: string;
   description: string;
   author: string;
@@ -305,6 +307,7 @@ export interface HubPluginInfo {
 export interface DiscoveredPlugin {
   id: string;
   name: string;
+  display_name?: string;
   version: string;
   description: string;
   author: string;

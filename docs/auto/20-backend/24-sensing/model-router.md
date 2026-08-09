@@ -78,6 +78,7 @@ tier: "standard"
 | `prompt_cache.py` | Anthropic prompt-cache hint helpers. |
 | `provider.py` | — |
 | `rescue_policy.py` | Compatibility exports for the canonical platform model-rescue policy. |
+| `vision_guard.py` | Runtime vision capability guard. |
 
 ## Key classes & functions
 
@@ -268,6 +269,17 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class ProviderCapabilities` | Declarative flags describing what an LLM adapter can do. |
 | class | `class Provider` | Mixin: opt-in capability declaration for ``ModelRouter`` subclasses. |
+
+### `vision_guard.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def request_has_images(request)` | True when the request carries images on either channel. |
+| func | `def model_known_non_vision(model)` | Operator declared ``supports_vision: false`` for this model id. |
+| func | `def apply_vision_guard(request)` | Pre-guard: transcribe/strip images for models declared non-vision. |
+| func | `def build_without_images(request)` | Crash-recovery variant: always transcribe/strip images. |
+| func | `def classify_image_rejection(exc)` | True when the upstream likely rejected the image payload. |
+| func | `def transcribe_or_strip_images(request)` | Replace every image with a transcription (best effort) or a note. |
 
 
 ## Who imports this

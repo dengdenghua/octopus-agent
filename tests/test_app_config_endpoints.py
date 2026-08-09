@@ -1087,3 +1087,134 @@ class TestFeatureFlagsEndpoint:
         entry = next(e for e in r.json()["flags"] if e["name"] == "camouflage.enabled")
         assert entry["value"] is True
         assert entry["source"] == "env"
+
+
+# ═══════════════════════════════════════════════════════════
+# POST /api/config/custom-models/test · vision auto-detection
+# ═══════════════════════════════════════════════════════════
+
+
+class TestCustomModelTestVisionProbe:
+    """The test endpoint probes whether the model accepts image input
+    and reports it as ``supports_vision`` so the UI can gate the vision
+    toggle. The probe helper maps an image-canary outcome to a tri-state:
+    accepted → True, upstream ``4xx`` → False (model has no vision),
+    transport failure → None (inconclusive)."""
+
+    def test_probe_helper_tri_state(self) -> None:
+        from runtime.platform.models.llm import ModelResponse
+        from runtime.sensing.gateway._config_endpoints_custom_models import (
+            _probe_vision_support,
+        )
+        from runtime.sensing.model_router.openai_router import OpenAIRouterError
+
+        class VisionAccepted:
+            def call(self, request):  # noqa: ARG002
+                return ModelResponse(text="ok")
+
+        class VisionRejected:
+            def call(self, request):  # noqa: ARG002
+                raise OpenAIRouterError("http_400: this model does not support image input")
+
+        class VisionInconclusive:
+            def call(self, request):  # noqa: ARG002
+                raise TimeoutError("upstream timed out")
+
+        assert _probe_vision_support(VisionAccepted(), model="m") is True
+        assert _probe_vision_support(VisionRejected(), model="m") is False
+        assert _probe_vision_support(VisionInconclusive(), model="m") is None
+
+    def test_probe_helper_builds_image_canary(self) -> None:
+        from runtime.platform.models.llm import ModelResponse
+        from runtime.sensing.gateway._config_endpoints_custom_models import (
+            _probe_vision_support,
+        )
+
+        captured: dict[str, object] = {}
+
+        class CapturingRouter:
+            def call(self, request):  # noqa: ARG002
+                captured["request"] = request
+                return ModelResponse(text="ok")
+
+        result = _probe_vision_support(CapturingRouter(), model="deepseek-chat")
+
+        assert result is True
+        req = captured["request"]
+        assert req.model == "deepseek-chat"  # type: ignore[attr-defined]
+        assert req.images_b64  # type: ignore[attr-defined]
+        assert len(req.messages) == 1  # type: ignore[attr-defined]
+
+    def test_test_endpoint_reports_supports_vision(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from runtime.platform.models.llm import ModelResponse
+        from runtime.sensing.gateway import _config_endpoints_custom_models as endpoints
+        from runtime.sensing.model_router.openai_router import OpenAIModelRouter
+
+        # Stub the router so no network is hit; the text ping and the
+        # vision canary both resolve to a plain "pong".
+        monkeypatch.setattr(
+            OpenAIModelRouter,
+            "call",
+            lambda self, request: ModelResponse(text="pong"),  # noqa: ARG005
+        )
+        # Pin the probe outcome so the assertion targets the wiring,
+        # not the upstream behaviour.
+        monkeypatch.setattr(
+            endpoints,
+            "_probe_vision_support",
+            lambda router, *, model: True,  # noqa: ARG005
+        )
+
+        r = client.post(
+            "/api/config/custom-models/test",
+            json={
+                "provider": "openai",
+                "base_url": "https://api.deepseek.com/v1",
+                "api_key": "sk-test",
+                "model": "deepseek-chat",
+            },
+        )
+
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert data["supports_vision"] is True
+
+    def test_test_endpoint_locks_vision_off_for_rejected_model(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from runtime.platform.models.llm import ModelResponse
+        from runtime.sensing.gateway import _config_endpoints_custom_models as endpoints
+        from runtime.sensing.model_router.openai_router import OpenAIModelRouter
+
+        monkeypatch.setattr(
+            OpenAIModelRouter,
+            "call",
+            lambda self, request: ModelResponse(text="pong"),  # noqa: ARG005
+        )
+        monkeypatch.setattr(
+            endpoints,
+            "_probe_vision_support",
+            lambda router, *, model: False,  # noqa: ARG005
+        )
+
+        r = client.post(
+            "/api/config/custom-models/test",
+            json={
+                "provider": "openai",
+                "base_url": "https://api.deepseek.com/v1",
+                "api_key": "sk-test",
+                "model": "deepseek-chat",
+            },
+        )
+
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ok"] is True
+        assert data["supports_vision"] is False

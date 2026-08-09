@@ -10,6 +10,12 @@ from .rescue_policy import (
 from .rescue_policy import (
     model_rescue_quality as _model_rescue_quality,
 )
+from .vision_guard import (
+    apply_vision_guard,
+    build_without_images,
+    classify_image_rejection,
+    request_has_images,
+)
 
 
 class ModelDispatchRouter(ModelRouter):
@@ -48,19 +54,49 @@ class ModelDispatchRouter(ModelRouter):
 
     def call_stream(self, request: ModelRequest):
         picked = self._resolve(request.model)
+        # Vision pre-guard: a model the operator marked non-vision never
+        # sees a raw image — images are transcribed (or stripped) before
+        # the upstream call, so a picture can't crash the turn up front.
+        guarded = apply_vision_guard(request)
         yielded_any = False
         try:
-            for evt in picked.call_stream(request):
+            for evt in picked.call_stream(guarded):
                 yielded_any = True
                 yield evt
         except Exception as exc:
+            # Vision crash recovery for streams · only when nothing has
+            # been yielded yet: a partial stream already showed the user
+            # content, and replaying it on a stripped request would
+            # duplicate the reply. The pre-guard gate (``request_has_
+            # images(guarded)``) also keeps recovery off when a known
+            # non-vision model already got its images stripped.
+            if (
+                not yielded_any
+                and request_has_images(guarded)
+                and classify_image_rejection(exc)
+            ):
+                try:
+                    for evt in picked.call_stream(build_without_images(guarded)):
+                        yield evt
+                    return
+                except Exception:
+                    # The stripped retry also failed → the failure is not
+                    # the image; re-raise the original so we never mask.
+                    raise exc from None
             if not yielded_any and _is_provider_unavailable_error(exc):
                 rescue = self._pick_provider_rescue(request.model, picked)
                 if rescue is not None:
                     rescue_model, rescue_router = rescue
                     rewritten = request.model_copy(update={"model": rescue_model})
+                    # Pre-guard the rescue payload so a rescue model that
+                    # is KNOWN non-vision never sees the original images.
+                    # A residual image rejection on an unknown rescue
+                    # model surfaces like any other rescue-stream error —
+                    # the generator is lazy, so it cannot be caught here.
                     yield from _stamp_stream_model(
-                        rescue_router.call_stream(rewritten),
+                        rescue_router.call_stream(
+                            apply_vision_guard(rewritten),
+                        ),
                         rescue_model,
                     )
                     return
@@ -92,21 +128,45 @@ class ModelDispatchRouter(ModelRouter):
                 rewritten = request.model_copy(
                     update={"model": rescue_default},
                 )
-                yield from rescue.call_stream(rewritten)
+                yield from rescue.call_stream(
+                    apply_vision_guard(rewritten),
+                )
             except (ConnectionError, TimeoutError, TypeError, ValueError):
                 raise exc from None
 
     def call(self, request: ModelRequest) -> ModelResponse:
         picked = self._resolve(request.model)
+        # Vision pre-guard: a model the operator marked non-vision never
+        # sees a raw image (transcribe/strip before the upstream call).
+        guarded = apply_vision_guard(request)
         try:
-            return picked.call(request)
+            return picked.call(guarded)
         except Exception as exc:
+            # Vision crash recovery: a model that rejected the image
+            # payload (declared-vision or undeclared) gets one retry
+            # with images transcribed/stripped, so the turn continues
+            # instead of dying. Runs before provider-rescue — a 4xx
+            # image rejection is disjoint from the retryable markers,
+            # so the two never collide. If the stripped retry ALSO
+            # fails we re-raise the ORIGINAL error (never mask). The
+            # ``request_has_images(guarded)`` gate keeps recovery off
+            # when a known non-vision model already got its images
+            # stripped (its 4xx is about something else).
+            if request_has_images(guarded) and classify_image_rejection(exc):
+                try:
+                    return picked.call(build_without_images(guarded))
+                except Exception:
+                    raise exc from None
             if _is_provider_unavailable_error(exc):
                 rescue = self._pick_provider_rescue(request.model, picked)
                 if rescue is not None:
                     rescue_model, rescue_router = rescue
                     rewritten = request.model_copy(update={"model": rescue_model})
-                    response = rescue_router.call(rewritten)
+                    response = _call_with_vision_recovery(
+                        rescue_router,
+                        apply_vision_guard(rewritten),
+                        original_exc=exc,
+                    )
                     return response.model_copy(update={"model": rescue_model})
             # Guest-mode rescue · the default fallback (Molili) requires
             # a logged-in actor. A guest with ONE registered custom
@@ -149,7 +209,9 @@ class ModelDispatchRouter(ModelRouter):
                             rewritten = request.model_copy(
                                 update={"model": rescue_default},
                             )
-                            return rescue.call(rewritten)
+                            return rescue.call(
+                                apply_vision_guard(rewritten),
+                            )
                         except (ConnectionError, TimeoutError, TypeError, ValueError):  # noqa: BLE001 — rescue router failed; re-raise original error
                             pass
             raise
@@ -245,3 +307,28 @@ def _stamp_stream_model(events: Any, model_id: str):
             final = event.final.model_copy(update={"model": model_id})
             event = event.model_copy(update={"final": final})
         yield event
+
+
+def _call_with_vision_recovery(
+    router: ModelRouter,
+    request: ModelRequest,
+    *,
+    original_exc: BaseException,
+) -> ModelResponse:
+    """Call ``router``, recovering one image rejection with a strip.
+
+    ``request`` is already pre-guarded; this covers the residual case
+    where the router's model is not KNOWN non-vision but still rejects
+    the image payload (e.g. an undeclared rescue model). If the stripped
+    retry also fails, the caller's original error is re-raised so a
+    retryable failure is never masked by a secondary one.
+    """
+    try:
+        return router.call(request)
+    except Exception as exc:
+        if request_has_images(request) and classify_image_rejection(exc):
+            try:
+                return router.call(build_without_images(request))
+            except Exception:
+                raise original_exc from None
+        raise

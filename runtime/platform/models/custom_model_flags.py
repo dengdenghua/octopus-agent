@@ -98,6 +98,25 @@ def model_is_openai_compat_endpoint(model: str) -> bool:
     return provider in ("openai", "") and bool(entry.get("base_url"))
 
 
+def model_supports_vision(model: str) -> bool | None:
+    """Operator-declared vision capability for a model id.
+
+    Mirrors ``model_supports_tool_use`` / ``custom_model_supports_thinking``:
+    the ``supports_vision`` field on the ``custom_models.json`` entry wins
+    when declared. Unlike the tool-use helper (which defaults True), this
+    returns ``None`` when undeclared so the caller can distinguish "known
+    non-vision" from "don't know" — the runtime vision guard feeds images
+    to unknown models and recovers on a 4xx, but never to a model that is
+    explicitly marked ``supports_vision: false``.
+    """
+    entry = custom_model_entry_for(model)
+    if isinstance(entry, dict):
+        declared = entry.get("supports_vision")
+        if isinstance(declared, bool):
+            return declared
+    return None
+
+
 def custom_model_supports_thinking(model: str) -> bool:
     """Operator-declared thinking capability for a custom model.
 
@@ -170,5 +189,6 @@ __all__ = [
     "model_context_window",
     "model_omits_sampling_parameters",
     "model_supports_tool_use",
+    "model_supports_vision",
     "read_custom_models",
 ]

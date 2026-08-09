@@ -22,8 +22,53 @@ from runtime.sensing.gateway._config_models import (
     CustomModelTestResponse,
 )
 
+# Minimal 1×1 transparent PNG — the cheapest payload that lets an
+# OpenAI-compatible / Anthropic / Gemini endpoint confirm a model
+# actually accepts image input.
+_TINY_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
+    "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
+
 if TYPE_CHECKING:
     from ._config_endpoints import _ConfigCtx
+
+
+def _probe_vision_support(router: Any, *, model: str) -> bool | None:
+    """Confirm whether a custom model accepts image input.
+
+    Sends a minimal image canary through ``router``. The config-test
+    caller has already validated the endpoint + key with a text ping,
+    so an upstream ``4xx`` on the image payload means the model itself
+    rejects images (no vision); a transport-level failure at that point
+    is inconclusive.
+
+    Returns
+    -------
+    bool | None
+        ``True``  — image canary accepted (model supports vision).
+        ``False`` — upstream rejected the image payload (no vision).
+        ``None``  — probe inconclusive (transport error, etc.).
+    """
+    from runtime.sensing.model_router.models import Message, ModelRequest
+
+    try:
+        router.call(
+            ModelRequest(
+                model=model,
+                messages=[Message(role="user", content="ping")],
+                images_b64=[_TINY_PNG_B64],
+                max_tokens=1,
+            )
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 — canary failures are classification input
+        # Routers surface upstream rejections as ``http_<code>``-prefixed
+        # messages. Anything else (httpx timeouts, DNS, 5xx) we can't
+        # attribute to the model rejecting images → inconclusive.
+        if any(code in str(exc) for code in ("400", "422")):
+            return False
+        return None
 
 
 def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
@@ -110,10 +155,19 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
                 if "supports_thinking" in body
                 else prev.get("supports_thinking", False)
             ),
+            # Vision capability is a THREE-state signal at runtime
+            # (true / false / undeclared→None): only persist it when the
+            # caller actually said something, so an entry created via the
+            # API without ``supports_vision`` stays "unknown" instead of
+            # being pinned non-vision. Pinning False by default would
+            # make the vision guard strip images from genuinely
+            # vision-capable models the operator never probed. The
+            # settings UI always sends an explicit bool (it gates save on
+            # the connection test), so this only affects raw-API entries.
             "supports_vision": (
                 body["supports_vision"]
                 if "supports_vision" in body
-                else prev.get("supports_vision", False)
+                else prev.get("supports_vision")
             ),
             "supports_tool_use": (
                 body["supports_tool_use"]
@@ -276,12 +330,17 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
                 )
             )
             latency_ms = int((time.perf_counter() - started) * 1000)
+            supports_vision = _probe_vision_support(
+                router_for_test,
+                model=upstream_model,
+            )
             return {
                 "ok": True,
                 "provider": provider_name,
                 "model": upstream_model,
                 "latency_ms": latency_ms,
                 "message": (resp.text or "").strip()[:120] or "ok",
+                "supports_vision": supports_vision,
             }
         except Exception as e:  # noqa: BLE001
             return {

@@ -630,8 +630,42 @@ def _split_system(messages: list[Message]) -> tuple[str, list[dict]]:
         if m.role == "system":
             sys_parts.append(m.content)
         else:
-            rest.append({"role": m.role, "content": m.content})
+            content = m.content
+            # Normalize OpenAI-shaped ``image_url`` content blocks (built
+            # by ``_react_context_attachments`` from user uploads) into
+            # Anthropic's ``image`` block shape. Passed verbatim they
+            # 400 the whole request on any model — the vision guard's
+            # crash-recovery would then strip the user's image entirely,
+            # so translating here is what actually delivers uploads on
+            # the default anthropic route. ``images_b64`` screenshots
+            # are attached separately by ``_attach_images_to_last_user``.
+            if isinstance(content, list):
+                content = [_normalize_image_block(b) for b in content]
+            rest.append({"role": m.role, "content": content})
     return "\n\n".join(sys_parts), rest
+
+
+def _normalize_image_block(block: dict[str, Any]) -> dict[str, Any]:
+    """Translate one OpenAI ``image_url`` block to an Anthropic ``image``.
+
+    Data URLs split into a base64 ``source``; https URLs pass through as
+    a remote ``url`` source. Anthropic-shaped ``image`` blocks and every
+    other block type are returned unchanged.
+    """
+    if block.get("type") != "image_url":
+        return block
+    raw = block.get("image_url")
+    url = raw.get("url") if isinstance(raw, dict) else raw
+    if not isinstance(url, str) or not url:
+        return block
+    if url.startswith("data:"):
+        header, _, data = url.partition(",")
+        media_type = header[len("data:"):].split(";", 1)[0] or "image/png"
+        return {
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type, "data": data},
+        }
+    return {"type": "image", "source": {"type": "url", "url": url}}
 
 
 def _attach_images_to_last_user(
@@ -640,22 +674,29 @@ def _attach_images_to_last_user(
 ) -> None:
     for i in range(len(msgs) - 1, -1, -1):
         if msgs[i].get("role") == "user":
-            text = msgs[i].get("content", "")
-            blocks: list[dict[str, Any]] = []
-            for b64 in images_b64:
-                blocks.append(
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": b64,
-                        },
-                    }
-                )
-            if text:
-                blocks.append({"type": "text", "text": text})
-            msgs[i]["content"] = blocks
+            image_blocks: list[dict[str, Any]] = [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": b64,
+                    },
+                }
+                for b64 in images_b64
+            ]
+            content = msgs[i].get("content", "")
+            if isinstance(content, list):
+                # The user message already carries inline blocks (e.g.
+                # uploads normalized by ``_normalize_image_block``) —
+                # append the screenshots instead of wrapping the whole
+                # list as a text block (which would 400).
+                msgs[i]["content"] = list(content) + image_blocks
+            else:
+                blocks = list(image_blocks)
+                if content:
+                    blocks.append({"type": "text", "text": content})
+                msgs[i]["content"] = blocks
             return
 
 

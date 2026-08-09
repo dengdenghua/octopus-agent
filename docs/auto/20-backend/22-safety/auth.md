@@ -179,7 +179,7 @@ tier: "core"
 
 ## Who imports this
 
-**72** file(s) reference this package:
+**73** file(s) reference this package:
 
 - **`runtime/adapters/`** · 5 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
@@ -224,6 +224,8 @@ tier: "core"
   - `runtime/sensing/gateway/account_usage_router.py`
   - `runtime/sensing/gateway/agent_trace_dependencies.py`
   - _… and 25 more_
+- **`runtime/tentacle/`** · 1 file(s)
+  - `runtime/tentacle/dashboard.py`
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 - **`runtime/workspace/`** · 1 file(s)

@@ -1738,6 +1738,17 @@
           "provider": {
             "title": "Provider",
             "type": "string"
+          },
+          "supports_vision": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Vision"
           }
         },
         "required": [
@@ -13268,7 +13279,6 @@
     },
     "/api/browser-artifacts/{filename}": {
       "get": {
-        "description": "Serve a browser screenshot saved by ``live_browser_screenshot``.\n\nFiles land in ``data/browser_artifacts/<filename>``. Only ``.png``\nfiles are served (screenshots only); directory traversal is\nblocked by the simple name check.",
         "operationId": "serve_browser_artifact_api_browser_artifacts__filename__get",
         "parameters": [
           {
@@ -37065,7 +37075,7 @@
     },
     "/api/tentacle/mcp/message": {
       "post": {
-        "description": "MCP 消息接收端点.\n\n客户端通过此端点发送 JSON-RPC 请求，服务端处理后通过 SSE 推送响应。",
+        "description": "MCP 消息接收端点.\n\n客户端通过此端点发送 JSON-RPC 请求，服务端处理后通过 SSE 推送响应。\n与 ``/mcp/sse`` 一致要求账号凭证；若会话已绑定账号，则必须由\n同一账号携带相同凭证调用。",
         "operationId": "mcp_message_api_tentacle_mcp_message_post",
         "responses": {
           "200": {
@@ -37089,7 +37099,7 @@
     },
     "/api/tentacle/mcp/sse": {
       "get": {
-        "description": "MCP SSE 连接端点.\n\n客户端连接此端点获取 SSE 事件流，服务端首先发送 endpoint 事件\n告知客户端消息发送 URL，然后持续推送 JSON-RPC 响应。",
+        "description": "MCP SSE 连接端点.\n\n客户端连接此端点获取 SSE 事件流，服务端首先发送 endpoint 事件\n告知客户端消息发送 URL，然后持续推送 JSON-RPC 响应。\n\n账号登录鉴权：网关开启 ``require_auth`` 时，Claude Desktop /\nCursor 等 MCP 客户端必须携带账号登录后的 Bearer Token\n（``Authorization`` 请求头或 ``?token=`` 查询参数）。会话会\n绑定到该账号，后续 ``/mcp/message`` 也要求同一账号凭证。",
         "operationId": "mcp_sse_api_tentacle_mcp_sse_get",
         "responses": {
           "200": {
