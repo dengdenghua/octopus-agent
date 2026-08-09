@@ -11,14 +11,16 @@ implementations, and the agent picks one through scattered
 * **Extension relay** (``extensions/``) — acts on the user's own live
   browser tab and is wired as the highest-priority interactive track.
 
-This module defines the contract all three should satisfy and a single
-place to decide which one handles a call. It deliberately does NOT
-rewrite the existing tracks — wrapping the live Playwright / Electron
-code paths in real adapters needs a machine with those runtimes to
-verify end-to-end. What lands here is the testable seam: the Protocol,
-the priority resolver, and a Mock backend, so callers and tests can
-target one interface now and the real adapters can slot in behind it
-later without touching call sites.
+This module defines the contract all three tracks satisfy and a single
+place to decide which one handles a call. The real adapters live in
+``browser_backends.py`` (ElectronBackend / PlaywrightBackend /
+ExtensionBackend, each with an injectable transport so mapping logic is
+unit-testable) and are wired into the call path by
+``browser_skills._dispatch_higher_track`` — extension → Electron first,
+headless Playwright as the always-available fallback. The stateless
+``browser_*`` handlers route through that dispatch; the desktop-explicit
+``live_browser_*`` tools talk to the Electron bridge directly by design
+(their ``live_`` prefix promises a visible page).
 
 Action results share the existing wire shape every track already
 returns: ``{"ok": bool, ...}``. ``BrowserResult`` documents that shape
