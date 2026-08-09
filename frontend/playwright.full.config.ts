@@ -32,6 +32,7 @@ const defaultTestMatch = [
   "chat.spec.ts",
   "regression.spec.ts",
   "workflow-editor.spec.ts",
+  "visual-regression.spec.ts",
 ];
 const testMatch =
   process.env.OCTOPUS_E2E_TEST_MATCH?.split(",")
@@ -79,6 +80,12 @@ if (!reuseServers) {
 export default defineConfig({
   testDir: "./e2e",
   testMatch,
+  // Visual-regression baselines are shared across platforms (CI runs on
+  // Linux, dev on macOS): drop the default -{project}-{platform} suffix so
+  // both lanes compare against the same committed PNGs. Font rasterisation
+  // noise is absorbed by the maxDiffPixelRatio in visual-regression.spec.ts.
+  snapshotPathTemplate:
+    "{testDir}/__screenshots__/{testFilePath}/{arg}{ext}",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

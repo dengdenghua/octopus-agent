@@ -16,6 +16,11 @@ const frontendPort = process.env.FRONTEND_PORT || "3000";
  */
 export default defineConfig({
   testDir: "./e2e",
+  // Visual-regression baselines are shared across platforms (CI runs on
+  // Linux, dev on macOS): drop the default -{project}-{platform} suffix so
+  // both lanes compare against the same committed PNGs.
+  snapshotPathTemplate:
+    "{testDir}/__screenshots__/{testFilePath}/{arg}{ext}",
   // The default suite reuses a developer backend on :8000 and exercises
   // browser/UI contracts only. Specs that own isolated :13000/:18000 servers
   // belong to playwright.full.config.ts and must never leak into this lane.
