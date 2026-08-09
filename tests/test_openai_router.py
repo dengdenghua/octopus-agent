@@ -16,6 +16,9 @@ from runtime.sensing.model_router import (  # noqa: E402
     OpenAIRouterError,
 )
 from runtime.sensing.model_router.models import ToolSpec  # noqa: E402
+from runtime.sensing.model_router.openai_router import (  # noqa: E402
+    _MIN_THINKING_OUTPUT_TOKENS,
+)
 
 # ═══════════════════════════════════════════════════════════
 # fake httpx client
@@ -268,7 +271,7 @@ class TestRequestShape:
         payload = fake.calls[0]["json"]
         assert payload["model"] == "kimi-k2.7-code"
         assert "temperature" not in payload
-        assert payload["max_tokens"] == 128
+        assert payload["max_tokens"] == _MIN_THINKING_OUTPUT_TOKENS
 
     def test_custom_model_compat_profile_overrides_payload_policy(
         self,
@@ -349,7 +352,10 @@ class TestRequestShape:
 
         payload = fake.calls[0]["json"]
         assert payload["model"] == "kimi-k2.7-code"
-        assert payload["max_tokens"] == 128
+        # Reference the constant, not a literal: this asserts the floor is
+        # APPLIED, and the floor's value is owned by the router (and pinned
+        # against the measured empty-content cliff in test_model_capabilities).
+        assert payload["max_tokens"] == _MIN_THINKING_OUTPUT_TOKENS
         assert "temperature" not in payload
 
     def test_kimi_coding_agentic_payload_drops_thinking_and_sampling_but_keeps_tools(
@@ -385,7 +391,7 @@ class TestRequestShape:
         assert payload["model"] == "K2.7 Code"
         assert payload["tools"][0]["function"]["name"] == "read_file"
         assert payload["tool_choice"] == "auto"
-        assert payload["max_tokens"] == 128
+        assert payload["max_tokens"] == _MIN_THINKING_OUTPUT_TOKENS
         assert "temperature" not in payload
         assert "reasoning_effort" not in payload
         assert "thinking" not in payload
@@ -710,7 +716,7 @@ class TestRequestShape:
 
         payload = fake.calls[0]["json"]
         assert payload["model"] == "kimi-for-coding"
-        assert payload["max_tokens"] == 128
+        assert payload["max_tokens"] == _MIN_THINKING_OUTPUT_TOKENS
         assert "temperature" not in payload
 
     def test_stream_thinking_400_retries_without_openai_extension_fields(self):

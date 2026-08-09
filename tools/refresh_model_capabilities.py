@@ -18,6 +18,7 @@ reviewable in a diff:
 
 ``context``       input window, corrects an entry's ``context_window``
 ``temperature``   False means the model 400s on a temperature parameter
+``reasoning``     True means it spends output tokens thinking before writing
 
 Usage:
     python -m tools.refresh_model_capabilities [--url URL] [--out PATH]
@@ -83,6 +84,13 @@ def distill(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
             # ("omit this parameter"). ``True`` is the default assumption.
             if model.get("temperature") is False:
                 record["temperature"] = False
+
+            # Reasoning models spend max_tokens on thinking before they write,
+            # so an output budget that only covers the thinking returns HTTP
+            # 200 with empty content. Recording this lets the router raise its
+            # floor for models the operator never declared.
+            if model.get("reasoning") is True:
+                record["reasoning"] = True
 
             # ``interleaved.field`` (which response key carries reasoning) is
             # deliberately NOT captured. Across the whole upstream dump it only

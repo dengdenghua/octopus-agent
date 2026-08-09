@@ -8,7 +8,10 @@ from typing import Any
 
 from runtime.adapters.instrumentation import record_gen_ai_cost, trace_stage
 from runtime.platform.models import CostEntry
-from runtime.platform.models.model_capabilities import model_rejects_temperature
+from runtime.platform.models.model_capabilities import (
+    model_is_reasoning,
+    model_rejects_temperature,
+)
 
 from .custom_model_flags import (
     custom_model_entry_for,
@@ -55,7 +58,13 @@ except ImportError:  # pragma: no cover
 
 _DEFAULT_INPUT_USD_PER_TOKEN = 1e-7
 _DEFAULT_OUTPUT_USD_PER_TOKEN = 3e-7
-_MIN_THINKING_OUTPUT_TOKENS = 128
+# Floor for a request that may spend output tokens on reasoning before it
+# writes anything. Measured on agnes-2.5-flash against a real question: at 128
+# the reasoning consumed the entire budget and content came back EMPTY in 3/3
+# runs, at 192 in 0/3. 256 keeps headroom above that observed cliff without
+# meaningfully raising cost — this is a floor, so it only ever applies to
+# callers that asked for less.
+_MIN_THINKING_OUTPUT_TOKENS = 256
 _MAX_COMPAT_RETRY_ATTEMPTS = 6
 
 # OpenAI's reasoning_effort only accepts minimal/low/medium/high. Octopus's
@@ -77,6 +86,18 @@ _OPENAI_REASONING_EFFORT: dict[str, str] = {
 def _openai_reasoning_effort(value: Any) -> str:
     """Map an octopus reasoning-effort tier onto a value native OpenAI accepts."""
     return _OPENAI_REASONING_EFFORT.get(normalize_reasoning_effort(value) or "high", "high")
+
+
+def _model_might_think(model: str) -> bool:
+    """Whether ``model`` may spend output tokens reasoning before it writes.
+
+    Two sources, deliberately OR'ed rather than ranked: the operator's own
+    ``supports_thinking`` declaration, and the bundled models.dev snapshot.
+    Either saying yes is enough, because the cost of a false positive is a
+    slightly larger output floor while the cost of a false negative is a
+    response with no content in it.
+    """
+    return custom_model_supports_thinking(model) or model_is_reasoning(model)
 
 
 def _compat_payload_fingerprint(payload: dict[str, Any]) -> str:
@@ -379,8 +400,15 @@ class OpenAIModelRouter(Provider, ModelRouter):
         if not model_omits_sampling_parameters(model) and not model_rejects_temperature(model):
             payload["temperature"] = request.temperature
         max_tokens = request.max_tokens
+        # A reasoning model spends max_tokens on reasoning FIRST, so a budget
+        # that only covers the thinking leaves finish_reason="length" with
+        # empty content — an HTTP 200 carrying no answer. Raise the floor for
+        # any model that might think, including ones with no config entry: on a
+        # relay most models are unconfigured, and ``custom_model_supports_
+        # thinking`` returns False for those, so the floor never applied where
+        # it was needed most.
         if (
-            (request.enable_thinking or custom_model_supports_thinking(model))
+            (request.enable_thinking or _model_might_think(model))
             and max_tokens is not None
             and max_tokens < _MIN_THINKING_OUTPUT_TOKENS
         ):

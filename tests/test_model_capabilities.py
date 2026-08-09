@@ -184,3 +184,69 @@ def test_snapshot_fills_in_an_undeclared_context_window(snapshot, monkeypatch) -
     from runtime.platform.models.custom_model_flags import model_context_window
 
     assert model_context_window("m") == 1_000_000
+
+
+def test_reasoning_floor_applies_to_an_unconfigured_model(snapshot) -> None:
+    """The output floor must not depend on having a config entry.
+
+    A reasoning model spends max_tokens on thinking before it writes, so a
+    budget that only covers the thinking returns HTTP 200 with empty content.
+    Measured on agnes-2.5-flash against a real question: empty in 3/3 runs at
+    128 tokens. The old floor only consulted the operator's
+    ``supports_thinking`` flag, which is False for every model on a relay that
+    nobody hand-configured — exactly where the floor was needed.
+    """
+    snapshot({"thinker": {"reasoning": True}})
+    from runtime.platform.models.llm import ModelRequest
+    from runtime.sensing.model_router.openai_router import (
+        _MIN_THINKING_OUTPUT_TOKENS,
+        OpenAIModelRouter,
+    )
+
+    router = OpenAIModelRouter(
+        base_url="https://relay.example/v1", api_key="sk-test", default_model="thinker"
+    )
+    request = ModelRequest(
+        model="thinker", messages=[{"role": "user", "content": "hi"}], max_tokens=16
+    )
+
+    assert router._build_payload(request, "thinker")["max_tokens"] == _MIN_THINKING_OUTPUT_TOKENS
+
+
+def test_reasoning_floor_never_lowers_a_generous_budget(snapshot) -> None:
+    """It is a floor: a caller asking for more keeps what it asked for."""
+    snapshot({"thinker": {"reasoning": True}})
+    from runtime.platform.models.llm import ModelRequest
+    from runtime.sensing.model_router.openai_router import OpenAIModelRouter
+
+    router = OpenAIModelRouter(
+        base_url="https://relay.example/v1", api_key="sk-test", default_model="thinker"
+    )
+    request = ModelRequest(
+        model="thinker", messages=[{"role": "user", "content": "hi"}], max_tokens=4096
+    )
+
+    assert router._build_payload(request, "thinker")["max_tokens"] == 4096
+
+
+def test_a_non_reasoning_model_keeps_a_small_budget(snapshot) -> None:
+    """Don't inflate budgets for models that write immediately."""
+    snapshot({"plain": {"context": 128_000}})
+    from runtime.platform.models.llm import ModelRequest
+    from runtime.sensing.model_router.openai_router import OpenAIModelRouter
+
+    router = OpenAIModelRouter(
+        base_url="https://relay.example/v1", api_key="sk-test", default_model="plain"
+    )
+    request = ModelRequest(
+        model="plain", messages=[{"role": "user", "content": "hi"}], max_tokens=16
+    )
+
+    assert router._build_payload(request, "plain")["max_tokens"] == 16
+
+
+def test_the_floor_stays_above_the_measured_empty_content_cliff() -> None:
+    """Guard the constant itself: 128 was measured to return empty content."""
+    from runtime.sensing.model_router.openai_router import _MIN_THINKING_OUTPUT_TOKENS
+
+    assert _MIN_THINKING_OUTPUT_TOKENS >= 192

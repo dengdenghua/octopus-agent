@@ -88,6 +88,15 @@ def model_rejects_temperature(model: str) -> bool:
     return _record(model).get("temperature") is False
 
 
+def model_is_reasoning(model: str) -> bool:
+    """Whether the model spends output tokens on reasoning before writing.
+
+    Callers use this to raise an output-token floor: a budget that only covers
+    the thinking yields HTTP 200 with empty content.
+    """
+    return _record(model).get("reasoning") is True
+
+
 def reset_capability_cache() -> None:
     """Drop the cached snapshot. For tests that patch the resources root."""
     _snapshot.cache_clear()
@@ -95,6 +104,7 @@ def reset_capability_cache() -> None:
 
 __all__ = [
     "known_model_context_window",
+    "model_is_reasoning",
     "model_rejects_temperature",
     "reset_capability_cache",
 ]
