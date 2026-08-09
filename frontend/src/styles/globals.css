@@ -621,7 +621,7 @@
 /* apricot → 蜜杏：主色相 42、高明度暖橙粉，中性色相 50 的奶杏底调。
    与 amber（陶土 40）同色相区但明度高一档、彩度低一档，走柔和路线。 */
 [data-theme="apricot"] {
-  --background: oklch(0.975 0.011 50);
+  --background: oklch(0.98 0.007 50);
   --foreground: oklch(0.21 0.012 50);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.012 50);
@@ -638,7 +638,7 @@
   --border: oklch(0.895 0.014 50);
   --input: oklch(0.925 0.014 50);
   --ring: oklch(0.61 0.15 42);
-  --sidebar: oklch(0.96 0.013 50);
+  --sidebar: oklch(0.965 0.009 50);
   --sidebar-foreground: oklch(0.21 0.012 50);
   --sidebar-primary: oklch(0.57 0.15 42);
   --sidebar-primary-foreground: oklch(0.99 0.005 42);
@@ -680,7 +680,7 @@
 /* mint → 薄荷：主色相 162、高明度清透绿，中性色相 168 的雪青底调。
    与 emerald（松玉 178）区分在明度高一档、色相更偏黄绿，更轻盈。 */
 [data-theme="mint"] {
-  --background: oklch(0.975 0.01 168);
+  --background: oklch(0.98 0.007 168);
   --foreground: oklch(0.21 0.013 168);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.013 168);
@@ -697,7 +697,7 @@
   --border: oklch(0.895 0.013 168);
   --input: oklch(0.925 0.013 168);
   --ring: oklch(0.58 0.13 162);
-  --sidebar: oklch(0.96 0.012 168);
+  --sidebar: oklch(0.965 0.008 168);
   --sidebar-foreground: oklch(0.21 0.013 168);
   --sidebar-primary: oklch(0.54 0.13 162);
   --sidebar-primary-foreground: oklch(0.99 0.005 162);
@@ -797,7 +797,7 @@
 /* violet → 丁香紫（lilac）：主色相 322，中性色相 320 的紫灰底调。
    明度提到 0.60 与蔷薇粉/蜜杏/薄荷同档，归入柔和组。 */
 [data-theme="violet"] {
-  --background: oklch(0.972 0.009 320);
+  --background: oklch(0.98 0.006 320);
   --foreground: oklch(0.2 0.013 320);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.2 0.013 320);
@@ -814,7 +814,7 @@
   --border: oklch(0.89 0.012 320);
   --input: oklch(0.92 0.012 320);
   --ring: oklch(0.6 0.16 322);
-  --sidebar: oklch(0.957 0.011 320);
+  --sidebar: oklch(0.965 0.008 320);
   --sidebar-foreground: oklch(0.2 0.013 320);
   --sidebar-primary: oklch(0.56 0.16 322);
   --sidebar-primary-foreground: oklch(0.99 0.004 322);
