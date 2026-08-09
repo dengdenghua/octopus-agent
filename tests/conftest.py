@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from uuid import uuid4
 
 import pytest
@@ -311,3 +312,40 @@ def sample_trajectory(sample_step: Step, sample_graph: TaskGraph) -> Trajectory:
         steps=[sample_step],
         outcome=TrajectoryOutcome(success=True),
     )
+
+
+# ═══════════════════════════════════════════════════════════
+# Browser availability
+# ═══════════════════════════════════════════════════════════
+
+
+@functools.lru_cache(maxsize=1)
+def _chromium_unavailable_reason() -> str | None:
+    """Why a real-browser test cannot run here, or None when it can.
+
+    ``pytest.importorskip("playwright")`` only proves the PACKAGE is present.
+    The browser binary is downloaded separately and is versioned against the
+    package, so "installed package, missing or stale binary" is a real state —
+    and in it those tests failed instead of skipping, which reads as a product
+    regression rather than an unprovisioned machine.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return "playwright is not installed"
+    try:
+        with sync_playwright() as playwright:
+            playwright.chromium.launch(headless=True).close()
+    except Exception as exc:  # noqa: BLE001 — any launch failure means unusable
+        return f"chromium cannot launch: {str(exc).splitlines()[0][:160]}"
+    return None
+
+
+def requires_chromium() -> None:
+    """Skip the calling test unless a launchable chromium is present.
+
+    Install with: uv pip install playwright && python -m playwright install chromium
+    """
+    reason = _chromium_unavailable_reason()
+    if reason is not None:
+        pytest.skip(reason)

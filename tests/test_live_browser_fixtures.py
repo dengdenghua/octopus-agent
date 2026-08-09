@@ -8,6 +8,7 @@ from playwright.sync_api import expect, sync_playwright
 from benchmarks.eval_harness import Trajectory
 from benchmarks.fixed_suite_fixtures import prepare_fixture_suite
 from benchmarks.fixture_grading import LiveIsolatedFixture
+from tests.conftest import requires_chromium
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,6 +41,7 @@ def test_frontend_fixtures_have_isolated_live_previews(tmp_path) -> None:
 
 
 def test_dynamic_crud_fixture_is_live_and_satisfiable(tmp_path) -> None:
+    requires_chromium()
     prepared = prepare_fixture_suite(
         repo_root=REPO_ROOT,
         runs_root=tmp_path / "runs",
@@ -88,6 +90,7 @@ def test_dynamic_crud_fixture_is_live_and_satisfiable(tmp_path) -> None:
 
 
 def test_rich_editor_upload_fixture_is_live_and_satisfiable(tmp_path) -> None:
+    requires_chromium()
     prepared = prepare_fixture_suite(
         repo_root=REPO_ROOT,
         runs_root=tmp_path / "runs",

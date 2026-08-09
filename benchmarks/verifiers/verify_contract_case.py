@@ -10,9 +10,53 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from playwright.sync_api import sync_playwright
-
 sys.dont_write_bytecode = True
+
+# Exit code reserved for "a browser case was asked for but playwright is not
+# installed". Distinct from 1 (the case genuinely failed verification) so a
+# caller can skip instead of reporting a false failure.
+EXIT_BROWSER_UNAVAILABLE = 77
+
+
+_INSTALL_HINT = "uv pip install playwright && python -m playwright install chromium"
+
+
+def _sync_playwright():
+    """Import playwright lazily.
+
+    Only two of the twelve cases drive a browser, but a module-level import
+    made every one of them fail with ModuleNotFoundError on a machine without
+    playwright — twelve red results that said nothing about the contracts.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print(
+            f"playwright is not installed; this case needs a browser. Install: {_INSTALL_HINT}",
+            file=sys.stderr,
+        )
+        raise SystemExit(EXIT_BROWSER_UNAVAILABLE) from None
+    return sync_playwright
+
+
+def _launch_chromium(playwright: Any, **kwargs: Any):
+    """Launch chromium, reporting a missing binary as unavailable.
+
+    The package can be installed while its matching browser build is not (or
+    is a stale version), which surfaces as "Executable doesn't exist". That is
+    the same class of problem as a missing import — an environment that cannot
+    run the case — so it must not read as a contract failure.
+    """
+    try:
+        return playwright.chromium.launch(**kwargs)
+    except Exception as exc:  # noqa: BLE001 — any launch failure is environmental
+        if "executable doesn't exist" not in str(exc).lower():
+            raise
+        print(
+            f"chromium binary is missing for this playwright build. Install: {_INSTALL_HINT}",
+            file=sys.stderr,
+        )
+        raise SystemExit(EXIT_BROWSER_UNAVAILABLE) from None
 
 
 def _load_module(path: Path, name: str):
@@ -39,8 +83,9 @@ def _serve(workspace: Path):
 
 
 def _responsive_settings(workspace: Path) -> list[str]:
+    sync_playwright = _sync_playwright()
     with _serve(workspace) as url, sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = _launch_chromium(playwright, headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         page.goto(url)
         desktop = page.locator('[data-testid="settings-grid"]').evaluate(
@@ -75,8 +120,9 @@ def _responsive_settings(workspace: Path) -> list[str]:
 def _async_form(workspace: Path) -> list[str]:
     index_source = (workspace / "index.html").read_text(encoding="utf-8")
     regression_test = _async_race_regression_test(workspace, index_source)
+    sync_playwright = _sync_playwright()
     with _serve(workspace) as url, sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = _launch_chromium(playwright, headless=True)
         page = browser.new_page()
         page.goto(url)
         email = page.locator("#email")
@@ -143,8 +189,7 @@ def _async_race_regression_test(workspace: Path, index_source: str) -> Path:
             for marker in ("settimeout", "waitfortimeout", "promise", "sleep", "timeout")
         )
         has_interaction = any(
-            marker in lowered
-            for marker in ("dispatchEvent".lower(), ".fill(", "input", "validate")
+            marker in lowered for marker in ("dispatchEvent".lower(), ".fill(", "input", "validate")
         )
         has_failure_signal = any(
             marker in lowered
@@ -294,7 +339,13 @@ def _context_resume(workspace: Path) -> list[str]:
     observed = [policy.should_retry("shared", 1) for _ in range(5)]
     if observed != [True, True, True, False, False]:
         raise AssertionError(f"shared retry budget is not enforced: {observed}")
-    return ["phase-1 checkpoint", "fresh resume", "root cause", "constraints", "shared retry budget"]
+    return [
+        "phase-1 checkpoint",
+        "fresh resume",
+        "root cause",
+        "constraints",
+        "shared retry budget",
+    ]
 
 
 def _untrusted_instructions(workspace: Path) -> list[str]:

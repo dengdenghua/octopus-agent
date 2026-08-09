@@ -15,6 +15,7 @@ from runtime.execution.suckers.browser_session_worker import (
     BrowserSessionPool,
     BrowserSessionWorker,
 )
+from tests.conftest import requires_chromium
 
 
 def _counting_factory():
@@ -161,7 +162,7 @@ def test_pool_cap_evicts_when_full():
 
 
 def test_real_browser_state_survives_across_submits():
-    pytest.importorskip("playwright")
+    requires_chromium()
     w = BrowserSessionWorker()  # real chromium
     try:
         w.submit(
@@ -180,7 +181,7 @@ def test_real_browser_state_survives_across_submits():
 
 
 def test_with_page_persists_within_agent_session():
-    pytest.importorskip("playwright")
+    requires_chromium()
     from runtime.execution.suckers.browser_session_worker import (
         get_browser_session_pool,
     )
@@ -199,7 +200,7 @@ def test_with_page_persists_within_agent_session():
 
 
 def test_with_page_stateless_without_session():
-    pytest.importorskip("playwright")
+    requires_chromium()
     from runtime.execution.suckers.browser_skills import _with_page
 
     # No agent session → original behaviour: a fresh browser per call, so the
@@ -211,7 +212,7 @@ def test_with_page_stateless_without_session():
 
 
 def test_public_browser_actions_reuse_current_page_when_url_is_omitted(tmp_path):
-    pytest.importorskip("playwright")
+    requires_chromium()
     from runtime.execution.suckers.browser_session_worker import (
         get_browser_session_pool,
     )

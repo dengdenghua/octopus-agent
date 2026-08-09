@@ -214,12 +214,19 @@ SOLUTIONS: dict[str, Callable[[Path], None]] = {
 }
 
 
-@pytest.mark.parametrize("case_id", sorted(SOLUTIONS))
-def test_contract_fixture_verifier_is_satisfiable(case_id: str, tmp_path: Path) -> None:
-    workspace = tmp_path / case_id
-    shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / case_id, workspace)
-    SOLUTIONS[case_id](workspace)
+# The verifier reports a missing browser with this code rather than 1, so a
+# machine without playwright skips the two browser cases instead of reporting
+# ten more failures that say nothing about the contracts.
+EXIT_BROWSER_UNAVAILABLE = 77
 
+
+def _run_verifier(case_id: str, workspace: Path) -> dict:
+    """Run one case, skipping when it needs a browser we do not have.
+
+    Deliberately not ``check=True``: that raised CalledProcessError with the
+    subprocess's stderr swallowed, so every failure looked like an opaque
+    "exit status 1" and the real cause (an ImportError, here) never surfaced.
+    """
     completed = subprocess.run(
         [
             sys.executable,
@@ -229,9 +236,24 @@ def test_contract_fixture_verifier_is_satisfiable(case_id: str, tmp_path: Path) 
         ],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
-    result = json.loads(completed.stdout)
+    if completed.returncode == EXIT_BROWSER_UNAVAILABLE:
+        pytest.skip(f"{case_id} needs playwright: {completed.stderr.strip()}")
+    assert completed.returncode == 0, (
+        f"verifier exited {completed.returncode}\n"
+        f"stdout: {completed.stdout}\nstderr: {completed.stderr}"
+    )
+    return json.loads(completed.stdout)
+
+
+@pytest.mark.parametrize("case_id", sorted(SOLUTIONS))
+def test_contract_fixture_verifier_is_satisfiable(case_id: str, tmp_path: Path) -> None:
+    workspace = tmp_path / case_id
+    shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / case_id, workspace)
+    SOLUTIONS[case_id](workspace)
+
+    result = _run_verifier(case_id, workspace)
 
     assert result["passed"] is True, result
 
@@ -246,19 +268,9 @@ def test_skill_roundtrip_verifier_accepts_semantic_chinese_procedure(tmp_path: P
     )
     _write(workspace / "result.json", json.dumps({"values": [0, 9, 25]}))
 
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(REPO_ROOT / "benchmarks" / "verifiers" / "verify_contract_case.py"),
-            case_id,
-            str(workspace),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    completed_result = _run_verifier(case_id, workspace)
 
-    assert json.loads(completed.stdout)["passed"] is True
+    assert completed_result["passed"] is True
 
 
 def test_skill_roundtrip_verifier_still_rejects_missing_discard_step(tmp_path: Path) -> None:
@@ -268,18 +280,8 @@ def test_skill_roundtrip_verifier_still_rejects_missing_discard_step(tmp_path: P
     _write(workspace / "skill" / "SKILL.md", "将负数与其他整数一起平方并按升序排序。")
     _write(workspace / "result.json", json.dumps({"values": [0, 9, 25]}))
 
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(REPO_ROOT / "benchmarks" / "verifiers" / "verify_contract_case.py"),
-            case_id,
-            str(workspace),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    result = json.loads(completed.stdout)
+    completed_result = _run_verifier(case_id, workspace)
+    result = completed_result
 
     assert result["passed"] is False
     assert "discard" in result["reason"]
@@ -292,18 +294,8 @@ def test_async_form_verifier_rejects_missing_persistent_race_test(tmp_path: Path
     _async_form(workspace)
     (workspace / "tests" / "test_race.js").unlink()
 
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(REPO_ROOT / "benchmarks" / "verifiers" / "verify_contract_case.py"),
-            case_id,
-            str(workspace),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    result = json.loads(completed.stdout)
+    completed_result = _run_verifier(case_id, workspace)
+    result = completed_result
 
     assert result["passed"] is False
     assert "persistent race regression" in result["reason"]
@@ -322,18 +314,8 @@ def test_async_form_verifier_rejects_test_auto_loaded_by_production_page(tmp_pat
         encoding="utf-8",
     )
 
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(REPO_ROOT / "benchmarks" / "verifiers" / "verify_contract_case.py"),
-            case_id,
-            str(workspace),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    result = json.loads(completed.stdout)
+    completed_result = _run_verifier(case_id, workspace)
+    result = completed_result
 
     assert result["passed"] is False
     assert "separate from index.html" in result["reason"]

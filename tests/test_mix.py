@@ -2,10 +2,26 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+
+import pytest
 
 from runtime.platform.models import ParsedIntent
 from runtime.sensing.gateway.openai_gateway import mix
+
+
+@pytest.fixture(autouse=True)
+def _isolated_mix_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the Mix preset at a scratch path for every test in this file.
+
+    The preset lives in the developer's own ``~/.octopus/mix_config.json`` and
+    takes precedence over the environment by design, so without this a machine
+    with a real preset made these tests assert against whatever models the
+    developer happened to have configured — a test that passes or fails based
+    on the home directory is not a test.
+    """
+    monkeypatch.setattr(mix, "_config_path", lambda: tmp_path / "mix_config.json")
 
 
 def _intent(goal: str = "What is 2+2?") -> ParsedIntent:
