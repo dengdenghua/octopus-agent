@@ -13,6 +13,8 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type MutableRefObject,
+  type RefObject,
 } from "react";
 
 import { ChainOfThought } from "@/components/ai-elements/chain-of-thought";
@@ -324,6 +326,49 @@ function formatDuration(ms: number): string {
  * up to read history, in which case follow-mode pauses until they return to
  * the bottom.
  */
+/**
+ * Smoothly glide a live stream window to the newest content instead of
+ * snapping. Each typewriter tick calls this with the latest display text;
+ * the scroll animates in a few rAF steps so long streams read like a
+ * sliding window (fixed height, newest line entering at the bottom) rather
+ * than a jump. User scroll-away still pauses the stick.
+ */
+function useSmoothStickToBottom(
+  ref: RefObject<HTMLDivElement | null>,
+  stickToBottomRef: MutableRefObject<boolean>,
+  trigger: string,
+) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !stickToBottomRef.current) return;
+    const target = el.scrollHeight - el.clientHeight;
+    const start = el.scrollTop;
+    const delta = target - start;
+    if (Math.abs(delta) < 1) return;
+    if (typeof requestAnimationFrame !== "function") {
+      el.scrollTop = target;
+      return;
+    }
+    const steps = 5;
+    let step = 0;
+    let raf = 0;
+    const glide = () => {
+      step += 1;
+      el.scrollTop = start + (delta * step) / steps;
+      if (step < steps) raf = requestAnimationFrame(glide);
+    };
+    raf = requestAnimationFrame(glide);
+    return () => cancelAnimationFrame(raf);
+  }, [ref, stickToBottomRef, trigger]);
+}
+
+/**
+ * Live typewriter window for the in-flight extended thinking. The window
+ * keeps a fixed height; the full raw reasoning streams in as a typewriter
+ * and scrolls smoothly like a sliding window (newest line at the bottom,
+ * older lines glide up out of view). Once the stream settles, the window
+ * folds away back to the compact summary row.
+ */
 function LiveThinkingWindow({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -334,12 +379,7 @@ function LiveThinkingWindow({ text }: { text: string }) {
     targetText: text,
   });
 
-  useEffect(() => {
-    const el = ref.current;
-    if (el && stickToBottomRef.current) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [displayText]);
+  useSmoothStickToBottom(ref, stickToBottomRef, displayText);
 
   const handleScroll = () => {
     const el = ref.current;
@@ -374,12 +414,7 @@ function LiveExecWindow({ text }: { text: string }) {
     targetText: text,
   });
 
-  useEffect(() => {
-    const el = ref.current;
-    if (el && stickToBottomRef.current) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [displayText]);
+  useSmoothStickToBottom(ref, stickToBottomRef, displayText);
 
   const handleScroll = () => {
     const el = ref.current;
