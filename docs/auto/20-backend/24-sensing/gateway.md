@@ -87,6 +87,7 @@ tier: "standard"
 | `_realtime_gateway_connection.py` | Per-WebSocket RPC connection (``RpcConnection``). |
 | `_realtime_gateway_frame.py` | Last-ditch frame-size guard so no single WS frame exceeds the ceiling. |
 | `_realtime_gateway_types.py` | Shared types, protocols, exceptions and constants for the realtime gateway. |
+| `_realtime_orchestrator_bridge.py` | Bridge a ``ParallelAgentOrchestrator`` batch stream onto a realtime turn. |
 | `_realtime_react_stream_apply.py` | Reducer that maps bridge events to ``item/*`` notifications. |
 | `_realtime_react_stream_drive.py` | ReAct loop stream driver. |
 | `_realtime_react_stream_helpers.py` | Shared helpers & reactive predicates for the realtime stream drivers. |
@@ -370,6 +371,12 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class EventEmitter(Protocol)` | Sink the runtime uses to push events out to a client. |
 | class | `class RealtimeRuntime(Protocol)` | The contract turn loops implement to plug into the gateway. |
+
+### `_realtime_orchestrator_bridge.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `async def bridge_orchestrator_batch(orchestrator, batch_id, turn, log, emitter)` | Stream ``batch_id``'s tasks onto ``turn`` as live ``SubagentItem`` tiles. |
 
 ### `_team_tasks_models.py`
 
@@ -1152,7 +1159,7 @@ tier: "standard"
 
 ## Who imports this
 
-**15** file(s) reference this package:
+**14** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -1165,6 +1172,4 @@ tier: "standard"
   - `runtime/platform/ui/_app_meta.py`
   - `runtime/platform/ui/_app_parallel.py`
   - _… and 7 more_
-- **`runtime/tests/`** · 1 file(s)
-  - `runtime/tests/test_realtime_workbench.py`
 

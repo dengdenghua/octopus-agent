@@ -136,7 +136,7 @@ tier: "core"
 
 ## Who imports this
 
-**16** file(s) reference this package:
+**15** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -158,8 +158,6 @@ tier: "core"
   - `runtime/sensing/gateway/media_router.py`
   - `runtime/sensing/gateway/retrieve_router.py`
   - `runtime/sensing/gateway/wiki_router.py`
-- **`runtime/tests/`** · 1 file(s)
-  - `runtime/tests/test_experience_ledger_recall.py`
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

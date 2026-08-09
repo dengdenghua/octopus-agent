@@ -43,11 +43,13 @@ tier: "core"
 | `_react_prompt_assembly_sections.py` | Early PHASE 3 sections: date / public-orientation / work-mode / read-only / grounding / browser-operation / iteration & budget / todo-protocol resolution. |
 | `_react_prompt_assembly_state.py` | Shared mutable assembly state for the PHASE 3 prompt-assembly split, plus the final ``messages`` composition and the memory / identity / team-roster sections. |
 | `agent_auto_delegate.py` | Auto-delegate to pinned agents on the first ReAct step. |
+| `agent_auto_parallel.py` | Auto-decompose + run subtasks in parallel for the first ReAct turn. |
 | `ai_mode.py` | AI Mode — Marvis-style two-mode wrapper over the 3-tier router. |
 | `capability_router.py` | — |
 | `checkpoint_integrity.py` | — |
 | `checkpoint_mirror.py` | Distributed checkpoint mirror — P3 fourth slice. |
 | `completion_receipt.py` | — |
+| `guard_model_policy.py` | Model-aware guard routing — apply code-smell guards only to cheap models. |
 | `input_mentions.py` | Parse @plugin/@skill/@agent and runtime surface mentions from prompts. |
 | `leader.py` | Leader Process · single-owner supervisor for long-running tasks. |
 | `live_steering.py` | Shared prompt contract for user messages received during an active turn. |
@@ -137,6 +139,16 @@ tier: "core"
 | class | `class AgentDelegationPlan` | Recommended single-agent delegation, or empty when none fits. |
 | func | `def plan_auto_delegation(prompt, registry)` | Decide whether this prompt should auto-delegate to one agent. |
 
+### `agent_auto_parallel.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class AutoParallelPlan` | A resolved decomposition plan, or empty when no split fits. |
+| func | `def plan_auto_parallel(goal, context, max_subtasks, model_name)` | Decide whether this goal should be auto-decomposed and run in parallel. |
+| func | `def set_auto_parallel_orchestrator(orchestrator)` | Inject the orchestrator used for dispatch (tests / app wiring). |
+| func | `def get_auto_parallel_orchestrator()` | Return the shared orchestrator, creating one wired to real sub-agents. |
+| func | `def run_auto_parallel(plan, thread_id, model_name, context, owner_id, timeout_s, on_batch_started)` | Dispatch the plan's subtasks in parallel and aggregate the results. |
+
 ### `ai_mode.py`
 
 | Kind | Symbol | Doc |
@@ -180,6 +192,15 @@ tier: "core"
 | --- | --- | --- |
 | class | `class CompletionReceipt` | Machine-readable proof that a run reached a defensible terminal state. |
 | func | `def build_completion_receipt(statuses, contract_issues, contract_warnings, artifact_count, output_present)` |  |
+
+### `guard_model_policy.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def classify_model_tier(model)` | Classify model into 'premium', 'cheap', or 'unknown'. |
+| func | `def should_apply_code_smell_guards(model)` | Return whether code-smell guards should run for this model. |
+| func | `def guard_categories_for_model(model, base_categories)` | Return the guard categories that should apply to this model. |
+| func | `def explain_guard_policy(model)` | Human-readable explanation of guard policy for a model. |
 
 ### `input_mentions.py`
 
@@ -284,7 +305,7 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def stream_react_loop(stack, intent, agent, model, max_iterations, temperature, enable_tools, resume_task_id, thread_id, max_tokens_budget, max_usd_budget, approval_provider, output_chunk_sink, step_evaluator, planning_mode, reasoning_effort, steering_drain)` |  |
+| func | `def stream_react_loop(stack, intent, agent, model, max_iterations, temperature, enable_tools, resume_task_id, thread_id, max_tokens_budget, max_usd_budget, approval_provider, output_chunk_sink, step_evaluator, planning_mode, reasoning_effort, steering_drain, on_auto_parallel_batch)` |  |
 | func | `def run_react_loop(stack, intent, agent, model, max_iterations, temperature, enable_tools, resume_task_id, thread_id, max_tokens_budget, max_usd_budget, approval_provider)` |  |
 
 ### `react_loop_controls.py`
@@ -378,7 +399,7 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class JuiceStats` | Before/after char counts for a single compression pass. |
-| func | `def juice(text, max_chars, enable_html, enable_url, enable_dedup, enable_array, enable_cap)` | Apply the compression pipeline. Returns (compressed_text, stats). |
+| func | `def juice(text, max_chars, enable_html, enable_url, enable_dedup, enable_array, enable_code, enable_cap)` | Apply the compression pipeline. Returns (compressed_text, stats). |
 | func | `def is_enabled()` | Feature flag. Default ON — compression has been validated to reduce token usage without losing sentinel patterns. The protected- pattern gua |
 
 ### `turn_complexity.py`
@@ -414,12 +435,14 @@ tier: "core"
 
 ## Who imports this
 
-**50** file(s) reference this package:
+**52** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
+- **`runtime/cli_guard_health.py/`** · 1 file(s)
+  - `runtime/cli_guard_health.py`
 - **`runtime/cli_reflect.py/`** · 1 file(s)
   - `runtime/cli_reflect.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
@@ -438,30 +461,28 @@ tier: "core"
 - **`runtime/memory/`** · 2 file(s)
   - `runtime/memory/cowork/turn_plan.py`
   - `runtime/memory/diagnostics/_trace_store_recovery.py`
-- **`runtime/platform/`** · 6 file(s)
+- **`runtime/platform/`** · 7 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
   - `runtime/platform/ui/_app_collab.py`
+  - `runtime/platform/ui/_app_parallel.py`
   - `runtime/platform/ui/_app_stack.py`
-  - `runtime/platform/ui/_reflex_admin_gepa_apply.py`
-  - `runtime/platform/ui/_reflex_admin_gepa_run.py`
+  - _… and 2 more_
 - **`runtime/safety/`** · 4 file(s)
   - `runtime/safety/experiments/prompt_optimizer.py`
   - `runtime/safety/recovery/gepa_bridge.py`
   - `runtime/safety/recovery/workflow_applier.py`
   - `runtime/safety/validation/trust_signal.py`
-- **`runtime/sensing/`** · 22 file(s)
+- **`runtime/sensing/`** · 23 file(s)
   - `runtime/sensing/gateway/_agents_endpoints.py`
   - `runtime/sensing/gateway/_agents_endpoints_conversations.py`
   - `runtime/sensing/gateway/_agents_endpoints_tasks.py`
   - `runtime/sensing/gateway/_config_endpoints_system.py`
   - `runtime/sensing/gateway/_observability_journal.py`
-  - _… and 17 more_
+  - _… and 18 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/mobile/cerebrum_adapter.py`
-- **`runtime/tests/`** · 1 file(s)
-  - `runtime/tests/test_react_loop_commentary.py`
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

@@ -102,6 +102,8 @@ tier: "standard"
 | func | `def extract_openai_compat_reasoning(message)` |  |
 | func | `def extract_openai_compat_usage(data)` |  |
 | func | `def parse_tool_call_arguments(value)` |  |
+| func | `def split_inline_reasoning(text)` | Split ``<think>``-wrapped reasoning out of a content string. |
+| class | `class InlineReasoningSplitter` | Streaming counterpart to :func:`split_inline_reasoning`. |
 
 ### `anthropic_router.py`
 
