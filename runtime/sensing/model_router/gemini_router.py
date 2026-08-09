@@ -9,6 +9,7 @@ from runtime.adapters.instrumentation import record_gen_ai_cost, trace_stage
 from runtime.platform.models import CostEntry
 
 from .models import (
+    DEFAULT_USER_AGENT,
     LLMResponseFormatError,
     Message,
     ModelRequest,
@@ -191,7 +192,12 @@ class GeminiModelRouter(Provider, ModelRouter):
         return payload
 
     def _build_headers(self) -> dict[str, str]:
-        headers: dict[str, str] = {"Content-Type": "application/json"}
+        # See models.DEFAULT_USER_AGENT: a default library UA gets
+        # rejected by bot-protection layers in front of some relays.
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+            "User-Agent": DEFAULT_USER_AGENT,
+        }
         if self.api_key:
             headers["x-goog-api-key"] = self.api_key
         headers.update(self.extra_headers)

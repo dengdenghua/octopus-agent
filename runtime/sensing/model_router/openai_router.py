@@ -22,6 +22,7 @@ from .custom_model_flags import (
     read_custom_models as _read_custom_models,
 )
 from .models import (
+    DEFAULT_USER_AGENT,
     LLMResponseFormatError,
     Message,
     ModelRequest,
@@ -491,9 +492,11 @@ class OpenAIModelRouter(Provider, ModelRouter):
             )
 
     def _build_headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", "User-Agent": DEFAULT_USER_AGENT}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        # An entry's ``default_headers`` wins, so a provider that wants a
+        # specific UA (or none of ours) can still say so.
         headers.update(self.extra_headers)
         return headers
 

@@ -936,6 +936,35 @@ class TestRequestShape:
         assert hdrs["HTTP-Referer"] == "https://my-app.com"
         assert hdrs["X-Title"] == "my-app"
 
+    def test_sends_explicit_user_agent(self):
+        """Endpoints behind bot protection reject the default httpx UA.
+
+        opencode.ai answers HTTP 403 ``error code: 1010`` to
+        ``python-httpx/x.y`` and 200 to the identical request under any other
+        UA — and on the streaming path it cuts the connection after the TLS
+        handshake, which surfaced as ``SSL: UNEXPECTED_EOF_WHILE_READING``
+        and made a working key look like a dead endpoint.
+        """
+        from runtime.sensing.model_router.models import DEFAULT_USER_AGENT
+
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+        r.call(_req())
+        ua = fake.calls[0]["headers"]["User-Agent"]
+        assert ua == DEFAULT_USER_AGENT
+        assert "httpx" not in ua.lower()
+
+    def test_entry_can_override_user_agent(self):
+        """A relay that wants a specific UA must still be able to say so."""
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(
+            base_url="http://x/v1",
+            client=fake,
+            extra_headers={"User-Agent": "custom-relay/9"},
+        )
+        r.call(_req())
+        assert fake.calls[0]["headers"]["User-Agent"] == "custom-relay/9"
+
     def test_no_auth_header_when_no_api_key(self, monkeypatch):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from runtime import __version__
 from runtime.adapters.instrumentation import record_gen_ai_cost, trace_stage
 from runtime.platform.models import CostEntry
 from runtime.platform.models.llm import (
@@ -33,7 +34,18 @@ from runtime.platform.models.llm import (
     thinking_budget_for_effort,
 )
 
+# Sent on every upstream LLM call. Without it httpx advertises
+# ``python-httpx/x.y``, and endpoints behind Cloudflare's browser-integrity
+# check reject that as bot traffic: opencode.ai answers HTTP 403 ``error code:
+# 1010`` for a plain request and 200 for the identical one under any other UA.
+# Worse, on the streaming path the same rule cuts the connection after the TLS
+# handshake, so the runtime saw ``SSL: UNEXPECTED_EOF_WHILE_READING`` and
+# reported it as a router failure — a working key looked like a dead endpoint.
+# Overridable per entry via ``default_headers``.
+DEFAULT_USER_AGENT = f"octopus-agent/{__version__}"
+
 __all__ = [
+    "DEFAULT_USER_AGENT",
     "EventType",
     "LLMResponseFormatError",
     "Message",

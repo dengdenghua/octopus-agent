@@ -118,6 +118,21 @@ class TestURLAndPayload:
         assert call["params"] == {"key": "MYKEY"}
         assert call["headers"]["x-goog-api-key"] == "MYKEY"
 
+    def test_sends_explicit_user_agent(self):
+        """Same reason as the OpenAI router: bot-protection layers in front of
+        some relays reject the default httpx UA outright."""
+        from runtime.sensing.model_router.models import DEFAULT_USER_AGENT
+
+        http = _FakeClient(resp=_FakeResp(body=_default_ok()))
+        r = GeminiModelRouter(api_key="MYKEY", client=http)
+        r.call(
+            ModelRequest(
+                model="gemini-2.5-flash",
+                messages=[Message(role="user", content="x")],
+            )
+        )
+        assert http.calls[0]["headers"]["User-Agent"] == DEFAULT_USER_AGENT
+
     def test_no_api_key_omits_params(self):
         http = _FakeClient(resp=_FakeResp(body=_default_ok()))
         r = GeminiModelRouter(api_key="", client=http)
