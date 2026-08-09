@@ -81,6 +81,20 @@ export function extractThinkingText(content: MessageContent): string {
     .trim();
 }
 
+// First-person plan narration ("我将先检查目录结构…", "接下来我会查看
+// config") reads as user-facing prose — the model is telling the user what
+// it is about to do. True chain-of-thought ("用户可能期望 X 但 Y 成本更高")
+// has no first-person action intro and stays collapsible. Deliberately
+// conservative: requires an action-intro word + a concrete verb.
+const OUTWARD_FACING_THINKING_RE =
+  /(?:我将|我会|接下来|下面|然后|先|首先|准备|接着|开始)\s*.{0,24}(?:检查|查看|梳理|确认|读取|执行|分析|排查|定位|验证|测试|搜索|了解|修复|创建|删除|修改|运行|构建|部署|浏览|打开|对比|核对)/;
+
+export function isOutwardFacingThinking(text: string): boolean {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return false;
+  return OUTWARD_FACING_THINKING_RE.test(trimmed);
+}
+
 function classifyToolCall(name: string): ActivityKind | "passthrough" {
   if (PASSTHROUGH_TOOLS.has(name)) return "passthrough";
   if (isPlanTool(name)) return "plan";
@@ -640,6 +654,14 @@ export function groupActivities(
       (!aiMsg.tool_calls || aiMsg.tool_calls.length === 0);
 
     if (isThinkOnly) {
+      const text = extractThinkingText(aiMsg.content);
+      // Outward-facing narration ("我将先检查目录结构…") is user-facing
+      // prose — render it as normal body text instead of folding it into a
+      // 🧠 thinking row. Only true inner chain-of-thought stays collapsible.
+      if (isOutwardFacingThinking(text)) {
+        pushPassthrough(i, aiMsg.id ?? `msg-${i}`);
+        continue;
+      }
       // Aggregate think items.
       if (!currentActivity || currentActivity.kind !== "think") {
         flushActivity();
@@ -651,7 +673,6 @@ export function groupActivities(
           id: aiMsg.id ?? `think-${i}`,
         };
       }
-      const text = extractThinkingText(aiMsg.content);
       currentActivity.items.push({
         id: aiMsg.id ?? `think-${i}`,
         label: truncate(text || labels.think, 80),

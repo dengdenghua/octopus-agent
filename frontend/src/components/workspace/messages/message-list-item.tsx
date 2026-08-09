@@ -259,7 +259,7 @@ function SegmentedReasoningPanel({
           },
         })
       }
-      className="group/thinking-row mb-1 flex w-full min-w-0 items-center gap-1.5 py-0.5 text-left text-xs leading-4 text-muted-foreground/55 transition-colors hover:text-muted-foreground"
+      className="group/thinking-row mb-1 flex w-full min-w-0 items-center gap-1.5 rounded-full border border-border/50 bg-muted/40 px-2.5 py-1 text-left text-xs leading-4 text-muted-foreground/70 transition-colors hover:text-muted-foreground hover:border-border"
       data-process-event-id={messageId}
       data-process-event-kind="thinking"
       data-testid="assistant-thinking-event"

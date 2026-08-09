@@ -5,7 +5,10 @@
 export type MessageContent = string | MessageContentComplex[];
 export type MessageContentComplex =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: string | { url: string; detail?: string } };
+  | { type: "image_url"; image_url: string | { url: string; detail?: string } }
+  // Extended-thinking blocks. `thinking` is the canonical field; some
+  // providers emit `text` instead.
+  | { type: "thinking"; thinking?: string; text?: string };
 
 export interface BaseMessage {
   content: MessageContent;

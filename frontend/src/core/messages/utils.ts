@@ -521,6 +521,18 @@ export function extractContentFromMessage(message: Message) {
           case "image_url":
             const imageURL = extractURLFromImageURLContent(content.image_url);
             return `![image](${imageURL})`;
+          // Extended-thinking blocks ("我将先检查…" style outward-facing
+          // narration) render as normal body text when the grouping layer
+          // decides they are user-facing, not collapsible inner thought.
+          case "thinking": {
+            const thinking =
+              typeof content.thinking === "string"
+                ? content.thinking
+                : typeof content.text === "string"
+                  ? content.text
+                  : "";
+            return thinking.trim();
+          }
           default:
             return "";
         }

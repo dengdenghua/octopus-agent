@@ -18,6 +18,7 @@ import {
 import { ChainOfThought } from "@/components/ai-elements/chain-of-thought";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { isApprovalRequest } from "@/components/workspace/tool-approval-card";
+import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
 import {
   type AgentRunState,
   agentRunStatusLightClass,
@@ -312,6 +313,90 @@ function formatDuration(ms: number): string {
   const minutes = Math.floor(roundedSeconds / 60);
   const remainingSeconds = roundedSeconds % 60;
   return `${minutes}m${remainingSeconds}s`;
+}
+
+/**
+ * Fixed-height typewriter window for the latest in-flight thinking text.
+ *
+ * Scrolls normally (up to re-read history, down to catch up) and, while
+ * streaming, auto-anchors to the newest text — unless the user has scrolled
+ * up to read history, in which case follow-mode pauses until they return to
+ * the bottom.
+ */
+function LiveThinkingWindow({ text }: { text: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+  // Typewriter buffer: reveal the stream at a fixed tick rate (40ms, 1–4
+  // chars/frame, accel on backlog) instead of flashing every delta. Full
+  // text appears instantly for prefers-reduced-motion users.
+  const displayText = useStreamingTextBuffer({
+    targetText: text,
+  });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el && stickToBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [displayText]);
+
+  const handleScroll = () => {
+    const el = ref.current;
+    if (!el) return;
+    stickToBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
+
+  return (
+    <div
+      ref={ref}
+      onScroll={handleScroll}
+      className="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md border border-border/50 bg-muted/25 px-2.5 py-1.5 pl-4 text-xs leading-5 text-muted-foreground/80"
+      data-testid="live-thinking-stream"
+    >
+      {displayText}
+    </div>
+  );
+}
+
+/**
+ * Live typewriter window for the in-flight execution output (shell stdout).
+ * Same buffer + stick-to-bottom behaviour as LiveThinkingWindow, but monospace
+ * since it renders command output. Appears only while the latest step is
+ * still running; once it settles, the window folds away back to the summary
+ * row ("fold only after the stream finishes").
+ */
+function LiveExecWindow({ text }: { text: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+  const displayText = useStreamingTextBuffer({
+    targetText: text,
+  });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el && stickToBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [displayText]);
+
+  const handleScroll = () => {
+    const el = ref.current;
+    if (!el) return;
+    stickToBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
+
+  return (
+    <div
+      ref={ref}
+      onScroll={handleScroll}
+      className="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md border border-border/50 bg-muted/25 px-2.5 py-1.5 pl-4 font-mono text-xs leading-5 text-muted-foreground/80"
+      data-testid="live-exec-stream"
+    >
+      {displayText}
+    </div>
+  );
 }
 
 export function MessageGroup({
@@ -808,6 +893,35 @@ export function MessageGroup({
         );
       }
       const isThinking = item.type === "reasoningGroup";
+      // Latest reasoning step's full text — streams token-by-token as
+      // messages update, so the live window below renders typewriter-style.
+      const liveThinkingText =
+        item.type === "reasoningGroup"
+          ? (item.steps[item.steps.length - 1]?.reasoning ?? "").trim()
+          : "";
+      // While the latest thought is still streaming, the live window below
+      // carries the full text; hide the row's truncated summary so the two
+      // don't duplicate. The row keeps its icon + status light + timer.
+      const liveThinkingStreamActive =
+        isThinking &&
+        isLastOverall &&
+        isCurrentlyThinking &&
+        Boolean(liveThinkingText);
+      // Latest shell execution's live stdout (realtime-adapter mirrors
+      // commandExecution.aggregatedOutput into tool_call.args.output).
+      const liveExecOutput =
+        item.type === "toolCall" &&
+        typeof item.step.args.output === "string"
+          ? item.step.args.output.trim()
+          : "";
+      // Show the typewriter output window only while the latest step is
+      // actually running; once it settles the window folds back to the row.
+      const liveExecStreamActive =
+        Boolean(liveExecOutput) &&
+        isLastOverall &&
+        isLiveTimeline &&
+        isLoading &&
+        state === "running";
       const isAggregatedGroup = item.type === "aggregatedToolGroup";
       const aggregatedExpanded =
         isAggregatedGroup && (expandedAggregatedGroups[item.id] ?? false);
@@ -1143,7 +1257,9 @@ export function MessageGroup({
               <span className="flex min-w-0 flex-1 items-center gap-1">
                 <span className="truncate">
                   {isThinking ? (
-                    processEventSummary || summary
+                    liveThinkingStreamActive
+                      ? null
+                      : processEventSummary || summary
                   ) : actionObject ? (
                     <>
                       <span className="text-foreground">{actionVerb}</span>
@@ -1287,6 +1403,15 @@ export function MessageGroup({
               </span>
             )}
           </div>
+          {/* Live thinking window: while the latest step is still
+              streaming, show its full text typewriter-style in a fixed-
+              height window (auto-anchored to the newest text). Once the
+              stream settles, this disappears and the row folds back to
+              its summary — "fold only after the stream finishes". */}
+          {liveThinkingStreamActive && (
+            <LiveThinkingWindow text={liveThinkingText} />
+          )}
+          {liveExecStreamActive && <LiveExecWindow text={liveExecOutput} />}
           {isThinking &&
             processEventDetail &&
             processEventDetail.trim() !==

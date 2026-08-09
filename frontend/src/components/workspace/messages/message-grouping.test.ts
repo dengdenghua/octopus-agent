@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import {
   extractThinkingText,
   groupActivities,
+  isOutwardFacingThinking,
   isThinkingContentPart,
   MIN_AGGREGATION_SIZE,
 } from "./message-grouping";
@@ -23,6 +24,15 @@ function aiToolCallMsg(
   };
 }
 
+function thinkingMsg(id: string, thinking: string) {
+  return {
+    id,
+    type: "ai",
+    content: [{ type: "thinking", thinking }],
+    tool_calls: [],
+  };
+}
+
 function humanMsg(id: string, content = "hi") {
   return { id, type: "human", content };
 }
@@ -30,6 +40,25 @@ function humanMsg(id: string, content = "hi") {
 function toolResultMsg(id: string, toolCallId: string, content = "ok") {
   return { id, type: "tool", content, tool_call_id: toolCallId };
 }
+
+describe("isOutwardFacingThinking", () => {
+  test("classifies first-person plan narration as user-facing", () => {
+    expect(isOutwardFacingThinking("我将先检查项目的目录结构和依赖配置")).toBe(
+      true,
+    );
+    expect(isOutwardFacingThinking("接下来我会查看配置文件确认技术栈")).toBe(
+      true,
+    );
+    expect(isOutwardFacingThinking("先梳理一下入口文件再开始改")).toBe(true);
+  });
+
+  test("keeps inner chain-of-thought collapsible", () => {
+    expect(
+      isOutwardFacingThinking("用户可能期望 A，但方案 B 的成本更高，需要权衡"),
+    ).toBe(false);
+    expect(isOutwardFacingThinking("")).toBe(false);
+  });
+});
 
 describe("groupActivities", () => {
   test("returns empty for empty messages", () => {
@@ -434,6 +463,35 @@ describe("groupActivities file diffs", () => {
       for (const item of activity.items) {
         expect(item.meta?.diffs).toBeUndefined();
       }
+    }
+  });
+});
+
+describe("groupActivities outward-facing thinking", () => {
+  test("plan narration renders as passthrough body text, not a think row", () => {
+    const messages = [
+      humanMsg("h1", "检查一下项目"),
+      thinkingMsg("a1", "我将先检查项目的目录结构和依赖配置，确认技术栈。"),
+      thinkingMsg("a2", "接下来我会查看 pyproject.toml 确认依赖声明。"),
+    ];
+    const chunks = groupActivities(messages as any);
+    // All three merge into passthrough — no 🧠 thinking activity.
+    expect(chunks.length).toBe(1);
+    expect(chunks[0].kind).toBe("passthrough");
+  });
+
+  test("inner chain-of-thought still folds into a think activity", () => {
+    const messages = [
+      humanMsg("h1", "为什么"),
+      thinkingMsg("a1", "用户可能期望 A，但方案 B 的成本更高，需要权衡影响面。"),
+      thinkingMsg("a2", "如果直接改接口会影响下游三个调用方，先评估风险。"),
+    ];
+    const chunks = groupActivities(messages as any);
+    const activity = chunks.find((c) => c.kind === "activity");
+    expect(activity?.kind).toBe("activity");
+    if (activity?.kind === "activity") {
+      expect(activity.activityKind).toBe("think");
+      expect(activity.items.length).toBe(2);
     }
   });
 });

@@ -1,5 +1,5 @@
 import { act, fireEvent, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AIMessage, Message } from "@/core/api/types";
 import { renderWithProviders } from "@/test/harness";
@@ -14,6 +14,17 @@ import {
   selectCompactTimelineItems,
   type TimelineItem,
 } from "./message-group";
+
+// jsdom has no matchMedia. Simulate "prefers-reduced-motion: reduce" so the
+// streaming text buffer reveals full text instantly in tests (typewriter
+// timing is covered separately in use-streaming-text-buffer.test.ts).
+beforeEach(() => {
+  window.matchMedia = vi.fn().mockReturnValue({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }) as unknown as typeof window.matchMedia;
+});
 
 vi.mock("../artifacts", () => ({
   useArtifacts: () => ({
@@ -494,6 +505,39 @@ describe("MessageGroup reasoning grouping", () => {
     );
     expect(screen.getAllByText("再整理成可执行步骤")).toHaveLength(1);
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+  });
+
+  it("shows a typewriter live-thinking window while streaming, then folds after settle", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: { public_reasoning_summary: "先梳理目录结构" },
+      },
+      {
+        id: "ai-2",
+        type: "ai",
+        content: "",
+        additional_kwargs: { public_reasoning_summary: "接下来检查配置文件" },
+      },
+    ];
+
+    const { rerender } = renderWithProviders(
+      <MessageGroup messages={messages as never} isLoading />,
+      { locale: "zh-CN" },
+    );
+
+    // While streaming: the live window carries the latest thought's full
+    // text; the truncated row summary is hidden so text isn't duplicated.
+    const stream = screen.getByTestId("live-thinking-stream");
+    expect(stream).toHaveTextContent("接下来检查配置文件");
+    expect(screen.getAllByText("接下来检查配置文件")).toHaveLength(1);
+
+    // After the stream settles: window folds away, summary row returns.
+    rerender(<MessageGroup messages={messages as never} />);
+    expect(screen.queryByTestId("live-thinking-stream")).not.toBeInTheDocument();
+    expect(screen.getByText("接下来检查配置文件")).toBeInTheDocument();
   });
 
   it("keeps kept-open traces compact and sends prior steps to the workbench", () => {
@@ -2443,5 +2487,39 @@ describe("reasoning live timer from backend timestamp", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("shows a live execution output window while running, folds after settle", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-exec",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "tc-exec",
+            name: "npm test",
+            args: {
+              command: "npm test",
+              output: "PASS test1\nPASS test2\nrunning...",
+            },
+            type: "tool_call",
+          },
+        ],
+      },
+    ];
+
+    const { rerender } = renderWithProviders(
+      <MessageGroup messages={messages as never} isLoading />,
+      { locale: "en-US" },
+    );
+
+    // While running: live stdout typewriter window is visible.
+    const stream = screen.getByTestId("live-exec-stream");
+    expect(stream).toHaveTextContent("PASS test1");
+
+    // Once settled: window folds away, summary row remains.
+    rerender(<MessageGroup messages={messages as never} />);
+    expect(screen.queryByTestId("live-exec-stream")).not.toBeInTheDocument();
   });
 });
