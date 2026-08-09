@@ -194,12 +194,15 @@ export default defineConfig({
     ],
   },
   server: {
-    port: parseInt(process.env.FRONTEND_PORT || "3000"),
+    // PORT is honoured so a supervisor that assigns a free port (the IDE
+    // preview pane) can run alongside a dev server already holding 3000.
+    // FRONTEND_PORT stays the explicit override and wins.
+    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3000"),
     host: "0.0.0.0",
     proxy: proxyConfig,
   },
   preview: {
-    port: parseInt(process.env.FRONTEND_PORT || "3000"),
+    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3000"),
     host: "0.0.0.0",
     proxy: proxyConfig,
   },

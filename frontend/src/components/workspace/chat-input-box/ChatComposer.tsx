@@ -185,6 +185,10 @@ export function ChatComposer({
         id: m.id,
         name: m.id,
         display_name: (m as { display_name?: string }).display_name ?? m.id,
+        // The picker folds a ``::1m`` row into its base model, which it can
+        // only detect from context_profile. Dropping the field here made the
+        // long-context variant render as a second, identically-labelled row.
+        context_profile: (m as { context_profile?: string }).context_profile,
       })),
     [models],
   );
