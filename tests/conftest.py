@@ -127,6 +127,48 @@ def _disable_os_keychain(monkeypatch):
     _ss.reset_key_cache_for_tests()
 
 
+@pytest.fixture(autouse=True)
+def _protect_live_custom_models():
+    """Restore ``data/custom_models.json`` if a test writes the live copy.
+
+    This file is the operator's real model catalog: base URLs, API keys, and
+    the rows the in-app ModelPicker renders. It is gitignored, so a stray
+    write leaves no diff to notice and no history to bisect — the checkout
+    this guard was added from had accumulated eight entries pointing at
+    ``x.test`` / ``mirror.example.com`` / ``example.test``, which are RFC
+    reserved names that can never resolve. They still rendered as selectable
+    models, so the picker offered mostly dead options.
+
+    Most suites redirect correctly (``monkeypatch.chdir(tmp_path)`` is enough,
+    because ``app_paths()`` walks up for a project sentinel and a tmp dir has
+    none). But the config router resolves its path ONCE at construction, so
+    any test that builds the app before redirecting cwd — directly or through
+    a fixture ordering change — silently writes the real file. Rather than
+    chase each route, snapshot and put it back.
+
+    Deliberately restore-only, not a hard failure: a test that legitimately
+    exercises persistence against the default path should still pass, it just
+    must not leave the operator's catalog mutated.
+    """
+    from runtime.platform.process.paths import app_paths
+
+    try:
+        path = app_paths().custom_models_path
+        before = path.read_bytes() if path.exists() else None
+    except OSError:  # unreadable / no data dir → nothing to protect
+        yield
+        return
+    yield
+    try:
+        if before is None:
+            if path.exists():
+                path.unlink()
+        elif path.read_bytes() != before:
+            path.write_bytes(before)
+    except OSError:  # noqa: S110 — cleanup must never fail a test
+        pass
+
+
 def _reset_injection_taint() -> None:
     """Clear the per-thread prompt-injection taint + gate-handled contextvars.
 
