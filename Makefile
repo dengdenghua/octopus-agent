@@ -5,7 +5,7 @@
         k8s-apply k8s-delete k8s-status \
         frontend-install frontend-dev frontend-build frontend-clean frontend-typecheck \
         dev-full dev-full-example \
-        openapi-snapshot frontend-types
+        openapi-snapshot frontend-types refresh-model-capabilities
 
 # ─── Toolchain ───────────────────────────────────────
 # Prefer the project venv over whatever `python` resolves to on PATH. Without
@@ -173,6 +173,9 @@ frontend-clean:  ## Clean frontend build outputs
 # ─── OpenAPI contract ────────────────────────────────
 openapi-snapshot:  ## Regenerate docs/openapi-snapshot.json
 	OCTOPUS_OPENAPI_WRITE=1 $(PYTHON) -m pytest tests/test_openapi_snapshot.py -q
+
+refresh-model-capabilities:  ## Refresh resources/models/capabilities.json from models.dev
+	$(PYTHON) -m tools.refresh_model_capabilities
 
 frontend-types:  ## Generate TypeScript types from the OpenAPI snapshot
 	cd frontend && pnpm exec openapi-typescript ../docs/openapi-snapshot.json -o src/core/api/openapi-types.ts

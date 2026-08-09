@@ -8,6 +8,7 @@ from typing import Any
 
 from runtime.adapters.instrumentation import record_gen_ai_cost, trace_stage
 from runtime.platform.models import CostEntry
+from runtime.platform.models.model_capabilities import model_rejects_temperature
 
 from .custom_model_flags import (
     custom_model_entry_for,
@@ -370,7 +371,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
             "model": model,
             "messages": msgs,
         }
-        if not model_omits_sampling_parameters(model):
+        # ``model_rejects_temperature`` covers models the operator never
+        # declared: kimi-k3 answers HTTP 400 on any temperature, and on a relay
+        # hosting dozens of models nobody hand-configures each one. The
+        # operator's own ``omit_sampling_parameters`` still takes precedence by
+        # being checked first.
+        if not model_omits_sampling_parameters(model) and not model_rejects_temperature(model):
             payload["temperature"] = request.temperature
         max_tokens = request.max_tokens
         if (

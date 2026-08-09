@@ -130,7 +130,14 @@ def custom_model_supports_thinking(model: str) -> bool:
 
 
 def model_context_window(model: str) -> int | None:
-    """Return the operator-declared input window for a custom model."""
+    """Return the input window for a custom model.
+
+    An operator's ``context_window`` wins. When the entry does not declare one
+    (or declares something out of range), fall back to the bundled models.dev
+    snapshot instead of a flat 256k guess: a relay's ``deepseek-v4-flash``
+    really has a 1M window, and guessing 128k-256k made context budgeting
+    truncate work that would have fit.
+    """
 
     entry = custom_model_entry_for(model)
     if not isinstance(entry, dict):
@@ -140,8 +147,20 @@ def model_context_window(model: str) -> int | None:
     try:
         value = int(entry.get("context_window"))
     except (TypeError, ValueError):
+        return _upstream_context_window(model)
+    if 8_192 <= value <= 2_000_000:
+        return value
+    return _upstream_context_window(model) or 256_000
+
+
+def _upstream_context_window(model: str) -> int | None:
+    """models.dev's window for ``model``, clamped to the range we accept."""
+    from runtime.platform.models.model_capabilities import known_model_context_window
+
+    value = known_model_context_window(model)
+    if value is None:
         return None
-    return value if 8_192 <= value <= 2_000_000 else 256_000
+    return value if 8_192 <= value <= 2_000_000 else None
 
 
 __all__ = [
