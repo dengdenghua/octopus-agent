@@ -60,6 +60,7 @@ import { normalizeExecutionPlan } from "../execution-plan-utils";
 
 import { MarkdownContent } from "./markdown-content";
 import { useThreadStreaming, useThreadValues } from "./context";
+import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { GroundingChip } from "./grounding-chip";
 import { extractClarificationQuestionnaire } from "../clarification-questionnaire";
@@ -568,6 +569,23 @@ function MessageContent_({
   );
   const visibleContentToDisplay =
     structuredClarification?.visibleContent ?? contentToDisplay;
+  // Body typewriter (WorkBuddy-style buffer playback): while this message is
+  // actively receiving streamed tokens, play the content back at a smooth
+  // tick rate instead of re-rendering markdown on every delta. When the
+  // stream ends (`enabled` flips off) the full text is revealed immediately,
+  // so the final markdown is rendered from a complete source — no dangling
+  // code fences or half-built tables linger. Guard against the target text
+  // shrinking mid-stream (e.g. a draft being replaced): if the buffer ever
+  // exceeds the target, fall back to the source text directly.
+  const bufferedBody = useStreamingTextBuffer({
+    targetText: visibleContentToDisplay,
+    enabled: isCurrentlyStreaming,
+    resetKey: message.id,
+  });
+  const renderedBody =
+    bufferedBody.length <= visibleContentToDisplay.length
+      ? bufferedBody
+      : visibleContentToDisplay;
   const messageHasToolCalls =
     !isHuman &&
     Array.isArray((message as { tool_calls?: unknown[] }).tool_calls) &&
@@ -769,7 +787,7 @@ function MessageContent_({
       {visibleContentToDisplay.trim() && (
         <div className="relative">
           <MarkdownContent
-            content={visibleContentToDisplay}
+            content={renderedBody}
             isLoading={isLoading}
             rehypePlugins={allRehypePlugins}
             className={cn(

@@ -1209,7 +1209,10 @@ describe("MessageList reasoning privacy", () => {
     const handleOpen = (event: Event) => opened.push(event as CustomEvent);
     window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
     const thinkingEvent = screen.getByTestId("assistant-thinking-event");
-    expect(thinkingEvent.className).not.toMatch(/\b(?:border|rounded|bg-)/);
+    // Thinking rows are pill-style badges (rounded-full + border + tinted
+    // bg), mirroring the WorkBuddy thinking summary chip.
+    expect(thinkingEvent.className).toMatch(/\brounded-full\b/);
+    expect(thinkingEvent.className).toMatch(/\bborder\b/);
     expect(thinkingEvent).toHaveAttribute(
       "data-process-event-id",
       "assistant-public-summary",
@@ -1559,6 +1562,21 @@ describe("MessageList stalled-run warning", () => {
   test("resets the warning timer when streaming content advances", () => {
     vi.useFakeTimers();
     try {
+      // Reduced-motion disables the body typewriter (which would otherwise
+      // register its own setInterval and pollute the spy count below).
+      vi.mocked(window.matchMedia).mockImplementation(
+        (query: string) =>
+          ({
+            matches: true,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+          }) as MediaQueryList,
+      );
       const intervalSpy = vi.spyOn(window, "setInterval");
       const firstMessages = [
         message("user-1", "human", "Write a report"),
@@ -1593,6 +1611,72 @@ describe("MessageList stalled-run warning", () => {
         vi.advanceTimersByTime(60_000);
       });
       expect(screen.queryByText(/No progress for/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("streams the body through the typewriter buffer while loading", () => {
+    vi.useFakeTimers();
+    try {
+      // Typewriter enabled (reduced-motion off).
+      vi.mocked(window.matchMedia).mockImplementation(
+        (query: string) =>
+          ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+          }) as MediaQueryList,
+      );
+
+      const user = message("user-1", "human", "hi");
+      const partial = message("assistant-1", "ai", "Plan");
+      const firstThread = mockThread({
+        messages: [user, partial],
+        streamingMessage: partial,
+        isLoading: true,
+      });
+      const { rerender } = renderMessageList({ thread: firstThread });
+
+      // The body grows while streaming; the buffer plays back the delta.
+      const grown = message(
+        "assistant-1",
+        "ai",
+        "Planning and collecting sources",
+      );
+      const grownThread = mockThread({
+        messages: [user, grown],
+        streamingMessage: grown,
+        isLoading: true,
+      });
+      rerender(messageListTree({ thread: grownThread }));
+
+      // The full text is NOT visible yet — the buffer is mid-playback.
+      expect(
+        screen.queryByText("Planning and collecting sources"),
+      ).not.toBeInTheDocument();
+
+      // Advancing the ticker drains the buffer to the full body.
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(
+        screen.getByText("Planning and collecting sources"),
+      ).toBeInTheDocument();
+
+      // Stream settles: full text shown immediately, no lingering buffer.
+      const settledThread = mockThread({
+        messages: [user, grown],
+      });
+      rerender(messageListTree({ thread: settledThread }));
+      expect(
+        screen.getByText("Planning and collecting sources"),
+      ).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
