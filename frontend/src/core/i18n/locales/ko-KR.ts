@@ -6493,6 +6493,7 @@ export const koKR: Translations = {
     autoModelLabel: "Auto",
     autoModelDescription: "시스템이 작업별로 최적의 모델을 선택하게 합니다",
     autoModelBadge: "Smart",
+    longContextHint: "1M 컨텍스트 사용",
   },
 
   // Account Settings

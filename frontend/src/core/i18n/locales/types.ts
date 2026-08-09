@@ -5606,6 +5606,7 @@ export interface Translations {
     autoModelDescription: string;
     /** Compact badge for the picker row (e.g. "智能" / "Smart"). */
     autoModelBadge: string;
+    longContextHint: string;
   };
 
   // Account Settings

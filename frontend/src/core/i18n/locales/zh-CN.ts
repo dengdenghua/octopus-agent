@@ -6238,6 +6238,7 @@ export const zhCN: Translations = {
     autoModelLabel: "Auto",
     autoModelDescription: "让系统根据任务类型自动选择最合适的模型",
     autoModelBadge: "智能",
+    longContextHint: "使用 100 万上下文",
   },
 
   // Account Settings

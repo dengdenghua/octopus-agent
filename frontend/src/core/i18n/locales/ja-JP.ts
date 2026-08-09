@@ -6589,6 +6589,7 @@ export const jaJP: Translations = {
     autoModelDescription:
       "タスクタイプに応じてシステムが最適なモデルを自動選択",
     autoModelBadge: "Smart",
+    longContextHint: "1M コンテキストを使用",
   },
 
   // Account Settings

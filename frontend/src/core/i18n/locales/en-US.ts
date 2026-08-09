@@ -6605,6 +6605,7 @@ Strategy:
     autoModelLabel: "Auto",
     autoModelDescription: "Let the system pick the best model per task",
     autoModelBadge: "Smart",
+    longContextHint: "Use the 1M context window",
   },
 
   // Account Settings

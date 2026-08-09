@@ -1,8 +1,11 @@
 /**
  * Tests for the chat-input model picker — compact dropdown variant.
  *
- * Focus: classification (official vs custom) + selection plumbing.
- * We don't re-test Radix Tabs / DropdownMenu internals.
+ * Focus: one flat model list + selection plumbing. The Official/Custom
+ * tab split was removed — with a handful of configured endpoints it cost
+ * two clicks to reach a neighbouring model and hid the selected row behind
+ * whichever tab opened by default. We don't re-test Radix DropdownMenu
+ * internals.
  */
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
@@ -61,19 +64,26 @@ describe("<ModelPicker />", () => {
     );
   });
 
-  it("opens on the custom tab when the current model is custom", async () => {
+  it("lists every model in one flat list, no tabs", async () => {
     const user = userEvent.setup();
     setup();
 
     await user.click(screen.getByTestId("model-picker-trigger"));
     const menu = await screen.findByTestId("model-picker-menu");
     expect(menu).toBeInTheDocument();
-    const customTab = await screen.findByTestId("model-picker-tab-custom");
-    expect(customTab).toHaveAttribute("data-state", "active");
-    expect(screen.getByTestId("model-picker-tab-official")).toBeInTheDocument();
+    // No tab strip at all — every model is reachable without a category hop.
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    for (const label of [
+      "Octopus Mix",
+      "Kimi K2.5",
+      "GLM-5",
+      "Claude Opus 4.6 (mirror)",
+    ]) {
+      expect(within(menu).getByText(label)).toBeInTheDocument();
+    }
   });
 
-  it("shows separate 256K and 1M rows for the same upstream model", async () => {
+  it("folds the 1M variant into its base row instead of a second row", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
@@ -100,10 +110,47 @@ describe("<ModelPicker />", () => {
     );
 
     await user.click(screen.getByTestId("model-picker-trigger"));
-    expect(screen.getByText("256K")).toBeInTheDocument();
-    expect(screen.getByText("1M")).toBeInTheDocument();
-    await user.click(screen.getByText("1M"));
+    const menu = await screen.findByTestId("model-picker-menu");
+    // One row for the model, not two near-identical ones. Scoped to the menu
+    // because the trigger also renders the selected model's label.
+    expect(within(menu).getAllByText("DeepSeek V4 Pro")).toHaveLength(1);
+    // The long-context variant is still reachable, as an inline affordance.
+    await user.click(screen.getByTestId("model-picker-1m-deepseek-v4-pro"));
     expect(onChange).toHaveBeenCalledWith("deepseek-v4-pro::1m");
+  });
+
+  it("selecting the row itself keeps the default context window", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      withRouter(
+        <ModelPicker
+          models={[
+            {
+              name: "deepseek-v4-pro",
+              model: "deepseek-v4-pro",
+              display_name: "DeepSeek V4 Pro",
+              context_profile: "default",
+            },
+            {
+              name: "deepseek-v4-pro::1m",
+              model: "deepseek-v4-pro",
+              display_name: "DeepSeek V4 Pro",
+              context_profile: "1m",
+            },
+          ]}
+          value="deepseek-v4-pro"
+          onChange={onChange}
+        />,
+      ),
+    );
+
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const menu = await screen.findByTestId("model-picker-menu");
+    await user.click(
+      within(menu).getByText("DeepSeek V4 Pro").closest("button")!,
+    );
+    expect(onChange).toHaveBeenCalledWith("deepseek-v4-pro");
   });
 
   it("keeps reasoning effort inside the model dropdown", async () => {
@@ -135,36 +182,10 @@ describe("<ModelPicker />", () => {
     expect(onReasoningEffortChange).toHaveBeenCalledWith("xhigh");
   });
 
-  it("official tab shows Octopus Mix with multiplier", async () => {
-    const user = userEvent.setup();
-    setup();
-    await user.click(screen.getByRole("button", { name: "选择模型" }));
-    await user.click(screen.getByRole("tab", { name: "官方模型" }));
-
-    const menu = await screen.findByRole("menu");
-    const root = menu.parentElement ?? menu;
-    const allText = root.textContent ?? "";
-    expect(allText).toContain("Octopus Mix");
-    // MIX_META.multiplier is "Mix"
-    expect(allText).toContain("Mix");
-  });
-
-  it("Octopus Mix carries the 推荐 badge", async () => {
-    const user = userEvent.setup();
-    setup("kimi-k2.5");
-    await user.click(screen.getByRole("button", { name: "选择模型" }));
-    await user.click(screen.getByRole("tab", { name: "官方模型" }));
-    const menu = await screen.findByRole("menu");
-    const root = menu.parentElement ?? menu;
-    const badges = root.querySelectorAll('[title="推荐"]');
-    expect(badges.length).toBe(1);
-  });
-
   it("selecting the official Octopus Mix row invokes onChange with its backend name", async () => {
     const user = userEvent.setup();
     const { onChange } = setup("kimi-k2.5");
     await user.click(screen.getByRole("button", { name: "选择模型" }));
-    await user.click(screen.getByRole("tab", { name: "官方模型" }));
 
     const menu = await screen.findByRole("menu");
     const root = menu.parentElement ?? menu;
@@ -177,26 +198,24 @@ describe("<ModelPicker />", () => {
     expect(onChange).toHaveBeenCalledWith("octopus-mix");
   });
 
-  it("自定义 tab lists non-official models with provider hints", async () => {
+  it("shows a bare model name with no guessed vendor label", async () => {
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByRole("button", { name: "选择模型" }));
-
-    await user.click(screen.getByRole("tab", { name: "自定义" }));
 
     const menu = await screen.findByRole("menu");
     expect(
       within(menu).getByText("Claude Opus 4.6 (mirror)"),
     ).toBeInTheDocument();
-    // Right-hint resolves "claude" → "Claude" provider label.
-    expect(within(menu).getByText("Claude")).toBeInTheDocument();
+    // The old right column guessed a vendor from the model name ("claude" →
+    // "Claude"), which restated what the label already said.
+    expect(within(menu).queryByText("Claude")).not.toBeInTheDocument();
   });
 
-  it("自定义 tab shows 添加模型 CTA", async () => {
+  it("shows the 添加模型 CTA", async () => {
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByRole("button", { name: "选择模型" }));
-    await user.click(screen.getByRole("tab", { name: "自定义" }));
 
     const menu = await screen.findByRole("menu");
     expect(
@@ -208,7 +227,6 @@ describe("<ModelPicker />", () => {
     const user = userEvent.setup();
     const { onChange } = setup();
     await user.click(screen.getByRole("button", { name: "选择模型" }));
-    await user.click(screen.getByRole("tab", { name: "自定义" }));
 
     const menu = await screen.findByRole("menu");
     await user.click(
@@ -222,35 +240,6 @@ describe("<ModelPicker />", () => {
     expect(screen.getByRole("button", { name: "选择模型" })).toHaveTextContent(
       "Octopus Mix",
     );
-  });
-
-  it("opens on the official tab when the current model is official", async () => {
-    const user = userEvent.setup();
-    setup("octopus-mix");
-
-    await user.click(screen.getByRole("button", { name: "选择模型" }));
-
-    expect(
-      await screen.findByTestId("model-picker-tab-official"),
-    ).toHaveAttribute("data-state", "active");
-  });
-
-  it("falls back to 自定义 tab when no official models exist", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    render(
-      withRouter(
-        <ModelPicker
-          models={[{ name: "only-custom", display_name: "Only Custom" }]}
-          value="only-custom"
-          onChange={onChange}
-        />,
-      ),
-    );
-    await user.click(screen.getByRole("button", { name: "选择模型" }));
-
-    const customTab = await screen.findByRole("tab", { name: "自定义" });
-    expect(customTab).toHaveAttribute("data-state", "active");
   });
 
   it("supports a renderTrigger override", async () => {

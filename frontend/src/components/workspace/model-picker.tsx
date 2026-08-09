@@ -1,21 +1,13 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, PlusIcon, SparklesIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
-
-import { toast } from "sonner";
 
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { jsonAuthHeaders } from "@/core/auth/api";
-import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
-import { useOctLink } from "@/core/oct/hooks";
 import type { ReasoningEffort } from "@/core/threads";
 import { cn } from "@/lib/utils";
 
@@ -49,37 +41,6 @@ const MIX_META: OfficialMeta = {
   multiplier: "Mix",
   recommended: true,
 };
-
-/**
- * Very small helper — given a custom model, derive a short right-column
- * label (provider hint). Falls back to the backend `model` field, then
- * to nothing.
- */
-function rightHint(m: PickerModel): string {
-  if (m.context_profile === "1m") return "1M";
-  if (m.context_profile === "default") return "256K";
-  const probe =
-    `${m.name} ${m.model ?? ""} ${m.display_name ?? ""}`.toLowerCase();
-  for (const [needle, label] of [
-    ["claude", "Claude"],
-    ["gpt", "OpenAI"],
-    ["openai", "OpenAI"],
-    ["gemini", "Gemini"],
-    ["kimi", "Kimi"],
-    ["moonshot", "Kimi"],
-    ["ark", "Ark"],
-    ["volc", "Ark"],
-    ["qwen", "Qwen"],
-    ["deepseek", "DeepSeek"],
-    ["minimax", "MiniMax"],
-    ["glm", "GLM"],
-    ["mistral", "Mistral"],
-    ["llama", "Llama"],
-  ] as const) {
-    if (probe.includes(needle)) return label;
-  }
-  return m.model || "";
-}
 
 const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = [
   "low",
@@ -237,7 +198,6 @@ export function ModelPicker({
   open: controlledOpen,
   onOpenChange,
 }: ModelPickerProps) {
-  const navigate = useNavigate();
   const { t } = useI18n();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
@@ -286,103 +246,41 @@ export function ModelPicker({
     );
   }, [officialMetas, selected]);
 
-  const [officialEntries, customEntries] = useMemo(() => {
-    const official: {
-      meta: OfficialMeta;
-      model: PickerModel;
-      // True when the local /api/models has no matching entry — we'll
-      // deep-link to the settings page instead of dispatching a run.
-      unconfigured: boolean;
-    }[] = [];
-    const custom: PickerModel[] = [];
-    const consumedMetaKeys = new Set<string>();
+
+  /**
+   * One flat list, in the order the backend returned.
+   *
+   * The dropdown used to split Official / Custom across tabs. With a handful
+   * of configured endpoints that cost two clicks to reach a neighbouring
+   * model and hid the selected row behind whichever tab opened by default.
+   * Unconfigured official rows are dropped here rather than rendered grey —
+   * they are a settings concern, and a column of unclickable placeholders is
+   * the bulk of what made this panel feel heavy.
+   *
+   * ``::1m`` variants are folded into their base row (see longContextFor) so
+   * one model occupies one line.
+   */
+  const flatEntries = useMemo(
+    () => models.filter((m) => m.context_profile !== "1m"),
+    [models],
+  );
+
+  /**
+   * Map base model name → its ``::1m`` sibling, so a row can offer the
+   * long-context variant inline instead of as a second, near-identical entry.
+   */
+  const longContextFor = useMemo(() => {
+    const map = new Map<string, PickerModel>();
     for (const m of models) {
-      const meta = officialMetas.find(
-        (x) =>
-          x.id === m.name ||
-          x.id === m.model ||
-          x.displayName === m.display_name,
-      );
-      if (meta && !consumedMetaKeys.has(meta.key)) {
-        consumedMetaKeys.add(meta.key);
-        official.push({ meta, model: m, unconfigured: false });
-      } else {
-        custom.push(m);
-      }
+      if (m.context_profile !== "1m") continue;
+      map.set(m.name.replace(/::1m$/, ""), m);
     }
-    for (const meta of officialMetas) {
-      if (consumedMetaKeys.has(meta.key)) continue;
-      consumedMetaKeys.add(meta.key);
-      official.push({
-        meta,
-        model: { name: meta.id, display_name: meta.displayName },
-        unconfigured: true,
-      });
-    }
-    return [official, custom];
-  }, [models, officialMetas]);
+    return map;
+  }, [models]);
 
   const handleSelect = (name: string) => {
     onChange(name);
     setOpen(false);
-  };
-
-  const octLink = useOctLink();
-  const queryClient = useQueryClient();
-  const [enabling, setEnabling] = useState<string | null>(null);
-
-  /* Implementation note. */
-  const handleSelectUnconfigured = async (
-    meta: OfficialMeta,
-    upstreamId: string,
-  ) => {
-    const octUserId = octLink.data?.oct_user_id;
-    if (!octUserId) {
-      setOpen(false);
-      toast.message(t.modelPicker.bindAccountFirst, {
-        description: t.modelPicker.bindAccountDesc,
-      });
-      navigate("/login");
-      return;
-    }
-    setEnabling(meta.key);
-    try {
-      const r = await fetch(`${getBackendBaseURL()}/api/models`, {
-        method: "POST",
-        headers: jsonAuthHeaders(),
-        body: JSON.stringify({
-          name: upstreamId,
-          model: upstreamId,
-          display_name: meta.displayName,
-          max_tokens: 8192,
-          temperature: 0.7,
-          supports_thinking: false,
-          supports_vision: false,
-        }),
-      });
-      if (r.status === 409) {
-        // Already exists from a parallel click — that's fine.
-      } else if (!r.ok) {
-        const body = (await r.json().catch(() => null)) as {
-          detail?: string;
-        } | null;
-        throw new Error(body?.detail ?? `POST /api/models → ${r.status}`);
-      }
-      // Refresh the local model list so the picker drops the disabled
-      // chip on next render.
-      await queryClient.invalidateQueries({ queryKey: ["models"] });
-      toast.success(t.modelPicker.modelEnabled(meta.displayName));
-      onChange(upstreamId);
-      setOpen(false);
-    } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? t.modelPicker.enableFailedWithMessage(err.message)
-          : t.modelPicker.enableFailed,
-      );
-    } finally {
-      setEnabling(null);
-    }
   };
 
   // Clean up model name: remove trailing question marks and whitespace
@@ -431,20 +329,6 @@ export function ModelPicker({
     <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
   );
 
-  // Open on the category containing the current model. Previously every
-  // signed-in user landed on Official even while a custom model was selected,
-  // making the highlighted current row invisible until an extra tab switch.
-  const selectedIsCustom = customEntries.some(
-    (entry) => entry.name === selected?.name,
-  );
-  const defaultTab = selectedMeta
-    ? "official"
-    : selectedIsCustom
-      ? "custom"
-      : officialEntries.length > 0
-        ? "official"
-        : "custom";
-
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       {renderTrigger ? (
@@ -492,137 +376,75 @@ export function ModelPicker({
           />
         )}
 
-        <Tabs defaultValue={defaultTab} className="gap-0">
-          <TabsList className="mx-1 mt-1 h-6 w-auto bg-transparent p-0 flex gap-1">
-            <TabsTrigger
-              data-testid="model-picker-tab-official"
-              value="official"
-              disabled={officialEntries.length === 0}
-              className={cn(
-                // Match sidebar section labels: opacity-based emphasis,
-                // monochrome. Active state is just the text going full
-                // opacity + muted underline — no violet accent.
-                "flex-1 rounded-md text-xs font-medium uppercase tracking-wider transition-[opacity,color]",
-                "text-muted-foreground/60 hover:text-foreground",
-                "data-[state=active]:text-foreground data-[state=active]:opacity-100",
-              )}
-            >
-              <span>{t.modelPicker.tabOfficial}</span>
-            </TabsTrigger>
-            <TabsTrigger
-              data-testid="model-picker-tab-custom"
-              value="custom"
-              disabled={
-                customEntries.length === 0 && officialEntries.length > 0
-              }
-              className={cn(
-                "flex-1 rounded-md text-xs font-medium uppercase tracking-wider transition-[opacity,color]",
-                "text-muted-foreground/60 hover:text-foreground",
-                "data-[state=active]:text-foreground data-[state=active]:opacity-100",
-              )}
-            >
-              {t.modelPicker.tabCustom}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="official" className="p-1 pt-0.5">
-            {officialEntries.length === 0 ? (
+        <div className="p-1 pt-0.5">
+          <div className="flex flex-col gap-0.5">
+            {flatEntries.length === 0 ? (
               <div className="px-2 py-4 text-center text-xs text-muted-foreground">
-                {t.modelPicker.officialDisabled}
+                {t.modelPicker.noCustomModels}
               </div>
             ) : (
-              <div className="flex flex-col gap-0.5">
-                {officialEntries.map(({ meta, model, unconfigured }) => {
-                  const isEnabling = enabling === meta.key;
-                  return (
-                    <PickerRow
-                      key={model.name}
-                      label={
-                        <span
-                          className={cn(
-                            unconfigured && "text-muted-foreground/70",
-                          )}
-                        >
-                          {meta.displayName}
-                        </span>
-                      }
-                      right={
-                        isEnabling ? (
-                          <span className="text-xs text-muted-foreground">
-                            {t.modelPicker.enabling}
-                          </span>
-                        ) : unconfigured ? (
-                          <span className="text-xs text-muted-foreground/70">
-                            {t.modelPicker.clickToEnable}
-                          </span>
-                        ) : (
-                          meta.multiplier
-                        )
-                      }
-                      badge={
-                        meta.recommended ? (
-                          <span
-                            title={t.modelPicker.recommended}
-                            className="inline-block size-1 shrink-0 rounded-full bg-primary/70"
-                          />
-                        ) : undefined
-                      }
-                      selected={model.name === value && !unconfigured}
-                      onSelect={() =>
-                        unconfigured
-                          ? handleSelectUnconfigured(meta, model.name)
-                          : handleSelect(model.name)
-                      }
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="custom" className="p-1 pt-0.5">
-            <div className="flex flex-col gap-0.5">
-              {customEntries.length === 0 ? (
-                <div className="px-2 py-4 text-center text-xs text-muted-foreground">
-                  {t.modelPicker.noCustomModels}
-                </div>
-              ) : (
-                customEntries.map((m) => (
+              flatEntries.map((m) => {
+                const long = longContextFor.get(m.name);
+                return (
                   <PickerRow
                     key={m.name}
                     label={m.display_name || m.name}
-                    right={rightHint(m)}
+                    right={
+                      long ? (
+                        <button
+                          type="button"
+                          data-testid={`model-picker-1m-${m.name}`}
+                          title={t.modelPicker.longContextHint}
+                          onClick={(e) => {
+                            // The row itself selects the default context
+                            // window; this affordance is the only way to
+                            // reach the 1M variant now that it no longer
+                            // occupies its own row.
+                            e.stopPropagation();
+                            handleSelect(long.name);
+                          }}
+                          className={cn(
+                            "rounded border px-1 text-xs transition",
+                            long.name === value
+                              ? "border-primary/60 text-foreground"
+                              : "border-border-default/60 text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          1M
+                        </button>
+                      ) : undefined
+                    }
                     selected={m.name === value}
                     onSelect={() => handleSelect(m.name)}
                   />
-                ))
+                );
+              })
+            )}
+          </div>
+          <div className="mt-1.5 border-t pt-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                // Settings dialog hosts the "models" page where the
+                // user manages api_base / api_key entries.
+                window.dispatchEvent(
+                  new CustomEvent("octopus:open-settings", {
+                    detail: { tab: "models" },
+                  }),
+                );
+              }}
+              className={cn(
+                "flex w-full items-center justify-center gap-1.5 rounded-md",
+                "px-2 py-1.5 text-xs text-muted-foreground transition",
+                "hover:bg-accent hover:text-foreground",
               )}
-            </div>
-            <div className="mt-1.5 border-t pt-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  // Settings dialog hosts the "models" page where the
-                  // user manages api_base / api_key entries.
-                  window.dispatchEvent(
-                    new CustomEvent("octopus:open-settings", {
-                      detail: { tab: "models" },
-                    }),
-                  );
-                }}
-                className={cn(
-                  "flex w-full items-center justify-center gap-1.5 rounded-md",
-                  "px-2 py-1.5 text-xs text-muted-foreground transition",
-                  "hover:bg-accent hover:text-foreground",
-                )}
-              >
-                <PlusIcon className="size-3.5" />
-                {t.modelPicker.addModel}
-              </button>
-            </div>
-          </TabsContent>
-        </Tabs>
+            >
+              <PlusIcon className="size-3.5" />
+              {t.modelPicker.addModel}
+            </button>
+          </div>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
