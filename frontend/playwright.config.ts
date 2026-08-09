@@ -25,6 +25,7 @@ export default defineConfig({
     "stream-timeline-narrative.spec.ts",
     "workflow-editor.spec.ts",
     "auto-parallel.spec.ts",
+    "visual-regression.spec.ts",
   ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
