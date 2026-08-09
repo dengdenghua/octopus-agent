@@ -34,7 +34,7 @@ def test_corepack_download_failure_is_environment_blocked() -> None:
     assert _verification_item_is_environment_blocked(item)
 
 
-def test_command_not_found_is_NOT_environment_blocked() -> None:
+def test_command_not_found_is_not_environment_blocked() -> None:
     # A missing CLI is something the agent can usually fix by picking an
     # installed equivalent — it must keep hard-failing (environment_missing
     # _tool repair route), NOT degrade to manual confirmation.

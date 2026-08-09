@@ -323,7 +323,7 @@ def _skeletonize_python(text: str, max_chars: int) -> str:
     # against the budget. Without it the loop stops early, the result
     # still exceeds max_chars, and the byte-offset cap runs anyway —
     # re-introducing the mid-function slice this pass exists to avoid.
-    _MARKER_COST = 40
+    _marker_cost = 40
     elide: dict[int, int] = {}
     remaining = len(text)
     for start, end, size in sorted(spans, key=lambda s: -s[2]):
@@ -332,7 +332,7 @@ def _skeletonize_python(text: str, max_chars: int) -> str:
         if any(start >= s and end <= e for s, e in elide.items()):
             continue
         elide[start] = end
-        remaining -= size - _MARKER_COST
+        remaining -= size - _marker_cost
 
     if not elide:
         return text

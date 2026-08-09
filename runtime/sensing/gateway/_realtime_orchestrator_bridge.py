@@ -18,7 +18,7 @@ Runs on the same asyncio loop as the react driver's consumer, so it mutates
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from runtime.execution.parallel_agents.orchestrator import ParallelAgentOrchestrator
 from runtime.memory.threads.event_log import EventLog

@@ -33,7 +33,6 @@ from runtime.core.cerebrum.todo_protocol import (
 )
 from runtime.core.cerebrum.work_mode import resolve_work_mode
 
-
 # System-overview anchor: a deliberately tiny, byte-stable "north star"
 # paragraph placed at the very top of the system prompt (before the ReAct
 # base). Mirrors WorkBuddy's minimal system-reminder pattern — a short

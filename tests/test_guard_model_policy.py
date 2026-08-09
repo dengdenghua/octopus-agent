@@ -1,6 +1,5 @@
 """Tests for model-aware guard routing policy."""
 
-import pytest
 
 from runtime.core.cerebrum.guard_model_policy import (
     classify_model_tier,

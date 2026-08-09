@@ -56,7 +56,7 @@ def test_missing_sandbox_policy_defaults_to_deny(_bind_session) -> None:
     assert _resolved_allow_network(None) is False
 
 
-def test_scope_network_policy_allow_does_NOT_auto_enable(
+def test_scope_network_policy_allow_does_not_auto_enable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Regression: scope.network_policy defaults to "allow" outside plan

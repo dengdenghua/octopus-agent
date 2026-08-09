@@ -300,9 +300,7 @@ def _long_task_budget_limits(
     # 复杂代码/研究/多 Agent 任务自动扩容预算，避免长任务被预算硬切断。
     if is_swarm_mode:
         base_tokens, base_usd = 250_000, 5.0
-    elif is_research_mode:
-        base_tokens, base_usd = 150_000, 3.0
-    elif is_code_mode:
+    elif is_research_mode or is_code_mode:
         base_tokens, base_usd = 150_000, 3.0
     else:
         base_tokens, base_usd = max_tokens_budget, max_usd_budget

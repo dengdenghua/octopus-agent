@@ -12,8 +12,6 @@ so existing turns behave identically.
 
 from __future__ import annotations
 
-import re
-
 from runtime.core.cerebrum._react_prompt_assembly_sections import (
     _SYSTEM_OVERVIEW_ANCHOR,
 )
