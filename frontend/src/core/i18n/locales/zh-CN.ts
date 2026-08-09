@@ -3542,6 +3542,7 @@ export const zhCN: Translations = {
       saveSuccess: "保存成功",
       notTested: "尚未测试连接",
       testFailed: "连接测试失败",
+      saveRequiresTestPass: "测试未通过，无法保存该模型",
       testConnection: "测试连接",
       showApiKey: "显示 API Key",
       hideApiKey: "隐藏 API Key",
@@ -3559,6 +3560,8 @@ export const zhCN: Translations = {
       port: "端口",
       thinkingLabel: "思考",
       visionLabel: "视觉",
+      visionDetected: "已检测到视觉能力",
+      visionNotSupported: "该模型不支持视觉",
       millionContextLabel: "1M 上下文",
       backendUrlHint:
         "当前前端实际请求的网关地址。修改请使用环境变量 `VITE_BACKEND_BASE_URL`。",
@@ -7455,6 +7458,31 @@ export const zhCN: Translations = {
       full: {
         label: "全部允许",
         description: "沙箱内命令可访问任意网络（pnpm install、git clone 等均可）。",
+      },
+    },
+    replyStyleTitle: "回复风格",
+    replyStyleDesc: "选择助手的回复人格（性格/价值观/语气/升级策略），仅影响怎么说话，不影响能力。",
+    toastReplyStyleSwitched: (label: string) => `回复风格已切换为「${label}」`,
+    replyStyle: {
+      default: {
+        label: "默认",
+        description: "经典 emoji 装饰 + 务实工程风格。",
+      },
+      professional: {
+        label: "专业",
+        description: "克制正式，结构清晰，少用 emoji。",
+      },
+      friendly: {
+        label: "友好",
+        description: "亲和耐心，适度 emoji，像靠谱同事。",
+      },
+      concise: {
+        label: "直接",
+        description: "极简，结论先行，不废话。",
+      },
+      socratic: {
+        label: "苏格拉底",
+        description: "提问引导思考，关键结论仍明确。",
       },
     },
   },

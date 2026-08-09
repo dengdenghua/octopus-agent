@@ -3719,6 +3719,7 @@ export const koKR: Translations = {
       saveSuccess: "저장되었습니다",
       notTested: "아직 연결을 테스트하지 않음",
       testFailed: "연결 테스트에 실패했습니다",
+      saveRequiresTestPass: "연결 테스트를 통과해야 저장할 수 있습니다",
       testConnection: "연결 테스트",
       showApiKey: "API Key 표시",
       hideApiKey: "API Key 숨기기",
@@ -3737,6 +3738,8 @@ export const koKR: Translations = {
       port: "포트",
       thinkingLabel: "사고",
       visionLabel: "비전",
+      visionDetected: "비전 지원이 감지되었습니다",
+      visionNotSupported: "이 모델은 비전을 지원하지 않습니다",
       millionContextLabel: "1M 컨텍스트",
       backendUrlHint:
         "현재 게이트웨이 URL입니다. 변경하려면 VITE_BACKEND_BASE_URL 환경 변수를 사용하세요.",
@@ -7741,6 +7744,31 @@ export const koKR: Translations = {
       full: {
         label: "허용",
         description: "샌드박스 내 명령이 모든 네트워크에 접근할 수 있습니다(pnpm install, git clone 등).",
+      },
+    },
+    replyStyleTitle: "답변 스타일",
+    replyStyleDesc: "어시스턴트의 답변 페르소나(성격/가치관/어조/에스컬레이션 방침)를 선택합니다. 말투에만 영향을 주며 능력에는 영향이 없습니다.",
+    toastReplyStyleSwitched: (label: string) => `답변 스타일을 '${label}'(으)로 전환했습니다`,
+    replyStyle: {
+      default: {
+        label: "기본",
+        description: "클래식 이모지 장식 + 실용적인 엔지니어링 톤.",
+      },
+      professional: {
+        label: "전문",
+        description: "절제되고 격식 있는 문체, 구조 중시, 이모지 최소.",
+      },
+      friendly: {
+        label: "친근",
+        description: "따뜻하고 인내심 있으며, 적당한 이모지, 든든한 동료처럼.",
+      },
+      concise: {
+        label: "간결",
+        description: "최소한의 표현, 결론 우선, 군더더기 없음.",
+      },
+      socratic: {
+        label: "소크라테스",
+        description: "질문으로 사고를 유도하고, 핵심 결론은 명확히 제시.",
       },
     },
   },

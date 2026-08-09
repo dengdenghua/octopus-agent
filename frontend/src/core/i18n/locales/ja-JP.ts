@@ -3780,6 +3780,7 @@ export const jaJP: Translations = {
       saveSuccess: "正常に保存されました",
       notTested: "接続はまだテストされていません",
       testFailed: "接続テストに失敗しました",
+      saveRequiresTestPass: "接続テストが成功しないと保存できません",
       testConnection: "接続をテスト",
       showApiKey: "API Key を表示",
       hideApiKey: "API Key を隠す",
@@ -3799,6 +3800,8 @@ export const jaJP: Translations = {
       port: "ポート",
       thinkingLabel: "思考",
       visionLabel: "ビジョン",
+      visionDetected: "ビジョン対応を確認しました",
+      visionNotSupported: "このモデルはビジョン非対応です",
       millionContextLabel: "1M コンテキスト",
       backendUrlHint:
         "現在のゲートウェイ URL です。変更するには環境変数 VITE_BACKEND_BASE_URL を使用してください。",
@@ -7850,6 +7853,31 @@ export const jaJP: Translations = {
       full: {
         label: "許可",
         description: "サンドボックス内コマンドが任意のネットワークにアクセスできます（pnpm install、git clone など）。",
+      },
+    },
+    replyStyleTitle: "返信スタイル",
+    replyStyleDesc: "アシスタントの返信ペルソナ（性格/価値観/口調/エスカレーション方針）を選択します。話し方にのみ影響し、能力には影響しません。",
+    toastReplyStyleSwitched: (label: string) => `返信スタイルを「${label}」に切り替えました`,
+    replyStyle: {
+      default: {
+        label: "デフォルト",
+        description: "定番の絵文字装飾＋実務的なエンジニアリング調。",
+      },
+      professional: {
+        label: "プロフェッショナル",
+        description: "抑制された正式な文体、構造重視、絵文字は控えめ。",
+      },
+      friendly: {
+        label: "フレンドリー",
+        description: "親しみやすく忍耐強い、適度な絵文字、頼れる同僚のように。",
+      },
+      concise: {
+        label: "簡潔",
+        description: "極めて簡潔、結論優先、冗長なし。",
+      },
+      socratic: {
+        label: "ソクラテス",
+        description: "問いかけで考えを導き、重要結論は明確に示す。",
       },
     },
   },

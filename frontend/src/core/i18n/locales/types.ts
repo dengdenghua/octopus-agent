@@ -1168,6 +1168,9 @@ export interface Translations {
     computerViewSelectHint: string;
     computerViewEmpty: string;
     computerViewEmptyDesc: string;
+    visibilityPanelTitle: string;
+    visibilityPanelEmpty: string;
+    visibilityStep: string;
   };
 
   // Diagnostics page
@@ -3103,6 +3106,7 @@ export interface Translations {
       saveSuccess: string;
       notTested: string;
       testFailed: string;
+      saveRequiresTestPass: string;
       testConnection: string;
       showApiKey: string;
       hideApiKey: string;
@@ -3120,6 +3124,8 @@ export interface Translations {
       port: string;
       thinkingLabel: string;
       visionLabel: string;
+      visionDetected: string;
+      visionNotSupported: string;
       millionContextLabel: string;
       backendUrlHint: string;
       connectionHelp: string;
@@ -3283,6 +3289,31 @@ export interface Translations {
         description: string;
       };
       full: {
+        label: string;
+        description: string;
+      };
+    };
+    replyStyleTitle: string;
+    replyStyleDesc: string;
+    toastReplyStyleSwitched: (label: string) => string;
+    replyStyle: {
+      default: {
+        label: string;
+        description: string;
+      };
+      professional: {
+        label: string;
+        description: string;
+      };
+      friendly: {
+        label: string;
+        description: string;
+      };
+      concise: {
+        label: string;
+        description: string;
+      };
+      socratic: {
         label: string;
         description: string;
       };

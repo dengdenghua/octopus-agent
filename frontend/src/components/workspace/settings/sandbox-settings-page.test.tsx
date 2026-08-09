@@ -110,6 +110,29 @@ describe("SandboxSettingsPage", () => {
     );
   });
 
+  it("switches reply style without touching the other axes", () => {
+    renderWithProviders(<SandboxSettingsPage />);
+
+    // Default style is highlighted by default.
+    expect(
+      screen.getByRole("button", { name: "reply-style-default" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "reply-style-professional" }),
+    );
+
+    const persisted = getLocalSettings();
+    expect(persisted.context.reply_style).toBe("professional");
+    // Other axes untouched.
+    expect(persisted.context.network_access).toBe("deny");
+    expect(persisted.context.permission_mode).toBe("default");
+    expect(persisted.context.execution_environment).toBe("sandbox");
+    expect(
+      screen.getByRole("button", { name: "reply-style-professional" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("keeps all three axes independent when re-rendering an existing combination", () => {
     window.localStorage.setItem(
       "octopus.local-settings",

@@ -3792,6 +3792,7 @@ export const enUS: Translations = {
       saveSuccess: "Saved successfully",
       notTested: "Connection not tested yet",
       testFailed: "Connection test failed",
+      saveRequiresTestPass: "The connection test must pass before saving",
       testConnection: "Test connection",
       showApiKey: "Show API key",
       hideApiKey: "Hide API key",
@@ -3810,6 +3811,8 @@ export const enUS: Translations = {
       port: "Port",
       thinkingLabel: "Thinking",
       visionLabel: "Vision",
+      visionDetected: "Vision capability detected",
+      visionNotSupported: "This model does not support vision",
       millionContextLabel: "1M context",
       backendUrlHint:
         "Current gateway URL. Use VITE_BACKEND_BASE_URL env var to change.",
@@ -7869,6 +7872,33 @@ Strategy:
         label: "Allowed",
         description:
           "Sandboxed commands can reach any network (pnpm install, git clone, etc.).",
+      },
+    },
+    replyStyleTitle: "Reply style",
+    replyStyleDesc:
+      "Pick the assistant's reply personality (character / values / tone / escalation). Affects how it speaks, not what it can do.",
+    toastReplyStyleSwitched: (label: string) =>
+      `Reply style switched to “${label}”`,
+    replyStyle: {
+      default: {
+        label: "Default",
+        description: "Classic emoji decoration + pragmatic engineering tone.",
+      },
+      professional: {
+        label: "Professional",
+        description: "Restrained and structured, minimal emoji.",
+      },
+      friendly: {
+        label: "Friendly",
+        description: "Warm and patient, light emoji, like a reliable teammate.",
+      },
+      concise: {
+        label: "Concise",
+        description: "Minimal, conclusion first, no filler.",
+      },
+      socratic: {
+        label: "Socratic",
+        description: "Guides with questions; key conclusions stay explicit.",
       },
     },
   },
