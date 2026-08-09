@@ -1096,7 +1096,7 @@ function mergeDelta(
   delta: string,
   onDiagnostic?: ReducerDiagnosticHandler,
   replayMode?: boolean,
-  contentIndex: number = 0,
+  contentIndex = 0,
 ): ReducerOutput {
   const turnIdx = state.turns.findIndex((t) => t.id === turnId);
   const turn = state.turns[turnIdx];

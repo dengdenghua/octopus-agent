@@ -1849,6 +1849,8 @@ export function MessageList({
               className={cn(
                 "message-turn flex flex-col gap-3",
                 !isLatestTurn && "message-turn-history",
+                // ChatGPT-style entrance: animate new turns appearing, skip history
+                isLatestTurn && "animate-[message-entrance_220ms_cubic-bezier(0.33,1,0.68,1)]",
               )}
               data-message-turn={turn.key}
               data-turn-rendering={isLatestTurn ? "active" : "history"}

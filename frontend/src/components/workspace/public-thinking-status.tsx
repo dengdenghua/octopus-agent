@@ -161,7 +161,7 @@ export function PublicThinkingStatus({
     >
       <span
         className={cn(
-          "inline-block size-1 shrink-0 rounded-full",
+          "inline-block size-1 shrink-0 rounded-full animate-pulse",
           phase === "slow"
             ? "bg-warning/50"
             : phase === "disconnected"

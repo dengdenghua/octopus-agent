@@ -9,10 +9,11 @@ import {
   XCircleIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+import { useConversationDetailLevel } from "./use-conversation-detail-level";
 
 export type ActivityKind = "think" | "plan" | "file_ops" | "tool_calls";
 
@@ -199,7 +200,45 @@ export function CollapsibleActivityGroup({
   className,
 }: Props) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(defaultOpen);
+  const detailConfig = useConversationDetailLevel();
+
+  // Build a stable ID for this activity group for localStorage persistence
+  const groupId = useMemo(() => {
+    if (items.length === 0) return null;
+    // Use first item's ID as the stable identifier for this activity group
+    return `activity-${kind}-${items[0]?.id}`;
+  }, [kind, items]);
+
+  // Determine initial open state based on detail level
+  const initialOpen = useMemo(() => {
+    if (defaultOpen !== undefined) return defaultOpen;
+
+    // Check localStorage for user's explicit preference for this group
+    if (groupId && typeof window !== "undefined") {
+      const stored = localStorage.getItem(groupId);
+      if (stored !== null) {
+        return stored === "true";
+      }
+    }
+
+    // In "low" detail, collapse everything
+    if (detailConfig.level === "low") return false;
+
+    // In "high" detail, expand all intermediate steps
+    if (detailConfig.level === "high") return true;
+
+    // In "medium" detail: current streaming turn stays open, history collapses
+    return isRunning;
+  }, [defaultOpen, detailConfig.level, isRunning, groupId]);
+
+  const [open, setOpen] = useState(initialOpen);
+
+  // Persist user's expand/collapse choice to localStorage
+  useEffect(() => {
+    if (groupId && typeof window !== "undefined") {
+      localStorage.setItem(groupId, open.toString());
+    }
+  }, [open, groupId]);
 
   const header = useMemo(
     () => buildHeaderSummary(kind, items, t),
@@ -209,6 +248,11 @@ export function CollapsibleActivityGroup({
   const latest = items[items.length - 1];
 
   if (header === null) {
+    return null;
+  }
+
+  // In "low" detail mode, hide non-essential activities entirely
+  if (detailConfig.level === "low" && kind !== "plan") {
     return null;
   }
 
