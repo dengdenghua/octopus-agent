@@ -41,6 +41,15 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
 
+def _lease_renewal_interval_s(lease_ttl_seconds: float) -> float:
+    """Renewal cadence for the supervisor lease (lease_ttl/3, capped at 30s).
+
+    Matches the execution/loops heartbeat cadence so long realtime turns
+    keep their TaskSupervisor lease alive without hammering the store.
+    """
+    return max(0.1, min(float(lease_ttl_seconds) / 3.0, 30.0))
+
+
 async def _drive_react(
     runtime: CerebrumRuntime,
     turn: Turn,
@@ -260,10 +269,55 @@ async def _drive_react(
             return
 
     watcher = asyncio.create_task(_interrupt_watcher())
+
+    # ── Supervisor lease renewal ─────────────────────────────────
+    # The realtime react loop (unlike the execution/loops controller
+    # path) never renews its TaskSupervisor lease. A turn that outlives
+    # the default 300s TTL fails at finish with "lease is no longer
+    # current" and stays a zombie "running" task. Heartbeat from the
+    # consumer loop (throttled to lease_ttl/3, matching the loops path)
+    # keeps the lease alive for long tasks and still lets them
+    # terminate cleanly.
+    supervisor = getattr(runtime, "_task_supervisor", None)
+    _last_supervisor_heartbeat = time.monotonic()
+    _supervisor_heartbeat_interval = 0.0
+    if supervisor is not None:
+        try:
+            _supervisor_heartbeat_interval = _lease_renewal_interval_s(
+                float(supervisor.lease_ttl_seconds)
+            )
+        except Exception:  # noqa: BLE001 — malformed supervisor; skip renewal
+            _supervisor_heartbeat_interval = 0.0
+
+    def _supervisor_heartbeat_if_due(now: float) -> None:
+        nonlocal _last_supervisor_heartbeat
+        if (
+            supervisor is None
+            or _supervisor_heartbeat_interval <= 0.0
+            or now - _last_supervisor_heartbeat < _supervisor_heartbeat_interval
+        ):
+            return
+        task_id = turn.task_id or ""
+        if not task_id:
+            # react_started not seen yet — nothing registered to renew.
+            return
+        _last_supervisor_heartbeat = now
+        try:
+            supervisor.heartbeat(task_id)
+        except Exception as exc:  # noqa: BLE001 — lease lost/revoked; abort turn
+            _logger.warning(
+                "react supervisor heartbeat failed for %s: %s — cancelling turn",
+                task_id,
+                exc,
+            )
+            if not cancel_source.is_cancelled:
+                cancel_source.cancel(reason="task supervisor lease lost")
+
     saw_terminal_event = False
     try:
         loop_started = time.monotonic()
         while True:
+            _supervisor_heartbeat_if_due(time.monotonic())
             try:
                 evt = await asyncio.wait_for(
                     queue.get(), timeout=_SINGLE_AGENT_HEARTBEAT_INTERVAL_S
