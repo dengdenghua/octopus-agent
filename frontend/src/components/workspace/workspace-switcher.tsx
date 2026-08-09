@@ -250,7 +250,7 @@ export function WorkspaceSwitcher({
             : tr.switcherTitle
         }
         className={cn(
-          "group flex h-8 w-full items-center gap-2 rounded-lg border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none transition-all",
+          "group flex h-8 w-full items-center gap-2 rounded-lg border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none transition-colors",
           "hover:border-border-default hover:bg-muted/55 hover:text-foreground",
           open && "border-border-default bg-muted/55 text-foreground",
           "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0",

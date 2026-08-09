@@ -308,7 +308,7 @@ export function ModelPicker({
       title={t.modelPicker.selectModel}
     >
       {isAutoMode && <SparklesIcon className="size-3 shrink-0 text-info" />}
-      <span className="truncate max-w-[140px]">
+      <span className="truncate max-w-[var(--text-truncate-md)]">
         {isAutoMode
           ? t.modelPicker.autoModelLabel
           : cleanModelName(selectedMeta?.displayName) ||

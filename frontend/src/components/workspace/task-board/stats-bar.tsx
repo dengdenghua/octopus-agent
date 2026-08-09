@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton as _Skeleton } from "@/components/ui/skeleton";
 import type { TaskBoardStats } from "@/core/task-board/types";
 import { cn } from "@/lib/utils";
 

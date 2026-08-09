@@ -33,8 +33,8 @@ import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
 
 const SMS_COOLDOWN_SECONDS = 60;
-const AUTH_PROVIDER_RETRY_COUNT = 24;
-const AUTH_PROVIDER_RETRY_DELAY_MS = 500;
+const AUTH_PROVIDER_RETRY_COUNT = 5;  // 24 → 5
+const AUTH_PROVIDER_BASE_DELAY_MS = 500;
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -323,12 +323,18 @@ export default function LoginPage() {
       for (let attempt = 0; attempt < AUTH_PROVIDER_RETRY_COUNT; attempt += 1) {
         const providers = await getAuthProviderInfo();
         if (cancelled) return;
-        if (providers.length > 0 || attempt === AUTH_PROVIDER_RETRY_COUNT - 1) {
+        if (providers.length > 0) {
           setAuthProviders(providers);
           return;
         }
-        await delay(AUTH_PROVIDER_RETRY_DELAY_MS);
+        if (attempt < AUTH_PROVIDER_RETRY_COUNT - 1) {
+          // 指数退避：500ms, 1s, 2s, 4s
+          const backoffDelay = AUTH_PROVIDER_BASE_DELAY_MS * Math.pow(2, attempt);
+          await delay(backoffDelay);
+        }
       }
+      // 5 次后仍为空，停止重试
+      setAuthProviders([]);
     }
 
     void loadAuthProviders();

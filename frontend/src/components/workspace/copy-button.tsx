@@ -47,7 +47,7 @@ export function CopyButton({
         type="button"
         variant="ghost"
         aria-label={t.clipboard.copyToClipboard}
-        className="rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border-default hover:bg-muted/60 hover:text-foreground"
+        className="rounded-lg border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/60 hover:text-foreground"
         onClick={handleCopy}
         {...props}
       >

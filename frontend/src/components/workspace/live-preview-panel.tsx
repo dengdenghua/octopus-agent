@@ -312,7 +312,7 @@ ${jsContent || "// No JavaScript"}
             <button
               onClick={() => setDevice("desktop")}
               className={cn(
-                "p-1.5 rounded-md transition-all",
+                "p-1.5 rounded-md transition-colors",
                 device === "desktop"
                   ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
@@ -324,7 +324,7 @@ ${jsContent || "// No JavaScript"}
             <button
               onClick={() => setDevice("tablet")}
               className={cn(
-                "p-1.5 rounded-md transition-all",
+                "p-1.5 rounded-md transition-colors",
                 device === "tablet"
                   ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
@@ -336,7 +336,7 @@ ${jsContent || "// No JavaScript"}
             <button
               onClick={() => setDevice("mobile")}
               className={cn(
-                "p-1.5 rounded-md transition-all",
+                "p-1.5 rounded-md transition-colors",
                 device === "mobile"
                   ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
@@ -397,7 +397,7 @@ ${jsContent || "// No JavaScript"}
           <button
             type="button"
             onClick={handleRefresh}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             title={t.livePreview.refresh}
             aria-label={t.livePreview.refresh}
           >
@@ -406,7 +406,7 @@ ${jsContent || "// No JavaScript"}
           <button
             type="button"
             onClick={handleOpenDevTools}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             title={
               isElectronEnv
                 ? t.codeMode.previewDevTools
@@ -424,7 +424,7 @@ ${jsContent || "// No JavaScript"}
             <button
               type="button"
               onClick={onOpenExternal}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               title={t.livePreview.openExternal}
               aria-label={t.livePreview.openExternal}
             >

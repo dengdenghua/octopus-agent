@@ -79,6 +79,17 @@ export function ComposerStepProgress({
       }),
     [events, hasAnswer, paused, runFailed, runSettled],
   );
+  // A plan whose items are all done is NOT a completed task while the turn is
+  // still streaming — the model may keep working (or extend the plan, as in
+  // the 4/4→5-item case). A checkmark is only meaningful once the run settles,
+  // so present the last finished phase as still running during streaming.
+  const phaseForDisplay = useMemo(() => {
+    if (!currentPhase) return null;
+    if (isLoading && currentPhase.status === "done") {
+      return { ...currentPhase, status: "running" as const };
+    }
+    return currentPhase;
+  }, [currentPhase, isLoading]);
 
   const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
 
@@ -87,15 +98,15 @@ export function ComposerStepProgress({
   // invented numbered plan.
   if (
     !hasPlan ||
-    !currentPhase ||
+    !phaseForDisplay ||
     phases.length < 2 ||
     (runSettled && hasAnswer && !paused) ||
-    (!isLoading && currentPhase.status === "done")
+    (!isLoading && phaseForDisplay.status === "done")
   ) {
     return null;
   }
 
-  const progress = progressForPhases(phases, currentPhase);
+  const progress = progressForPhases(phases, phaseForDisplay);
   const label = t.agentWorkbench.stepProgress(progress.current, progress.total);
   const phaseLabels = t.agentPhases;
 
@@ -104,12 +115,12 @@ export function ComposerStepProgress({
       <button
         type="button"
         onClick={toggleExpanded}
-        aria-label={`${label} · ${currentPhase.title}`}
+        aria-label={`${label} · ${phaseForDisplay.title}`}
         aria-expanded={expanded}
-        title={currentPhase.title}
+        title={phaseForDisplay.title}
         className="group inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border border-border-default bg-background/95 pl-3.5 pr-2.5 text-xs font-semibold text-muted-foreground shadow-[0_8px_24px_-16px_rgba(15,23,42,0.45)] backdrop-blur-xl transition-[border-color,background-color,color,transform] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:translate-y-0"
       >
-        <PhaseStatusIcon phase={currentPhase} className="size-3.5" />
+        <PhaseStatusIcon phase={phaseForDisplay} className="size-3.5" />
         <span className="truncate tabular-nums">{label}</span>
         {expanded ? (
           <ChevronUpIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground/60" />

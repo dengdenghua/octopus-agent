@@ -89,4 +89,30 @@ describe("<ComposerStepProgress />", () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  test("does not present a done plan as complete while the turn is still streaming", () => {
+    renderWithProviders(
+      <ComposerStepProgress
+        isLoading
+        events={[
+          event({
+            input: {
+              items: [
+                { content: "Inspect the project", status: "completed" },
+                { content: "Verify the result", status: "completed" },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    // The plan is fully done but the turn is still running: the button stays
+    // visible, but the last phase renders as an in-progress spinner instead
+    // of a done checkmark (a check would falsely imply the task finished).
+    const button = screen.getByRole("button", { name: /Step 2 \/ 2/ });
+    expect(button).toBeInTheDocument();
+    expect(button.querySelector(".animate-spin")).not.toBeNull();
+    expect(button.querySelector(".text-success")).toBeNull();
+  });
 });

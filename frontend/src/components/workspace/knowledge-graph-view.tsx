@@ -1202,7 +1202,7 @@ function KnowledgeGraph3DContent() {
   }, []);
 
   return (
-    <div className="relative h-[720px] min-h-[560px] overflow-hidden bg-[#05070d] shadow-[inset_0_0_120px_rgba(14,165,233,0.12)]">
+    <div className="relative h-[var(--panel-height-2xl)] min-h-[var(--panel-height-xl)] overflow-hidden bg-[#05070d] shadow-[inset_0_0_120px_rgba(14,165,233,0.12)]">
       <div
         ref={containerRef}
         className="absolute inset-0"

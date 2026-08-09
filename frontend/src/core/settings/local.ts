@@ -28,6 +28,11 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
     // Chat message font size. ``medium`` matches the historical default so
     // existing users see no visual change until they opt in.
     chat_font_size: "medium",
+    // Conversation detail level controls how much intermediate activity is shown.
+    // - "high": Show all tool calls, code blocks, reasoning steps (power users)
+    // - "medium": Collapse intermediate steps, show final results (default)
+    // - "low": Minimal view, hide tool details and code blocks
+    conversation_detail_level: "medium",
   },
   session: {
     auto_new_session_hours: 0,
@@ -68,6 +73,7 @@ export interface LocalSettings {
   };
   display: {
     chat_font_size: "small" | "medium" | "large";
+    conversation_detail_level: "low" | "medium" | "high";
   };
   session: {
     /** Hours of inactivity before a *new* chat session is auto-started when

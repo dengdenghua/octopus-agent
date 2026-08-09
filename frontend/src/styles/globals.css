@@ -92,6 +92,20 @@
     }
   }
 
+  /* ChatGPT-style smooth message entrance: subtle slide-up with fade.
+     Applied to new message groups (not streaming tokens within a group).
+     Uses ChatGPT's exact easing: cubic-bezier(0.33, 1, 0.68, 1) */
+  @keyframes message-entrance {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   --animate-community-pop: community-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   @keyframes community-pop {
     0% {
@@ -779,6 +793,23 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    /* Smooth theme transitions for color properties.
+       Exclude transform/opacity to avoid interference with component animations.
+       Users with prefers-reduced-motion will skip this via the rule below. */
+    transition:
+      background-color 200ms ease-out,
+      color 200ms ease-out,
+      border-color 200ms ease-out;
+  }
+
+  /* Smooth transitions for all color-based CSS variables during theme switch */
+  :root,
+  .dark,
+  [data-theme] {
+    transition:
+      background-color 200ms ease-out,
+      color 200ms ease-out,
+      border-color 200ms ease-out;
   }
 
   /* Consistent focus-visible ring for all interactive elements.

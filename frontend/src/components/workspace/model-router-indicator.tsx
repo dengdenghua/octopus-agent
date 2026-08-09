@@ -180,7 +180,7 @@ export function ModelRouterIndicator({
             )}
           >
             <RotateCcwIcon size={12} className="shrink-0 opacity-60" />
-            <span className="truncate max-w-[140px]">
+            <span className="truncate max-w-[var(--text-truncate-md)]">
               {isAutoRouted ? t.modelRouter.auto : t.modelRouter.manual}:{" "}
               <span className="font-medium">{displayModel}</span>
             </span>

@@ -734,7 +734,7 @@ export function BackgroundTasksPanel({
   const { t } = useI18n();
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[420px] sm:w-[480px] p-0">
+      <SheetContent side="right" className="w-[var(--dialog-lg)] sm:w-[var(--dialog-lg)] p-0">
         <SheetHeader className="sr-only">
           <SheetTitle>{t.backgroundTasks.title}</SheetTitle>
         </SheetHeader>

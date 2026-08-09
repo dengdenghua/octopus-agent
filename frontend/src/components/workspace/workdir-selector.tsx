@@ -612,7 +612,7 @@ export function WorkDirSelector({
       onClick={opts.onClick}
       disabled={opts.disabled}
       className={cn(
-        "flex w-full items-center gap-2 transition-all",
+        "flex w-full items-center gap-2 transition-colors",
         isMutedVariant
           ? "rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           : "rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-primary",
@@ -1008,7 +1008,7 @@ export function WorkDirSelector({
     >
       <button
         className={cn(
-          "group flex items-center gap-1.5 text-xs font-medium shadow-none transition-all duration-base",
+          "group flex items-center gap-1.5 text-xs font-medium shadow-none transition-colors duration-base",
           chromeless
             ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",

@@ -245,7 +245,7 @@ function EmptyState({
   title: string;
 }) {
   return (
-    <Empty className="min-h-[220px] rounded-lg">
+    <Empty className="min-h-[var(--panel-height-sm)] rounded-lg">
       <EmptyHeader>
         <EmptyMedia variant="icon">{icon}</EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>

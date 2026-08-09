@@ -126,7 +126,7 @@ export function QuickTemplates({ onSelect, className }: QuickTemplatesProps) {
               onClick={() => onSelect(template)}
               className={cn(
                 "group flex items-start gap-3 p-3 rounded-lg border border-border-default",
-                "hover:border-primary/30 hover:bg-primary/5 transition-all duration-base",
+                "hover:border-primary/30 hover:bg-primary/5 transition-colors duration-base",
                 "text-left",
               )}
             >

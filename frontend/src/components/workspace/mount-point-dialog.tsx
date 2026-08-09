@@ -314,7 +314,7 @@ export function MountPointDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="w-[min(520px,calc(100vw-2rem))] gap-4 rounded-lg p-5 sm:max-w-[520px]"
+        className="w-[min(var(--dialog-xl),calc(100vw-2rem))] gap-4 rounded-lg p-5 sm:max-w-[var(--dialog-xl)]"
       >
         <DialogHeader className="gap-1 text-left">
           <DialogTitle className="text-base">{tr.title}</DialogTitle>

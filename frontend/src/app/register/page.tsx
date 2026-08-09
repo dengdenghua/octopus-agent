@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRightIcon,
@@ -61,6 +61,16 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 注册被禁用/本地模式时跳转工作区。导航必须放进 effect：渲染期间调用
+  // navigate() 会更新 HashRouter 的状态，触发 React 的
+  // "Cannot update a component while rendering a different component" 警告。
+  const redirectToWorkspace =
+    authStatus && (!authStatus.enabled || !authStatus.allow_registration);
+
+  useEffect(() => {
+    if (redirectToWorkspace) navigate("/workspace", { replace: true });
+  }, [redirectToWorkspace, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
@@ -104,10 +114,7 @@ export default function RegisterPage() {
     );
   }
 
-  if (authStatus && (!authStatus.enabled || !authStatus.allow_registration)) {
-    navigate("/workspace");
-    return null;
-  }
+  if (redirectToWorkspace) return null;
 
   const features = [
     {

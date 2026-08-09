@@ -77,7 +77,7 @@ class PetIPCClient {
     this.send({ type: "agent.thinking" });
   }
 
-  working(intensity: number = 0.5): void {
+  working(intensity = 0.5): void {
     this.send({ type: "agent.working", intensity });
   }
 

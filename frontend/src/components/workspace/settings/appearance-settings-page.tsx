@@ -260,6 +260,40 @@ export default function AppearanceSettingsPage() {
       <Separator />
 
       <SettingsSection
+        title={t.settings.appearance.conversationDetailLevelTitle}
+        description={t.settings.appearance.conversationDetailLevelDescription}
+      >
+        <Select
+          value={settings.display.conversation_detail_level ?? "medium"}
+          onValueChange={(value) => {
+            if (value === "low" || value === "medium" || value === "high") {
+              setSetting("display", { conversation_detail_level: value });
+            }
+          }}
+        >
+          <SelectTrigger
+            aria-label={t.settings.appearance.conversationDetailLevelTitle}
+            className="w-full sm:w-[220px] max-w-full"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="low">
+              {t.settings.appearance.conversationDetailLevelLow}
+            </SelectItem>
+            <SelectItem value="medium">
+              {t.settings.appearance.conversationDetailLevelMedium}
+            </SelectItem>
+            <SelectItem value="high">
+              {t.settings.appearance.conversationDetailLevelHigh}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingsSection>
+
+      <Separator />
+
+      <SettingsSection
         title={t.settings.appearance.cornerRadiusTitle}
         description={t.settings.appearance.cornerRadiusDescription}
       >

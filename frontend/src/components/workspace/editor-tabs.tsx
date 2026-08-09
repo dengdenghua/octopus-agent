@@ -107,7 +107,7 @@ export function EditorTabs({
               onClick={() => onSelect(tab.path)}
               onMouseDown={(e) => handleMiddleClick(e, tab.path)}
               className={cn(
-                "group relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium whitespace-nowrap border-r border-border-subtle transition-colors shrink-0 max-w-[180px]",
+                "group relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium whitespace-nowrap border-r border-border-subtle transition-colors shrink-0 max-w-[var(--text-truncate-lg)]",
                 isActive
                   ? "bg-background text-foreground"
                   : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",

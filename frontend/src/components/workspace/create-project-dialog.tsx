@@ -96,7 +96,7 @@ export function CreateProjectDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[var(--dialog-md)]">
         <DialogHeader>
           <DialogTitle>{t.createProjectDialog.title}</DialogTitle>
         </DialogHeader>

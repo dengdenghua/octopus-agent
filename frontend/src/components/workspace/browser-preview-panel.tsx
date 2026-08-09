@@ -1382,7 +1382,7 @@ export function BrowserPreviewPanel({
             )
           }
           disabled={viewportChanging}
-          className="hidden h-7 max-w-[112px] shrink-0 rounded-md border border-border-default bg-background/70 px-1.5 text-xs font-medium text-muted-foreground outline-none hover:text-foreground md:block"
+          className="hidden h-7 max-w-[var(--text-truncate-sm)] shrink-0 rounded-md border border-border-default bg-background/70 px-1.5 text-xs font-medium text-muted-foreground outline-none hover:text-foreground md:block"
           title={bp.selectDevicePreset}
           aria-label={bp.selectDevicePreset}
         >

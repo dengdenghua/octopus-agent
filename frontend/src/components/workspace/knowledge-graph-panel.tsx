@@ -476,7 +476,7 @@ function KnowledgeRelationMap({
         </svg>
       )}
       {selectedNode && (
-        <div className="absolute bottom-3 left-3 max-w-[320px] rounded-md border border-white/10 bg-black/45 px-3 py-2 text-white backdrop-blur-md">
+        <div className="absolute bottom-3 left-3 max-w-[var(--text-truncate-2xl)] rounded-md border border-white/10 bg-black/45 px-3 py-2 text-white backdrop-blur-md">
           <div className="truncate text-xs font-semibold">{labelFor(selectedNode.name)}</div>
           <div className="mt-1 text-mini text-white/55">{typeLabelFor(selectedNode.entity_type)} · {degree.get(selectedNode.name) ?? 0} 条关系</div>
           {selectedNode.description && <div className="mt-1 line-clamp-2 text-mini leading-4 text-white/65">{selectedNode.description}</div>}

@@ -440,7 +440,7 @@ export function ModeSelector({
           }
         }}
         className={cn(
-          "group flex items-center gap-1.5 text-xs font-medium text-muted-foreground shadow-none transition-all duration-base",
+          "group flex items-center gap-1.5 text-xs font-medium text-muted-foreground shadow-none transition-colors duration-base",
           chromeless
             ? "h-8 rounded-lg px-1.5 hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 hover:border-border-default hover:bg-muted/55 hover:text-foreground",
@@ -518,7 +518,7 @@ export function ModeSelector({
                         aria-selected={mode === option.name}
                         onClick={() => handleToggle(option.name)}
                         className={cn(
-                          "flex w-full items-center gap-2 rounded-lg py-2 text-xs transition-all duration-base",
+                          "flex w-full items-center gap-2 rounded-lg py-2 text-xs transition-colors duration-base",
                           "px-3",
                           mode === option.name
                             ? option.activeTone

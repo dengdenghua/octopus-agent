@@ -41,7 +41,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
   // also present; when collapsed the logo becomes a plain ghost-icon tile
   // matching the new-chat tile next to it.
   const iconTileClass =
-    "transition-all hover:bg-muted hover:text-foreground text-muted-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:p-0";
+    "transition-colors hover:bg-muted hover:text-foreground text-muted-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:p-0";
 
   // Shared active-state treatment for the new-chat item.
   const newChatActiveClass =
@@ -87,7 +87,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
               <OctopusLogo size={18} />
             </div>
           )}
-          <SidebarTrigger className="flex h-7 w-7 items-center justify-center transition-all hover:scale-105 hover:bg-accent/40" />
+          <SidebarTrigger className="flex h-7 w-7 items-center justify-center transition-colors hover:bg-accent/40" />
         </div>
       </div>
     </div>

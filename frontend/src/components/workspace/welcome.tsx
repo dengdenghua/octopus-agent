@@ -18,13 +18,13 @@ import { Button } from "@/components/ui/button";
 
 type SceneId = "daily" | "code" | "design" | "data" | "doc" | "agent";
 
-const SCENES: { id: SceneId; label: string; icon: typeof LayoutIcon }[] = [
-  { id: "daily", label: "日常办公", icon: LayoutIcon },
-  { id: "code", label: "代码开发", icon: Code2Icon },
-  { id: "design", label: "设计创意", icon: PaletteIcon },
-  { id: "data", label: "数据分析", icon: BarChart3Icon },
-  { id: "doc", label: "文档处理", icon: FileTextIcon },
-  { id: "agent", label: "Agent 编排", icon: BotIcon },
+const SCENES: { id: SceneId; icon: typeof LayoutIcon }[] = [
+  { id: "daily", icon: LayoutIcon },
+  { id: "code", icon: Code2Icon },
+  { id: "design", icon: PaletteIcon },
+  { id: "data", icon: BarChart3Icon },
+  { id: "doc", icon: FileTextIcon },
+  { id: "agent", icon: BotIcon },
 ];
 
 /** Pseudo agent IDs used in URLs that are not real agent names. */
@@ -73,12 +73,10 @@ function pickGreetingName(
 
 export function Welcome({
   className,
-  mode,
   agent,
   agentName,
 }: {
   className?: string;
-  mode?: "chat" | "code" | "deep" | "thinking" | "flash" | "react";
   agent?: Agent | null;
   agentName?: string | null;
 }) {
@@ -122,17 +120,6 @@ export function Welcome({
             {t.welcome.createYourOwnSkillDescription}
           </p>
         </>
-      ) : isOctopus ? (
-        <>
-          <div className="flex flex-col items-center gap-4">
-            <h1 className="text-[32px] font-bold tracking-tight leading-tight bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
-              {greetingName}
-            </h1>
-            <p className="text-muted-foreground/80 text-base">
-              今天帮你做些什么？可以随时 @ 引用文件、/ 调用技能
-            </p>
-          </div>
-        </>
       ) : (
         <>
           <div className="flex flex-col items-center gap-4">
@@ -141,12 +128,12 @@ export function Welcome({
             </h1>
             <p className="text-muted-foreground/80 text-base">
               {greetingName === "Octopus"
-                ? "多智能体协作 · 一个输入框，直接解决问题"
+                ? t.welcome.octopusTagline
                 : agentDescription || t.welcome.description}
             </p>
           </div>
 
-          {greetingName === "Octopus" && (
+          {(isOctopus || greetingName === "Octopus") && (
             <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl">
               {SCENES.map((scene) => {
                 const Icon = scene.icon;
@@ -163,7 +150,7 @@ export function Welcome({
                     )}
                   >
                     <Icon className="size-3.5" strokeWidth={2} />
-                    <span className="text-sm">{scene.label}</span>
+                    <span className="text-sm">{t.welcome.scenes[scene.id]}</span>
                   </Button>
                 );
               })}

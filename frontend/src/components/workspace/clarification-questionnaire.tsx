@@ -304,7 +304,7 @@ export function ClarificationQuestionnaire({
       aria-label={t.clarificationQuestionnaire.title}
       role="region"
       className={cn(
-        "mt-4 flex min-h-[330px] w-full flex-col rounded-lg border border-border-default bg-background px-4 py-4 shadow-[0_10px_34px_rgba(15,23,42,0.08)] sm:min-h-[360px] sm:px-6 sm:py-5",
+        "mt-4 flex min-h-[var(--panel-height-lg)] w-full flex-col rounded-lg border border-border-default bg-background px-4 py-4 shadow-[0_10px_34px_rgba(15,23,42,0.08)] sm:min-h-[var(--panel-height-lg)] sm:px-6 sm:py-5",
         className,
       )}
     >
