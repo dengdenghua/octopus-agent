@@ -6,6 +6,10 @@ from typing import Any
 
 import pytest
 
+from runtime.execution.suckers.browser_launch import (
+    launch_chromium,
+)
+
 playwright = pytest.importorskip("playwright.sync_api")
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +22,7 @@ DOM_ACTIONS = (ROOT / "extensions" / "octopus-browser-relay" / "dom-actions.js")
 def browser_page() -> Iterator[Any]:
     with playwright.sync_playwright() as runtime:
         try:
-            browser = runtime.chromium.launch(headless=True)
+            browser = launch_chromium(runtime.chromium, headless=True)
         except playwright.Error as exc:
             pytest.skip(f"Chromium is unavailable: {exc}")
         page = browser.new_page()

@@ -71,11 +71,21 @@ _ARM_FACTORIES: dict[str, ArmFactory] = {
 
 
 def _repo_root() -> Path:
-    """Find the repo root by walking up from this file until we see
-    ``agents/`` alongside ``runtime/``."""
-    from runtime.platform.process.paths import project_root
+    """Root that carries the bundled ``agents/`` presets.
 
-    return project_root()
+    ``resources_root()``, not ``project_root()``: the 24 shipped agent
+    profiles are read-only bundled assets, and ``project_root()`` walks up
+    from the working directory — so anything started outside the checkout
+    resolved ``<cwd>/agents`` and failed with "missing .../profile.jsonc"
+    for profiles that were tracked in the repo the whole time.
+
+    ``resources_root()`` resolves relative to the installed package (and
+    honours ``OCTOPUS_RESOURCES_DIR`` for the container layout), which is the
+    same contract the skill and prompt catalogs use.
+    """
+    from runtime.platform.process.paths import resources_root
+
+    return resources_root()
 
 
 def _configured_agents_root() -> Path | None:

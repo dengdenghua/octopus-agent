@@ -438,6 +438,40 @@ def _project_root() -> Path:
     return project_root()
 
 
+def meta_skills_read_dirs(scope: str = "global") -> list[Path]:
+    """Directories to READ MetaSkill templates from, in precedence order.
+
+    Writes go to one place (:func:`meta_skills_dir`), but reads must also see
+    the templates shipped in the repo. ``project_root()`` walks up from the
+    working directory, so a process started outside the checkout resolved
+    ``<cwd>/meta_skills`` and listed nothing — the 18 tracked capability
+    packages silently disappeared with no error.
+
+    The writable directory comes first so a user's own edit of a shipped name
+    wins over the bundled copy.
+    """
+    dirs = [meta_skills_dir(scope)]
+    try:
+        from runtime.platform.process.paths import resources_root
+
+        bundled = _scoped_dir(resources_root(), scope)
+    except Exception:  # noqa: BLE001 — never let path resolution break listing
+        return dirs
+    if bundled not in dirs:
+        dirs.append(bundled)
+    return dirs
+
+
+def _scoped_dir(root: Path, scope: str) -> Path:
+    """``<root>/meta_skills`` or ``<root>/agents/<id>/meta_skills``."""
+    if scope.startswith("agent:"):
+        agent_id = scope.split(":", 1)[1].strip()
+        if not agent_id:
+            raise ValueError(f"invalid agent scope: {scope!r}")
+        return root / "agents" / agent_id / "meta_skills"
+    return root / "meta_skills"
+
+
 def meta_skills_dir(scope: str = "global") -> Path:
     """Where ``*.yaml`` MetaSkill templates are stored.
 
@@ -463,11 +497,22 @@ def list_meta_skills(scope: str = "global") -> list[dict[str, Any]]:
     MetaSkill catalog entries with no changes. ``kind`` defaults to
     ``"skill_cluster"`` (UI label "能力包").
     """
-    sdir = meta_skills_dir(scope)
-    if not sdir.exists():
+    # First directory wins on a name collision, so a user's own copy shadows
+    # the bundled template of the same name rather than appearing twice.
+    seen: set[str] = set()
+    candidates: list[Path] = []
+    for sdir in meta_skills_read_dirs(scope):
+        if not sdir.exists():
+            continue
+        for p in sorted(sdir.glob("*.yaml")):
+            if p.name in seen:
+                continue
+            seen.add(p.name)
+            candidates.append(p)
+    if not candidates:
         return []
     out: list[dict[str, Any]] = []
-    for p in sorted(sdir.glob("*.yaml")):
+    for p in candidates:
         try:
             text = p.read_text(encoding="utf-8")
             meta = meta_skill_from_yaml_text(text)
@@ -512,11 +557,11 @@ def _display_name(meta: MetaSkill) -> str:
 
 def load_meta_skill(name: str, scope: str = "global") -> MetaSkill | None:
     """Read a single MetaSkill by name. ``None`` if not found."""
-    sdir = meta_skills_dir(scope)
-    for ext in (".yaml", ".yml", ".json"):
-        path = sdir / f"{name}{ext}"
-        if path.exists():
-            return meta_skill_from_yaml_text(path.read_text(encoding="utf-8"))
+    for sdir in meta_skills_read_dirs(scope):
+        for ext in (".yaml", ".yml", ".json"):
+            path = sdir / f"{name}{ext}"
+            if path.exists():
+                return meta_skill_from_yaml_text(path.read_text(encoding="utf-8"))
     return None
 
 
@@ -693,6 +738,7 @@ __all__ = [
     "meta_skill_from_dict",
     "meta_skill_from_yaml_text",
     "meta_skills_dir",
+    "meta_skills_read_dirs",
     "save_meta_skill",
 ]
 

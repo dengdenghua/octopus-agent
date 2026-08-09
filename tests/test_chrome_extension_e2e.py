@@ -16,6 +16,9 @@ from fastapi.responses import HTMLResponse
 
 from runtime.execution.suckers.browser_backend import Track
 from runtime.execution.suckers.browser_backends import ExtensionBackend
+from runtime.execution.suckers.browser_launch import (
+    launch_persistent_chromium,
+)
 from runtime.platform.ui.browser_router import create_browser_router
 from runtime.safety.auth import Identity, IdentityStore
 
@@ -174,7 +177,8 @@ def live_extension_runtime(
     context = None
     runtime = playwright.sync_playwright().start()
     try:
-        context = runtime.chromium.launch_persistent_context(
+        context = launch_persistent_chromium(
+            runtime.chromium,
             user_data_dir=str(tmp_path / "profile"),
             channel="chromium",
             headless=True,

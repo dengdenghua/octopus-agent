@@ -206,7 +206,16 @@ def _resolve_root(*, root: str | Path | None, plugins: list[dict[str, Any]]) -> 
         for parent in (path, *path.parents):
             if (parent / "runtime").is_dir() and (parent / "tests").is_dir():
                 return parent
-    return Path.cwd()
+    # The probes below (docs/guide/..., tests/test_*.py) are tracked repo files,
+    # so the last resort has to be the repo that ships them — not the working
+    # directory. With cwd, running from anywhere else reported "plugin
+    # regression tests missing" for tests that are right there in the tree.
+    try:
+        from runtime.platform.process.paths import resources_root
+
+        return resources_root()
+    except (ImportError, OSError):
+        return Path.cwd()
 
 
 def _read_text(path: Path) -> str:

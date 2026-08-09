@@ -16,13 +16,32 @@ from runtime.core.nerves.reflex.reflex_router import (
 
 _LOG = logging.getLogger("octopus.reflex.loader")
 
-# Project-root-relative default path · the runtime cwd is the project
-# root so a plain relative path works for both CLI and uvicorn launches.
-_DEFAULT_PATHS = [
-    Path("data") / "reflex_rules.yaml",
-    Path("data") / "reflex_rules.yml",
-    Path("data") / "reflex_rules.json",
-]
+_RULE_FILENAMES = ("reflex_rules.yaml", "reflex_rules.yml", "reflex_rules.json")
+
+
+def _default_paths() -> list[Path]:
+    """Candidate rule files, resolved rather than assumed.
+
+    This used to be a module-level list of bare ``Path("data")/...`` values,
+    documented as safe because "the runtime cwd is the project root". That
+    assumption does not hold: a server can be started from anywhere, and its
+    working directory can even be deleted underneath it. When it broke, the
+    rules silently did not load — no error, just no reflexes.
+
+    ``app_paths().data_dir`` is the same contract the other data-dir readers
+    use, and it honours ``OCTOPUS_DATA_DIR``. The cwd-relative paths are kept
+    as a trailing fallback so a project-local ``data/`` still works.
+    """
+    paths: list[Path] = []
+    try:
+        from runtime.platform.process.paths import app_paths
+
+        root = app_paths().data_dir
+        paths.extend(root / name for name in _RULE_FILENAMES)
+    except Exception:  # noqa: BLE001 — never let path resolution break loading
+        pass
+    paths.extend(Path("data") / name for name in _RULE_FILENAMES)
+    return paths
 
 
 def _resolve_case_sensitive(raw: Any) -> bool:
@@ -179,7 +198,7 @@ def _attach_variants(matcher: Reflex, entry: dict[str, Any]) -> None:
 
 def find_default_rules_file() -> Path | None:
     """Return the first existing default rules path, or None."""
-    for p in _DEFAULT_PATHS:
+    for p in _default_paths():
         if p.is_file():
             return p
     return None

@@ -25,6 +25,12 @@ from runtime.tentacle.llm import (
     ToolCallResult,
 )
 
+# Anchored to this file, not the working directory: these tests used a
+# bare relative path and so only passed when pytest ran from the repo root.
+_MOBILE_SKILLS_DIR = (
+    Path(__file__).resolve().parents[1] / "runtime" / "tentacle" / "mobile" / "skills"
+)
+
 # ── 工具类 ──────────────────────────────────────────────────
 
 
@@ -188,7 +194,7 @@ class TestSkillManifestLoader:
     def test_load_real_directory(self):
         """扫真实 mobile 技能目录（项目内） —— 30 个 SKILL.md."""
         loader = SkillManifestLoader()
-        skills = loader.load_directory(Path("runtime/tentacle/mobile/skills"))
+        skills = loader.load_directory(_MOBILE_SKILLS_DIR)
         assert len(skills) == 30, f"expected 30 skills, got {len(skills)}"
         names = {s.name for s in skills}
         # 核心移动技能
@@ -241,7 +247,7 @@ class TestSkillManifestLoader:
     def test_tap_parameters_to_json_schema(self):
         """android.tap 的 parameters 应当正确转成 JSON Schema（list-of-objects → schema）."""
         loader = SkillManifestLoader()
-        skills = loader.load_directory(Path("runtime/tentacle/mobile/skills"))
+        skills = loader.load_directory(_MOBILE_SKILLS_DIR)
         tap = next(s for s in skills if s.name == "android.tap")
         assert "properties" in tap.parameters
         assert "x" in tap.parameters["properties"]
@@ -251,7 +257,7 @@ class TestSkillManifestLoader:
     def test_description_merged_from_pipe_block(self):
         """description: | 块的多行内容应合并成单字符串."""
         loader = SkillManifestLoader()
-        skills = loader.load_directory(Path("runtime/tentacle/mobile/skills"))
+        skills = loader.load_directory(_MOBILE_SKILLS_DIR)
         tap = next(s for s in skills if s.name == "android.tap")
         # tap/SKILL.md description 是英文多行（Tap at coordinate ...），包含必要关键词
         assert "Tap" in tap.description
@@ -261,7 +267,7 @@ class TestSkillManifestLoader:
     def test_to_openai_tools(self):
         """SkillSpec → OpenAI tools 数组."""
         loader = SkillManifestLoader()
-        skills = loader.load_directory(Path("runtime/tentacle/mobile/skills"))
+        skills = loader.load_directory(_MOBILE_SKILLS_DIR)
         tools = loader.to_openai_tools(skills)
         assert len(tools) == len(skills)
         for t in tools:

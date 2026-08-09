@@ -308,6 +308,12 @@ class TestRoundTrip:
             "runtime.platform.process.paths.project_root",
             lambda: tmp_path,
         )
+        # Reads also consult the bundled resources root; without pinning it
+        # too, the 18 shipped capability packages leak into these listings.
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.resources_root",
+            lambda: tmp_path,
+        )
         meta = MetaSkill(
             name="roundtrip",
             description="test",
@@ -327,6 +333,12 @@ class TestRoundTrip:
             "runtime.platform.process.paths.project_root",
             lambda: tmp_path,
         )
+        # Reads also consult the bundled resources root; without pinning it
+        # too, the 18 shipped capability packages leak into these listings.
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.resources_root",
+            lambda: tmp_path,
+        )
         meta = MetaSkill(
             name="autocreate",
             steps=(MetaStep(node_id="a", skill_ref="foo"),),
@@ -338,6 +350,12 @@ class TestRoundTrip:
     def test_list_meta_skills(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
             "runtime.platform.process.paths.project_root",
+            lambda: tmp_path,
+        )
+        # Reads also consult the bundled resources root; without pinning it
+        # too, the 18 shipped capability packages leak into these listings.
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.resources_root",
             lambda: tmp_path,
         )
         for name in ("alpha", "beta", "gamma"):
@@ -544,6 +562,12 @@ class TestKind:
             "runtime.platform.process.paths.project_root",
             lambda: tmp_path,
         )
+        # Reads also consult the bundled resources root; without pinning it
+        # too, the 18 shipped capability packages leak into these listings.
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.resources_root",
+            lambda: tmp_path,
+        )
         m = MetaSkill(
             name="kind-test",
             kind="skill_cluster",
@@ -556,6 +580,12 @@ class TestKind:
     def test_round_trip_preserves_kind(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
             "runtime.platform.process.paths.project_root",
+            lambda: tmp_path,
+        )
+        # Reads also consult the bundled resources root; without pinning it
+        # too, the 18 shipped capability packages leak into these listings.
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.resources_root",
             lambda: tmp_path,
         )
         m = MetaSkill(
@@ -571,6 +601,12 @@ class TestKind:
     def test_list_returns_kind_and_display_name(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
             "runtime.platform.process.paths.project_root",
+            lambda: tmp_path,
+        )
+        # Reads also consult the bundled resources root; without pinning it
+        # too, the 18 shipped capability packages leak into these listings.
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.resources_root",
             lambda: tmp_path,
         )
         save_meta_skill(

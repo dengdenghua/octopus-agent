@@ -38,7 +38,9 @@ def test_root_prompt_runs_code_session(monkeypatch, tmp_path: Path, capsys) -> N
 def test_pyproject_exposes_octopus_coding_binary() -> None:
     import tomllib
 
-    data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    data = tomllib.loads(
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    )
 
     assert data["project"]["scripts"]["octopus"] == "runtime.cli:main"
 

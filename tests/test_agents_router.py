@@ -1022,7 +1022,11 @@ class TestLocalPartners:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        repo_root = project_root()
+        # The point of the chdir is to run from a directory that is NOT the repo
+        # root. Derive it from this file rather than ``project_root()``, which
+        # walks up from the cwd and so yields the cwd itself when pytest is
+        # invoked from outside the tree.
+        repo_root = Path(__file__).resolve().parents[1]
         monkeypatch.chdir(repo_root / "runtime" / "sensing")
         executable = tmp_path / "Code Buddy (Beta)" / "codebuddy"
         executable.parent.mkdir()
