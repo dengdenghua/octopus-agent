@@ -534,10 +534,13 @@ describe("MessageGroup reasoning grouping", () => {
     expect(stream).toHaveTextContent("接下来检查配置文件");
     expect(screen.getAllByText("接下来检查配置文件")).toHaveLength(1);
 
-    // After the stream settles: window folds away, summary row returns.
+    // After the stream settles: window folds away, and outward-facing
+    // narration ("接下来检查配置文件") stays visible as full conversation
+    // prose instead of collapsing into a faded truncated row.
     rerender(<MessageGroup messages={messages as never} />);
     expect(screen.queryByTestId("live-thinking-stream")).not.toBeInTheDocument();
-    expect(screen.getByText("接下来检查配置文件")).toBeInTheDocument();
+    expect(screen.getByText(/接下来检查配置文件/)).toBeInTheDocument();
+    expect(screen.getByText(/先梳理目录结构/)).toBeInTheDocument();
   });
 
   it("keeps kept-open traces compact and sends prior steps to the workbench", () => {

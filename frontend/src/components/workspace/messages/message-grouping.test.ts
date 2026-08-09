@@ -56,6 +56,11 @@ describe("isOutwardFacingThinking", () => {
     expect(
       isOutwardFacingThinking("用户可能期望 A，但方案 B 的成本更高，需要权衡"),
     ).toBe(false);
+    // A mid-sentence "先…确认" inside deliberation is analysis, not an
+    // outward announcement — the intro word must lead the text.
+    expect(
+      isOutwardFacingThinking("这个问题需要先确认赛道边界，否则机会点会太泛"),
+    ).toBe(false);
     expect(isOutwardFacingThinking("")).toBe(false);
   });
 });

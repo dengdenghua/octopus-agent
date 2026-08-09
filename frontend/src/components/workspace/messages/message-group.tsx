@@ -81,6 +81,7 @@ import {
   aggregateSimilarToolCalls,
   isAggregatedToolGroup,
 } from "./activity-aggregator";
+import { isOutwardFacingThinking } from "./message-grouping";
 import { projectToolNarrative } from "./narrative-block";
 
 const HIDDEN_TIMELINE_TOOL_NAMES = new Set([
@@ -987,6 +988,25 @@ export function MessageGroup({
               ),
           )
         : false;
+      // Outward-facing thinking ("我将先检查目录结构…", "接下来我会查看
+      // config") is the model telling the user what it's about to do — that
+      // is conversation prose, not private deliberation. Render it as normal
+      // body text (full text, normal color, no collapse) instead of a faded
+      // tiny thinking row. Only true inner chain-of-thought stays compact.
+      const isOutwardThinking =
+        isThinking &&
+        isOutwardFacingThinking(
+          coveredItems
+            .filter(
+              (coveredItem) => coveredItem.type === "reasoningGroup",
+            )
+            .flatMap((coveredItem) =>
+              coveredItem.steps.map(
+                (reasoningStep) => reasoningStep.reasoning ?? "",
+              ),
+            )
+            .join("\n"),
+        );
 
       // Use action-display for human-readable verb + icon
       let actionVerb: string;
@@ -1185,11 +1205,15 @@ export function MessageGroup({
                 // Aggregated rows use a slightly larger size and stronger
                 // hover target per spec §Design/Style.
                 isAggregatedGroup && "text-sm",
-                needsEffectReview
-                  ? "text-warning/80 hover:text-warning/80 dark:hover:text-warning"
-                  : isAggregatedGroup
-                    ? "text-muted-foreground hover:text-foreground"
-                    : "text-muted-foreground/60 hover:text-muted-foreground",
+                isOutwardThinking
+                  ? // Outward-facing narration is conversation prose — keep
+                    // it readable (full opacity) like the final answer.
+                    "text-foreground/85 hover:text-foreground"
+                  : needsEffectReview
+                    ? "text-warning/80 hover:text-warning/80 dark:hover:text-warning"
+                    : isAggregatedGroup
+                      ? "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground/60 hover:text-muted-foreground",
               )}
               data-process-event-id={workbenchEventId}
               data-timeline-item-id={timelineItemLinkageId(item)}
@@ -1255,11 +1279,17 @@ export function MessageGroup({
                 <ActionIcon className="size-3.5 shrink-0 text-muted-foreground" />
               )}
               <span className="flex min-w-0 flex-1 items-center gap-1">
-                <span className="truncate">
+                <span className={cn(isOutwardThinking && "whitespace-normal")}>
                   {isThinking ? (
-                    liveThinkingStreamActive
-                      ? null
-                      : processEventSummary || summary
+                    liveThinkingStreamActive ? (
+                      null
+                    ) : isOutwardThinking ? (
+                      // Outward-facing narration: show the full text as
+                      // conversation prose, never truncate it.
+                      processEventDetail || processEventSummary || summary
+                    ) : (
+                      processEventSummary || summary
+                    )
                   ) : actionObject ? (
                     <>
                       <span className="text-foreground">{actionVerb}</span>
@@ -1317,6 +1347,7 @@ export function MessageGroup({
               )}
             </button>
             {isThinking &&
+              !isOutwardThinking &&
               processEventDetail &&
               processEventDetail.trim() !==
                 (processEventSummary || summary).trim() && (
@@ -1413,6 +1444,7 @@ export function MessageGroup({
           )}
           {liveExecStreamActive && <LiveExecWindow text={liveExecOutput} />}
           {isThinking &&
+            !isOutwardThinking &&
             processEventDetail &&
             processEventDetail.trim() !==
               (processEventSummary || summary).trim() && (
