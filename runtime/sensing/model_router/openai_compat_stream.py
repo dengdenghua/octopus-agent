@@ -31,6 +31,7 @@ from typing import Any
 
 from .models import CostEntry, ModelResponse, ModelStreamEvent
 from .openai_compat_providers import (
+    InlineReasoningSplitter,
     extract_openai_compat_reasoning,
     extract_openai_compat_usage,
     parse_tool_call_arguments,
@@ -67,6 +68,7 @@ def iter_openai_sse(
     """
     accumulated: list[str] = []
     accumulated_reasoning: list[str] = []
+    inline_reasoning_splitter = InlineReasoningSplitter()
     tool_state: dict[int, dict[str, Any]] = {}
     input_tokens = 0
     output_tokens = 0
@@ -125,10 +127,19 @@ def iter_openai_sse(
                 delta=reasoning_piece,
             )
 
-        piece = _render_content_delta(delta.get("content"))
-        if piece:
-            accumulated.append(piece)
-            yield ModelStreamEvent(type="text_delta", delta=piece)
+        raw_piece = _render_content_delta(delta.get("content"))
+        if raw_piece:
+            # Providers that inline reasoning in ``content`` as ``<think>…``
+            # (minimax-m3, measured) need it split out here, not downstream: a
+            # tag can straddle two chunks, so the splitter buffers a partial
+            # tag rather than emitting it as text.
+            piece, inline_reasoning = inline_reasoning_splitter.feed(raw_piece)
+            if inline_reasoning:
+                accumulated_reasoning.append(inline_reasoning)
+                yield ModelStreamEvent(type="thinking_delta", delta=inline_reasoning)
+            if piece:
+                accumulated.append(piece)
+                yield ModelStreamEvent(type="text_delta", delta=piece)
 
         raw_tool_calls = delta.get("tool_calls") or []
         if isinstance(raw_tool_calls, list):
@@ -248,6 +259,17 @@ def iter_openai_sse(
                 )
             )
             yield ModelStreamEvent(type="tool_use", tool_call=tool_calls[-1])
+
+    # Release anything the inline-reasoning splitter was holding back as a
+    # possible partial ``<think>`` tag. If the stream ended mid-tag it was
+    # literal text, so it belongs in the answer.
+    _tail_content, _tail_reasoning = inline_reasoning_splitter.flush()
+    if _tail_reasoning:
+        accumulated_reasoning.append(_tail_reasoning)
+        yield ModelStreamEvent(type="thinking_delta", delta=_tail_reasoning)
+    if _tail_content:
+        accumulated.append(_tail_content)
+        yield ModelStreamEvent(type="text_delta", delta=_tail_content)
 
     yield ModelStreamEvent(
         type="done",

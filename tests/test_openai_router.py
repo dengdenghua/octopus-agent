@@ -1336,3 +1336,69 @@ class TestMultiRouterIntegration:
         )
         assert resp.text == "via-fallback"
         assert mm.dispatch_log[-1].final_role == "fallback[0]"
+
+
+def _relay_router(default_model: str):
+    """A router for a multi-vendor relay: one base_url, many vendors' models."""
+    return OpenAIModelRouter(
+        base_url="https://relay.example/zen/go/v1",
+        api_key="sk-test",
+        default_model=default_model,
+    )
+
+
+def test_entry_profile_does_not_leak_across_vendors_on_a_relay() -> None:
+    """A sibling entry's model name must not pick the profile for this call.
+
+    The entry-level profile is resolved once from ``default_model``. On a
+    relay that fronts many vendors behind one base_url, that says nothing
+    about the model actually being called — inheriting it meant one vendor's
+    request quirks were applied to another vendor's model.
+    """
+    router = _relay_router("deepseek-v4-flash")
+    # Sanity: the entry itself really did resolve to a vendor profile.
+    assert router._provider_profile.id == "deepseek"
+    # The model that named DeepSeek still gets DeepSeek.
+    assert router._profile_for_model("deepseek-v4-flash").id == "deepseek"
+    # Models naming a different vendor get their own profile.
+    assert router._profile_for_model("glm-5.2").id == "glm"
+    assert router._profile_for_model("qwen3.7-plus").id == "qwen"
+    # A model naming no known vendor stays generic rather than borrowing
+    # DeepSeek's quirks from the sibling entry.
+    assert router._profile_for_model("gpt-5.6-luna").id == "openai_compat"
+
+
+def test_entry_profile_still_applies_when_the_base_url_identifies_the_vendor() -> None:
+    """The fallback is real when the endpoint itself is the vendor.
+
+    A single-vendor endpoint should keep applying its quirks to model ids we
+    have no marker for — that is the case the fallback exists to serve.
+    """
+    router = OpenAIModelRouter(
+        base_url="https://api.deepseek.com/v1",
+        api_key="sk-test",
+        default_model="deepseek-chat",
+    )
+    assert router._profile_for_model("some-unreleased-id").id == "deepseek"
+
+
+def test_non_streaming_response_splits_inline_reasoning() -> None:
+    """The blocking ``call`` path needs the same split as the stream path."""
+    router = OpenAIModelRouter(
+        base_url="https://relay.example/v1",
+        api_key="sk-test",
+        default_model="minimax-m3",
+    )
+    content, finish_reason, thinking = router._extract_text(
+        {
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "<think>weigh it</think>\n4"},
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+    )
+    assert content == "4"
+    assert thinking == "weigh it"
+    assert finish_reason == "stop"

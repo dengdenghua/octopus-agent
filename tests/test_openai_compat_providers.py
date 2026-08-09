@@ -14,6 +14,7 @@ from runtime.sensing.model_router.openai_compat_providers import (
     resolve_openai_compat_profile,
     retry_payloads_after_openai_compat_error,
     sample_openai_compat_profile_probe,
+    split_inline_reasoning,
 )
 from runtime.sensing.model_router.openai_compat_smoke_matrix import (
     openai_compat_smoke_provider_ids,
@@ -649,3 +650,18 @@ def test_parse_tool_call_arguments_recovers_kimi_xml_parameters() -> None:
         "url": "http://127.0.0.1:8001/",
         "allow_private": True,
     }
+
+
+def test_split_inline_reasoning_extracts_think_blocks() -> None:
+    assert split_inline_reasoning("<think>\nweigh it\n</think>\n4") == ("4", "weigh it")
+    assert split_inline_reasoning("a<think>x</think>b<think>y</think>c") == ("abc", "x\ny")
+
+
+def test_split_inline_reasoning_leaves_ordinary_text_alone() -> None:
+    # The overwhelmingly common case: no tag, nothing changed.
+    assert split_inline_reasoning("a < b and c > d") == ("a < b and c > d", "")
+
+
+def test_split_inline_reasoning_treats_an_unclosed_tag_as_reasoning() -> None:
+    # A generation truncated mid-thought never reached an answer.
+    assert split_inline_reasoning("<think>cut off here") == ("", "cut off here")

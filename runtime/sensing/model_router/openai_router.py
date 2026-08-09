@@ -40,6 +40,7 @@ from .openai_compat_providers import (
     parse_tool_call_arguments,
     plan_openai_compat_retries,
     resolve_openai_compat_profile,
+    split_inline_reasoning,
 )
 
 try:
@@ -423,12 +424,38 @@ class OpenAIModelRouter(Provider, ModelRouter):
 
     def _profile_for_model(self, model: str) -> OpenAICompatProviderProfile:
         profile = resolve_openai_compat_profile(self.base_url, model)
-        if profile.id == "openai_compat":
+        if profile.id == "openai_compat" and self._can_fall_back_to_entry_profile(model):
             profile = self._provider_profile
         return apply_custom_openai_compat_profile(
             custom_model_entry_for(model),
             base_profile=profile,
         )
+
+    def _can_fall_back_to_entry_profile(self, model: str) -> bool:
+        """Whether the entry-level profile may stand in for this model.
+
+        ``self._provider_profile`` is resolved once from the configured
+        ``default_model``. That is a useful fallback when the per-call model
+        carries no signal at all — an entry pointing at DeepSeek still wants
+        the DeepSeek quirks for a bare model id.
+
+        It is wrong when the per-call model DOES carry a vendor signal and
+        simply isn't one we have a profile for. A relay hosts many vendors
+        behind one base_url (opencode.ai advertises 25 models across 8-plus
+        vendors), so the entry's ``default_model`` says nothing about the
+        model actually being called: ``gpt-5.6-luna`` was inheriting the
+        DeepSeek profile purely because a sibling entry named a DeepSeek
+        model. Harmless today, but it is quirks crossing vendor lines in
+        exactly the setup we run in production.
+
+        So the fallback only applies when the entry-level profile was matched
+        on the shared base_url — which genuinely describes the endpoint — and
+        not when it was inferred from a sibling model's name.
+        """
+        if self._provider_profile.id == "openai_compat":
+            return False
+        base = self.base_url.lower()
+        return any(marker in base for marker in self._provider_profile.base_url_markers)
 
     def _retry_payloads(
         self,
@@ -523,6 +550,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
             content = json.dumps(content)
         if not isinstance(thinking, str):
             thinking = json.dumps(thinking, ensure_ascii=False)
+        # Providers that emit reasoning inline in ``content`` rather than in
+        # ``reasoning_content`` (minimax-m3, measured) would otherwise hand
+        # the model's private reasoning back as the answer.
+        content, inline_reasoning = split_inline_reasoning(content)
+        if inline_reasoning:
+            thinking = f"{thinking}\n{inline_reasoning}".strip() if thinking else inline_reasoning
         finish_reason = first.get("finish_reason") or "stop"
         return content, finish_reason, thinking
 

@@ -166,3 +166,81 @@ def test_iter_openai_sse_handles_multiline_data_events():
     assert events[1].delta == " line"
     assert events[-1].final is not None
     assert events[-1].final.text == "multi line"
+
+
+def test_iter_openai_sse_splits_inline_think_tags_out_of_content():
+    """Reasoning inlined in ``content`` must not surface as the answer.
+
+    Measured on minimax-m3 via a relay: the message carries no
+    ``reasoning_content`` at all and instead returns
+    ``"<think>…</think>4"`` in ``content``.
+    """
+    response = _FakeSSE(
+        [
+            'data: {"choices":[{"delta":{"content":"<think>weigh it up</think>"}}]}',
+            'data: {"choices":[{"delta":{"content":"4"}}]}',
+            "data: [DONE]",
+        ]
+    )
+
+    events = list(iter_openai_sse(response, model="minimax-m3"))
+
+    assert events[-1].final is not None
+    assert events[-1].final.text == "4"
+    assert events[-1].final.thinking == "weigh it up"
+    assert "<think>" not in events[-1].final.text
+
+
+def test_iter_openai_sse_handles_a_think_tag_split_across_chunks():
+    """A tag can straddle chunk boundaries, so buffering must be correct."""
+    response = _FakeSSE(
+        [
+            'data: {"choices":[{"delta":{"content":"<thi"}}]}',
+            'data: {"choices":[{"delta":{"content":"nk>hidden"}}]}',
+            'data: {"choices":[{"delta":{"content":"</thi"}}]}',
+            'data: {"choices":[{"delta":{"content":"nk>visible"}}]}',
+            "data: [DONE]",
+        ]
+    )
+
+    events = list(iter_openai_sse(response, model="minimax-m3"))
+
+    assert events[-1].final is not None
+    assert events[-1].final.text == "visible"
+    assert events[-1].final.thinking == "hidden"
+
+
+def test_iter_openai_sse_leaves_an_unopened_angle_bracket_alone():
+    """Content that merely resembles a tag prefix must survive verbatim.
+
+    A stream ending on ``"<thi"`` never completed a tag, so it was literal
+    text and belongs in the answer rather than being swallowed.
+    """
+    response = _FakeSSE(
+        [
+            'data: {"choices":[{"delta":{"content":"compare a <thi"}}]}',
+            "data: [DONE]",
+        ]
+    )
+
+    events = list(iter_openai_sse(response, model="minimax-m3"))
+
+    assert events[-1].final is not None
+    assert events[-1].final.text == "compare a <thi"
+    assert events[-1].final.thinking == ""
+
+
+def test_iter_openai_sse_keeps_plain_content_byte_identical():
+    """The common path must be untouched by the splitter."""
+    response = _FakeSSE(
+        [
+            'data: {"choices":[{"delta":{"content":"a < b and c > d"}}]}',
+            "data: [DONE]",
+        ]
+    )
+
+    events = list(iter_openai_sse(response, model="deepseek-v4-flash"))
+
+    assert events[-1].final is not None
+    assert events[-1].final.text == "a < b and c > d"
+    assert events[-1].final.thinking == ""

@@ -190,3 +190,122 @@ def _int_from_any(value: Any) -> int:
     except (TypeError, ValueError):
         match = re.search(r"\d+", str(value or ""))
         return int(match.group(0)) if match else 0
+
+
+# Some OpenAI-compat providers emit reasoning INLINE in ``content``, wrapped
+# in ``<think>`` tags, and send no ``reasoning_content`` field at all
+# (measured on minimax-m3: content is
+# ``"<think>\nThe user is asking...\n</think>\n4"``). Without splitting it,
+# the model's private reasoning is shown to the user as the answer, and every
+# downstream consumer that parses the answer — ReAct's Final Answer matcher,
+# tool-call extraction, verification guards — sees the reasoning first.
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
+
+
+def split_inline_reasoning(text: str) -> tuple[str, str]:
+    """Split ``<think>``-wrapped reasoning out of a content string.
+
+    Returns ``(content, reasoning)``. Text outside the tags is content;
+    text inside is reasoning. An unclosed ``<think>`` treats the rest as
+    reasoning, which is the right reading for a truncated generation.
+    Strings with no opening tag are returned unchanged so the overwhelmingly
+    common case costs one substring check.
+    """
+    if _THINK_OPEN not in text:
+        return text, ""
+    content: list[str] = []
+    reasoning: list[str] = []
+    rest = text
+    while True:
+        head, sep, tail = rest.partition(_THINK_OPEN)
+        content.append(head)
+        if not sep:
+            break
+        thought, closed, rest = tail.partition(_THINK_CLOSE)
+        reasoning.append(thought)
+        if not closed:
+            break
+    return "".join(content).strip(), "\n".join(reasoning).strip()
+
+
+class InlineReasoningSplitter:
+    """Streaming counterpart to :func:`split_inline_reasoning`.
+
+    A ``<think>`` tag can straddle two SSE chunks (``"<thi"`` / ``"nk>"``),
+    so the split cannot be done per-chunk in isolation. Feed each content
+    delta through :meth:`feed`; it returns the ``(content, reasoning)``
+    fragments that are safe to emit now and buffers any trailing text that
+    could still turn out to be a partial tag.
+
+    Call :meth:`flush` at end of stream to release a buffered partial tag as
+    content — if it never completed, it was literal text.
+    """
+
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._in_thinking = False
+
+    def feed(self, delta: str) -> tuple[str, str]:
+        if not delta:
+            return "", ""
+        self._buffer += delta
+        content: list[str] = []
+        reasoning: list[str] = []
+        while self._buffer:
+            if self._in_thinking:
+                thought, closed, rest = self._buffer.partition(_THINK_CLOSE)
+                if not closed:
+                    # Hold back only what could be a partial closing tag;
+                    # everything before it is settled reasoning.
+                    keep = _partial_tag_suffix_len(self._buffer, _THINK_CLOSE)
+                    if keep:
+                        reasoning.append(self._buffer[:-keep])
+                        self._buffer = self._buffer[-keep:]
+                    else:
+                        reasoning.append(self._buffer)
+                        self._buffer = ""
+                    break
+                reasoning.append(thought)
+                self._buffer = rest
+                self._in_thinking = False
+                continue
+            head, sep, rest = self._buffer.partition(_THINK_OPEN)
+            if not sep:
+                keep = _partial_tag_suffix_len(self._buffer, _THINK_OPEN)
+                if keep:
+                    content.append(self._buffer[:-keep])
+                    self._buffer = self._buffer[-keep:]
+                else:
+                    content.append(self._buffer)
+                    self._buffer = ""
+                break
+            content.append(head)
+            self._buffer = rest
+            self._in_thinking = True
+        return "".join(content), "".join(reasoning)
+
+    def flush(self) -> tuple[str, str]:
+        """Release the tail. A never-completed tag was literal text."""
+        tail, self._buffer = self._buffer, ""
+        if self._in_thinking:
+            self._in_thinking = False
+            return "", tail
+        return tail, ""
+
+    @property
+    def saw_inline_reasoning(self) -> bool:
+        return self._in_thinking
+
+
+def _partial_tag_suffix_len(text: str, tag: str) -> int:
+    """Length of the longest suffix of ``text`` that prefixes ``tag``.
+
+    ``"answer: <thi"`` against ``"<think>"`` returns 4 — that much must be
+    buffered because the next chunk may complete the tag.
+    """
+    limit = min(len(text), len(tag) - 1)
+    for size in range(limit, 0, -1):
+        if tag.startswith(text[-size:]):
+            return size
+    return 0

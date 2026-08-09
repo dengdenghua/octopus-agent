@@ -37,9 +37,11 @@ from ._providers_data import (
     resolve_openai_compat_profile,
 )
 from ._response_parsers import (
+    InlineReasoningSplitter,
     extract_openai_compat_reasoning,
     extract_openai_compat_usage,
     parse_tool_call_arguments,
+    split_inline_reasoning,
 )
 
 _OPTIONAL_REQUEST_FIELD_FALLBACKS = (
@@ -934,6 +936,7 @@ __all__ = [
     "OpenAICompatProfileProbe",
     "OpenAICompatRetryPayload",
     "REQUIRED_DOMESTIC_PROFILE_IDS",
+    "InlineReasoningSplitter",
     "apply_custom_openai_compat_profile",
     "audit_openai_compat_profile_catalog",
     "describe_openai_compat_profile",
@@ -947,4 +950,5 @@ __all__ = [
     "resolve_openai_compat_profile",
     "retry_payloads_after_openai_compat_error",
     "sample_openai_compat_profile_probe",
+    "split_inline_reasoning",
 ]
