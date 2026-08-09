@@ -371,3 +371,120 @@ def test_react_loop_compresses_observation_when_flag_on(
     # survives.
     assert "tracking()" not in obs_text, "<script> body leaked into prompt — juicer didn't engage"
     assert "Useful sentence." in obs_text
+
+
+# ── code pass · AST-aware body elision ──
+
+
+def _many_functions(count: int, body_lines: int = 8) -> str:
+    return "\n".join(
+        f"def f{i}(a, b):\n    '''compute f{i}.'''\n"
+        + "\n".join(f"    x{k} = a + {k}" for k in range(body_lines))
+        + "\n    return x0\n"
+        for i in range(count)
+    )
+
+
+def test_code_pass_keeps_every_signature() -> None:
+    """Signatures carry the structure a model reasons about; bodies don't."""
+    out, stats = juice(_many_functions(60), max_chars=6000)
+
+    assert "code" in stats.passes
+    assert out.count("def f") == 60
+    assert stats.after < stats.before
+
+
+def test_code_pass_output_still_parses() -> None:
+    """The whole point: the byte-offset cap sliced mid-function and handed
+    the model source that no longer parses. Structural elision must not."""
+    import ast
+
+    out, _ = juice(_many_functions(60), max_chars=6000)
+    ast.parse(out)  # raises SyntaxError on regression
+
+
+def test_code_pass_beats_the_hard_cap() -> None:
+    """Guards against the pass silently degrading back to a plain cap."""
+    text = _many_functions(60)
+    with_code, code_stats = juice(text, max_chars=6000)
+    cap_only, cap_stats = juice(text, max_chars=6000, enable_code=False)
+
+    assert "code" in code_stats.passes
+    assert "code" not in cap_stats.passes
+    # The cap keeps head+tail, so it retains far fewer signatures.
+    assert with_code.count("def f") > cap_only.count("def f")
+
+
+def test_code_pass_preserves_docstrings() -> None:
+    out, _ = juice(_many_functions(60), max_chars=6000)
+    assert out.count("compute f0.") == 1
+
+
+def test_code_pass_handles_decorated_definitions() -> None:
+    """A decorated def must be elided together with its decorators.
+
+    Eliding from the ``def`` line alone leaves the decorators stranded
+    above an elision marker, which is a syntax error.
+    """
+    import ast
+
+    text = "class C:\n" + "".join(
+        f"    @property\n    def m{i}(self):\n"
+        + "\n".join(f"        q{k} = 1" for k in range(10))
+        + "\n"
+        for i in range(60)
+    )
+    out, stats = juice(text, max_chars=6000)
+
+    assert "code" in stats.passes
+    ast.parse(out)
+    assert out.count("def m") == 60
+
+
+def test_code_pass_handles_async_definitions() -> None:
+    import ast
+
+    text = "\n".join(
+        f"async def g{i}(x):\n" + "\n".join(f"    v{k} = x + {k}" for k in range(10)) + "\n"
+        for i in range(60)
+    )
+    out, stats = juice(text, max_chars=6000)
+
+    assert "code" in stats.passes
+    ast.parse(out)
+
+
+def test_unparseable_python_falls_back_to_cap() -> None:
+    """Never raise on malformed source — degrade to the existing cap."""
+    out, stats = juice("def f(:\n  ???\n" * 900, max_chars=6000)
+
+    assert "code" not in stats.passes
+    assert len(out) <= 6100
+
+
+def test_prose_mentioning_keywords_is_not_treated_as_code() -> None:
+    prose = "import means bringing in.\nclass of problems.\ndef not what you think.\n" * 3
+    out, stats = juice(prose, max_chars=6000)
+
+    assert out == prose
+    assert "code" not in stats.passes
+
+
+def test_small_code_is_byte_identical() -> None:
+    """Prompt-cache prefixes must not shift for outputs under budget."""
+    src = "def f():\n    return 1\n"
+    out, stats = juice(src, max_chars=6000)
+
+    assert out == src
+    assert stats.passes == ()
+
+
+def test_code_pass_can_be_disabled() -> None:
+    _, stats = juice(_many_functions(60), max_chars=6000, enable_code=False)
+    assert "code" not in stats.passes
+
+
+def test_code_pass_respects_protected_sentinels() -> None:
+    text = "(工具失败)\n" + _many_functions(60)
+    out, _ = juice(text, max_chars=6000)
+    assert "(工具失败)" in out
