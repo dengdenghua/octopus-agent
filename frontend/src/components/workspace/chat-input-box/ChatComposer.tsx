@@ -49,6 +49,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DesktopPetMascot } from "@/components/desktop-pet";
+import { usePetSettings } from "@/core/pet/pet-settings";
 import { cn } from "@/lib/utils";
 import { normalizePermissionMode } from "@/core/permissions";
 import { uploadFiles } from "@/core/uploads";
@@ -121,6 +122,7 @@ export function ChatComposer({
 }: ChatInputBoxProps) {
   const { t } = useI18n();
   const { models } = useModels();
+  const petVisible = usePetSettings().visible;
   const [draft, setDraft] = useState(defaultValue);
   const [researchUrlText, setResearchUrlText] = useState("");
   const [researchTextTitle, setResearchTextTitle] = useState("");
@@ -841,11 +843,13 @@ export function ChatComposer({
         className,
       )}
     >
-      <DesktopPetMascot
-        mood={petMood}
-        size="sm"
-        anchor={{ corner: "bottom-right", gap: { x: 19, y: -23 } }}
-      />
+      {petVisible && (
+        <DesktopPetMascot
+          mood={petMood}
+          size="sm"
+          anchor={{ corner: "bottom-right", gap: { x: 19, y: -23 } }}
+        />
+      )}
       <div className="relative">
         {slashPicker}
         <MentionPicker

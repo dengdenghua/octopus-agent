@@ -938,28 +938,6 @@ export const enUS: Translations = {
     turns: (count) => `${count} turns`,
     lastStatus: (status) => `last status: ${status}`,
     updated: (date) => `updated: ${date}`,
-    chatStarters: [
-      {
-        label: "Research a direction",
-        prompt:
-          "Research a niche market worth entering, output opportunities, competitive landscape, risks, and next steps.",
-      },
-      {
-        label: "Plan a task",
-        prompt:
-          "Break this goal into an executable plan, list milestones, risks, and the first step to take today by priority.",
-      },
-      {
-        label: "Write a document",
-        prompt:
-          "Help me write a clear project brief, including background, goals, approach, timeline, and acceptance criteria.",
-      },
-      {
-        label: "Review some code",
-        prompt:
-          "Help me review this code, find potential bugs, edge cases, performance issues, and areas that can be directly improved.",
-      },
-    ],
     panelToggle: {
       close: "Close right panel",
       open: "Open right panel",

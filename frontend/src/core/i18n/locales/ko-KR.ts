@@ -916,28 +916,6 @@ export const koKR: Translations = {
     turns: (count) => `${count}턴`,
     lastStatus: (status) => `마지막 상태: ${status}`,
     updated: (date) => `업데이트: ${date}`,
-    chatStarters: [
-      {
-        label: "방향 조사",
-        prompt:
-          "진입할 가치가 있는 틈새 시장을 조사하고, 기회, 경쟁 구도, 위험, 다음 단계를 출력하세요.",
-      },
-      {
-        label: "작업 계획",
-        prompt:
-          "이 목표를 실행 가능한 계획으로 분해하고, 우선순위별로 마일스톤, 위험, 오늘 할 첫 번째 일을 나열하세요.",
-      },
-      {
-        label: "문서 작성",
-        prompt:
-          "명확한 프로젝트 브리프를 작성해주세요. 배경, 목표, 방법, 타임라인, 수용 기준을 포함하세요.",
-      },
-      {
-        label: "코드 검토",
-        prompt:
-          "이 코드를 검토하고, 잠재적 버그, 엣지 케이스, 성능 문제, 직접 개선할 수 있는 부분을 찾아주세요.",
-      },
-    ],
     panelToggle: {
       close: "오른쪽 패널 닫기",
       open: "오른쪽 패널 열기",

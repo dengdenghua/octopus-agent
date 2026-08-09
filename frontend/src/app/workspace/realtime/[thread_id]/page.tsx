@@ -1,10 +1,8 @@
 import {
   CheckIcon,
   CircleDotIcon,
-  Code2Icon,
   CopyIcon,
   FileTextIcon,
-  ListChecksIcon,
   MessageCircleIcon,
   PanelRightIcon,
   SearchIcon,
@@ -14,7 +12,6 @@ import {
   UsersRoundIcon,
   WifiIcon,
   XIcon,
-  type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -102,6 +99,7 @@ import {
 } from "@/core/agent-modes/presets";
 import { PlanPanel } from "@/components/workspace/plan-panel";
 import { AutomationSubscriptionPanel } from "@/components/workspace/automation/automation-subscription-panel";
+import { PetSettingsMenu } from "@/components/workspace/pet-settings-menu";
 import { Welcome } from "@/components/workspace/welcome";
 import {
   latestPersistedTodoEventsFromMessages,
@@ -322,13 +320,6 @@ const URL_PATTERN = /https?:\/\/[^\s，,]+/gi;
 // deliverable before it can be considered settled.
 const REPORT_DELIVERABLE_PATTERN =
   /deep-research|report|docx|pptx|pdf|research|swarm/i;
-
-const CHAT_STARTER_ICONS: LucideIcon[] = [
-  SearchIcon,
-  ListChecksIcon,
-  FileTextIcon,
-  Code2Icon,
-];
 
 function extractResearchUrls(text: string): { topic: string; urls: string[] } {
   const urls = Array.from(new Set(text.match(URL_PATTERN) ?? []));
@@ -1398,7 +1389,14 @@ function RealtimePageContent({
   );
   const resolvedThreadOwnerAgentId =
     threadOwnerAgentId || hintedThreadOwnerAgentId;
-  const effectiveAgentId = resolvedThreadOwnerAgentId || activeAgentId;
+  // 「助手」侧栏入口使用固定的 octopus-assistant 持久会话（见
+  // workspace-sidebar 的 OCTOPUS_THREAD_ID）。历史上该线程可能因
+  // 创建时选中的 agent 而写入 general 等身份，这里在渲染层强制归位
+  // 为 octopus，避免助手页面被解析成别的 agent；发送层 agent_name
+  // 同源修正存量数据。
+  const effectiveAgentId =
+    (threadId === "octopus-assistant" ? "octopus" : resolvedThreadOwnerAgentId) ||
+    activeAgentId;
   // 助理（octopus）是私人助手本体：不走编码/工作空间工作台，固定进入
   // 纯对话长对话，隐藏工作空间选择器。
   const isOctopusAssistant = effectiveAgentId === "octopus";
@@ -2092,24 +2090,28 @@ function RealtimePageContent({
     }
   }, [queryAgentName, routeAgentName]);
   useEffect(() => {
+    // 使用 effectiveAgentId 而非 resolvedThreadOwnerAgentId：octopus-assistant
+    // 的存量 metadata 可能写的是 general，若据此派发会把 footer 的 active
+    // persona 漂移到别的 agent（「助手跳转别人agent」的另一个来源）。归位后
+    // octopus 与 activeAgentId 相等，自然命中首条守卫而跳过派发。
     if (
-      !resolvedThreadOwnerAgentId ||
-      resolvedThreadOwnerAgentId === activeAgentId ||
-      resolvedThreadOwnerAgentId === "octopus"
+      !effectiveAgentId ||
+      effectiveAgentId === activeAgentId ||
+      effectiveAgentId === "octopus"
     ) {
       return;
     }
     try {
       window.dispatchEvent(
         new CustomEvent(ACTIVE_AGENT_EVENT, {
-          detail: { name: resolvedThreadOwnerAgentId, source: "thread" },
+          detail: { name: effectiveAgentId, source: "thread" },
         }),
       );
     } catch (e) {
       swallow(e, "event");
     }
-    emitAgentChanged(resolvedThreadOwnerAgentId, "thread");
-  }, [activeAgentId, resolvedThreadOwnerAgentId]);
+    emitAgentChanged(effectiveAgentId, "thread");
+  }, [activeAgentId, effectiveAgentId]);
   useEffect(() => {
     const context = settings.context as typeof settings.context & {
       page_agent_memory_mode?: string;
@@ -3520,6 +3522,7 @@ function RealtimePageContent({
                         <Settings2Icon className="size-4" />
                       </Button>
                     )}
+                    {isOctopusAssistant && <PetSettingsMenu />}
                     <RightPanelMenu
                       activePage={activeRightPanel}
                       artifactCount={artifactCount}
@@ -3828,33 +3831,5 @@ function RealtimePageContent({
         </ToolEffectsProvider>
       </ThreadProviders>
     </SubtasksProvider>
-  );
-}
-
-function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
-  const { t } = useI18n();
-  const starters = t.realtime.chatStarters;
-  return (
-    <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-      {starters.map((item, index) => {
-        const Icon = CHAT_STARTER_ICONS[index] ?? SearchIcon;
-        return (
-          <button
-            key={item.label}
-            type="button"
-            onClick={() => onPick(item.prompt)}
-            title={item.prompt}
-            className={cn(
-              "group inline-flex items-center gap-2 rounded-lg border border-transparent bg-transparent px-3.5 py-2 text-sm font-medium text-muted-foreground/80",
-              "transition-all duration-base ease-out hover:-translate-y-0.5 hover:border-border-default hover:bg-card hover:text-foreground hover:shadow-[var(--shadow-sm)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0 active:duration-instant",
-            )}
-          >
-            <Icon className="size-4 text-muted-foreground/70 transition-all duration-base group-hover:scale-110 group-hover:text-primary" />
-            {item.label}
-          </button>
-        );
-      })}
-    </div>
   );
 }

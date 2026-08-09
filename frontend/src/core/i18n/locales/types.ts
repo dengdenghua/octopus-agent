@@ -822,10 +822,6 @@ export interface Translations {
     turns: (count: number) => string;
     lastStatus: (status: string) => string;
     updated: (date: string) => string;
-    chatStarters: {
-      label: string;
-      prompt: string;
-    }[];
     panelToggle: {
       close: string;
       open: string;

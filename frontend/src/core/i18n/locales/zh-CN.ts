@@ -895,28 +895,6 @@ export const zhCN: Translations = {
     turns: (count) => `${count} 轮`,
     lastStatus: (status) => `最后状态：${status}`,
     updated: (date) => `更新于：${date}`,
-    chatStarters: [
-      {
-        label: "调研一个方向",
-        prompt:
-          "调研一个值得进入的细分赛道，输出机会点、竞品格局、风险和下一步行动。",
-      },
-      {
-        label: "规划一项工作",
-        prompt:
-          "把这个目标拆成可执行计划，按优先级列出里程碑、风险和今天要做的第一步。",
-      },
-      {
-        label: "写一份文档",
-        prompt:
-          "帮我写一份清晰的项目说明，包含背景、目标、方案、时间线和验收标准。",
-      },
-      {
-        label: "检查一段代码",
-        prompt:
-          "帮我审查这段代码，找出潜在 bug、边界情况、性能问题和可以直接修改的地方。",
-      },
-    ],
     panelToggle: {
       close: "关闭右侧窗口",
       open: "打开右侧窗口",
