@@ -124,6 +124,17 @@ def _tool_done_public_narrative(
     return None
 
 
+# Diff-viewer tools: their ``diff`` output is a *view* of the current
+# working tree — which may hold other sessions' uncommitted work — not a
+# change this turn actually made. Promoting one into a FileChangeItem makes
+# the verification gate attribute those files to this turn: a pure-read turn
+# that ran ``git diff`` was hard-failed as if it had edited code
+# (see ``tests/test_event_bridge_git_diff_promotion.py``). Only a write
+# tool's own diff (``apply_patch``'s ``diff_preview``) represents a change
+# the turn produced, so the diff-viewer family is excluded here.
+_DIFF_VIEWER_TOOLS: frozenset[str] = frozenset({"git_diff", "git_show"})
+
+
 def _file_change_item_from_tool_evt(evt: dict[str, Any]) -> FileChangeItem | None:
     """Build a structured FileChangeItem from a react_loop ``tool_end`` event.
 
@@ -135,8 +146,12 @@ def _file_change_item_from_tool_evt(evt: dict[str, Any]) -> FileChangeItem | Non
         the shape can emit these directly to avoid a re-parse.
 
     Returns ``None`` when neither is present or both are empty — the
-    caller must not emit an empty FileChangeItem.
+    caller must not emit an empty FileChangeItem. Returns ``None`` for a
+    ``_DIFF_VIEWER_TOOLS`` tool regardless: a read-only diff viewer's output
+    is inspection, never a change this turn made.
     """
+    if evt.get("tool_name") in _DIFF_VIEWER_TOOLS:
+        return None
     raw_diff = evt.get("diff")
     if isinstance(raw_diff, str) and raw_diff.strip():
         changes = parse_unified_diff(raw_diff)
