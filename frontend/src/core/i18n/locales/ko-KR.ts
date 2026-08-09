@@ -3491,6 +3491,12 @@ export const koKR: Translations = {
       paletteAmberDescription: "따뜻한 테라코타, 소박하고 질감 있는.",
       paletteTeal: "슬레이트 틸",
       paletteTealDescription: "낮은 채도의 슬레이트 틸, 스모키하고 차분함.",
+      paletteApricot: "애프리콧",
+      paletteApricotDescription: "부드러운 살구 오렌지, 밝고 온화함.",
+      paletteMint: "민트",
+      paletteMintDescription: "맑은 민트 그린, 가볍고 깔끔함.",
+      paletteGroupSoft: "부드러운",
+      paletteGroupDeep: "차분한",
       paletteCustom: "사용자 지정",
       paletteCustomDescription:
         "원하는 강조색을 직접 골라 실시간 미리보기 후 자동 저장.",

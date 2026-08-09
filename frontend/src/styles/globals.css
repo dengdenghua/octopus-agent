@@ -618,6 +618,124 @@
    token 集合与上方 steel 一致；浅色与深色（[data-theme=xxx].dark）各一套。
    中性色彩度按色相视觉权重调整：暖色相同彩度更显色，故取值低于冷色相。 */
 
+/* apricot → 蜜杏：主色相 42、高明度暖橙粉，中性色相 50 的奶杏底调。
+   与 amber（陶土 40）同色相区但明度高一档、彩度低一档，走柔和路线。 */
+[data-theme="apricot"] {
+  --background: oklch(0.975 0.011 50);
+  --foreground: oklch(0.21 0.012 50);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.012 50);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.012 50);
+  --primary: oklch(0.57 0.15 42);
+  --primary-foreground: oklch(0.99 0.005 42);
+  --secondary: oklch(0.955 0.012 50);
+  --secondary-foreground: oklch(0.31 0.016 50);
+  --muted: oklch(0.95 0.012 50);
+  --muted-foreground: oklch(0.46 0.018 50);
+  --accent: oklch(0.935 0.016 50);
+  --accent-foreground: oklch(0.33 0.024 50);
+  --border: oklch(0.895 0.014 50);
+  --input: oklch(0.925 0.014 50);
+  --ring: oklch(0.61 0.15 42);
+  --sidebar: oklch(0.96 0.013 50);
+  --sidebar-foreground: oklch(0.21 0.012 50);
+  --sidebar-primary: oklch(0.57 0.15 42);
+  --sidebar-primary-foreground: oklch(0.99 0.005 42);
+  --sidebar-accent: oklch(0.93 0.016 50);
+  --sidebar-accent-foreground: oklch(0.33 0.024 50);
+  --sidebar-border: oklch(0.895 0.014 50);
+  --sidebar-ring: oklch(0.61 0.15 42);
+  --chart-1: oklch(0.57 0.15 42);
+}
+[data-theme="apricot"].dark {
+  --background: oklch(0.19 0.011 50);
+  --foreground: oklch(0.94 0.008 50);
+  --card: oklch(0.23 0.011 50);
+  --card-foreground: oklch(0.94 0.008 50);
+  --popover: oklch(0.22 0.011 50);
+  --popover-foreground: oklch(0.94 0.008 50);
+  --primary: oklch(0.79 0.1 42);
+  --primary-foreground: oklch(0.18 0.02 42);
+  --secondary: oklch(0.29 0.013 50);
+  --secondary-foreground: oklch(0.91 0.01 50);
+  --muted: oklch(0.27 0.013 50);
+  --muted-foreground: oklch(0.69 0.016 50);
+  --accent: oklch(0.31 0.017 50);
+  --accent-foreground: oklch(0.91 0.01 50);
+  --border: oklch(0.33 0.013 50);
+  --input: oklch(0.31 0.013 50);
+  --ring: oklch(0.77 0.1 42);
+  --sidebar: oklch(0.21 0.011 50);
+  --sidebar-foreground: oklch(0.94 0.008 50);
+  --sidebar-primary: oklch(0.79 0.1 42);
+  --sidebar-primary-foreground: oklch(0.18 0.02 42);
+  --sidebar-accent: oklch(0.29 0.013 50);
+  --sidebar-accent-foreground: oklch(0.91 0.01 50);
+  --sidebar-border: oklch(0.33 0.013 50);
+  --sidebar-ring: oklch(0.77 0.1 42);
+  --chart-1: oklch(0.79 0.1 42);
+}
+
+/* mint → 薄荷：主色相 162、高明度清透绿，中性色相 168 的雪青底调。
+   与 emerald（松玉 178）区分在明度高一档、色相更偏黄绿，更轻盈。 */
+[data-theme="mint"] {
+  --background: oklch(0.975 0.01 168);
+  --foreground: oklch(0.21 0.013 168);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.013 168);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.013 168);
+  --primary: oklch(0.54 0.13 162);
+  --primary-foreground: oklch(0.99 0.005 162);
+  --secondary: oklch(0.955 0.011 168);
+  --secondary-foreground: oklch(0.31 0.017 168);
+  --muted: oklch(0.95 0.011 168);
+  --muted-foreground: oklch(0.46 0.019 168);
+  --accent: oklch(0.935 0.014 168);
+  --accent-foreground: oklch(0.33 0.026 168);
+  --border: oklch(0.895 0.013 168);
+  --input: oklch(0.925 0.013 168);
+  --ring: oklch(0.58 0.13 162);
+  --sidebar: oklch(0.96 0.012 168);
+  --sidebar-foreground: oklch(0.21 0.013 168);
+  --sidebar-primary: oklch(0.54 0.13 162);
+  --sidebar-primary-foreground: oklch(0.99 0.005 162);
+  --sidebar-accent: oklch(0.93 0.014 168);
+  --sidebar-accent-foreground: oklch(0.33 0.026 168);
+  --sidebar-border: oklch(0.895 0.013 168);
+  --sidebar-ring: oklch(0.58 0.13 162);
+  --chart-1: oklch(0.54 0.13 162);
+}
+[data-theme="mint"].dark {
+  --background: oklch(0.19 0.01 168);
+  --foreground: oklch(0.94 0.008 168);
+  --card: oklch(0.23 0.01 168);
+  --card-foreground: oklch(0.94 0.008 168);
+  --popover: oklch(0.22 0.01 168);
+  --popover-foreground: oklch(0.94 0.008 168);
+  --primary: oklch(0.78 0.095 162);
+  --primary-foreground: oklch(0.18 0.02 162);
+  --secondary: oklch(0.29 0.013 168);
+  --secondary-foreground: oklch(0.91 0.01 168);
+  --muted: oklch(0.27 0.013 168);
+  --muted-foreground: oklch(0.69 0.016 168);
+  --accent: oklch(0.31 0.017 168);
+  --accent-foreground: oklch(0.91 0.01 168);
+  --border: oklch(0.33 0.013 168);
+  --input: oklch(0.31 0.013 168);
+  --ring: oklch(0.76 0.095 162);
+  --sidebar: oklch(0.21 0.01 168);
+  --sidebar-foreground: oklch(0.94 0.008 168);
+  --sidebar-primary: oklch(0.78 0.095 162);
+  --sidebar-primary-foreground: oklch(0.18 0.02 162);
+  --sidebar-accent: oklch(0.29 0.013 168);
+  --sidebar-accent-foreground: oklch(0.91 0.01 168);
+  --sidebar-border: oklch(0.33 0.013 168);
+  --sidebar-ring: oklch(0.76 0.095 162);
+  --chart-1: oklch(0.78 0.095 162);
+}
+
 /* emerald → 松玉（jade）：主色相 178，中性色相 185 的青灰底调。 */
 [data-theme="emerald"] {
   --background: oklch(0.97 0.005 185);
@@ -676,15 +794,16 @@
   --chart-1: oklch(0.74 0.085 178);
 }
 
-/* violet → 藕荷（mauve）：主色相 322，中性色相 320 的紫灰底调。 */
+/* violet → 丁香紫（lilac）：主色相 322，中性色相 320 的紫灰底调。
+   明度提到 0.60 与蔷薇粉/蜜杏/薄荷同档，归入柔和组。 */
 [data-theme="violet"] {
-  --background: oklch(0.97 0.005 320);
+  --background: oklch(0.972 0.009 320);
   --foreground: oklch(0.2 0.013 320);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.2 0.013 320);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.2 0.013 320);
-  --primary: oklch(0.53 0.12 322);
+  --primary: oklch(0.56 0.16 322);
   --primary-foreground: oklch(0.99 0.004 322);
   --secondary: oklch(0.95 0.01 320);
   --secondary-foreground: oklch(0.3 0.017 320);
@@ -694,16 +813,16 @@
   --accent-foreground: oklch(0.32 0.026 320);
   --border: oklch(0.89 0.012 320);
   --input: oklch(0.92 0.012 320);
-  --ring: oklch(0.58 0.12 322);
-  --sidebar: oklch(0.955 0.007 320);
+  --ring: oklch(0.6 0.16 322);
+  --sidebar: oklch(0.957 0.011 320);
   --sidebar-foreground: oklch(0.2 0.013 320);
-  --sidebar-primary: oklch(0.53 0.12 322);
+  --sidebar-primary: oklch(0.56 0.16 322);
   --sidebar-primary-foreground: oklch(0.99 0.004 322);
   --sidebar-accent: oklch(0.92 0.013 320);
   --sidebar-accent-foreground: oklch(0.32 0.026 320);
   --sidebar-border: oklch(0.89 0.012 320);
-  --sidebar-ring: oklch(0.58 0.12 322);
-  --chart-1: oklch(0.53 0.12 322);
+  --sidebar-ring: oklch(0.6 0.16 322);
+  --chart-1: oklch(0.56 0.16 322);
 }
 [data-theme="violet"].dark {
   --background: oklch(0.18 0.01 320);
@@ -712,8 +831,8 @@
   --card-foreground: oklch(0.93 0.007 320);
   --popover: oklch(0.21 0.01 320);
   --popover-foreground: oklch(0.93 0.007 320);
-  --primary: oklch(0.74 0.11 322);
-  --primary-foreground: oklch(0.17 0.02 322);
+  --primary: oklch(0.78 0.115 322);
+  --primary-foreground: oklch(0.18 0.02 322);
   --secondary: oklch(0.28 0.013 320);
   --secondary-foreground: oklch(0.9 0.009 320);
   --muted: oklch(0.26 0.013 320);
@@ -722,16 +841,16 @@
   --accent-foreground: oklch(0.9 0.009 320);
   --border: oklch(0.32 0.013 320);
   --input: oklch(0.3 0.013 320);
-  --ring: oklch(0.72 0.11 322);
+  --ring: oklch(0.76 0.115 322);
   --sidebar: oklch(0.2 0.01 320);
   --sidebar-foreground: oklch(0.93 0.007 320);
-  --sidebar-primary: oklch(0.74 0.11 322);
-  --sidebar-primary-foreground: oklch(0.17 0.02 322);
+  --sidebar-primary: oklch(0.78 0.115 322);
+  --sidebar-primary-foreground: oklch(0.18 0.02 322);
   --sidebar-accent: oklch(0.28 0.013 320);
   --sidebar-accent-foreground: oklch(0.9 0.009 320);
   --sidebar-border: oklch(0.32 0.013 320);
-  --sidebar-ring: oklch(0.72 0.11 322);
-  --chart-1: oklch(0.74 0.11 322);
+  --sidebar-ring: oklch(0.76 0.115 322);
+  --chart-1: oklch(0.78 0.115 322);
 }
 
 /* amber → 陶土（clay）：色相 40。金黄在 AA 对比度下必然压暗成土黄，

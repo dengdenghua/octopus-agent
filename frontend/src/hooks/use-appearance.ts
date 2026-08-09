@@ -24,11 +24,13 @@ export type Density =
 /** 配色主题：rouge = 蔷薇粉（默认），steel = 冷钢蓝，emerald/violet/amber/teal = 高级预设，custom = 用户自定义主色。 */
 export type Palette =
   | "rouge"
-  | "steel"
-  | "emerald"
+  | "apricot"
   | "violet"
-  | "amber"
+  | "mint"
+  | "steel"
   | "teal"
+  | "emerald"
+  | "amber"
   | "custom";
 
 const CORNER_KEY = "octopus-corner-scale";
@@ -164,16 +166,22 @@ function isDensity(value: string | null): value is Density {
   );
 }
 
+/** Single source of truth for valid palette ids — keep in sync with the
+    [data-theme] blocks in globals.css. */
+const PALETTES = [
+  "rouge",
+  "apricot",
+  "violet",
+  "mint",
+  "steel",
+  "teal",
+  "emerald",
+  "amber",
+  "custom",
+] as const satisfies readonly Palette[];
+
 function isPalette(value: string | null): value is Palette {
-  return (
-    value === "rouge" ||
-    value === "steel" ||
-    value === "emerald" ||
-    value === "violet" ||
-    value === "amber" ||
-    value === "teal" ||
-    value === "custom"
-  );
+  return (PALETTES as readonly string[]).includes(value ?? "");
 }
 
 function readPalette(): Palette {

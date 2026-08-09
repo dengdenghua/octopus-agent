@@ -3560,6 +3560,12 @@ export const enUS: Translations = {
       paletteAmberDescription: "Warm terracotta — earthy and tactile.",
       paletteTeal: "Slate Teal",
       paletteTealDescription: "Low-chroma slate teal — smoky and calm.",
+      paletteApricot: "Apricot",
+      paletteApricotDescription: "Soft warm apricot — bright and gentle.",
+      paletteMint: "Mint",
+      paletteMintDescription: "Clear mint green — light and clean.",
+      paletteGroupSoft: "Soft",
+      paletteGroupDeep: "Deep",
       paletteCustom: "Custom",
       paletteCustomDescription:
         "Pick your own accent color — live preview, auto-saved.",

@@ -2896,6 +2896,12 @@ export interface Translations {
       paletteAmberDescription: string;
       paletteTeal: string;
       paletteTealDescription: string;
+      paletteApricot: string;
+      paletteApricotDescription: string;
+      paletteMint: string;
+      paletteMintDescription: string;
+      paletteGroupSoft: string;
+      paletteGroupDeep: string;
       paletteCustom: string;
       paletteCustomDescription: string;
       paletteCustomHint: string;

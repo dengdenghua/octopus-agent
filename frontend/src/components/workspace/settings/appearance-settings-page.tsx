@@ -74,56 +74,92 @@ export default function AppearanceSettingsPage() {
 
   const languageOptions = useLanguageOptions();
 
-  const paletteOptions = useMemo(
+  // Two groups by character: bright/warm ("柔和") vs low-chroma/deep ("沉稳").
+  // Swatch hexes are the computed light-mode --primary of each [data-theme].
+  const paletteGroups = useMemo(
     () =>
       [
         {
-          id: "rouge" as NamedPalette,
-          label: t.settings.appearance.paletteRose,
-          description: t.settings.appearance.paletteRoseDescription,
-          swatch: "#d85164",
+          id: "soft",
+          label: t.settings.appearance.paletteGroupSoft,
+          options: [
+            {
+              id: "rouge" as NamedPalette,
+              label: t.settings.appearance.paletteRose,
+              description: t.settings.appearance.paletteRoseDescription,
+              swatch: "#d85164",
+            },
+            {
+              id: "apricot" as NamedPalette,
+              label: t.settings.appearance.paletteApricot,
+              description: t.settings.appearance.paletteApricotDescription,
+              swatch: "#bd5223",
+            },
+            {
+              id: "violet" as NamedPalette,
+              label: t.settings.appearance.paletteViolet,
+              description: t.settings.appearance.paletteVioletDescription,
+              swatch: "#9e4eab",
+            },
+            {
+              id: "mint" as NamedPalette,
+              label: t.settings.appearance.paletteMint,
+              description: t.settings.appearance.paletteMintDescription,
+              swatch: "#008557",
+            },
+          ],
         },
         {
-          id: "steel" as NamedPalette,
-          label: t.settings.appearance.paletteSteel,
-          description: t.settings.appearance.paletteSteelDescription,
-          swatch: "#4461be",
-        },
-        {
-          id: "emerald" as NamedPalette,
-          label: t.settings.appearance.paletteEmerald,
-          description: t.settings.appearance.paletteEmeraldDescription,
-          swatch: "#167a69",
-        },
-        {
-          id: "violet" as NamedPalette,
-          label: t.settings.appearance.paletteViolet,
-          description: t.settings.appearance.paletteVioletDescription,
-          swatch: "#8c5295",
-        },
-        {
-          id: "amber" as NamedPalette,
-          label: t.settings.appearance.paletteAmber,
-          description: t.settings.appearance.paletteAmberDescription,
-          swatch: "#af5331",
-        },
-        {
-          id: "teal" as NamedPalette,
-          label: t.settings.appearance.paletteTeal,
-          description: t.settings.appearance.paletteTealDescription,
-          swatch: "#377684",
+          id: "deep",
+          label: t.settings.appearance.paletteGroupDeep,
+          options: [
+            {
+              id: "steel" as NamedPalette,
+              label: t.settings.appearance.paletteSteel,
+              description: t.settings.appearance.paletteSteelDescription,
+              swatch: "#4461be",
+            },
+            {
+              id: "teal" as NamedPalette,
+              label: t.settings.appearance.paletteTeal,
+              description: t.settings.appearance.paletteTealDescription,
+              swatch: "#377684",
+            },
+            {
+              id: "emerald" as NamedPalette,
+              label: t.settings.appearance.paletteEmerald,
+              description: t.settings.appearance.paletteEmeraldDescription,
+              swatch: "#167a69",
+            },
+            {
+              id: "amber" as NamedPalette,
+              label: t.settings.appearance.paletteAmber,
+              description: t.settings.appearance.paletteAmberDescription,
+              swatch: "#af5331",
+            },
+          ],
         },
       ] satisfies {
-        id: NamedPalette;
+        id: string;
         label: string;
-        description: string;
-        swatch: string;
+        options: {
+          id: NamedPalette;
+          label: string;
+          description: string;
+          swatch: string;
+        }[];
       }[],
     [
       t.settings.appearance.paletteAmber,
       t.settings.appearance.paletteAmberDescription,
+      t.settings.appearance.paletteApricot,
+      t.settings.appearance.paletteApricotDescription,
       t.settings.appearance.paletteEmerald,
       t.settings.appearance.paletteEmeraldDescription,
+      t.settings.appearance.paletteGroupDeep,
+      t.settings.appearance.paletteGroupSoft,
+      t.settings.appearance.paletteMint,
+      t.settings.appearance.paletteMintDescription,
       t.settings.appearance.paletteRose,
       t.settings.appearance.paletteRoseDescription,
       t.settings.appearance.paletteSteel,
@@ -194,17 +230,24 @@ export default function AppearanceSettingsPage() {
         title={t.settings.appearance.paletteTitle}
         description={t.settings.appearance.paletteDescription}
       >
-        <div className="flex flex-wrap items-center gap-2">
-          {paletteOptions.map((option) => (
-            <PaletteSwatchButton
-              key={option.id}
-              label={option.label}
-              description={option.description}
-              active={palette === option.id}
-              swatch={option.swatch}
-              onSelect={() => setPalette(option.id)}
-            />
+        <div className="space-y-3">
+          {paletteGroups.map((group) => (
+            <div key={group.id} className="flex flex-wrap items-center gap-2">
+              <span className="w-10 shrink-0 text-xs text-muted-foreground">{group.label}</span>
+              {group.options.map((option) => (
+                <PaletteSwatchButton
+                  key={option.id}
+                  label={option.label}
+                  description={option.description}
+                  active={palette === option.id}
+                  swatch={option.swatch}
+                  onSelect={() => setPalette(option.id)}
+                />
+              ))}
+            </div>
           ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <PaletteSwatchButton
             label={t.settings.appearance.paletteCustom}
             active={palette === "custom"}

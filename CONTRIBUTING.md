@@ -12,6 +12,12 @@ make test        # 或 python -m pytest tests/ -q
 
 目标：**测试全绿 · lint 0 error**。
 
+> **已知环境限制**：`tests/test_agents_router.py` 的 local-partner 测试
+> （`registered_count` 期望 1）依赖对真实 CLI（Claude Code / Codex / Trae / Qoder）
+> 的 readiness 探测。在未安装这些 CLI 或网络受限的沙箱 / CI 环境中，探测不通过
+> 会导致这 2 条测试失败——这是环境限制，不是回归；本地安装对应 CLI 后即恢复通过。
+> 跑全量测试前请先确认环境具备对应 CLI，避免把环境红误判为代码回归。
+
 ## 提交前硬性要求
 
 - [ ] `python -m pytest tests/` 全绿

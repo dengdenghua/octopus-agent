@@ -3549,6 +3549,12 @@ export const jaJP: Translations = {
       paletteTeal: "スレートティール",
       paletteTealDescription:
         "低彩度のスレートティール。スモーキーで静か。",
+      paletteApricot: "アプリコット",
+      paletteApricotDescription: "柔らかな杏オレンジ。明るく穏やか。",
+      paletteMint: "ミント",
+      paletteMintDescription: "澄んだミントグリーン。軽やかで清潔感。",
+      paletteGroupSoft: "やわらか",
+      paletteGroupDeep: "深み",
       paletteCustom: "カスタム",
       paletteCustomDescription:
         "お好みのアクセントカラーを選択。プレビュー付きで自動保存。",
