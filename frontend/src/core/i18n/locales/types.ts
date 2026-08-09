@@ -3278,6 +3278,7 @@ export interface Translations {
     };
     networkTitle: string;
     networkDesc: string;
+    presetDomainsNote: string;
     toastNetworkSwitched: (label: string) => string;
     network: {
       deny: {

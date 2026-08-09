@@ -7731,6 +7731,7 @@ export const koKR: Translations = {
     },
     networkTitle: "네트워크 액세스",
     networkDesc: "샌드박스 내 명령의 네트워크 범위: 기본적으로 모델 추론 엔드포인트만 연결할 수 있습니다. '일반 도메인'은 개발 도구 도메인을 추가로 허용합니다.",
+    presetDomainsNote: "'일반 도메인' 단계에서 사전 허용되는 개발 도구 도메인(읽기 전용):",
     toastNetworkSwitched: (label: string) => `네트워크 액세스를 '${label}'(으)로 전환했습니다`,
     network: {
       deny: {

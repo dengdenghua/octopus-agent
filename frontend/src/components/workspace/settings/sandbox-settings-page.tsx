@@ -8,6 +8,48 @@ import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
 
+/**
+ * Read-only mirror of the backend pre-bundled dev-tool allowlist
+ * (runtime/safety/sandboxing/sandbox.py DEFAULT_EGRESS_DOMAINS). Shown so
+ * users know exactly what the "common domains" tier permits; editing is
+ * intentionally not exposed (pre-bundled by design — see the three-tier
+ * network decision). Keep in sync with the backend list.
+ */
+const PRESET_EGRESS_DOMAINS: readonly string[] = [
+  // npm / frontend tooling
+  "registry.npmjs.org",
+  "registry.npmmirror.com",
+  "yarnpkg.com",
+  "registry.yarnpkg.com",
+  "cdn.jsdelivr.net",
+  "unpkg.com",
+  // pip / python
+  "pypi.org",
+  "files.pythonhosted.org",
+  "pypi.tuna.tsinghua.edu.cn",
+  "mirrors.aliyun.com",
+  // git
+  "github.com",
+  "codeload.github.com",
+  "raw.githubusercontent.com",
+  "gitee.com",
+  // apt / system packages
+  "archive.ubuntu.com",
+  "security.ubuntu.com",
+  // rust
+  "crates.io",
+  "index.crates.io",
+  "static.crates.io",
+  // go
+  "proxy.golang.org",
+  "goproxy.cn",
+  // other dev tools
+  "playwright.download.prss.microsoft.com",
+  "cdn.playwright.dev",
+  "repo1.maven.org",
+  "central.sonatype.com",
+];
+
 type ExecutionEnvironment = "sandbox" | "local";
 type SandboxPermissionMode = "default" | "acceptEdits" | "bypassPermissions";
 type NetworkTier = "deny" | "common" | "full";
@@ -238,6 +280,23 @@ export default function SandboxSettingsPage() {
               );
             })}
           </div>
+          {networkTier === "common" && (
+            <div className="mt-3">
+              <p className="text-xs text-muted-foreground">
+                {copy.presetDomainsNote}
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {PRESET_EGRESS_DOMAINS.map((domain) => (
+                  <span
+                    key={domain}
+                    className="rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+                  >
+                    {domain}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ─── Reply style (personality module) ─── */}

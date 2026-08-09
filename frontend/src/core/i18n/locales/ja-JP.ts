@@ -7840,6 +7840,7 @@ export const jaJP: Translations = {
     },
     networkTitle: "ネットワークアクセス",
     networkDesc: "サンドボックス内コマンドのネットワーク範囲：既定ではモデル推論エンドポイントのみ到達可能。「一般ドメイン」は開発ツールのドメインを追加で許可します。",
+    presetDomainsNote: "「一般ドメイン」で事前許可される開発ツールドメイン（読み取り専用）：",
     toastNetworkSwitched: (label: string) => `ネットワークアクセスを「${label}」に切り替えました`,
     network: {
       deny: {

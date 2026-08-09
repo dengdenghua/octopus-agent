@@ -7856,6 +7856,8 @@ Strategy:
     networkTitle: "Network access",
     networkDesc:
       "Network scope for sandboxed commands: by default only model inference stays reachable; the “Common domains” tier additionally pre-allows dev-tool hosts.",
+    presetDomainsNote:
+      "Dev-tool domains pre-allowed by the “Common domains” tier (read-only):",
     toastNetworkSwitched: (label: string) => `Network access switched to “${label}”`,
     network: {
       deny: {

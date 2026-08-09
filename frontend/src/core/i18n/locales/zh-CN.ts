@@ -7445,6 +7445,7 @@ export const zhCN: Translations = {
     },
     networkTitle: "网络访问",
     networkDesc: "沙箱内命令的网络范围：默认仅推理端点可达；「常用域名」额外放行 npm/pip/git 等开发工具域名。",
+    presetDomainsNote: "「常用域名」档预置放行的开发工具域名（只读）：",
     toastNetworkSwitched: (label: string) => `网络访问已切换为「${label}」`,
     network: {
       deny: {
