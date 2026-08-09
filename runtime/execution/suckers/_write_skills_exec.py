@@ -35,6 +35,102 @@ from ._write_skills_common import (
     _parse_command,
 )
 
+# Read-only git subcommands. exec_shell is classified as a mutating tool
+# (affinity ``exec``/``dangerous``), so in sandbox mode its explicit ``cwd``
+# is confined to the sandbox workdir and a ``git status`` aimed at the
+# workspace root fails with ``path_escapes_sandbox``. The git READ skills
+# (git_status/git_diff/git_log) already run at the workspace root in sandbox
+# mode — their affinity is ``read``, so the executor injects the workspace
+# as their sandbox. A raw read-only ``git`` command via exec_shell should get
+# the same treatment: rewrite it to ``git -C <root> …`` so the process itself
+# stays sandbox-confined (writes outside the workdir are denied by the
+# backend) while git inspects the repo the agent pointed at.
+#
+# Misclassification is fail-safe: a subcommand not in this set is left alone
+# (stays confined to the workdir); a read-looking name whose git alias mutates
+# still gets its writes denied by the sandbox backend, which is the real
+# security boundary here.
+_READ_ONLY_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
+    {
+        "status",
+        "diff",
+        "log",
+        "show",
+        "blame",
+        "shortlog",
+        "whatchanged",
+        "grep",
+        "ls-files",
+        "ls-tree",
+        "rev-parse",
+        "rev-list",
+        "for-each-ref",
+        "show-ref",
+        "diff-index",
+        "diff-tree",
+        "name-rev",
+        "merge-base",
+        "describe",
+        "count-objects",
+        "check-ignore",
+        "check-ref-format",
+        "check-attr",
+    }
+)
+
+
+def _is_read_only_git_argv(argv: list[str]) -> bool:
+    """True when ``argv`` is ``git <read-only subcommand>``.
+
+    Tolerates git's global options before the subcommand: ``-C <dir>`` /
+    ``-c <k=v>`` (value-taking) and bare flags like ``--no-pager`` /
+    ``--paginate``. Unknown subcommands return False, so they stay confined.
+    """
+    if not argv or argv[0] not in {"git", "git.exe"}:
+        return False
+    i = 1
+    while i < len(argv):
+        tok = argv[i]
+        if tok in {"-C", "-c"} and i + 1 < len(argv):
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        return tok in _READ_ONLY_GIT_SUBCOMMANDS
+    return False
+
+
+def _read_only_git_rewrite(
+    argv: list[str],
+    cwd: str | None,
+    sandbox_dir: str | None,
+) -> tuple[list[str], str | None] | None:
+    """Rewrites a read-only ``git`` command aimed outside the sandbox.
+
+    When a read-only ``git`` command requests a ``cwd`` outside the sandbox
+    workdir (the workspace root, in sandbox mode), returns
+    ``(["git", "-C", <root>, …], None)`` — the process then runs at the
+    sandbox root while git's working directory is the requested root, so
+    sandboxed inspection of the real repo works without relaxing write
+    confinement. Returns ``None`` when no rewrite applies (not read-only git,
+    no sandbox, or the cwd is already inside the sandbox).
+    """
+    if not sandbox_dir or not cwd or not _is_read_only_git_argv(argv):
+        return None
+    try:
+        root = Path(cwd).expanduser()
+        if not root.is_absolute():
+            root = Path(sandbox_dir).expanduser() / root
+        root = root.resolve(strict=False)
+        work = Path(sandbox_dir).expanduser().resolve(strict=False)
+    except (OSError, ValueError):
+        return None
+    if root == work or root.is_relative_to(work):
+        # Already inside the sandbox — no rewrite needed.
+        return None
+    return ["git", "-C", str(root), *argv[1:]], None
+
 
 def _exec_shell(
     command: str | list[str] = "",
@@ -63,6 +159,15 @@ def _exec_shell(
     if parse_error:
         return {"error": parse_error}
     assert argv is not None
+
+    # Read-only git inspection may target the workspace root, which in
+    # sandbox mode sits outside the sandbox workdir (path_escapes_sandbox
+    # otherwise). Rewrite to ``git -C <root> …`` so the process stays
+    # sandbox-confined while git inspects the requested root.
+    if cwd is not None:
+        rewritten = _read_only_git_rewrite(argv, cwd, sandbox_dir)
+        if rewritten is not None:
+            argv, cwd = rewritten
 
     if cwd is not None:
         resolved_cwd, err = _ensure_sandbox(cwd, sandbox_dir)
