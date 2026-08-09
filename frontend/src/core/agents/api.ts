@@ -5,7 +5,10 @@ import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import type { Agent, CreateAgentRequest, UpdateAgentRequest } from "./types";
 
 const BACKEND_UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
-const HIDDEN_AGENT_IDS = new Set(["admin", "desktop_operator"]);
+// Only the system-level admin persona is hidden from the agent list;
+// desktop_operator (Raven) is a first-class user-facing CUA persona
+// since #22 (CUA productization).
+const HIDDEN_AGENT_IDS = new Set(["admin"]);
 
 export class AgentNameCheckError extends Error {
   constructor(

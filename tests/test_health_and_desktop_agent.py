@@ -67,12 +67,12 @@ class TestDesktopOperatorAgent:
         # Implementation note.
         assert agent.can_use("read_file")
 
-    def test_not_in_default_preset_list(self):
-        """desktop_operator is a special persona, not part of the default roster."""
+    def test_is_part_of_default_preset_list(self):
+        """desktop_operator is a first-class persona since #22 (CUA productization)."""
         from runtime.execution.agents import make_all_agent_presets
 
         roster_ids = {getattr(a, "agent_id", None) for a in make_all_agent_presets(_rt())}
-        assert "desktop_operator" not in roster_ids
+        assert "desktop_operator" in roster_ids
 
     def test_general_agent_has_desktop_arm(self):
         """Implementation note."""

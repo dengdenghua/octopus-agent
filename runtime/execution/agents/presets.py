@@ -48,12 +48,12 @@ def make_ecommerce_mind_agent(runtime: GraphRuntime) -> Agent:
 
 
 def make_desktop_operator_agent(runtime: GraphRuntime) -> Agent:
-    """Construct the legacy standalone desktop-operator agent.
+    """Construct the desktop-operator (Raven) persona agent.
 
-    Not auto-registered — desktop capability is primarily exposed as the
-    ``desktop_operator`` arm inside the ``general`` agent. This factory
-    remains for tests and tools that explicitly request a persona-bound
-    desktop agent; the folder lives at ``agents/desktop_operator/``.
+    Since #22 (CUA productization) this is a first-class user-facing
+    persona again and is auto-registered via ``load_all_agents`` from its
+    ``agents/desktop_operator/`` folder. This factory remains for callers
+    that explicitly request the persona by id.
     """
     return _load_one("desktop_operator", runtime)
 
@@ -75,6 +75,7 @@ def make_all_agent_presets(runtime: GraphRuntime) -> list[Agent]:
     operations and is intentionally excluded from the default preset
     roster so normal registry routing is not skewed toward admin.
     Call ``make_admin_agent()`` explicitly when that persona is needed.
+    ``desktop_operator`` IS part of the roster (first-class CUA persona).
     """
     return [
         agent for agent in load_all_agents(runtime) if getattr(agent, "agent_id", None) != "admin"

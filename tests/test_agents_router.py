@@ -128,7 +128,7 @@ class TestListAgents:
         app.include_router(create_agents_router(registry=AgentRegistry()))
         assert TestClient(app).get("/api/agents").json() == []
 
-    def test_system_and_capability_agents_are_hidden_from_list(self):
+    def test_system_agent_is_hidden_from_list(self):
         registry = AgentRegistry()
         registry.register(
             Agent(
@@ -148,11 +148,13 @@ class TestListAgents:
                 arms=ArmPool([make_web_read_arm(_rt())]),
             )
         )
+        # desktop_operator is a user-facing CUA persona since #22 — it
+        # must NOT be hidden from the gallery.
         registry.register(
             Agent(
                 agent_id="desktop_operator",
                 display_name="Desktop Operator",
-                description="[legacy] desktop automation persona",
+                description="desktop automation persona",
                 soul="",
                 arms=ArmPool([make_web_read_arm(_rt())]),
             )
@@ -162,7 +164,7 @@ class TestListAgents:
 
         data = TestClient(app).get("/api/agents").json()
 
-        assert [agent["name"] for agent in data] == ["general"]
+        assert [agent["name"] for agent in data] == ["general", "desktop_operator"]
 
 
 # ═══════════════════════════════════════════════════════════

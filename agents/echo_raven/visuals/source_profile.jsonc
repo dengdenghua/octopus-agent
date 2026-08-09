@@ -1,11 +1,8 @@
 // Octopus Agent profile · desktop_operator.
 //
-// DEPRECATED as a standalone persona — desktop control is a *capability*
-// (the `desktop_operator` arm, now folded into Octopus/general). This
-// folder exists for backward compatibility with tests + tooling that
-// still construct the old standalone agent. `make_all_agent_presets`
-// skips this agent through loader policy; callers who want it must call
-// `make_desktop_operator_agent(runtime)` explicitly.
+// Raven (夜鸦) — first-class user-facing desktop-automation persona
+// (see agents/desktop_operator/profile.jsonc). This visuals source
+// mirrors the profile for the echo_raven avatar pipeline.
 
 {
   "id": "desktop_operator",

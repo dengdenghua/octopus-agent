@@ -60,13 +60,10 @@ function effectiveModelId() {
 // Section logic.
 let currentModel = LS.get('octopus.model') || 'molili';
 // Section logic.
-const LEGACY_AGENT_IDS = new Set(['desktop_operator']);
+// desktop_operator was briefly treated as a legacy/deprecated agent id;
+// since #22 (CUA productization) it is a first-class persona again, so
+// the stored-agent cleanup below no longer removes it.
 let _storedAgent = LS.get('octopus.agent') || 'general';
-if (LEGACY_AGENT_IDS.has(_storedAgent)) {
-  console.info('[octopus] 清理弃用 agent:', _storedAgent);
-  LS.del('octopus.agent');
-  _storedAgent = 'general';
-}
 let currentAgent = _storedAgent;
 let modelSource = LS.get('octopus.modelSource') || 'builtin';
 let availableAgents = [];

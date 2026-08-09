@@ -10,6 +10,7 @@ from runtime.execution.agents import (
     AgentRegistry,
     make_all_agent_presets,
     make_coder_agent,
+    make_desktop_operator_agent,
     make_ecommerce_mind_agent,
     make_general_agent,
     make_vibe_selling_agent,
@@ -27,15 +28,16 @@ def _fake_runtime():
     return GraphRuntime(executor=_FakeExecutor(), journal=None)
 
 
-# The default user-facing preset factories. desktop_operator and admin are
-# special personas excluded from the default roster (see presets.py), so they
-# are not listed here — mirrors the old _PRESET_FACTORIES, which the
-# preset refactor replaced with disk-driven make_all_agent_presets().
+# The default user-facing preset factories. admin is a special system
+# persona excluded from the default roster (see presets.py), so it is
+# not listed here. desktop_operator IS first-class since #22 (CUA
+# productization), so it is included.
 _PRESET_FACTORIES = [
     make_general_agent,
     make_coder_agent,
     make_vibe_selling_agent,
     make_ecommerce_mind_agent,
+    make_desktop_operator_agent,
 ]
 
 

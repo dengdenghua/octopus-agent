@@ -1044,7 +1044,10 @@ const SHOW_LOCAL_AGENT_LIBRARY = true;
 const SHOW_ENTERPRISE_ASSETS = false;
 // Hub shows all available agents (installed + installable).
 const LOCAL_LIBRARY_INSTALLED_ONLY = false;
-const HIDDEN_LOCAL_AGENT_IDS = new Set(["admin", "desktop_operator"]);
+// Only the system-level admin persona is hidden from the hub;
+// desktop_operator (Raven) is a first-class user-facing CUA persona
+// since #22 (CUA productization).
+const HIDDEN_LOCAL_AGENT_IDS = new Set(["admin"]);
 
 export function AgentWorldUnified() {
   const { t } = useI18n();

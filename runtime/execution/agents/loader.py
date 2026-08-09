@@ -577,15 +577,12 @@ def load_agent(agent_dir: Path, runtime: GraphRuntime, shared_dir: Path) -> Agen
     return instantiate(parse_template(agent_dir, shared_dir), runtime)
 
 
-_LOAD_ALL_SKIP_IDS = frozenset(
-    {
-        # `desktop_operator` is kept on disk for backward-compat tests
-        # (see presets.make_desktop_operator_agent) but NOT auto-registered
-        # into the agent registry — desktop capability is primarily an arm
-        # of the `general` agent, not a standalone persona.
-        "desktop_operator",
-    }
-)
+# No agent ids are skipped from directory auto-registration anymore.
+# `desktop_operator` (the Raven persona) was previously excluded because
+# desktop capability lived as an arm of `general`; since #22 (CUA
+# productization) it is a first-class user-facing persona again and is
+# loaded from its agents/desktop_operator/ folder like any other preset.
+_LOAD_ALL_SKIP_IDS: frozenset[str] = frozenset()
 
 
 def load_all_agents(

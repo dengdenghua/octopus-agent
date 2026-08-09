@@ -97,7 +97,7 @@ tier: "core"
 | `react_todo_protocol_guards.py` | Todo-protocol and completion-phrase guards. |
 | `react_types.py` | — |
 | `react_verification_guards.py` | Verification-completeness guards for ReAct code-mode turns. |
-| `reply_styles.py` | Reply-style registry: user-facing response decoration is a selectable dimension, mirroring WorkBuddy's ``style/`` template set (professional / friendly / socratic / ...). The content here is behaviour guidance injected into the system prompt as a ``<reply-style>`` section — separate from the core ca |
+| `reply_styles.py` | Reply-style registry: user-facing response decoration is a selectable dimension, mirroring WorkBuddy's ``style/`` template set (professional / friendly / socratic / ...) and Codex's four-part personality templates (personality / values / tone / escalation). |
 | `resume_cli.py` | CLI for inspecting + driving ReAct checkpoint resume (P3 long-task durability). |
 | `rewind.py` | Turn-scoped rewind · roll a task back to a prior checkpoint anchor. |
 | `rules_persistence.py` | — |
@@ -355,7 +355,7 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def reply_style_prompt(style)` | Return the ``<reply-style>`` section for ``style``, or ``None`` when the style is unset/unknown (the assembly layer then injects nothing). |
+| func | `def reply_style_prompt(style)` | Return the ``<reply-style>`` section for ``style`` (four-part personality module), or ``None`` when the style is unset/unknown. |
 | func | `def is_reply_style(name)` | True when ``name`` is a registered style. |
 
 ### `resume_cli.py`

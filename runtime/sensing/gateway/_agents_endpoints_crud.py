@@ -61,9 +61,10 @@ def _register_agents_crud(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> N
     _require_admin = auth.require_admin
 
     # Agent IDs that should not appear in the agent gallery/picker.
-    # These agents are system-level or capability-only and have their own
-    # dedicated entry points.
-    _AGENT_GALLERY_SKIP_IDS = frozenset({"admin", "desktop_operator"})  # noqa: N806
+    # ``admin`` is system-level (code-mode privileged persona) and has its
+    # own dedicated entry point. ``desktop_operator`` IS user-facing since
+    # #22 (CUA productization) — the Raven persona shows in the picker.
+    _AGENT_GALLERY_SKIP_IDS = frozenset({"admin"})  # noqa: N806
 
     @router.get("/api/agents")
     def list_agents(request: Request) -> list[AgentWire]:
