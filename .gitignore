@@ -88,6 +88,8 @@ appliance-auth.json
 .octopus-home/
 .octopus-tmp/
 .octopus-work/
+.octopus-cache/
+.octopus-data/
 .octopus/*.json
 .octopus/*.jsonl
 .octopus/*.bak
