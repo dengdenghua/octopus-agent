@@ -1163,10 +1163,11 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(screen.queryByText("已调用")).not.toBeInTheDocument();
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
-    // The entire raw reasoning payload is private, including narration around
-    // an Action callback. Only explicit public summaries may enter the UI.
+    // The raw reasoning trace is now surfaced as a thinking row (streaming
+    // UX: what the user saw live stays visible on replay), but only the
+    // Thought narration survives — the Action callback body is stripped.
     expect(screen.queryByText("继续检查输出文件。")).not.toBeInTheDocument();
-    expect(screen.queryByText("先整理报告结构。")).not.toBeInTheDocument();
+    expect(screen.getByText("先整理报告结构。")).toBeInTheDocument();
     expect(screen.queryByText("执行动作")).not.toBeInTheDocument();
     expect(screen.queryByText("整理调研结果")).not.toBeInTheDocument();
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();

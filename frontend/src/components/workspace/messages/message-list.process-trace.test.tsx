@@ -1152,7 +1152,7 @@ describe("MessageList reasoning privacy", () => {
     expect(screen.queryByText(/SOUL\.md/)).not.toBeInTheDocument();
   });
 
-  test("keeps raw reasoning-only streaming messages private", () => {
+  test("surfaces a reasoning-only streaming message as a thinking row", () => {
     const leakedReasoning =
       "好的，用户之前发了很长一段关于我是Octopus的系统指令，现在又发了当前日期，我应该先判断是否需要工具。";
     const assistant: AIMessage = {
@@ -1171,8 +1171,12 @@ describe("MessageList reasoning privacy", () => {
 
     renderMessageList({ thread, locale: "zh-CN" });
 
-    expect(screen.queryByText(/系统指令/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/当前日期/)).not.toBeInTheDocument();
+    // Streaming UX: what the user saw live (thinking row) stays visible on
+    // replay — raw reasoning is no longer hidden. The row is collapsible
+    // and dimmed (inner chain-of-thought), while the pulse still indicates
+    // the answer is on its way.
+    expect(screen.getByText(/系统指令/)).toBeInTheDocument();
+    expect(screen.getByText(/当前日期/)).toBeInTheDocument();
     expect(
       screen.getByTestId("conversation-activity-pulse"),
     ).toBeInTheDocument();

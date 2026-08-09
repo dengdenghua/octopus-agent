@@ -2650,6 +2650,64 @@ function extractPublicReasoningSummary(message: Message): string | null {
   return extractExplicitPublicReasoningSummary(message);
 }
 
+/**
+ * Read the provider thinking that the realtime adapter persisted on the
+ * AIMessage (`additional_kwargs.reasoning_content`). The historical render
+ * path aligns with live streaming: thinking the user chose to see during the
+ * turn (typewriter + collapsible row) must stay visible when the thread is
+ * replayed. public_progress messages are exempt — their message.content is
+ * the narrator-authored public text and raw reasoning would duplicate it.
+ */
+function extractRawReasoningContent(message: Message): string | null {
+  if (message.type !== "ai") return null;
+  const raw = message.additional_kwargs?.reasoning_content;
+  let text: string | null = null;
+  if (typeof raw === "string" && raw.trim()) {
+    text = raw.trim();
+  } else if (Array.isArray(raw)) {
+    const joined = raw
+      .filter(
+        (part): part is string =>
+          typeof part === "string" && Boolean(part.trim()),
+      )
+      .join("\n");
+    text = joined.trim() || null;
+  }
+  if (!text) return null;
+  return stripReactProtocolBlocks(text);
+}
+
+// ReAct-style trace labels. Thought blocks are the user-facing thinking;
+// Action / Observation / Final Answer blocks are internal tool protocol and
+// must be dropped entirely (their bodies are tool args + raw tool output).
+const REACT_BLOCK_START_RE =
+  /^\s*(?:Thought|Action|Observation|Final Answer|Tool|Tool Result)\s*:/;
+
+/**
+ * Drop Action/Observation/Final-Answer blocks from a raw reasoning trace,
+ * keeping only the Thought narration (labels are stripped downstream by
+ * redactPublicProcessText). Plain prose reasoning without ReAct labels is
+ * returned untouched.
+ */
+function stripReactProtocolBlocks(text: string): string | null {
+  const lines = text.split(/\r?\n/);
+  const kept: string[] = [];
+  let inProtocolBlock = false;
+  for (const line of lines) {
+    if (REACT_BLOCK_START_RE.test(line)) {
+      inProtocolBlock = !/^\s*Thought\s*:/.test(line);
+      if (!inProtocolBlock) {
+        kept.push(line);
+      }
+      continue;
+    }
+    if (inProtocolBlock) continue;
+    kept.push(line);
+  }
+  const joined = kept.join("\n").trim();
+  return joined || null;
+}
+
 export function convertToSteps(messages: Message[]): CoTStep[] {
   const steps: CoTStep[] = [];
   const seenPublicNarrative = new Set<string>();
@@ -2820,18 +2878,20 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
         seenToolCallIds.add(toolCall.id);
         return true;
       });
-      // Raw reasoning_content is private model state. It must never be used
-      // to invent public "thinking" or execution rows. Only an explicitly
-      // public summary, public checkpoint, or an actual tool call belongs in
-      // the conversation timeline.
+      // Raw reasoning_content used to be treated as private model state that
+      // must never invent public "thinking" rows. With streaming UX, the user
+      // chose to see thinking live (typewriter + collapsible row), so the
+      // historical replay must stay consistent — fall back to the persisted
+      // reasoning_content when no explicit public summary protocol exists.
+      // public_progress messages keep the protocol-only lane (their content
+      // IS the public narrator text). The render layer applies
+      // isOutwardFacingThinking() to decide brightness/collapse.
       const publicReasoning = extractPublicReasoningSummary(message);
       const isPublicProgress =
         message.additional_kwargs?.public_progress === true;
-      // The public lane is protocol-driven. Ordinary assistant content may be
-      // an answer preamble, a provider callback, or a final answer; guessing
-      // its role from wording creates duplicate narration. Only explicitly
-      // public summaries/checkpoints become process events.
-      const reasoningText = publicReasoning;
+      const reasoningText =
+        publicReasoning ||
+        (!isPublicProgress ? extractRawReasoningContent(message) : null);
       const reasoningChunks = dedupeTimelineChunks(
         reasoningText
           ? splitReasoningIntoTimelineChunks(reasoningText)
