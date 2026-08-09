@@ -660,10 +660,17 @@ class _ReactBridgeState:
             except Exception:  # noqa: BLE001
                 _logger.debug("background command watcher failed", exc_info=True)
 
-        self.background_tasks.append(asyncio.create_task(_watch_background()))
+        _bg_task = asyncio.create_task(_watch_background())
+        # Tag the watcher task with the background command so turn
+        # finalization can tell "the model delegated verification" from an
+        # unrelated watcher/server still running, when deciding whether to
+        # close unverified code as completed-with-background.
+        with contextlib.suppress(Exception):
+            _bg_task.set_name(f"octopus-background:{str(item.command or '')[:200]}")
+        self.background_tasks.append(_bg_task)
         if self._on_background_task_start is not None:
             with contextlib.suppress(Exception):
-                self._on_background_task_start(self.background_tasks[-1])
+                self._on_background_task_start(_bg_task)
 
     async def complete_tool(
         self,

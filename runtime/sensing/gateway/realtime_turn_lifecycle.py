@@ -19,6 +19,7 @@ from runtime.protocol import (
 )
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.sensing.gateway._realtime_turn_lifecycle_helpers import (
+    _background_task_is_verification,
     _inject_cowork_turn_plan,
     _turn_has_observable_output,
 )
@@ -65,6 +66,13 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
 _logger = logging.getLogger(__name__)
+
+# Bounded window (seconds) the turn verifier waits for an in-flight
+# background verification task (background_exec) before closing the turn.
+# The model may hand verification to a background task and return while it
+# is still running; failing with "verification required" then would blame
+# the model for work that is genuinely still finishing.
+_BACKGROUND_VERIFY_WAIT_S = 180.0
 
 
 async def _start_turn(
@@ -757,6 +765,37 @@ async def _start_turn(
                 return turn
 
         if _turn_has_unverified_code_changes(turn):
+            # ── Await in-flight background verification ─────────────
+            # The model may have handed verification to a background task
+            # (background_exec) that is still running when the loop
+            # returned. Failing with "verification required" while those
+            # tasks are in flight would blame the model for work that is
+            # genuinely still finishing. Wait a bounded window for their
+            # outcome; if one is still running afterwards, close the turn
+            # as completed-with-background (the verifier keeps running)
+            # instead of a spurious verification-required failure.
+            pending_bg_tasks = [
+                task
+                for task in runtime._thread_background_tasks.get(thread_id, [])
+                if not task.done()
+            ]
+            # Only bypass the gate when a pending task is plausibly the
+            # delegated verification itself. An unrelated watcher / dev
+            # server / poller still running is not a reason to silently
+            # green unverified code — in that case fall through to the
+            # normal verification gate below.
+            if any(_background_task_is_verification(task.get_name()) for task in pending_bg_tasks):
+                await asyncio.wait(
+                    pending_bg_tasks,
+                    timeout=_BACKGROUND_VERIFY_WAIT_S,
+                )
+                if any(not task.done() for task in pending_bg_tasks):
+                    turn.status = TurnStatus.COMPLETED
+                    turn.outcome_reason = "completed_with_background"
+                    log.turn_completed(thread_id, turn.id, turn.status)
+                    runtime._snapshot_to_thread_store(thread_id, log, intent)
+                    return turn
+
             code_change_paths = _code_change_paths(turn)
             verification_plan = _verification_plan_for_code_paths(
                 code_change_paths,

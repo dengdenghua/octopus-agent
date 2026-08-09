@@ -11,11 +11,55 @@ under the god-file line budget.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from runtime.protocol import ItemType, Turn
 
 _logger = logging.getLogger(__name__)
+
+# Commands that plausibly run verification on the code the turn changed.
+# Used by ``_background_task_is_verification`` so turn finalization only
+# closes unverified code as completed-with-background when the model actually
+# delegated verification to a background task — not when an unrelated
+# watcher / dev-server / poller happens to still be running.
+_VERIFICATION_COMMAND_HINTS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(^|\s)(pytest|tox|nox)\b"),
+    re.compile(r"(^|\s)(ruff|mypy|pyright|flake8|pylint)\b"),
+    re.compile(r"(^|\s)(tsc|eslint|vitest|jest|karma|ava)\b"),
+    re.compile(
+        r"(^|\s)(npm|pnpm|yarn|bun)\s+(run\s+)?(test|lint|check|typecheck|build|validate)\b"
+    ),
+    re.compile(r"(^|\s)(go\s+(test|vet)|cargo\s+(test|check|clippy)|golangci-lint)\b"),
+    re.compile(r"(^|\s)(make|ninja)\s+(test|check|lint|validate)\b"),
+    re.compile(r"(^|\s)cmake\s+--build\b"),
+    re.compile(
+        r"(^|\s)python(\d(\.\d+)*)?(\s+-[A-Za-z]+)*\s+-m\s+(pytest|unittest|tox|ruff|mypy|validate)"
+    ),
+)
+
+
+def _background_task_is_verification(task_name: str) -> bool:
+    """Whether a tagged background task plausibly runs code verification.
+
+    The realtime bridge tags background watcher tasks with
+    ``octopus-background:<command>`` at launch. Turn finalization checks this
+    before closing unverified code as completed-with-background, so an
+    unrelated long-running task (file watcher, dev server, poller) no longer
+    silently skips the verification gate.
+
+    Untagged task names (created before tagging existed, or by code paths
+    that never registered through the bridge) default to True so in-flight
+    turns keep the pre-tagging behavior during a hot reload.
+    """
+    if not task_name:
+        return False
+    if ":" not in task_name:
+        return True
+    command = task_name.split(":", 1)[1]
+    if not command.strip():
+        return False
+    return any(pattern.search(command) for pattern in _VERIFICATION_COMMAND_HINTS)
 
 
 def _turn_has_observable_output(turn: Turn) -> bool:
