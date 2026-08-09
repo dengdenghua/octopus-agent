@@ -92,4 +92,9 @@ export interface AgentThreadContext extends Record<string, unknown> {
   execution_environment?: "sandbox" | "local";
   /* Implementation note. */
   ephemeral?: boolean;
+  /** User-controlled network tier for confined shell exec: "deny" (only
+   * model inference reachable), "common" (plus pre-bundled dev-tool
+   * registries/mirrors), "full" (everything). Default "deny". Threaded
+   * through to ``sandboxPolicy.networkAccess`` / ``egressAllowCommon``. */
+  network_access?: "deny" | "common" | "full";
 }

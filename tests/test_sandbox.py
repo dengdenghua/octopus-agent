@@ -125,6 +125,119 @@ class TestEnvironmentScrub:
         assert "*" in result.stdout
         assert "127.0.0.1:1" in result.stdout
 
+    def test_no_network_keeps_inference_domains_reachable(self, workspace: Path) -> None:
+        """Claude Desktop parity: a network-denied sandbox still lets the
+        agent reach the LLM inference endpoint(s). ``no_proxy`` enumerates
+        them (direct connect) while the HTTP(S) proxy stays short-circuited,
+        so every other host is blocked."""
+        runner = SandboxRunner(
+            SandboxPolicy(
+                workspace=workspace,
+                timeout_s=10.0,
+                inference_domains=("api.octoapk.com", "ark.cn-beijing.volces.com"),
+            )
+        )
+        result = runner.run(
+            _python(
+                "import os",
+                "print(os.environ.get('no_proxy', 'MISSING'))",
+                "print(os.environ.get('http_proxy', 'MISSING'))",
+                "print(os.environ.get('https_proxy', 'MISSING'))",
+            )
+        )
+        lines = result.stdout.splitlines()
+        # Inference domains are in no_proxy → direct connect, not blocked.
+        assert "api.octoapk.com" in lines[0]
+        assert "ark.cn-beijing.volces.com" in lines[0]
+        # Other hosts still go through the dead proxy → blocked.
+        assert "127.0.0.1:1" in lines[1]
+        assert "127.0.0.1:1" in lines[2]
+
+    def test_no_network_without_inference_domains_denies_everything(self, workspace: Path) -> None:
+        runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
+        result = runner.run(
+            _python("import os; print(os.environ.get('no_proxy', 'MISSING'))")
+        )
+        assert result.stdout.strip() == "*"
+
+    def test_common_domains_tier_pre_allows_dev_tool_hosts(self, workspace: Path) -> None:
+        """The "common domains" tier (egress_allow_common) additionally puts
+        the bundled dev-tool registries/mirrors into ``no_proxy`` while the
+        dead proxy still blocks everything else. Users never maintain this
+        list by hand."""
+        from runtime.safety.sandboxing.sandbox import default_egress_domains
+
+        preset = default_egress_domains()
+        assert "registry.npmjs.org" in preset
+        assert "pypi.org" in preset
+        assert "github.com" in preset
+
+        runner = SandboxRunner(
+            SandboxPolicy(
+                workspace=workspace,
+                timeout_s=10.0,
+                inference_domains=("api.octoapk.com",),
+                egress_allow_common=True,
+            )
+        )
+        result = runner.run(
+            _python(
+                "import os",
+                "print(os.environ.get('no_proxy', 'MISSING'))",
+                "print(os.environ.get('https_proxy', 'MISSING'))",
+            )
+        )
+        lines = result.stdout.splitlines()
+        no_proxy = set(lines[0].split(","))
+        # Inference + pre-bundled dev-tool hosts are reachable.
+        assert "api.octoapk.com" in no_proxy
+        assert "registry.npmjs.org" in no_proxy
+        assert "pypi.org" in no_proxy
+        assert "github.com" in no_proxy
+        assert "archive.ubuntu.com" in no_proxy
+        # Everything else still goes through the dead proxy.
+        assert "127.0.0.1:1" in lines[1]
+
+    def test_common_domains_tier_off_keeps_deny_scope(self, workspace: Path) -> None:
+        runner = SandboxRunner(
+            SandboxPolicy(
+                workspace=workspace,
+                timeout_s=10.0,
+                inference_domains=("api.octoapk.com",),
+                egress_allow_common=False,
+            )
+        )
+        result = runner.run(
+            _python(
+                "import os",
+                "print(os.environ.get('no_proxy', 'MISSING'))",
+            )
+        )
+        # Only inference is pre-allowed; npm etc. must NOT appear.
+        assert result.stdout.strip() == "api.octoapk.com"
+
+    def test_allow_network_keeps_real_proxy(self, workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("https_proxy", "http://proxy.internal:3128")
+        monkeypatch.setenv("no_proxy", "localhost")
+        runner = SandboxRunner(
+            SandboxPolicy(workspace=workspace, timeout_s=10.0, allow_network=True)
+        )
+        result = runner.run(
+            _python(
+                "import os",
+                "print(os.environ.get('no_proxy', 'MISSING'))",
+                "print(os.environ.get('http_proxy', 'MISSING'))",
+                "print(os.environ.get('https_proxy', 'MISSING'))",
+            )
+        )
+        lines = result.stdout.splitlines()
+        # allow_network=True must NOT inject the proxy short-circuit —
+        # the child keeps its own network configuration (direct by default).
+        assert "*" not in lines[0]
+        assert "127.0.0.1:1" not in lines[0]
+        assert "127.0.0.1:1" not in lines[1]
+        assert "127.0.0.1:1" not in lines[2]
+
     def test_home_and_temp_are_redirected_inside_workspace(self, workspace: Path) -> None:
         runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
         result = runner.run(

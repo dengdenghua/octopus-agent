@@ -836,8 +836,21 @@ def _default_sandbox_factory(workspace: Path, timeout_s: float) -> SandboxRunner
             workspace=workspace,
             timeout_s=timeout_s,
             allow_network=False,
+            # Model inference endpoints stay reachable in a network-denied
+            # sandbox (Claude Desktop parity).
+            inference_domains=_inference_domains(),
         )
     )
+
+
+def _inference_domains() -> tuple[str, ...]:
+    """Best-effort inference-domain whitelist; empty means deny-all."""
+    try:
+        from runtime.safety.sandboxing.sandbox import inference_domains
+
+        return inference_domains()
+    except Exception:  # noqa: BLE001 - best-effort; empty means deny-all
+        return ()
 
 
 __all__ = [

@@ -120,6 +120,49 @@ def _sandbox_extra_env(env: Mapping[str, str] | None) -> dict[str, str]:
     return extra
 
 
+def _inference_domains_for_policy(allow_network: bool) -> tuple[str, ...]:
+    """Inference-domain whitelist for a SandboxPolicy, when network is denied.
+
+    A network-*allowed* sandbox needs no whitelist (everything reachable), so
+    skip the file read entirely. Only a network-denied sandbox enumerates the
+    model endpoints it must still reach.
+    """
+    if allow_network:
+        return ()
+    try:
+        from runtime.safety.sandboxing.sandbox import inference_domains
+
+        return inference_domains()
+    except Exception:  # noqa: BLE001 - best-effort; empty means deny-all
+        return ()
+
+
+def _egress_domains_for_policy(
+    allow_network: bool, egress_allow_common: bool
+) -> tuple[str, ...]:
+    """Host allowlist for a network-denied SandboxPolicy.
+
+    ``allow_network=True`` needs nothing (everything reachable). Otherwise the
+    inference endpoints always stay allowed; the "common domains" tier
+    additionally pre-allows the bundled dev-tool registries/mirrors.
+    """
+    if allow_network:
+        return ()
+    inference = _inference_domains_for_policy(False)
+    if not egress_allow_common:
+        return inference
+    try:
+        from runtime.safety.sandboxing.sandbox import default_egress_domains
+
+        merged = list(inference)
+        for domain in default_egress_domains():
+            if domain not in merged:
+                merged.append(domain)
+        return tuple(merged)
+    except Exception:  # noqa: BLE001 - best-effort
+        return inference
+
+
 def execution_policy_snapshot(
     *,
     sandbox_requested: bool,
@@ -173,6 +216,7 @@ def stream_run(
     on_timeout: Callable[[subprocess.Popen[str]], None] | None = None,
     sandbox_dir: str | None = None,
     allow_network: bool = False,
+    egress_allow_common: bool = False,
     sandbox_required: bool = False,
 ) -> dict[str, Any]:
     """Run ``argv`` as a subprocess, streaming output as it arrives.
@@ -279,6 +323,14 @@ def stream_run(
             allow_network=allow_network,
             timeout_s=timeout,
             extra_env=_sandbox_extra_env(env),
+            # Model inference endpoints stay reachable even when the sandbox
+            # is network-denied (Claude Desktop parity). Resolved lazily from
+            # custom_models.json / ANTHROPIC_BASE_URL; empty for network-allowed
+            # sandboxes. The "common domains" tier pre-allows dev-tool hosts.
+            inference_domains=_egress_domains_for_policy(
+                allow_network, egress_allow_common
+            ),
+            egress_allow_common=egress_allow_common,
         )
         run_env = policy.env_for()
         env_mode = "allowlist"

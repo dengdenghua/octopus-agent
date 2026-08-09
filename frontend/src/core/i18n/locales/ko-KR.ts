@@ -87,10 +87,20 @@ export const koKR: Translations = {
     greeting: "안녕하세요, Octopus입니다",
     description:
       "멀티 Agent AI · 요청을 직접 말하거나, Agent 모드로 전환하여 심층 처리하세요.",
+    octopusTagline: "멀티 에이전트 협업 · 하나의 입력으로 직접 해결",
 
     createYourOwnSkill: "나만의 Agent 스킬 만들기",
     createYourOwnSkillDescription:
       "나만의 스킬을 만들어 Octopus의 힘을 발휘하세요. 커스텀 스킬로,\nOctopus가 웹 검색, 데이터 분석, 슬라이드 및 웹 페이지 같은\n산출물 생성 등 거의 모든 작업을 수행할 수 있습니다.",
+
+    scenes: {
+      daily: "일상 업무",
+      code: "코드 개발",
+      design: "디자인",
+      data: "데이터 분석",
+      doc: "문서 처리",
+      agent: "에이전트 편성",
+    },
   },
 
   // Clipboard
@@ -388,19 +398,19 @@ export const koKR: Translations = {
     maxSubagents: "최대 하위 에이전트 수",
     maxSearches: "최대 검색 수",
     permissionModeLabel: "권한",
-    permissionModeDefault: "먼저 확인",
+    permissionModeDefault: "기본",
     permissionModeDefaultDesc:
-      "읽기는 자유롭게 허용하고, 고위험 작업 전에는 확인합니다.",
-    permissionModeAcceptEdits: "파일 자동 편집",
+      "모든 쓰기 작업과 명령은 먼저 확인을 받습니다. 가장 안전합니다.",
+    permissionModeAcceptEdits: "편집 수락",
     permissionModeAcceptEditsDesc:
-      "파일 생성과 편집은 자동으로 실행되며, 명령·삭제·Git 작업 전에는 확인합니다.",
-    permissionModeBypass: "전권 실행",
+      "파일 변경은 자동으로 실행되며, 명령 실행 전에는 확인합니다.",
+    permissionModeBypass: "완전 액세스",
     permissionModeBypassDesc:
-      "일반적인 승인을 건너뛰지만 안전 차단은 그대로 적용됩니다. 완전히 신뢰하는 로컬 작업에만 사용하세요.",
-    permissionModeBypassConfirmTitle: "전권 실행으로 전환할까요?",
+      "모든 작업을 확인 없이 자동 실행합니다. 최대 권한입니다.",
+    permissionModeBypassConfirmTitle: "완전 액세스로 전환할까요?",
     permissionModeBypassConfirmDesc:
       "명령, 파일 변경 및 Git 작업의 일반 확인을 건너뜁니다. 안전 차단은 유지되지만 오작동 위험이 높아집니다.",
-    permissionModeBypassConfirmAction: "전권 실행 사용",
+    permissionModeBypassConfirmAction: "완전 액세스 사용",
     permissionModePlan: "계획만",
     permissionModePlanDesc: "단계만 제안하고 도구는 아직 호출하지 않습니다.",
     seedWorkflow: "워크플로를 생성하거나 실행하세요: ",
@@ -416,9 +426,9 @@ export const koKR: Translations = {
       "이 에이전트는 프로젝트 컨텍스트를 사용할 수 있지만, 프로젝트 쓰기 권한이 있는 역할을 선택하지 않으면 쓰기 범위가 축소됩니다.",
     projectWriteAccess: "프로젝트 쓰기",
     projectReadOnly: "읽기 전용",
-    permissionFullAccess: "전체 액세스",
-    permissionAcceptEdits: "편집 자동 수락",
-    permissionConfirm: "확인 후 실행",
+    permissionFullAccess: "완전 액세스",
+    permissionAcceptEdits: "편집 수락",
+    permissionConfirm: "기본",
     addImage: "이미지 추가 (붙여넣기 / 드래그 / 선택)",
     removeImage: "제거",
     readme: "README",
@@ -787,12 +797,12 @@ export const koKR: Translations = {
     autoVerifyRunning: "자동 검증 실행 중",
     changesAwaitingVerify: "검증 대기 중인 변경 사항",
     verify: "Verify",
-    attemptCompleted: (attempt: number, count: number, singular: boolean) =>
+    attemptCompleted: (attempt: number, count: number, _singular: boolean) =>
       `${attempt}번째 시도 완료${count > 0 ? `, ${count}개 파일` : ""}`,
     autoFixLimitReached: (attempt: number, max: number) =>
       `${attempt}번째 시도. 자동 수정 한도 도달(${max}/${max})`,
-    failedChecks: (count: number, singular: boolean) => `${count}건 검사 실패`,
-    changedFilesPending: (count: number, singular: boolean) =>
+    failedChecks: (count: number, _singular: boolean) => `${count}건 검사 실패`,
+    changedFilesPending: (count: number, _singular: boolean) =>
       `${count}개 변경 파일 검사 대기 중`,
     runningProjectChecks: "프로젝트 검사 실행 중",
     // Panel labels
@@ -3213,6 +3223,7 @@ export const koKR: Translations = {
       about: "정보",
       automation: "실행 및 권한",
       evolution: "자기 진화",
+      sandbox: "샌드박스 및 실행",
     },
     automation: {
       title: "실행 및 권한",
@@ -3828,6 +3839,7 @@ export const koKR: Translations = {
         privacy: [],
         observability: [],
         about: [],
+        sandbox: ["샌드박스", "실행", "완전 액세스", "권한"],
       },
     },
   },
@@ -7652,6 +7664,65 @@ export const koKR: Translations = {
     toastJudgeEnabled: "LLM 의미 검토를 활성화했습니다",
     toastJudgeDisabled: "LLM 의미 검토를 비활성화했습니다",
     toastJudgeToggleFailed: (msg: string) => `전환 실패: ${msg}`,
+  },
+
+  // Sandbox / execution permission settings
+  sandboxSettings: {
+    title: "샌드박스 및 실행 권한",
+    description:
+      "실행 환경과 권한 수준은 독립적인 두 축으로 자유롭게 조합할 수 있습니다. 예: '샌드박스 + 완전 액세스'는 격리 환경에서 완전 자동, '로컬 + 편집 수락'은 이 머신에서 실행하되 명령은 확인을 요청합니다.",
+    activeTag: "현재",
+    scopeNote:
+      "변경 사항은 로컬 설정에 저장되며 이후의 모든 새 작업에 적용됩니다. 실행 중인 작업에는 영향을 주지 않습니다.",
+    restartHint: "'완전 액세스'는 영구 승인을 부여합니다. 신뢰하는 환경에서만 사용하세요.",
+    envTitle: "실행 환경",
+    envDesc: "명령이 실행되는 위치와 쓸 수 있는 파일 범위.",
+    permissionTitle: "권한 수준",
+    permissionDesc: "파일 편집 및 명령 실행에 필요한 확인 수준.",
+    toastEnvSwitched: (label: string) => `실행 환경이 '${label}'(으)로 전환되었습니다`,
+    toastPermissionSwitched: (label: string) => `권한 수준이 '${label}'(으)로 전환되었습니다`,
+    toastFailed: (msg: string) => `전환 실패: ${msg}`,
+    env: {
+      sandbox: {
+        label: "샌드박스",
+        description: "명령은 격리된 샌드박스에서 실행되며, 파일 쓰기는 작업 공간으로 제한됩니다.",
+      },
+      local: {
+        label: "로컬",
+        description: "명령은 이 머신에서 직접 실행되며 파일 쓰기 제한이 없습니다(샌드박스 격리 우회).",
+      },
+    },
+    permission: {
+      default: {
+        label: "기본",
+        description: "모든 쓰기 작업과 명령은 먼저 확인을 받습니다. 가장 안전합니다.",
+      },
+      acceptEdits: {
+        label: "편집 수락",
+        description: "파일 변경은 자동으로 실행되며, 명령 실행 전에는 확인합니다.",
+      },
+      bypassPermissions: {
+        label: "완전 액세스",
+        description: "모든 작업을 확인 없이 자동 실행합니다. 최대 권한입니다.",
+      },
+    },
+    networkTitle: "네트워크 액세스",
+    networkDesc: "샌드박스 내 명령의 네트워크 범위: 기본적으로 모델 추론 엔드포인트만 연결할 수 있습니다. '일반 도메인'은 개발 도구 도메인을 추가로 허용합니다.",
+    toastNetworkSwitched: (label: string) => `네트워크 액세스를 '${label}'(으)로 전환했습니다`,
+    network: {
+      deny: {
+        label: "차단",
+        description: "모델 추론 엔드포인트만 연결 가능하며 나머지 요청은 모두 차단됩니다(가장 안전).",
+      },
+      common: {
+        label: "일반 도메인",
+        description: "npm/pip/github/apt 등 개발 도구 도메인을 미리 허용하며 나머지는 차단됩니다(권장).",
+      },
+      full: {
+        label: "허용",
+        description: "샌드박스 내 명령이 모든 네트워크에 접근할 수 있습니다(pnpm install, git clone 등).",
+      },
+    },
   },
 
   // Login page

@@ -287,6 +287,28 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Dialog and panel widths — semantic tokens for consistent sizing */
+  --dialog-sm: 360px;
+  --dialog-md: 425px;
+  --dialog-lg: 480px;
+  --dialog-xl: 520px;
+  --dialog-2xl: 768px;
+
+  /* Panel and container heights — common fixed heights */
+  --panel-height-sm: 220px;
+  --panel-height-md: 320px;
+  --panel-height-lg: 400px;
+  --panel-height-xl: 560px;
+  --panel-height-2xl: 720px;
+
+  /* Max widths for truncated text — common truncation widths */
+  --text-truncate-sm: 112px;
+  --text-truncate-md: 140px;
+  --text-truncate-lg: 180px;
+  --text-truncate-xl: 220px;
+  --text-truncate-2xl: 320px;
+
   --animate-aurora: aurora 8s ease-in-out infinite alternate;
   @keyframes aurora {
     0% {
@@ -1460,7 +1482,7 @@
     padding: 0.45rem 0.75rem;
     border-bottom: 1px solid
       color-mix(in oklch, var(--foreground) 20%, transparent);
-    color: color-mix(in oklch, var(--foreground) 84%, transparent);
+    color: color-mix(in oklch, var(--primary) 72%, var(--foreground));
     font-size: 0.82em;
     letter-spacing: 0.01em;
   }
@@ -1503,6 +1525,56 @@
       padding-inline: 0.625rem;
     }
   }
+
+  /* ─── Claude-style colored markdown ───────────────────────────────
+     Accent-driven rendering so the chat reads like Claude's: headings,
+     inline code, blockquotes, list markers, HRs and table headers all
+     pick up the brand accent (--primary) instead of staying flat
+     black/white. Everything is mixed from theme CSS variables, so the
+     light/dark modes and brand variants (default orange, steel blue)
+     adapt automatically. Shiki-highlighted code blocks are untouched
+     (inline `code` only; `:not(pre code)` guard). */
+  .chat-markdown :where(h1, h2, h3, h4) {
+    color: color-mix(in oklch, var(--foreground) 82%, var(--primary));
+  }
+
+  .chat-markdown :where(h1) {
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid
+      color-mix(in oklch, var(--primary) 26%, transparent);
+  }
+
+  .chat-markdown :where(code):not(pre code) {
+    background: color-mix(in oklch, var(--primary) 12%, transparent);
+    color: color-mix(in oklch, var(--foreground) 78%, var(--primary));
+    border-radius: 0.3rem;
+    padding: 0.14em 0.36em;
+    font-size: 0.875em;
+    font-weight: 500;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .chat-markdown :where(blockquote) {
+    border-left: 3px solid var(--primary);
+    background: color-mix(in oklch, var(--primary) 7%, transparent);
+    padding: 0.4rem 0.9rem;
+    border-radius: 0 0.5rem 0.5rem 0;
+  }
+
+  .chat-markdown :where(ul li)::marker,
+  .chat-markdown :where(ol li)::marker {
+    color: var(--primary);
+  }
+
+  .chat-markdown :where(hr) {
+    border-color: color-mix(in oklch, var(--primary) 32%, transparent);
+  }
+
+  .chat-markdown :where(strong) {
+    color: color-mix(in oklch, var(--foreground) 90%, var(--primary));
+  }
+
 
 
 

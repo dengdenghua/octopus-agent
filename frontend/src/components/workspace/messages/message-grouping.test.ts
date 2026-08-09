@@ -384,3 +384,56 @@ describe("extractThinkingText", () => {
     expect(extractThinkingText(content as any)).toBe("");
   });
 });
+
+describe("groupActivities file diffs", () => {
+  test("carries unified diffs from edit_file args into file_ops meta", () => {
+    const diff = [
+      "--- a/src/a.ts",
+      "+++ b/src/a.ts",
+      "@@ -1,3 +1,4 @@",
+      " const ctx = 1;",
+      "-const oldLine = 2;",
+      "+const newLine = 2;",
+      "+const another = 3;",
+    ].join("\n");
+    const messages = [
+      humanMsg("h1", "edit files"),
+      aiToolCallMsg("a1", "edit_file", {
+        path: "/src/a.ts",
+        changes: [{ path: "/src/a.ts", op: "update", diff }],
+      }),
+      toolResultMsg("t1", "tc-a1"),
+      aiToolCallMsg("a2", "write_file", { path: "/src/b.ts", content: "z" }),
+      toolResultMsg("t2", "tc-a2"),
+    ];
+    const chunks = groupActivities(messages as any);
+    const activity = chunks.find((c) => c.kind === "activity");
+    expect(activity?.kind).toBe("activity");
+    if (activity?.kind === "activity") {
+      expect(activity.activityKind).toBe("file_ops");
+      const first = activity.items[0];
+      expect(Array.isArray(first.meta?.diffs)).toBe(true);
+      const diffs = first.meta?.diffs as string[];
+      expect(diffs[0]).toContain("+const newLine");
+      expect(diffs[0]).toContain("-const oldLine");
+    }
+  });
+
+  test("leaves meta.diffs absent when no diff is available", () => {
+    const messages = [
+      humanMsg("h1", "write"),
+      aiToolCallMsg("a1", "write_file", { path: "/src/a.ts", content: "x" }),
+      toolResultMsg("t1", "tc-a1"),
+      aiToolCallMsg("a2", "write_file", { path: "/src/b.ts", content: "z" }),
+      toolResultMsg("t2", "tc-a2"),
+    ];
+    const chunks = groupActivities(messages as any);
+    const activity = chunks.find((c) => c.kind === "activity");
+    expect(activity?.kind).toBe("activity");
+    if (activity?.kind === "activity") {
+      for (const item of activity.items) {
+        expect(item.meta?.diffs).toBeUndefined();
+      }
+    }
+  });
+});

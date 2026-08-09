@@ -71,8 +71,17 @@ export interface Translations {
   welcome: {
     greeting: string;
     description: string;
+    octopusTagline: string;
     createYourOwnSkill: string;
     createYourOwnSkillDescription: string;
+    scenes: {
+      daily: string;
+      code: string;
+      design: string;
+      data: string;
+      doc: string;
+      agent: string;
+    };
   };
 
   // Clipboard
@@ -2648,6 +2657,7 @@ export interface Translations {
       about: string;
       automation: string;
       evolution: string;
+      sandbox: string;
     };
     automation: {
       title: string;
@@ -3199,6 +3209,64 @@ export interface Translations {
         privacy: string[];
         observability: string[];
         about: string[];
+        sandbox: string[];
+      };
+    };
+  };
+
+  // Sandbox / execution permission settings
+  sandboxSettings: {
+    title: string;
+    description: string;
+    activeTag: string;
+    scopeNote: string;
+    restartHint: string;
+    envTitle: string;
+    envDesc: string;
+    permissionTitle: string;
+    permissionDesc: string;
+    toastEnvSwitched: (label: string) => string;
+    toastPermissionSwitched: (label: string) => string;
+    toastFailed: (msg: string) => string;
+    env: {
+      sandbox: {
+        label: string;
+        description: string;
+      };
+      local: {
+        label: string;
+        description: string;
+      };
+    };
+    permission: {
+      default: {
+        label: string;
+        description: string;
+      };
+      acceptEdits: {
+        label: string;
+        description: string;
+      };
+      bypassPermissions: {
+        label: string;
+        description: string;
+      };
+    };
+    networkTitle: string;
+    networkDesc: string;
+    toastNetworkSwitched: (label: string) => string;
+    network: {
+      deny: {
+        label: string;
+        description: string;
+      };
+      common: {
+        label: string;
+        description: string;
+      };
+      full: {
+        label: string;
+        description: string;
       };
     };
   };

@@ -204,6 +204,7 @@ class _LSPClient:
             SandboxPolicy,
             SandboxViolation,
             effective_process_sandbox_mode,
+            inference_domains,
             process_sandbox_required,
             select_process_backend,
         )
@@ -213,7 +214,12 @@ class _LSPClient:
             if not workspace.is_dir():
                 raise _LSPTransportError(f"sandbox workspace is not a directory: {workspace}")
             policy = SandboxPolicy(
-                workspace=workspace, allow_network=False, timeout_s=self.INIT_TIMEOUT
+                workspace=workspace,
+                allow_network=False,
+                timeout_s=self.INIT_TIMEOUT,
+                # Model inference endpoints stay reachable in a
+                # network-denied sandbox (Claude Desktop parity).
+                inference_domains=inference_domains(),
             )
             try:
                 choice = select_process_backend(effective_process_sandbox_mode())

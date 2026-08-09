@@ -26,6 +26,7 @@ from runtime.safety.sandboxing.sandbox import (  # noqa: E402
     SandboxPolicy,
     SandboxRunner,
     SandboxViolation,
+    inference_domains,
 )
 
 
@@ -199,6 +200,9 @@ def _run_case_probe(
                 allow_network=False,
                 timeout_s=5.0,
                 max_output_bytes=16 * 1024,
+                # Model inference endpoints stay reachable in a
+                # network-denied sandbox (Claude Desktop parity).
+                inference_domains=inference_domains(),
             )
         ).run([_python_executable(), "-c", probe], cwd=case_dir)
     except SandboxViolation as exc:

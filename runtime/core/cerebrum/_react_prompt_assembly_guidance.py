@@ -35,6 +35,21 @@ _logger = logging.getLogger(__name__)
 
 def _assemble_core_guidance(state: _AssemblyState) -> None:
     """Approval gate + workspace / project / code-mode / cadence sections."""
+    # Claude-style reply decoration: default-on so every assistant reply in
+    # the realtime chat renders with light emoji markers (the frontend
+    # renders color emoji). Kept as a short, bounded paragraph — not a hard
+    # rule — so technical answers stay clean while lists/summaries get the
+    # visual rhythm Claude users expect.
+    state.system_parts.append(
+        "\n<reply-style>\n"
+        "回复排版使用轻量 emoji 装饰（Claude 风格，前端支持彩色渲染）：\n"
+        "- 完成/成功用 ✅，关键结论/重点用 📌 或 🎯，警告用 ⚠️，修复用 🔧，"
+        "数据/统计用 📊，下一步建议用 🚀\n"
+        "- 小节标题前可加一个相关 emoji（如 📋 摘要、🛠 实施、✅ 验证）\n"
+        "- 列表项可用 emoji 作装饰（如 \"- ✅ 已修复 …\"）\n"
+        "- 适度：一段话最多 1-2 个 emoji，不堆砌；代码块、命令输出、路径内不插入 emoji\n"
+        "</reply-style>"
+    )
     if state.approval_provider is not None:
         # Approval-gate etiquette only means anything when a gate exists to
         # be tripped. Keeping it out of REACT_SYSTEM_PROMPT_BASE stops every
@@ -274,6 +289,23 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
     if state.mode_contract_value:
         state.system_parts.append(
             "\n<mode-contract>\n" + state.mode_contract_value[:4000] + "\n</mode-contract>"
+        )
+    # Audit / review turns: default to inspect-and-report. The task is to
+    # surface findings, not to rewrite code silently. Edits are allowed but
+    # must be explicitly stated and justified in the same turn.
+    if (
+        state.user_context.get("audit_mode")
+        or state.metadata.get("audit_mode")
+        or str(state.mode_value or "").strip().lower() == "audit"
+    ):
+        state.system_parts.append(
+            "\n<audit-mode>\n"
+            "当前为审计/审查模式。默认行为是只读检查并输出审计报告："
+            "先逐项核对目标并给出证据与结论，最后汇总发现的问题和风险。\n"
+            "不要在没有明确说明的情况下静默修改代码或配置；若审计中发现"
+            "需要修复的问题，先在报告中指出，并说明你准备如何修改、为何"
+            "修改，征得确认或至少在最终回复中显式列出每一处改动，再执行写操作。\n"
+            "</audit-mode>"
         )
     if state.is_codex_composer_plan_or_spec:
         state.system_parts.append(

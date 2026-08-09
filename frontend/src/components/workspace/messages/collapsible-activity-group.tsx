@@ -65,6 +65,78 @@ function sumMeta(items: ActivityItem[], key: string): number {
   return total;
 }
 
+// -------------------------------------------------------------------------
+// Lightweight unified-diff rendering (red/green +/- lines, Claude-style)
+// -------------------------------------------------------------------------
+
+type DiffRowType = "ctx" | "add" | "del";
+
+interface DiffRow {
+  type: DiffRowType;
+  text: string;
+}
+
+/** Parse a unified diff into +/-/context rows, skipping the meta headers. */
+export function parseUnifiedDiff(diff: string): DiffRow[] {
+  const rows: DiffRow[] = [];
+  if (!diff || !diff.trim()) return rows;
+  for (const line of diff.split(/\r?\n/)) {
+    if (
+      line.startsWith("diff --git") ||
+      line.startsWith("--- ") ||
+      line.startsWith("+++ ") ||
+      line.startsWith("@@ ") ||
+      line.startsWith("\\ No newline")
+    ) {
+      continue;
+    }
+    if (line.startsWith("+")) rows.push({ type: "add", text: line.slice(1) });
+    else if (line.startsWith("-"))
+      rows.push({ type: "del", text: line.slice(1) });
+    else rows.push({ type: "ctx", text: line });
+  }
+  return rows;
+}
+
+function DiffLines({ diffs }: { diffs: unknown }) {
+  const rows = useMemo(() => {
+    if (!Array.isArray(diffs)) return [];
+    const list: DiffRow[] = [];
+    for (const raw of diffs) {
+      if (typeof raw !== "string" || !raw.trim()) continue;
+      list.push(...parseUnifiedDiff(raw));
+    }
+    // Truncate pathological diffs (chat perf guard); the header row in
+    // the label already carries the +N/-M counts.
+    return list.length > 400 ? list.slice(0, 400) : list;
+  }, [diffs]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mt-1 max-h-52 overflow-auto rounded-md border border-border bg-background/70 font-mono text-xs leading-5">
+      {rows.map((row, i) => (
+        <div
+          key={i}
+          className={cn(
+            "flex break-all px-2 whitespace-pre-wrap",
+            row.type === "add"
+              ? "bg-green-500/10 text-green-700 dark:text-green-400"
+              : row.type === "del"
+                ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                : "text-muted-foreground",
+          )}
+        >
+          <span className="w-4 shrink-0 select-none text-muted-foreground/60">
+            {row.type === "add" ? "+" : row.type === "del" ? "-" : ""}
+          </span>
+          <span className="min-w-0 flex-1">{row.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Build the folded-header summary text for this activity kind.
  * Returns null when the group should not be rendered at all (e.g. empty think).
@@ -206,6 +278,8 @@ export function CollapsibleActivityGroup({
                     {item.detail}
                   </span>
                 )}
+                {/* Red/green +/- lines for file edits (Claude-style). */}
+                <DiffLines diffs={item.meta?.diffs} />
               </div>
             </li>
           ))}

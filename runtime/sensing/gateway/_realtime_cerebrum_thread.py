@@ -374,8 +374,14 @@ def _snapshot_to_thread_store(
             status=thread_status,
         )
     except Exception as exc:  # noqa: BLE001
-        _logger.debug(
-            "snapshot to thread_store skipped (%s: %s)",
+        # Not fatal (the realtime event log is the durable record), but a
+        # swallowed snapshot write used to silently freeze thread status /
+        # updated_at in the sidebar. Surface at warning level so a broken
+        # serialisation or store failure is at least visible in logs.
+        _logger.warning(
+            "snapshot to thread_store failed for %s (%s: %s); sidebar thread "
+            "status may be stale",
+            thread_id,
             type(exc).__name__,
             exc,
             exc_info=True,

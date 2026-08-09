@@ -11,6 +11,10 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
     permission_mode: "default",
     execution_environment: "sandbox",
     reasoning_effort: undefined,
+    // Sandbox default: network denied (only model inference reachable).
+    // Users opt in from the sandbox settings page ("network access") to
+    // the "common domains" or "full" tiers.
+    network_access: "deny",
   },
   layout: {
     sidebar_collapsed: false,

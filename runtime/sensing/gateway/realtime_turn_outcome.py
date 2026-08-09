@@ -264,6 +264,141 @@ def _turn_has_failed_code_verification(turn: Turn) -> bool:
     return False
 
 
+# Environment-blocked verification markers: the verifier itself could not
+# run because the sandbox blocks the toolchain at a level the agent cannot
+# self-repair — no network, corepack unable to download itself, DNS/SSL
+# failures, pnpm's strict node_modules layout breaking direct `node` calls.
+# Deliberately EXCLUDES "command not found" / "npx: not found" / "winerror
+# 2" / "no module named": a missing CLI is something the agent can usually
+# fix by selecting an installed equivalent (the failure classifier routes
+# those to environment_missing_tool + repair), so they keep hard-failing.
+_ENV_BLOCKED_VERIFICATION_MARKERS = (
+    # corepack / package-manager self-download
+    "corepack is about to download",
+    "error when performing the request",
+    "err_module_not_found",
+    "cannot find package",
+    # network / DNS / proxy
+    "network is unreachable",
+    "getaddrinfo failed",
+    "temporary failure in name resolution",
+    "name or service not known",
+    "failed to connect",
+    "unable to access",
+    "socket hang up",
+    "proxyconnect",
+    "connection refused",
+    # TLS / cert
+    "unexpected_eof_while_reading",
+    "ssl: unexpected_eof",
+    "certificate verify failed",
+    "self-signed certificate",
+    # fd exhaustion
+    "emfile",
+)
+
+
+def _verification_item_is_environment_blocked(item: VerificationItem) -> bool:
+    """True when a failed verification item failed because the environment
+    (network / package-manager / sandbox) blocked the verifier at a level
+    the agent cannot self-repair, not because the code under test is
+    broken."""
+    haystack = "\n".join(
+        str(part)
+        for part in (item.summary, item.stdout_tail, item.stderr_tail)
+        if isinstance(part, str) and part.strip()
+    )
+    lowered = haystack.lower()
+    return any(marker in lowered for marker in _ENV_BLOCKED_VERIFICATION_MARKERS)
+
+
+def _command_execution_environment_blocked(item: Any) -> bool:
+    """True when a failed shell command's output shows an environment-level
+    blockage (network / package-manager self-download / TLS) rather than a
+    code error. Used to catch verification attempts the agent ran via
+    ``exec_shell`` that never produced a ``VerificationItem``."""
+    output = str(getattr(item, "aggregated_output", "") or "")
+    lowered = output.lower()
+    return any(marker in lowered for marker in _ENV_BLOCKED_VERIFICATION_MARKERS)
+
+
+def _turn_verification_environment_blocked(turn: Turn) -> bool:
+    """True when every failed verification attempt for this turn is
+    environment-blocked (no network / package-manager self-download / TLS),
+    so the turn can degrade to a manual-confirmation state instead of a
+    hard failure.
+
+    Covers both ``VerificationItem`` failures AND failed shell commands the
+    agent ran as verification attempts (their ``aggregated_output`` shows
+    the environment blockage). A turn with at least one real code failure
+    (test assertion, syntax error) is NOT treated as blocked.
+    """
+    failed_verifications = [
+        item
+        for item in _verification_items(turn)
+        if item.status == ItemStatus.FAILED
+    ]
+    if failed_verifications:
+        # At least one recorded verification failure is a real code error.
+        if not all(
+            _verification_item_is_environment_blocked(item)
+            for item in failed_verifications
+        ):
+            return False
+        # All recorded verification items are environment-blocked — only
+        # degrade when no shell command carried a real code failure either.
+        return not _turn_has_real_code_failure(turn)
+
+    # No recorded VerificationItem failures — inspect failed shell commands
+    # the agent ran as verification attempts.
+    failed_commands = [
+        item
+        for item in turn.items
+        if getattr(item, "type", None) == "commandExecution"
+        and getattr(item, "status", None) == ItemStatus.FAILED
+    ]
+    if not failed_commands:
+        return False
+    if any(_command_is_real_code_failure(item) for item in failed_commands):
+        return False
+    return all(
+        _command_execution_environment_blocked(item) for item in failed_commands
+    )
+
+
+def _command_is_real_code_failure(item: Any) -> bool:
+    """True when a failed shell command's output shows a real code problem
+    (test assertion, syntax error, lint violation, type error) rather than
+    an environment blockage. Used to keep hard-failing turns whose
+    verifier genuinely found broken code."""
+    code_failure_markers = (
+        "assert",
+        "syntaxerror",
+        "invalid syntax",
+        "e999",
+        "failed tests",
+        "failures =",
+        "error: cannot find",
+        "type error",
+        "tsc",
+        "mypy",
+    )
+    output = str(getattr(item, "aggregated_output", "") or "").lower()
+    return any(marker in output for marker in code_failure_markers)
+
+
+def _turn_has_real_code_failure(turn: Turn) -> bool:
+    """True when the turn carries any failed shell command whose output is a
+    real code problem (test assertion, syntax error, lint violation) rather
+    than an environment blockage."""
+    return any(
+        _command_is_real_code_failure(item)
+        for item in turn.items
+        if getattr(item, "type", None) == "commandExecution"
+        and getattr(item, "status", None) == ItemStatus.FAILED
+    )
+
+
 def _turn_has_unverified_code_changes(turn: Turn) -> bool:
     return bool(_code_change_paths(turn)) and not _turn_has_passing_code_verification(turn)
 

@@ -56,6 +56,7 @@ from runtime.sensing.gateway.realtime_turn_outcome import (
     _file_change_item_ids,
     _turn_has_failed_code_verification,
     _turn_has_unverified_code_changes,
+    _turn_verification_environment_blocked,
     _verification_plan_for_code_paths,
     _verification_plan_stdout_tail,
 )
@@ -657,6 +658,35 @@ async def _start_turn(
                 for item in turn.items
                 if isinstance(item, VerificationItem) and item.status == ItemStatus.FAILED
             ]
+            # ── Environment-blocked degrade ──────────────────────
+            # All failed verification items are environment-blocked
+            # (missing tool / no network): don't burn repair attempts or
+            # hard-fail the turn on an environment problem. Surface a
+            # manual-confirmation item and complete.
+            if not repair_limit and _turn_verification_environment_blocked(turn):
+                degrade_item = VerificationItem(
+                    command="manual verification required (environment blocked)",
+                    kind="manual",
+                    status=ItemStatus.COMPLETED,
+                    exit_code=None,
+                    summary=(
+                        "代码已修改，但验证命令因环境受限未能执行 "
+                        "(工具缺失/网络不可用)。请人工运行下列推荐命令确认后继续。"
+                    ),
+                    stdout_tail=_verification_plan_stdout_tail(
+                        _verification_plan_for_code_paths(_code_change_paths(turn), intent)
+                    ),
+                    stderr_tail=None,
+                    related_files=_code_change_paths(turn),
+                    related_change_item_ids=_file_change_item_ids(turn),
+                )
+                turn.items.append(degrade_item)
+                await runtime._emit_item_started(turn, log, emitter, degrade_item)
+                await runtime._emit_item_completed(turn, log, emitter, degrade_item)
+                turn.status = TurnStatus.COMPLETED
+                log.turn_completed(thread_id, turn.id, turn.status)
+                runtime._snapshot_to_thread_store(thread_id, log, intent)
+                return turn
             if repair_limit:
                 from runtime.safety.evolution.auto_verifier import (
                     build_verification_repair_request,
@@ -828,6 +858,36 @@ async def _start_turn(
                 )
 
             if auto_items:
+                # ── Environment-blocked degrade ──────────────────────
+                # The verifier could not run at all (missing tool /
+                # no network / corepack download failure), so a hard
+                # failure would blame the code for an environment
+                # problem. Degrade to a manual-confirmation turn: the
+                # change is preserved, the UI shows the exact command
+                # the user must run to close the loop.
+                if _turn_verification_environment_blocked(turn):
+                    degrade_item = VerificationItem(
+                        command="manual verification required (environment blocked)",
+                        kind="manual",
+                        status=ItemStatus.COMPLETED,
+                        exit_code=None,
+                        summary=(
+                            "代码已修改，但验证命令因环境受限未能执行 "
+                            "(工具缺失/网络不可用)。请人工运行下列推荐命令确认后继续。"
+                        ),
+                        stdout_tail=_verification_plan_stdout_tail(verification_plan),
+                        stderr_tail=None,
+                        related_files=code_change_paths,
+                        related_change_item_ids=_file_change_item_ids(turn),
+                    )
+                    turn.items.append(degrade_item)
+                    await runtime._emit_item_started(turn, log, emitter, degrade_item)
+                    await runtime._emit_item_completed(turn, log, emitter, degrade_item)
+                    turn.status = TurnStatus.COMPLETED
+                    log.turn_completed(thread_id, turn.id, turn.status)
+                    runtime._snapshot_to_thread_store(thread_id, log, intent)
+                    return turn
+
                 turn.status = TurnStatus.FAILED
                 log.turn_completed(thread_id, turn.id, turn.status)
                 runtime._record_failed_turn_proposal(
@@ -855,6 +915,17 @@ async def _start_turn(
             turn.items.append(verification_item)
             await runtime._emit_item_started(turn, log, emitter, verification_item)
             await runtime._emit_item_completed(turn, log, emitter, verification_item)
+            # ── Environment-blocked degrade ──────────────────────
+            # The agent changed code but could not run ANY verifier
+            # because the environment itself is broken (missing tool /
+            # no network / corepack shim download failure). Keep the
+            # change visible and ask the user to confirm manually instead
+            # of failing the turn on an environment problem.
+            if _turn_verification_environment_blocked(turn):
+                turn.status = TurnStatus.COMPLETED
+                log.turn_completed(thread_id, turn.id, turn.status)
+                runtime._snapshot_to_thread_store(thread_id, log, intent)
+                return turn
             turn.status = TurnStatus.FAILED
             log.turn_completed(thread_id, turn.id, turn.status)
             runtime._record_failed_turn_proposal(

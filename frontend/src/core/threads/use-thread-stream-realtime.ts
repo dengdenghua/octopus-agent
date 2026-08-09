@@ -45,6 +45,7 @@ import type { ToolEndEvent } from "@/core/threads/hooks";
 import {
   permissionRuntimeConfig,
   type ApprovalPolicy,
+  type NetworkAccessMode,
   type SandboxPolicy,
 } from "@/core/permissions";
 import {
@@ -899,6 +900,12 @@ export function useThreadStreamRealtime(
       permissionRuntimeConfig(
         (context as { permission_mode?: unknown } | null | undefined)
           ?.permission_mode,
+        // Explicit user opt-in only; when unset we pass undefined so the
+        // mode's safe default (deny, or allow for full access) applies.
+        (context as
+          | { network_access?: NetworkAccessMode }
+          | null
+          | undefined)?.network_access,
       ),
     [context],
   );

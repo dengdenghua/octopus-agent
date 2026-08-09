@@ -86,10 +86,20 @@ export const zhCN: Translations = {
   welcome: {
     greeting: "你好，我是 Octopus",
     description: "多智能体 AI · 直接说需求，或切到 Agent 模式深入处理。",
+    octopusTagline: "多智能体协作 · 一个输入框，直接解决问题",
 
     createYourOwnSkill: "创建你自己的 Agent Skill",
     createYourOwnSkillDescription:
       "创建自定义 Agent Skill 是 Octopus 的核心功能之一,Octopus\n会根据你的描述自动生成代码,你可以随时修改和优化\n这个 Skill,让它更好地为你服务。",
+
+    scenes: {
+      daily: "日常办公",
+      code: "代码开发",
+      design: "设计创意",
+      data: "数据分析",
+      doc: "文档处理",
+      agent: "Agent 编排",
+    },
   },
 
   // Clipboard
@@ -380,18 +390,16 @@ export const zhCN: Translations = {
     maxSubagents: "最大子代理数",
     maxSearches: "最大搜索数",
     permissionModeLabel: "权限",
-    permissionModeDefault: "默认确认",
-    permissionModeDefaultDesc: "读取可直接进行，高风险操作执行前需确认。",
-    permissionModeAcceptEdits: "自动改文件",
-    permissionModeAcceptEditsDesc:
-      "新建和编辑文件可直接执行；命令、删除和 Git 操作仍需确认。",
-    permissionModeBypass: "全权执行",
-    permissionModeBypassDesc:
-      "跳过常规审批，但安全拦截仍有效；仅用于完全可信的本地任务。",
-    permissionModeBypassConfirmTitle: "切换到全权执行？",
+    permissionModeDefault: "默认",
+    permissionModeDefaultDesc: "任何写入和命令都会先征求你的同意，最安全。",
+    permissionModeAcceptEdits: "接受编辑",
+    permissionModeAcceptEditsDesc: "修改文件自动执行，执行命令前仍会问你。",
+    permissionModeBypass: "完全访问",
+    permissionModeBypassDesc: "所有操作自动执行、不再询问，最高权限。",
+    permissionModeBypassConfirmTitle: "切换到完全访问？",
     permissionModeBypassConfirmDesc:
       "此模式会跳过命令、文件修改和 Git 操作的常规确认。安全拦截仍有效，但误操作风险会明显提高。",
-    permissionModeBypassConfirmAction: "确认全权执行",
+    permissionModeBypassConfirmAction: "确认完全访问",
     permissionModePlan: "仅规划",
     permissionModePlanDesc: "只给方案和步骤，暂不调用工具。",
     seedWorkflow: "创建或运行一个工作流：",
@@ -407,8 +415,8 @@ export const zhCN: Translations = {
     projectWriteAccess: "项目写入",
     projectReadOnly: "只读项目",
     permissionFullAccess: "完全访问",
-    permissionAcceptEdits: "自动接受编辑",
-    permissionConfirm: "确认后执行",
+    permissionAcceptEdits: "接受编辑",
+    permissionConfirm: "默认",
     addImage: "添加图片（粘贴 / 拖拽 / 选择）",
     removeImage: "移除",
     readme: "README",
@@ -3054,6 +3062,7 @@ export const zhCN: Translations = {
       about: "关于",
       automation: "执行与权限",
       evolution: "自演化",
+      sandbox: "沙箱与执行",
     },
     automation: {
       title: "执行与权限",
@@ -3648,6 +3657,7 @@ export const zhCN: Translations = {
         privacy: ["隐私", "权限", "安全"],
         observability: ["监控", "诊断", "日志"],
         about: ["关于", "版本", "帮助"],
+        sandbox: ["沙箱", "执行环境", "最高权限", "完全访问", "sandbox"],
       },
     },
   },
@@ -7368,6 +7378,65 @@ export const zhCN: Translations = {
     toastJudgeEnabled: "已开启 LLM 语义审查",
     toastJudgeDisabled: "已关闭 LLM 语义审查",
     toastJudgeToggleFailed: (msg: string) => `切换失败:${msg}`,
+  },
+
+  // Sandbox / execution permission settings
+  sandboxSettings: {
+    title: "沙箱与执行权限",
+    description:
+      "执行环境与权限粒度是两个独立维度，可自由组合：例如「沙箱 + 完全访问」在隔离环境内全自动，或「本地 + 接受编辑」在本机执行但命令仍需确认。",
+    activeTag: "当前",
+    scopeNote:
+      "改动保存到本地设置，对之后发起的所有新任务生效；当前正在运行的任务不受影响。",
+    restartHint: "「完全访问」为永久放行，请仅在可信任的本机环境中使用。",
+    envTitle: "执行环境",
+    envDesc: "命令在哪里运行、文件写入范围多大。",
+    permissionTitle: "权限级别",
+    permissionDesc: "文件改动和命令执行需要多少确认。",
+    toastEnvSwitched: (label: string) => `执行环境已切换为「${label}」`,
+    toastPermissionSwitched: (label: string) => `权限级别已切换为「${label}」`,
+    toastFailed: (msg: string) => `切换失败：${msg}`,
+    env: {
+      sandbox: {
+        label: "沙箱",
+        description: "命令在隔离沙箱中执行，写文件仅限工作区。",
+      },
+      local: {
+        label: "本地",
+        description: "命令在本机直接执行，写文件不设限制（绕过沙箱隔离）。",
+      },
+    },
+    permission: {
+      default: {
+        label: "默认",
+        description: "任何写入和命令都会先征求你的同意，最安全。",
+      },
+      acceptEdits: {
+        label: "接受编辑",
+        description: "修改文件自动执行，执行命令前仍会问你。",
+      },
+      bypassPermissions: {
+        label: "完全访问",
+        description: "所有操作自动执行、不再询问，最高权限。",
+      },
+    },
+    networkTitle: "网络访问",
+    networkDesc: "沙箱内命令的网络范围：默认仅推理端点可达；「常用域名」额外放行 npm/pip/git 等开发工具域名。",
+    toastNetworkSwitched: (label: string) => `网络访问已切换为「${label}」`,
+    network: {
+      deny: {
+        label: "禁止",
+        description: "仅模型推理端点可达，其余网络请求全部拦截（最安全）。",
+      },
+      common: {
+        label: "常用域名",
+        description: "放行 npm/pip/github/apt 等预置开发工具域名，其余仍拦截（推荐）。",
+      },
+      full: {
+        label: "全部允许",
+        description: "沙箱内命令可访问任意网络（pnpm install、git clone 等均可）。",
+      },
+    },
   },
 
   // Login page

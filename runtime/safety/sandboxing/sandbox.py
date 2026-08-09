@@ -46,6 +46,95 @@ from typing import Protocol
 _logger = logging.getLogger(__name__)
 
 
+def inference_domains() -> tuple[str, ...]:
+    """Hostnames of the LLM inference endpoints the agent must always reach.
+
+    Mirrors Claude Desktop's "allowed egress hosts" default: a network-denied
+    sandbox still lets the agent talk to the model API. Sources, in order:
+
+      1. ``custom_models.json`` — every entry's ``base_url`` host (the
+         operator-declared model endpoints).
+      2. ``ANTHROPIC_BASE_URL`` / ``ANTHROPIC_API_URL`` env override host.
+
+    Hosts are lowercased and deduplicated. A network-*allowed* sandbox ignores
+    this list entirely (everything is reachable); it only matters when
+    ``allow_network=False``.
+    """
+    from urllib.parse import urlparse
+
+    hosts: list[str] = []
+    try:
+        from runtime.platform.models.custom_model_flags import read_custom_models
+
+        models = read_custom_models()
+        if isinstance(models, dict):
+            for entry in models.values():
+                if not isinstance(entry, dict):
+                    continue
+                base = entry.get("base_url")
+                if isinstance(base, str) and base.strip():
+                    host = (urlparse(base.strip()).hostname or "").strip().lower()
+                    if host and host not in hosts:
+                        hosts.append(host)
+    except Exception:  # noqa: BLE001 - inference-domain discovery is best-effort
+        pass
+    for env_key in ("ANTHROPIC_BASE_URL", "ANTHROPIC_API_URL"):
+        raw = os.environ.get(env_key)
+        if isinstance(raw, str) and raw.strip():
+            host = (urlparse(raw.strip()).hostname or "").strip().lower()
+            if host and host not in hosts:
+                hosts.append(host)
+    return tuple(hosts)
+
+
+# Common dev-tool egress domains, pre-bundled so a network-"common" sandbox
+# lets the agent install packages / clone repos without the user having to
+# hand-maintain a host allowlist (Claude Desktop ships a similar preset in its
+# "Allowed egress hosts"). Mirrors (npmmirror / tuna / aliyun) are included so
+# CN users get the same zero-config experience. Everything outside
+# inference + this preset stays blocked by the dead proxy.
+DEFAULT_EGRESS_DOMAINS: tuple[str, ...] = (
+    # npm / frontend tooling
+    "registry.npmjs.org",
+    "registry.npmmirror.com",
+    "yarnpkg.com",
+    "registry.yarnpkg.com",
+    "cdn.jsdelivr.net",
+    "unpkg.com",
+    # pip / python
+    "pypi.org",
+    "files.pythonhosted.org",
+    "pypi.tuna.tsinghua.edu.cn",
+    "mirrors.aliyun.com",
+    # git
+    "github.com",
+    "codeload.github.com",
+    "raw.githubusercontent.com",
+    "gitee.com",
+    # apt / system packages
+    "archive.ubuntu.com",
+    "security.ubuntu.com",
+    # rust
+    "crates.io",
+    "index.crates.io",
+    "static.crates.io",
+    # go
+    "proxy.golang.org",
+    "goproxy.cn",
+    # other dev tools
+    "playwright.download.prss.microsoft.com",
+    "cdn.playwright.dev",
+    "repo1.maven.org",
+    "central.sonatype.com",
+)
+
+
+def default_egress_domains() -> tuple[str, ...]:
+    """The pre-bundled dev-tool host allowlist for the "common domains"
+    network tier (see ``SandboxPolicy.egress_allow_common``)."""
+    return DEFAULT_EGRESS_DOMAINS
+
+
 _COMMERCIAL_DEPLOYMENT_MODES = frozenset(
     {
         "commercial",
@@ -108,6 +197,27 @@ class SandboxPolicy:
     allow_network: bool = False
     """If False, set ``no_proxy=*`` etc. so common HTTP libs short-circuit."""
 
+    inference_domains: tuple[str, ...] = ()
+    """Hostnames that stay reachable even when ``allow_network`` is False.
+
+    Mirrors Claude Desktop's "allowed egress hosts" behaviour: a network-
+    denied sandbox still lets the agent reach the LLM inference endpoint(s)
+    (the model API), otherwise a sandboxed local partner (claude/codex CLI)
+    would be unable to call the model at all. When non-empty and network is
+    denied, ``no_proxy`` is set to these domains (direct connect) while the
+    HTTP(S) proxy still points at the dead short-circuit address, so every
+    other host is blocked.
+    """
+
+    egress_allow_common: bool = False
+    """When network is denied, additionally allow the pre-bundled dev-tool
+    domains (``DEFAULT_EGRESS_DOMAINS`` — npm / pip / git / apt / rust / go
+    registries and CN mirrors). This is the "common domains" tier of the
+    network setting: the agent can install packages and clone repos, but
+    everything outside inference + the preset stays blocked. Users never
+    hand-maintain this list.
+    """
+
     timeout_s: float = 60.0
     """Wall-clock cap. 0 disables (don't do that with untrusted models)."""
 
@@ -153,6 +263,24 @@ class SandboxPolicy:
             env["NO_PROXY"] = "*"
             env["http_proxy"] = "http://127.0.0.1:1"
             env["https_proxy"] = "http://127.0.0.1:1"
+            # Model inference endpoints stay reachable even when the
+            # sandbox is network-denied (Claude Desktop parity), and the
+            # "common domains" tier additionally pre-allows dev-tool hosts.
+            # ``no_proxy`` enumerates them so HTTP libs connect directly;
+            # everything else still goes through the dead proxy and fails.
+            allowed = [d.strip() for d in self.inference_domains if d.strip()]
+            if self.egress_allow_common:
+                allowed.extend(d.strip() for d in DEFAULT_EGRESS_DOMAINS if d.strip())
+            unique: list[str] = []
+            seen: set[str] = set()
+            for domain in allowed:
+                if domain and domain not in seen:
+                    seen.add(domain)
+                    unique.append(domain)
+            if unique:
+                joined = ",".join(unique)
+                env["no_proxy"] = joined
+                env["NO_PROXY"] = joined
         return env
 
 

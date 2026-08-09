@@ -638,6 +638,28 @@ def _turn_mode(params: TurnParams) -> str:
     return ""
 
 
+# Audit / review intent detection. "审计项目 / 审计一下 / 审查 / code review" are
+# read-heavy inspection tasks: the agent's job is a report, not silent
+# code edits. We do NOT hard-block writes (an audit may legitimately fix a
+# found issue after stating it), but we inject a prompt-level audit contract
+# so the default behaviour is inspect-and-report, and any edit must be
+# explicitly justified in the same turn.
+_AUDIT_INTENT_RE = re.compile(
+    r"审计|审查|审计项目|audit\b|security\s*audit\b|code\s*review\b|"
+    r"代码评审|代码审查|检查项目|盘点|体检|review\s+the\s+project",
+    re.IGNORECASE,
+)
+
+
+def _is_audit_intent(text: str, context_payload: dict[str, Any]) -> bool:
+    if _AUDIT_INTENT_RE.search(text):
+        return True
+    # A declared read-only / audit capability also opts in.
+    mode = str(context_payload.get("mode") or "").strip().lower()
+    capability = str(context_payload.get("capability_mode") or "").strip().lower()
+    return mode == "audit" or capability == "audit" or bool(context_payload.get("audit_mode"))
+
+
 def _build_intent(
     text: str,
     params: TurnParams,
@@ -730,6 +752,22 @@ def _build_intent(
     approval_policy = params.approval_policy
     if approval_policy == "never" and not allow_client_auto_approve:
         approval_policy = "on-request"
+    # Audit / review turns get a prompt-level audit contract (inspect →
+    # report; any code edit must be explicitly justified). This is a
+    # behavioural nudge, not a permission gate — an audit may legitimately
+    # fix a found issue after stating it.
+    audit_mode = _is_audit_intent(text, context_payload)
+    if audit_mode:
+        context_payload = {**context_payload, "audit_mode": True}
+    # Thread the turn's declared sandbox policy through to execution so
+    # exec_shell can honour ``sandboxPolicy.networkAccess``. Default when
+    # absent is network denied — a turn must explicitly opt in.
+    sb_policy = getattr(params, "sandbox_policy", None) or {}
+    if isinstance(sb_policy, dict) and sb_policy:
+        context_payload = {
+            **context_payload,
+            "sandbox_policy": {"type": str(sb_policy.get("type") or ""), **sb_policy},
+        }
     return ParsedIntent(
         raw=text,
         intent_type="task",

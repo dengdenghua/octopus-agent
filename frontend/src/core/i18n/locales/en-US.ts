@@ -87,10 +87,20 @@ export const enUS: Translations = {
     greeting: "Hello, again!",
     description:
       "Welcome to 🦌 Octopus, an open source super agent. With built-in and custom skills, Octopus helps you search on the web, analyze data, and generate artifacts like slides, web pages and do almost anything.",
+    octopusTagline: "Multi-agent collaboration · One input, direct solutions",
 
     createYourOwnSkill: "Create Your Own Skill",
     createYourOwnSkillDescription:
       "Create your own skill to release the power of Octopus. With customized skills,\nOctopus can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
+
+    scenes: {
+      daily: "Daily Work",
+      code: "Code Dev",
+      design: "Design",
+      data: "Data Analysis",
+      doc: "Documents",
+      agent: "Agent Orchestration",
+    },
   },
 
   // Clipboard
@@ -398,15 +408,15 @@ export const enUS: Translations = {
     maxSubagents: "Max Subagents",
     maxSearches: "Max Searches",
     permissionModeLabel: "Permissions",
-    permissionModeDefault: "Ask first",
+    permissionModeDefault: "Default",
     permissionModeDefaultDesc:
-      "Read freely; ask before performing high-risk actions.",
-    permissionModeAcceptEdits: "Auto-edit files",
+      "Any write or command asks for your approval first. Safest option.",
+    permissionModeAcceptEdits: "Accept edits",
     permissionModeAcceptEditsDesc:
-      "Create and edit files automatically; still ask before commands, deletions, and Git actions.",
+      "File changes run automatically; commands still ask for approval.",
     permissionModeBypass: "Full access",
     permissionModeBypassDesc:
-      "Skip routine approvals; safety blocks still apply. Use only for fully trusted local tasks.",
+      "Every action runs automatically with no questions. Maximum permissions.",
     permissionModeBypassConfirmTitle: "Switch to Full access?",
     permissionModeBypassConfirmDesc:
       "This mode skips routine confirmation for commands, file changes, and Git operations. Safety blocks remain active, but accidental changes are more likely.",
@@ -428,7 +438,7 @@ export const enUS: Translations = {
     projectReadOnly: "Read only",
     permissionFullAccess: "Full access",
     permissionAcceptEdits: "Accept edits",
-    permissionConfirm: "Confirm",
+    permissionConfirm: "Default",
     addImage: "Add image (paste / drag / select)",
     removeImage: "Remove",
     readme: "README",
@@ -3282,6 +3292,7 @@ export const enUS: Translations = {
       about: "About",
       automation: "Execution & Permissions",
       evolution: "Self-evolution",
+      sandbox: "Sandbox & Execution",
     },
     automation: {
       title: "Execution & Permissions",
@@ -3902,6 +3913,7 @@ export const enUS: Translations = {
         privacy: [],
         observability: [],
         about: [],
+        sandbox: ["sandbox", "execution", "full access", "permissions"],
       },
     },
   },
@@ -7772,6 +7784,72 @@ Strategy:
     toastJudgeEnabled: "LLM semantic review enabled",
     toastJudgeDisabled: "LLM semantic review disabled",
     toastJudgeToggleFailed: (msg: string) => `Toggle failed: ${msg}`,
+  },
+
+  // Sandbox / execution permission settings
+  sandboxSettings: {
+    title: "Sandbox & Execution Permissions",
+    description:
+      "Execution environment and permission level are two independent dimensions you can combine freely — e.g. “Sandbox + Full access” for full automation inside isolation, or “Local + Accept edits” to run on this machine while commands still ask for confirmation.",
+    activeTag: "Current",
+    scopeNote:
+      "Changes are saved to local settings and apply to all future tasks; tasks already running are unaffected.",
+    restartHint:
+      "“Full access” grants permanent approval — only use it on a machine you trust.",
+    envTitle: "Execution environment",
+    envDesc: "Where commands run and how much of the file system they can write.",
+    permissionTitle: "Permission level",
+    permissionDesc: "How much confirmation file edits and commands require.",
+    toastEnvSwitched: (label: string) => `Execution environment switched to “${label}”`,
+    toastPermissionSwitched: (label: string) => `Permission level switched to “${label}”`,
+    toastFailed: (msg: string) => `Switch failed: ${msg}`,
+    env: {
+      sandbox: {
+        label: "Sandbox",
+        description:
+          "Commands run in an isolated sandbox; file writes are limited to the workspace.",
+      },
+      local: {
+        label: "Local",
+        description:
+          "Commands run directly on this machine with unrestricted file writes (bypasses sandbox isolation).",
+      },
+    },
+    permission: {
+      default: {
+        label: "Default",
+        description: "Any write or command asks for your approval first. Safest option.",
+      },
+      acceptEdits: {
+        label: "Accept edits",
+        description: "File changes run automatically; commands still ask for approval.",
+      },
+      bypassPermissions: {
+        label: "Full access",
+        description: "Every action runs automatically with no questions. Maximum permissions.",
+      },
+    },
+    networkTitle: "Network access",
+    networkDesc:
+      "Network scope for sandboxed commands: by default only model inference stays reachable; the “Common domains” tier additionally pre-allows dev-tool hosts.",
+    toastNetworkSwitched: (label: string) => `Network access switched to “${label}”`,
+    network: {
+      deny: {
+        label: "Blocked",
+        description:
+          "Only model inference endpoints are reachable; all other requests are blocked (most secure).",
+      },
+      common: {
+        label: "Common domains",
+        description:
+          "Pre-allows bundled dev-tool hosts (npm / pip / github / apt); everything else stays blocked (recommended).",
+      },
+      full: {
+        label: "Allowed",
+        description:
+          "Sandboxed commands can reach any network (pnpm install, git clone, etc.).",
+      },
+    },
   },
 
   // Login page

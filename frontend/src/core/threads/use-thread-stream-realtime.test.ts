@@ -736,7 +736,9 @@ describe("useThreadStreamRealtime permissions", () => {
         approvalPolicy: "on-request",
         sandboxPolicy: {
           type: "workspaceWrite",
-          networkAccess: true,
+          // Default permission mode keeps network denied unless the user
+          // opts in from the sandbox settings page.
+          networkAccess: false,
         },
         metadata: {
           context: expect.objectContaining({
@@ -1266,7 +1268,8 @@ describe("useThreadStreamRealtime permissions", () => {
         approvalPolicy: "on-request",
         sandboxPolicy: {
           type: "workspaceWrite",
-          networkAccess: true,
+          // Plan mode defaults to network denied too.
+          networkAccess: false,
         },
         planningMode: true,
         metadata: {

@@ -134,6 +134,7 @@ class PersistentStdioMCPClient(MCPClient):
             SandboxPolicy,
             SandboxViolation,
             effective_process_sandbox_mode,
+            inference_domains,
             process_sandbox_required,
             select_process_backend,
         )
@@ -164,6 +165,9 @@ class PersistentStdioMCPClient(MCPClient):
             allow_network=False,
             timeout_s=self.config.timeout_ms / 1000,
             extra_env=_sandbox_extra_env(self.config.env),
+            # Model inference endpoints stay reachable in a network-denied
+            # sandbox (Claude Desktop parity).
+            inference_domains=inference_domains(),
         )
         try:
             choice = select_process_backend(effective_process_sandbox_mode())

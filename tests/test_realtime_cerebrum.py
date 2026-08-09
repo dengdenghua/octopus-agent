@@ -182,6 +182,82 @@ def test_flatten_merges_post_final_trace_items_into_delivered_answer() -> None:
     assert [tool["name"] for tool in ai["tool_calls"]] == ["todo_write"]
 
 
+def test_flatten_file_change_tool_calls_are_json_serializable() -> None:
+    """Regression: FileChange pydantic models leaked into the flattened
+    ``tool_calls[].args.changes``, so the ThreadStateStore snapshot write
+    (``json.dumps`` with no ``default=``) raised TypeError and the whole
+    turn-state update was silently swallowed — thread status / updated_at
+    froze at creation time. Flattened output must be JSON-safe.
+    """
+    import json as _json
+
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    turn = Turn.model_validate(
+        {
+            "id": "turn-fc",
+            "threadId": "thread-fc",
+            "status": "completed",
+            "startedAt": "2026-06-01T18:53:24Z",
+            "completedAt": "2026-06-01T19:03:00Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T18:53:24Z",
+                    "text": "fix the config",
+                    "attachments": [],
+                },
+                {
+                    "id": "a1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:00Z",
+                    "text": "done",
+                },
+                {
+                    "id": "fc1",
+                    "type": "fileChange",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:02:47Z",
+                    "changes": [
+                        {
+                            "path": "/repo/commitlint.config.js",
+                            "op": "update",
+                            "diff": "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new",
+                            "diffTruncated": False,
+                            "hunks": [],
+                        }
+                    ],
+                    "grantRoot": "/repo",
+                },
+            ],
+            "error": None,
+        }
+    )
+
+    messages, artifacts, _ = _flatten_turns_to_messages([turn])
+
+    # The file path must still surface in artifacts.
+    assert artifacts == ["/repo/commitlint.config.js"]
+    ai = messages[-1]
+    tool_calls = ai.get("tool_calls") or []
+    assert any(tc.get("name") == "file_change" for tc in tool_calls)
+    # The flattened transcript must be plain JSON — no pydantic models.
+    dumped = _json.dumps(messages, ensure_ascii=False)
+    assert "/repo/commitlint.config.js" in dumped
+    change = next(
+        tc["args"]["changes"][0]
+        for tc in tool_calls
+        if tc.get("name") == "file_change"
+    )
+    assert isinstance(change, dict)
+    assert change["path"] == "/repo/commitlint.config.js"
+    assert change["op"] == "update"
+
+
 @pytest.fixture()
 def gateway(tmp_path: Path) -> Any:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
@@ -2375,6 +2451,62 @@ def test_input_metadata_capability_mode_reaches_react_intent() -> None:
     assert intent.user_context["permission_mode"] == "default"
     assert intent.user_context["sandbox_mode"] == "sandbox"
     assert intent.user_context["auto_approve"] is True
+
+
+def test_audit_intent_sets_audit_mode_in_user_context() -> None:
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-audit",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "审计项目",
+                    "metadata": {
+                        "context": {
+                            "mode": "code",
+                            "workspace_path": "/tmp/repo",
+                            "workspace_scope": "project",
+                        },
+                    },
+                },
+            ],
+            "approvalPolicy": "never",
+        }
+    )
+
+    intent = _build_intent("审计项目", params, allow_client_auto_approve=True)
+    assert intent.user_context.get("audit_mode") is True
+
+
+def test_non_audit_intent_does_not_set_audit_mode() -> None:
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-fix",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "修复登录页的 bug",
+                    "metadata": {
+                        "context": {
+                            "mode": "code",
+                            "workspace_path": "/tmp/repo",
+                            "workspace_scope": "project",
+                        },
+                    },
+                },
+            ],
+            "approvalPolicy": "never",
+        }
+    )
+
+    intent = _build_intent("修复登录页的 bug", params, allow_client_auto_approve=True)
+    assert intent.user_context.get("audit_mode") is None
 
 
 def test_code_capability_without_project_gets_personal_workspace(tmp_path: Path) -> None:

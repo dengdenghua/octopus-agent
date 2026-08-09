@@ -185,6 +185,41 @@ function extractLineCounts(
 }
 
 /**
+ * Extract the raw unified diffs produced by a file-mutation tool call so
+ * the activity view can render the +/- lines (red/green) mid-turn, like
+ * Claude's edit blocks. Sources, in order:
+ *
+ *   1. ``args.changes[].diff`` — edit_file's structured changes carry the
+ *      full unified diff per file (same source MessageOutputSummary uses).
+ *   2. The tool result JSON's ``changes[].diff`` — fallback for tools that
+ *      echo the changes back in their result.
+ *
+ * Returns one entry per file; empty when no diff is available.
+ */
+function extractToolCallDiffs(
+  args: Record<string, unknown>,
+  result: string | undefined,
+): string[] {
+  const out: string[] = [];
+  const pushFrom = (source: unknown): void => {
+    if (!source || typeof source !== "object") return;
+    const changes = (source as Record<string, unknown>).changes;
+    if (!Array.isArray(changes)) return;
+    for (const raw of changes) {
+      if (!raw || typeof raw !== "object") continue;
+      const diff = (raw as Record<string, unknown>).diff;
+      if (typeof diff === "string" && diff.trim()) out.push(diff);
+    }
+  };
+  pushFrom(args);
+  if (!out.length && result) {
+    const parsed = parseResultJSON(result);
+    if (parsed && typeof parsed === "object") pushFrom(parsed);
+  }
+  return out;
+}
+
+/**
  * Shape of the label bag consumers pass to localize activity labels.
  * Mirrors the `messageGrouping` section of the Translations interface.
  * When the label bag is omitted we fall back to English hardcodes so
@@ -419,6 +454,11 @@ function toActivityItem(
   if (classification === "file_ops") {
     const counts = extractLineCounts(args, resultText);
     const label = buildFileOpLabel(toolCall.name, args, counts, labels);
+    // Carry the raw unified diffs (from the tool-call args, e.g.
+    // edit_file's `changes[].diff`) so the activity view can render the
+    // +/- lines in red/green mid-turn, like Claude's edit blocks. Each
+    // entry is one file's diff.
+    const diffs = extractToolCallDiffs(args, resultText);
     return {
       item: {
         id,
@@ -428,6 +468,7 @@ function toActivityItem(
           tool_name: toolCall.name,
           lines_added: counts.added ?? 0,
           lines_removed: counts.removed ?? 0,
+          ...(diffs.length ? { diffs } : {}),
         },
       },
       kind: "file_ops",

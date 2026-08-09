@@ -45,6 +45,8 @@ def _exec_shell(
     sandbox_dir: str | None = None,
     run_in_background: bool = False,
     background: bool = False,
+    allow_network: bool | None = None,
+    egress_allow_common: bool | None = None,
     **_kw: Any,
 ) -> dict[str, Any]:
     if run_in_background or background:
@@ -53,6 +55,8 @@ def _exec_shell(
             cwd=cwd,
             env=env,
             sandbox_dir=sandbox_dir,
+            allow_network=allow_network,
+            egress_allow_common=egress_allow_common,
         )
 
     argv, parse_error = _parse_command(command)
@@ -101,6 +105,8 @@ def _exec_shell(
         output_cap_bytes=_EXEC_OUTPUT_CAP,
         sandbox_dir=sandbox_dir,
         sandbox_required=True,
+        allow_network=_resolved_allow_network(allow_network),
+        egress_allow_common=_resolved_egress_allow_common(egress_allow_common),
     )
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
@@ -129,12 +135,86 @@ def _exec_shell(
     }
 
 
+def _resolved_allow_network(explicit: bool | None) -> bool:
+    """Resolve the effective ``allow_network`` for a shell exec.
+
+    Precedence:
+      1. Explicit caller value (tool arg ``allow_network``) — wins.
+      2. The bound Session's declared ``sandbox_policy.networkAccess`` —
+         the turn explicitly opted into network access.
+      3. Fallback ``False`` — sandbox default is network DENIED.
+
+    ``scope.network_policy`` is deliberately NOT consulted: it defaults to
+    "allow" outside plan mode (it governs browser/remote-exec surfaces, not
+    the confined shell), so reading it here would flip the default from
+    denied to allowed and effectively escape the sandbox's network policy.
+    """
+    if explicit is not None:
+        return bool(explicit)
+    try:
+        from runtime.platform.process.session import current_session
+
+        sess = current_session()
+        if sess is None:
+            return False
+        policy = (sess.metadata or {}).get("sandbox_policy")
+        if isinstance(policy, dict):
+            return bool(policy.get("networkAccess") or policy.get("network_access"))
+        return False
+    except Exception:  # noqa: BLE001 - best-effort; sandbox default is deny
+        return False
+
+
+def _resolved_egress_allow_common(explicit: bool | None) -> bool:
+    """Resolve the "common domains" network tier for a shell exec.
+
+    When the sandbox is network-denied, this tier pre-allows the bundled
+    dev-tool registries/mirrors (npm / pip / git / apt / rust / go). The
+    user picks it from the sandbox settings page ("常用域名"), never by
+    hand-maintaining hosts.
+
+    Precedence:
+      1. Explicit caller value (tool arg) — wins.
+      2. The bound Session's declared ``sandbox_policy.egressAllowCommon``.
+      3. Fallback ``False`` — a denied sandbox allows only inference.
+    """
+    if explicit is not None:
+        return bool(explicit)
+    try:
+        from runtime.platform.process.session import current_session
+
+        sess = current_session()
+        if sess is None:
+            return False
+        policy = (sess.metadata or {}).get("sandbox_policy")
+        if isinstance(policy, dict):
+            return bool(
+                policy.get("egressAllowCommon") or policy.get("egress_allow_common")
+            )
+        return False
+    except Exception:  # noqa: BLE001 - best-effort; deny stays deny
+        return False
+
+
+def _inference_domains() -> tuple[str, ...]:
+    """Model inference endpoints that stay reachable in a network-denied
+    sandbox (Claude Desktop parity). Best-effort; empty means deny-all."""
+    try:
+        from runtime.safety.sandboxing.sandbox import inference_domains
+
+        return inference_domains()
+    except Exception:  # noqa: BLE001 - best-effort; empty means deny-all
+        return ()
+
+
 def _background_exec(
     command: str | list[str] = "",
     *,
     cwd: str | None = None,
     env: dict[str, str] | None = None,
     sandbox_dir: str | None = None,
+    allow_network: bool | None = None,
+    egress_allow_common: bool | None = None,
     **_kw: Any,
 ) -> dict[str, Any]:
     argv, parse_error = _parse_command(command)
@@ -201,9 +281,17 @@ def _background_exec(
 
         sandbox_root = Path(sandbox_dir).expanduser().resolve()
         sandbox_workspace = str(sandbox_root)
+        resolved_network = _resolved_allow_network(allow_network)
+        resolved_common = _resolved_egress_allow_common(egress_allow_common)
         policy = SandboxPolicy(
             workspace=sandbox_root,
+            allow_network=resolved_network,
             extra_env=_sandbox_extra_env(env),
+            # Model inference endpoints stay reachable even when the sandbox
+            # is network-denied (Claude Desktop parity); the "common domains"
+            # tier additionally pre-allows dev-tool registries/mirrors.
+            inference_domains=(() if resolved_network else _inference_domains()),
+            egress_allow_common=resolved_common,
         )
         run_env = policy.env_for()
         env_mode = "allowlist"

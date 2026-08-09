@@ -52,6 +52,7 @@ def _session_metadata_from_intent(intent: ParsedIntent) -> dict[str, Any]:
             "browser_permission_policy",
             "browser_evidence_policy",
             "allowed_write_paths",
+            "sandbox_policy",
         ):
             value = nested.get(key)
             if value is not None:
@@ -83,6 +84,7 @@ def _session_metadata_from_intent(intent: ParsedIntent) -> dict[str, Any]:
         "browser_permission_policy",
         "browser_evidence_policy",
         "allowed_write_paths",
+        "sandbox_policy",
     ):
         value = user_context.get(key)
         if value is not None:

@@ -87,10 +87,20 @@ export const jaJP: Translations = {
     greeting: "こんにちは！",
     description:
       "🦌 Octopusへようこそ。オープンソースのスーパーエージェントです。ビルトインスキルとカスタムスキルを使って、ウェブ検索、データ分析、スライドやウェブページなどのアーティファクト生成など、ほぼ何でもこなせます。",
+    octopusTagline: "マルチエージェント協働 · 一つの入力で直接解決",
 
     createYourOwnSkill: "スキルを自作する",
     createYourOwnSkillDescription:
       "Octopusの力を解放する独自のスキルを作成しましょう。カスタムスキルがあれば、\nOctopusはウェブ検索、データ分析、スライドやウェブページなどの\nアーティファクト生成など、ほぼ何でもこなせます。",
+
+    scenes: {
+      daily: "日常業務",
+      code: "コード開発",
+      design: "デザイン",
+      data: "データ分析",
+      doc: "ドキュメント",
+      agent: "エージェント編成",
+    },
   },
 
   // Clipboard
@@ -391,15 +401,15 @@ export const jaJP: Translations = {
     maxSubagents: "最大サブエージェント数",
     maxSearches: "最大検索数",
     permissionModeLabel: "権限",
-    permissionModeDefault: "実行前に確認",
+    permissionModeDefault: "デフォルト",
     permissionModeDefaultDesc:
-      "読み取りは自由に行えます。高リスクな操作の実行前に確認します。",
-    permissionModeAcceptEdits: "ファイルを自動編集",
+      "すべての書き込みとコマンドは事前に確認を求めます。最も安全です。",
+    permissionModeAcceptEdits: "編集を受け入れる",
     permissionModeAcceptEditsDesc:
-      "ファイルの作成と編集は自動的に実行されます。コマンド、削除、Git 操作の前には確認します。",
+      "ファイルの変更は自動的に実行されますが、コマンド実行前には確認します。",
     permissionModeBypass: "フルアクセス",
     permissionModeBypassDesc:
-      "通常の承認をスキップしますが、安全ブロックは引き続き適用されます。完全に信頼できるローカルタスクにのみ使用してください。",
+      "すべての操作を確認なしで自動実行します。最大権限です。",
     permissionModeBypassConfirmTitle: "フルアクセスに切り替えますか？",
     permissionModeBypassConfirmDesc:
       "コマンド、ファイル変更、Git 操作の通常確認を省略します。安全ブロックは有効ですが、誤操作のリスクが高まります。",
@@ -420,8 +430,8 @@ export const jaJP: Translations = {
     projectWriteAccess: "プロジェクト書き込み",
     projectReadOnly: "読み取り専用",
     permissionFullAccess: "フルアクセス",
-    permissionAcceptEdits: "編集を許可",
-    permissionConfirm: "確認",
+    permissionAcceptEdits: "編集を受け入れる",
+    permissionConfirm: "デフォルト",
     addImage: "画像を追加（貼り付け / ドラッグ / 選択）",
     removeImage: "削除",
     readme: "README",
@@ -793,13 +803,13 @@ export const jaJP: Translations = {
     autoVerifyRunning: "自動検証実行中",
     changesAwaitingVerify: "検証待ちの変更",
     verify: "Verify",
-    attemptCompleted: (attempt: number, count: number, singular: boolean) =>
+    attemptCompleted: (attempt: number, count: number, _singular: boolean) =>
       `第 ${attempt} 回目の試行完了${count > 0 ? `、${count} 個のファイル` : ""}`,
     autoFixLimitReached: (attempt: number, max: number) =>
       `第 ${attempt} 回目。自動修正回数が上限に達しました (${max}/${max})`,
-    failedChecks: (count: number, singular: boolean) =>
+    failedChecks: (count: number, _singular: boolean) =>
       `${count} 件のチェック失敗`,
-    changedFilesPending: (count: number, singular: boolean) =>
+    changedFilesPending: (count: number, _singular: boolean) =>
       `${count} 個の変更ファイルがチェック待ち`,
     runningProjectChecks: "プロジェクトチェックを実行中",
     // Panel labels
@@ -3267,6 +3277,7 @@ export const jaJP: Translations = {
       about: "情報",
       automation: "実行と権限",
       evolution: "自己進化",
+      sandbox: "サンドボックスと実行",
     },
     automation: {
       title: "実行と権限",
@@ -3890,6 +3901,7 @@ export const jaJP: Translations = {
         privacy: [],
         observability: [],
         about: [],
+        sandbox: ["サンドボックス", "実行", "フルアクセス", "権限"],
       },
     },
   },
@@ -7761,6 +7773,65 @@ export const jaJP: Translations = {
     toastJudgeEnabled: "LLM セマンティックレビューを有効にしました",
     toastJudgeDisabled: "LLM セマンティックレビューを無効にしました",
     toastJudgeToggleFailed: (msg: string) => `切り替え失敗: ${msg}`,
+  },
+
+  // Sandbox / execution permission settings
+  sandboxSettings: {
+    title: "サンドボックスと実行権限",
+    description:
+      "実行環境と権限レベルは独立した2つの軸で、自由に組み合わせられます。例：「サンドボックス + フルアクセス」は隔離内で全自動、「ローカル + 編集を受け入れる」は本機で実行しつつコマンドは確認を求めます。",
+    activeTag: "現在",
+    scopeNote:
+      "変更はローカル設定に保存され、以降のすべての新しいタスクに適用されます。実行中のタスクには影響しません。",
+    restartHint: "「フルアクセス」は恒久承認を許可します。信頼できる環境でのみ使用してください。",
+    envTitle: "実行環境",
+    envDesc: "コマンドの実行場所と、書き込めるファイル範囲。",
+    permissionTitle: "権限レベル",
+    permissionDesc: "ファイル編集とコマンド実行に必要な確認の程度。",
+    toastEnvSwitched: (label: string) => `実行環境を「${label}」に切り替えました`,
+    toastPermissionSwitched: (label: string) => `権限レベルを「${label}」に切り替えました`,
+    toastFailed: (msg: string) => `切り替え失敗: ${msg}`,
+    env: {
+      sandbox: {
+        label: "サンドボックス",
+        description: "コマンドは隔離されたサンドボックスで実行され、ファイル書き込みはワークスペースに限定されます。",
+      },
+      local: {
+        label: "ローカル",
+        description: "コマンドはこのマシン上で直接実行され、ファイル書き込みに制限はありません（サンドボックス分離をバイパス）。",
+      },
+    },
+    permission: {
+      default: {
+        label: "デフォルト",
+        description: "すべての書き込みとコマンドは事前に確認を求めます。最も安全です。",
+      },
+      acceptEdits: {
+        label: "編集を受け入れる",
+        description: "ファイルの変更は自動的に実行されますが、コマンド実行前には確認します。",
+      },
+      bypassPermissions: {
+        label: "フルアクセス",
+        description: "すべての操作を確認なしで自動実行します。最大権限です。",
+      },
+    },
+    networkTitle: "ネットワークアクセス",
+    networkDesc: "サンドボックス内コマンドのネットワーク範囲：既定ではモデル推論エンドポイントのみ到達可能。「一般ドメイン」は開発ツールのドメインを追加で許可します。",
+    toastNetworkSwitched: (label: string) => `ネットワークアクセスを「${label}」に切り替えました`,
+    network: {
+      deny: {
+        label: "禁止",
+        description: "モデル推論エンドポイントのみ到達可能。その他のリクエストはすべて遮断されます（最も安全）。",
+      },
+      common: {
+        label: "一般ドメイン",
+        description: "npm/pip/github/apt などの開発ツール用ドメインを事前許可。それ以外は引き続き遮断（推奨）。",
+      },
+      full: {
+        label: "許可",
+        description: "サンドボックス内コマンドが任意のネットワークにアクセスできます（pnpm install、git clone など）。",
+      },
+    },
   },
 
   // Login page

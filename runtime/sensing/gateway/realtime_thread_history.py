@@ -13,6 +13,46 @@ from typing import Any
 from runtime.protocol import Turn, TurnStatus
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively normalise objects into JSON-serialisable plain data.
+
+    The legacy ``ThreadStateStore`` snapshot is written with
+    ``json.dumps`` (no ``default=`` hook), so any pydantic model or
+    other non-JSON object nested inside a flattened message (e.g.
+    ``FileChange`` under ``tool_calls[].args.changes``) would raise
+    ``TypeError`` and silently abort the turn-state write. Converting
+    here keeps the snapshot writer robust without changing its wire
+    contract.
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if hasattr(value, "model_dump"):
+        try:
+            return _json_safe(value.model_dump(by_alias=True, mode="json"))
+        except Exception:  # noqa: BLE001 - best-effort flatten
+            try:
+                return _json_safe(value.model_dump())
+            except Exception:  # noqa: BLE001
+                return repr(value)
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    # datetime / Enum / any remaining non-JSON leaf: fall back to str.
+    return str(value)
+
+
+def _limit_text(text: str, limit: int) -> str:
+    """Truncate a long text, keeping the head and marking the omitted tail.
+
+    Progress anchors injected for failed turns must stay cheap; the tail is
+    the least likely to carry actionable state (the conclusion preamble is).
+    """
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}\n…（后文已省略）"
+
+
 def _flatten_turns_to_messages(
     turns: list[Turn],
     *,
@@ -68,34 +108,66 @@ def _flatten_turns_to_messages(
         # appended below; the model context then only sees the *failed*
         # fact, not the stale in-progress narrative it was building.
         if turn_failed and not include_failed_drafts:
+            # Keep the task objective (user prompt), the last concrete
+            # ``answer`` the turn produced (progress anchor) and the error
+            # (when present). Commentary checkpoints are still dropped —
+            # they are mid-flight narration, not a conclusion — but without
+            # the anchor the next turn cannot tell what the previous run was
+            # doing or how far it got.
+            failed_user = ""
+            user_id: Any = None
+            last_answer: str | None = None
+            error_item: Any = None
             for item in turn.items:
                 t = getattr(item, "type", None)
                 if t == "userMessage":
-                    messages.append(
-                        {
-                            "type": "human",
-                            "id": getattr(item, "id", None),
-                            "content": getattr(item, "text", "") or "",
-                        }
-                    )
+                    failed_user = getattr(item, "text", "") or ""
+                    user_id = getattr(item, "id", None)
+                elif t == "agentMessage" and (
+                    getattr(item, "message_kind", "answer") == "answer"
+                ):
+                    text = (getattr(item, "text", "") or "").strip()
+                    if text:
+                        last_answer = text
                 elif t == "error":
-                    message = getattr(item, "message", "") or ""
-                    messages.append(
-                        {
-                            "type": "ai",
-                            "id": getattr(item, "id", None),
-                            "content": f"[上一轮任务失败。] {message}"
-                            if message
-                            else "[上一轮任务失败。]",
-                            "additional_kwargs": {
-                                "error": {
-                                    "message": message,
-                                    "will_retry": False,
-                                    "info": getattr(item, "error_info", None),
-                                },
+                    error_item = item
+            if failed_user:
+                messages.append(
+                    {
+                        "type": "human",
+                        "id": user_id,
+                        "content": failed_user,
+                    }
+                )
+            if last_answer:
+                messages.append(
+                    {
+                        "type": "ai",
+                        "id": None,
+                        "content": (
+                            "[上一轮任务进行到：]\n"
+                            f"{_limit_text(last_answer, 600)}"
+                        ),
+                    }
+                )
+            if error_item is not None:
+                message = getattr(error_item, "message", "") or ""
+                messages.append(
+                    {
+                        "type": "ai",
+                        "id": getattr(error_item, "id", None),
+                        "content": f"[上一轮任务失败。] {message}"
+                        if message
+                        else "[上一轮任务失败。]",
+                        "additional_kwargs": {
+                            "error": {
+                                "message": message,
+                                "will_retry": False,
+                                "info": getattr(error_item, "error_info", None),
                             },
-                        }
-                    )
+                        },
+                    }
+                )
             continue
         pending_reasoning: list[str] = []
         pending_plan: str | None = None
@@ -257,7 +329,13 @@ def _flatten_turns_to_messages(
                         "id": getattr(item, "id", ""),
                         "name": "file_change",
                         "args": {
-                            "changes": changes,
+                            # FileChange is a pydantic model — the legacy
+                            # ThreadStateStore json.dumps()s this snapshot, so
+                            # raw model objects would raise TypeError and the
+                            # whole turn-state write gets silently swallowed
+                            # (updated_at frozen at thread creation). Normalise
+                            # to plain dicts before handing off.
+                            "changes": _json_safe(changes),
                             "grant_root": getattr(item, "grant_root", None),
                         },
                         "type": "tool_call",

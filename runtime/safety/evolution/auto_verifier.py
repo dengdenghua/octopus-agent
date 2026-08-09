@@ -25,6 +25,17 @@ _MAX_COMMANDS = 3
 _MAX_REPAIR_ATTEMPTS = 2
 
 
+def _inference_domains() -> tuple[str, ...]:
+    """Model inference endpoints that stay reachable in a network-denied
+    sandbox (Claude Desktop parity). Best-effort; empty means deny-all."""
+    try:
+        from runtime.safety.sandboxing.sandbox import inference_domains
+
+        return inference_domains()
+    except Exception:  # noqa: BLE001 - best-effort; empty means deny-all
+        return ()
+
+
 def run_verification_plan(
     plan: dict[str, Any],
     *,
@@ -175,11 +186,15 @@ def _run_command(
     if parsed is None:
         return None
     argv, cwd = parsed
+    allow_network = bool(sandbox_policy.get("networkAccess"))
     policy = SandboxPolicy(
         workspace=workspace,
-        allow_network=bool(sandbox_policy.get("networkAccess")),
+        allow_network=allow_network,
         timeout_s=_TIMEOUT_S,
         max_output_bytes=_OUTPUT_CAP,
+        # Model inference endpoints stay reachable even when the sandbox
+        # is network-denied (Claude Desktop parity).
+        inference_domains=(() if allow_network else _inference_domains()),
     )
     try:
         result = SandboxRunner(policy).run(argv, cwd=cwd)
