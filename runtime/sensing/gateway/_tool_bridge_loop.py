@@ -680,10 +680,13 @@ def stream_agentic_fallback(
 
     # Resolve upstream model name through the dispatcher so we
     # know whether we're talking to an Anthropic-family model
-    # (the only one that honors ``tools=``).
+    # (the only one that honors ``tools=``). ``auto`` means "use the
+    # planner's configured model" — leaving the literal string here
+    # made ``model_supports_thinking("auto")`` return False and
+    # silently disabled the reasoning channel on every auto-model turn.
     effective_model = (
         model
-        if model and model not in ("octopus-agent", "")
+        if model and model not in ("octopus-agent", "", "auto")
         else getattr(stack.planner, "planner_model", None) or "molili"
     )
 

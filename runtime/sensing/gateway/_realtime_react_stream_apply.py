@@ -20,6 +20,7 @@ from runtime.protocol import (
     ItemStatus,
     ServerMethod,
     TurnStatus,
+    VisibilityItem,
 )
 from runtime.sensing.gateway.realtime_event_bridge import _ReactBridgeState
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
@@ -133,10 +134,17 @@ async def _apply_react_event(
         )
         return
     if kind == "thinking_delta":
-        # Provider thinking tokens are private chain-of-thought. Persisting or
-        # streaming them as a ReasoningItem exposes raw deliberation through
-        # both turn/state APIs and the transcript. User-facing progress travels
-        # through the explicit commentary/public-summary channels instead.
+        # Provider thinking tokens were previously treated as private
+        # chain-of-thought and dropped at this boundary. The streaming
+        # UX (foldable reasoning rows + live thinking typewriter) needs
+        # them surfaced as a ReasoningItem, and the frontend already
+        # renders reasoning items folded-by-default with a live
+        # typewriter while the turn streams. The bridge state fully
+        # supports reasoning items (append_reasoning / item/reasoning
+        # textDelta), so route the deltas through instead of dropping.
+        delta = evt.get("delta")
+        if delta:
+            await state.append_reasoning(turn, log, emitter, str(delta))
         return
     if kind == "tool_start":
         await state.start_tool(turn, log, emitter, evt)
@@ -236,6 +244,41 @@ async def _apply_react_event(
                     **({"eventId": logged_update.event_id} if logged_update is not None else {}),
                 },
             )
+        return
+    if kind == "visibility":
+        # Turn-assembly decision trace (capability routing / delegation
+        # visibility / skill catalog) exported by react_loop. Snapshot-only
+        # item: started + completed back-to-back, no incremental deltas.
+        steps = evt.get("steps")
+        if not isinstance(steps, list):
+            steps = []
+        item = VisibilityItem(
+            summary=str(evt.get("summary") or "本轮能力路由 / 委派 / 技能目录决策"),
+            steps=steps,
+            status=ItemStatus.COMPLETED,
+        )
+        state._bind_timeline(item)
+        turn.items.append(item)
+        started_event = log.item_started(turn.thread_id, turn.id, item)
+        await emitter.notify(
+            ServerMethod.ITEM_STARTED,
+            {
+                "threadId": turn.thread_id,
+                "turnId": turn.id,
+                "item": item.model_dump(by_alias=True, mode="json"),
+                "eventId": started_event.event_id,
+            },
+        )
+        completed_event = log.item_completed(turn.thread_id, turn.id, item)
+        await emitter.notify(
+            ServerMethod.ITEM_COMPLETED,
+            {
+                "threadId": turn.thread_id,
+                "turnId": turn.id,
+                "item": item.model_dump(by_alias=True, mode="json"),
+                "eventId": completed_event.event_id,
+            },
+        )
         return
     if kind == "react_step_complete":
         await state.flush(turn, log, emitter)

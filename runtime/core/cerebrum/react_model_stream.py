@@ -56,7 +56,7 @@ _logger = logging.getLogger(__name__)
 # transcript whose markers arrive a few chunks later. Buffer a modest prefix
 # before exposing it. This keeps ordinary long answers progressive while
 # giving the protocol-echo detector enough text to make a safe decision.
-_ZERO_ANCHOR_STREAM_GATE_CHARS = 120
+_ZERO_ANCHOR_STREAM_GATE_CHARS = 24
 
 
 def _phase_6b_model_stream(
@@ -467,14 +467,20 @@ def _phase_6b_model_stream(
                             ):
                                 _final_stream_guarded = True
                                 continue
+                            # Emit only the NEWLY arrived portion so the
+                            # frontend typewriter has real deltas to play —
+                            # yielding the whole joined buffer here would
+                            # dump the 24+ chars accumulated so far in one
+                            # frame, defeating the streaming UX.
+                            delta_out = joined[_streamed_final_chars:]
                             yield {
                                 "type": "text_delta",
-                                "delta": joined,
+                                "delta": delta_out,
                                 "iteration": i + 1,
                             }
                             _final_delta_emitted_this_iteration = True
                             _streamed_final_chars = len(joined)
-                            _throughput_chars += len(joined)
+                            _throughput_chars += len(delta_out)
                             _tp = _maybe_emit_throughput(_throughput_chars)
                             if _tp is not None:
                                 yield _tp

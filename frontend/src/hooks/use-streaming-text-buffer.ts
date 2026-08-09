@@ -21,6 +21,15 @@ export interface StreamingTextBufferOptions {
   targetText: string;
   /** When false, the full text is shown immediately (no animation). */
   enabled?: boolean;
+  /**
+   * When the stream finishes (enabled flips false) with a backlog still
+   * unplayed, drain it at the typewriter pace instead of jumping straight
+   * to the full text. Without this, a backend that delivers the whole
+   * answer in one delta + immediate completion would show the text
+   * instantly — no typewriter at all. Mirrors WorkBuddy's drainOnFinish.
+   * Default true.
+   */
+  drainOnFinish?: boolean;
   /** Bump this to reset the buffer to the target text (e.g. message id). */
   resetKey?: string | number;
   /** Milliseconds between ticks. Default 40. */
@@ -62,6 +71,7 @@ function clampToSafeCharBoundary(text: string, length: number): number {
 export function useStreamingTextBuffer({
   targetText,
   enabled = true,
+  drainOnFinish = true,
   resetKey,
   targetIntervalMs = 40,
   minCharsPerTick = 1,
@@ -74,6 +84,7 @@ export function useStreamingTextBuffer({
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reducedMotionRef = useRef(prefersReducedMotion());
   const resetKeyRef = useRef(resetKey);
+  const drainingRef = useRef(false);
 
   // Track the OS "reduce motion" preference while mounted.
   useEffect(() => {
@@ -94,6 +105,7 @@ export function useStreamingTextBuffer({
     if (resetKey !== resetKeyRef.current) {
       resetKeyRef.current = resetKey;
       displayRef.current = targetText.length;
+      drainingRef.current = false;
       setDisplayText(targetText);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,10 +113,31 @@ export function useStreamingTextBuffer({
 
   // Drive the typewriter as the target text grows.
   useEffect(() => {
-    if (!enabled || reducedMotionRef.current) {
+    if (reducedMotionRef.current) {
       displayRef.current = targetText.length;
+      drainingRef.current = false;
       setDisplayText(targetText);
       return;
+    }
+    const finishDrain = () => {
+      displayRef.current = targetText.length;
+      drainingRef.current = false;
+      setDisplayText(targetText);
+      if (tickRef.current) {
+        clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+    };
+    if (!enabled) {
+      // Stream finished. If there's still a backlog and drainOnFinish is
+      // set, keep playing at typewriter pace (WorkBuddy drainOnFinish);
+      // otherwise reveal the full text now.
+      if (drainOnFinish && displayRef.current < targetText.length) {
+        drainingRef.current = true;
+      } else {
+        finishDrain();
+        return;
+      }
     }
     if (tickRef.current) {
       clearInterval(tickRef.current);
@@ -114,10 +147,7 @@ export function useStreamingTextBuffer({
     const tick = () => {
       const backlog = targetText.length - displayRef.current;
       if (backlog <= 0) {
-        if (tickRef.current) {
-          clearInterval(tickRef.current);
-          tickRef.current = null;
-        }
+        finishDrain();
         return;
       }
       let step: number;
@@ -134,14 +164,13 @@ export function useStreamingTextBuffer({
         displayRef.current + step,
       );
       setDisplayText(targetText.slice(0, displayRef.current));
-      if (displayRef.current >= targetText.length && tickRef.current) {
-        clearInterval(tickRef.current);
-        tickRef.current = null;
+      if (displayRef.current >= targetText.length) {
+        finishDrain();
       }
     };
 
     if (displayRef.current >= targetText.length) {
-      setDisplayText(targetText);
+      finishDrain();
       return;
     }
     tickRef.current = setInterval(tick, targetIntervalMs);
@@ -154,6 +183,7 @@ export function useStreamingTextBuffer({
   }, [
     targetText,
     enabled,
+    drainOnFinish,
     targetIntervalMs,
     minCharsPerTick,
     maxCharsPerTick,

@@ -85,12 +85,13 @@ def test_simple_question_uses_reflection_fast_path(tmp_path: Path) -> None:
 
     assert router.calls == 1
     turn = out["response"].result["turn"]
-    assert [it["type"] for it in turn["items"]] == [
-        "userMessage",
-        "agentMessage",
-    ]
-    assert "quick reflection" not in str(turn)
-    assert turn["items"][1]["text"] == "4"
+    # Thinking is now surfaced as a ReasoningItem (streaming-UX work);
+    # the fast path itself is unchanged — one router call, no tools.
+    item_types = [it["type"] for it in turn["items"]]
+    assert item_types[0] == "userMessage"
+    assert item_types[-1] == "agentMessage"
+    assert "reasoning" in item_types
+    assert turn["items"][-1]["text"] == "4"
 
 
 def test_reflex_greeting_uses_selected_agent_identity(tmp_path: Path) -> None:

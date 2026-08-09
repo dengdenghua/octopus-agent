@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from runtime.core.cerebrum.react_browser_iteration import (
     _browser_operation_requested,
@@ -100,9 +100,12 @@ def _resolve_turn_bootstrap(
 
     # Resolve the model up-front (was computed later) so the native
     # tool-use gate can be decided before the system prompt is built.
+    # ``auto`` means "use the planner's configured model" — resolving it
+    # here (instead of passing the literal string downstream) keeps
+    # model_supports_thinking()/capability probes correct for auto turns.
     effective_model = (
         model
-        if model and model not in ("octopus-agent", "")
+        if model and model not in ("octopus-agent", "", "auto")
         else getattr(stack.planner, "planner_model", None) or "auto"
     )
 
@@ -371,14 +374,37 @@ def _emit_turn_start_events(
     if tools_active and not planning_mode and not _auto_delegated:
         try:
             from runtime.core.cerebrum.agent_auto_parallel import (
+                build_thread_memory_summary,
                 plan_auto_parallel,
                 run_auto_parallel,
             )
 
+            # Cross-turn memory (conversation history stamped by the gateway)
+            # feeds the decomposition so each parallel sub-agent executes
+            # against prior context instead of a blank slate. Best-effort —
+            # an empty summary is a plain no-op for both the plan and run.
+            # Board evidence (the previous turn's blackboard key/value
+            # findings, persisted by ``run_auto_parallel``) rides the same
+            # lane: concrete parallel-exploration outputs beat re-research.
+            _parallel_memory = build_thread_memory_summary(intent.user_context)
+            try:
+                from runtime.memory.threads.board_evidence import load_board_evidence
+
+                _board_evidence = load_board_evidence(thread_id or "")
+            except (ImportError, AttributeError, TypeError):
+                _board_evidence = ""
+            if _board_evidence:
+                _parallel_memory = "\n\n".join(
+                    part for part in (_parallel_memory, _board_evidence) if part
+                )
             _auto_goal = str(intent.normalized_goal or "") or str(intent.raw or "")
-            _parallel_plan = plan_auto_parallel(_auto_goal)
+            _parallel_plan = plan_auto_parallel(
+                _auto_goal,
+                context=_parallel_memory,
+            )
         except (ImportError, AttributeError, TypeError):
             _parallel_plan = None
+            _parallel_memory = ""
         if _parallel_plan is not None and _parallel_plan.should_parallelize():
             _subtask_descriptions = [
                 t.description for t in _parallel_plan.subtasks
@@ -396,6 +422,7 @@ def _emit_turn_start_events(
                         "thread_id": thread_id or "",
                         "source": "auto_parallel",
                         "parent_task_id": str(react_task_id),
+                        "memory_summary": _parallel_memory,
                     },
                     on_batch_started=on_auto_parallel_batch,
                 )

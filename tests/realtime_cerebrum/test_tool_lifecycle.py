@@ -114,7 +114,10 @@ def test_turn_effort_reaches_react_loop(gateway: Any) -> None:
     assert _LAST_SESSION["metadata"]["reasoning_effort"] == "xhigh"
 
 
-def test_private_thinking_delta_is_not_exposed_as_reasoning(gateway: Any) -> None:
+def test_thinking_delta_is_streamed_as_reasoning(gateway: Any) -> None:
+    # Since the streaming-UX work (live thinking typewriter + foldable
+    # reasoning rows), provider thinking deltas are surfaced as a
+    # ReasoningItem instead of being dropped as private chain-of-thought.
     client, _ = gateway
     _set_script(
         [
@@ -134,11 +137,13 @@ def test_private_thinking_delta_is_not_exposed_as_reasoning(gateway: Any) -> Non
         )
 
     reasoning_deltas = [n for n in out["notifications"] if n.method == "item/reasoning/textDelta"]
-    assert reasoning_deltas == []
+    assert len(reasoning_deltas) >= 1
+    assert "".join(n.params["delta"] for n in reasoning_deltas) == "step 1\nstep 2"
 
     turn = out["response"].result["turn"]
     r_items = [it for it in turn["items"] if it["type"] == "reasoning"]
-    assert r_items == []
+    assert len(r_items) == 1
+    assert r_items[0]["content"] == "step 1\nstep 2"
 
 
 def test_tool_round_trip_with_approval(gateway: Any) -> None:

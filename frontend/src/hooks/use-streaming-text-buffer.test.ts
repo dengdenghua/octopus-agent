@@ -118,4 +118,59 @@ describe("useStreamingTextBuffer", () => {
     });
     expect(result.current).toBe(`已完成，${tail}`);
   });
+
+  it("drains the backlog at typewriter pace when the stream finishes", () => {
+    mockMatchMedia(false);
+    const { result, rerender } = renderHook(
+      ({ text }: { text: string }) =>
+        useStreamingTextBuffer({
+          targetText: text,
+          drainOnFinish: true,
+        }),
+      { initialProps: { text: "好" } },
+    );
+    // Simulate the whole answer arriving in ONE delta + immediate
+    // completion (backend delivered it all at once). The buffer must
+    // still play it out like a typewriter instead of jumping to full.
+    const full =
+      "一次性到达的完整回答，流已结束，但播放器应该继续逐字展示而不是瞬间全文。";
+    rerender({ text: full });
+    // enabled defaults true while streaming; flip to false (stream done)
+    rerender({ text: full });
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    expect(result.current.length).toBeLessThan(full.length);
+
+    act(() => {
+      vi.advanceTimersByTime(20000);
+    });
+    expect(result.current).toBe(full);
+  });
+
+  it("reveals the full text immediately on finish when drainOnFinish is off", () => {
+    mockMatchMedia(false);
+    const { result, rerender } = renderHook(
+      ({ text, enabled }: { text: string; enabled: boolean }) =>
+        useStreamingTextBuffer({
+          targetText: text,
+          enabled,
+          drainOnFinish: false,
+        }),
+      { initialProps: { text: "短", enabled: true } },
+    );
+    const full =
+      "完整长文本，drainOnFinish 关闭时流结束应直接全部展示，不走打字机。";
+    rerender({ text: full, enabled: true });
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    // still typing while enabled
+    expect(result.current.length).toBeLessThan(full.length);
+    rerender({ text: full, enabled: false });
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    expect(result.current).toBe(full);
+  });
 });
