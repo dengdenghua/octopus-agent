@@ -3537,18 +3537,18 @@ export const jaJP: Translations = {
       paletteRose: "ローズ",
       paletteRoseDescription:
         "上品でロマンチックなピンク。落ち着きがあり上質。",
-      paletteSteel: "スチールブルー",
+      paletteSteel: "インディゴ",
       paletteSteelDescription:
-        "落ち着いた理知的な冷たいブルーで、シンプルでシャープ。",
-      paletteEmerald: "エメラルド",
-      paletteEmeraldDescription: "静かで透明感のあるグリーン。自然で清新。",
-      paletteViolet: "バイオレット",
-      paletteVioletDescription: "神秘で気高いパープル。深みのあるエレガント。",
-      paletteAmber: "アンバーゴールド",
-      paletteAmberDescription: "温かく華やかなゴールド。上質な風合い。",
-      paletteTeal: "ティール",
+        "落ち着いたインディゴ。理性的で目に優しい。",
+      paletteEmerald: "翡翠",
+      paletteEmeraldDescription: "青みがかった翡翠色。控えめで澄んだ印象。",
+      paletteViolet: "モーヴ",
+      paletteVioletDescription: "グレイッシュな薔薇紫。控えめで飽きない。",
+      paletteAmber: "テラコッタ",
+      paletteAmberDescription: "温かみのあるテラコッタ。素朴で質感豊か。",
+      paletteTeal: "スレートティール",
       paletteTealDescription:
-        "すっきりとした清涼感のあるシアン。シャープで整う。",
+        "低彩度のスレートティール。スモーキーで静か。",
       paletteCustom: "カスタム",
       paletteCustomDescription:
         "お好みのアクセントカラーを選択。プレビュー付きで自動保存。",

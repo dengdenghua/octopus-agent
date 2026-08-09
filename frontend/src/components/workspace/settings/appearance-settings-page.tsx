@@ -1,4 +1,5 @@
 import {
+  CheckIcon,
   MonitorSmartphoneIcon,
   MoonIcon,
   SunIcon,
@@ -35,6 +36,9 @@ import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
 
+/** Palettes with a fixed swatch — excludes "custom", which setPalette rejects. */
+type NamedPalette = Exclude<Palette, "custom">;
+
 function useLanguageOptions(): { value: Locale; label: string }[] {
   return SUPPORTED_LOCALES.map((value) => ({
     value,
@@ -67,6 +71,69 @@ export default function AppearanceSettingsPage() {
     setPalette,
     setCustomColor,
   } = useAppearance();
+
+  const languageOptions = useLanguageOptions();
+
+  const paletteOptions = useMemo(
+    () =>
+      [
+        {
+          id: "rouge" as NamedPalette,
+          label: t.settings.appearance.paletteRose,
+          description: t.settings.appearance.paletteRoseDescription,
+          swatch: "#d85164",
+        },
+        {
+          id: "steel" as NamedPalette,
+          label: t.settings.appearance.paletteSteel,
+          description: t.settings.appearance.paletteSteelDescription,
+          swatch: "#4461be",
+        },
+        {
+          id: "emerald" as NamedPalette,
+          label: t.settings.appearance.paletteEmerald,
+          description: t.settings.appearance.paletteEmeraldDescription,
+          swatch: "#167a69",
+        },
+        {
+          id: "violet" as NamedPalette,
+          label: t.settings.appearance.paletteViolet,
+          description: t.settings.appearance.paletteVioletDescription,
+          swatch: "#8c5295",
+        },
+        {
+          id: "amber" as NamedPalette,
+          label: t.settings.appearance.paletteAmber,
+          description: t.settings.appearance.paletteAmberDescription,
+          swatch: "#af5331",
+        },
+        {
+          id: "teal" as NamedPalette,
+          label: t.settings.appearance.paletteTeal,
+          description: t.settings.appearance.paletteTealDescription,
+          swatch: "#377684",
+        },
+      ] satisfies {
+        id: NamedPalette;
+        label: string;
+        description: string;
+        swatch: string;
+      }[],
+    [
+      t.settings.appearance.paletteAmber,
+      t.settings.appearance.paletteAmberDescription,
+      t.settings.appearance.paletteEmerald,
+      t.settings.appearance.paletteEmeraldDescription,
+      t.settings.appearance.paletteRose,
+      t.settings.appearance.paletteRoseDescription,
+      t.settings.appearance.paletteSteel,
+      t.settings.appearance.paletteSteelDescription,
+      t.settings.appearance.paletteTeal,
+      t.settings.appearance.paletteTealDescription,
+      t.settings.appearance.paletteViolet,
+      t.settings.appearance.paletteVioletDescription,
+    ],
+  );
 
   const themeOptions = useMemo(
     () => [
@@ -105,7 +172,7 @@ export default function AppearanceSettingsPage() {
         title={t.settings.appearance.themeTitle}
         description={t.settings.appearance.themeDescription}
       >
-        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-3">
           {themeOptions.map((option) => (
             <ThemePreviewCard
               key={option.id}
@@ -127,172 +194,151 @@ export default function AppearanceSettingsPage() {
         title={t.settings.appearance.paletteTitle}
         description={t.settings.appearance.paletteDescription}
       >
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
-          <PalettePreviewCard
-            label={t.settings.appearance.paletteRose}
-            description={t.settings.appearance.paletteRoseDescription}
-            active={palette === "rouge"}
-            swatch="#e85d75"
-            onSelect={() => setPalette("rouge")}
-          />
-          <PalettePreviewCard
-            label={t.settings.appearance.paletteSteel}
-            description={t.settings.appearance.paletteSteelDescription}
-            active={palette === "steel"}
-            swatch="#3e6fd8"
-            onSelect={() => setPalette("steel")}
-          />
-          <PalettePreviewCard
-            label={t.settings.appearance.paletteEmerald}
-            description={t.settings.appearance.paletteEmeraldDescription}
-            active={palette === "emerald"}
-            swatch="#1a7a56"
-            onSelect={() => setPalette("emerald")}
-          />
-          <PalettePreviewCard
-            label={t.settings.appearance.paletteViolet}
-            description={t.settings.appearance.paletteVioletDescription}
-            active={palette === "violet"}
-            swatch="#6a5fb4"
-            onSelect={() => setPalette("violet")}
-          />
-          <PalettePreviewCard
-            label={t.settings.appearance.paletteAmber}
-            description={t.settings.appearance.paletteAmberDescription}
-            active={palette === "amber"}
-            swatch="#8a5a1c"
-            onSelect={() => setPalette("amber")}
-          />
-          <PalettePreviewCard
-            label={t.settings.appearance.paletteTeal}
-            description={t.settings.appearance.paletteTealDescription}
-            active={palette === "teal"}
-            swatch="#1a7a80"
-            onSelect={() => setPalette("teal")}
-          />
-          <PalettePreviewCard
+        <div className="flex flex-wrap items-center gap-2">
+          {paletteOptions.map((option) => (
+            <PaletteSwatchButton
+              key={option.id}
+              label={option.label}
+              description={option.description}
+              active={palette === option.id}
+              swatch={option.swatch}
+              onSelect={() => setPalette(option.id)}
+            />
+          ))}
+          <PaletteSwatchButton
             label={t.settings.appearance.paletteCustom}
-            description={t.settings.appearance.paletteCustomDescription}
             active={palette === "custom"}
             swatch={customColor}
             onSelect={() => setCustomColor(customColor)}
           />
+          <label
+            className={cn(
+              "relative ml-1 inline-flex size-8 shrink-0 cursor-pointer items-center",
+              "justify-center rounded-full border border-dashed text-muted-foreground",
+              "transition-colors hover:border-primary/50 hover:text-foreground",
+            )}
+            title={t.settings.appearance.paletteCustomHint}
+          >
+            <input
+              type="color"
+              aria-label={t.settings.appearance.paletteCustom}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              value={customColor}
+              onChange={(event) => setCustomColor(event.target.value)}
+            />
+            <span aria-hidden="true" className="font-mono text-xs leading-none">
+              +
+            </span>
+          </label>
         </div>
-        <div className="mt-3 flex items-center gap-3 rounded-lg border bg-muted/20 px-4 py-3">
-          <input
-            type="color"
-            aria-label={t.settings.appearance.paletteCustom}
-            className="h-9 w-12 cursor-pointer rounded border bg-transparent p-0.5"
-            value={customColor}
-            onChange={(event) => setCustomColor(event.target.value)}
-          />
-          <span className="font-mono text-sm uppercase">{customColor}</span>
-          <span className="text-xs text-muted-foreground">
-            {t.settings.appearance.paletteCustomHint}
-          </span>
-        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {t.settings.appearance.paletteCustomHint}
+          <span className="ml-1.5 font-mono uppercase">{customColor}</span>
+        </p>
       </SettingsSection>
 
       <Separator />
 
-      <SettingsSection
-        title={t.settings.appearance.languageTitle}
-        description={t.settings.appearance.languageDescription}
-      >
-        <Select
-          value={locale}
-          onValueChange={(value) => {
-            if (isLocale(value)) {
-              changeLocale(value);
-            }
-          }}
+      {/* Language / font size / detail level share one card: three one-line
+          rows instead of three full sections with their own headings. */}
+      <div className="divide-y rounded-lg border">
+        <SettingRow
+          title={t.settings.appearance.languageTitle}
+          description={t.settings.appearance.languageDescription}
         >
-          <SelectTrigger
-            aria-label={t.settings.appearance.languageTitle}
-            className="w-full sm:w-[220px]"
+          <Select
+            value={locale}
+            onValueChange={(value) => {
+              if (isLocale(value)) {
+                changeLocale(value);
+              }
+            }}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {useLanguageOptions().map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.label}
+            <SelectTrigger
+              aria-label={t.settings.appearance.languageTitle}
+              className="w-full sm:w-[200px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {languageOptions.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingRow>
+
+        <SettingRow
+          title={t.settings.appearance.chatFontSizeTitle}
+          description={t.settings.appearance.chatFontSizeDescription}
+        >
+          <Select
+            value={settings.display.chat_font_size}
+            onValueChange={(value) => {
+              if (value === "small" || value === "medium" || value === "large") {
+                setSetting("display", { chat_font_size: value });
+              }
+            }}
+          >
+            <SelectTrigger
+              aria-label={t.settings.appearance.chatFontSizeTitle}
+              className="w-full sm:w-[200px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="small">
+                {t.settings.appearance.chatFontSizeSmall}
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </SettingsSection>
+              <SelectItem value="medium">
+                {t.settings.appearance.chatFontSizeMedium}
+              </SelectItem>
+              <SelectItem value="large">
+                {t.settings.appearance.chatFontSizeLarge}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingRow>
 
-      <Separator />
-
-      <SettingsSection
-        title={t.settings.appearance.chatFontSizeTitle}
-        description={t.settings.appearance.chatFontSizeDescription}
-      >
-        <Select
-          value={settings.display.chat_font_size}
-          onValueChange={(value) => {
-            if (value === "small" || value === "medium" || value === "large") {
-              setSetting("display", { chat_font_size: value });
-            }
-          }}
+        <SettingRow
+          title={t.settings.appearance.conversationDetailLevelTitle}
+          description={t.settings.appearance.conversationDetailLevelDescription}
         >
-          <SelectTrigger
-            aria-label={t.settings.appearance.chatFontSizeTitle}
-            className="w-full sm:w-[220px] max-w-full"
+          <Select
+            value={settings.display.conversation_detail_level ?? "medium"}
+            onValueChange={(value) => {
+              if (value === "low" || value === "medium" || value === "high") {
+                setSetting("display", { conversation_detail_level: value });
+              }
+            }}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="small">
-              {t.settings.appearance.chatFontSizeSmall}
-            </SelectItem>
-            <SelectItem value="medium">
-              {t.settings.appearance.chatFontSizeMedium}
-            </SelectItem>
-            <SelectItem value="large">
-              {t.settings.appearance.chatFontSizeLarge}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </SettingsSection>
+            <SelectTrigger
+              aria-label={t.settings.appearance.conversationDetailLevelTitle}
+              className="w-full sm:w-[200px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">
+                {t.settings.appearance.conversationDetailLevelLow}
+              </SelectItem>
+              <SelectItem value="medium">
+                {t.settings.appearance.conversationDetailLevelMedium}
+              </SelectItem>
+              <SelectItem value="high">
+                {t.settings.appearance.conversationDetailLevelHigh}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingRow>
+      </div>
 
       <Separator />
 
-      <SettingsSection
-        title={t.settings.appearance.conversationDetailLevelTitle}
-        description={t.settings.appearance.conversationDetailLevelDescription}
-      >
-        <Select
-          value={settings.display.conversation_detail_level ?? "medium"}
-          onValueChange={(value) => {
-            if (value === "low" || value === "medium" || value === "high") {
-              setSetting("display", { conversation_detail_level: value });
-            }
-          }}
-        >
-          <SelectTrigger
-            aria-label={t.settings.appearance.conversationDetailLevelTitle}
-            className="w-full sm:w-[220px] max-w-full"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="low">
-              {t.settings.appearance.conversationDetailLevelLow}
-            </SelectItem>
-            <SelectItem value="medium">
-              {t.settings.appearance.conversationDetailLevelMedium}
-            </SelectItem>
-            <SelectItem value="high">
-              {t.settings.appearance.conversationDetailLevelHigh}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </SettingsSection>
-
-      <Separator />
-
+      {/* Both step sliders sit side by side on wide screens. */}
+      <div className="grid gap-6 lg:grid-cols-2">
       <SettingsSection
         title={t.settings.appearance.cornerRadiusTitle}
         description={t.settings.appearance.cornerRadiusDescription}
@@ -332,8 +378,6 @@ export default function AppearanceSettingsPage() {
         />
       </SettingsSection>
 
-      <Separator />
-
       <SettingsSection
         title={t.settings.appearance.uiDensityTitle}
         description={t.settings.appearance.uiDensityDescription}
@@ -372,7 +416,73 @@ export default function AppearanceSettingsPage() {
           ]}
         />
       </SettingsSection>
+      </div>
     </div>
+  );
+}
+
+/** One-line setting: label + description on the left, control on the right. */
+function SettingRow({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <div className="min-w-0 space-y-0.5">
+        <div className="text-sm font-medium">{title}</div>
+        <p className="text-xs leading-snug text-muted-foreground">
+          {description}
+        </p>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+/** Compact palette picker: a color dot with a check when active. */
+function PaletteSwatchButton({
+  label,
+  description,
+  active,
+  swatch,
+  onSelect,
+}: {
+  label: string;
+  description?: string;
+  active: boolean;
+  swatch: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={active}
+      aria-label={label}
+      title={description ? `${label} · ${description}` : label}
+      className={cn(
+        "relative inline-flex size-8 shrink-0 items-center justify-center rounded-full",
+        "border transition-all hover:scale-105",
+        active
+          ? "border-primary ring-2 ring-primary/35 ring-offset-1 ring-offset-background"
+          : "border-black/10 hover:border-primary/40 dark:border-white/15",
+      )}
+      style={{ backgroundColor: swatch }}
+    >
+      {active ? (
+        <CheckIcon
+          aria-hidden="true"
+          className="size-4 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]"
+          strokeWidth={3}
+        />
+      ) : null}
+      <span className="sr-only">{label}</span>
+    </button>
   );
 }
 
@@ -550,52 +660,6 @@ function AppearanceStepSlider<TValue extends AppearanceStepValue>({
   );
 }
 
-function PalettePreviewCard({
-  label,
-  description,
-  active,
-  swatch,
-  onSelect,
-}: {
-  label: string;
-  description: string;
-  active: boolean;
-  swatch: string;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={active}
-      className={cn(
-        "group flex h-full flex-col gap-3 rounded-lg border p-4 text-left transition-all",
-        active
-          ? "border-primary ring-primary/30 shadow-[var(--shadow-xs)] ring-2"
-          : "hover:border-border hover:shadow-[var(--shadow-xs)]",
-      )}
-    >
-      <div className="flex items-center gap-3">
-        <span
-          className="size-8 rounded-full border border-black/5 shadow-inner"
-          style={{ backgroundColor: swatch }}
-        />
-        <div className="space-y-1">
-          <div className="text-sm leading-none font-semibold">{label}</div>
-          <p className="text-muted-foreground text-xs leading-snug">
-            {description}
-          </p>
-        </div>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <span className="h-20 rounded-md border" style={{ backgroundColor: swatch }} />
-        <span className="h-20 rounded-md border bg-white" />
-        <span className="h-20 rounded-md border bg-muted" />
-      </div>
-    </button>
-  );
-}
-
 function ThemePreviewCard({
   icon: Icon,
   label,
@@ -678,7 +742,7 @@ function ThemePreviewCard({
         <div className="grid grid-cols-[32px_minmax(0,1fr)]">
           <div
             className={cn(
-              "flex min-h-[142px] flex-col gap-2 border-r px-2 py-3",
+              "flex min-h-[100px] flex-col gap-2 border-r px-2 py-3",
               previewSidebarClass,
             )}
           >
@@ -694,11 +758,11 @@ function ThemePreviewCard({
             )}
           >
             <div className="space-y-2">
-              <div className="h-3 w-3/4 rounded-md bg-current/15" />
-              <div className="h-3 w-1/2 rounded-md bg-current/10" />
+              <div className="h-2.5 w-3/4 rounded-md bg-current/15" />
+              <div className="h-2.5 w-1/2 rounded-md bg-current/10" />
               <div
                 className={cn(
-                  "h-[88px] rounded-lg border bg-current/5",
+                  "h-[52px] rounded-lg border bg-current/5",
                   previewIsDark
                     ? "border-white/10 bg-white/[0.03]"
                     : "border-border bg-white",
