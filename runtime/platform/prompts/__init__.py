@@ -102,6 +102,31 @@ Output JSON with action sequences.
 _init_builtins()
 
 
+def _default_search_dirs() -> list[Path]:
+    """Where to look for prompt YAML when the caller did not say.
+
+    The seven prompts under ``prompts/`` are tracked repo assets, so they must
+    resolve no matter what the working directory is. A bare ``Path("prompts")``
+    only worked when the process happened to be started from the repo root:
+    anything that changed directory — a server launched elsewhere, or a test
+    that chdir'd — got ``KeyError: Prompt '...' not found`` for a file that was
+    sitting right there.
+
+    The cwd-relative directory is kept FIRST so a project-local ``prompts/``
+    override still wins; the resolved repo copy is the fallback.
+    """
+    dirs = [Path("prompts")]
+    try:
+        from runtime.platform.process.paths import resources_root
+
+        bundled = resources_root() / "prompts"
+    except (ImportError, OSError):  # pragma: no cover — never break prompt load
+        return dirs
+    if bundled not in dirs:
+        dirs.append(bundled)
+    return dirs
+
+
 class PromptLoader:
     def __init__(
         self,
@@ -115,7 +140,7 @@ class PromptLoader:
             Defaults to ["prompts/"] relative to cwd.
         """
         if search_dirs is None:
-            search_dirs = [Path("prompts")]
+            search_dirs = _default_search_dirs()
         self._search_dirs = [Path(d) for d in search_dirs]
         self._cache: dict[str, str] = {}
         self._file_map: dict[str, Path] = {}

@@ -56,3 +56,31 @@ def test_prompt_loader_supports_chomped_content_block_without_pyyaml(
     loader = PromptLoader([prompts_dir])
 
     assert loader.get("compact") == "one\ntwo"
+
+
+class TestWorkingDirectoryIndependence:
+    """Tracked prompts must resolve regardless of the working directory.
+
+    The default search path was a bare relative ``prompts/``, so it only
+    worked when the process was started from the repo root. A server launched
+    elsewhere — or any test that chdir'd — got "Prompt not found" for a file
+    that was tracked and present. Same class of fault as a deleted cwd taking
+    down app_paths().
+    """
+
+    def test_a_tracked_prompt_loads_from_an_unrelated_cwd(self, tmp_path, monkeypatch):
+        from runtime.platform.prompts import PromptLoader
+
+        monkeypatch.chdir(tmp_path)
+        assert PromptLoader().get("query_rewrite").strip()
+
+    def test_a_project_local_prompts_dir_still_wins(self, tmp_path, monkeypatch):
+        from runtime.platform.prompts import PromptLoader
+
+        local = tmp_path / "prompts"
+        local.mkdir()
+        (local / "query_rewrite.yaml").write_text(
+            "content: |\n  LOCAL OVERRIDE\n", encoding="utf-8"
+        )
+        monkeypatch.chdir(tmp_path)
+        assert "LOCAL OVERRIDE" in PromptLoader().get("query_rewrite")
