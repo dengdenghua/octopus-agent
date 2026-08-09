@@ -94,6 +94,12 @@ class AppPaths:
         return self.data_dir / "org_audit_chain.secret"
 
     @property
+    def decision_audit_chain_path(self) -> Path:
+        """协作决策查看/导出的审计链（``decision_visibility.DecisionAccessAudit``）。"""
+
+        return self.data_dir / "decision_access_audit.jsonl"
+
+    @property
     def proposal_ledger_path(self) -> Path:
         return self.data_dir / "proposal_ledger.jsonl"
 

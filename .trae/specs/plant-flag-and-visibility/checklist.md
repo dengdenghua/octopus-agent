@@ -1,0 +1,10 @@
+- [x] 立旗文档存在且符合结构要求：竞品对比矩阵、仿生证据、5 条超越路径与优先级
+- [x] 立旗文档引用真实代码路径，无编造事实（可用 `ls`/Grep 抽查验证）
+- [x] 可见性原语后端模块提供统一的 trace 采集接口
+- [x] capability_router 激活时记录每个激活标签及命中依据（mode/关键词）
+- [x] 委派能力决策（_delegation_cap）记录暴露/隐藏原因
+- [x] 技能目录截断（_format_skill_catalog）记录总数、保留、截断数及依据
+- [x] 可见性 trace 随回合持久化（EventLog/thread JSONL）并可回放
+- [x] 前端工作台侧栏可见性面板渲染最近一轮的 why 链（弱化默认展示）
+- [x] 全部相关后端测试通过（pytest 关键测试文件）
+- [x] 前端 tsc/typecheck 通过

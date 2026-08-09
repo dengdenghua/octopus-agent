@@ -11,6 +11,12 @@ import logging
 from collections.abc import Collection
 from typing import Any
 
+from runtime.core.cerebrum._visibility_trace import (
+    active_trace,
+    record_visibility,
+    reset_active_trace,
+    set_active_trace,
+)
 from runtime.core.cerebrum.capability_router import (
     activate_capabilities,
     order_skill_names,
@@ -427,6 +433,12 @@ def _format_skill_catalog(
         user_context=user_context,
         registry=registry,
     )
+    # Wire the capability router's trace into the ContextVar default slot so
+    # record_visibility() below appends to the same trace. If the turn owner
+    # already set its own trace, active_trace() returns it and this is a no-op.
+    _visibility_token = None
+    if active_trace() is None and getattr(activation, "trace", None) is not None:
+        _visibility_token = set_active_trace(activation.trace)
     # Capability-aware priority list. The unconditional groups (planning,
     # discovery, files, web, local execution) are always front-loaded so the
     # model keeps a stable core. Capability-conditional groups (git, browser,
@@ -441,7 +453,40 @@ def _format_skill_catalog(
     _browser_surface = str(_uc_for_browser.get("browser_surface") or "").strip().lower()
     _browser_cap = _browser_cap or _browser_surface in {"browser", "chrome"}
     _git_cap = bool(_labels & {"code", "files"})
-    _delegation_cap = bool(_labels & {"delegation", "swarm"})
+    # Delegation lane: the capability router activates it for swarm mode or
+    # delegation keywords in the goal. The single-agent guidance block
+    # (_react_prompt_assembly_guidance) already tells code/audit lanes to use
+    # ``call_agent_parallel`` for independent subtasks, so keep the tool
+    # visible there too — otherwise the model is prompted to call a tool the
+    # catalog truncates out of its 100-skill view and every attempt fails
+    # with "(工具未注册) 不存在名为 ... 的 skill".
+    _uc_for_delegation = _uc_for_browser
+    _delegation_mode = str(_uc_for_delegation.get("mode") or "").strip().lower()
+    _delegation_agent_mode = str(
+        _uc_for_delegation.get("agent_mode") or ""
+    ).strip().lower()
+    _delegation_cap = bool(
+        (_labels & {"delegation", "swarm"})
+        or _delegation_mode in {"code"}
+        or _delegation_agent_mode in {"audit"}
+    )
+    _delegation_bits: list[str] = []
+    if _labels & {"delegation", "swarm"}:
+        _delegation_bits.append("标签 delegation/swarm 命中")
+    if _delegation_mode in {"code"}:
+        _delegation_bits.append("mode=code")
+    if _delegation_agent_mode in {"audit"}:
+        _delegation_bits.append("agent_mode=audit")
+    record_visibility(
+        "context.delegation_cap",
+        conclusion=f"委派工具{'暴露' if _delegation_cap else '隐藏'}",
+        basis="; ".join(_delegation_bits)
+        if _delegation_bits
+        else "未命中委派条件（标签/mode/agent_mode 均未匹配）",
+        mode=_delegation_mode,
+        agent_mode=_delegation_agent_mode,
+        labels=sorted(_labels),
+    )
     _research_cap = bool(_labels & {"research"})
 
     priority = [
@@ -543,6 +588,7 @@ def _format_skill_catalog(
     # ranks the full list; this step only decides which non-priority
     # skills survive the truncation, so a 300-skill registry no longer
     # evicts goal-relevant skills behind 100 alphabetically-lucky ones.
+    _catalog_total = len(names)
     if goal and len(names) > max_skills:
         try:
             from runtime.execution.suckers.search import TfIdfSkillSearcher
@@ -554,6 +600,23 @@ def _format_skill_catalog(
             names = pinned + [n for n in rest if n in relevant]
         except Exception:  # noqa: BLE001 — selection is an optimization, never fatal
             pass
+    record_visibility(
+        "context.skill_catalog",
+        conclusion=(
+            f"技能目录 {_catalog_total} -> {min(len(names), max_skills)} 保留"
+            if len(names) > max_skills
+            else f"技能目录 {min(len(names), max_skills)} 条（未截断）"
+        ),
+        basis=(
+            "pinned 优先 + TF-IDF 选择"
+            if goal and _catalog_total > max_skills
+            else "总数未超过 max_skills"
+        ),
+        total=_catalog_total,
+        kept=min(len(names), max_skills),
+        truncated=max(0, len(names) - max_skills),
+        max_skills=max_skills,
+    )
     lines: list[str] = ["可用工具 (skill):"]
     for name in names[:max_skills]:
         try:
@@ -616,4 +679,6 @@ def _format_skill_catalog(
                 lines.append("</capability-index>")
         except (ImportError, AttributeError):  # noqa: BLE001 — best-effort hint
             pass
+    if _visibility_token is not None:
+        reset_active_trace(_visibility_token)
     return "\n".join(lines)

@@ -30,6 +30,18 @@ export interface StreamingTextBufferOptions {
    * Default true.
    */
   drainOnFinish?: boolean;
+  /**
+   * Sentence-paced playback (L2): each tick advances at most
+   * `sentenceWindowChars`, but prefers to stop exactly at a sentence
+   * boundary (。！？;、newline, English .!? followed by space) so a whole
+   * sentence appears in one beat — reads like a person speaking rather
+   * than a uniform character-by-character machine. Large backlogs still
+   * stream quickly because the window cap applies every tick. Default
+   * true.
+   */
+  sentencePacing?: boolean;
+  /** Max chars revealed per tick under sentence pacing. Default 120. */
+  sentenceWindowChars?: number;
   /** Bump this to reset the buffer to the target text (e.g. message id). */
   resetKey?: string | number;
   /** Milliseconds between ticks. Default 40. */
@@ -68,10 +80,29 @@ function clampToSafeCharBoundary(text: string, length: number): number {
   return length;
 }
 
+// Sentence enders that make the typewriter read like speech. Chinese
+// punctuation is unambiguous; an English "." only counts when followed by
+// whitespace or EOS so "3.14" / "e.g." are not split mid-sentence.
+const SENTENCE_END_RE = /[。！？!?；;、\n]|\.(?=\s|$)/g;
+
+/**
+ * Find the index just past the next sentence boundary at/after `from`.
+ * Returns -1 when the text has no boundary yet (stream still mid-sentence).
+ */
+function findSentenceEndAfter(text: string, from: number): number {
+  if (from >= text.length) return -1;
+  SENTENCE_END_RE.lastIndex = from;
+  const m = SENTENCE_END_RE.exec(text);
+  if (!m) return -1;
+  return m.index + m[0].length;
+}
+
 export function useStreamingTextBuffer({
   targetText,
   enabled = true,
   drainOnFinish = true,
+  sentencePacing = true,
+  sentenceWindowChars = 120,
   resetKey,
   targetIntervalMs = 40,
   minCharsPerTick = 1,
@@ -144,29 +175,65 @@ export function useStreamingTextBuffer({
       tickRef.current = null;
     }
 
+    const advance = (chars: number) => {
+      const clamped = clampToSafeCharBoundary(
+        targetText,
+        displayRef.current + chars,
+      );
+      displayRef.current = Math.min(clamped, targetText.length);
+      setDisplayText(targetText.slice(0, displayRef.current));
+      if (displayRef.current >= targetText.length) {
+        finishDrain();
+      }
+    };
+
     const tick = () => {
       const backlog = targetText.length - displayRef.current;
       if (backlog <= 0) {
         finishDrain();
         return;
       }
+      // Drain mode (stream finished): finish at char-level pace — the
+      // sentence grouping is a live-stream nicety, not a replay device.
+      if (drainingRef.current) {
+        let step: number;
+        if (backlog <= fastDrainThreshold) {
+          step = backlog;
+        } else {
+          step = Math.max(
+            minCharsPerTick,
+            Math.round(backlog / backlogDivisor),
+          );
+          step = Math.min(step, maxCharsPerTick);
+        }
+        advance(Math.min(step, backlog));
+        return;
+      }
+      // Sentence-paced playback: advance at most sentenceWindowChars but
+      // prefer landing exactly on a sentence boundary so the whole
+      // sentence appears in one beat.
+      if (sentencePacing && backlog > fastDrainThreshold) {
+        const windowEnd = Math.min(
+          targetText.length,
+          displayRef.current + sentenceWindowChars,
+        );
+        const sentenceEnd = findSentenceEndAfter(targetText, displayRef.current);
+        const goal =
+          sentenceEnd !== -1 && sentenceEnd <= windowEnd
+            ? sentenceEnd
+            : windowEnd;
+        advance(Math.max(1, goal - displayRef.current));
+        return;
+      }
+      // Uniform char-level fallback (sentencePacing off).
       let step: number;
       if (backlog <= fastDrainThreshold) {
         step = backlog;
       } else {
-        // Accelerate on a large backlog, ease off as we catch up.
         step = Math.max(minCharsPerTick, Math.round(backlog / backlogDivisor));
         step = Math.min(step, maxCharsPerTick);
       }
-      step = Math.min(step, backlog);
-      displayRef.current = clampToSafeCharBoundary(
-        targetText,
-        displayRef.current + step,
-      );
-      setDisplayText(targetText.slice(0, displayRef.current));
-      if (displayRef.current >= targetText.length) {
-        finishDrain();
-      }
+      advance(Math.min(step, backlog));
     };
 
     if (displayRef.current >= targetText.length) {
@@ -184,6 +251,8 @@ export function useStreamingTextBuffer({
     targetText,
     enabled,
     drainOnFinish,
+    sentencePacing,
+    sentenceWindowChars,
     targetIntervalMs,
     minCharsPerTick,
     maxCharsPerTick,

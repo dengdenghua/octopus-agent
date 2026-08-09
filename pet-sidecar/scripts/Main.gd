@@ -132,9 +132,9 @@ func _connect_signals() -> void:
 func _on_viewport_resized() -> void:
 	pass
 
-func _on_ipc_event(event: String) -> void:
+func _on_ipc_event(event: String, data: Dictionary = {}) -> void:
 	if brain and brain.has_method("on_agent_event"):
-		brain.call("on_agent_event", event)
+		brain.call("on_agent_event", event, data)
 
 func _on_brain_state_changed(new_state: int) -> void:
 	if pet and pet.has_method("set_mood"):

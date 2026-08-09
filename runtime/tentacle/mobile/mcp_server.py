@@ -17,12 +17,15 @@
       }
     }
 
-或远程 SSE 模式::
+或远程 SSE 模式（网关开启账号鉴权时需携带账号登录 Token）::
 
     {
       "mcpServers": {
         "octopus-tentacle": {
-          "url": "http://localhost:8766/api/tentacle/mcp/sse"
+          "url": "http://localhost:8766/api/tentacle/mcp/sse",
+          "headers": {
+            "Authorization": "Bearer <账号登录后获取的 Token>"
+          }
         }
       }
     }
@@ -664,11 +667,23 @@ class SseSession:
     2. 服务端发送 endpoint 事件，告知客户端消息发送 URL
     3. 客户端通过 /api/tentacle/mcp/message 发送 JSON-RPC 请求
     4. 服务端通过 SSE 推送 JSON-RPC 响应
+
+    Args:
+        actor_id: 创建该会话的账号（账号登录鉴权后由网关绑定）。
+            ``None`` 表示匿名/未开启账号鉴权。绑定后 ``/mcp/message``
+            只接受同一账号携带相同凭证的调用。
     """
 
-    def __init__(self, server: TentacleMcpServer, session_id: str) -> None:
+    def __init__(
+        self,
+        server: TentacleMcpServer,
+        session_id: str,
+        *,
+        actor_id: str | None = None,
+    ) -> None:
         self.server = server
         self.session_id = session_id
+        self.actor_id = actor_id
         self._event_queue: asyncio.Queue[str | None] = asyncio.Queue()
 
     async def send_event(self, data: str) -> None:
@@ -706,10 +721,10 @@ class SseSessionManager:
         self.server = server
         self._sessions: dict[str, SseSession] = {}
 
-    def create_session(self) -> SseSession:
-        """创建新的 SSE 会话."""
+    def create_session(self, *, actor_id: str | None = None) -> SseSession:
+        """创建新的 SSE 会话，可选绑定创建该会话的账号."""
         session_id = uuid.uuid4().hex[:16]
-        session = SseSession(self.server, session_id)
+        session = SseSession(self.server, session_id, actor_id=actor_id)
         self._sessions[session_id] = session
         logger.info("MCP SSE session created: %s", session_id)
         return session

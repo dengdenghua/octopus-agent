@@ -1102,7 +1102,9 @@ export function AgentSummaryPage({
                   : terminalState === "failed"
                     ? t.agentWorkbench.statusError
                     : phases.length > 0
-                      ? `${donePhaseCount}/${phases.length} ${phaseStatusText("done")}`
+                      ? `${donePhaseCount}/${phases.length} ${phaseStatusText(
+                          runningPhase ? "running" : "done",
+                        )}`
                       : t.agentWorkbenchPages.roundActivitySummary(
                           outlineExecutionCount,
                           outlineFactCount,

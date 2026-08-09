@@ -5,6 +5,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from runtime.core.cerebrum._visibility_trace import (
+    active_trace,
+    new_trace,
+)
+
 _PATHISH_RE = re.compile(
     r"([A-Za-z]:\\|/[\w.-]+|\.{1,2}/|[\w.-]+\.(?:py|ts|tsx|js|jsx|go|rs|md|json|yaml|yml|css|html))"
 )
@@ -71,6 +76,10 @@ class CapabilityActivation:
     pinned_agents: tuple[str, ...] = ()
     pinned_packs: tuple[str, ...] = ()
     pinned_surfaces: tuple[str, ...] = ()
+    # Optional visibility trace attached by activate_capabilities so downstream
+    # consumers (e.g. _react_context_helpers) can append their own decision
+    # records. Purely incremental — never changes routing results.
+    trace: Any = None
 
     @property
     def active(self) -> bool:
@@ -473,6 +482,7 @@ def activate_capabilities(
     registry: Any = None,
 ) -> CapabilityActivation:
     text, mode = _context_text(goal, user_context)
+    local_trace = active_trace() or new_trace()
     labels: list[str] = []
     skills: list[str] = []
     terms: list[str] = []
@@ -527,11 +537,29 @@ def activate_capabilities(
         if not mode_hit and not keyword_hits:
             continue
         labels.append(rule["label"])
+        if mode_hit and keyword_hits:
+            hit_basis = f"mode={mode!r} 且关键词 {keyword_hits} 命中"
+        elif mode_hit:
+            hit_basis = f"mode={mode!r} 命中"
+        else:
+            hit_basis = f"关键词 {keyword_hits} 命中"
+        local_trace.record_decision(
+            "capability_router.activate",
+            conclusion=f"激活能力 {rule['label']}",
+            basis=hit_basis,
+            mode=mode,
+            keyword_hits=keyword_hits,
+        )
         terms.extend(keyword_hits[:3] or ([mode] if mode_hit else []))
         skills.extend(rule["skills"])
 
     if _PATHISH_RE.search(text):
         labels.append("files")
+        local_trace.record_decision(
+            "capability_router.activate",
+            conclusion="激活能力 files",
+            basis="files 能力激活：路径特征命中",
+        )
         skills.extend(
             (
                 "list_cwd",
@@ -544,6 +572,12 @@ def activate_capabilities(
 
     if "chrome" in pinned_surfaces:
         labels.append("external-chrome")
+        local_trace.record_decision(
+            "capability_router.activate",
+            conclusion="激活能力 external-chrome",
+            basis="external-chrome 能力激活：@mention 指定",
+            pinned_surfaces=pinned_surfaces,
+        )
         terms.append("@Chrome")
         leading_chrome_skills = (
             "browser_state",
@@ -566,6 +600,12 @@ def activate_capabilities(
 
     elif "browser" in pinned_surfaces:
         labels.append("browser-ui")
+        local_trace.record_decision(
+            "capability_router.activate",
+            conclusion="激活能力 browser-ui",
+            basis="browser-ui 能力激活：@mention 指定",
+            pinned_surfaces=pinned_surfaces,
+        )
         terms.append("@Browser")
         leading_browser_skills = (
             "live_browser_state",
@@ -592,6 +632,11 @@ def activate_capabilities(
 
     if isolated_code_ui_regression(user_context):
         labels.append("code-ui-regression")
+        local_trace.record_decision(
+            "capability_router.activate",
+            conclusion="激活能力 code-ui-regression",
+            basis="code-ui-regression 能力激活：isolated browser regression 配置命中",
+        )
         leading_code_ui_skills = (
             "browser_navigate",
             "browser_state",
@@ -618,6 +663,13 @@ def activate_capabilities(
         skills = [*leading, *skills]
         if "pinned" not in labels:
             labels.append("pinned")
+            local_trace.record_decision(
+                "capability_router.activate",
+                conclusion="激活能力 pinned",
+                basis="pinned 能力激活：@skill/@pack 显式指定",
+                pinned_skills=pinned_skills,
+                pack_expanded_skills=pack_expanded_skills,
+            )
 
     skills = [name for name in _dedupe(skills) if _skill_available(registry, name)]
     skills = filter_surface_compatible_skills(
@@ -635,6 +687,14 @@ def activate_capabilities(
             if _skill_available(registry, name):
                 skills.append(name)
 
+    if not labels:
+        local_trace.record_decision(
+            "capability_router.activate",
+            conclusion="无能力激活",
+            basis=f"未命中任何规则：mode={mode!r}，无关键词/路径/@mention 命中",
+            mode=mode,
+        )
+
     return CapabilityActivation(
         labels=_dedupe(labels),
         priority_skills=_dedupe(skills),
@@ -644,6 +704,7 @@ def activate_capabilities(
         pinned_agents=pinned_agents,
         pinned_packs=pinned_packs,
         pinned_surfaces=pinned_surfaces,
+        trace=local_trace,
     )
 
 

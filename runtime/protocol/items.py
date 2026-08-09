@@ -50,6 +50,7 @@ class ItemType(StrEnum):
     VERIFICATION = "verification"
     ARTIFACT = "artifact"
     ERROR = "error"
+    VISIBILITY = "visibility"
 
 
 class ItemMarker(StrEnum):
@@ -393,6 +394,22 @@ class VerificationItem(_ItemBase):
     related_change_item_ids: list[str] = Field(default_factory=list, alias="relatedChangeItemIds")
 
 
+class VisibilityItem(_ItemBase):
+    """Snapshot of the turn's decision-point visibility trace.
+
+    Carries the trace export collected during turn assembly — capability
+    routing, delegation-tool visibility and skill-catalog decisions — each
+    as a step with the conclusion and the basis behind it. Emitted once
+    per turn as a snapshot item (started + completed back-to-back, no
+    deltas) so clients can render a "why these choices" panel without
+    re-walking raw events.
+    """
+
+    type: Literal[ItemType.VISIBILITY] = ItemType.VISIBILITY
+    summary: str = ""
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class ArtifactItem(_ItemBase):
     """Generated or modified artifact with preview and validation state."""
 
@@ -438,6 +455,7 @@ Item: TypeAlias = Annotated[
     | SubagentItem
     | ApprovalItem
     | VerificationItem
+    | VisibilityItem
     | ArtifactItem
     | ErrorItem,
     Field(discriminator="type"),
@@ -581,6 +599,7 @@ __all__ = [
     "TurnStatus",
     "UserMessageItem",
     "VerificationItem",
+    "VisibilityItem",
     "WorkbenchSnapshotV2",
     "WorkspaceFocus",
 ]

@@ -34,6 +34,7 @@ func _process(delta: float) -> void:
 
 func _handle_message(msg: String) -> void:
 	var event_type: String = ""
+	var payload: Dictionary = {}
 	if msg.begins_with("{"):
 		var json = JSON.new()
 		if json.parse(msg) == OK:
@@ -41,6 +42,7 @@ func _handle_message(msg: String) -> void:
 			if data and data is Dictionary:
 				if data.has("type"):
 					event_type = String(data["type"]).replace("agent.", "")
+				payload = data
 				# 世界更新消息:刷新桌面窗口矩形(用于避障)。
 				if String(data.get("type", "")) == "world.windows" and data.has("windows"):
 					_sync_windows(data["windows"])
@@ -49,7 +51,7 @@ func _handle_message(msg: String) -> void:
 	if event_type != "":
 		print("[IPC] Event: ", event_type)
 		if event_callback.is_valid():
-			event_callback.call(event_type)
+			event_callback.call(event_type, payload)
 
 func _sync_windows(windows) -> void:
 	var dw = get_node_or_null("/root/Main/DesktopWorld")

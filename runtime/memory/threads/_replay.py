@@ -39,6 +39,7 @@ from runtime.protocol.items import (
     TurnStatus,
     UserMessageItem,
     VerificationItem,
+    VisibilityItem,
     WorkbenchSnapshotV2,
     WorkspaceFocus,
 )
@@ -71,6 +72,7 @@ _ITEM_BY_TYPE: dict[ItemType, type] = {
     ItemType.VERIFICATION: VerificationItem,
     ItemType.ARTIFACT: ArtifactItem,
     ItemType.ERROR: ErrorItem,
+    ItemType.VISIBILITY: VisibilityItem,
 }
 
 

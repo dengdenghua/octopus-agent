@@ -31,12 +31,14 @@ already-delegated) demand model orchestration.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from runtime.execution.parallel_agents import (
     DispatchTaskInput,
@@ -89,6 +91,61 @@ def _clean_fragment(text: str) -> str:
     """Strip list markers and surrounding whitespace from a fragment."""
     frag = _BULLET_PREFIX.sub("", text).strip()
     return frag.strip(" \t,，;；。.、:")
+
+
+def build_thread_memory_summary(
+    user_context: dict[str, Any] | None,
+    *,
+    max_turns: int = 4,
+    max_chars: int = 1200,
+) -> str:
+    """Best-effort cross-turn memory summary from the conversation history.
+
+    The realtime gateway stamps ``intent.user_context["conversation_messages"]``
+    with the thread's recent OpenAI-style messages (the same lane the model
+    prompt reads). We project the last ``max_turns`` user requests and the
+    assistant answer that followed each into a compact "what happened before"
+    block, so parallel sub-agents don't re-research already-settled ground.
+
+    Pure helper — never raises, never blocks. Empty history → empty string.
+    """
+    if not isinstance(user_context, dict):
+        return ""
+    messages = user_context.get("conversation_messages")
+    if not isinstance(messages, list) or not messages:
+        return ""
+    try:
+        turns: list[str] = []
+        last_user: str | None = None
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role") or "")
+            content = msg.get("content")
+            if isinstance(content, list):
+                content = " ".join(
+                    str(part.get("text", ""))
+                    for part in content
+                    if isinstance(part, dict) and part.get("text")
+                )
+            text = str(content or "").strip()
+            if not text:
+                continue
+            if role == "user":
+                last_user = text
+            elif role == "assistant" and last_user is not None:
+                turns.append(f"用户: {last_user}\n助手: {text[:300]}")
+                last_user = None
+        if last_user is not None:
+            turns.append(f"用户: {last_user}")
+        if not turns:
+            return ""
+        body = "\n\n".join(turns[-max_turns:])
+        if len(body) > max_chars:
+            body = body[:max_chars].rstrip() + "…"
+        return f"<thread-memory>\n{body}\n</thread-memory>"
+    except Exception:  # noqa: BLE001 — summary is best-effort, never fatal
+        return ""
 
 
 def _extract_parallel_subtasks(text: str, *, max_subtasks: int | None) -> list[str]:
@@ -145,10 +202,22 @@ def _heuristic_splitter(
 
     Mirrors the ``splitter`` callable contract the orchestrator expects so
     the exact same decomposition strategy is used for planning and dispatch.
+
+    ``context`` is optional cross-turn memory text (e.g. the ``<thread-memory>``
+    block from ``build_thread_memory_summary``). It never influences whether a
+    goal is parallelizable — decomposition stays conservative and content-only —
+    but when a split IS chosen, the memory is appended to every subtask so each
+    parallel sub-agent executes against prior context instead of a blank slate.
     """
-    del context, model_name  # heuristic is content-only for now
+    del model_name  # splitter contract keeps it; decomposition is content-only
     text = (task or "").strip()
+    background = (context or "").strip()
     fragments = _extract_parallel_subtasks(text, max_subtasks=max_subtasks)
+
+    def _with_background(description: str) -> str:
+        if not background:
+            return description
+        return f"{description}\n\n{background}"
 
     if len(fragments) < 2:
         tid = f"task_{uuid.uuid4().hex[:10]}"
@@ -164,7 +233,7 @@ def _heuristic_splitter(
         tasks.append(
             SplitTask(
                 task_id=f"task_{uuid.uuid4().hex[:10]}",
-                description=fragment,
+                description=_with_background(fragment),
                 subagent_name="general-purpose",
                 depends_on=[],
                 priority=0,
@@ -252,6 +321,7 @@ def run_auto_parallel(
     plan: AutoParallelPlan,
     *,
     thread_id: str = "",
+    turn_id: str | None = None,
     model_name: str | None = None,
     context: dict[str, Any] | None = None,
     owner_id: str | None = None,
@@ -269,6 +339,11 @@ def run_auto_parallel(
     a caller can wire up a live event bridge (e.g. stream the
     orchestrator's ``BatchStreamEvent``s to a frontend workbench) while
     this function is still waiting on the batch.
+
+    ``turn_id`` (optional) lets the runner persist the turn's blackboard
+    evidence to the thread's board-evidence log once the batch settles —
+    the "事件日志证据复用" bridge: later turns / reconnect read it back
+    via ``load_board_evidence``. Best-effort; empty turn_id is a no-op.
     """
     if not plan.should_parallelize():
         return {
@@ -332,10 +407,9 @@ def run_auto_parallel(
         time.sleep(_POLL_INTERVAL_S)
 
     if terminal is None:
-        try:
+        with contextlib.suppress(Exception):
             orchestrator.cancel_all()
-        except Exception:  # noqa: BLE001
-            pass
+        _persist_turn_board_evidence(thread_id, turn_id)
         return {
             "success": False,
             "content": "",
@@ -345,6 +419,8 @@ def run_auto_parallel(
             "completed": terminal.completed_tasks if terminal else 0,
             "total": len(tasks),
         }
+
+    _persist_turn_board_evidence(thread_id, turn_id)
 
     sections: list[str] = []
     for r in terminal.results:
@@ -361,6 +437,26 @@ def run_auto_parallel(
         "completed": terminal.completed_tasks,
         "total": terminal.total_tasks,
     }
+
+
+def _persist_turn_board_evidence(thread_id: str, turn_id: str | None) -> None:
+    """Best-effort：batch 落定后把本轮黑板的键值证据持久化到线程证据日志。
+
+    无 turn_id（未接线）或持久化失败均为 no-op——证据复用绝不能影响
+    并行执行本身。
+    """
+    if not thread_id or not turn_id:
+        return
+    try:
+        from runtime.memory.runtime_state.blackboard import get_blackboard
+        from runtime.memory.threads.board_evidence import save_turn_blackboard
+
+        board = get_blackboard(turn_id)
+        if board is None:
+            return
+        save_turn_blackboard(thread_id, turn_id, board)
+    except Exception:  # noqa: BLE001 — evidence bridge must never break the run
+        _log.debug("board evidence persist skipped · thread=%s turn=%s", thread_id, turn_id, exc_info=True)
 
 
 _ORCHESTRATOR: ParallelAgentOrchestrator | None = None

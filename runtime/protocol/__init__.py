@@ -53,6 +53,7 @@ from .items import (
     TurnStatus,
     UserMessageItem,
     VerificationItem,
+    VisibilityItem,
     WorkbenchSnapshotV2,
     WorkspaceFocus,
 )
@@ -93,6 +94,7 @@ __all__ = [
     "TurnStatus",
     "UserMessageItem",
     "VerificationItem",
+    "VisibilityItem",
     "WorkbenchSnapshotV2",
     "WorkspaceFocus",
     "decode_message",

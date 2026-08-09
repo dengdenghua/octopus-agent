@@ -1332,7 +1332,9 @@ export default function ModelSettingsPage() {
               method: "POST",
               headers: jsonAuthHeaders(),
               body: JSON.stringify({ id: customModelEntryId(model) }),
-              signal: AbortSignal.timeout(8000),
+              // Test runs a text ping + a vision canary; give both probes
+              // room even on slow reasoning models.
+              signal: AbortSignal.timeout(20000),
             },
           );
           const data = await res.json().catch(() => ({}));
@@ -2478,6 +2480,10 @@ function EditModelForm({
   const [baseUrl, setBaseUrl] = useState("");
   const [thinking, setThinking] = useState(false);
   const [vision, setVision] = useState(false);
+  // True when the last connection test confirmed the model has no
+  // vision — the toggle is then locked off until a new test says
+  // otherwise.
+  const [visionLocked, setVisionLocked] = useState(false);
   const [millionContext, setMillionContext] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [headersText, setHeadersText] = useState("");
@@ -2594,6 +2600,15 @@ function EditModelForm({
       setSaving(false);
       return;
     }
+    // Save is gated on the connection test: a model that can't be
+    // reached is useless to persist. Re-run it here so a config change
+    // made after a successful test can't slip through.
+    const testError = await handleTest();
+    if (testError) {
+      setError(t.settings.model.saveRequiresTestPass + "：" + testError);
+      setSaving(false);
+      return;
+    }
     const body: Record<string, unknown> = {};
     // Keep a display name on every entry. It is editable independently
     // of the stable connection id and the upstream model ids.
@@ -2634,17 +2649,21 @@ function EditModelForm({
     }
   };
 
-  const handleTest = async () => {
+  // Returns null when the connection test passed, otherwise the error
+  // message. ``handleSave`` calls this first and refuses to persist a
+  // model that has not passed the test.
+  const handleTest = async (): Promise<string | null> => {
     if (!baseUrl) {
+      const msg = t.settings.model.fillRequiredBeforeTest;
       setTestStatus("fail");
-      setTestMessage(t.settings.model.fillRequiredBeforeTest);
-      return;
+      setTestMessage(msg);
+      return msg;
     }
     const baseUrlErr = validateBaseUrl(baseUrl);
     if (baseUrlErr) {
       setTestStatus("fail");
       setTestMessage(baseUrlErr);
-      return;
+      return baseUrlErr;
     }
     setTestStatus("testing");
     setTestMessage("");
@@ -2669,24 +2688,49 @@ function EditModelForm({
               : undefined,
             default_headers: parseHeadersText(headersText),
           }),
-          signal: AbortSignal.timeout(8000),
+          // Test runs a text ping + a vision canary; give both probes
+          // room even on slow reasoning models.
+          signal: AbortSignal.timeout(20000),
         },
       );
       const latency = Math.round(performance.now() - started);
       setTestLatency(latency);
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
+        const msg = data.error || `HTTP ${res.status}`;
         setTestStatus("fail");
-        setTestMessage(data.error || `HTTP ${res.status}`);
+        setTestMessage(msg);
+        return msg;
       } else {
         setTestStatus("success");
-        setTestMessage(data.message || t.settings.model.saveSuccess);
+        // Vision auto-detection from the test probe. A confirmed
+        // ``false`` locks the toggle off; ``true`` enables + checks it.
+        const visionNote =
+          data.supports_vision === true
+            ? t.settings.model.visionDetected
+            : data.supports_vision === false
+              ? t.settings.model.visionNotSupported
+              : "";
+        if (data.supports_vision === true) {
+          setVision(true);
+          setVisionLocked(false);
+        } else if (data.supports_vision === false) {
+          setVision(false);
+          setVisionLocked(true);
+        }
+        setTestMessage(
+          [data.message || t.settings.model.saveSuccess, visionNote]
+            .filter(Boolean)
+            .join(" · "),
+        );
+        return null;
       }
     } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : t.settings.model.networkError;
       setTestStatus("fail");
-      setTestMessage(
-        e instanceof Error ? e.message : t.settings.model.networkError,
-      );
+      setTestMessage(msg);
+      return msg;
     }
   };
 
@@ -2890,9 +2934,25 @@ function EditModelForm({
               <Switch checked={thinking} onCheckedChange={setThinking} />{" "}
               <span className="text-xs">{t.settings.model.thinkingLabel}</span>
             </div>
-            <div className="flex items-center gap-2 pt-5">
-              <Switch checked={vision} onCheckedChange={setVision} />{" "}
-              <span className="text-xs">{t.settings.model.visionLabel}</span>
+            <div className="flex flex-col items-start gap-1 pt-5">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={vision}
+                  onCheckedChange={setVision}
+                  disabled={visionLocked}
+                />{" "}
+                <span className="text-xs">
+                  {t.settings.model.visionLabel}
+                </span>
+              </div>
+              {visionLocked && (
+                <span
+                  className="text-[11px] leading-tight text-muted-foreground"
+                  role="status"
+                >
+                  {t.settings.model.visionNotSupported}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 pt-5">
               <Switch
@@ -3007,6 +3067,10 @@ function AddModelForm({
   const [baseUrl, setBaseUrl] = useState("https://api.openai.com/v1");
   const [thinking, setThinking] = useState(false);
   const [vision, setVision] = useState(false);
+  // True when the last connection test confirmed the model has no
+  // vision — the toggle is then locked off until a new test says
+  // otherwise.
+  const [visionLocked, setVisionLocked] = useState(false);
   const [millionContext, setMillionContext] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3043,18 +3107,22 @@ function AddModelForm({
     );
   };
 
-  const handleTest = async () => {
+  // Returns null when the connection test passed, otherwise the error
+  // message. ``handleSave`` calls this first and refuses to persist a
+  // model that has not passed the test.
+  const handleTest = async (): Promise<string | null> => {
     const firstModel = models.map((m) => m.trim()).find((m) => m.length > 0);
     if (!apiKey || !baseUrl || !firstModel) {
+      const msg = t.settings.model.fillRequiredBeforeTest;
       setTestStatus("fail");
-      setTestMessage(t.settings.model.fillRequiredBeforeTest);
-      return;
+      setTestMessage(msg);
+      return msg;
     }
     const baseUrlErr = validateBaseUrl(baseUrl);
     if (baseUrlErr) {
       setTestStatus("fail");
       setTestMessage(baseUrlErr);
-      return;
+      return baseUrlErr;
     }
     setTestStatus("testing");
     setTestMessage("");
@@ -3073,24 +3141,49 @@ function AddModelForm({
             model: firstModel,
             default_headers: parseHeadersText(headersText),
           }),
-          signal: AbortSignal.timeout(8000),
+          // Test runs a text ping + a vision canary; give both probes
+          // room even on slow reasoning models.
+          signal: AbortSignal.timeout(20000),
         },
       );
       const latency = Math.round(performance.now() - started);
       setTestLatency(latency);
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
+        const msg = data.error || `HTTP ${res.status}`;
         setTestStatus("fail");
-        setTestMessage(data.error || `HTTP ${res.status}`);
+        setTestMessage(msg);
+        return msg;
       } else {
         setTestStatus("success");
-        setTestMessage(data.message || t.settings.model.saveSuccess);
+        // Vision auto-detection from the test probe. A confirmed
+        // ``false`` locks the toggle off; ``true`` enables + checks it.
+        const visionNote =
+          data.supports_vision === true
+            ? t.settings.model.visionDetected
+            : data.supports_vision === false
+              ? t.settings.model.visionNotSupported
+              : "";
+        if (data.supports_vision === true) {
+          setVision(true);
+          setVisionLocked(false);
+        } else if (data.supports_vision === false) {
+          setVision(false);
+          setVisionLocked(true);
+        }
+        setTestMessage(
+          [data.message || t.settings.model.saveSuccess, visionNote]
+            .filter(Boolean)
+            .join(" · "),
+        );
+        return null;
       }
     } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : t.settings.model.networkError;
       setTestStatus("fail");
-      setTestMessage(
-        e instanceof Error ? e.message : t.settings.model.networkError,
-      );
+      setTestMessage(msg);
+      return msg;
     }
   };
 
@@ -3111,6 +3204,15 @@ function AddModelForm({
     const baseUrlErr = validateBaseUrl(baseUrl);
     if (baseUrlErr) {
       setError(baseUrlErr);
+      setSaving(false);
+      return;
+    }
+    // Save is gated on the connection test: a model that can't be
+    // reached is useless to persist. Re-run it here so a config change
+    // made after a successful test can't slip through.
+    const testError = await handleTest();
+    if (testError) {
+      setError(t.settings.model.saveRequiresTestPass + "：" + testError);
       setSaving(false);
       return;
     }
@@ -3434,13 +3536,24 @@ function AddModelForm({
           />{" "}
           <span className="text-sm">{t.settings.model.thinkingLabel}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Switch
-            aria-label={t.settings.model.visionLabel}
-            checked={vision}
-            onCheckedChange={setVision}
-          />{" "}
-          <span className="text-sm">{t.settings.model.visionLabel}</span>
+        <div className="flex flex-col items-start gap-1">
+          <div className="flex items-center gap-2">
+            <Switch
+              aria-label={t.settings.model.visionLabel}
+              checked={vision}
+              onCheckedChange={setVision}
+              disabled={visionLocked}
+            />{" "}
+            <span className="text-sm">{t.settings.model.visionLabel}</span>
+          </div>
+          {visionLocked && (
+            <span
+              className="text-[11px] leading-tight text-muted-foreground"
+              role="status"
+            >
+              {t.settings.model.visionNotSupported}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Switch

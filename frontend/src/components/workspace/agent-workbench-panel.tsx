@@ -25,7 +25,10 @@ import type { AgentWorkbenchTabId, DiffEntry } from "./agent-workbench-utils";
 import { useAgentWorkbenchI18n } from "./use-agent-workbench-i18n";
 import { AgentDiffPage } from "./agent-workbench-pages";
 import { useAgentWorkbenchSnapshot } from "./agent-workbench-snapshot";
-import { deriveAgentPhases } from "./agent-phases";
+import {
+  deriveAgentPhases,
+  type AgentPhase,
+} from "./agent-phases";
 import { type AgentRunState, workbenchRunState } from "./agent-run-status";
 import { MachineScopeRail } from "./agent-workbench-panel/machine-scope-rail";
 import { EmptyShellView } from "./agent-workbench-panel/empty-shell-view";
@@ -150,6 +153,12 @@ function AgentWorkbenchPanelImpl({
     phases: snapshotPhases,
     visibleDiffEntries,
   } = workbenchSnapshot;
+  // Visibility (capability routing / delegation / skill-catalog) decisions,
+  // surfaced as a de-emphasised collapsed section on the Agent kanban view.
+  const visibilityEvents = useMemo(
+    () => events.filter((event) => event.name === "visibility"),
+    [events],
+  );
 
   // Directly derive phases from raw events (same logic as composer-step-progress)
   // to ensure workbench always shows task plan when expanded, regardless of
@@ -158,7 +167,24 @@ function AgentWorkbenchPanelImpl({
     () => deriveAgentPhases(events, { hasAnswer, runSettled, runFailed, paused }),
     [events, hasAnswer, runSettled, runFailed, paused],
   );
-  const phases = snapshotPhases.length > 0 ? snapshotPhases : directDerived.phases;
+  // Stream-time guard: a todo plan whose phases are all "done" is NOT a
+  // completed turn while the stream is still running — the model may keep
+  // working or extend the plan (e.g. 4/4 → 5 items), and may mark items
+  // completed before the work behind them has actually finished. Until the
+  // turn settles, no phase is presented as "done": checkmarks only appear
+  // once ``runSettled`` restores the real terminal state.
+  const phases = useMemo<AgentPhase[]>(() => {
+    const base =
+      snapshotPhases.length > 0 ? snapshotPhases : directDerived.phases;
+    if (isLoading && base.length > 0) {
+      return base.map((phase) =>
+        phase.status === "done"
+          ? ({ ...phase, status: "running" as const } as AgentPhase)
+          : phase,
+      );
+    }
+    return base;
+  }, [snapshotPhases, directDerived.phases, isLoading]);
   const currentPhase = snapshotCurrentPhase ?? directDerived.currentPhase;
 
   const {
@@ -474,6 +500,7 @@ function AgentWorkbenchPanelImpl({
       openSubagentProcess={openSubagentProcess}
       setSelectedBlockId={setSelectedBlockId}
       setManualBlockSelection={setManualBlockSelection}
+      visibilityEvents={visibilityEvents}
     />
   );
 

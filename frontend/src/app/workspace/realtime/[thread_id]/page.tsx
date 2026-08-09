@@ -2617,9 +2617,6 @@ function RealtimePageContent({
     if (agentRunInterrupted) return null;
     if (agentRunFailed || (thread.error && !thread.isLoading)) return "error";
     if (agentRunSettled) return null;
-    if (agentDisplayEvents.some((event) => event.status === "error")) {
-      return "error";
-    }
     if (
       agentDisplayEvents.some((event) => event.status === "waiting_approval")
     ) {
@@ -2648,7 +2645,7 @@ function RealtimePageContent({
   const sidebarThreadId =
     thread.threadId ?? localStartedThreadIdRef.current ?? threadId;
   // Forward the derived run state to the Godot desktop pet (no-op in browser).
-  usePetAgentEvents({
+  const petMood = usePetAgentEvents({
     runState: sidebarRunState,
     settled: agentRunSettled,
     failed: agentRunFailed,
@@ -3652,6 +3649,7 @@ function RealtimePageContent({
                           disabled={researchLoading}
                           workDir={effectiveWorkDir}
                           displayAgent={composerDisplayAgent}
+                          petMood={petMood}
                           showWorkDirSelector={!isOctopusAssistant}
                           onWorkDirChange={handleWorkDirChange}
                           lockWorkDirToThread={!isNewThread}
@@ -3703,16 +3701,6 @@ function RealtimePageContent({
                           )}
                         />
                       </div>
-                      {isNewThread &&
-                        !isAgentRoute &&
-                        !isOctopusAssistant &&
-                        !composerSeed && (
-                          <NewChatStarterGrid
-                            onPick={(prompt) => {
-                              setComposerSeed(prompt);
-                            }}
-                          />
-                        )}
                     </div>
                   ) : (
                     <div

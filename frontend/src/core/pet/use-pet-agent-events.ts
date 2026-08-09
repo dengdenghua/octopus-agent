@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+import type { PetMood } from "@/components/desktop-pet";
+
 /**
  * Bridges the realtime agent run state to the Godot desktop pet sidecar.
  *
@@ -42,7 +44,7 @@ function petEventFor(input: PetAgentInput): PetEventName | null {
   return "idle";
 }
 
-export function usePetAgentEvents(input: PetAgentInput): void {
+export function usePetAgentEvents(input: PetAgentInput): PetMood {
   // Remember the last event so we only fire on real transitions.
   const lastRef = useRef<PetEventName | null>(null);
 
@@ -58,4 +60,7 @@ export function usePetAgentEvents(input: PetAgentInput): void {
       /* pet sidecar may be unavailable — non-fatal */
     });
   }, [input]);
+
+  const event = petEventFor(input);
+  return event === "waiting_user" ? "waiting" : (event ?? "idle");
 }

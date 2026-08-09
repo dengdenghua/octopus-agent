@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .mobile.vlm import VlmConfig
 
+from runtime.pet import PetUdpBridge
+
 from .base import Heartbeat, ToolCall, ToolResult
 from .mobile.cerebrum_adapter import CerebrumDecisionAdapter
 from .mobile.device import MobileDevice
@@ -111,6 +113,8 @@ class TentacleCoordinator:
         auth_token: str | None = None,
     ) -> None:
         self.pool = TentaclePool()
+        self._pet_bridge = PetUdpBridge()
+        self.pool.subscribe_screen_changes(self._pet_bridge.on_pool_event)
         # 屏幕流中继服务
         self.screen_relay = ScreenRelay(max_fps=screen_max_fps)
         # 远程输入处理器（手机→PC控制）
@@ -189,6 +193,7 @@ class TentacleCoordinator:
         for t in self.pool.all():
             await t.disconnect()
         await self.ws_server.stop()
+        self._pet_bridge.close()
         # 停止 Dashboard
         if self._dashboard_server is not None:
             self._dashboard_server.should_exit = True
@@ -204,6 +209,7 @@ class TentacleCoordinator:
         if existing is not None:
             logger.warning("device reconnected id=%s", hello.tentacle_id)
             await existing.disconnect()
+            await self.pool.unregister(hello.tentacle_id)
 
         # 创建新设备（按平台分发）
         device = _build_device_from_hello(hello, ws_server=self.ws_server)

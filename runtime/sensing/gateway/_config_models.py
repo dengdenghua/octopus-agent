@@ -100,6 +100,11 @@ if FASTAPI_AVAILABLE:
         latency_ms: int | None = None
         message: str | None = None
         error: str | None = None
+        # Vision auto-detection · ``True`` when the image canary was
+        # accepted, ``False`` when the model rejected image input, and
+        # ``None`` when the probe was inconclusive (no info). The UI
+        # uses ``False`` to lock the vision toggle off.
+        supports_vision: bool | None = None
 
     class IdentityLockResponse(BaseModel):
         locked: bool

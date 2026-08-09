@@ -11,12 +11,20 @@
  *   - agent.waiting_user
  *   - agent.success
  *   - agent.error
+ *   - agent.emotion   { emotion: "happy"|"sad"|"curious"|"surprised"|"concerned", intensity: 0-1 }
+ *   - agent.tired     { intensity: number 0-1 }
+ *   - agent.presence  { online: boolean, device_id: string }
+ *
+ * The canonical semantic source is `runtime/pet/pet_state_map.py`; this
+ * client mirrors its event types so both sides stay in sync.
  */
 
 import dgram from "dgram";
 
 const PET_IPC_HOST = "127.0.0.1";
 const PET_IPC_PORT = 8765;
+
+export type PetEmotion = "happy" | "sad" | "curious" | "surprised" | "concerned";
 
 export interface PetEvent {
   type: string;
@@ -91,6 +99,25 @@ class PetIPCClient {
 
   error(): void {
     this.send({ type: "agent.error" });
+  }
+
+  emotion(emotion: PetEmotion, intensity = 1.0): void {
+    this.send({
+      type: "agent.emotion",
+      emotion,
+      intensity: Math.max(0, Math.min(1, intensity)),
+    });
+  }
+
+  tired(intensity = 0.5): void {
+    this.send({
+      type: "agent.tired",
+      intensity: Math.max(0, Math.min(1, intensity)),
+    });
+  }
+
+  presence(online: boolean, deviceId = ""): void {
+    this.send({ type: "agent.presence", online, device_id: deviceId });
   }
 
   destroy(): void {

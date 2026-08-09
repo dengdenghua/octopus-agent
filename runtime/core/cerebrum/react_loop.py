@@ -177,61 +177,120 @@ def stream_react_loop(
     _camouflage_suffix = _boot.camouflage_suffix
 
     # ── PHASE 3 · system + volatile prompt assembly ────────────────────
-    _assembly = _assemble_prompt_and_messages(
-        intent=intent,
-        agent=agent,
-        stack=stack,
-        executor=executor,
-        approval_provider=approval_provider,
-        resume_task_id=resume_task_id,
-        planning_mode=planning_mode,
-        tools_active=tools_active,
-        native_mode=_native_mode,
-        no_tool_turn=_no_tool_turn,
-        strict_explicit_reads=_strict_explicit_reads,
-        camouflage_suffix=_camouflage_suffix,
-        max_iterations=max_iterations,
-        max_tokens_budget=max_tokens_budget,
-        max_usd_budget=max_usd_budget,
-    )
-    messages = _assembly.messages
-    max_iterations = _assembly.max_iterations
-    _metadata = _assembly.metadata
-    _effective_wp = _assembly.effective_wp
-    _is_goal_mode = _assembly.is_goal_mode
-    _is_code_mode = _assembly.is_code_mode
-    _browser_operation_mode = _assembly.browser_operation_mode
-    _todo_protocol_required = _assembly.todo_protocol_required
-    _todo_protocol_visible = _assembly.todo_protocol_visible
-    _file_inspection_tools_visible = _assembly.file_inspection_tools_visible
-    _read_only_turn = _assembly.read_only_turn
-    _observed_read_sequence = _assembly.observed_read_sequence
-    _final_guard_grounded_source_paths = _assembly.final_guard_grounded_source_paths
-    _guard_impasse_state = _assembly.guard_impasse_state
-    _budget_auto_pause_enabled = _assembly.budget_auto_pause_enabled
-    _budget_pause_threshold = _assembly.budget_pause_threshold
-    _realtime_public_orientation_requested = _assembly.realtime_public_orientation_requested
-    _grounding_sources = _assembly.grounding_sources
-    _is_swarm_mode = _assembly.is_swarm_mode
-    _is_research_mode = _assembly.is_research_mode
-    _active_max_tokens_budget = _assembly.active_max_tokens_budget
-    _active_max_usd_budget = _assembly.active_max_usd_budget
+    # Establish the turn-level visibility trace before prompt assembly so
+    # capability routing / delegation visibility / skill-catalog decisions
+    # recorded inside ``_format_skill_catalog`` land on one trace, then
+    # export it as an event in PHASE 4.7. Best-effort: never blocks the turn.
+    _visibility_token = None
+    try:
+        from runtime.core.cerebrum._visibility_trace import (
+            active_trace,
+            new_trace,
+            reset_active_trace,
+            set_active_trace,
+        )
 
-    # ── PHASE 4/4.5 · start events + auto-delegation ───────────────────
-    # Moved verbatim to react_prompt_assembly._emit_turn_start_events.
-    yield from _emit_turn_start_events(
-        react_task_id=react_task_id,
-        thread_id=thread_id,
-        max_iterations=max_iterations,
-        grounding_sources=_grounding_sources,
-        tools_active=tools_active,
-        planning_mode=planning_mode,
-        intent=intent,
-        executor=executor,
-        stack=stack,
-        messages=messages,
-        on_auto_parallel_batch=on_auto_parallel_batch,
-    )
+        if active_trace() is None:
+            _visibility_token = set_active_trace(new_trace())
+    except ImportError:  # pragma: no cover — module is always present
+        pass
+    # PHASE 3→4.7 share a turn-scoped ContextVar trace. Wrap them in
+    # try/finally so the token is reset even if a consumer closes the
+    # generator early (reconnect / test short-circuit), never leaking
+    # the trace into a recycled producer thread or the shared test thread.
+    try:
+        _assembly = _assemble_prompt_and_messages(
+            intent=intent,
+            agent=agent,
+            stack=stack,
+            executor=executor,
+            approval_provider=approval_provider,
+            resume_task_id=resume_task_id,
+            planning_mode=planning_mode,
+            tools_active=tools_active,
+            native_mode=_native_mode,
+            no_tool_turn=_no_tool_turn,
+            strict_explicit_reads=_strict_explicit_reads,
+            camouflage_suffix=_camouflage_suffix,
+            max_iterations=max_iterations,
+            max_tokens_budget=max_tokens_budget,
+            max_usd_budget=max_usd_budget,
+        )
+        messages = _assembly.messages
+        max_iterations = _assembly.max_iterations
+        _metadata = _assembly.metadata
+        _effective_wp = _assembly.effective_wp
+        _is_goal_mode = _assembly.is_goal_mode
+        _is_code_mode = _assembly.is_code_mode
+        _browser_operation_mode = _assembly.browser_operation_mode
+        _todo_protocol_required = _assembly.todo_protocol_required
+        _todo_protocol_visible = _assembly.todo_protocol_visible
+        _file_inspection_tools_visible = _assembly.file_inspection_tools_visible
+        _read_only_turn = _assembly.read_only_turn
+        _observed_read_sequence = _assembly.observed_read_sequence
+        _final_guard_grounded_source_paths = _assembly.final_guard_grounded_source_paths
+        _guard_impasse_state = _assembly.guard_impasse_state
+        _budget_auto_pause_enabled = _assembly.budget_auto_pause_enabled
+        _budget_pause_threshold = _assembly.budget_pause_threshold
+        _realtime_public_orientation_requested = _assembly.realtime_public_orientation_requested
+        _grounding_sources = _assembly.grounding_sources
+        _is_swarm_mode = _assembly.is_swarm_mode
+        _is_research_mode = _assembly.is_research_mode
+        _active_max_tokens_budget = _assembly.active_max_tokens_budget
+        _active_max_usd_budget = _assembly.active_max_usd_budget
+
+        # ── PHASE 4/4.5 · start events + auto-delegation ───────────────
+        # Moved verbatim to react_prompt_assembly._emit_turn_start_events.
+        yield from _emit_turn_start_events(
+            react_task_id=react_task_id,
+            thread_id=thread_id,
+            max_iterations=max_iterations,
+            grounding_sources=_grounding_sources,
+            tools_active=tools_active,
+            planning_mode=planning_mode,
+            intent=intent,
+            executor=executor,
+            stack=stack,
+            messages=messages,
+            on_auto_parallel_batch=on_auto_parallel_batch,
+        )
+
+        # ── PHASE 4.7 · visibility-trace snapshot ──────────────────────
+        # Export the decision-point trace collected during prompt assembly
+        # (capability routing / delegation visibility / skill catalog) as
+        # one snapshot event so the realtime bridge can persist it as an
+        # item. Best-effort: a missing or empty trace skips the event and
+        # can never block or alter the turn.
+        _visibility_trace = None
+        try:
+            from runtime.core.cerebrum._visibility_trace import active_trace
+
+            _visibility_trace = active_trace()
+        except ImportError:  # pragma: no cover — module is always present
+            pass
+        if _visibility_trace is None:
+            # ``activation`` is normally not bound in this scope; the
+            # ContextVar above is the designed channel (react_context_helpers
+            # wires ``activation.trace`` into it during PHASE 3). Keep this
+            # defensive lookup so a caller that attaches the trace to its
+            # activation object directly still wins.
+            _activation = locals().get("activation")
+            if _activation is not None:
+                _visibility_trace = getattr(_activation, "trace", None)
+        if _visibility_trace is not None and not _visibility_trace.empty():
+            yield {
+                "type": "visibility",
+                "summary": "本轮能力路由 / 委派 / 技能目录决策",
+                "steps": _visibility_trace.export(),
+            }
+    finally:
+        # All trace decision points (capability routing / delegation
+        # visibility / skill catalog) run during PHASE 3 prompt assembly, so
+        # the turn-level trace is done after this snapshot. Reset it even on
+        # early generator close so a recycled producer thread/context never
+        # accumulates decisions across turns.
+        if _visibility_token is not None:
+            reset_active_trace(_visibility_token)
 
     # ── PHASE 5 · pre-loop state init + checkpoint resume ──────────────
     # Pause registration, taint reset, checkpoint resume, and resume

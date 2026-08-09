@@ -1048,6 +1048,12 @@ def generate_all() -> tuple[dict[str, str], DocNode]:
             "全部 FastAPI router · openai_gateway / meta / mcp / config / channels / thread_compat / …",
         ),
         (
+            "24-sensing/pet.md",
+            "Sensing · Pet 事件桥",
+            "runtime/pet",
+            "桌面宠物物理在场事件语义 · agent 状态 / 情绪 / 疲劳 / 在场 / tentacle 事件的权威映射（best-effort）。",
+        ),
+        (
             "25-adapters/mcp.md",
             "Adapters · MCP",
             "runtime/adapters/mcp_client",

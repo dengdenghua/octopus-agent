@@ -1,10 +1,16 @@
-import { memo } from "react";
+import { memo, useMemo, useState } from "react";
 
-import { BotIcon, ChevronRightIcon, MonitorIcon } from "lucide-react";
+import {
+  BotIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  MonitorIcon,
+} from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import type { OutlineRound } from "@/core/threads/progress-outline";
+import type { VisibilityStep } from "@/core/realtime/items";
 import type { WorkBlock } from "../work-blocks";
 import { pickCurrentWorkBlock } from "../work-blocks";
 import type {
@@ -20,6 +26,7 @@ import type { AgentWorkbenchProcessEventSnapshot } from "../agent-workbench-even
 import { AgentCreationCard, AgentSummaryPage } from "../agent-workbench-pages";
 import { useAgentWorkbenchI18n } from "../use-agent-workbench-i18n";
 import type { ScreenFrameSnapshot } from "../agent-workbench-snapshot";
+import type { LiveToolEvent } from "../live-tool-timeline";
 import { ActivityTraceView } from "./activity-trace-view";
 import { RosterComputerPlaceholder } from "./roster-computer-placeholder";
 import { SubagentProcessView } from "./subagent-process-view";
@@ -60,6 +67,7 @@ function AgentKanbanViewImpl({
   mainAgentName,
   currentPhaseTitle: currentPhaseTitleText,
   terminalState,
+  visibilityEvents,
   setActivityView,
   onSelectTab,
   onOpenArtifact,
@@ -91,6 +99,7 @@ function AgentKanbanViewImpl({
   mainAgentName: string | null | undefined;
   currentPhaseTitle: string;
   terminalState: "interrupted" | "failed" | null;
+  visibilityEvents: LiveToolEvent[];
   setActivityView: (view: "summary" | "trace" | "screen") => void;
   onSelectTab: ((tab: AgentWorkbenchTabId) => void) | undefined;
   onOpenArtifact: ((path: string) => void) | undefined;
@@ -101,6 +110,29 @@ function AgentKanbanViewImpl({
 }) {
   const { t } = useI18n();
   const { agentStatusLabel, agentStatusClass } = useAgentWorkbenchI18n();
+
+  // Visibility (capability routing / delegation / skill-catalog) decisions.
+  // Deliberately de-emphasised: collapsed by default, small text,
+  // transparent background. Latest visibility item wins.
+  const lastVisibilityEvent =
+    visibilityEvents[visibilityEvents.length - 1] ?? null;
+  const visibilitySummary =
+    typeof lastVisibilityEvent?.input?.summary === "string"
+      ? lastVisibilityEvent.input.summary
+      : "";
+  const visibilitySteps = useMemo<VisibilityStep[]>(() => {
+    const raw = lastVisibilityEvent?.input?.steps;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(
+      (step): step is VisibilityStep =>
+        !!step &&
+        typeof step === "object" &&
+        typeof (step as VisibilityStep).decision_point === "string" &&
+        typeof (step as VisibilityStep).conclusion === "string" &&
+        typeof (step as VisibilityStep).basis === "string",
+    );
+  }, [lastVisibilityEvent]);
+  const [visibilityOpen, setVisibilityOpen] = useState(false);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -375,6 +407,66 @@ function AgentKanbanViewImpl({
           )}
         </div>
       )}
+
+      {/* Visibility decisions — de-emphasised surface: collapsed by default,
+          small text, transparent background. Latest visibility item wins. */}
+      <div className="shrink-0 border-t border-border-subtle bg-background/35">
+        {lastVisibilityEvent ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setVisibilityOpen((open) => !open)}
+              className="flex w-full items-center gap-1.5 px-5 py-1.5 text-left transition-colors hover:bg-muted/30"
+              aria-expanded={visibilityOpen}
+            >
+              {visibilityOpen ? (
+                <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground/60" />
+              ) : (
+                <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/60" />
+              )}
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {t.agentWorkbenchPanel.visibilityPanelTitle}
+              </span>
+            </button>
+            {visibilityOpen && (
+              <div className="space-y-1.5 px-5 pb-2.5">
+                {visibilitySummary ? (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground/75">
+                    {visibilitySummary}
+                  </p>
+                ) : null}
+                {visibilitySteps.length > 0 ? (
+                  visibilitySteps.map((step, index) => (
+                    <div
+                      key={`${step.decision_point}:${index}`}
+                      className="rounded-md border border-border-subtle bg-background/40 px-2 py-1.5"
+                    >
+                      <span className="font-mono text-[10px] text-muted-foreground/60">
+                        {t.agentWorkbenchPanel.visibilityStep} ·{" "}
+                        {step.decision_point}
+                      </span>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-foreground/75">
+                        {step.conclusion}
+                      </p>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground/60">
+                        {step.basis}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[11px] text-muted-foreground/60">
+                    {t.agentWorkbenchPanel.visibilityPanelEmpty}
+                  </p>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="px-5 py-1.5 text-[11px] text-muted-foreground/60">
+            {t.agentWorkbenchPanel.visibilityPanelEmpty}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

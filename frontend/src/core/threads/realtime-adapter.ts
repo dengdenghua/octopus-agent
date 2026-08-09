@@ -667,6 +667,12 @@ function turnToMessages(turn: Turn): Message[] {
         });
         break;
       }
+      case "visibility": {
+        // Visibility (capability routing / delegation / skill-catalog)
+        // snapshots are surfaced on the Agent workbench panel, not in the
+        // conversation narrative — skip silently.
+        break;
+      }
       case "error": {
         flushPendingAsTrailingAi();
         pushAiMessage(errorToAi(item as ErrorItem));

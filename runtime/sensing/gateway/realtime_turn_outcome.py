@@ -892,6 +892,7 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
         "react_cancelled": "REACT_CANCELLED",
         "react_paused": "TASK_RUN_PAUSED",
         "react_error": "REACT_ERROR",
+        "visibility": "VISIBILITY_TRACE",
     }.get(kind)
     if event_type is None:
         return

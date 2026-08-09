@@ -248,6 +248,31 @@ function petEventForAgentState(state) {
   }
 }
 
+// Extended state semantics (mirrors runtime/pet/pet_state_map.py):
+// emotion / tired / presence give the pet a richer inner life.
+function clamp01(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+}
+
+function sendEmotion(emotion, intensity = 1.0) {
+  const valid = ["happy", "sad", "curious", "surprised", "concerned"];
+  if (!valid.includes(emotion)) return false;
+  return sendPetEvent("agent.emotion", {
+    emotion,
+    intensity: clamp01(intensity, 1.0),
+  });
+}
+
+function sendTired(intensity = 0.5) {
+  return sendPetEvent("agent.tired", { intensity: clamp01(intensity, 0.5) });
+}
+
+function sendPresence(online, deviceId = "") {
+  return sendPetEvent("agent.presence", { online: !!online, device_id: deviceId });
+}
+
 function shutdown() {
   stopPet();
   stopWindowSync();
@@ -270,6 +295,9 @@ module.exports = {
   stopPet,
   isPetRunning,
   sendPetEvent,
+  sendEmotion,
+  sendTired,
+  sendPresence,
   petEventForAgentState,
   shutdown,
 };

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -201,6 +202,7 @@ def search_facts(
     include_global: bool = True,
     semantic: bool = False,
     scope: TenantScope | None = None,
+    viewer: MemoryViewer | None = None,
 ) -> list[dict[str, Any]]:
     query = _clean_text(query).casefold()
     if not query:
@@ -208,8 +210,17 @@ def search_facts(
     terms = [term for term in query.split() if term]
     scored: list[tuple[float, dict[str, Any]]] = []
     query_tokens = _tokenize(query) if semantic else []
-    for fact in read_memory(scope).get("facts", []):
+    if scope is None and viewer is not None:
+        # 多用户共享读取：聚合该租户下全部 actor 分区的记忆，再按查看者
+        # 身份过滤（否则 team 共享记忆物理躺在 owner 自己的分区里，其他
+        # 成员永远读不到——那"共享上下文"就只是字段，不是闭环）。
+        facts_source: list[dict[str, Any]] = _facts_for_viewer(viewer)
+    else:
+        facts_source = read_memory(scope).get("facts", [])
+    for fact in facts_source:
         if not isinstance(fact, dict):
+            continue
+        if viewer is not None and not fact_visible_to(fact, viewer):
             continue
         if not _fact_in_scope(
             fact,
@@ -245,6 +256,7 @@ def relevant_memory_texts(
     agent_id: str | None = None,
     project: str | None = None,
     scope: TenantScope | None = None,
+    viewer: MemoryViewer | None = None,
 ) -> list[str]:
     settings = read_config(scope)
     if not settings.get("enabled", True) or not settings.get("injection_enabled", True):
@@ -252,7 +264,12 @@ def relevant_memory_texts(
     return [
         str(fact.get("content") or "").strip()
         for fact in search_facts(
-            query, limit=limit, agent_id=agent_id, project=project, scope=scope
+            query,
+            limit=limit,
+            agent_id=agent_id,
+            project=project,
+            scope=scope,
+            viewer=viewer,
         )
         if str(fact.get("content") or "").strip()
     ]
@@ -588,3 +605,163 @@ def _fact_in_scope(
     if scope == "project":
         return bool(clean_project) and str(fact.get("project") or "") == clean_project
     return include_global
+
+
+# ── 多用户共享上下文与身份隔离 · 记忆可见性执行层 ─────────────────────────
+#
+# fact 自始就携带可见性元数据（visibility / team_id / allowed_users /
+# allowed_roles / allowed_agents / owner / tenant_id），但此前的搜索过滤
+# （``_fact_in_scope``）只按 agent/project/global 维度做范围过滤，完全忽略
+# 这些身份字段——"我的记忆"与"团队共享记忆"没有执行边界。本层把
+# ``visibility`` 语义变成可判定、可单测的纯函数：显式传入查看者
+# （``MemoryViewer``）时，搜索 / 注入只返回该查看者有权可见的记忆。
+#
+# 向后兼容：``viewer=None``（既有调用路径）行为不变，不做身份过滤；
+# 显式提供 ``viewer`` 时按 tenant + visibility + ACL 字段执行隔离。
+
+
+@dataclass(frozen=True)
+class MemoryViewer:
+    """查看者身份：actor + 租户 + 团队归属 + 角色。
+
+    ``team_ids`` 为查看者所属协作团队（对应 fact 的 ``team_id``）；
+    ``roles`` 为查看者在组织/团队中的角色（对应 fact 的 ``allowed_roles``）；
+    ``is_admin`` 为组织管理员——可审计 team / restricted 记忆（仍不可读
+    他人 private 记忆，private 只属于 owner）。
+    """
+
+    actor_id: str
+    tenant_id: str = ""
+    team_ids: frozenset[str] = field(default_factory=frozenset)
+    roles: frozenset[str] = field(default_factory=frozenset)
+    is_admin: bool = False
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> MemoryViewer:
+        return cls(
+            actor_id=str(raw.get("actor_id") or ""),
+            tenant_id=str(raw.get("tenant_id") or ""),
+            team_ids=frozenset(str(t) for t in (raw.get("team_ids") or []) if t),
+            roles=frozenset(str(r) for r in (raw.get("roles") or []) if r),
+            is_admin=bool(raw.get("is_admin", False)),
+        )
+
+
+def fact_visible_to(fact: dict[str, Any], viewer: MemoryViewer | None) -> bool:
+    """判定一条 fact 是否对 ``viewer`` 可见（纯函数，绝不抛出）。
+
+    规则（默认最小暴露）：
+
+    * ``viewer`` 为 None——视为不启用身份过滤，返回 True（旧路径语义）；
+    * 租户不一致（fact.tenant_id 非空且 != viewer.tenant_id）——不可见；
+    * owner 本人——总是可见（private 也只属于 owner）；
+    * ``private``——仅 owner；
+    * ``team``——查看者属于 fact.team_id 所指团队（或组织管理员）；
+    * ``restricted``——命中 allowed_users / allowed_roles / allowed_agents
+      任一（或组织管理员）；
+    * ``agent``——绑定的 agent 身份（fact.agent_id）或 allowed_agents 命中；
+    * 其它/缺失 visibility——按 private 保守处理（仅 owner）。
+    """
+    if viewer is None:
+        return True
+    try:
+        fact_owner = str(fact.get("owner") or "").strip()
+        tenant_id = str(fact.get("tenant_id") or "").strip()
+        if tenant_id and tenant_id != viewer.tenant_id:
+            return False
+        if fact_owner and fact_owner == viewer.actor_id:
+            return True
+        visibility = str(fact.get("visibility") or "private").strip().lower()
+        if visibility == "private":
+            return False
+        if visibility == "team":
+            team_id = str(fact.get("team_id") or "").strip()
+            return bool(team_id) and (team_id in viewer.team_ids or viewer.is_admin)
+        if visibility == "agent":
+            agent_id = str(fact.get("agent_id") or "").strip()
+            if agent_id and agent_id == viewer.actor_id:
+                return True
+            return viewer.actor_id in _clean_string_list(fact.get("allowed_agents"))
+        if visibility == "restricted":
+            if viewer.is_admin:
+                return True
+            if viewer.actor_id in _clean_string_list(fact.get("allowed_users")):
+                return True
+            allowed_roles = frozenset(_clean_string_list(fact.get("allowed_roles")))
+            if allowed_roles and allowed_roles & viewer.roles:
+                return True
+            return viewer.actor_id in _clean_string_list(fact.get("allowed_agents"))
+        return False
+    except Exception:  # noqa: BLE001 - visibility check must never break memory read
+        return False
+
+
+def visible_facts_for_viewer(
+    viewer: MemoryViewer,
+    *,
+    limit: int = 50,
+    scope: TenantScope | None = None,
+) -> list[dict[str, Any]]:
+    """查看者可读的全部 fact（无查询词版本，供团队共享上下文注入）。
+
+    按 visibility + tenant + ACL 过滤，返回原 fact dict（调用方决定
+    如何投影进提示词）。与 ``search_facts`` 一致：scope 为空时聚合
+    读取该租户全部分区。
+    """
+    source = (
+        _facts_for_viewer(viewer)
+        if scope is None
+        else read_memory(scope).get("facts", [])
+    )
+    facts: list[dict[str, Any]] = []
+    for fact in source:
+        if not isinstance(fact, dict):
+            continue
+        if fact_visible_to(fact, viewer):
+            facts.append(fact)
+        if len(facts) >= max(1, limit):
+            break
+    return facts
+
+
+def _memory_paths_for_tenant(tenant_id: str) -> list[Path]:
+    """该租户涉及的全部记忆文件：默认文件 + ``data/tenants/*`` 分区。
+
+    分区目录名是 ``tenant:actor`` 的哈希，无法从文件名反推租户，因此
+    多用户共享读取扫描全部分区、按 fact 自带的 ``tenant_id`` 过滤。
+    """
+    paths: list[Path] = [app_paths().user_memory_path]
+    if not tenant_id:
+        return paths
+    tenants_dir = app_paths().user_memory_path.parent / "tenants"
+    if not tenants_dir.is_dir():
+        return paths
+    for partition in sorted(tenants_dir.iterdir()):
+        if not partition.is_dir():
+            continue
+        paths.append(partition / "memory.json")
+    return paths
+
+
+def _facts_from_memory_file(path: Path) -> list[dict[str, Any]]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return []
+    if not isinstance(raw, dict):
+        return []
+    return [fact for fact in normalize_memory(raw).get("facts") or [] if isinstance(fact, dict)]
+
+
+def _facts_for_viewer(viewer: MemoryViewer) -> list[dict[str, Any]]:
+    """聚合读取查看者租户下全部记忆 fact（供身份过滤与团队共享注入）。"""
+    facts: list[dict[str, Any]] = []
+    for path in _memory_paths_for_tenant(viewer.tenant_id):
+        for fact in _facts_from_memory_file(path):
+            # 分区哈希不可反推租户：以 fact 自带的 tenant_id 为准；legacy
+            # fact（tenant_id 为空）在本地单租户模式下视为同一空间。
+            tenant_id = str(fact.get("tenant_id") or "").strip()
+            if tenant_id and viewer.tenant_id and tenant_id != viewer.tenant_id:
+                continue
+            facts.append(fact)
+    return facts

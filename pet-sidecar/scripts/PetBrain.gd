@@ -9,7 +9,9 @@ enum State {
 	SLEEP,
 	CELEBRATE,
 	ERROR_STATE,
-	WAIT_USER
+	WAIT_USER,
+	CURIOUS,
+	FATIGUE
 }
 
 var current_state: int = State.IDLE
@@ -29,7 +31,7 @@ func _ready() -> void:
 func register_state_change_callback(cb: Callable) -> void:
 	_state_change_callbacks.append(cb)
 
-func on_agent_event(event: String) -> void:
+func on_agent_event(event: String, data: Dictionary = {}) -> void:
 	agent_event = event
 	match event:
 		"success":
@@ -38,6 +40,25 @@ func on_agent_event(event: String) -> void:
 			_change_state(State.ERROR_STATE)
 		"waiting_user":
 			_change_state(State.WAIT_USER)
+		# 情绪语义(来自 runtime/pet/pet_state_map.py 的白名单)。
+		"emotion":
+			var emotion: String = str(data.get("emotion", ""))
+			if emotion == "happy":
+				_change_state(State.CELEBRATE)
+			elif emotion in ["curious", "surprised"]:
+				_change_state(State.CURIOUS)
+			elif emotion in ["sad", "concerned"]:
+				_change_state(State.OBSERVE)
+		# 疲劳语义:高强度疲劳才进入,普通任务不会让宠物长期无精打采。
+		"tired":
+			if float(data.get("intensity", 0.5)) >= 0.5:
+				_change_state(State.FATIGUE)
+		# 在场语义:主人/设备上线回到待机,离线转入观察四周。
+		"presence":
+			if data.get("online", true) == false:
+				_change_state(State.OBSERVE)
+			else:
+				_change_state(State.IDLE)
 
 func update(delta: float, dt: float) -> State:
 	state_time += delta
@@ -72,6 +93,9 @@ func _evaluate_utilities(delta: float) -> void:
 	utility_scores[State.CELEBRATE] = 1.0 if is_success else 0.0
 	utility_scores[State.ERROR_STATE] = 1.0 if is_error else 0.0
 	utility_scores[State.WAIT_USER] = 0.95 if is_waiting else 0.0
+	# 情绪/疲劳是事件驱动的瞬时状态:不常驻,但疲劳在未醒前保持,新事件自然唤醒。
+	utility_scores[State.CURIOUS] = 0.1
+	utility_scores[State.FATIGUE] = 0.9 if agent_event == "tired" else 0.05
 
 func _change_state(new_state: int) -> void:
 	if current_state == new_state:
@@ -94,4 +118,6 @@ func get_mood_for_state() -> String:
 		State.CELEBRATE: return "happy"
 		State.ERROR_STATE: return "error"
 		State.WAIT_USER: return "happy"
+		State.CURIOUS: return "curious"
+		State.FATIGUE: return "tired"
 		_: return "idle"

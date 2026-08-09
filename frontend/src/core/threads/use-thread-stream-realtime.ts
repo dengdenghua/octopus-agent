@@ -33,6 +33,7 @@ import type {
   TodoListItem,
   Turn,
   VerificationItem,
+  VisibilityItem,
   WorkbenchSnapshotV2,
   WorkspaceFocus,
 } from "@/core/realtime/items";
@@ -524,6 +525,27 @@ function verificationItemToLiveEvent(
   };
 }
 
+function visibilityItemToLiveEvent(
+  item: VisibilityItem,
+  turn: Turn,
+  iteration: number,
+): LiveToolEvent {
+  const startedAt = toMillis(item.createdAt);
+  const status = liveStatus(item.status);
+  return {
+    id: item.id,
+    name: "visibility",
+    status,
+    startedAt,
+    iteration,
+    input: {
+      summary: item.summary,
+      steps: item.steps,
+    },
+    ...finishFields(status, startedAt, turn),
+  };
+}
+
 function artifactItemToLiveEvent(
   item: ArtifactItem,
   turn: Turn,
@@ -584,6 +606,9 @@ function itemToLiveEvent(
   }
   if (item.type === "verification") {
     return verificationItemToLiveEvent(item, turn, iteration);
+  }
+  if (item.type === "visibility") {
+    return visibilityItemToLiveEvent(item, turn, iteration);
   }
   if (item.type === "artifact") {
     return artifactItemToLiveEvent(item, turn, iteration);

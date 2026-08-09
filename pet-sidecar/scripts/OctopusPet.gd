@@ -79,6 +79,8 @@ func set_mood(mood: String) -> void:
 		"working": move_speed = 0.9; _set_anim_speed(1.2)
 		"error": move_speed = 1.0; _set_anim_speed(1.1)
 		"success": move_speed = 1.8; _set_anim_speed(1.6)
+		"curious": move_speed = 0.7; _set_anim_speed(1.1)
+		"tired": move_speed = 0.15; _set_anim_speed(0.4)
 		_: move_speed = 0.5; _set_anim_speed(1.0)
 
 func on_mouse_enter() -> void: mouse_inside = true

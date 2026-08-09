@@ -25,6 +25,19 @@ Storage layout::
     data/topology_performance.jsonl — per-run trace (append-only)
 """
 
+from .decision_visibility import (
+    DECISION_ACCESS_EVENT_TYPES,
+    SENSITIVE_DECISION_POINTS,
+    DecisionAccessAudit,
+    DecisionAccessLevel,
+    DecisionRecord,
+    DecisionScope,
+    ViewerContext,
+    apply_level,
+    decision_records_from_trace,
+    filter_decisions,
+    resolve_access,
+)
 from .topology import (
     AgentSpec,
     CoordinationProtocol,
@@ -36,7 +49,18 @@ from .topology import (
 __all__ = [
     "AgentSpec",
     "CoordinationProtocol",
+    "DECISION_ACCESS_EVENT_TYPES",
+    "DecisionAccessAudit",
+    "DecisionAccessLevel",
+    "DecisionRecord",
+    "DecisionScope",
     "Role",
     "RoutingRule",
+    "SENSITIVE_DECISION_POINTS",
     "TeamTopology",
+    "ViewerContext",
+    "apply_level",
+    "decision_records_from_trace",
+    "filter_decisions",
+    "resolve_access",
 ]

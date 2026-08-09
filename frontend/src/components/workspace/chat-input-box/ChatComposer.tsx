@@ -48,6 +48,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DesktopPetMascot } from "@/components/desktop-pet";
 import { cn } from "@/lib/utils";
 import { normalizePermissionMode } from "@/core/permissions";
 import { uploadFiles } from "@/core/uploads";
@@ -90,6 +91,7 @@ export function ChatComposer({
   status,
   disabled,
   modelName,
+  petMood = "idle",
   mode = "react",
   threadId,
   workDir,
@@ -839,8 +841,11 @@ export function ChatComposer({
         className,
       )}
     >
-      {/* 3D mascot slot — Live2D integration pending */}
-      <div className="pointer-events-none absolute z-10" style={{ right: -30, top: -100 }} />
+      <DesktopPetMascot
+        mood={petMood}
+        size="sm"
+        anchor={{ corner: "bottom-right", gap: { x: 19, y: -23 } }}
+      />
       <div className="relative">
         {slashPicker}
         <MentionPicker

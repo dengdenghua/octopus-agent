@@ -5,6 +5,7 @@ import { getBackendBaseURL } from "@/core/config";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Agent } from "@/core/agents/types";
+import type { PetMood } from "@/components/desktop-pet";
 import {
   normalizePermissionMode,
   type PermissionMode,
@@ -51,6 +52,7 @@ export interface ChatInputBoxProps {
     Agent,
     "name" | "display_name" | "avatar_url" | "icon"
   > | null;
+  petMood?: PetMood;
   /** Show the workdir selector pill in the footer. Default false (chat
    * doesn't need a folder); pass true for code-flavored conversations
    * that read/edit local files. */

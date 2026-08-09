@@ -25,6 +25,7 @@ export type ItemType =
   | "subagent"
   | "approval"
   | "verification"
+  | "visibility"
   | "artifact"
   | "error";
 
@@ -241,6 +242,22 @@ export interface VerificationItem extends ItemBase {
   relatedChangeItemIds: string[];
 }
 
+/** One decision point inside a visibility (capability routing / delegation /
+ * skill-catalog) snapshot. Snapshot-only — no incremental deltas. */
+export interface VisibilityStep {
+  decision_point: string;
+  conclusion: string;
+  basis: string;
+  ts: number;
+  details?: Record<string, unknown>;
+}
+
+export interface VisibilityItem extends ItemBase {
+  type: "visibility";
+  summary: string;
+  steps: VisibilityStep[];
+}
+
 export interface ArtifactItem extends ItemBase {
   type: "artifact";
   artifactId: string;
@@ -285,6 +302,7 @@ export type Item =
   | SubagentItem
   | ApprovalItem
   | VerificationItem
+  | VisibilityItem
   | ArtifactItem
   | ErrorItem;
 
