@@ -84,7 +84,7 @@ export const koKR: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "안녕하세요, Octopus입니다",
+    greeting: "안녕하세요, {name}입니다",
     description:
       "멀티 Agent AI · 요청을 직접 말하거나, Agent 모드로 전환하여 심층 처리하세요.",
     octopusTagline: "멀티 에이전트 협업 · 하나의 입력으로 직접 해결",
@@ -1365,6 +1365,9 @@ export const koKR: Translations = {
     computerViewEmpty: "서브에이전트 없음",
     computerViewEmptyDesc:
       "작업이 서브에이전트에 할당되면 여기에서 서브에이전트의 독립적인 컴퓨터 작업 기록을 볼 수 있습니다.",
+    visibilityPanelTitle: "가시성",
+    visibilityPanelEmpty: "이번 턴에 가시성 결정이 없습니다",
+    visibilityStep: "결정",
   },
 
   diagnosticsPage: {

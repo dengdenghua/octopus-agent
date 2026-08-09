@@ -84,7 +84,7 @@ export const zhCN: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "你好，我是 Octopus",
+    greeting: "你好，我是 {name}",
     description: "多智能体 AI · 直接说需求，或切到 Agent 模式深入处理。",
     octopusTagline: "多智能体协作 · 一个输入框，直接解决问题",
 
@@ -1338,6 +1338,9 @@ export const zhCN: Translations = {
     computerViewEmpty: "暂无子智能体",
     computerViewEmptyDesc:
       "当任务派发给子智能体执行时，可以在这里查看子智能体的独立电脑操作记录。",
+    visibilityPanelTitle: "可见性",
+    visibilityPanelEmpty: "本轮暂无可见性决策",
+    visibilityStep: "决策",
   },
 
   diagnosticsPage: {

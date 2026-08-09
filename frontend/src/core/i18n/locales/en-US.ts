@@ -84,7 +84,7 @@ export const enUS: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "Hello, again!",
+    greeting: "Hello, I am {name}",
     description:
       "Welcome to 🦌 Octopus, an open source super agent. With built-in and custom skills, Octopus helps you search on the web, analyze data, and generate artifacts like slides, web pages and do almost anything.",
     octopusTagline: "Multi-agent collaboration · One input, direct solutions",
@@ -1399,6 +1399,9 @@ export const enUS: Translations = {
     computerViewEmpty: "No subagents yet",
     computerViewEmptyDesc:
       "When tasks are dispatched to subagents, you can view their independent computer operation records here.",
+    visibilityPanelTitle: "Visibility",
+    visibilityPanelEmpty: "No visibility decisions this turn",
+    visibilityStep: "Decision",
   },
 
   diagnosticsPage: {

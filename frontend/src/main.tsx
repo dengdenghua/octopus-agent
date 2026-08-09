@@ -23,6 +23,8 @@ import { installHashRouterShellUrlNormalizer } from "./core/router/hash-shell-ur
 import { normalizeLoopbackOrigin } from "./core/router/loopback-origin";
 import { installAuthFetchInterceptor } from "./core/auth/fetch-interceptor";
 
+import { loadTranslations } from "./core/i18n/translations";
+
 // Self-hosted Inter (fontsource) — replaces the render-blocking Google
 // Fonts CDN link so first paint is local-only and Electron/offline works.
 import "@fontsource/inter/400.css";
@@ -111,19 +113,26 @@ async function bootstrap() {
     ? normalizeLocale(savedLocale)
     : detectLocale();
 
-  // First paint uses the bundled en-US pack so it is never blocked on a
-  // locale-chunk fetch (non-en packs are ~120KB gzipped). The real locale is
-  // loaded in the background by <I18nLocaleBootstrap /> and swapped in once
-  // ready — locale state updates immediately, only the copy flashes en →
-  // target (no blank/empty flash). en-US users are unaffected (no-op swap).
   document.documentElement.lang = initialLocale.split("-")[0] ?? initialLocale;
+
+  // Mount with the target locale's pack already resolved, so no copy ever
+  // flashes en-US → target on refresh. en-US resolves synchronously (bundled);
+  // other packs are a ~120KB gzipped chunk fetched before first paint. If the
+  // chunk fails, fall back to the bundled en-US rather than blocking boot.
+  let initialTranslations = enUS;
+  if (initialLocale !== "en-US") {
+    try {
+      initialTranslations = await loadTranslations(initialLocale);
+    } catch {
+      initialTranslations = enUS;
+    }
+  }
 
   createRoot(document.getElementById("root")!).render(
     <HashRouter>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider defaultTheme="system" storageKey="octopus-theme">
-          <I18nProvider initialLocale="en-US" initialTranslations={enUS}>
-            <I18nLocaleBootstrap targetLocale={initialLocale} />
+          <I18nProvider initialLocale={initialLocale} initialTranslations={initialTranslations}>
             <AuthProvider>
               <AppearanceBootstrap />
               <AppRouter />
@@ -134,21 +143,6 @@ async function bootstrap() {
       </QueryClientProvider>
     </HashRouter>,
   );
-}
-
-/**
- * Kicks off the async load of the real locale after first paint. For en-US this
- * is a no-op (already mounted with en-US). For other locales it loads the chunk
- * and swaps translations in via the provider's race-guarded setLocale.
- */
-function I18nLocaleBootstrap({ targetLocale }: { targetLocale: Locale }) {
-  const { setLocale } = useI18nContext();
-  useEffect(() => {
-    if (targetLocale !== "en-US") {
-      void setLocale(targetLocale);
-    }
-  }, [targetLocale, setLocale]);
-  return null;
 }
 
 void bootstrap();

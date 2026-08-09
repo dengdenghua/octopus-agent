@@ -84,7 +84,7 @@ export const jaJP: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "こんにちは！",
+    greeting: "こんにちは、{name} です",
     description:
       "🦌 Octopusへようこそ。オープンソースのスーパーエージェントです。ビルトインスキルとカスタムスキルを使って、ウェブ検索、データ分析、スライドやウェブページなどのアーティファクト生成など、ほぼ何でもこなせます。",
     octopusTagline: "マルチエージェント協働 · 一つの入力で直接解決",
@@ -1378,6 +1378,9 @@ export const jaJP: Translations = {
     computerViewEmpty: "サブエージェントがありません",
     computerViewEmptyDesc:
       "タスクがサブエージェントにディスパッチされると、ここでサブエージェントの独立したコンピュータ操作記録を確認できます。",
+    visibilityPanelTitle: "可視性",
+    visibilityPanelEmpty: "このターンに可視性の判断はありません",
+    visibilityStep: "判断",
   },
 
   diagnosticsPage: {

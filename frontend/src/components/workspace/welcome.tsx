@@ -124,7 +124,7 @@ export function Welcome({
         <>
           <div className="flex flex-col items-center gap-4">
             <h1 className="text-[32px] font-bold tracking-tight leading-tight bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
-              你好，我是 {greetingName}
+              {t.welcome.greeting.replace("{name}", greetingName)}
             </h1>
             <p className="text-muted-foreground/80 text-base">
               {greetingName === "Octopus"
