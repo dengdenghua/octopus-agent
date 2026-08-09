@@ -21,6 +21,7 @@ import { ChainOfThought } from "@/components/ai-elements/chain-of-thought";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { isApprovalRequest } from "@/components/workspace/tool-approval-card";
 import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
+import { useConversationDetailLevel } from "./use-conversation-detail-level";
 import {
   type AgentRunState,
   agentRunStatusLightClass,
@@ -454,6 +455,10 @@ export function MessageGroup({
 }) {
   const { t } = useI18n();
   const { receiptsByCallId } = useToolEffects();
+  // Conversation detail level (Settings → Appearance → 对话细节级别):
+  // low = hide thinking/tool/intermediate rows (final answer only),
+  // medium (default) = collapse rows, high = expand them by default.
+  const detailConfig = useConversationDetailLevel();
   // Keep the live turn focused on the current frame. Older steps move behind
   // a replay disclosure so streaming never becomes a long historical pile.
   const isLiveTimeline = isLoading || keepOpen;
@@ -783,6 +788,20 @@ export function MessageGroup({
     }
 
     return items.map((item) => {
+      // Conversation detail level "low": hide intermediate activity rows
+      // (thinking / tool execution / process narration) so the transcript
+      // reads like a plain chat with only the final answers.
+      if (
+        (!detailConfig.showThinkingProcess &&
+          item.type === "reasoningGroup") ||
+        (!detailConfig.showToolCalls &&
+          (item.type === "toolCall" ||
+            item.type === "aggregatedToolGroup" ||
+            item.type === "actionCallbackGroup")) ||
+        (!detailConfig.showIntermediateSteps && item.type === "commentary")
+      ) {
+        return null;
+      }
       const step = lastTimelineStep(item);
       const phaseItems = step.phaseId
         ? historicalPhaseItems.get(step.phaseId)
@@ -960,7 +979,9 @@ export function MessageGroup({
         state === "running";
       const isAggregatedGroup = item.type === "aggregatedToolGroup";
       const aggregatedExpanded =
-        isAggregatedGroup && (expandedAggregatedGroups[item.id] ?? false);
+        isAggregatedGroup &&
+        (expandedAggregatedGroups[item.id] ??
+          detailConfig.level === "high");
       const coveredItems =
         compactExecutionCoverage.get(item.id) ?? ([item] as TimelineItem[]);
       const groupedTargetSummary =
@@ -1483,7 +1504,12 @@ export function MessageGroup({
             processEventDetail &&
             processEventDetail.trim() !==
               (processEventSummary || summary).trim() && (
-              <Collapsible open={expandedThinkingRows[item.id] ?? false}>
+              <Collapsible
+                open={
+                  expandedThinkingRows[item.id] ??
+                  detailConfig.level === "high"
+                }
+              >
                 <CollapsibleContent
                   className="pb-1 pl-5 text-xs leading-5 text-muted-foreground/70 data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
                   data-testid="thinking-row-content"

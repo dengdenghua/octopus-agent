@@ -2527,3 +2527,99 @@ describe("reasoning live timer from backend timestamp", () => {
     expect(screen.queryByTestId("live-exec-stream")).not.toBeInTheDocument();
   });
 });
+
+describe("conversation detail level (对话细节级别)", () => {
+  const SETTINGS_KEY = "octopus.local-settings";
+
+  function seedDetailLevel(level: "low" | "medium" | "high") {
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ display: { conversation_detail_level: level } }),
+    );
+  }
+
+  function detailMessages(): Message[] {
+    return [
+      {
+        id: "ai-think",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content:
+            "权衡:用户可能期望方案 A 更快落地,但方案 B 在长期维护上更稳妥。" +
+            "如果选择 A,后续扩展需要重构,模块边界需要重新设计,测试也要补齐。" +
+            "如果选择 B,首轮开发成本更高,但后续每次迭代都会更省力,风险更低。" +
+            "综合团队当前节奏、交付压力与长期可维护性,还需要再权衡一次," +
+            "不能因为交付压力就草率决定,至少要把两边的隐性成本都列清楚。",
+        },
+      } as AIMessage,
+      {
+        id: "ai-tool",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          { id: "tc-1", name: "read_file", args: { path: "src/a.ts" } },
+        ],
+      } as AIMessage,
+      {
+        id: "ai-final",
+        type: "ai",
+        content: "最终结果:已读取 src/a.ts 并确认结构。",
+      } as AIMessage,
+    ];
+  }
+
+  it("low hides thinking/tool rows (process lane empty)", () => {
+    seedDetailLevel("low");
+    renderWithProviders(<MessageGroup messages={detailMessages()} />, {
+      locale: "zh-CN",
+    });
+
+    expect(
+      screen.queryByTestId("process-timeline-event-thinking"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("process-timeline-event-execution"),
+    ).not.toBeInTheDocument();
+    // No thinking/execution/commentary rows survive in the process lane.
+    const lanes = screen.queryAllByTestId("interleaved-process-timeline");
+    for (const lane of lanes) {
+      expect(lane.textContent ?? "").toBe("");
+    }
+  });
+
+  it("high shows thinking/tool rows and expands the thinking detail", () => {
+    seedDetailLevel("high");
+    renderWithProviders(<MessageGroup messages={detailMessages()} />, {
+      locale: "zh-CN",
+    });
+
+    // Thinking + execution rows are visible.
+    expect(
+      screen.getByTestId("process-timeline-event-thinking"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("process-timeline-event-execution"),
+    ).toBeInTheDocument();
+    // High detail expands the collapsible thinking content by default.
+    expect(
+      screen.getByTestId("thinking-row-content"),
+    ).toHaveAttribute("data-state", "open");
+  });
+
+  it("medium keeps rows visible but collapses the thinking detail (default)", () => {
+    seedDetailLevel("medium");
+    renderWithProviders(<MessageGroup messages={detailMessages()} />, {
+      locale: "zh-CN",
+    });
+
+    expect(
+      screen.getByTestId("process-timeline-event-thinking"),
+    ).toBeInTheDocument();
+    // Medium collapses the detail by default (Radix keeps the node in the
+    // DOM but marks it closed + hidden).
+    expect(
+      screen.getByTestId("thinking-row-content"),
+    ).toHaveAttribute("data-state", "closed");
+  });
+});
