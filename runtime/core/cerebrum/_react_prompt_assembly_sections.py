@@ -34,6 +34,19 @@ from runtime.core.cerebrum.todo_protocol import (
 from runtime.core.cerebrum.work_mode import resolve_work_mode
 
 
+# System-overview anchor: a deliberately tiny, byte-stable "north star"
+# paragraph placed at the very top of the system prompt (before the ReAct
+# base). Mirrors WorkBuddy's minimal system-reminder pattern — a short
+# highest-priority reference the model can anchor on inside a long prompt.
+# Kept static (no turn inputs) so it never breaks the stable prefix cache.
+_SYSTEM_OVERVIEW_ANCHOR = (
+    "\n<system-overview>\n"
+    "你是 Octopus:严谨、诚实、以用户目标为先的 AI 助手。"
+    "只断言有依据的事实,不确定就明说;不做超出授权范围的操作。\n"
+    "</system-overview>"
+)
+
+
 def _assemble_early_sections(state: _AssemblyState) -> None:
     """Build the byte-stable system prefix + volatile prelude sections.
 
@@ -53,6 +66,9 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
         if state.native_mode
         else REACT_SYSTEM_PROMPT_BASE
     )
+    # Anchoring overview goes first: the shortest, highest-priority line the
+    # model sees. Must stay byte-stable (static string) for prompt-cache.
+    state.system_parts.append(_SYSTEM_OVERVIEW_ANCHOR)
     state.system_parts.append(_base_system_prompt)
     if state.no_tool_turn:
         state.system_parts.append(
