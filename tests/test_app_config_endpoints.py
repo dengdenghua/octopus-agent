@@ -906,7 +906,13 @@ class TestLlmModelsMerge:
         assert len(rows) == 4
         default_rows = [row for row in rows if row["context_profile"] == "default"]
         one_million_rows = [row for row in rows if row["context_profile"] == "1m"]
-        assert {row["context_window"] for row in default_rows} == {256_000}
+        # The default profile reports whatever the upstream really has —
+        # for these ids the models.dev snapshot says 1M, which is the
+        # point of the auto-detection. It used to be a flat 256k guess
+        # here while context budgeting already resolved the true window,
+        # so the UI understated it. What this test pins is the profile
+        # split, not a specific number.
+        assert {row["context_window"] for row in default_rows} == {1_000_000}
         assert {row["context_window"] for row in one_million_rows} == {1_000_000}
         assert all(row["id"].endswith("::1m") for row in one_million_rows)
         assert {row["model"] for row in default_rows} == {row["model"] for row in one_million_rows}

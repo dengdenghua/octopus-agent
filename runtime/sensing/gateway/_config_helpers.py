@@ -50,6 +50,19 @@ def _entry_context_window(entry: dict[str, Any], upstreams: list[str]) -> int:
         explicit = 0
     if 8_192 <= explicit <= 2_000_000:
         return explicit
+    # No usable declaration: ask the bundled models.dev snapshot before
+    # falling back to a flat guess. Context budgeting already resolves
+    # the real window this way (custom_model_flags.model_context_window),
+    # and a guess here made the UI report 256k for a model the router was
+    # correctly treating as 1M.
+    from runtime.platform.models.model_capabilities import known_model_context_window
+
+    for candidate in (*upstreams, entry.get("id"), entry.get("name")):
+        if not isinstance(candidate, str) or not candidate.strip():
+            continue
+        known = known_model_context_window(candidate)
+        if known is not None and 8_192 <= known <= 2_000_000:
+            return known
     return 256_000
 
 

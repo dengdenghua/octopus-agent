@@ -250,3 +250,33 @@ def test_the_floor_stays_above_the_measured_empty_content_cliff() -> None:
     from runtime.sensing.model_router.openai_router import _MIN_THINKING_OUTPUT_TOKENS
 
     assert _MIN_THINKING_OUTPUT_TOKENS >= 192
+
+
+class TestConfigWireWindow:
+    """The window the config API reports must match the one used.
+
+    ``_entry_context_window`` feeds the settings UI while
+    ``model_context_window`` feeds context budgeting. They used to
+    disagree: with no ``context_window`` on the entry, the wire helper
+    guessed a flat 256k while budgeting resolved the real 1M from the
+    snapshot, so the UI understated the window by 4x.
+    """
+
+    def test_an_undeclared_window_comes_from_the_snapshot(self, snapshot) -> None:
+        from runtime.sensing.gateway._config_helpers import _entry_context_window
+
+        snapshot({"big-relay-model": {"context": 1_000_000}})
+        assert _entry_context_window({"id": "big-relay-model"}, ["big-relay-model"]) == 1_000_000
+
+    def test_an_operator_declaration_still_wins(self, snapshot) -> None:
+        from runtime.sensing.gateway._config_helpers import _entry_context_window
+
+        snapshot({"big-relay-model": {"context": 1_000_000}})
+        entry = {"id": "big-relay-model", "context_window": 64_000}
+        assert _entry_context_window(entry, ["big-relay-model"]) == 64_000
+
+    def test_an_unknown_model_keeps_the_old_default(self, snapshot) -> None:
+        from runtime.sensing.gateway._config_helpers import _entry_context_window
+
+        snapshot({"something-else": {"context": 1_000_000}})
+        assert _entry_context_window({"id": "mystery"}, ["mystery"]) == 256_000
