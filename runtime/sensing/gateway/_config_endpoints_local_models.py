@@ -261,7 +261,7 @@ def _register_local_models(router: Any, ctx: _ConfigCtx) -> None:
             "default_headers": {},
         }
         custom_models_state[model_id] = entry
-        save()
+        save(model_id)
         status = register(entry)
         return {
             "ok": True,

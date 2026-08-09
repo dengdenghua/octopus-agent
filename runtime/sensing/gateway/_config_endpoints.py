@@ -47,7 +47,11 @@ class _ConfigCtx:
 
     router: Any
     custom_models: dict[str, dict[str, Any]]
-    save: Callable[[], None]
+    # ``save(*model_ids)`` merges over the file on disk rather than
+    # overwriting it with our snapshot, so callers must name the ids they
+    # mutated. An id held in memory but not named is left as-is on disk;
+    # an id named but absent from memory is deleted from disk.
+    save: Callable[..., None]
     load: Callable[[], None]
     register: Callable[[dict[str, Any]], dict[str, Any]]
     unregister_entry: Callable[..., bool]

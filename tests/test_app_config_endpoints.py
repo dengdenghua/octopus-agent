@@ -39,6 +39,7 @@ Design notes
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
@@ -483,6 +484,108 @@ class TestCustomModelsUpsert:
         assert not dispatcher.has("kimi-code")
         assert not dispatcher.has("kimi-for-coding-v2")
         assert not dispatcher.has("kimi-for-coding-v2::1m")
+
+
+class TestCustomModelsExternalEdits:
+    """The file is hand-edited while the server runs.
+
+    ``custom_models.json`` is where an operator sets base urls and api
+    keys, so it gets edited by hand — and the router only reads it at
+    startup. A save that wrote the boot-time snapshot therefore erased
+    every edit made since boot. These pin the merge that replaced it.
+    """
+
+    def _write(self, cwd: Path, data: dict) -> Path:
+        path = cwd / "data" / "custom_models.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return path
+
+    def _read(self, cwd: Path) -> dict:
+        return json.loads((cwd / "data" / "custom_models.json").read_text(encoding="utf-8"))
+
+    def test_an_unrelated_hand_added_entry_survives_an_upsert(
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
+    ) -> None:
+        # Appears only after the router has already loaded, exactly as a
+        # hand edit to a running server does.
+        self._write(isolated_cwd, {"typed-by-hand": {"base_url": "https://x/v1"}})
+
+        r = client.put(
+            "/api/config/custom-models/added-via-api",
+            json={"name": "added-via-api", "base_url": "https://y/v1"},
+        )
+        assert r.status_code == 200
+
+        on_disk = self._read(isolated_cwd)
+        assert "added-via-api" in on_disk
+        assert on_disk["typed-by-hand"]["base_url"] == "https://x/v1"
+
+    def test_a_hand_edited_api_key_is_not_reverted(
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
+    ) -> None:
+        r = client.put(
+            "/api/config/custom-models/relay",
+            json={"name": "relay", "base_url": "https://r/v1", "api_key": "sk-old"},
+        )
+        assert r.status_code == 200
+
+        # Operator rotates the key by hand, then touches something else.
+        data = self._read(isolated_cwd)
+        data["relay"]["api_key"] = "sk-rotated"
+        self._write(isolated_cwd, data)
+
+        client.put(
+            "/api/config/custom-models/other",
+            json={"name": "other", "base_url": "https://o/v1"},
+        )
+
+        # The rotated key belongs to an id we did not touch in this
+        # request, so the merge must leave it alone.
+        assert self._read(isolated_cwd)["relay"]["api_key"] == "sk-rotated"
+
+    def test_a_deleted_entry_stays_deleted(
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
+    ) -> None:
+        client.put(
+            "/api/config/custom-models/doomed",
+            json={"name": "doomed", "base_url": "https://d/v1"},
+        )
+        assert client.delete("/api/config/custom-models/doomed").status_code == 200
+        assert "doomed" not in self._read(isolated_cwd)
+
+        # A later save merges over disk; the delete must not come back.
+        client.put(
+            "/api/config/custom-models/keeper",
+            json={"name": "keeper", "base_url": "https://k/v1"},
+        )
+        on_disk = self._read(isolated_cwd)
+        assert "doomed" not in on_disk
+        assert "keeper" in on_disk
+
+    def test_re_adding_a_deleted_id_retracts_the_delete(
+        self,
+        client: TestClient,
+        isolated_cwd: Path,
+    ) -> None:
+        client.put(
+            "/api/config/custom-models/flip",
+            json={"name": "flip", "base_url": "https://1/v1"},
+        )
+        client.delete("/api/config/custom-models/flip")
+        client.put(
+            "/api/config/custom-models/flip",
+            json={"name": "flip", "base_url": "https://2/v1"},
+        )
+
+        on_disk = self._read(isolated_cwd)
+        assert on_disk["flip"]["base_url"] == "https://2/v1"
 
 
 # ═══════════════════════════════════════════════════════════

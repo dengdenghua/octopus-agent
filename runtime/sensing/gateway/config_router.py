@@ -217,11 +217,42 @@ def create_config_router(
     # keeps the "own your state" principle — same file, one level of
     # scoping instead of two.
 
-    def _save() -> None:
+    def _disk_state() -> dict[str, dict[str, Any]]:
+        """Entries currently on disk, or an empty mapping if unreadable."""
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {k: v for k, v in data.items() if isinstance(v, dict)}
+
+    def _save(*touched: str) -> None:
+        """Persist, writing through only the ids this request changed.
+
+        This file is routinely hand-edited — it is where an operator sets
+        base urls and api keys — while our in-memory copy is refreshed
+        only at startup. Writing that snapshot wholesale therefore
+        silently reverted every edit made since boot, and could bring
+        back an entry the operator had removed.
+
+        So disk is the source of truth and each caller names the ids it
+        actually mutated: those are applied (or removed, when the caller
+        dropped them from memory) and nothing else is touched. Passing no
+        ids makes this a no-op write, which keeps a bare ``save()`` from
+        clobbering anything.
+        """
+        merged = _disk_state()
+        for model_id in touched:
+            entry = custom_models_state.get(model_id)
+            if entry is None:
+                merged.pop(model_id, None)
+            else:
+                merged[model_id] = entry
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
-                json.dumps(custom_models_state, ensure_ascii=False, indent=2),
+                json.dumps(merged, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
         except OSError:  # noqa: BLE001 — disk full / permission denied; in-memory PUT already succeeded
@@ -239,7 +270,10 @@ def create_config_router(
                     if isinstance(entry, dict):
                         entry.pop("max_tokens", None)
                 custom_models_state.update({k: v for k, v in data.items() if isinstance(v, dict)})
-                _save()
+                # Boot-time rewrite: the loop above stripped the retired
+                # ``max_tokens`` field, so every id we just read is one
+                # we changed and has to be written back.
+                _save(*custom_models_state)
         except (OSError, json.JSONDecodeError):  # noqa: BLE001 — fresh install or corrupt file; start empty rather than crash boot
             # Fresh install (no file) or corrupted file — start empty
             # rather than crashing app boot. Corrupt files should be

@@ -158,7 +158,7 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
         if prev:
             unregister_entry(prev, fallback_id=model_id)
         custom_models_state[model_id] = entry
-        save()
+        save(model_id)
         status = register(entry)
         return {"model": _custom_model_wire_entry(entry), "_status": status}
 
@@ -171,7 +171,7 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
         returns ok:true with removed:false rather than 404, matching
         the UI's double-click race semantics."""
         prev = custom_models_state.pop(model_id, None)
-        save()
+        save(model_id)
         removed = unregister_entry(prev, fallback_id=model_id)
         return {"ok": True, "removed": removed}
 
