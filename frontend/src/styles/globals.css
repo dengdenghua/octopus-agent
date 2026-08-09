@@ -613,46 +613,123 @@
   --sidebar-ring: oklch(0.72 0.13 268);
 }
 
-/* ── 高级配色预设：以下仅覆盖主色相关 token（primary / ring / sidebar-primary /
-   chart-1 及其前景），背景与中性色沿用 rouge/dark 基础，呈现克制的高级质感。
-   每种配色均提供浅色与深色（[data-theme=xxx].dark）两套，确保明暗模式一致。 */
+/* ── 高级配色预设：每套都是完整配色，中性色（背景 / 卡片 / 边框 / 侧栏）
+   带同色相的低彩度底调，与主色协调，而不是黑白灰配一个强调色。
+   token 集合与上方 steel 一致；浅色与深色（[data-theme=xxx].dark）各一套。
+   中性色彩度按色相视觉权重调整：暖色相同彩度更显色，故取值低于冷色相。 */
 
-/* emerald → 松玉（jade）：色相 178，蓝调偏移的青玉绿，比草绿更内敛。 */
+/* emerald → 松玉（jade）：主色相 178，中性色相 185 的青灰底调。 */
 [data-theme="emerald"] {
+  --background: oklch(0.97 0.005 185);
+  --foreground: oklch(0.2 0.013 185);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.013 185);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.013 185);
   --primary: oklch(0.52 0.09 178);
   --primary-foreground: oklch(0.99 0.005 178);
+  --secondary: oklch(0.95 0.01 185);
+  --secondary-foreground: oklch(0.3 0.017 185);
+  --muted: oklch(0.945 0.01 185);
+  --muted-foreground: oklch(0.45 0.019 185);
+  --accent: oklch(0.93 0.013 185);
+  --accent-foreground: oklch(0.32 0.026 185);
+  --border: oklch(0.89 0.012 185);
+  --input: oklch(0.92 0.012 185);
   --ring: oklch(0.57 0.09 178);
+  --sidebar: oklch(0.955 0.007 185);
+  --sidebar-foreground: oklch(0.2 0.013 185);
   --sidebar-primary: oklch(0.52 0.09 178);
   --sidebar-primary-foreground: oklch(0.99 0.005 178);
+  --sidebar-accent: oklch(0.92 0.013 185);
+  --sidebar-accent-foreground: oklch(0.32 0.026 185);
+  --sidebar-border: oklch(0.89 0.012 185);
   --sidebar-ring: oklch(0.57 0.09 178);
   --chart-1: oklch(0.52 0.09 178);
 }
 [data-theme="emerald"].dark {
+  --background: oklch(0.18 0.01 185);
+  --foreground: oklch(0.93 0.007 185);
+  --card: oklch(0.22 0.01 185);
+  --card-foreground: oklch(0.93 0.007 185);
+  --popover: oklch(0.21 0.01 185);
+  --popover-foreground: oklch(0.93 0.007 185);
   --primary: oklch(0.74 0.085 178);
   --primary-foreground: oklch(0.17 0.02 178);
+  --secondary: oklch(0.28 0.013 185);
+  --secondary-foreground: oklch(0.9 0.009 185);
+  --muted: oklch(0.26 0.013 185);
+  --muted-foreground: oklch(0.68 0.016 185);
+  --accent: oklch(0.3 0.017 185);
+  --accent-foreground: oklch(0.9 0.009 185);
+  --border: oklch(0.32 0.013 185);
+  --input: oklch(0.3 0.013 185);
   --ring: oklch(0.72 0.085 178);
+  --sidebar: oklch(0.2 0.01 185);
+  --sidebar-foreground: oklch(0.93 0.007 185);
   --sidebar-primary: oklch(0.74 0.085 178);
   --sidebar-primary-foreground: oklch(0.17 0.02 178);
+  --sidebar-accent: oklch(0.28 0.013 185);
+  --sidebar-accent-foreground: oklch(0.9 0.009 185);
+  --sidebar-border: oklch(0.32 0.013 185);
   --sidebar-ring: oklch(0.72 0.085 178);
   --chart-1: oklch(0.74 0.085 178);
 }
 
-/* violet → 藕荷（mauve）：色相 322，带灰调的玫紫，比标准紫更克制耐看。 */
+/* violet → 藕荷（mauve）：主色相 322，中性色相 320 的紫灰底调。 */
 [data-theme="violet"] {
+  --background: oklch(0.97 0.005 320);
+  --foreground: oklch(0.2 0.013 320);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.013 320);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.013 320);
   --primary: oklch(0.53 0.12 322);
   --primary-foreground: oklch(0.99 0.004 322);
+  --secondary: oklch(0.95 0.01 320);
+  --secondary-foreground: oklch(0.3 0.017 320);
+  --muted: oklch(0.945 0.01 320);
+  --muted-foreground: oklch(0.45 0.019 320);
+  --accent: oklch(0.93 0.013 320);
+  --accent-foreground: oklch(0.32 0.026 320);
+  --border: oklch(0.89 0.012 320);
+  --input: oklch(0.92 0.012 320);
   --ring: oklch(0.58 0.12 322);
+  --sidebar: oklch(0.955 0.007 320);
+  --sidebar-foreground: oklch(0.2 0.013 320);
   --sidebar-primary: oklch(0.53 0.12 322);
   --sidebar-primary-foreground: oklch(0.99 0.004 322);
+  --sidebar-accent: oklch(0.92 0.013 320);
+  --sidebar-accent-foreground: oklch(0.32 0.026 320);
+  --sidebar-border: oklch(0.89 0.012 320);
   --sidebar-ring: oklch(0.58 0.12 322);
   --chart-1: oklch(0.53 0.12 322);
 }
 [data-theme="violet"].dark {
+  --background: oklch(0.18 0.01 320);
+  --foreground: oklch(0.93 0.007 320);
+  --card: oklch(0.22 0.01 320);
+  --card-foreground: oklch(0.93 0.007 320);
+  --popover: oklch(0.21 0.01 320);
+  --popover-foreground: oklch(0.93 0.007 320);
   --primary: oklch(0.74 0.11 322);
   --primary-foreground: oklch(0.17 0.02 322);
+  --secondary: oklch(0.28 0.013 320);
+  --secondary-foreground: oklch(0.9 0.009 320);
+  --muted: oklch(0.26 0.013 320);
+  --muted-foreground: oklch(0.68 0.016 320);
+  --accent: oklch(0.3 0.017 320);
+  --accent-foreground: oklch(0.9 0.009 320);
+  --border: oklch(0.32 0.013 320);
+  --input: oklch(0.3 0.013 320);
   --ring: oklch(0.72 0.11 322);
+  --sidebar: oklch(0.2 0.01 320);
+  --sidebar-foreground: oklch(0.93 0.007 320);
   --sidebar-primary: oklch(0.74 0.11 322);
   --sidebar-primary-foreground: oklch(0.17 0.02 322);
+  --sidebar-accent: oklch(0.28 0.013 320);
+  --sidebar-accent-foreground: oklch(0.9 0.009 320);
+  --sidebar-border: oklch(0.32 0.013 320);
   --sidebar-ring: oklch(0.72 0.11 322);
   --chart-1: oklch(0.74 0.11 322);
 }
@@ -660,40 +737,116 @@
 /* amber → 陶土（clay）：色相 40。金黄在 AA 对比度下必然压暗成土黄，
    改走暖陶红更耐看；id 保留 amber 以免影响已保存的用户偏好。 */
 [data-theme="amber"] {
+  --background: oklch(0.97 0.004 45);
+  --foreground: oklch(0.2 0.011 45);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.011 45);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.011 45);
   --primary: oklch(0.55 0.13 40);
   --primary-foreground: oklch(0.99 0.005 40);
+  --secondary: oklch(0.95 0.008 45);
+  --secondary-foreground: oklch(0.3 0.014 45);
+  --muted: oklch(0.945 0.008 45);
+  --muted-foreground: oklch(0.45 0.016 45);
+  --accent: oklch(0.93 0.011 45);
+  --accent-foreground: oklch(0.32 0.022 45);
+  --border: oklch(0.89 0.01 45);
+  --input: oklch(0.92 0.01 45);
   --ring: oklch(0.6 0.13 40);
+  --sidebar: oklch(0.955 0.006 45);
+  --sidebar-foreground: oklch(0.2 0.011 45);
   --sidebar-primary: oklch(0.55 0.13 40);
   --sidebar-primary-foreground: oklch(0.99 0.005 40);
+  --sidebar-accent: oklch(0.92 0.011 45);
+  --sidebar-accent-foreground: oklch(0.32 0.022 45);
+  --sidebar-border: oklch(0.89 0.01 45);
   --sidebar-ring: oklch(0.6 0.13 40);
   --chart-1: oklch(0.55 0.13 40);
 }
 [data-theme="amber"].dark {
+  --background: oklch(0.18 0.009 45);
+  --foreground: oklch(0.93 0.006 45);
+  --card: oklch(0.22 0.009 45);
+  --card-foreground: oklch(0.93 0.006 45);
+  --popover: oklch(0.21 0.009 45);
+  --popover-foreground: oklch(0.93 0.006 45);
   --primary: oklch(0.74 0.115 40);
   --primary-foreground: oklch(0.17 0.02 40);
+  --secondary: oklch(0.28 0.011 45);
+  --secondary-foreground: oklch(0.9 0.008 45);
+  --muted: oklch(0.26 0.011 45);
+  --muted-foreground: oklch(0.68 0.014 45);
+  --accent: oklch(0.3 0.014 45);
+  --accent-foreground: oklch(0.9 0.008 45);
+  --border: oklch(0.32 0.011 45);
+  --input: oklch(0.3 0.011 45);
   --ring: oklch(0.72 0.115 40);
+  --sidebar: oklch(0.2 0.009 45);
+  --sidebar-foreground: oklch(0.93 0.006 45);
   --sidebar-primary: oklch(0.74 0.115 40);
   --sidebar-primary-foreground: oklch(0.17 0.02 40);
+  --sidebar-accent: oklch(0.28 0.011 45);
+  --sidebar-accent-foreground: oklch(0.9 0.008 45);
+  --sidebar-border: oklch(0.32 0.011 45);
   --sidebar-ring: oklch(0.72 0.115 40);
   --chart-1: oklch(0.74 0.115 40);
 }
 
-/* teal → 黛青（slate teal）：色相 215、低彩度，烟熏质感的蓝青。 */
+/* teal → 黛青（slate teal）：主色相 215、低彩度，中性色相 220 的烟灰蓝底调。 */
 [data-theme="teal"] {
+  --background: oklch(0.97 0.005 220);
+  --foreground: oklch(0.2 0.013 220);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.013 220);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.013 220);
   --primary: oklch(0.53 0.068 215);
   --primary-foreground: oklch(0.99 0.005 215);
+  --secondary: oklch(0.95 0.01 220);
+  --secondary-foreground: oklch(0.3 0.017 220);
+  --muted: oklch(0.945 0.01 220);
+  --muted-foreground: oklch(0.45 0.019 220);
+  --accent: oklch(0.93 0.013 220);
+  --accent-foreground: oklch(0.32 0.026 220);
+  --border: oklch(0.89 0.012 220);
+  --input: oklch(0.92 0.012 220);
   --ring: oklch(0.58 0.068 215);
+  --sidebar: oklch(0.955 0.007 220);
+  --sidebar-foreground: oklch(0.2 0.013 220);
   --sidebar-primary: oklch(0.53 0.068 215);
   --sidebar-primary-foreground: oklch(0.99 0.005 215);
+  --sidebar-accent: oklch(0.92 0.013 220);
+  --sidebar-accent-foreground: oklch(0.32 0.026 220);
+  --sidebar-border: oklch(0.89 0.012 220);
   --sidebar-ring: oklch(0.58 0.068 215);
   --chart-1: oklch(0.53 0.068 215);
 }
 [data-theme="teal"].dark {
+  --background: oklch(0.18 0.01 220);
+  --foreground: oklch(0.93 0.007 220);
+  --card: oklch(0.22 0.01 220);
+  --card-foreground: oklch(0.93 0.007 220);
+  --popover: oklch(0.21 0.01 220);
+  --popover-foreground: oklch(0.93 0.007 220);
   --primary: oklch(0.74 0.068 215);
   --primary-foreground: oklch(0.17 0.02 215);
+  --secondary: oklch(0.28 0.013 220);
+  --secondary-foreground: oklch(0.9 0.009 220);
+  --muted: oklch(0.26 0.013 220);
+  --muted-foreground: oklch(0.68 0.016 220);
+  --accent: oklch(0.3 0.017 220);
+  --accent-foreground: oklch(0.9 0.009 220);
+  --border: oklch(0.32 0.013 220);
+  --input: oklch(0.3 0.013 220);
   --ring: oklch(0.72 0.068 215);
+  --sidebar: oklch(0.2 0.01 220);
+  --sidebar-foreground: oklch(0.93 0.007 220);
   --sidebar-primary: oklch(0.74 0.068 215);
   --sidebar-primary-foreground: oklch(0.17 0.02 215);
+  --sidebar-accent: oklch(0.28 0.013 220);
+  --sidebar-accent-foreground: oklch(0.9 0.009 220);
+  --sidebar-border: oklch(0.32 0.013 220);
   --sidebar-ring: oklch(0.72 0.068 215);
   --chart-1: oklch(0.74 0.068 215);
 }
