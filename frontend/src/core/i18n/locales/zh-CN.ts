@@ -1480,6 +1480,12 @@ export const zhCN: Translations = {
     experimental: "实验性",
   },
 
+  followUpSuggestions: {
+    title: "后续问题建议",
+    selectAria: (title) => `发送后续问题: ${title}`,
+    dismissAria: (title) => `忽略建议: ${title}`,
+  },
+
   remoteBackendsPanel: {
     title: "远程后端",
     disabled: "已禁用",

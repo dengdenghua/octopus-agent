@@ -1544,6 +1544,12 @@ export const enUS: Translations = {
     experimental: "experimental",
   },
 
+  followUpSuggestions: {
+    title: "Follow-up suggestions",
+    selectAria: (title) => `Send follow-up: ${title}`,
+    dismissAria: (title) => `Dismiss suggestion: ${title}`,
+  },
+
   remoteBackendsPanel: {
     title: "Remote Backends",
     disabled: "disabled",

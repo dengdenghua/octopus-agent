@@ -79,6 +79,7 @@ import {
 import { MessageListSkeleton } from "./skeleton";
 import { ParallelSubtasksGrid } from "./parallel-subtasks-grid";
 import { SubtaskCard } from "./subtask-card";
+import { FollowUpSuggestions } from "./follow-up-suggestions";
 
 export const MESSAGE_LIST_DEFAULT_PADDING_BOTTOM = 160;
 export const MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM = 80;
@@ -682,6 +683,8 @@ export function MessageList({
   completedAgentOutput = false,
   showSenderName = false,
   mode,
+  project,
+  onSendFollowUp,
 }: {
   className?: string;
   threadId: string;
@@ -707,6 +710,10 @@ export function MessageList({
     icon?: string | null;
   } | null;
   agentRoster?: MessageListAgentRosterEntry[];
+  /** Project path for ambient suggestions */
+  project?: string | null;
+  /** Callback when user selects a follow-up suggestion */
+  onSendFollowUp?: (prompt: string) => void;
 }) {
   const { t } = useI18n();
   const [settings] = useLocalSettings();
@@ -1967,6 +1974,17 @@ export function MessageList({
             </div>
           );
         })}
+
+        {/* Follow-up suggestions: show after the last turn when conversation is idle */}
+        {onSendFollowUp && project && messageTurns.length > 0 && !thread.isLoading && (
+          <FollowUpSuggestions
+            project={project}
+            agentId={threadId}
+            isLoading={thread.isLoading}
+            onSelect={onSendFollowUp}
+            className="ml-11 mt-4"
+          />
+        )}
 
         {footer}
 

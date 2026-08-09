@@ -3091,6 +3091,17 @@ function RealtimePageContent({
       window.removeEventListener("octopus:quick-reply", handleQuickReply);
     };
   }, [markSidebarThreadRunning, sendMessage, thread.isLoading, threadId]);
+
+  // Follow-up suggestion chips: send the picked prompt as if the user typed it.
+  const handleSendFollowUp = useCallback(
+    (prompt: string) => {
+      const text = prompt.trim();
+      if (!text || thread.isLoading) return;
+      markSidebarThreadRunning(threadId);
+      void sendMessage(threadId, { text, files: [] });
+    },
+    [markSidebarThreadRunning, sendMessage, thread.isLoading, threadId],
+  );
   const handleModeChange = useCallback(
     (mode: ReasoningMode, draft?: string) => {
       if (mode === effectiveMode) return;
@@ -3537,6 +3548,8 @@ function RealtimePageContent({
                   threadId={threadId}
                   thread={thread}
                   onOpenArtifact={openWorkbenchArtifact}
+                  project={projectWorkspacePath || null}
+                  onSendFollowUp={handleSendFollowUp}
                   header={
                     realtimeApprovals.hasMoreTurns ? (
                       <LoadOlderTurnsBanner

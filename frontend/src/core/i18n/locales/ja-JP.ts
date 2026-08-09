@@ -1524,6 +1524,12 @@ export const jaJP: Translations = {
     experimental: "experimental",
   },
 
+  followUpSuggestions: {
+    title: "フォローアップの提案",
+    selectAria: (title) => `フォローアップを送信：${title}`,
+    dismissAria: (title) => `提案を却下：${title}`,
+  },
+
   remoteBackendsPanel: {
     title: "リモートバックエンド",
     disabled: "disabled",

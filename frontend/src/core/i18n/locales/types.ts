@@ -1313,6 +1313,13 @@ export interface Translations {
     experimental: string;
   };
 
+  // Follow-up suggestions (Trae-style contextual bubbles)
+  followUpSuggestions: {
+    title: string;
+    selectAria: (title: string) => string;
+    dismissAria: (title: string) => string;
+  };
+
   // Remote Backends panel
   remoteBackendsPanel: {
     title: string;

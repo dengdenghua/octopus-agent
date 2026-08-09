@@ -1510,6 +1510,12 @@ export const koKR: Translations = {
     experimental: "실험적 기능",
   },
 
+  followUpSuggestions: {
+    title: "후속 질문 제안",
+    selectAria: (title) => `후속 질문 전송: ${title}`,
+    dismissAria: (title) => `제안 무시: ${title}`,
+  },
+
   remoteBackendsPanel: {
     title: "원격 백엔드",
     disabled: "disabled",

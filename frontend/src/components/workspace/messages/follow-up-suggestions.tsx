@@ -1,0 +1,132 @@
+/**
+ * Follow-up Suggestions · Trae-style contextual question bubbles.
+ *
+ * Shows 2-3 smart follow-up question chips after the assistant's reply.
+ * Click to send instantly, no typing needed. Auto-generated from
+ * conversation context via the ambient-suggestions backend.
+ */
+
+import { SparklesIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { useI18n } from "@/core/i18n/hooks";
+import { cn } from "@/lib/utils";
+import {
+  useAmbientSuggestions,
+  type AmbientSuggestion,
+} from "@/hooks/use-ambient-suggestions";
+
+export interface FollowUpSuggestionsProps {
+  /** Project root for suggestions storage */
+  project: string | null;
+  /** Thread/agent ID for context-aware generation */
+  agentId?: string;
+  /** Whether the conversation is currently loading */
+  isLoading: boolean;
+  /** Callback when user clicks a suggestion */
+  onSelect: (prompt: string) => void;
+  /** Optional base URL override */
+  baseUrl?: string;
+  /** CSS class name */
+  className?: string;
+}
+
+export function FollowUpSuggestions({
+  project,
+  agentId,
+  isLoading,
+  onSelect,
+  baseUrl,
+  className,
+}: FollowUpSuggestionsProps) {
+  const { t } = useI18n();
+  const { bucket, generate, setStatus } = useAmbientSuggestions(project, {
+    baseUrl,
+    auto: false, // Manual refresh only
+  });
+
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [generating, setGenerating] = useState(false);
+
+  // Filter to pending suggestions, exclude dismissed in this session
+  const suggestions = useMemo(() => {
+    if (!bucket?.suggestions) return [];
+    return bucket.suggestions
+      .filter((s) => s.status === "pending" && !dismissed.has(s.id))
+      .slice(0, 3); // Max 3 chips, Trae-style
+  }, [bucket?.suggestions, dismissed]);
+
+  // Auto-generate when conversation finishes (transitions from loading → idle)
+  const wasLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    if (!agentId || !project) return;
+    const wasLoading = wasLoadingRef.current;
+    wasLoadingRef.current = isLoading;
+
+    if (wasLoading && !isLoading && !generating) {
+      // Conversation just finished, generate suggestions
+      setGenerating(true);
+      generate(agentId, { turnWindow: 5 })
+        .catch(() => {
+          // Silently fail, suggestions are optional
+        })
+        .finally(() => setGenerating(false));
+    }
+  }, [isLoading, agentId, project, generate, generating]);
+
+  const handleSelect = useCallback(
+    async (suggestion: AmbientSuggestion) => {
+      // Mark as accepted in backend
+      await setStatus(suggestion.id, "accepted").catch(() => {
+        // Ignore errors, proceed with sending
+      });
+      onSelect(suggestion.prompt);
+    },
+    [onSelect, setStatus],
+  );
+
+  const handleDismiss = useCallback((id: string) => {
+    setDismissed((prev) => new Set(prev).add(id));
+  }, []);
+
+  // Hide while loading or when no suggestions
+  if (isLoading || suggestions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap gap-2 pt-3 animate-[fade-in-up_0.3s_cubic-bezier(0.16,1,0.3,1)]",
+        className,
+      )}
+      role="group"
+      aria-label={t.followUpSuggestions?.title ?? "Follow-up suggestions"}
+    >
+      {suggestions.map((suggestion) => (
+        <button
+          key={suggestion.id}
+          type="button"
+          onClick={() => handleSelect(suggestion)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            handleDismiss(suggestion.id);
+          }}
+          className={cn(
+            "group relative inline-flex items-center gap-1.5",
+            "rounded-full border border-border bg-background/80",
+            "px-4 py-2 text-sm font-medium text-foreground",
+            "shadow-sm backdrop-blur-sm transition-all duration-200",
+            "hover:border-primary/40 hover:bg-primary/5 hover:shadow-md",
+            "active:scale-[0.98]",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+          )}
+          title={suggestion.description || suggestion.title}
+        >
+          <SparklesIcon className="size-3.5 text-primary/70 transition-colors group-hover:text-primary" />
+          <span className="max-w-[280px] truncate">{suggestion.title}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
