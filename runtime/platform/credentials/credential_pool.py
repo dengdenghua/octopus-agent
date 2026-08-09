@@ -1,25 +1,12 @@
 from __future__ import annotations
 
 import logging
-
-
-def _obfuscate(value: str) -> str:
-    import base64
-
-    return base64.b64encode(value.encode()).decode()
-
-
-def _deobfuscate(value: str) -> str:
-    import base64
-
-    return base64.b64decode(value.encode()).decode()
-
-
-import random  # noqa: E402
-import threading  # noqa: E402
-import time  # noqa: E402
-from dataclasses import dataclass, field  # noqa: E402
-from typing import Any  # noqa: E402
+import os
+import random
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import Any
 
 _LOG = logging.getLogger("octopus.credentials.pool")
 
@@ -55,8 +42,6 @@ class CredentialPool:
             self._entries.append(entry)
 
     def add_from_env(self, env_var: str, provider: str = "") -> CredentialEntry | None:
-        import os
-
         secret = os.environ.get(env_var)
         if not secret:
             return None

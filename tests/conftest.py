@@ -101,6 +101,32 @@ def _isolate_gene_locks(tmp_path, monkeypatch):
     _sg._INTEGRITY_FAILED = None
 
 
+@pytest.fixture(autouse=True)
+def _disable_os_keychain(monkeypatch):
+    """Keep the suite away from the developer's real OS keychain.
+
+    At-rest encryption keys resolve through
+    ``runtime.platform.credentials.secret_store``, which mints and stores a
+    key in the platform keychain when none is configured. Left enabled, a
+    test run would prompt for keychain access, write entries into the
+    developer's login keyring, and — worse — make outcomes depend on
+    whether a key happened to exist, so the same test would encrypt on a
+    laptop and stay plaintext in CI. ``OCTOPUS_KEYCHAIN=off`` pins every
+    test to the no-keychain path; tests that want a key set the explicit
+    env var instead.
+
+    The resolved-key cache is process-wide, so it is cleared on both sides
+    of the test: a key cached under one test's env would otherwise leak
+    into the next one and silently decide whether it encrypts.
+    """
+    from runtime.platform.credentials import secret_store as _ss
+
+    monkeypatch.setenv("OCTOPUS_KEYCHAIN", "off")
+    _ss.reset_key_cache_for_tests()
+    yield
+    _ss.reset_key_cache_for_tests()
+
+
 def _reset_injection_taint() -> None:
     """Clear the per-thread prompt-injection taint + gate-handled contextvars.
 

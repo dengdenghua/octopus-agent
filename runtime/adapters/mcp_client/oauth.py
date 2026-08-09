@@ -181,18 +181,34 @@ def _store_path(tenant_id: str | None = None) -> Path:
     return base / "mcp_oauth.json"
 
 
+_TOKEN_KEY_ENV = "OCTOPUS_MCP_TOKEN_KEY"
+_TOKEN_KEY_NAME = "mcp-oauth-token-key"
+
+
 def _token_cipher() -> Any:
     """Fernet cipher for at-rest token encryption, or None when disabled.
 
-    Opt-in via ``OCTOPUS_MCP_TOKEN_KEY`` — a urlsafe-base64 32-byte key
-    (``cryptography.fernet.Fernet.generate_key()``). When set, access/
-    refresh tokens are encrypted on disk with a key that lives in the
-    deployment's secret store / env, *not* co-located on the token disk.
-    Unset (the default) keeps the plaintext 0600 file — no behavior change.
-    A malformed key or a missing ``cryptography`` install logs once and
-    falls back to plaintext rather than losing the ability to store tokens.
+    The key is resolved in two steps, first match wins:
+
+    1. ``OCTOPUS_MCP_TOKEN_KEY`` — a urlsafe-base64 32-byte key
+       (``cryptography.fernet.Fernet.generate_key()``). Deployments that
+       inject secrets from their own vault keep full control this way.
+    2. The OS keychain (macOS Keychain / Secret Service / DPAPI), minting
+       and storing a key on first use. This is what makes encryption the
+       default on a normal desktop install instead of something the
+       operator has to remember to turn on.
+
+    When neither is available the store keeps its plaintext 0600 file — a
+    machine with no keychain must still be able to hold tokens, so this
+    degrades rather than failing. A malformed key or a missing
+    ``cryptography`` install degrades the same way.
     """
-    key = os.environ.get("OCTOPUS_MCP_TOKEN_KEY")
+    from runtime.platform.credentials.secret_store import get_or_create_fernet_key
+
+    try:
+        key = get_or_create_fernet_key(_TOKEN_KEY_NAME, env_var=_TOKEN_KEY_ENV)
+    except Exception:  # noqa: BLE001 — keychain trouble must never break token storage
+        key = os.environ.get(_TOKEN_KEY_ENV)
     if not key:
         return None
     try:
@@ -201,8 +217,8 @@ def _token_cipher() -> Any:
         return Fernet(key.encode("utf-8") if isinstance(key, str) else key)
     except Exception:  # noqa: BLE001 — bad key / missing dep → degrade to plaintext
         _logger.warning(
-            "OCTOPUS_MCP_TOKEN_KEY is set but unusable (need a valid Fernet key "
-            "and the cryptography package); MCP OAuth tokens stored unencrypted."
+            "MCP OAuth token key is set but unusable (need a valid Fernet key "
+            "and the cryptography package); tokens stored unencrypted."
         )
         return None
 
@@ -249,8 +265,10 @@ class MCPOAuthStore:
                 raw = json.loads(cipher.decrypt(blob).decode("utf-8"))
             except Exception:  # noqa: BLE001 — undecryptable store → start empty
                 _logger.warning(
-                    "MCP OAuth token store could not be decrypted "
-                    "(wrong OCTOPUS_MCP_TOKEN_KEY?); ignoring — re-auth required."
+                    "MCP OAuth token store could not be decrypted (the key in "
+                    "%s or the OS keychain does not match the one it was "
+                    "written with); ignoring — re-auth required.",
+                    _TOKEN_KEY_ENV,
                 )
                 return
         for srv, tok in (raw.get("tokens") or {}).items():
