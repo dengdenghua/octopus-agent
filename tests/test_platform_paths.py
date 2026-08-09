@@ -103,3 +103,43 @@ def test_resources_root_resolves_assets_when_cwd_outside_tree(monkeypatch, tmp_p
     assert (rr / "skills" / "public").is_dir()
     # project_root(), by contrast, degrades to cwd when no sentinel is found.
     assert project_root() == scratch.resolve()
+
+
+def test_project_root_survives_a_deleted_cwd(monkeypatch, tmp_path):
+    """A vanished working directory must not break path resolution.
+
+    A long-lived server can outlive the directory it was launched in. Once
+    that directory is gone, ``Path.cwd()`` raises ``FileNotFoundError`` with
+    no filename attached, and because ``app_paths()`` funnels through
+    ``project_root()`` the failure surfaced as a bare ``[Errno 2] No such
+    file or directory`` on work that never touched the filesystem.
+    """
+    import os
+
+    from runtime.platform.process import paths as paths_mod
+
+    doomed = tmp_path / "doomed"
+    doomed.mkdir()
+    launch = _make_project(tmp_path / "launch")
+    monkeypatch.setattr(paths_mod, "_LAUNCH_DIR", launch)
+    monkeypatch.delenv("OCTOPUS_DATA_DIR", raising=False)
+    monkeypatch.delenv("OCTOPUS_HOME", raising=False)
+
+    previous = Path(__file__).parent
+    os.chdir(doomed)
+    try:
+        doomed.rmdir()
+        # Sanity: the condition under test really is live.
+        try:
+            Path.cwd()
+        except OSError:
+            pass
+        else:  # pragma: no cover — platform keeps a live handle to the dir
+            import pytest
+
+            pytest.skip("this platform still resolves a deleted cwd")
+
+        assert project_root() == launch
+        assert app_paths().custom_models_path == launch / "data" / "custom_models.json"
+    finally:
+        os.chdir(previous)

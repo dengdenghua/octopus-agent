@@ -18,6 +18,13 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+# Captured at import, while the working directory is still guaranteed to
+# exist. Used only as the fallback in :func:`_launch_dir`.
+try:
+    _LAUNCH_DIR = Path.cwd()
+except OSError:  # pragma: no cover — cwd already gone before we loaded
+    _LAUNCH_DIR = Path("/")
+
 
 @dataclass(frozen=True)
 class AppPaths:
@@ -150,13 +157,32 @@ def _looks_like_project_root(path: Path) -> bool:
     return (path / "pyproject.toml").is_file() and (path / "runtime").is_dir()
 
 
+def _launch_dir() -> Path:
+    """The directory to resolve relative paths against.
+
+    Normally ``cwd``, but a long-lived server can outlive its own working
+    directory: delete or move the directory the process was started in and
+    every later ``Path.cwd()`` raises a bare ``FileNotFoundError`` with no
+    filename attached. Because ``app_paths()`` funnels through here, that
+    single deleted directory turned into ``[Errno 2] No such file or
+    directory`` on unrelated work — a turn would fail with an error naming
+    nothing at all. Remember the launch directory at import time and fall
+    back to it, so a vanished cwd degrades to a stale-but-valid root rather
+    than an exception on every path lookup.
+    """
+    try:
+        return Path.cwd()
+    except OSError:
+        return _LAUNCH_DIR
+
+
 def project_root(start: str | Path | None = None) -> Path:
     """Return the nearest Octopus project root, falling back to ``start``/cwd.
 
     ``start`` may point at a file or directory. The fallback keeps tests and
     scratch invocations usable when no source-tree sentinels are present.
     """
-    raw = Path(start).expanduser() if start is not None else Path.cwd()
+    raw = Path(start).expanduser() if start is not None else _launch_dir()
     base = raw.resolve(strict=False)
     if not base.is_dir():
         base = base.parent
