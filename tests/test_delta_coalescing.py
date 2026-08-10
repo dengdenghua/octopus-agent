@@ -70,6 +70,96 @@ async def test_first_chunk_emits_immediately() -> None:
 
 
 @pytest.mark.asyncio
+async def test_tool_backed_answer_gets_public_handoff_without_promoting_reasoning() -> None:
+    state = _ReactBridgeState()
+    turn = _make_turn()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    await _apply_react_event(
+        _StubRuntime(),  # type: ignore[arg-type]
+        turn,
+        log,  # type: ignore[arg-type]
+        emitter,  # type: ignore[arg-type]
+        state,
+        {
+            "type": "commentary_delta",
+            "delta": "我先检查项目结构。",
+            "progress_source": "model",
+        },
+    )
+    await _apply_react_event(
+        _StubRuntime(),  # type: ignore[arg-type]
+        turn,
+        log,  # type: ignore[arg-type]
+        emitter,  # type: ignore[arg-type]
+        state,
+        {"type": "thinking_delta", "delta": "原始内部推理"},
+    )
+    for delta in ("完整", "答复"):
+        await _apply_react_event(
+            _StubRuntime(),  # type: ignore[arg-type]
+            turn,
+            log,  # type: ignore[arg-type]
+            emitter,  # type: ignore[arg-type]
+            state,
+            {"type": "text_delta", "delta": delta},
+        )
+
+    await state.flush(turn, log, emitter)
+
+    reasoning = [item for item in turn.items if item.type == "reasoning"]
+    commentary = [
+        item
+        for item in turn.items
+        if item.type == "agentMessage" and item.message_kind == "commentary"
+    ]
+    answers = [
+        item for item in turn.items if item.type == "agentMessage" and item.message_kind == "answer"
+    ]
+    assert len(reasoning) == 1
+    assert reasoning[0].content == "原始内部推理"
+    assert [item.text for item in commentary] == [
+        "我先检查项目结构。",
+        "已经整理好了，下面给出完整答复。",
+    ]
+    assert len(answers) == 1
+    assert answers[0].text == "完整答复"
+
+
+@pytest.mark.asyncio
+async def test_direct_answer_does_not_get_an_unnecessary_handoff() -> None:
+    state = _ReactBridgeState()
+    turn = _make_turn()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    await _apply_react_event(
+        _StubRuntime(),  # type: ignore[arg-type]
+        turn,
+        log,  # type: ignore[arg-type]
+        emitter,  # type: ignore[arg-type]
+        state,
+        {"type": "thinking_delta", "delta": "简短推理"},
+    )
+    await _apply_react_event(
+        _StubRuntime(),  # type: ignore[arg-type]
+        turn,
+        log,  # type: ignore[arg-type]
+        emitter,  # type: ignore[arg-type]
+        state,
+        {"type": "text_delta", "delta": "直接答复"},
+    )
+
+    commentary = [
+        item
+        for item in turn.items
+        if item.type == "agentMessage" and item.message_kind == "commentary"
+    ]
+    assert commentary == []
+
+
+@pytest.mark.asyncio
 async def test_small_chunks_coalesce_until_flush() -> None:
     state = _ReactBridgeState()
     turn = _make_turn()
@@ -150,6 +240,28 @@ async def test_size_threshold_forces_flush() -> None:
 
     # 70 chars crossed _DELTA_FLUSH_MAX_CHARS — no waiting for a timer.
     assert "".join(emitter.deltas()) == "x" + "y" * 70
+
+
+@pytest.mark.asyncio
+async def test_size_counter_resets_after_each_flush() -> None:
+    state = _ReactBridgeState()
+    turn = _make_turn()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    await state.append_agent_message(turn, log, emitter, "first")
+    await state.append_agent_message(turn, log, emitter, "a" * 64)
+    assert state._delta_buf_chars == 0
+
+    # A fresh short tail must remain buffered. A stale cumulative count would
+    # flush this immediately and regress frame coalescing after the first burst.
+    await state.append_agent_message(turn, log, emitter, "tail")
+    assert state._delta_buf_chars == 4
+    assert "".join(emitter.deltas()) == "first" + "a" * 64
+
+    await state.flush(turn, log, emitter)
+    assert state._delta_buf_chars == 0
+    assert "".join(emitter.deltas()) == "first" + "a" * 64 + "tail"
 
 
 @pytest.mark.asyncio
@@ -344,3 +456,44 @@ def test_reasoning_item_duration_ms_round_trip() -> None:
     # And a round-trip via model_validate on the aliased dict.
     restored = ReasoningItem.model_validate(dumped)
     assert restored.duration_ms == 1234
+
+
+@pytest.mark.asyncio
+async def test_resumed_stream_appends_without_loss_or_duplication() -> None:
+    """Simulates a mid-stream disconnect/reconnect.
+
+    Segment 1 streams into turn1; flush() finalizes it (disconnect). After
+    resume the stream continues on a NEW turn (turn2). Invariants:
+
+      * the finalized item persists the FULL pre-disconnect text — the
+        buffered tail is in item.text, not just in the wire frames
+      * the post-reconnect stream lands on its own item with full text
+      * concatenated wire frames equal every chunk — no loss, no dup.
+    """
+    state = _ReactBridgeState()
+    emitter = _StubEmitter()
+    log = _StubLog()
+
+    # Segment 1 — streamed before the disconnect.
+    turn1 = _make_turn()
+    for ch in "abcdefgh":
+        await state.append_agent_message(turn1, log, emitter, ch)
+    await state.flush(turn1, log, emitter)
+
+    # The pre-disconnect item persists the FULL streamed text (tail
+    # included), and the completed snapshot carries it.
+    assert turn1.items[0].text == "abcdefgh"
+    assert turn1.items[0].status == ItemStatus.COMPLETED
+    completed1 = [p for m, p in emitter.notified if m.endswith("item/completed")]
+    assert completed1[-1]["item"]["text"] == "abcdefgh"
+
+    # Segment 2 — streamed after reconnect on a fresh turn.
+    turn2 = _make_turn()
+    for ch in "ijklmnopqrstuvwxyz":
+        await state.append_agent_message(turn2, log, emitter, ch)
+    await state.flush(turn2, log, emitter)
+
+    assert turn2.items[0].text == "ijklmnopqrstuvwxyz"
+    # Wire frames across both segments concatenate to the full stream —
+    # nothing dropped, nothing duplicated.
+    assert "".join(emitter.deltas()) == "abcdefghijklmnopqrstuvwxyz"

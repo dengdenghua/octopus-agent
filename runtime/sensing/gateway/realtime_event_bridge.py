@@ -88,11 +88,13 @@ class _ReactBridgeState:
     # Streaming text/reasoning chunks arrive per-token from the LLM.
     # One WS frame + one journal write per token is pure overhead —
     # the frontend coalesces per animation frame anyway. Buffer and
-    # flush on whichever comes first: ~64 chars or 50ms. The FIRST
+    # flush on whichever comes first: ~64 chars or 32ms. 32ms keeps the
+    # transport to roughly two display frames while still collapsing the
+    # many tiny chunks produced by token streaming. The FIRST
     # chunk of each item is never buffered (time-to-first-token), and
     # any kind switch / item finalization drains the buffer, so
     # ordering and final content are byte-identical to unbuffered.
-    _DELTA_FLUSH_INTERVAL_S = 0.05
+    _DELTA_FLUSH_INTERVAL_S = 0.032
     _DELTA_FLUSH_MAX_CHARS = 64
 
     def __init__(
@@ -110,6 +112,10 @@ class _ReactBridgeState:
         self.agent_message: AgentMessageItem | None = None
         self.commentary_message: AgentMessageItem | None = None
         self.last_public_commentary_key: str | None = None
+        # A long tool-backed turn gets one explicit public handoff before its
+        # final answer.  Provider reasoning remains a ReasoningItem; this flag
+        # prevents token chunks from creating duplicate handoff messages.
+        self.final_answer_handoff_emitted = False
         self.progress_sequence = 0
         self.timeline_sequence = 0
         self.last_timeline_item_id: str | None = None
@@ -125,6 +131,10 @@ class _ReactBridgeState:
         self.workbench_snapshot_version = 0
         self.background_tasks: list[asyncio.Task[None]] = []
         self._delta_buf: list[str] = []
+        # Keep the threshold check O(1). Streaming providers commonly emit
+        # one- or two-character chunks, so repeatedly summing the whole list
+        # becomes quadratic between flushes.
+        self._delta_buf_chars = 0
         self._delta_kind: str | None = None
         self._delta_ctx: tuple[Turn, EventLog, EventEmitter] | None = None
         self._delta_flush_task: asyncio.Task[None] | None = None
@@ -387,7 +397,8 @@ class _ReactBridgeState:
         self._delta_kind = kind
         self._delta_ctx = (turn, log, emitter)
         self._delta_buf.append(delta)
-        if flush_now or sum(len(s) for s in self._delta_buf) >= self._DELTA_FLUSH_MAX_CHARS:
+        self._delta_buf_chars += len(delta)
+        if flush_now or self._delta_buf_chars >= self._DELTA_FLUSH_MAX_CHARS:
             await self._flush_pending_delta()
             return
         if self._delta_flush_task is None or self._delta_flush_task.done():
@@ -410,6 +421,7 @@ class _ReactBridgeState:
                 return
             combined = "".join(self._delta_buf)
             self._delta_buf.clear()
+            self._delta_buf_chars = 0
             kind = self._delta_kind
             turn, log, emitter = self._delta_ctx
             if kind == "agentMessage" and self.agent_message is not None:
