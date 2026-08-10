@@ -97,6 +97,9 @@ def _assemble_core_guidance(state: _AssemblyState) -> None:
                 "**收工硬约束**: 仍有 pending/in_progress todo、改动未验证、"
                 "或工具/权限/登录阻塞时, 不能给完成式 Final Answer;"
                 "用 Final Answer 描述阻塞 + 列出未完成 todo + 已做过的验证。\n"
+                "**进度 ≠ 收尾**: 阶段总结、下一步计划、'接下来还要读/改 X' 这类"
+                "中间产出必须用 commentary/进度消息, 绝不能当作 Final Answer 提交;"
+                "只有完成全部承诺的读取/修改/验证动作后才给完成式 Final Answer。\n"
                 "</code-mode>"
             )
             state.system_parts.append(_build_code_agent_mode_prompt(state.agent_mode_value))
