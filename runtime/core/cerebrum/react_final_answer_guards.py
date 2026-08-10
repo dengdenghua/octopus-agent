@@ -19,6 +19,7 @@ from runtime.core.cerebrum.react_explicit_reads import _explicit_read_only_goal
 from runtime.core.cerebrum.react_guards import (
     _goal_requests_code_mutation,
     _incomplete_final_answer_guard,
+    _step_is_failed_execution,
 )
 from runtime.core.cerebrum.react_loop_controls import (
     _disabled_guard_labels,
@@ -127,7 +128,31 @@ def _looks_like_observation_echo(text: str) -> bool:
             re.search(r"(?im)^(?:user|model|assistant|system):\s*", head)
             and re.search(r"(?im)^(?:thought|action|observation|update):\s*", head)
         )
+        # ReAct protocol blocks leaked into the answer channel. The model
+        # occasionally writes ``Thought: ...`` / ``Action: name({...})`` as
+        # answer text instead of routing them through the tool-call channel —
+        # the tools then never execute and the user sees raw protocol. A
+        # standalone ``Action: name({...})`` call shape is unambiguous (it
+        # is never legitimate prose); ``Thought:`` alone could be a quote,
+        # so only flag it when an Action block is also present.
+        or bool(_REACT_ACTION_CALL_RE.search(stripped))
+        or bool(
+            _REACT_THOUGHT_LINE_RE.search(stripped)
+            and _REACT_ACTION_CALL_RE.search(stripped)
+        )
     )
+
+
+# A ReAct Action block written as prose: ``Action:\n    name({...})`` or
+# ``Action: name({...})``. Anchored on the tool-call shape (name + JSON
+# parens) so a legitimate mention like "the Action field" is not flagged.
+_REACT_ACTION_CALL_RE = re.compile(
+    r"(?im)Action\s*:\s*\n?\s*\w+\s*\(\s*\{.*?\}\s*\)",
+    re.DOTALL,
+)
+# A ``Thought:`` line at the start of a line. Used only as a corroboration
+# signal alongside an Action block above, never on its own.
+_REACT_THOUGHT_LINE_RE = re.compile(r"(?im)^\s*Thought\s*:\s*")
 
 
 def _final_answer_needs_pre_emit_guard(
@@ -231,9 +256,10 @@ def _evaluate_final_answer_guards(
     candidate_digest = hashlib.sha256(final_answer.encode("utf-8", errors="ignore")).hexdigest()[
         :16
     ]
+    all_steps = steps + [step]
     return evaluate_guards(
         GuardContext(
-            steps=steps + [step],
+            steps=all_steps,
             final_answer=final_answer,
             is_code_mode=is_code_mode,
             todo_protocol_required=todo_protocol_required,
@@ -244,6 +270,7 @@ def _evaluate_final_answer_guards(
             browser_operation_mode=browser_operation_mode,
             grounded_source_paths=grounded_source_paths,
             model=model,
+            execution_degraded=_trajectory_execution_degraded(all_steps),
         ),
         recorder=_guard_hit_recorder(
             dedupe_key=f"{id(steps)}:{step.iteration}:{candidate_digest}",
@@ -279,11 +306,18 @@ def _note_guard_impasse(
     auto-pause path, whose "paused — continue from checkpoint" wording
     misreports what actually happened. Three no-progress rejections in a
     row is the bound: real evidence-gathering always grows the step list.
+
+    FAILED executions do not count toward progress: an environmental
+    failure (sandbox/network) that the model retries adds a step but no
+    evidence, so counting it would silently reset the counter and let the
+    same guard reject forever. A genuinely successful new action still
+    resets the counter.
     """
     progress = sum(
         1
         for s in steps
-        if (getattr(s, "action", "") or "").strip() or getattr(s, "action_results", None)
+        if ((getattr(s, "action", "") or "").strip() or getattr(s, "action_results", None))
+        and not _step_is_failed_execution(s)
     )
     if state.get("label") == label and state.get("progress") == progress:
         state["count"] = state.get("count", 0) + 1
@@ -303,21 +337,85 @@ def _guard_rejection_outcome(state: dict, label: str, steps: list) -> str:
     return "hard_stop" if disposition == "hard" else "soft_land"
 
 
-def _guard_soft_landing_answer(candidate: str, label: str) -> str:
-    """Deliver useful work after one failed quality-contract repair.
+# Markers that distinguish an ENVIRONMENTAL tool failure (sandbox/network
+# denial the model cannot fix by retrying the same tool) from a logic error
+# it could. Matched case-insensitively against the observation text.
+_ENVIRONMENTAL_FAILURE_MARKERS: tuple[str, ...] = (
+    "(工具执行异常)",
+    "operation not permitted",
+    "eperm",
+    "sandbox_apply",
+    "sandbox",
+    "connectionerror",
+    "connection error",
+    "connect timeout",
+    "network access",
+    "network request",
+)
 
-    The note is phrased so the model does NOT misread it as a system action:
-    the repair retry that failed was the model's OWN earlier attempt, rejected
-    by the guard — not something the system went and did.
+
+def _step_is_environmental_failure(step) -> bool:
+    """Whether a failed step's cause is environmental rather than a logic
+    error the model could fix by retrying. Successful receipts win."""
+    if step.action_results:
+        if any(result.get("ok") is True for result in step.action_results):
+            return False
+        text = " ".join(str(result.get("observation") or "") for result in step.action_results)
+    else:
+        text = str(getattr(step, "observation", "") or "")
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in _ENVIRONMENTAL_FAILURE_MARKERS)
+
+
+# How many environmental failures mark the environment itself as degraded.
+# One EPERM can be transient (or the model probing whether a tool runs);
+# two or more mean execution is genuinely blocked, so run-based evidence
+# guards must stop vetoing the turn.
+_EXECUTION_DEGRADED_THRESHOLD = 2
+
+
+def _trajectory_execution_degraded(steps: list) -> bool:
+    """Whether the execution environment is degraded.
+
+    Two independent signals, OR'd:
+
+    * startup canary — ``env_health`` probed a sandboxed command at serve
+      boot and it could not run (the whole process session is degraded);
+    * live trajectory — ≥2 steps that failed environmentally (sandbox /
+      network / OS-permission denials the model cannot fix by retrying).
+
+    Either means the run-based guards — which demand executed test or
+    typecheck evidence — can never be satisfied, so evaluate_guards
+    downgrades them to advisory instead of three-striking the turn.
     """
-    body = _strip_inline_tool_calls(candidate or "")
-    note = (
-        "\n\n---\n"
-        f"质量提示：「{label}」未通过证据门禁。"
-        "此前给出的收尾答案未满足要求（该次提交是模型自身发起的，未被系统接受）；"
-        "为避免继续空转，现将已有结果交付。"
-    )
-    return f"{body}{note}" if body else note.lstrip()
+    from runtime.core.cerebrum.env_health import execution_canary_degraded
+
+    if execution_canary_degraded():
+        return True
+    count = sum(1 for s in steps or [] if _step_is_environmental_failure(s))
+    return count >= _EXECUTION_DEGRADED_THRESHOLD
+
+
+def _guard_soft_landing_answer(
+    candidate: str,
+    label: str,
+    *,
+    steps: list | None = None,
+) -> str:
+    """Return the useful candidate without exposing internal guard policy.
+
+    Guard labels, retry counters and evidence-gate diagnostics are runtime
+    implementation details.  They belong in structured telemetry, never in
+    the assistant's conversational answer.  A repair-tier guard is bounded:
+    after its retry budget is exhausted we deliver the cleaned candidate and
+    let the structured completion receipt carry any degraded-environment
+    details.
+
+    ``label`` and ``steps`` intentionally remain in the signature so existing
+    callers and telemetry hooks do not need a second compatibility path.
+    """
+    del label, steps
+    return _strip_inline_tool_calls(candidate or "")
 
 
 # Tool names the model may write into answer prose as an inline JSON call
@@ -395,11 +493,13 @@ def _guard_impasse_final_answer(label: str, message: str) -> str:
     can't drift between them."""
     user_reason = _guard_reason_for_user(label, message)
     actionable = _guard_impasse_actionable_hint(label, message)
+    # ``label`` is useful for logs/metrics, but exposing names such as
+    # ``todo-protocol guard`` makes an internal policy failure look like an
+    # assistant answer.  Keep the user-facing result factual and actionable.
+    del label
     return (
-        "任务未能完成:我连续多次尝试收尾,但始终无法满足"
-        f"「{label}」要求的执行证据,期间也没有任何新的工具执行成功。"
-        "为避免空转,我停止了重试。\n\n"
-        f"最后一次拦截原因:\n{user_reason}\n\n"
+        "这轮任务没有完成。我已停止重复尝试，并保留了当前进度。\n\n"
+        f"原因：\n{user_reason}\n\n"
         f"{actionable}"
     )
 
@@ -573,7 +673,11 @@ def _phase_6e_guards_and_step_emit(
                 _guard_label, _guard_message = _guard_hit
                 _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
                 if _guard_outcome == "soft_land":
-                    final_answer = _guard_soft_landing_answer(maybe_final, _guard_label)
+                    final_answer = _guard_soft_landing_answer(
+                        maybe_final,
+                        _guard_label,
+                        steps=steps,
+                    )
                     terminated_reason = "final_answer_with_warning"
                     steps.append(step)
                     return _LoopControl.BREAK

@@ -100,6 +100,10 @@ def _assemble_core_guidance(state: _AssemblyState) -> None:
                 "**进度 ≠ 收尾**: 阶段总结、下一步计划、'接下来还要读/改 X' 这类"
                 "中间产出必须用 commentary/进度消息, 绝不能当作 Final Answer 提交;"
                 "只有完成全部承诺的读取/修改/验证动作后才给完成式 Final Answer。\n"
+                "**协议块走工具通道**: `Thought:` / `Action: name({args})` / "
+                "`Observation:` 等 ReAct 协议块必须走工具调用通道, 绝不能写进 "
+                "Final Answer 文本——否则工具不会执行、用户只看到协议原文。"
+                "Final Answer 只能是给用户的最终答复, 不含任何 ReAct 协议块。\n"
                 "</code-mode>"
             )
             state.system_parts.append(_build_code_agent_mode_prompt(state.agent_mode_value))
@@ -129,6 +133,16 @@ def _assemble_core_guidance(state: _AssemblyState) -> None:
                     "如果没有可测试 UI、缺少登录/权限或预览无法启动，请在 Final Answer 里明确说明阻塞原因和已完成的静态验证。\n"
                     "</browser-regression-guidance>"
                 )
+        # Personal build has a real writable sandbox, so it is code mode, but
+        # it still needs the maker contract that distinguishes it from project
+        # development. Personal research/general are non-code work styles and
+        # arrive here too; the helper intentionally emits nothing for them.
+        if state.work_mode.scope == "personal":
+            _personal_mode_prompt = _build_personal_agent_mode_prompt(
+                state.personal_mode_value
+            )
+            if _personal_mode_prompt:
+                state.system_parts.append("\n" + _personal_mode_prompt)
         if state.is_goal_mode:
             state.system_parts.append(
                 "\n<goal-mode-guidance>\n"
@@ -288,6 +302,18 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
         state.system_parts.append(
             "\n<mode-contract>\n" + state.mode_contract_value[:4000] + "\n</mode-contract>"
         )
+    if state.work_mode.scope == "personal":
+        _personal_instructions = str(
+            state.user_context.get("personal_instructions")
+            or state.metadata.get("personal_instructions")
+            or ""
+        ).strip()
+        if _personal_instructions:
+            state.system_parts.append(
+                "\n<personal-space-custom-instructions>\n"
+                + _personal_instructions[:2000]
+                + "\n</personal-space-custom-instructions>"
+            )
     # Audit / review turns: default to inspect-and-report. The task is to
     # surface findings, not to rewrite code silently. Edits are allowed but
     # must be explicitly stated and justified in the same turn.
@@ -295,6 +321,7 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
         state.user_context.get("audit_mode")
         or state.metadata.get("audit_mode")
         or str(state.mode_value or "").strip().lower() == "audit"
+        or str(state.agent_mode_value or "").strip().lower() == "audit"
     ):
         state.system_parts.append(
             "\n<audit-mode>\n"
@@ -355,13 +382,6 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
         "debug details.\n"
         "</user-facing-process-language>"
     )
-    # Personal-space work mode (no bound project dir). The code/project
-    # agent-mode steering above only runs under a workspace_path; this is its
-    # personal-space counterpart and applies to non-code turns only.
-    if not state.is_code_mode:
-        _personal_mode_prompt = _build_personal_agent_mode_prompt(state.personal_mode_value)
-        if _personal_mode_prompt:
-            state.system_parts.append("\n" + _personal_mode_prompt)
     if not state.is_swarm_mode and state.mode_value not in {"chat", "flash", "inspiration"}:
         state.system_parts.append(
             "\n<agent-auto-delegation-guidance>\n"

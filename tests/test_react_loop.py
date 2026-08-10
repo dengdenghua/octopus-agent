@@ -92,15 +92,14 @@ def test_parse_step_full_triplet_with_final() -> None:
     assert final == "1+1=2"
 
 
-def test_todo_prewrite_guard_blocks_tool_work_until_plan_exists() -> None:
+def test_todo_prewrite_hook_never_blocks_tool_work() -> None:
     discovery_message = _todo_prewrite_guard(
         ['read_file({"path": "config.py"})'],
         [],
         required=True,
         visible=True,
     )
-    assert discovery_message is not None
-    assert "todo-before-work" in discovery_message
+    assert discovery_message is None
 
     message = _todo_prewrite_guard(
         ['edit_file({"path": "config.py", "old_text": "a", "new_text": "b"})'],
@@ -109,8 +108,7 @@ def test_todo_prewrite_guard_blocks_tool_work_until_plan_exists() -> None:
         visible=True,
     )
 
-    assert message is not None
-    assert "todo-before-work" in message
+    assert message is None
 
 
 def test_todo_prewrite_guard_allows_write_after_nonempty_checklist() -> None:
@@ -135,15 +133,14 @@ def test_todo_prewrite_guard_allows_write_after_nonempty_checklist() -> None:
     )
 
 
-def test_todo_completion_before_write_guard_rejects_false_completed_state() -> None:
+def test_todo_completion_hook_never_rejects_tool_work() -> None:
     message = _todo_completion_before_write_guard(
         ['todo_write({"items": [{"content": "Implement fix", "status": "completed"}]})'],
         [],
         required=True,
     )
 
-    assert message is not None
-    assert "todo-completion-before-write" in message
+    assert message is None
 
 
 def test_todo_completion_before_write_guard_allows_grounded_progress() -> None:
@@ -185,7 +182,7 @@ def test_todo_completion_before_write_guard_allows_completion_after_write() -> N
     )
 
 
-def test_todo_reconciliation_guard_requires_revision_after_successful_write() -> None:
+def test_todo_reconciliation_hook_never_pauses_phase_transition() -> None:
     plan = ReActStep(
         iteration=1,
         action=(
@@ -207,9 +204,7 @@ def test_todo_reconciliation_guard_requires_revision_after_successful_write() ->
         visible=True,
     )
 
-    assert message is not None
-    assert "todo-reconciliation-required" in message
-    assert "add/remove/reword/reorder" in message
+    assert message is None
 
 
 def test_todo_reconciliation_guard_ignores_read_only_evidence() -> None:
@@ -1045,6 +1040,7 @@ def test_personal_research_does_not_treat_memory_as_local_file_inventory(tmp_pat
             "capability_mode": "code",
             "workspace_scope": "personal",
             "personal_workspace_enabled": True,
+            "personal_mode": "research",
             "cwd": str(tmp_path),
         }
     )
@@ -1058,8 +1054,40 @@ def test_personal_research_does_not_treat_memory_as_local_file_inventory(tmp_pat
         if message.role == "system" and isinstance(message.content, str)
     )
     assert "<personal-research-scope>" in system_text
+    assert "<research-skill-chain-guidance>" in system_text
+    assert "<code-mode>" not in system_text
     assert "Treat memory as a lead to verify, never as a file inventory." in system_text
     assert "start with web evidence" in system_text
+
+
+def test_personal_build_keeps_code_tools_and_receives_maker_contract(tmp_path) -> None:
+    router = _CapturingRouter(["Final Answer: done"])
+    intent = _intent("Create a tiny runnable artifact")
+    intent.user_context.update(
+        {
+            "mode": "code",
+            "capability_mode": "code",
+            "workspace_scope": "personal",
+            "personal_workspace_enabled": True,
+            "personal_mode": "build",
+            "personal_instructions": "Keep generated artifacts under outputs/.",
+            "cwd": str(tmp_path),
+        }
+    )
+
+    result = run_react_loop(_FakeStack(router), intent, agent=None)
+
+    assert result is not None
+    system_text = "\n".join(
+        message.content
+        for message in router.requests[0].messages
+        if message.role == "system" and isinstance(message.content, str)
+    )
+    assert "<code-mode>" in system_text
+    assert "<personal-agent-mode>" in system_text
+    assert "构建模式 / maker" in system_text
+    assert "<personal-space-custom-instructions>" in system_text
+    assert "Keep generated artifacts under outputs/." in system_text
 
 
 def test_code_agent_mode_prompt_distinguishes_architect_mode() -> None:
@@ -1068,6 +1096,16 @@ def test_code_agent_mode_prompt_distinguishes_architect_mode() -> None:
     assert "<code-agent-mode>" in prompt
     assert "architect / 架构师" in prompt
     assert "大范围修改前先分阶段执行" in prompt
+
+
+def test_code_agent_mode_prompt_distinguishes_audit_and_uxui_modes() -> None:
+    audit = _build_code_agent_mode_prompt("audit")
+    uxui = _build_code_agent_mode_prompt("uxui")
+
+    assert "audit / 审计" in audit
+    assert "默认只读" in audit
+    assert "uxui / 体验与界面" in uxui
+    assert "浏览器重新走查" in uxui
 
 
 def test_workflow_preset_prompt_steers_audit_ultracode_to_orchestration() -> None:
@@ -1081,6 +1119,69 @@ def test_workflow_preset_prompt_steers_audit_ultracode_to_orchestration() -> Non
     # Security: the preset must NOT let the turn raise its own spawn ceiling —
     # depth stays operator-budget-gated. The directive says so explicitly.
     assert "max_spawns" in prompt
+
+
+def test_audit_ultracode_executes_orchestration_before_first_model_round() -> None:
+    router = _ScriptedRouter(["Final Answer: synthesized audit"])
+    stack = _build_stack_with_executor(router)
+    calls: list[dict[str, Any]] = []
+
+    def _fake_orchestration(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return {
+            "ok": True,
+            "confirmed": ["finding-a", "finding-b"],
+            "count": 2,
+            "synthesis": "combined audit evidence",
+        }
+
+    stack.executor.registry.register(
+        Skill(
+            name="run_orchestration",
+            summary="Run deterministic multi-agent audit.",
+            affinity=["delegation", "orchestration", "swarm"],
+            trusted_source="builtin://run_orchestration",
+            handler=_fake_orchestration,
+        ),
+        verify_tests=False,
+    )
+    intent = _intent("audit the repository")
+    intent.user_context.update(
+        {
+            "mode": "code",
+            "agent_mode": "audit",
+            "workflow_preset": "audit.ultracode",
+        }
+    )
+
+    gen = stream_react_loop(stack, intent, agent=None)
+    events: list[dict[str, Any]] = []
+    try:
+        for _ in range(12):
+            event = next(gen)
+            events.append(event)
+            if event.get("type") == "tool_end" and event.get("tool_name") == "run_orchestration":
+                break
+    finally:
+        gen.close()
+
+    assert len(calls) == 1
+    assert calls[0]["agent_id"] == ["critic", "explorer", "researcher"]
+    assert calls[0]["n"] == 3
+    assert calls[0]["rounds"] == 2
+    assert calls[0]["verify"] is True
+    assert calls[0]["synthesize"] is True
+    assert any(
+        event.get("type") == "tool_start" and event.get("tool_name") == "run_orchestration"
+        for event in events
+    )
+    assert any(
+        event.get("type") == "tool_end"
+        and event.get("tool_name") == "run_orchestration"
+        and event.get("status") == "success"
+        for event in events
+    )
+    assert router.calls == 0, "orchestration must run before the first model request"
 
 
 def test_personal_agent_mode_prompt_steers_build_mode() -> None:
@@ -1102,12 +1203,11 @@ def test_personal_agent_mode_prompt_is_empty_for_general_and_research() -> None:
     assert _build_personal_agent_mode_prompt(None) == ""
 
 
-def test_workflow_preset_prompt_is_empty_for_non_ultracode_presets() -> None:
-    # Case-insensitive match on the one preset that carries behaviour; everything
-    # else (including the lighter audit.review) is advisory only → no directive.
+def test_workflow_preset_prompts_cover_each_project_work_mode() -> None:
     assert _build_workflow_preset_prompt("AUDIT.ULTRACODE").startswith("<workflow-preset>")
-    assert _build_workflow_preset_prompt("audit.review") == ""
-    assert _build_workflow_preset_prompt("develop.iterate") == ""
+    assert "默认只读" in _build_workflow_preset_prompt("audit.review")
+    assert "小步实现" in _build_workflow_preset_prompt("develop.iterate")
+    assert "窄屏" in _build_workflow_preset_prompt("uxui.regression")
     assert _build_workflow_preset_prompt("") == ""
     assert _build_workflow_preset_prompt(None) == ""
 
@@ -2237,12 +2337,15 @@ def test_evidence_synthesis_stall_emits_visible_handoff_without_phantom_tool_loo
     )
 
 
-def test_research_placeholder_continues_to_fetched_source_and_grounded_answer() -> None:
+def test_research_delivery_does_not_wait_for_checklist_reconciliation() -> None:
     placeholder = (
         "我先搜索并核对官方资料，接下来再整理关键变化；当前只是准备开始调研，"
         "还没有形成可以交付的结论，所以这段文字不能作为最终回答。"
     )
-    premature_final = "证据找到了，我先直接回答，清单稍后再补。"
+    grounded_final = (
+        "调研结论：事件流采用显式阶段与因果序号，"
+        "可从[官方说明](https://example.com/octopus-streaming)继续核对。"
+    )
     router = _ScriptedRouter(
         [
             placeholder,
@@ -2250,7 +2353,7 @@ def test_research_placeholder_continues_to_fetched_source_and_grounded_answer() 
                 "Thought: fetch the primary source before answering\n"
                 'Action: web_search({"q":"Octopus agent streaming architecture"})'
             ),
-            f"Final Answer: {premature_final}",
+            f"Final Answer: {grounded_final}",
             (
                 "Thought: close the visible research checklist after evidence collection\n"
                 'Action: todo_write({"todos":[{"title":"Research primary source",'
@@ -2287,12 +2390,11 @@ def test_research_placeholder_continues_to_fetched_source_and_grounded_answer() 
     events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
-    assert router.calls == 5
+    assert router.calls == 3
     visible_answer = "".join(event["delta"] for event in events if event["type"] == "text_delta")
     assert placeholder not in visible_answer
-    assert premature_final not in visible_answer
     assert visible_answer == result.final_answer
-    assert "https://example.com/octopus-streaming" in result.final_answer
+    assert result.final_answer == grounded_final
     assert all(
         "progress_kind" not in event for event in events if event["type"] == "commentary_delta"
     )
@@ -4855,7 +4957,7 @@ def test_code_mode_project_inspection_requires_real_file_tool_evidence() -> None
     assert result.final_answer.startswith("Recommendation")
 
 
-def test_react_todo_protocol_rejects_complex_final_without_checklist() -> None:
+def test_react_todo_protocol_does_not_block_final_without_checklist() -> None:
     stack = _build_stack_with_executor(
         _ScriptedRouter(
             [
@@ -4874,9 +4976,9 @@ def test_react_todo_protocol_rejects_complex_final_without_checklist() -> None:
     result = run_react_loop(stack, intent, agent=None, max_iterations=5)
 
     assert result is not None and result.success
-    assert result.final_answer == "final"
-    assert any("todo-protocol guard" in step.observation for step in result.steps)
-    assert any(step.action.startswith("todo_write") for step in result.steps)
+    assert result.final_answer == "premature"
+    assert not any("todo-protocol guard" in step.observation for step in result.steps)
+    assert not any(step.action.startswith("todo_write") for step in result.steps)
 
 
 def test_terminal_delivery_todo_is_fulfilled_by_substantive_final_answer() -> None:
@@ -4921,7 +5023,7 @@ def test_non_delivery_incomplete_todo_still_blocks_substantive_final() -> None:
     assert "验证代码修复" in rejection
 
 
-def test_react_todo_protocol_requires_update_after_tool_work() -> None:
+def test_react_todo_protocol_does_not_reopen_after_tool_work() -> None:
     stack = _build_stack_with_executor(
         _ScriptedRouter(
             [
@@ -4945,10 +5047,9 @@ def test_react_todo_protocol_requires_update_after_tool_work() -> None:
     result = run_react_loop(stack, intent, agent=None, max_iterations=6)
 
     assert result is not None and result.success
-    assert result.final_answer == "final"
+    assert result.final_answer == "premature"
     guard_steps = [step for step in result.steps if "todo-protocol guard" in step.observation]
-    assert len(guard_steps) == 1
-    assert "used tools after the latest todo_write update" in guard_steps[0].observation
+    assert guard_steps == []
 
 
 def _drain(gen: Any) -> tuple[list[dict], Any]:
@@ -5091,8 +5192,8 @@ def test_two_clean_verifier_rounds_suppress_redundant_probe(tmp_path: Any) -> No
     assert any("redundant-tool-skipped" in step.observation for step in result.steps)
 
 
-def test_todo_final_guard_preserves_green_convergence(tmp_path: Any) -> None:
-    """A stale checklist must not erase already-valid terminal evidence."""
+def test_stale_todo_does_not_reopen_green_convergence(tmp_path: Any) -> None:
+    """A stale checklist is telemetry-only after terminal evidence is valid."""
     target = tmp_path / "cache.py"
     target.write_text("value = 0\n", encoding="utf-8")
     router = _ScriptedRouter(
@@ -5137,8 +5238,7 @@ def test_todo_final_guard_preserves_green_convergence(tmp_path: Any) -> None:
     assert len(shell_starts) == 2, "\n---\n".join(
         f"{step.iteration}: {step.action}\n{step.observation}" for step in result.steps
     )
-    assert any("todo-protocol guard" in step.observation for step in result.steps)
-    assert any("redundant-tool-skipped" in step.observation for step in result.steps)
+    assert not any("todo-protocol guard" in step.observation for step in result.steps)
 
 
 def test_semantic_completion_guard_reopens_tools_after_green_convergence(tmp_path: Any) -> None:
@@ -5750,9 +5850,9 @@ def test_guarded_plain_answer_soft_lands_after_one_unchanged_retry() -> None:
     assert result is not None
     assert result.terminated_reason == "final_answer_with_warning"
     assert result.success is True
-    assert result.final_answer.startswith(plain_answer)
-    assert "inspection-evidence guard" in result.final_answer
-    assert "避免继续空转" in result.final_answer
+    assert result.final_answer == plain_answer
+    assert "guard" not in result.final_answer
+    assert "质量提示" not in result.final_answer
     assert router.calls == 3
     assert any(event["type"] == "text_delta" for event in events)
 
@@ -6492,7 +6592,8 @@ def test_unsafe_final_answer_is_guarded_before_streaming() -> None:
     )
 
     assert result is not None
-    assert "shell-injection guard" in result.final_answer
+    assert "安全检查拒绝了候选答复" in result.final_answer
+    assert "shell-injection guard" not in result.final_answer
     assert "subprocess.run" not in result.final_answer
     visible = "".join(e["delta"] for e in events if e["type"] == "text_delta")
     assert "subprocess.run" not in visible
@@ -6546,7 +6647,8 @@ def test_unsafe_chat_style_markdown_is_guarded_before_streaming() -> None:
     visible = "".join(e["delta"] for e in events if e["type"] == "text_delta")
     assert "subprocess.run" not in visible
     assert "shell=True" not in visible
-    assert result is None or "shell-injection guard" in result.final_answer
+    assert result is None or "安全检查拒绝了候选答复" in result.final_answer
+    assert result is None or "shell-injection guard" not in result.final_answer
 
 
 def test_chat_style_zero_anchor_streams_live_after_120_chars() -> None:
@@ -8457,6 +8559,66 @@ def test_guard_impasse_resets_on_different_guard() -> None:
     assert _note_guard_impasse(state, "implementation-write guard", steps) is False
 
 
+def test_guard_impasse_failed_retries_do_not_count_as_progress() -> None:
+    from runtime.core.cerebrum.react_loop import _note_guard_impasse
+
+    state: dict = {}
+    # The model keeps retrying a sandbox-blocked exec_shell: every attempt
+    # adds a step but no evidence.  Before the fix these new steps silently
+    # reset the impasse counter, so the same guard rejected forever instead
+    # of soft-landing.  Now failed executions don't count as progress and a
+    # soft guard (limit 2) converges after two no-evidence rejections.
+    failed = [
+        ReActStep(
+            iteration=i,
+            action='exec_shell({"cmd": "make test"})',
+            observation="(工具执行异常) PermissionError: [Errno 1] Operation not permitted",
+        )
+        for i in (1, 2, 3)
+    ]
+    assert _note_guard_impasse(state, "todo-protocol guard", failed, rejection_limit=2) is False
+    assert _note_guard_impasse(state, "todo-protocol guard", failed, rejection_limit=2) is True
+
+    # A genuinely NEW successful action between rejections is real progress
+    # and still resets the counter — evidence-gathering stays respected.
+    state.clear()
+    fresh = [
+        *failed,
+        ReActStep(iteration=4, action='write_text_file({"path": "a", "content": "x"})'),
+    ]
+    assert _note_guard_impasse(state, "todo-protocol guard", fresh, rejection_limit=2) is False
+    assert _note_guard_impasse(state, "todo-protocol guard", fresh, rejection_limit=2) is True
+
+
+def test_soft_land_never_exposes_environment_or_guard_diagnostics() -> None:
+    from runtime.core.cerebrum.react_final_answer_guards import _guard_soft_landing_answer
+
+    # Environment and guard diagnostics travel in the structured completion
+    # receipt. They must not be appended to conversational answer prose.
+    env_failed = [
+        ReActStep(
+            iteration=1,
+            action='exec_shell({"cmd": "make test"})',
+            observation="(工具执行异常) PermissionError: [Errno 1] Operation not permitted",
+        )
+    ]
+    delivered = _guard_soft_landing_answer("已完成。", "todo-protocol guard", steps=env_failed)
+    assert delivered == "已完成。"
+    assert "guard" not in delivered
+    assert "质量提示" not in delivered
+
+    # A clean trajectory with no environmental failure keeps the plain note.
+    clean = [
+        ReActStep(
+            iteration=1,
+            action='exec_shell({"cmd": "echo x"})',
+            observation="(real tool execution succeeded) exec_shell\nx",
+        )
+    ]
+    delivered_clean = _guard_soft_landing_answer("已完成。", "todo-protocol guard", steps=clean)
+    assert delivered_clean == "已完成。"
+
+
 def test_repair_guard_soft_lands_after_one_stalled_retry() -> None:
     from runtime.core.cerebrum.react_final_answer_guards import (
         _guard_rejection_outcome,
@@ -8469,22 +8631,17 @@ def test_repair_guard_soft_lands_after_one_stalled_retry() -> None:
     assert _guard_rejection_outcome(state, "todo-protocol guard", steps) == "retry"
     assert _guard_rejection_outcome(state, "todo-protocol guard", steps) == "soft_land"
     delivered = _guard_soft_landing_answer("已完成分析。", "todo-protocol guard")
-    assert delivered.startswith("已完成分析。")
-    assert "避免继续空转" in delivered
+    assert delivered == "已完成分析。"
+    assert "guard" not in delivered
 
 
-def test_soft_land_note_attributes_the_failed_retry_to_the_model() -> None:
+def test_soft_land_does_not_append_runtime_policy_note() -> None:
     from runtime.core.cerebrum.react_final_answer_guards import _guard_soft_landing_answer
 
-    # The old wording "系统已完成一次修复尝试" let the model believe the
-    # SYSTEM had done work for it — one thread's model even misread it as a
-    # system action and got confused ("这像是系统注入的提示……实际上我并没有
-    # 完成任何东西").  The note must make clear the failed attempt was the
-    # model's OWN submission, rejected by the guard, not a system action.
+    # Runtime policy prose previously confused both the user and the model.
+    # The public answer is now exactly the useful candidate.
     delivered = _guard_soft_landing_answer("已完成。", "todo-protocol guard")
-    assert "系统已完成" not in delivered
-    assert "模型自身发起" in delivered
-    assert "避免继续空转" in delivered
+    assert delivered == "已完成。"
 
 
 def test_soft_land_strips_inline_tool_call_json_from_candidate() -> None:
@@ -8520,7 +8677,7 @@ def test_soft_land_strips_inline_tool_call_json_from_candidate() -> None:
     delivered = _guard_soft_landing_answer(leaked, "todo-protocol guard")
     assert "todo_write" not in delivered
     assert "已完成静态审计" in delivered
-    assert "避免继续空转" in delivered
+    assert "guard" not in delivered
 
 
 def test_hard_guard_remains_fail_closed_for_three_stalls() -> None:
@@ -8664,3 +8821,42 @@ def test_register_group_returns_empty_for_unknown_group() -> None:
     reg = SkillRegistry()
     newly = register_group(reg, "nonexistent_group_xyz")
     assert newly == []
+
+
+def test_react_action_block_leaked_into_answer_is_rejected() -> None:
+    """A ReAct ``Action: name({args})`` block the model wrote into the
+    answer channel (instead of routing through tool_call) must be flagged
+    as leaked protocol text — so the caller does not treat it as a valid
+    final answer and the tools actually get dispatched. Regression for
+    thread twzYy6MvSrxmJFbbC00c8u where deepseek emitted ``Action:
+    list_cwd({...})`` as answer prose and the tools never ran."""
+    from runtime.core.cerebrum.react_final_answer_guards import (
+        _looks_like_observation_echo,
+    )
+
+    leak_action_block = (
+        "任务清单已建立,继续读取前端目录结构、当前改动范围与差异基线,确定审计面。\n\n"
+        "Action:\n"
+        '    list_cwd({"path": "frontend"})\n'
+        "    git_status({})\n"
+        '    git_diff({"stat": true, "max_stat": 80})'
+    )
+    assert _looks_like_observation_echo(leak_action_block) is True
+
+    leak_thought_plus_action = (
+        "明白,正式开跑前端代码审计。先列计划,再盘点目录与改动面。\n\n"
+        "Thought: 阶段=理解。按审计模式只读\n\n"
+        'Action:\n    list_cwd({"path": "frontend"})'
+    )
+    assert _looks_like_observation_echo(leak_thought_plus_action) is True
+
+    # Legitimate answers that merely mention the protocol must NOT be flagged.
+    assert not _looks_like_observation_echo(
+        "前端代码审计完成。发现 3 个问题:1. XSS 2. 密钥泄露 3. 依赖过旧。"
+    )
+    assert not _looks_like_observation_echo(
+        "ReAct 协议包含 Thought/Action/Observation 三个块。"
+    )
+    assert not _looks_like_observation_echo(
+        "The Action field in the ReAct schema is required."
+    )
