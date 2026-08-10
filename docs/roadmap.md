@@ -176,6 +176,9 @@
 - [ ] 多租户：Mantle 隔离 + Genome 分片
 - [ ] 协议：MCP 已有 + 考虑 ACP / A2A
 - [ ] 文档站 + demo 视频
+- [ ] **安全 · 升级 electron 桌面壳**（`^34.5.8` → 新版）：28 个 high 漏洞
+      （UAF：offscreen child window / fullscreen & pointer-lock 回调 / PowerMonitor），
+      影响打包桌面客户端，网页版不涉及（2026-08 审计遗留，`pnpm audit` 佐证）
 
 ---
 
