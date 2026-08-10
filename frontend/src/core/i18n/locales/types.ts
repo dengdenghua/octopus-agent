@@ -1066,6 +1066,9 @@ export interface Translations {
     inputsUploadedFiles: (count: number) => string;
     inputsAttachments: (count: number) => string;
     context: string;
+    contextCompress: string;
+    contextDescription: string;
+    contextUsed: (percentage: number, limit: string) => string;
     observableThisRound: string;
     sourceCount: (count: number) => string;
     sourceCountWithLabel: (label: string, count: number) => string;
@@ -5186,6 +5189,8 @@ export interface Translations {
     slowResponse: string;
     reconnecting: string;
     processing: string;
+    ttftLabel: string;
+    ttftHint: string;
   };
 
   // Evolution Dashboard

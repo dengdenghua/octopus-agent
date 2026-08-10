@@ -1210,6 +1210,10 @@ export const zhCN: Translations = {
     inputsUploadedFiles: (count) => `上传文件 ${count} 个`,
     inputsAttachments: (count) => `附件 ${count} 个`,
     context: "上下文",
+    contextCompress: "压缩",
+    contextDescription: "当前对话中 AI 获取的上下文",
+    contextUsed: (percentage, limit) =>
+      `已占用 ${percentage}%（上限 ${limit}）`,
     observableThisRound: "本轮可观测",
     sourceCount: (count) => `来源 ${count} 条`,
     sourceCountWithLabel: (label, count) => `${label} ${count} 条来源`,
@@ -1316,8 +1320,8 @@ export const zhCN: Translations = {
     computerViewEmpty: "暂无子智能体",
     computerViewEmptyDesc:
       "当任务派发给子智能体执行时，可以在这里查看子智能体的独立电脑操作记录。",
-    visibilityPanelTitle: "可见性",
-    visibilityPanelEmpty: "本轮暂无可见性决策",
+    visibilityPanelTitle: "能力决策",
+    visibilityPanelEmpty: "本轮暂无能力决策",
     visibilityStep: "决策",
   },
 
@@ -5671,6 +5675,8 @@ export const zhCN: Translations = {
     slowResponse: "还在继续，稍慢一些",
     reconnecting: "连接断开，正在回来",
     processing: "正在处理",
+    ttftLabel: "首字",
+    ttftHint: "本回合从请求发出到首个 token 到达的延迟",
   },
 
   // Evolution Dashboard
@@ -7433,7 +7439,8 @@ export const zhCN: Translations = {
       },
     },
     networkTitle: "网络访问",
-    networkDesc: "沙箱内命令的网络范围：默认仅推理端点可达；「常用域名」额外放行 npm/pip/git 等开发工具域名。",
+    networkDesc:
+      "沙箱内命令的网络范围：默认仅推理端点可达；「常用域名」额外放行 npm/pip/git 等开发工具域名。",
     presetDomainsNote: "「常用域名」档预置放行的开发工具域名（只读）：",
     toastNetworkSwitched: (label: string) => `网络访问已切换为「${label}」`,
     network: {
@@ -7443,15 +7450,18 @@ export const zhCN: Translations = {
       },
       common: {
         label: "常用域名",
-        description: "放行 npm/pip/github/apt 等预置开发工具域名，其余仍拦截（推荐）。",
+        description:
+          "放行 npm/pip/github/apt 等预置开发工具域名，其余仍拦截（推荐）。",
       },
       full: {
         label: "全部允许",
-        description: "沙箱内命令可访问任意网络（pnpm install、git clone 等均可）。",
+        description:
+          "沙箱内命令可访问任意网络（pnpm install、git clone 等均可）。",
       },
     },
     replyStyleTitle: "回复风格",
-    replyStyleDesc: "选择助手的回复人格（性格/价值观/语气/升级策略），仅影响怎么说话，不影响能力。",
+    replyStyleDesc:
+      "选择助手的回复人格（性格/价值观/语气/升级策略），仅影响怎么说话，不影响能力。",
     toastReplyStyleSwitched: (label: string) => `回复风格已切换为「${label}」`,
     replyStyle: {
       default: {

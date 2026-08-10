@@ -25,6 +25,12 @@ export function RunDurationBadge({
           ? t.publicThinkingStatus.waitingForModel
           : t.publicThinkingStatus.processing;
   const elapsedSeconds = Math.floor((vitals?.elapsedMs ?? 0) / 1000);
+  // Time-to-first-token: rendered once the first token has arrived, so the
+  // user sees the model's response latency for this turn at a glance.
+  const ttftSeconds =
+    vitals?.ttftMs != null && vitals.ttftMs >= 0
+      ? vitals.ttftMs / 1000
+      : null;
 
   // Tone follows the run state machine (red = disconnected, yellow = slow,
   // green = working/waiting) instead of a fixed accent colour.
@@ -56,6 +62,15 @@ export function RunDurationBadge({
       <span aria-hidden="true" className={cn("size-1.5 rounded-full", dot)} />
       <span className="max-w-24 truncate">{statusLabel}</span>
       <span className="tabular-nums opacity-70">{elapsedSeconds}s</span>
+      {ttftSeconds != null && (
+        <span
+          className="tabular-nums opacity-70"
+          title={t.publicThinkingStatus.ttftHint}
+          data-testid="ttft-badge"
+        >
+          {t.publicThinkingStatus.ttftLabel} {ttftSeconds.toFixed(1)}s
+        </span>
+      )}
     </div>
   );
 }

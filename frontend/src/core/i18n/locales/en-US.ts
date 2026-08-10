@@ -1268,6 +1268,9 @@ export const enUS: Translations = {
     inputsUploadedFiles: (count) => `${count} uploaded files`,
     inputsAttachments: (count) => `${count} attachments`,
     context: "Context",
+    contextCompress: "Compress",
+    contextDescription: "Context available to AI in this conversation",
+    contextUsed: (percentage, limit) => `${percentage}% used (${limit} limit)`,
     observableThisRound: "Observable this round",
     sourceCount: (count) => `${count} sources`,
     sourceCountWithLabel: (label, count) => `${label}: ${count} sources`,
@@ -1377,8 +1380,8 @@ export const enUS: Translations = {
     computerViewEmpty: "No subagents yet",
     computerViewEmptyDesc:
       "When tasks are dispatched to subagents, you can view their independent computer operation records here.",
-    visibilityPanelTitle: "Visibility",
-    visibilityPanelEmpty: "No visibility decisions this turn",
+    visibilityPanelTitle: "Capability decisions",
+    visibilityPanelEmpty: "No capability decisions this turn",
     visibilityStep: "Decision",
   },
 
@@ -3534,7 +3537,8 @@ export const enUS: Translations = {
       paletteSteel: "Indigo",
       paletteSteelDescription: "Composed indigo — rational without glare.",
       paletteEmerald: "Jade",
-      paletteEmeraldDescription: "Blue-shifted jade green — restrained and clear.",
+      paletteEmeraldDescription:
+        "Blue-shifted jade green — restrained and clear.",
       paletteViolet: "Mauve",
       paletteVioletDescription: "Greyed rose-purple — understated, wears well.",
       paletteAmber: "Clay",
@@ -6010,6 +6014,8 @@ Strategy:
     slowResponse: "Still on it — slower than usual",
     reconnecting: "Connection dropped — reconnecting",
     processing: "Working",
+    ttftLabel: "TTFT",
+    ttftHint: "Time from request to the first token of this turn",
   },
 
   // Evolution Dashboard
@@ -7799,7 +7805,8 @@ Strategy:
     restartHint:
       "“Full access” grants permanent approval — only use it on a machine you trust.",
     envTitle: "Execution environment",
-    envDesc: "Where commands run and how much of the file system they can write.",
+    envDesc:
+      "Where commands run and how much of the file system they can write.",
     permissionTitle: "Permission level",
     permissionDesc: "How much confirmation file edits and commands require.",
     guardianTitle: "High-risk action review",
@@ -7809,11 +7816,14 @@ Strategy:
     guardianToggleDesc:
       "Runs only for high/critical actions; failures degrade to the rule engine conclusion without blocking; max 3 reviews per turn.",
     guardianModelLabel: "Review model",
-    guardianModelHint: "Leave empty to use the conversation\u2019s own model (recommended); or pick a dedicated reviewer, e.g. gpt-5.6-luna.",
+    guardianModelHint:
+      "Leave empty to use the conversation\u2019s own model (recommended); or pick a dedicated reviewer, e.g. gpt-5.6-luna.",
     toastGuardianOn: "High-risk action review enabled",
     toastGuardianOff: "High-risk action review disabled",
-    toastEnvSwitched: (label: string) => `Execution environment switched to “${label}”`,
-    toastPermissionSwitched: (label: string) => `Permission level switched to “${label}”`,
+    toastEnvSwitched: (label: string) =>
+      `Execution environment switched to “${label}”`,
+    toastPermissionSwitched: (label: string) =>
+      `Permission level switched to “${label}”`,
     toastFailed: (msg: string) => `Switch failed: ${msg}`,
     env: {
       sandbox: {
@@ -7830,15 +7840,18 @@ Strategy:
     permission: {
       default: {
         label: "Default",
-        description: "Any write or command asks for your approval first. Safest option.",
+        description:
+          "Any write or command asks for your approval first. Safest option.",
       },
       acceptEdits: {
         label: "Accept edits",
-        description: "File changes run automatically; commands still ask for approval.",
+        description:
+          "File changes run automatically; commands still ask for approval.",
       },
       bypassPermissions: {
         label: "Full access",
-        description: "Every action runs automatically with no questions. Maximum permissions.",
+        description:
+          "Every action runs automatically with no questions. Maximum permissions.",
       },
     },
     networkTitle: "Network access",
@@ -7846,7 +7859,8 @@ Strategy:
       "Network scope for sandboxed commands: by default only model inference stays reachable; the “Common domains” tier additionally pre-allows dev-tool hosts.",
     presetDomainsNote:
       "Dev-tool domains pre-allowed by the “Common domains” tier (read-only):",
-    toastNetworkSwitched: (label: string) => `Network access switched to “${label}”`,
+    toastNetworkSwitched: (label: string) =>
+      `Network access switched to “${label}”`,
     network: {
       deny: {
         label: "Blocked",

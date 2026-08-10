@@ -1235,6 +1235,9 @@ export const koKR: Translations = {
     inputsUploadedFiles: (count) => `업로드 파일 ${count}개`,
     inputsAttachments: (count) => `첨부 ${count}개`,
     context: "컨텍스트",
+    contextCompress: "압축",
+    contextDescription: "이 대화에서 AI가 사용할 수 있는 컨텍스트",
+    contextUsed: (percentage, limit) => `${percentage}% 사용됨 (${limit} 한도)`,
     observableThisRound: "이번 라운드 관측 대상",
     sourceCount: (count) => `소스 ${count}개`,
     sourceCountWithLabel: (label, count) => `${label}: 소스 ${count}개`,
@@ -1343,8 +1346,8 @@ export const koKR: Translations = {
     computerViewEmpty: "서브에이전트 없음",
     computerViewEmptyDesc:
       "작업이 서브에이전트에 할당되면 여기에서 서브에이전트의 독립적인 컴퓨터 작업 기록을 볼 수 있습니다.",
-    visibilityPanelTitle: "가시성",
-    visibilityPanelEmpty: "이번 턴에 가시성 결정이 없습니다",
+    visibilityPanelTitle: "기능 결정",
+    visibilityPanelEmpty: "이번 턴에 기능 결정이 없습니다",
     visibilityStep: "결정",
   },
 
@@ -3462,8 +3465,7 @@ export const koKR: Translations = {
       paletteRoseDescription:
         "우아하고 로맨틱한 핑크, 부드럽고 고급스러운 느낌.",
       paletteSteel: "인디고",
-      paletteSteelDescription:
-        "차분한 인디고, 이성적이면서 눈부시지 않음.",
+      paletteSteelDescription: "차분한 인디고, 이성적이면서 눈부시지 않음.",
       paletteEmerald: "옥색",
       paletteEmeraldDescription: "푸른빛 옥색, 절제되고 맑은 느낌.",
       paletteViolet: "모브",
@@ -3494,7 +3496,8 @@ export const koKR: Translations = {
       chatFontSizeMedium: "중간 (기본값)",
       chatFontSizeLarge: "크게",
       conversationDetailLevelTitle: "대화 세부 수준",
-      conversationDetailLevelDescription: "대화 중 표시할 중간 활동량을 제어합니다.",
+      conversationDetailLevelDescription:
+        "대화 중 표시할 중간 활동량을 제어합니다.",
       conversationDetailLevelLow: "낮음 - 최소 보기",
       conversationDetailLevelMedium: "중간 - 균형",
       conversationDetailLevelHigh: "높음 - 상세",
@@ -5909,6 +5912,8 @@ export const koKR: Translations = {
     slowResponse: "계속 진행 중입니다. 조금 더 걸리고 있습니다",
     reconnecting: "연결이 끊겨 다시 돌아오는 중입니다",
     processing: "처리 중",
+    ttftLabel: "첫 토큰",
+    ttftHint: "요청부터 이 턴의 첫 토큰 도착까지의 지연",
   },
 
   // Evolution Dashboard
@@ -7675,7 +7680,8 @@ export const koKR: Translations = {
     activeTag: "현재",
     scopeNote:
       "변경 사항은 로컬 설정에 저장되며 이후의 모든 새 작업에 적용됩니다. 실행 중인 작업에는 영향을 주지 않습니다.",
-    restartHint: "'완전 액세스'는 영구 승인을 부여합니다. 신뢰하는 환경에서만 사용하세요.",
+    restartHint:
+      "'완전 액세스'는 영구 승인을 부여합니다. 신뢰하는 환경에서만 사용하세요.",
     envTitle: "실행 환경",
     envDesc: "명령이 실행되는 위치와 쓸 수 있는 파일 범위.",
     permissionTitle: "권한 수준",
@@ -7687,30 +7693,37 @@ export const koKR: Translations = {
     guardianToggleDesc:
       "high/critical 작업에만 적용. 검토 실패 시 규칙 엔진 결론으로 자동 폴백, 작업을 차단하지 않음. 턴당 최대 3회.",
     guardianModelLabel: "검토 모델",
-    guardianModelHint: "비우면 현재 대화 모델 사용(권장). 전용 검토 모델(예: gpt-5.6-luna) 지정 가능.",
+    guardianModelHint:
+      "비우면 현재 대화 모델 사용(권장). 전용 검토 모델(예: gpt-5.6-luna) 지정 가능.",
     toastGuardianOn: "고위험 작업 독립 검토가 켜졌습니다",
     toastGuardianOff: "고위험 작업 독립 검토가 꺼졌습니다",
-    toastEnvSwitched: (label: string) => `실행 환경이 '${label}'(으)로 전환되었습니다`,
-    toastPermissionSwitched: (label: string) => `권한 수준이 '${label}'(으)로 전환되었습니다`,
+    toastEnvSwitched: (label: string) =>
+      `실행 환경이 '${label}'(으)로 전환되었습니다`,
+    toastPermissionSwitched: (label: string) =>
+      `권한 수준이 '${label}'(으)로 전환되었습니다`,
     toastFailed: (msg: string) => `전환 실패: ${msg}`,
     env: {
       sandbox: {
         label: "샌드박스",
-        description: "명령은 격리된 샌드박스에서 실행되며, 파일 쓰기는 작업 공간으로 제한됩니다.",
+        description:
+          "명령은 격리된 샌드박스에서 실행되며, 파일 쓰기는 작업 공간으로 제한됩니다.",
       },
       local: {
         label: "로컬",
-        description: "명령은 이 머신에서 직접 실행되며 파일 쓰기 제한이 없습니다(샌드박스 격리 우회).",
+        description:
+          "명령은 이 머신에서 직접 실행되며 파일 쓰기 제한이 없습니다(샌드박스 격리 우회).",
       },
     },
     permission: {
       default: {
         label: "기본",
-        description: "모든 쓰기 작업과 명령은 먼저 확인을 받습니다. 가장 안전합니다.",
+        description:
+          "모든 쓰기 작업과 명령은 먼저 확인을 받습니다. 가장 안전합니다.",
       },
       acceptEdits: {
         label: "편집 수락",
-        description: "파일 변경은 자동으로 실행되며, 명령 실행 전에는 확인합니다.",
+        description:
+          "파일 변경은 자동으로 실행되며, 명령 실행 전에는 확인합니다.",
       },
       bypassPermissions: {
         label: "완전 액세스",
@@ -7718,26 +7731,34 @@ export const koKR: Translations = {
       },
     },
     networkTitle: "네트워크 액세스",
-    networkDesc: "샌드박스 내 명령의 네트워크 범위: 기본적으로 모델 추론 엔드포인트만 연결할 수 있습니다. '일반 도메인'은 개발 도구 도메인을 추가로 허용합니다.",
-    presetDomainsNote: "'일반 도메인' 단계에서 사전 허용되는 개발 도구 도메인(읽기 전용):",
-    toastNetworkSwitched: (label: string) => `네트워크 액세스를 '${label}'(으)로 전환했습니다`,
+    networkDesc:
+      "샌드박스 내 명령의 네트워크 범위: 기본적으로 모델 추론 엔드포인트만 연결할 수 있습니다. '일반 도메인'은 개발 도구 도메인을 추가로 허용합니다.",
+    presetDomainsNote:
+      "'일반 도메인' 단계에서 사전 허용되는 개발 도구 도메인(읽기 전용):",
+    toastNetworkSwitched: (label: string) =>
+      `네트워크 액세스를 '${label}'(으)로 전환했습니다`,
     network: {
       deny: {
         label: "차단",
-        description: "모델 추론 엔드포인트만 연결 가능하며 나머지 요청은 모두 차단됩니다(가장 안전).",
+        description:
+          "모델 추론 엔드포인트만 연결 가능하며 나머지 요청은 모두 차단됩니다(가장 안전).",
       },
       common: {
         label: "일반 도메인",
-        description: "npm/pip/github/apt 등 개발 도구 도메인을 미리 허용하며 나머지는 차단됩니다(권장).",
+        description:
+          "npm/pip/github/apt 등 개발 도구 도메인을 미리 허용하며 나머지는 차단됩니다(권장).",
       },
       full: {
         label: "허용",
-        description: "샌드박스 내 명령이 모든 네트워크에 접근할 수 있습니다(pnpm install, git clone 등).",
+        description:
+          "샌드박스 내 명령이 모든 네트워크에 접근할 수 있습니다(pnpm install, git clone 등).",
       },
     },
     replyStyleTitle: "답변 스타일",
-    replyStyleDesc: "어시스턴트의 답변 페르소나(성격/가치관/어조/에스컬레이션 방침)를 선택합니다. 말투에만 영향을 주며 능력에는 영향이 없습니다.",
-    toastReplyStyleSwitched: (label: string) => `답변 스타일을 '${label}'(으)로 전환했습니다`,
+    replyStyleDesc:
+      "어시스턴트의 답변 페르소나(성격/가치관/어조/에스컬레이션 방침)를 선택합니다. 말투에만 영향을 주며 능력에는 영향이 없습니다.",
+    toastReplyStyleSwitched: (label: string) =>
+      `답변 스타일을 '${label}'(으)로 전환했습니다`,
     replyStyle: {
       default: {
         label: "기본",

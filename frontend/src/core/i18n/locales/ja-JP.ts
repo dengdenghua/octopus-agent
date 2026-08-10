@@ -1247,6 +1247,10 @@ export const jaJP: Translations = {
     inputsUploadedFiles: (count) => `アップロードファイル ${count} 件`,
     inputsAttachments: (count) => `添付 ${count} 件`,
     context: "コンテキスト",
+    contextCompress: "圧縮",
+    contextDescription: "この会話で AI が参照できるコンテキスト",
+    contextUsed: (percentage, limit) =>
+      `${percentage}% 使用済み（上限 ${limit}）`,
     observableThisRound: "今ラウンドの観測対象",
     sourceCount: (count) => `ソース ${count} 件`,
     sourceCountWithLabel: (label, count) => `${label}: ソース ${count} 件`,
@@ -1356,8 +1360,8 @@ export const jaJP: Translations = {
     computerViewEmpty: "サブエージェントがありません",
     computerViewEmptyDesc:
       "タスクがサブエージェントにディスパッチされると、ここでサブエージェントの独立したコンピュータ操作記録を確認できます。",
-    visibilityPanelTitle: "可視性",
-    visibilityPanelEmpty: "このターンに可視性の判断はありません",
+    visibilityPanelTitle: "能力判断",
+    visibilityPanelEmpty: "このターンに能力判断はありません",
     visibilityStep: "判断",
   },
 
@@ -3519,8 +3523,7 @@ export const jaJP: Translations = {
       paletteRoseDescription:
         "上品でロマンチックなピンク。落ち着きがあり上質。",
       paletteSteel: "インディゴ",
-      paletteSteelDescription:
-        "落ち着いたインディゴ。理性的で目に優しい。",
+      paletteSteelDescription: "落ち着いたインディゴ。理性的で目に優しい。",
       paletteEmerald: "翡翠",
       paletteEmeraldDescription: "青みがかった翡翠色。控えめで澄んだ印象。",
       paletteViolet: "モーヴ",
@@ -3528,8 +3531,7 @@ export const jaJP: Translations = {
       paletteAmber: "テラコッタ",
       paletteAmberDescription: "温かみのあるテラコッタ。素朴で質感豊か。",
       paletteTeal: "スレートティール",
-      paletteTealDescription:
-        "低彩度のスレートティール。スモーキーで静か。",
+      paletteTealDescription: "低彩度のスレートティール。スモーキーで静か。",
       paletteApricot: "アプリコット",
       paletteApricotDescription: "柔らかな杏オレンジ。明るく穏やか。",
       paletteMint: "ミント",
@@ -3552,7 +3554,8 @@ export const jaJP: Translations = {
       chatFontSizeMedium: "中（デフォルト）",
       chatFontSizeLarge: "大",
       conversationDetailLevelTitle: "会話の詳細レベル",
-      conversationDetailLevelDescription: "会話中に表示する中間活動の量を制御します。",
+      conversationDetailLevelDescription:
+        "会話中に表示する中間活動の量を制御します。",
       conversationDetailLevelLow: "低 - 最小表示",
       conversationDetailLevelMedium: "中 - バランス",
       conversationDetailLevelHigh: "高 - 詳細",
@@ -5997,6 +6000,8 @@ export const jaJP: Translations = {
     slowResponse: "続けています。少し時間がかかっています",
     reconnecting: "接続が切れました。戻っています",
     processing: "処理中",
+    ttftLabel: "初回トークン",
+    ttftHint: "リクエストから最初のトークン到着までの遅延",
   },
 
   // Evolution Dashboard
@@ -7784,7 +7789,8 @@ export const jaJP: Translations = {
     activeTag: "現在",
     scopeNote:
       "変更はローカル設定に保存され、以降のすべての新しいタスクに適用されます。実行中のタスクには影響しません。",
-    restartHint: "「フルアクセス」は恒久承認を許可します。信頼できる環境でのみ使用してください。",
+    restartHint:
+      "「フルアクセス」は恒久承認を許可します。信頼できる環境でのみ使用してください。",
     envTitle: "実行環境",
     envDesc: "コマンドの実行場所と、書き込めるファイル範囲。",
     permissionTitle: "権限レベル",
@@ -7796,30 +7802,37 @@ export const jaJP: Translations = {
     guardianToggleDesc:
       "high/critical 動作のみ対象。レビュー失敗時はルールエンジンの結論に自動フォールバックし、タスクをブロックしない。ターンあたり最大3回。",
     guardianModelLabel: "レビューモデル",
-    guardianModelHint: "空欄なら現在の会話モデルを使用（推奨）。専用レビューモデル（例: gpt-5.6-luna）も指定可。",
+    guardianModelHint:
+      "空欄なら現在の会話モデルを使用（推奨）。専用レビューモデル（例: gpt-5.6-luna）も指定可。",
     toastGuardianOn: "高リスク動作の独立レビューを有効化しました",
     toastGuardianOff: "高リスク動作の独立レビューを無効化しました",
-    toastEnvSwitched: (label: string) => `実行環境を「${label}」に切り替えました`,
-    toastPermissionSwitched: (label: string) => `権限レベルを「${label}」に切り替えました`,
+    toastEnvSwitched: (label: string) =>
+      `実行環境を「${label}」に切り替えました`,
+    toastPermissionSwitched: (label: string) =>
+      `権限レベルを「${label}」に切り替えました`,
     toastFailed: (msg: string) => `切り替え失敗: ${msg}`,
     env: {
       sandbox: {
         label: "サンドボックス",
-        description: "コマンドは隔離されたサンドボックスで実行され、ファイル書き込みはワークスペースに限定されます。",
+        description:
+          "コマンドは隔離されたサンドボックスで実行され、ファイル書き込みはワークスペースに限定されます。",
       },
       local: {
         label: "ローカル",
-        description: "コマンドはこのマシン上で直接実行され、ファイル書き込みに制限はありません（サンドボックス分離をバイパス）。",
+        description:
+          "コマンドはこのマシン上で直接実行され、ファイル書き込みに制限はありません（サンドボックス分離をバイパス）。",
       },
     },
     permission: {
       default: {
         label: "デフォルト",
-        description: "すべての書き込みとコマンドは事前に確認を求めます。最も安全です。",
+        description:
+          "すべての書き込みとコマンドは事前に確認を求めます。最も安全です。",
       },
       acceptEdits: {
         label: "編集を受け入れる",
-        description: "ファイルの変更は自動的に実行されますが、コマンド実行前には確認します。",
+        description:
+          "ファイルの変更は自動的に実行されますが、コマンド実行前には確認します。",
       },
       bypassPermissions: {
         label: "フルアクセス",
@@ -7827,26 +7840,34 @@ export const jaJP: Translations = {
       },
     },
     networkTitle: "ネットワークアクセス",
-    networkDesc: "サンドボックス内コマンドのネットワーク範囲：既定ではモデル推論エンドポイントのみ到達可能。「一般ドメイン」は開発ツールのドメインを追加で許可します。",
-    presetDomainsNote: "「一般ドメイン」で事前許可される開発ツールドメイン（読み取り専用）：",
-    toastNetworkSwitched: (label: string) => `ネットワークアクセスを「${label}」に切り替えました`,
+    networkDesc:
+      "サンドボックス内コマンドのネットワーク範囲：既定ではモデル推論エンドポイントのみ到達可能。「一般ドメイン」は開発ツールのドメインを追加で許可します。",
+    presetDomainsNote:
+      "「一般ドメイン」で事前許可される開発ツールドメイン（読み取り専用）：",
+    toastNetworkSwitched: (label: string) =>
+      `ネットワークアクセスを「${label}」に切り替えました`,
     network: {
       deny: {
         label: "禁止",
-        description: "モデル推論エンドポイントのみ到達可能。その他のリクエストはすべて遮断されます（最も安全）。",
+        description:
+          "モデル推論エンドポイントのみ到達可能。その他のリクエストはすべて遮断されます（最も安全）。",
       },
       common: {
         label: "一般ドメイン",
-        description: "npm/pip/github/apt などの開発ツール用ドメインを事前許可。それ以外は引き続き遮断（推奨）。",
+        description:
+          "npm/pip/github/apt などの開発ツール用ドメインを事前許可。それ以外は引き続き遮断（推奨）。",
       },
       full: {
         label: "許可",
-        description: "サンドボックス内コマンドが任意のネットワークにアクセスできます（pnpm install、git clone など）。",
+        description:
+          "サンドボックス内コマンドが任意のネットワークにアクセスできます（pnpm install、git clone など）。",
       },
     },
     replyStyleTitle: "返信スタイル",
-    replyStyleDesc: "アシスタントの返信ペルソナ（性格/価値観/口調/エスカレーション方針）を選択します。話し方にのみ影響し、能力には影響しません。",
-    toastReplyStyleSwitched: (label: string) => `返信スタイルを「${label}」に切り替えました`,
+    replyStyleDesc:
+      "アシスタントの返信ペルソナ（性格/価値観/口調/エスカレーション方針）を選択します。話し方にのみ影響し、能力には影響しません。",
+    toastReplyStyleSwitched: (label: string) =>
+      `返信スタイルを「${label}」に切り替えました`,
     replyStyle: {
       default: {
         label: "デフォルト",

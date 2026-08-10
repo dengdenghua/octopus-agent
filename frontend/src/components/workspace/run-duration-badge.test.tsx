@@ -31,6 +31,52 @@ describe("RunDurationBadge", () => {
     expect(screen.getByTestId("run-duration-badge")).toHaveTextContent("137s");
   });
 
+  test("shows the time-to-first-token once the first token arrived", () => {
+    renderWithProviders(
+      <RunDurationBadge
+        isLoading
+        vitals={vitals({ ttftMs: 1240 })}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByTestId("ttft-badge")).toHaveTextContent("首字 1.2s");
+  });
+
+  test("hides the ttft badge while still waiting for the first token", () => {
+    renderWithProviders(
+      <RunDurationBadge isLoading vitals={vitals({ ttftMs: null })} />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.queryByTestId("ttft-badge"),
+    ).not.toBeInTheDocument();
+  });
+
+  test("shows the time-to-first-token once the first token arrived", () => {
+    renderWithProviders(
+      <RunDurationBadge
+        isLoading
+        vitals={vitals({ ttftMs: 1240 })}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByTestId("ttft-badge")).toHaveTextContent("首字 1.2s");
+  });
+
+  test("hides the ttft badge while still waiting for the first token", () => {
+    renderWithProviders(
+      <RunDurationBadge isLoading vitals={vitals({ ttftMs: null })} />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.queryByTestId("ttft-badge"),
+    ).not.toBeInTheDocument();
+  });
+
   test("does not render after the run settles", () => {
     renderWithProviders(<RunDurationBadge isLoading={false} vitals={vitals()} />);
     expect(screen.queryByTestId("run-duration-badge")).not.toBeInTheDocument();
