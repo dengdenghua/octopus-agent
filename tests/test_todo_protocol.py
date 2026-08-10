@@ -1,5 +1,6 @@
 from runtime.core.cerebrum.react_guards import _todo_protocol_completion_guard
 from runtime.core.cerebrum.react_parsing import _latest_todo_items
+from runtime.core.cerebrum.react_todo_protocol_guards import _has_tool_work_after_latest_todo
 from runtime.core.cerebrum.react_types import ReActStep
 from runtime.core.cerebrum.todo_protocol import (
     context_mode,
@@ -316,6 +317,95 @@ def test_guard_still_rejects_completed_todos_with_post_todo_toolwork() -> None:
     msg = _todo_protocol_completion_guard(steps, "done.", goal="修改这个函数的实现")
     assert msg is not None
     assert "used tools after the latest todo_write" in msg
+
+
+# ══════════════════════════════════════════════════════════════════
+# Fix — FAILED tool executions must not count as "work after the
+# latest todo_write".  An environmental failure (e.g. a sandboxed
+# exec_shell that cannot run) that the model retries a few times
+# re-triggered the stale-checklist veto on EVERY retry and spun an
+# already-complete turn into a three-strike guard impasse even though
+# nothing ever changed.  A failed attempt produces no scope-changing
+# work a checklist update would need to cover, so it is exempt; a
+# mixed step with ANY successful receipt stays real work.
+# ══════════════════════════════════════════════════════════════════
+
+_EXEC_FAIL_EXC = (
+    "(工具执行异常) PermissionError: [Errno 1] Operation not permitted "
+    "(sandbox-exec: sandbox_apply)"
+)
+_EXEC_FAIL_TOOL = "(工具失败) status=command_failed error=non_zero_exit\nexit_code: 71"
+
+
+def test_failed_exec_after_completed_todos_does_not_veto() -> None:
+    # The exact spin scenario: checklist completed, then a verification
+    # exec_shell fails environmentally and is retried.  Each failed retry
+    # previously re-triggered "used tools after the latest todo_write"
+    # and three-struck the turn.  Now the failures are exempt.
+    steps = [
+        _gstep(1, action=_TODO_DONE, action_results=[{"ok": True}]),
+        _gstep(2, action='exec_shell({"cmd": "make test"})', observation=_EXEC_FAIL_EXC),
+        _gstep(3, action='exec_shell({"cmd": "make test"})', observation=_EXEC_FAIL_TOOL),
+    ]
+    msg = _todo_protocol_completion_guard(
+        steps, "审计完成，动态验证被环境拦截。", goal="修改这个函数的实现"
+    )
+    assert msg is None
+
+
+def test_failed_parallel_step_does_not_veto() -> None:
+    # The parallel dispatch writes per-action receipts; all-ok-False means
+    # the step produced no successful work at all.
+    steps = [
+        _gstep(1, action=_TODO_DONE, action_results=[{"ok": True}]),
+        _gstep(
+            2,
+            action='run_tests({"cmd": "make test"})',
+            action_results=[{"ok": False}, {"ok": False}],
+        ),
+    ]
+    msg = _todo_protocol_completion_guard(steps, "测试执行被沙箱拦截。", goal="修改这个函数的实现")
+    assert msg is None
+
+
+def test_mixed_parallel_step_with_any_success_still_vetoes() -> None:
+    # A step where ONE call succeeded is real scope-changing work even if
+    # a sibling call in the same round failed — the stale-checklist
+    # contract still applies.
+    steps = [
+        _gstep(1, action=_TODO_DONE, action_results=[{"ok": True}]),
+        _gstep(
+            2,
+            action=_EDIT_OK,
+            observation="patched",
+            action_results=[{"ok": True}, {"ok": False}],
+        ),
+    ]
+    msg = _todo_protocol_completion_guard(steps, "done.", goal="修改这个函数的实现")
+    assert msg is not None
+    assert "used tools after the latest todo_write" in msg
+
+
+def test_has_tool_work_failed_attempts_are_exempt() -> None:
+    # Direct unit check of the spin mechanism: a failed exec_shell after
+    # the latest todo_write is not "outstanding work".
+    failed = [
+        _gstep(1, action=_TODO_DONE, action_results=[{"ok": True}]),
+        _gstep(2, action='exec_shell({"cmd": "make test"})', observation=_EXEC_FAIL_EXC),
+    ]
+    assert not _has_tool_work_after_latest_todo(failed)
+
+    # A genuinely successful non-read-only tool after the checklist still
+    # counts — the exemption must not swallow real post-todo work.
+    succeeded = [
+        _gstep(1, action=_TODO_DONE, action_results=[{"ok": True}]),
+        _gstep(
+            2,
+            action='exec_shell({"cmd": "echo x"})',
+            observation="(real tool execution succeeded) exec_shell\nx",
+        ),
+    ]
+    assert _has_tool_work_after_latest_todo(succeeded)
 
 
 # ══════════════════════════════════════════════════════════════════

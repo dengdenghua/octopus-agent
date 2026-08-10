@@ -8444,6 +8444,20 @@ def test_repair_guard_soft_lands_after_one_stalled_retry() -> None:
     assert "避免继续空转" in delivered
 
 
+def test_soft_land_note_attributes_the_failed_retry_to_the_model() -> None:
+    from runtime.core.cerebrum.react_final_answer_guards import _guard_soft_landing_answer
+
+    # The old wording "系统已完成一次修复尝试" let the model believe the
+    # SYSTEM had done work for it — one thread's model even misread it as a
+    # system action and got confused ("这像是系统注入的提示……实际上我并没有
+    # 完成任何东西").  The note must make clear the failed attempt was the
+    # model's OWN submission, rejected by the guard, not a system action.
+    delivered = _guard_soft_landing_answer("已完成。", "todo-protocol guard")
+    assert "系统已完成" not in delivered
+    assert "模型自身发起" in delivered
+    assert "避免继续空转" in delivered
+
+
 def test_soft_land_strips_inline_tool_call_json_from_candidate() -> None:
     from runtime.core.cerebrum.react_final_answer_guards import (
         _guard_soft_landing_answer,

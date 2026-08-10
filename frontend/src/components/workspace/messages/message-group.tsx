@@ -1530,10 +1530,16 @@ export function MessageGroup({
                 }
               >
                 <CollapsibleContent
-                  className="pb-1 pl-5 text-xs leading-5 text-muted-foreground/70 data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
+                  className="overflow-hidden data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
                   data-testid="thinking-row-content"
                 >
-                  {processEventDetail}
+                  <div className="ml-1 border-l-2 border-border/50 pl-3 py-1 text-xs leading-6 text-muted-foreground/85">
+                    <MarkdownContent
+                      content={processEventDetail}
+                      isLoading={false}
+                      rehypePlugins={rehypePlugins}
+                    />
+                  </div>
                 </CollapsibleContent>
               </Collapsible>
             )}

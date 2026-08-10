@@ -39,6 +39,15 @@ _READ_ONLY_EVIDENCE_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# Observations the dispatcher renders when a tool call did NOT succeed
+# (see ``_react_execution_dispatch``).  Prefix-matched on the step's
+# observation to detect executions that produced no scope-changing work.
+_FAILURE_OBSERVATION_PREFIXES: tuple[str, ...] = (
+    "(工具失败)",
+    "(工具执行异常)",
+    "(tool failed)",
+)
+
 _TERMINAL_DELIVERY_TODO_RE = re.compile(
     r"(?:"
     r"(?:交付|提交|呈现|输出|给出|发送|汇报).{0,12}(?:报告|结果|结论|答案|总结)|"
@@ -68,14 +77,38 @@ def _is_read_only_evidence_tool(name: str) -> bool:
     )
 
 
+def _step_is_failed_execution(step: ReActStep) -> bool:
+    """Whether a step's tool executions all failed (no success evidence).
+
+    The parallel dispatch writes per-action receipts (``ok: bool``); the
+    single-action path renders failures as ``(工具失败)`` / ``(工具执行异常)`` /
+    ``(tool failed)`` prefixed observations (see ``_react_execution_dispatch``).
+    Any successful receipt wins — a step where one call succeeded and another
+    failed IS scope-changing work.
+    """
+    if step.action_results:
+        return not any(result.get("ok") is True for result in step.action_results)
+    obs = (step.observation or "").strip()
+    return obs.startswith(_FAILURE_OBSERVATION_PREFIXES)
+
+
 def _has_tool_work_after_latest_todo(steps: list[ReActStep]) -> bool:
     """Whether real (non-read-only) work happened after the latest checklist update.
 
     Read-only tools (read_file, web_search, list_cwd, …) are evidence-gathering
     and must not trap an already-complete task into a todo_write loop.  Any
-    other tool that actually ran and returned an observation (echo, exec_shell,
-    write skills, …) is treated as outstanding work so the checklist stays
-    accurate before the turn reports completion.
+    other tool that actually ran successfully and returned an observation
+    (echo, exec_shell, write skills, …) is treated as outstanding work so the
+    checklist stays accurate before the turn reports completion.
+
+    FAILED executions are exempt: a step whose every tool call failed produced
+    no scope-changing work that a checklist update would need to cover.  Without
+    this carve-out, an environmental failure (e.g. a sandboxed exec_shell that
+    cannot run) that the model retries a few times re-triggers this veto on
+    every retry and spins an already-complete turn into a three-strike guard
+    impasse even though nothing ever changed.  Fabrication ("I'm done" right
+    after a failed verification) is caught by the verification guards, not
+    this stale-checklist veto.
     """
 
     for step in reversed(steps):
@@ -85,6 +118,10 @@ def _has_tool_work_after_latest_todo(steps: list[ReActStep]) -> bool:
         name, _args = parsed
         if name == "todo_write":
             return False
+        if _step_is_failed_execution(step):
+            # Failed attempts change nothing about the task scope.  Skip
+            # instead of treating them as outstanding work.
+            continue
         if _is_code_write_step(step):
             return True
         # A non-todo_write, non-code-write tool that actually ran and produced
@@ -276,5 +313,6 @@ __all__ = [
     "_has_tool_work_after_latest_todo",
     "_looks_like_completion_phrase",
     "_is_terminal_delivery_todo",
+    "_step_is_failed_execution",
     "_todo_protocol_completion_guard",
 ]

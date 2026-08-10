@@ -304,12 +304,18 @@ def _guard_rejection_outcome(state: dict, label: str, steps: list) -> str:
 
 
 def _guard_soft_landing_answer(candidate: str, label: str) -> str:
-    """Deliver useful work after one failed quality-contract repair."""
+    """Deliver useful work after one failed quality-contract repair.
+
+    The note is phrased so the model does NOT misread it as a system action:
+    the repair retry that failed was the model's OWN earlier attempt, rejected
+    by the guard — not something the system went and did.
+    """
     body = _strip_inline_tool_calls(candidate or "")
     note = (
         "\n\n---\n"
-        f"质量提示：「{label}」仍缺少结构化执行证据。"
-        "系统已完成一次修复尝试；为避免继续空转，现交付已有结果。"
+        f"质量提示：「{label}」未通过证据门禁。"
+        "此前给出的收尾答案未满足要求（该次提交是模型自身发起的，未被系统接受）；"
+        "为避免继续空转，现将已有结果交付。"
     )
     return f"{body}{note}" if body else note.lstrip()
 
