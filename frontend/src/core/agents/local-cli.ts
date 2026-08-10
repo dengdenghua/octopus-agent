@@ -38,6 +38,7 @@ const PARTNER_LABEL: Record<string, string> = {
   "qoder-cli": "Qoder CLI",
   "kimi-cli": "Kimi CLI",
   "codebuddy-cli": "CodeBuddy CLI",
+  "opencode-cli": "OpenCode CLI",
   openclaw: "OpenClaw",
   hermes: "Hermes Agent",
 };
@@ -49,6 +50,7 @@ const PARTNER_ICON: Record<string, string> = {
   "qoder-cli": "🟧",
   "kimi-cli": "🌙",
   "codebuddy-cli": "🟢",
+  "opencode-cli": "🟩",
   openclaw: "🦞",
   hermes: "🪽",
 };
@@ -59,6 +61,8 @@ const DRIVABLE_PARTNERS = new Set([
   "trae-cli",
   "qoder-cli",
   "codebuddy-cli",
+  "opencode-cli",
+  "hermes",
 ]);
 
 /** Turn a detected CLI into an `Agent` so it shows up in the team pickers

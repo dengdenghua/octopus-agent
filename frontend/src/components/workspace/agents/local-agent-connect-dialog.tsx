@@ -46,7 +46,9 @@ const PARTNER_ICONS: Record<string, typeof BotIcon> = {
   "claude-code": TerminalSquareIcon,
   "codex-cli": Code2Icon,
   "codebuddy-cli": Code2Icon,
+  "opencode-cli": Code2Icon,
   openclaw: BotIcon,
+  hermes: BotIcon,
 };
 const EMPTY_PARTNERS: LocalAgentPartner[] = [];
 const PARTNER_ALIAS_PATTERN = /^[A-Za-z0-9\u4e00-\u9fa5\u3000-\u303f ._-]*$/;
@@ -370,7 +372,11 @@ export function LocalAgentConnectDialog({
                   </Button>
                 </div>
               ) : null}
-              {partners.map((partner) => {
+              {partners
+                .filter(
+                  (partner) => partner.detected || partner.registered,
+                )
+                .map((partner) => {
                 const Icon = PARTNER_ICONS[partner.id] ?? BotIcon;
                 const avatarUrl =
                   localPartnerLogoUrl(partner.id, partner.avatar_url) ??

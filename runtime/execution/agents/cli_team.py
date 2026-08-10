@@ -71,6 +71,8 @@ _KNOWN_PARTNERS: dict[str, list[str]] = {
     "trae-cli": ["trae-cli", "traecli", "trae-agent", "ta", "trae", "trae.cmd", "trae.exe"],
     "qoder-cli": ["qodercli", "qoder", "qoder-cli", "qodercli.cmd", "qodercli.exe"],
     "codebuddy-cli": ["codebuddy", "codebuddy-code", "cbc", "codebuddy.cmd", "codebuddy.exe"],
+    "opencode-cli": ["opencode", "opencode.cmd", "opencode.exe"],
+    "hermes": ["hermes", "hermes-agent", "hermes-cli", "hermes.cmd", "hermes.exe"],
 }
 
 
