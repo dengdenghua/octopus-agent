@@ -393,7 +393,7 @@ function LiveThinkingWindow({ text }: { text: string }) {
     <div
       ref={ref}
       onScroll={handleScroll}
-      className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-r-md border border-l-2 border-border/40 border-l-foreground/15 bg-muted/20 px-2.5 py-1.5 pl-4 text-xs leading-5 text-muted-foreground/80"
+      className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 text-xs leading-6 text-muted-foreground/85"
       data-testid="live-thinking-stream"
     >
       {displayText}
@@ -428,7 +428,7 @@ function LiveExecWindow({ text }: { text: string }) {
     <div
       ref={ref}
       onScroll={handleScroll}
-      className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-r-md border border-l-2 border-border/40 border-l-foreground/15 bg-muted/20 px-2.5 py-1.5 pl-4 font-mono text-xs leading-5 text-muted-foreground/80"
+      className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 font-mono text-xs leading-6 text-muted-foreground/85"
       data-testid="live-exec-stream"
     >
       {displayText}
