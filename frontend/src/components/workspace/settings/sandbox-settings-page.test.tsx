@@ -186,9 +186,10 @@ describe("SandboxSettingsPage", () => {
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("data-state", "checked");
 
-    // Enabling reveals the review-model input, defaulting to gpt-5.6-luna.
+    // Enabling reveals the review-model input, empty by default
+    // (empty = follow the conversation's own model).
     const modelInput = screen.getByLabelText(/Review model/);
-    expect(modelInput).toHaveValue("gpt-5.6-luna");
+    expect(modelInput).toHaveValue("");
 
     // Persisted to local settings.
     const saved = getLocalSettings();
@@ -198,6 +199,9 @@ describe("SandboxSettingsPage", () => {
     expect(getLocalSettings().context.guardian_review_model).toBe(
       "agnes-2.5-flash",
     );
+    // Clearing the input resets to "follow conversation model".
+    fireEvent.change(modelInput, { target: { value: "" } });
+    expect(getLocalSettings().context.guardian_review_model).toBeUndefined();
 
     // Toggling off hides the model input and clears the flag.
     fireEvent.click(toggle);

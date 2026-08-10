@@ -7796,7 +7796,7 @@ export const jaJP: Translations = {
     guardianToggleDesc:
       "high/critical 動作のみ対象。レビュー失敗時はルールエンジンの結論に自動フォールバックし、タスクをブロックしない。ターンあたり最大3回。",
     guardianModelLabel: "レビューモデル",
-    guardianModelHint: "応答の速いモデル（例: gpt-5.6-luna）を推奨。空欄でデフォルト。",
+    guardianModelHint: "空欄なら現在の会話モデルを使用（推奨）。専用レビューモデル（例: gpt-5.6-luna）も指定可。",
     toastGuardianOn: "高リスク動作の独立レビューを有効化しました",
     toastGuardianOff: "高リスク動作の独立レビューを無効化しました",
     toastEnvSwitched: (label: string) => `実行環境を「${label}」に切り替えました`,

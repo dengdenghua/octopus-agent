@@ -68,9 +68,14 @@ class GuardianReviewerConfig:
     enabled: bool = False
     per_turn_limit: int = 3
     timeout_s: float = 15.0
-    # Separate model for the review (independent of the agent's planner
-    # model). None → the router's default model.
+    # Review model. None → the conversation's own model (default_model
+    # below) — the user's chosen model is always available to them; an
+    # explicit override here switches to a dedicated reviewer.
     guardian_model: str | None = None
+    # Fallback when guardian_model is unset: the conversation's effective
+    # model. Guarantees the reviewer never invents a model the user may
+    # not have installed.
+    default_model: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,7 +146,14 @@ class GuardianReviewer:
                     Message(role="system", content=_GUARDIAN_SYSTEM_PROMPT),
                     Message(role="user", content=body),
                 ],
-                model=self._config.guardian_model or "auto",
+                # Explicit review model if configured, else the
+                # conversation's own model (never invent a model the user
+                # may not have), else the router default.
+                model=(
+                    self._config.guardian_model
+                    or self._config.default_model
+                    or "auto"
+                ),
                 enable_thinking=False,
                 max_tokens=600,
             )

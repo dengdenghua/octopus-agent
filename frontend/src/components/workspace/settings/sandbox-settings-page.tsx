@@ -81,11 +81,12 @@ export default function SandboxSettingsPage() {
   const replyStyle =
     typeof context.reply_style === "string" ? context.reply_style : "default";
   const guardianEnabled = context.guardian_review_enabled === true;
+  // Empty = follow the conversation's own model (the user's chosen model
+  // is always available); only a non-empty override switches reviewer.
   const guardianModel =
-    typeof context.guardian_review_model === "string" &&
-    context.guardian_review_model.trim()
-      ? context.guardian_review_model.trim()
-      : "gpt-5.6-luna";
+    typeof context.guardian_review_model === "string"
+      ? context.guardian_review_model
+      : "";
 
   const applyEnvironment = useCallback(
     (next: ExecutionEnvironment) => {
@@ -301,7 +302,7 @@ export default function SandboxSettingsPage() {
                     guardian_review_model: next || undefined,
                   } as Partial<typeof settings.context>);
                 }}
-                placeholder="gpt-5.6-luna"
+                placeholder="留空使用对话模型"
                 className="mt-1 w-full max-w-xs rounded-md border border-border-default bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary/60"
               />
               <p className="mt-1 text-xs text-muted-foreground">

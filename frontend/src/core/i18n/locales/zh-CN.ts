@@ -7402,7 +7402,7 @@ export const zhCN: Translations = {
       "仅对 high/critical 动作触发;评审失败自动降级为规则引擎结论,不阻塞任务;每轮最多评审 3 次。",
     guardianModelLabel: "评审模型",
     guardianModelHint:
-      "建议使用响应快的模型(如 gpt-5.6-luna)。留空则使用默认模型。",
+      "留空则使用当前对话模型(推荐);可指定独立评审模型,如 gpt-5.6-luna。",
     toastGuardianOn: "高危动作独立评审已开启",
     toastGuardianOff: "高危动作独立评审已关闭",
     toastEnvSwitched: (label: string) => `执行环境已切换为「${label}」`,

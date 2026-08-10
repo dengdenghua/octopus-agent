@@ -7809,7 +7809,7 @@ Strategy:
     guardianToggleDesc:
       "Runs only for high/critical actions; failures degrade to the rule engine conclusion without blocking; max 3 reviews per turn.",
     guardianModelLabel: "Review model",
-    guardianModelHint: "Use a fast model (e.g. gpt-5.6-luna). Leave empty for the default.",
+    guardianModelHint: "Leave empty to use the conversation\u2019s own model (recommended); or pick a dedicated reviewer, e.g. gpt-5.6-luna.",
     toastGuardianOn: "High-risk action review enabled",
     toastGuardianOff: "High-risk action review disabled",
     toastEnvSwitched: (label: string) => `Execution environment switched to “${label}”`,

@@ -169,6 +169,10 @@ def _phase_6d_dispatch_and_observe(
             GuardianReviewerConfig,
         )
 
+        # Default the review model to the CONVERSATION's own model — the
+        # user's chosen model is always available to them; only an explicit
+        # override (guardian_review_model) switches to a dedicated reviewer.
+        _guardian_model = intent.user_context.get("guardian_review_model")
         _guardian_reviewer = GuardianReviewer(
             router,
             GuardianReviewerConfig(
@@ -179,7 +183,12 @@ def _phase_6d_dispatch_and_observe(
                 timeout_s=float(
                     intent.user_context.get("guardian_review_timeout_s", 15.0)
                 ),
-                guardian_model=intent.user_context.get("guardian_review_model"),
+                guardian_model=(
+                    str(_guardian_model).strip()
+                    if isinstance(_guardian_model, str) and _guardian_model.strip()
+                    else None
+                ),
+                default_model=effective_model,
             ),
         )
     output_chunk_sink = state.output_chunk_sink

@@ -329,3 +329,61 @@ def test_latest_human_intent_empty_fallback() -> None:
 
     assert _latest_human_intent([_Msg("ai", "only ai")]) == ""
     assert _latest_human_intent(None) == ""
+
+
+def test_guardian_defaults_to_conversation_model() -> None:
+    """No explicit review model → the reviewer uses the conversation's
+    own model (never invents a model the user may not have)."""
+
+    class _RecordingRouter:
+        def __init__(self) -> None:
+            self.last_model: str | None = None
+
+        def call(self, request: Any) -> Any:
+            self.last_model = request.model
+            return type(
+                "_R",
+                (),
+                {"text": '{"outcome": "deny", "risk": "high", "reason": "no"}'},
+            )()
+
+    router = _RecordingRouter()
+    reviewer = GuardianReviewer(
+        router,
+        GuardianReviewerConfig(
+            enabled=True,
+            default_model="agnes-2.5-flash",
+        ),
+    )
+    reviewer.begin_turn("th-m")
+    verdict = reviewer.review(
+        thread_id="th-m",
+        tool_name="exec_shell",
+        args_preview="rm -rf /",
+        user_intent="",
+        rule_engine_risk="high",
+        rule_engine_categories=("shell_execution",),
+    )
+    assert verdict is not None
+    assert router.last_model == "agnes-2.5-flash"
+
+    # Explicit guardian_model wins over default_model.
+    router2 = _RecordingRouter()
+    reviewer2 = GuardianReviewer(
+        router2,
+        GuardianReviewerConfig(
+            enabled=True,
+            guardian_model="gpt-5.6-luna",
+            default_model="agnes-2.5-flash",
+        ),
+    )
+    reviewer2.begin_turn("th-m2")
+    reviewer2.review(
+        thread_id="th-m2",
+        tool_name="exec_shell",
+        args_preview="",
+        user_intent="",
+        rule_engine_risk="high",
+        rule_engine_categories=("shell_execution",),
+    )
+    assert router2.last_model == "gpt-5.6-luna"

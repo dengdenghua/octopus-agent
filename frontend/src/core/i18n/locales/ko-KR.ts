@@ -7687,7 +7687,7 @@ export const koKR: Translations = {
     guardianToggleDesc:
       "high/critical 작업에만 적용. 검토 실패 시 규칙 엔진 결론으로 자동 폴백, 작업을 차단하지 않음. 턴당 최대 3회.",
     guardianModelLabel: "검토 모델",
-    guardianModelHint: "응답이 빠른 모델(예: gpt-5.6-luna) 권장. 비우면 기본 모델.",
+    guardianModelHint: "비우면 현재 대화 모델 사용(권장). 전용 검토 모델(예: gpt-5.6-luna) 지정 가능.",
     toastGuardianOn: "고위험 작업 독립 검토가 켜졌습니다",
     toastGuardianOff: "고위험 작업 독립 검토가 꺼졌습니다",
     toastEnvSwitched: (label: string) => `실행 환경이 '${label}'(으)로 전환되었습니다`,
