@@ -393,7 +393,7 @@ function LiveThinkingWindow({ text }: { text: string }) {
     <div
       ref={ref}
       onScroll={handleScroll}
-      className="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md border border-border/50 bg-muted/25 px-2.5 py-1.5 pl-4 text-xs leading-5 text-muted-foreground/80"
+      className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-r-md border border-l-2 border-border/40 border-l-foreground/15 bg-muted/20 px-2.5 py-1.5 pl-4 text-xs leading-5 text-muted-foreground/80"
       data-testid="live-thinking-stream"
     >
       {displayText}
@@ -428,7 +428,7 @@ function LiveExecWindow({ text }: { text: string }) {
     <div
       ref={ref}
       onScroll={handleScroll}
-      className="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md border border-border/50 bg-muted/25 px-2.5 py-1.5 pl-4 font-mono text-xs leading-5 text-muted-foreground/80"
+      className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded-r-md border border-l-2 border-border/40 border-l-foreground/15 bg-muted/20 px-2.5 py-1.5 pl-4 font-mono text-xs leading-5 text-muted-foreground/80"
       data-testid="live-exec-stream"
     >
       {displayText}
@@ -1493,12 +1493,31 @@ export function MessageGroup({
           {/* Live thinking window: while the latest step is still
               streaming, show its full text typewriter-style in a fixed-
               height window (auto-anchored to the newest text). Once the
-              stream settles, this disappears and the row folds back to
-              its summary — "fold only after the stream finishes". */}
-          {liveThinkingStreamActive && (
-            <LiveThinkingWindow text={liveThinkingText} />
+              stream settles the window folds away (150ms height collapse)
+              and the row returns to its summary — "fold only after the
+              stream finishes", with a transition instead of a hard cut.
+              The Collapsible stays mounted so the close animation plays;
+              only open toggles with the stream state. */}
+          {isThinking && (
+            <Collapsible open={liveThinkingStreamActive}>
+              <CollapsibleContent
+                className="overflow-hidden data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
+                data-testid="live-thinking-window"
+              >
+                <LiveThinkingWindow text={liveThinkingText} />
+              </CollapsibleContent>
+            </Collapsible>
           )}
-          {liveExecStreamActive && <LiveExecWindow text={liveExecOutput} />}
+          {item.type === "toolCall" && (
+            <Collapsible open={liveExecStreamActive}>
+              <CollapsibleContent
+                className="overflow-hidden data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
+                data-testid="live-exec-window"
+              >
+                <LiveExecWindow text={liveExecOutput} />
+              </CollapsibleContent>
+            </Collapsible>
+          )}
           {isThinking &&
             !isOutwardThinking &&
             processEventDetail &&
