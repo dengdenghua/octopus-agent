@@ -78,7 +78,10 @@ export function SpritePet({
   const displayHeight = frameHeight * scale;
   const backgroundWidth = singleFrame ? displayWidth : frameWidth * frameCount * scale;
   const backgroundHeight = singleFrame ? displayHeight : frameHeight * rowCount * scale;
-  const motion = singleFrame ? Math.sin(frame * 0.45) * 1.5 : 0;
+  // singleFrame（静态单帧）时禁用浮动/旋转：frame 循环仍由 rAF 驱动，
+  // 若保留 motion，不同浏览器 rAF 时序不同会让宠物上下浮动 ±1.5px，
+  // 出现"跨浏览器/跨时刻高度差几像素"的观感。
+  const motion = singleFrame ? 0 : Math.sin(frame * 0.45) * 1.5;
 
   const style = useMemo(
     () => ({
