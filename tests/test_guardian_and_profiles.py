@@ -281,3 +281,51 @@ def test_permission_profiles_unknown_falls_back_to_existing(tmp_path: Path) -> N
     policy = load_policy(p)
     assert len(policy.rules) == 1
     assert policy.rules[0].tool == "read_file"
+
+
+# ── phase6d wiring helpers ───────────────────────────────────
+
+
+def test_latest_human_intent_extracts_text() -> None:
+    from runtime.core.cerebrum._react_execution_phase6d import _latest_human_intent
+
+    class _Msg:
+        def __init__(self, type_: str, content: Any) -> None:
+            self.type = type_
+            self.content = content
+
+    msgs = [
+        _Msg("ai", ""),
+        _Msg("human", "先帮我审计一下项目"),
+        _Msg("ai", "开始"),
+    ]
+    assert _latest_human_intent(msgs) == "先帮我审计一下项目"
+
+
+def test_latest_human_intent_handles_content_parts() -> None:
+    from runtime.core.cerebrum._react_execution_phase6d import _latest_human_intent
+
+    class _Msg:
+        def __init__(self, type_: str, content: Any) -> None:
+            self.type = type_
+            self.content = content
+
+    msgs = [
+        _Msg(
+            "human",
+            [{"type": "text", "text": "请检查这个"}, {"type": "image", "text": "ignored"}],
+        )
+    ]
+    assert _latest_human_intent(msgs) == "请检查这个"
+
+
+def test_latest_human_intent_empty_fallback() -> None:
+    from runtime.core.cerebrum._react_execution_phase6d import _latest_human_intent
+
+    class _Msg:
+        def __init__(self, type_: str, content: Any) -> None:
+            self.type = type_
+            self.content = content
+
+    assert _latest_human_intent([_Msg("ai", "only ai")]) == ""
+    assert _latest_human_intent(None) == ""

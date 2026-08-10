@@ -78,6 +78,30 @@ from runtime.safety.validation.prompt_injection import (
 _logger = logging.getLogger(__name__)
 
 
+def _latest_human_intent(messages: Any) -> str:
+    """Most recent human message text — the only trusted authorization
+    evidence for the guardian review (codex policy_template Evidence
+    Handling: user messages are trusted content; tool outputs are not)."""
+    try:
+        for message in reversed(list(messages or [])):
+            if getattr(message, "type", None) == "human":
+                content = getattr(message, "content", None)
+                if isinstance(content, str) and content.strip():
+                    return content.strip()[:1000]
+                if isinstance(content, list):
+                    parts = [
+                        part.get("text", "")
+                        for part in content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    ]
+                    text = " ".join(parts).strip()
+                    if text:
+                        return text[:1000]
+    except Exception:  # noqa: BLE001 — intent extraction is best-effort
+        pass
+    return ""
+
+
 def _phase_6d_dispatch_and_observe(
     state: _LoopState,
     *,
@@ -132,6 +156,32 @@ def _phase_6d_dispatch_and_observe(
     router = state.router
     thread_id = state.thread_id
     approval_provider = state.approval_provider
+    # Guardian independent review (opt-in): high/critical risk actions get
+    # a second opinion from an independent model before escalating to the
+    # user. Off by default; budget is per-thread (exhaustion = long-task
+    # exemption, no further reviews this turn); failures degrade to the
+    # rule engine's conclusion. Built once per phase — the router and
+    # user-context config are read here.
+    _guardian_reviewer = None
+    if intent.user_context.get("guardian_review_enabled", False):
+        from runtime.safety.approval.guardian_review import (
+            GuardianReviewer,
+            GuardianReviewerConfig,
+        )
+
+        _guardian_reviewer = GuardianReviewer(
+            router,
+            GuardianReviewerConfig(
+                enabled=True,
+                per_turn_limit=int(
+                    intent.user_context.get("guardian_review_per_turn_limit", 3)
+                ),
+                timeout_s=float(
+                    intent.user_context.get("guardian_review_timeout_s", 15.0)
+                ),
+                guardian_model=intent.user_context.get("guardian_review_model"),
+            ),
+        )
     output_chunk_sink = state.output_chunk_sink
     _metadata = state.metadata
     _effective_wp = state.effective_wp
@@ -378,6 +428,32 @@ def _phase_6d_dispatch_and_observe(
                         if _approval_action not in {"ask", "confirm", "deny"}:
                             _approval_action = "ask"
                         _approval_risk = _approval_risk.with_injection_taint()
+                    # Guardian independent review (opt-in, after the taint
+                    # gate so tainted actions still route to the human): a
+                    # guardian deny tightens ask/confirm/allow to deny; an
+                    # allow or a failure keeps the rule engine's action.
+                    _approval_deny_reason: str | None = None
+                    if _guardian_reviewer is not None:
+                        from runtime.safety.approval.guardian_review import (
+                            decide_with_guardian,
+                        )
+
+                        _guardian_user_intent = _latest_human_intent(messages)
+                        _guardian_action, _guardian_note = decide_with_guardian(
+                            rule_engine_action=_approval_action,
+                            rule_engine_risk=_approval_risk.level,
+                            rule_engine_categories=_approval_risk.categories,
+                            reviewer=_guardian_reviewer,
+                            thread_id=thread_id,
+                            tool_name=resolved_name,
+                            args_preview=(
+                                str(_input_preview)[:500] if _input_preview else ""
+                            ),
+                            user_intent=_guardian_user_intent,
+                        )
+                        if _guardian_action == "deny":
+                            _approval_action = "deny"
+                            _approval_deny_reason = _guardian_note
                     if (
                         _approval_action == "deny"
                         and not _auto_approve
@@ -390,7 +466,8 @@ def _phase_6d_dispatch_and_observe(
                             "iteration": i + 1,
                             "status": "rejected",
                             "output_preview": (
-                                f"Denied by approval risk policy "
+                                _approval_deny_reason
+                                or f"Denied by approval risk policy "
                                 f"(risk={_approval_risk.level}: {_approval_risk.reason})"
                             ),
                             "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
