@@ -4,7 +4,16 @@
 # as $1 — this is the correct stage for message validation (pre-commit
 # runs before the message is written, so $1 would be stale/empty).
 #
-# commitlint config and the @commitlint packages live at the repo root,
-# so pnpm exec resolves everything from this directory without any
-# NODE_PATH workaround.
-pnpm exec commitlint --edit "$1"
+# commitlint config and the @commitlint packages live at the repo root.
+# Invoke the installed binary directly: `pnpm exec` may decide to purge or
+# reinstall node_modules and prompt for confirmation, which makes an otherwise
+# valid commit fail in a non-interactive agent/CI shell.
+repo_root="$(git rev-parse --show-toplevel)"
+commitlint_bin="$repo_root/node_modules/.bin/commitlint"
+
+if [ ! -x "$commitlint_bin" ]; then
+  echo "commitlint is not installed. Run 'pnpm install' at the repository root, then retry the commit." >&2
+  exit 1
+fi
+
+exec "$commitlint_bin" --edit "$1"

@@ -300,12 +300,73 @@ def _react_completion_receipt(
     if terminated_reason != "final_answer":
         warnings.append(f"terminated:{terminated_reason}")
 
-    return build_completion_receipt(
+    receipt = build_completion_receipt(
         statuses,
         contract_warnings=warnings,
         artifact_count=artifact_count,
         output_present=bool(final_answer),
     ).to_dict()
+    failure = _latest_failed_tool_message(executed_beak_steps)
+    if run_status == "failed" and failure:
+        receipt["message"] = failure
+        receipt["code"] = "tool_execution_failed"
+    return receipt
+
+
+def _latest_failed_tool_message(steps: list[Any], *, limit: int = 900) -> str:
+    """Return the latest actionable tool failure for the terminal receipt.
+
+    ReAct can emit a perfectly readable final answer after a command fails.
+    The turn is still correctly marked failed, but without this detail the
+    realtime layer only receives ``terminated_reason=final_answer`` and the UI
+    has no choice but to show a generic retry banner.
+    """
+
+    for step in reversed(steps):
+        if _beak_step_effective_success(step):
+            continue
+        action = getattr(step, "action", None)
+        result = getattr(step, "result", None)
+        tool_name = str(
+            getattr(action, "name", "")
+            or getattr(action, "sucker_id", "")
+            or getattr(result, "name", "")
+            or "tool"
+        ).strip()
+        output = getattr(result, "output", None)
+        candidates: list[Any] = []
+        if isinstance(output, dict):
+            candidates.extend(
+                output.get(key)
+                for key in ("stderr", "output", "stdout", "message", "error")
+            )
+        else:
+            candidates.append(output)
+        candidates.extend(
+            (
+                getattr(result, "rendered", None),
+                getattr(result, "error_type", None),
+            )
+        )
+        detail = next(
+            (
+                str(value).strip()
+                for value in candidates
+                if isinstance(value, str) and value.strip()
+            ),
+            "",
+        )
+        if not detail:
+            continue
+        try:
+            from runtime.platform.observability.redactor import redact_text
+
+            detail = redact_text(detail)
+        except Exception:  # pragma: no cover - diagnostics must not mask failure
+            detail = "tool execution failed"
+        detail = " ".join(detail.split())
+        return f"{tool_name} failed: {detail}"[:limit]
+    return ""
 
 
 def _skill_available_in_executor(executor: Any, skill_name: str) -> bool:

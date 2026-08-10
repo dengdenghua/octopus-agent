@@ -4656,6 +4656,35 @@ def test_react_result_is_unsuccessful_when_a_tool_step_fails() -> None:
     assert result is not None
     assert result.success is False
     assert result.completion_receipt["ready"] is False
+    assert result.completion_receipt["code"] == "tool_execution_failed"
+    assert "exec_shell failed:" in result.completion_receipt["message"]
+    assert result.completion_receipt["message"] != "turn failed"
+
+
+def test_failed_tool_receipt_keeps_actionable_command_cause() -> None:
+    from runtime.core.cerebrum._react_execution_results import (
+        _latest_failed_tool_message,
+    )
+
+    step = SimpleNamespace(
+        action=SimpleNamespace(sucker_id="git_commit"),
+        result=SimpleNamespace(
+            status="failed",
+            output={
+                "error": "git_commit_failed",
+                "stderr": (
+                    "[ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY] "
+                    "Aborted removal of modules directory due to no TTY"
+                ),
+            },
+            error_type="non_zero_exit",
+        ),
+    )
+
+    message = _latest_failed_tool_message([step])
+
+    assert message.startswith("git_commit failed:")
+    assert "ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY" in message
 
 
 def test_execute_action_no_executor_returns_none() -> None:
