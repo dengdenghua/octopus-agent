@@ -163,6 +163,9 @@ def _chat(
         },
     )
     for attempt in range(2):
+        # nosec B310 — the URL is built by describe_image from a caller-
+        # supplied image_b64/data: URL or https URL only; data: scheme is
+        # intentional (inline base64 image to the vision endpoint).
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = json.loads(resp.read().decode("utf-8"))
         content = body["choices"][0]["message"]["content"] or ""
