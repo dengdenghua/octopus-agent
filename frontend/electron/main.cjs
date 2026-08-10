@@ -863,11 +863,38 @@ if (!app.requestSingleInstanceLock()) {
     watchDesktop();
 
     // Launch the Godot desktop pet sidecar (honest no-op when not resolvable).
+    // Respect the renderer's persisted "显示宠物" switch (octopus.pet.settings):
+    // wait for the first load, then read the flag and skip startup when the
+    // user has it turned off — otherwise the desktop window would pop up
+    // against their choice on every launch.
     if (process.env.OCTOPUS_PET_DISABLED !== "1") {
-      const res = petSidecar.startPet();
-      if (!res.ok && res.reason) {
-        console.warn("[octopus] pet sidecar not started:", res.reason);
-      }
+      const maybeStartPet = () => {
+        const res = petSidecar.startPet();
+        if (!res.ok && res.reason) {
+          console.warn("[octopus] pet sidecar not started:", res.reason);
+        }
+      };
+      // executeJavaScript 需要页面已完成首帧加载；在这里监听 did-finish-load
+      // 一次性事件，避免在导航完成前读取 localStorage 失败导致误启动。
+      mainWindow.webContents.once("did-finish-load", () => {
+        mainWindow.webContents
+          .executeJavaScript(
+            `(() => {
+              try {
+                const raw = localStorage.getItem("octopus.pet.settings");
+                if (!raw) return true;
+                return (JSON.parse(raw).visible ?? true) !== false;
+              } catch { return true; }
+            })()`,
+            true,
+          )
+          .then((visible) => {
+            if (visible) maybeStartPet();
+            else
+              console.log("[octopus] pet suppressed by settings (visible=false)");
+          })
+          .catch(() => maybeStartPet());
+      });
     }
 
     if (process.env.OCTOPUS_SMOKE === "1") {

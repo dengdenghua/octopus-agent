@@ -123,6 +123,18 @@ export function ChatComposer({
   const { t } = useI18n();
   const { models } = useModels();
   const petVisible = usePetSettings().visible;
+  // 同步 Electron 桌面宠物（Godot sidecar）与网页内宠物：开关关闭时一并
+  // 隐藏桌面窗口。浏览器环境无 window.octopus.pet，天然 no-op。
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.octopus?.isElectron) return;
+    const pet = window.octopus.pet;
+    if (!pet) return;
+    if (petVisible) {
+      void pet.start().catch(() => {});
+    } else {
+      void pet.stop().catch(() => {});
+    }
+  }, [petVisible]);
   const [draft, setDraft] = useState(defaultValue);
   const [researchUrlText, setResearchUrlText] = useState("");
   const [researchTextTitle, setResearchTextTitle] = useState("");
