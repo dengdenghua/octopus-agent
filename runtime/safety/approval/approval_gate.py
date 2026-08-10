@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Literal
@@ -289,6 +290,33 @@ def assess_approval_risk(
             bump("high", "filesystem_write")
     if "api_key" in preview or "secret" in preview or "token" in preview:
         bump("high", "secret_material")
+    # Credential probing — reading credentials / session material from
+    # non-standard sources (browser profiles, keychains, credential files,
+    # logs) is how a hijacked agent exfiltrates auth. Mirrors codex
+    # policy.md "Credential Probing": high risk, denied at low/unknown
+    # authorization.
+    if name.startswith(("read_", "list_", "glob_", "grep_", "cat_", "file_stats")):
+        if any(marker in preview for marker in _CREDENTIAL_PROBE_MARKERS):
+            bump("high", "credential_probing")
+    # Sensitive egress — network actions moving secret material out.
+    # Codex requires BOTH payload AND destination authorization; we can't
+    # resolve the destination here, so flag sensitive_egress so the policy
+    # layer treats it as high-risk unless the user explicitly authorized
+    # that payload for that destination.
+    if name.startswith(
+        (
+            "fetch_",
+            "http_",
+            "send_",
+            "email_",
+            "slack_",
+            "upload_",
+            "publish_",
+            "post_",
+            "webhook_",
+        )
+    ) and any(marker in preview for marker in _SENSITIVE_EGRESS_MARKERS):
+        bump("high", "sensitive_egress")
     if level == "low" and is_dangerous_tool(name):
         bump("medium", "dangerous_tool_catalog")
 
@@ -307,6 +335,40 @@ def assess_approval_risk(
 # never escalates them; they must be blocked at the chokepoint while tainted.
 _DURABLE_PERSISTENCE_WRITES: frozenset[str] = frozenset(
     {"remember", "update_soul", "note_user"},
+)
+
+# Non-standard credential locations a compromised agent might read to
+# exfiltrate auth material. Lowercased args preview is matched against
+# these (codex policy.md "Credential Probing").
+_CREDENTIAL_PROBE_MARKERS: tuple[str, ...] = (
+    ".aws/credentials",
+    ".aws/config",
+    "browser profile",
+    "cookies.sqlite",
+    "login data",
+    "keychain",
+    "credential",
+    "id_rsa",
+    ".ssh/",
+    "session.json",
+    "secrets.json",
+    ".npmrc",
+    ".pypirc",
+)
+
+# Payload markers that make a network egress action sensitive — such an
+# action needs explicit payload+destination authorization (codex policy.md
+# "Data Exfiltration").
+_SENSITIVE_EGRESS_MARKERS: tuple[str, ...] = (
+    "api_key",
+    "secret",
+    "token",
+    "password",
+    "private_key",
+    "credentials",
+    "session",
+    "authorization",
+    "bearer",
 )
 
 
@@ -451,7 +513,6 @@ class AutoApproveProvider(ApprovalProvider):
 
 class AutoDenyProvider(ApprovalProvider):
     """Default fail-closed provider.
-
     When no UI is wired, the safe behavior is to refuse rather than
     silently auto-accepting whatever the planner proposes. The reason
     string is surfaced to the planner so it can adjust its plan.
@@ -562,4 +623,47 @@ __all__ = [
     "is_dangerous_tool",
     "needs_approval",
     "needs_approval_for_chain",
+    "DenialCircuitBreaker",
 ]
+
+
+# ── Denial circuit breaker ────────────────────────────────────
+#
+# A hijacked or stubborn agent may retry the same denied action over and
+# over, burning budget against a wall the guard already hit. Codex's
+# guardian tracks repeated same-guard rejections and stops retrying after
+# N (``count_denial_for_circuit_breaker``). This is the Octopus analogue:
+# a per-key (thread/action fingerprint) counter that flips OPEN after
+# ``limit`` consecutive denials, so the executor can stop retrying and
+# surface a terminal "denied + circuit open" instead of spinning.
+
+
+class DenialCircuitBreaker:
+    """Thread-safe consecutive-denial counter with an open state.
+
+    ``key`` is typically ``(thread_id, tool_name, fingerprint)`` so the
+    breaker only trips for the SAME action being retried, never for
+    unrelated approvals. Call ``note_denial`` on each denial and
+    ``note_clear`` when the action is approved / the goal moves on.
+    """
+
+    def __init__(self, limit: int = 3) -> None:
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        self._limit = limit
+        self._counts: dict[tuple[str, ...], int] = {}
+        self._lock = threading.Lock()
+
+    def is_open(self, key: tuple[str, ...]) -> bool:
+        with self._lock:
+            return self._counts.get(key, 0) >= self._limit
+
+    def note_denial(self, key: tuple[str, ...]) -> int:
+        with self._lock:
+            count = self._counts.get(key, 0) + 1
+            self._counts[key] = count
+            return count
+
+    def note_clear(self, key: tuple[str, ...]) -> None:
+        with self._lock:
+            self._counts.pop(key, None)

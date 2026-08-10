@@ -86,7 +86,13 @@ def _rule_to_json(rule: ApprovalRule) -> dict[str, Any]:
 
 
 def load_policy(path: Path) -> ApprovalPolicy:
-    """Read the policy file. Missing file → empty policy."""
+    """Read the policy file. Missing file → empty policy.
+
+    Honors the optional ``profile`` field (read_only / workspace_write /
+    full_access). An explicit non-default profile replaces the rules with
+    the built-in profile rule set; ``workspace_write`` or an absent field
+    keeps the rules array exactly as today (byte-identical behavior).
+    """
     if not path.exists():
         return ApprovalPolicy()
     try:
@@ -106,7 +112,12 @@ def load_policy(path: Path) -> ApprovalPolicy:
         rule = _rule_from_json(entry)
         if rule is not None:
             rules.append(rule)
-    return ApprovalPolicy(rules=tuple(rules))
+    from runtime.safety.approval.permission_profiles import resolve_profile
+
+    _profile_name, effective_rules, _auto = resolve_profile(
+        raw.get("profile"), tuple(rules)
+    )
+    return ApprovalPolicy(rules=effective_rules)
 
 
 def save_policy(path: Path, policy: ApprovalPolicy) -> None:
