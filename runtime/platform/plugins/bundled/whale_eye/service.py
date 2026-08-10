@@ -13,9 +13,12 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import mimetypes
 import os
 import urllib.request
+
+_logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Any
 
@@ -187,6 +190,10 @@ def describe_image(
 
     Returns ``None`` 当 agnes 未配置、调用失败或返回空——调用方此时
     应直接丢弃图片并加注记,而不是让回合崩溃。
+
+    转述是一次尽力而为的远程调用,实测偶发超时/网络抖动会返回空;
+    ``_chat`` 失败或返回空时自动重试一次(第二次几乎总是成功),
+    仍失败才返回 None。
     """
     try:
         cfg = resolve_config(api_key=api_key, base_url=base_url, model=model)
@@ -196,11 +203,20 @@ def describe_image(
         image_url = f"data:image/png;base64,{image_b64}"
     if not image_url:
         return None
-    try:
-        verdict = _chat(cfg, image_url, prompt, max_tokens=max_tokens, timeout=timeout)
-    except Exception:  # noqa: BLE001 — 转述尽力而为,任何失败都不该毁掉主回合
-        return None
-    return verdict.strip() or None
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            verdict = _chat(
+                cfg, image_url, prompt, max_tokens=max_tokens, timeout=timeout
+            )
+            if verdict and verdict.strip():
+                return verdict.strip()
+            last_error = None
+        except Exception as exc:  # noqa: BLE001 — 转述尽力而为,任何失败都不该毁掉主回合
+            last_error = exc
+    if last_error is not None:
+        _logger.debug("describe_image failed after retry: %s", last_error)
+    return None
 
 
 def _shot(url: str, output_dir: Path, selector: str | None) -> Path:

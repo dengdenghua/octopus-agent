@@ -10,7 +10,7 @@ Covers:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -122,3 +122,39 @@ def test_judge_raises_without_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
     with pytest.raises(VisionUnavailableError):
         judge(image=str(shot), output_dir=tmp_path / "out")
+
+
+def test_describe_image_retries_transient_failure() -> None:
+    """A transient transcription failure retries once and succeeds."""
+    from runtime.platform.plugins.bundled.whale_eye.service import describe_image
+
+    with patch("runtime.platform.plugins.bundled.whale_eye.service._chat") as mock_chat:
+        mock_chat.side_effect = [
+            RuntimeError("transient timeout"),
+            "这是一张截图: 界面顶部显示标题栏。",
+        ]
+        result = describe_image(image_b64="aGVsbG8=", timeout=30)
+    assert result == "这是一张截图: 界面顶部显示标题栏。"
+    assert mock_chat.call_count == 2
+
+
+def test_describe_image_degrades_after_double_failure() -> None:
+    """Two consecutive failures → None (caller drops the image, no crash)."""
+    from runtime.platform.plugins.bundled.whale_eye.service import describe_image
+
+    with patch("runtime.platform.plugins.bundled.whale_eye.service._chat") as mock_chat:
+        mock_chat.side_effect = [RuntimeError("a"), RuntimeError("b")]
+        result = describe_image(image_b64="aGVsbG8=", timeout=30)
+    assert result is None
+    assert mock_chat.call_count == 2
+
+
+def test_describe_image_retries_empty_verdict() -> None:
+    """An empty verdict counts as a failure and is retried once."""
+    from runtime.platform.plugins.bundled.whale_eye.service import describe_image
+
+    with patch("runtime.platform.plugins.bundled.whale_eye.service._chat") as mock_chat:
+        mock_chat.side_effect = ["", "ok-description"]
+        result = describe_image(image_b64="aGVsbG8=", timeout=30)
+    assert result == "ok-description"
+    assert mock_chat.call_count == 2
