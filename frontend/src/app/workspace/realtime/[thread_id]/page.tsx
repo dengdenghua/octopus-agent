@@ -2164,6 +2164,15 @@ function RealtimePageContent({
       context: {
         ...settings.context,
         reasoning_effort: effectiveReasoningEffort,
+        // Opt-in guardian independent review for high-risk actions. Only
+        // sent when the user enabled it; the backend gate reads these and
+        // degrades to the rule engine on review failure.
+        guardian_review_enabled: settings.context.guardian_review_enabled
+          ? true
+          : undefined,
+        guardian_review_model: settings.context.guardian_review_enabled
+          ? (settings.context.guardian_review_model ?? "gpt-5.6-luna")
+          : undefined,
         mode: streamMode,
         workspace_path: isProjectCodeMode ? projectWorkspacePath : undefined,
         workspace_scope: isProjectCodeMode

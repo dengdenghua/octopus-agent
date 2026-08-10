@@ -7394,6 +7394,17 @@ export const zhCN: Translations = {
     envDesc: "命令在哪里运行、文件写入范围多大。",
     permissionTitle: "权限级别",
     permissionDesc: "文件改动和命令执行需要多少确认。",
+    guardianTitle: "高危动作独立评审",
+    guardianDesc:
+      "对规则引擎判为高危的动作,由独立评审模型按「用户授权证据 × 动作风险」做二次裁决,与上方权限档位独立工作——即使「完全访问」,授权不足的高危动作也会被拦下。默认关闭。",
+    guardianToggleLabel: "启用独立评审",
+    guardianToggleDesc:
+      "仅对 high/critical 动作触发;评审失败自动降级为规则引擎结论,不阻塞任务;每轮最多评审 3 次。",
+    guardianModelLabel: "评审模型",
+    guardianModelHint:
+      "建议使用响应快的模型(如 gpt-5.6-luna)。留空则使用默认模型。",
+    toastGuardianOn: "高危动作独立评审已开启",
+    toastGuardianOff: "高危动作独立评审已关闭",
     toastEnvSwitched: (label: string) => `执行环境已切换为「${label}」`,
     toastPermissionSwitched: (label: string) => `权限级别已切换为「${label}」`,
     toastFailed: (msg: string) => `切换失败：${msg}`,

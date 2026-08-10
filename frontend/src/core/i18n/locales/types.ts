@@ -3245,6 +3245,14 @@ export interface Translations {
     envDesc: string;
     permissionTitle: string;
     permissionDesc: string;
+    guardianTitle: string;
+    guardianDesc: string;
+    guardianToggleLabel: string;
+    guardianToggleDesc: string;
+    guardianModelLabel: string;
+    guardianModelHint: string;
+    toastGuardianOn: string;
+    toastGuardianOff: string;
     toastEnvSwitched: (label: string) => string;
     toastPermissionSwitched: (label: string) => string;
     toastFailed: (msg: string) => string;

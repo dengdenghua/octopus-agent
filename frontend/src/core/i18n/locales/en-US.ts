@@ -7802,6 +7802,16 @@ Strategy:
     envDesc: "Where commands run and how much of the file system they can write.",
     permissionTitle: "Permission level",
     permissionDesc: "How much confirmation file edits and commands require.",
+    guardianTitle: "High-risk action review",
+    guardianDesc:
+      "High-risk actions get a second opinion from an independent review model (user authorization evidence × action risk), working independently of the permission tier above — even “Full Access” can't let through an unauthorized high-risk action. Off by default.",
+    guardianToggleLabel: "Enable independent review",
+    guardianToggleDesc:
+      "Runs only for high/critical actions; failures degrade to the rule engine conclusion without blocking; max 3 reviews per turn.",
+    guardianModelLabel: "Review model",
+    guardianModelHint: "Use a fast model (e.g. gpt-5.6-luna). Leave empty for the default.",
+    toastGuardianOn: "High-risk action review enabled",
+    toastGuardianOff: "High-risk action review disabled",
     toastEnvSwitched: (label: string) => `Execution environment switched to “${label}”`,
     toastPermissionSwitched: (label: string) => `Permission level switched to “${label}”`,
     toastFailed: (msg: string) => `Switch failed: ${msg}`,

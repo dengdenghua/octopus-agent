@@ -7789,6 +7789,16 @@ export const jaJP: Translations = {
     envDesc: "コマンドの実行場所と、書き込めるファイル範囲。",
     permissionTitle: "権限レベル",
     permissionDesc: "ファイル編集とコマンド実行に必要な確認の程度。",
+    guardianTitle: "高リスク動作の独立レビュー",
+    guardianDesc:
+      "ルールエンジンが高リスクと判定した動作を、独立レビューモデルが「ユーザー承認の証拠 × 動作リスク」で再判定。上の権限レベルとは独立に働く——「完全アクセス」でも承認不足の高リスク動作は止められる。デフォルトはオフ。",
+    guardianToggleLabel: "独立レビューを有効化",
+    guardianToggleDesc:
+      "high/critical 動作のみ対象。レビュー失敗時はルールエンジンの結論に自動フォールバックし、タスクをブロックしない。ターンあたり最大3回。",
+    guardianModelLabel: "レビューモデル",
+    guardianModelHint: "応答の速いモデル（例: gpt-5.6-luna）を推奨。空欄でデフォルト。",
+    toastGuardianOn: "高リスク動作の独立レビューを有効化しました",
+    toastGuardianOff: "高リスク動作の独立レビューを無効化しました",
     toastEnvSwitched: (label: string) => `実行環境を「${label}」に切り替えました`,
     toastPermissionSwitched: (label: string) => `権限レベルを「${label}」に切り替えました`,
     toastFailed: (msg: string) => `切り替え失敗: ${msg}`,

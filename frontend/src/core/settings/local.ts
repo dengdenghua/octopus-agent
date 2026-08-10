@@ -62,6 +62,12 @@ export interface LocalSettings {
     model_name?: string | undefined;
     mode: "chat" | "code" | "react" | "deep" | "flash" | "thinking" | undefined;
     reasoning_effort?: ReasoningEffort;
+    /** Opt-in independent review for high-risk actions (codex-style
+     * guardian). When on, high/critical tool calls get a second opinion
+     * from guardian_review_model before escalating to the user; failures
+     * degrade to the rule engine, never blocking the task. */
+    guardian_review_enabled?: boolean | undefined;
+    guardian_review_model?: string | undefined;
   };
   layout: {
     sidebar_collapsed: boolean;

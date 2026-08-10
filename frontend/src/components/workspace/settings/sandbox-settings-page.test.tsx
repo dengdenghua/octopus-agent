@@ -171,3 +171,38 @@ describe("SandboxSettingsPage", () => {
     expect(persisted.context.network_access).toBe(true);
   });
 });
+
+  it("toggles the guardian independent review switch and persists it", () => {
+    renderWithProviders(<SandboxSettingsPage />);
+
+    // Off by default.
+    expect(
+      screen.queryByLabelText(/Review model/),
+    ).not.toBeInTheDocument();
+
+    const toggle = screen.getByRole("switch", {
+      name: /Enable independent review/i,
+    });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("data-state", "checked");
+
+    // Enabling reveals the review-model input, defaulting to gpt-5.6-luna.
+    const modelInput = screen.getByLabelText(/Review model/);
+    expect(modelInput).toHaveValue("gpt-5.6-luna");
+
+    // Persisted to local settings.
+    const saved = getLocalSettings();
+    expect(saved.context.guardian_review_enabled).toBe(true);
+
+    fireEvent.change(modelInput, { target: { value: "agnes-2.5-flash" } });
+    expect(getLocalSettings().context.guardian_review_model).toBe(
+      "agnes-2.5-flash",
+    );
+
+    // Toggling off hides the model input and clears the flag.
+    fireEvent.click(toggle);
+    expect(
+      screen.queryByLabelText(/Review model/),
+    ).not.toBeInTheDocument();
+    expect(getLocalSettings().context.guardian_review_enabled).toBe(false);
+  });

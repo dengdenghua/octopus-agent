@@ -7,6 +7,7 @@ import { normalizeNetworkAccess, normalizePermissionMode } from "@/core/permissi
 import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
+import { Switch } from "@/components/ui/switch";
 
 /**
  * Read-only mirror of the backend pre-bundled dev-tool allowlist
@@ -70,6 +71,8 @@ export default function SandboxSettingsPage() {
     approval_policy?: string;
     network_access?: unknown;
     reply_style?: string;
+    guardian_review_enabled?: boolean;
+    guardian_review_model?: string;
   };
   const environment: ExecutionEnvironment =
     context.execution_environment === "local" ? "local" : "sandbox";
@@ -77,6 +80,12 @@ export default function SandboxSettingsPage() {
   const networkTier: NetworkTier = normalizeNetworkAccess(context.network_access) ?? "deny";
   const replyStyle =
     typeof context.reply_style === "string" ? context.reply_style : "default";
+  const guardianEnabled = context.guardian_review_enabled === true;
+  const guardianModel =
+    typeof context.guardian_review_model === "string" &&
+    context.guardian_review_model.trim()
+      ? context.guardian_review_model.trim()
+      : "gpt-5.6-luna";
 
   const applyEnvironment = useCallback(
     (next: ExecutionEnvironment) => {
@@ -236,6 +245,70 @@ export default function SandboxSettingsPage() {
               );
             })}
           </div>
+        </div>
+
+        {/* ─── Guardian independent review (opt-in second opinion) ─── */}
+        <div className="mt-8">
+          <h3 className="text-sm font-semibold text-foreground">
+            {copy.guardianTitle}
+          </h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {copy.guardianDesc}
+          </p>
+          <div className="mt-3 flex items-start justify-between gap-4 rounded-lg border border-border-default p-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                {copy.guardianToggleLabel}
+              </p>
+              <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                {copy.guardianToggleDesc}
+              </p>
+            </div>
+            <Switch
+              checked={guardianEnabled}
+              aria-label={copy.guardianToggleLabel}
+              onCheckedChange={(next) => {
+                try {
+                  setSettings("context", {
+                    ...context,
+                    guardian_review_enabled: next,
+                  } as Partial<typeof settings.context>);
+                  toast.success(
+                    next ? copy.toastGuardianOn : copy.toastGuardianOff,
+                  );
+                } catch {
+                  toast.error(copy.toastFailed(copy.guardianTitle));
+                }
+              }}
+            />
+          </div>
+          {guardianEnabled && (
+            <div className="mt-3">
+              <label
+                htmlFor="guardian-review-model"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                {copy.guardianModelLabel}
+              </label>
+              <input
+                id="guardian-review-model"
+                type="text"
+                value={guardianModel}
+                onChange={(event) => {
+                  const next = event.target.value.trim();
+                  setSettings("context", {
+                    ...context,
+                    guardian_review_model: next || undefined,
+                  } as Partial<typeof settings.context>);
+                }}
+                placeholder="gpt-5.6-luna"
+                className="mt-1 w-full max-w-xs rounded-md border border-border-default bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary/60"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {copy.guardianModelHint}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* ─── Network access (independent axis) ─── */}

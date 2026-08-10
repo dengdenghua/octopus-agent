@@ -7680,6 +7680,16 @@ export const koKR: Translations = {
     envDesc: "명령이 실행되는 위치와 쓸 수 있는 파일 범위.",
     permissionTitle: "권한 수준",
     permissionDesc: "파일 편집 및 명령 실행에 필요한 확인 수준.",
+    guardianTitle: "고위험 작업 독립 검토",
+    guardianDesc:
+      "규칙 엔진이 고위험으로 판정한 작업을 독립 검토 모델이 '사용자 승인 증거 × 작업 위험'으로 재판정. 위 권한 단계와 독립적으로 작동 — '완전 액세스'여도 승인되지 않은 고위험 작업은 차단됨. 기본 꺼짐.",
+    guardianToggleLabel: "독립 검토 활성화",
+    guardianToggleDesc:
+      "high/critical 작업에만 적용. 검토 실패 시 규칙 엔진 결론으로 자동 폴백, 작업을 차단하지 않음. 턴당 최대 3회.",
+    guardianModelLabel: "검토 모델",
+    guardianModelHint: "응답이 빠른 모델(예: gpt-5.6-luna) 권장. 비우면 기본 모델.",
+    toastGuardianOn: "고위험 작업 독립 검토가 켜졌습니다",
+    toastGuardianOff: "고위험 작업 독립 검토가 꺼졌습니다",
     toastEnvSwitched: (label: string) => `실행 환경이 '${label}'(으)로 전환되었습니다`,
     toastPermissionSwitched: (label: string) => `권한 수준이 '${label}'(으)로 전환되었습니다`,
     toastFailed: (msg: string) => `전환 실패: ${msg}`,
