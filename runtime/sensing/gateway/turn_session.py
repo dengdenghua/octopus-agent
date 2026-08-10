@@ -115,6 +115,22 @@ def build_turn_metadata(
             metadata[key] = value
     if resolved_model is not None:
         metadata["model_name"] = resolved_model
+    # Guardian independent review is an opt-in per-turn decision; pass the
+    # config through from the client context so high-risk actions can be
+    # routed to the independent reviewer without a server restart.
+    for _gkey in (
+        "guardian_review_enabled",
+        "guardian_review_per_turn_limit",
+        "guardian_review_timeout_s",
+        "guardian_review_model",
+    ):
+        _gval = ctx.get(_gkey)
+        if _gval is None and not explicit_conversation_mode:
+            _gval = stored_meta.get(_gkey)
+        if _gval is not None and not (
+            isinstance(_gval, str) and not _gval.strip()
+        ):
+            metadata[_gkey] = _gval
     value = ctx.get("personal_workspace_enabled")
     if value is None and not explicit_conversation_mode:
         value = stored_meta.get("personal_workspace_enabled")
