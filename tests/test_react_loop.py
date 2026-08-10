@@ -8444,6 +8444,42 @@ def test_repair_guard_soft_lands_after_one_stalled_retry() -> None:
     assert "避免继续空转" in delivered
 
 
+def test_soft_land_strips_inline_tool_call_json_from_candidate() -> None:
+    from runtime.core.cerebrum.react_final_answer_guards import (
+        _guard_soft_landing_answer,
+        _strip_inline_tool_calls,
+    )
+
+    # A model that wrote its todo_write call into prose (instead of emitting
+    # a structured tool call) must not leak the raw protocol JSON to the user.
+    leaked = (
+        '\ntodo_write({"items": [{"id": "1", "status": "completed", '
+        '"title": "静态审计"}]})\n\n已完成静态审计，动态验证被沙箱拦截。'
+    )
+    stripped = _strip_inline_tool_calls(leaked)
+    assert "todo_write" not in stripped
+    assert "已完成静态审计" in stripped
+
+    # Nested braces inside the JSON are handled by the balanced scan.
+    nested = (
+        'exec_shell({"cmd": "make test", "env": {"K": "v", "O": {"p": 1}}})\n'
+        "结果已确认。"
+    )
+    stripped_nested = _strip_inline_tool_calls(nested)
+    assert "exec_shell" not in stripped_nested
+    assert "结果已确认。" in stripped_nested
+
+    # Plain prose without inline tool calls is untouched.
+    plain = "任务已完成，三个检查点全部通过。"
+    assert _strip_inline_tool_calls(plain) == plain
+
+    # The soft-landing path applies the same cleanup to the delivered body.
+    delivered = _guard_soft_landing_answer(leaked, "todo-protocol guard")
+    assert "todo_write" not in delivered
+    assert "已完成静态审计" in delivered
+    assert "避免继续空转" in delivered
+
+
 def test_hard_guard_remains_fail_closed_for_three_stalls() -> None:
     from runtime.core.cerebrum.react_final_answer_guards import _guard_rejection_outcome
 

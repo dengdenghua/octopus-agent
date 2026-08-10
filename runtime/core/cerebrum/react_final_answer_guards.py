@@ -305,13 +305,82 @@ def _guard_rejection_outcome(state: dict, label: str, steps: list) -> str:
 
 def _guard_soft_landing_answer(candidate: str, label: str) -> str:
     """Deliver useful work after one failed quality-contract repair."""
-    body = (candidate or "").strip()
+    body = _strip_inline_tool_calls(candidate or "")
     note = (
         "\n\n---\n"
         f"质量提示：「{label}」仍缺少结构化执行证据。"
         "系统已完成一次修复尝试；为避免继续空转，现交付已有结果。"
     )
     return f"{body}{note}" if body else note.lstrip()
+
+
+# Tool names the model may write into answer prose as an inline JSON call
+# (``todo_write({"items": [...]})``) instead of emitting a structured tool
+# call. When that leaks into the final answer, strip the whole call block so
+# the user never sees raw tool protocol in the transcript.
+_INLINE_TOOL_CALL_NAMES = (
+    "todo_write",
+    "exec_shell",
+    "shell_command",
+    "run_command",
+    "web_search",
+    "fetch_url",
+    "web_fetch",
+    "read_file",
+    "glob_files",
+    "find_files",
+    "apply_patch",
+    "write_file",
+    "edit_file",
+    "str_replace",
+    "run_tests",
+    "lint_check",
+)
+_INLINE_TOOL_CALL_RE = re.compile(
+    rf"(?m)^\s*(?:{'|'.join(_INLINE_TOOL_CALL_NAMES)})\s*\("
+)
+
+
+def _strip_inline_tool_calls(text: str) -> str:
+    """Remove ``tool_name({...})`` blocks that the model wrote into answer
+    prose instead of emitting as structured tool calls. A balanced-brace scan
+    consumes the whole JSON object (including nested braces) plus the closing
+    paren, so surrounding narration survives intact."""
+    if not text:
+        return text
+    parts: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        m = _INLINE_TOOL_CALL_RE.match(text, i)
+        if not m:
+            parts.append(text[i:])
+            break
+        parts.append(text[i : m.start()])
+        open_idx = text.index("(", m.end() - 1)
+        depth = 0
+        j = open_idx
+        while j < n:
+            if text[j] == "{":
+                depth += 1
+            elif text[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    j += 1
+                    while j < n and text[j] in " \t":
+                        j += 1
+                    if j < n and text[j] == ")":
+                        j += 1
+                    if j < n and text[j] == "\n":
+                        j += 1
+                    i = j
+                    break
+            j += 1
+        else:
+            # Unbalanced — keep the matched prefix and advance past it.
+            parts.append(text[m.start() : m.end()])
+            i = m.end()
+    return "".join(parts).strip()
 
 
 def _guard_impasse_final_answer(label: str, message: str) -> str:
