@@ -1083,6 +1083,17 @@ export function MessageList({
   const resolveAgentIdentity = useCallback(
     (msg?: (typeof messages)[number]): AgentIdentity => {
       const aiMsg = msg?.type === "ai" ? (msg as AIMessage) : undefined;
+      if (threadId === "octopus-assistant" && currentAgent) {
+        return {
+          avatar:
+            cleanIdentityText(currentAgent.avatar_url) ??
+            fallbackAgentAvatarUrl(currentAgent.name),
+          icon: cleanIdentityText(currentAgent.icon),
+          id: currentAgent.name,
+          name: currentAgent.display_name ?? currentAgent.name,
+          role: undefined,
+        };
+      }
       const explicitDisplayName = cleanIdentityText(
         aiMsg?.additional_kwargs?.agent_display_name,
       );
@@ -1137,12 +1148,10 @@ export function MessageList({
     },
     [
       agentRosterMap,
-      currentAgent?.avatar_url,
-      currentAgent?.display_name,
-      currentAgent?.icon,
-      currentAgent?.name,
+      currentAgent,
       soleRosterEntry,
       thread.values,
+      threadId,
     ],
   );
   // Recomputed on every streamed frame (groupedMessages is rebuilt each

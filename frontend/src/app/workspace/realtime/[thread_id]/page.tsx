@@ -1400,6 +1400,9 @@ function RealtimePageContent({
   // 助理（octopus）是私人助手本体：不走编码/工作空间工作台，固定进入
   // 纯对话长对话，隐藏工作空间选择器。
   const isOctopusAssistant = effectiveAgentId === "octopus";
+  const { agent: effectiveAgent } = useAgent(
+    isOctopusAssistant ? effectiveAgentId : null,
+  );
 
   const channelsStatusQuery = useQuery({
     queryKey: ["channels-status"],
@@ -1431,7 +1434,10 @@ function RealtimePageContent({
       : null,
   );
   const displayAgent =
-    resolvedThreadOwnerAgentId && resolvedThreadOwnerAgentId !== activeAgentId
+    isOctopusAssistant
+      ? effectiveAgent
+      : resolvedThreadOwnerAgentId &&
+          resolvedThreadOwnerAgentId !== activeAgentId
       ? threadOwnerAgent
       : activeAgent;
   const currentTaskAgentName = displayAgent?.name ?? effectiveAgentId;
@@ -3368,12 +3374,10 @@ function RealtimePageContent({
       display_name: displayAgent?.display_name || effectiveAgentId,
       avatar_url:
         displayAgent?.avatar_url ||
-        (threadOwnerAgentId
-          ? `/api/agents/${encodeURIComponent(threadOwnerAgentId)}/avatar`
-          : null),
+        `/api/agents/${encodeURIComponent(effectiveAgentId)}/avatar`,
       icon: displayAgent?.icon || null,
     }),
-    [displayAgent, effectiveAgentId, threadOwnerAgentId],
+    [displayAgent, effectiveAgentId],
   );
 
   const handleModelChange = useCallback(
