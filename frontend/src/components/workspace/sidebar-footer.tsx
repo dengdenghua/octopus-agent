@@ -246,20 +246,26 @@ export function AgentFooter() {
     [cliPartnerAgents],
   );
   const cliPartnerRows = useMemo<LocalCliPartnerAgent[]>(() => {
-    if (allCliPartners.length > 0) {
-      return allCliPartners;
-    }
-    return cliPartnerAgents.map((agent) => ({
-      agent,
-      partnerId:
-        String(agent.capabilities?.local_partner_id || "") ||
-        agent.name.replace(/^local_/, "").replaceAll("_", "-"),
-      detected: true,
-      ready: true,
-      registered: false,
-      status: "detected",
-      fixHint: null,
-    }));
+    // Only render partners that are actually detected or already registered
+    // — un-detected catalog entries should not occupy the dropdown as
+    // "未检测到" placeholders. The /api/agents/local-partners endpoint
+    // returns the full catalog with detected flags; the cli-team fallback
+    // (cliPartnerAgents) is inherently detected=true so it passes through.
+    const source =
+      allCliPartners.length > 0
+        ? allCliPartners.filter((row) => row.detected || row.registered)
+        : cliPartnerAgents.map((agent) => ({
+            agent,
+            partnerId:
+              String(agent.capabilities?.local_partner_id || "") ||
+              agent.name.replace(/^local_/, "").replaceAll("_", "-"),
+            detected: true,
+            ready: true,
+            registered: false,
+            status: "detected",
+            fixHint: null,
+          }));
+    return source;
   }, [allCliPartners, cliPartnerAgents]);
   // 解析优先级与 page.tsx activeAgentId 保持一致：
   // 1) route lock（如 /workspace/agents/:id/chats 锁定到该 agent）
