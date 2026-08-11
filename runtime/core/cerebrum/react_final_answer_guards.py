@@ -19,8 +19,12 @@ from runtime.core.cerebrum.react_explicit_reads import _explicit_read_only_goal
 from runtime.core.cerebrum.react_guards import (
     _goal_requests_code_mutation,
     _incomplete_final_answer_guard,
-    _step_is_failed_execution,
 )
+# Imported from the defining module directly: react_guards' re-export of
+# ``_step_is_failed_execution`` exists only in an uncommitted refactor, so at
+# the committed tip ``from react_guards import _step_is_failed_execution``
+# raised ImportError and broke 24 test modules at collection.
+from runtime.core.cerebrum.react_todo_protocol_guards import _step_is_failed_execution
 from runtime.core.cerebrum.react_loop_controls import (
     _disabled_guard_labels,
     _guard_hit_recorder,
