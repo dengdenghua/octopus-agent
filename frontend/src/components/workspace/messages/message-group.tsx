@@ -1220,14 +1220,34 @@ export function MessageGroup({
         : item.type === "toolCall"
           ? item.step.id
           : step.messageId;
-      const effectReceipt =
-        !isAggregatedGroup && item.type === "toolCall"
+      // 外部副作用待复核凭据。聚合组也必须解析:叙事化时间线会把工具调用
+      // 聚合成一行,若只在非聚合分支取凭据,indeterminate 的写文件/网络动作
+      // 就再也不会亮出待复核标记 —— 这是安全可见性,不能被聚合吞掉。
+      const resolveReceipt = (toolStep: CoTToolCallStep) =>
+        toolStep.effectReceipt ??
+        (toolStep.id ? receiptsByCallId.get(toolStep.id) : undefined);
+      const effectReceipt = isAggregatedGroup
+        ? (item.items
+            .map((toolItem) => resolveReceipt(toolItem.step))
+            .find((receipt) => receipt?.state === "indeterminate") ??
+          undefined)
+        : item.type === "toolCall"
           ? (item.step.effectReceipt ??
             (workbenchEventId
               ? receiptsByCallId.get(workbenchEventId)
               : undefined))
           : undefined;
       const needsEffectReview = effectReceipt?.state === "indeterminate";
+      // 待复核时工作台要落到出问题的那一次调用,而不是聚合组的代表事件,
+      // 否则用户点开徽标看到的是同组里某个无关的只读调用。
+      const effectReceiptCallId = effectReceipt
+        ? "call_id" in effectReceipt
+          ? effectReceipt.call_id
+          : effectReceipt.callId
+        : undefined;
+      const workbenchOpenEventId =
+        (needsEffectReview ? effectReceiptCallId : undefined) ??
+        workbenchEventId;
       const processEventDetail = dedupeTimelineChunks(
         isAggregatedGroup
           ? item.items.map((toolItem) =>
@@ -1283,7 +1303,7 @@ export function MessageGroup({
                 activateTimelineItem(timelineItemLinkageId(item), "chat");
                 emitOpenAgentWorkbench({
                   tab: actionWorkbenchTab,
-                  eventId: workbenchEventId,
+                  eventId: workbenchOpenEventId,
                   eventKind: isThinking ? "thinking" : "execution",
                   view: isThinking ? "summary" : "trace",
                   processEvent: {
