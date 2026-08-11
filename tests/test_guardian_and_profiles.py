@@ -36,7 +36,12 @@ def test_credential_probing_reads_are_high_risk() -> None:
 
 
 def test_credential_probing_ssh_key() -> None:
-    risk = assess_approval_risk("glob_files", '{"pattern": "/Users/x/.ssh/id_rsa*"}')
+    # The /Users/<user>/.ssh glob shape is what the rule probes — the path
+    # pattern, not a real home, is the point of this fixture.
+    risk = assess_approval_risk(
+        "glob_files",
+        '{"pattern": "/Users/x/.ssh/id_rsa*"}',  # lint: allow-user-path
+    )
     assert risk.level == "high"
     assert "credential_probing" in risk.categories
 
@@ -48,7 +53,12 @@ def test_sensitive_egress_is_high_risk() -> None:
 
 
 def test_normal_read_stays_low() -> None:
-    risk = assess_approval_risk("read_file", '{"path": "/Users/x/project/src/a.py"}')
+    # A plain read inside a user project must stay low; the generic /Users/<u>
+    # root stands in for any home directory and is not a real account.
+    risk = assess_approval_risk(
+        "read_file",
+        '{"path": "/Users/x/project/src/a.py"}',  # lint: allow-user-path
+    )
     assert risk.level == "low"
     assert "credential_probing" not in risk.categories
 
