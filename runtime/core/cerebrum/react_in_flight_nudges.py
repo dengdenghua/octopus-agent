@@ -18,6 +18,7 @@ from runtime.core.cerebrum.react_execution import (
     _background_task_info_from_observation,
     _format_background_task_heartbeat,
 )
+from runtime.core.cerebrum.react_final_answer_guards import _step_is_environmental_failure
 from runtime.core.cerebrum.react_guards import (
     _code_semantic_followup_guard,
     _completion_phrase_without_todo_guard,
@@ -35,11 +36,32 @@ _logger = logging.getLogger(__name__)
 
 
 class _InFlightNudgeFlags(NamedTuple):
-    """Post-nudge values of the three loop flags this block can flip."""
+    """Post-nudge values of the four loop flags this block can flip."""
 
     context_pressure_signaled: bool
     green_verification_convergence_active: bool
     force_convergence_next: bool
+    env_degradation_signaled: bool
+
+
+# Fires ONCE per turn, right after the first environmental tool failure
+# (sandbox / network / OS-permission denial). Tells the model to stop
+# retrying the blocked tool and pivot: verify statically, close the turn,
+# and state the execution restriction plainly in the Final Answer. This is
+# the model's one heads-up that run-evidence guards are auto-downgraded at
+# Final Answer time — so it should never fabricate a green that "would have"
+# run (that is still caught by the hard false-verification guard).
+_ENV_DEGRADATION_NUDGE = (
+    "[environment-degraded]\n"
+    "Tool execution is being blocked by the environment (sandbox / network / "
+    "OS permissions) — retrying the same tool will keep failing. Pivot to "
+    "static evidence: read_file your written files back to confirm they "
+    "landed, inspect the diff, and finish. In the Final Answer state plainly "
+    "that dynamic verification (tests / typecheck / build) could not run "
+    "because the execution environment is restricted, and list what you "
+    "verified statically instead. Never claim a test or check passed unless "
+    "it actually ran — a fabricated green is detected and rejected."
+)
 
 
 def _apply_in_flight_nudges(
@@ -56,6 +78,7 @@ def _apply_in_flight_nudges(
     context_pressure_signaled: bool,
     green_verification_convergence_active: bool,
     force_convergence_next: bool,
+    env_degradation_signaled: bool,
 ) -> _InFlightNudgeFlags:
     """Append any due in-flight nudges to ``step.observation``.
 
@@ -127,6 +150,13 @@ def _apply_in_flight_nudges(
         if _ctx_ratio > 0.70:
             _midflight_nudges.append(_CONTEXT_PRESSURE_NUDGE.format(level=f"{_ctx_ratio:.0%}"))
             context_pressure_signaled = True
+    # Environment-degradation guidance — once per turn, right after the
+    # first environmental tool failure (see _ENV_DEGRADATION_NUDGE).
+    if not env_degradation_signaled and any(
+        _step_is_environmental_failure(s) for s in _steps_with_current
+    ):
+        _midflight_nudges.append(_ENV_DEGRADATION_NUDGE)
+        env_degradation_signaled = True
     if _midflight_nudges:
         step.observation = (
             ((step.observation or "") + "\n\n") if step.observation else ""
@@ -135,4 +165,5 @@ def _apply_in_flight_nudges(
         context_pressure_signaled=context_pressure_signaled,
         green_verification_convergence_active=green_verification_convergence_active,
         force_convergence_next=force_convergence_next,
+        env_degradation_signaled=env_degradation_signaled,
     )

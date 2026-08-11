@@ -127,3 +127,40 @@ class TestEdgeCases:
 
     def test_whitespace_only(self) -> None:
         assert _final_answer_requests_user_help("   \n\t  ") is False
+
+
+class TestAllowShortLoose:
+    """Fail-closed guards (the hard security guards) pass
+    ``allow_short_loose=False`` so a brief report that merely mentions
+    token/权限/permission cannot silently escape them. Genuine tight-marker
+    hand-offs must still clear the guard."""
+
+    def test_short_report_mentioning_token_not_help_when_tight(self) -> None:
+        msg = "已完成迁移,shell 调用保留以处理 token 格式。"
+        # Default (loose path on): a <150 char mention is treated as a sign-off.
+        assert _final_answer_requests_user_help(msg) is True
+        # Fail-closed mode: a short report mentioning token is NOT a hand-off.
+        assert _final_answer_requests_user_help(msg, allow_short_loose=False) is False
+
+    def test_short_report_mentioning_permission_not_help_when_tight(self) -> None:
+        msg = "调研完成,权限配置在文档中。"
+        assert _final_answer_requests_user_help(msg, allow_short_loose=False) is False
+
+    def test_tight_marker_handoff_still_escapes_when_tight(self) -> None:
+        msg = "请确认是否允许使用 shell 管道特性,否则无法继续。"
+        assert _final_answer_requests_user_help(msg, allow_short_loose=False) is True
+
+    def test_short_signoff_with_tight_marker_still_escapes_when_tight(self) -> None:
+        # Genuine hand-off that also mentions token — must escape via the
+        # tight marker (请补充) even with the loose path disabled.
+        msg = "需要权限 token,请补充后继续。"
+        assert _final_answer_requests_user_help(msg, allow_short_loose=False) is True
+
+    def test_long_report_unchanged(self) -> None:
+        report = (
+            "Tokens, permissions, and login flows are the three pillars "
+            "of any auth system. A token without scoped permissions is "
+            "a credential leak waiting to happen. Login flows that don't "
+            "rotate credentials extend the blast radius of any breach. "
+        ) * 5
+        assert _final_answer_requests_user_help(report, allow_short_loose=False) is False

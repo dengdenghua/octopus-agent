@@ -427,6 +427,59 @@ class TestStepIntroducesSecret:
         step = _step(1, action='read_file({"path": "runtime/foo.py"})')
         assert _step_introduces_secret(step) == []
 
+    def test_test_path_exempt(self) -> None:
+        # Tests legitimately embed mock credentials; a fail-closed guard
+        # firing on a test fixture would 3-strike the task (regression:
+        # this detector was the only security detector without a test-path
+        # exemption — every sibling exempts tests).
+        step = _step(
+            1,
+            action=(
+                'edit_file({"path": "tests/fixtures.py", '
+                '"old_string": "x = 1", '
+                '"new_string": "MOCK_PAT = \\"ghp_abcdefghijklmnopqrstuvwxyz123456\\""})'
+            ),
+        )
+        assert _step_introduces_secret(step) == []
+
+    def test_test_path_conftest_exempt(self) -> None:
+        step = _step(
+            1,
+            action=(
+                'edit_file({"path": "tests/conftest.py", '
+                '"old_string": "x = 1", '
+                '"new_string": "client = Client(api_key=\\"sk-test-abcdefghijklmnopqrstuvwxyz\\")"})'
+            ),
+        )
+        assert _step_introduces_secret(step) == []
+
+    def test_marked_fixture_name_exempt(self) -> None:
+        # The guard message advertises "if the string is genuinely a
+        # non-secret fixture — make that explicit"; a MOCK_/FAKE_-prefixed
+        # binding is that explicit marker and must clear the guard.
+        step = _step(
+            1,
+            action=(
+                'edit_file({"path": "src/config.py", '
+                '"old_string": "x = 1", '
+                '"new_string": "FAKE_API_KEY = \\"sk-abcdefghijklmnopqrstuvwxyz1234567890\\""})'
+            ),
+        )
+        assert _step_introduces_secret(step) == []
+
+    def test_unmarked_secret_in_runtime_still_fires(self) -> None:
+        # The exemption must NOT swallow a real-looking unmarked secret in
+        # runtime code — only clearly-marked fixtures / test paths escape.
+        step = _step(
+            1,
+            action=(
+                'edit_file({"path": "runtime/foo.py", '
+                '"old_string": "x = 1", '
+                '"new_string": "API_KEY = \\"sk-abcdefghijklmnopqrstuvwxyz1234567890\\""})'
+            ),
+        )
+        assert _step_introduces_secret(step) != []
+
 
 class TestSecretInPayloadGuard:
     def test_non_code_mode_still_fires(self) -> None:

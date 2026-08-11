@@ -161,6 +161,117 @@ def _fabricated_citation_guard(steps: list[ReActStep], final_answer: str) -> str
     )
 
 
+# ── External-fact grounding (non-code turns) ────────────────────────────
+# The citation guard above catches fabricated *links*; this one catches
+# fabricated *numbers*. When a turn actually fetched content, a currency
+# amount / percentage / version / dated fact asserted in the answer is
+# treated as a claim sourced from that content — if its digits never appear
+# in any observation, the claim is ungrounded. Repair-tier (not hard): the
+# model can cite the observation it came from or soften to an approximation.
+# Deliberately narrow to keep false positives near zero, mirroring the
+# citation guard's boundary: fires only on research turns (fetched=True),
+# only for external-fact-shaped numbers (never bare integers / single-dot
+# decimals), and the numeric core is matched as a substring of the
+# observation digit-stream so any overlapping evidence clears it.
+#
+# The one way a number legitimately misses the observation digit-stream is
+# when it is NOT presented as a source echo — the model's own approximation,
+# synthesis, or conversion. So a number is skipped when its immediate context
+# carries a hedge / own-understanding marker (约 / 据我了解 / approximately /
+# i believe) or an aggregation marker (总价 / 合计 / total / sum). This makes
+# the guard's advertised escape real (softening actually clears it) and keeps
+# honest synthesis / currency conversion out of the false-positive zone —
+# a guard that flags its own escape hatch wedges the loop.
+_EXTERNAL_FACT_RE = re.compile(
+    r"(?:[¥$€£]\s*)\d{1,3}(?:,\d{3})*(?:\.\d+)?"  # currency-prefixed ¥1,200 / $0.80
+    r"|\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:元|美元|人民币)"  # currency-suffixed 1,200元
+    r"|\d+(?:\.\d+)?\s*%"  # percentage
+    r"|\b\d+\.\d+\.\d+(?:[-.]\w+)*\b"  # version N.N.N
+    r"|\b(?:19|20)\d{2}[-年]\d{1,2}(?:[-月]\d{1,2}日?)?\b"  # dated fact YYYY-M(-D)
+)
+_HEDGE_OR_OWN_MARKERS = (
+    "约",
+    "大约",
+    "大概",
+    "左右",
+    "近",
+    "差不多",
+    "粗略",
+    "估计",
+    "可能",
+    "据我了解",
+    "我判断",
+    "我的估计",
+    "我推测",
+    "我估算",
+    "我的了解",
+    "我记得",
+    "approximately",
+    "about",
+    "around",
+    "roughly",
+    "approx",
+    "~",
+    "i believe",
+    "my estimate",
+    "best guess",
+    "as far as i know",
+)
+_AGGREGATE_MARKERS = (
+    "总计",
+    "合计",
+    "总价",
+    "总额",
+    "加总",
+    "相加",
+    "求和",
+    "共计",
+    "total",
+    "sum",
+    "combined",
+    "aggregate",
+)
+_NUMBER_CONTEXT_BEFORE = 18
+_NUMBER_CONTEXT_AFTER = 4
+
+
+def _ungrounded_external_fact_guard(steps: list[ReActStep], final_answer: str) -> str | None:
+    """Reject a research/chat final that asserts external facts it never fetched."""
+    fetched, observations = _turn_fetched_external_content(steps)
+    if not fetched:
+        # No research happened this turn — any number is the model's own
+        # knowledge or reasoning, not a fact claimed from this turn.
+        return None
+    obs_digits = re.sub(r"\D", "", observations)
+    answer = final_answer or ""
+    suppress = _HEDGE_OR_OWN_MARKERS + _AGGREGATE_MARKERS
+    ungrounded: list[str] = []
+    for match in _EXTERNAL_FACT_RE.finditer(answer):
+        fact = match.group(0).strip()
+        core = re.sub(r"\D", "", fact)
+        if not core or core in obs_digits:
+            continue
+        window_start = max(0, match.start() - _NUMBER_CONTEXT_BEFORE)
+        window_end = match.end() + _NUMBER_CONTEXT_AFTER
+        context = answer[window_start:window_end].lower()
+        if any(marker in context for marker in suppress):
+            # Hedged / own-understanding / synthesized number — the model
+            # isn't presenting it as a source echo, so don't police it.
+            continue
+        ungrounded.append(fact)
+    if not ungrounded:
+        return None
+    shown = ", ".join(dict.fromkeys(ungrounded))
+    return (
+        f"Your answer asserts external fact(s) — {shown} — that never "
+        "appeared in this turn's search/fetch results. Presenting a number "
+        "as a sourced fact it wasn't sourced from is fabrication. Either "
+        "cite the observation the figure actually came from, or soften to "
+        'an approximation / your own understanding (e.g. "约 ¥…" / '
+        '"据我了解…" / "approximately …").'
+    )
+
+
 _CHINESE_COUNT_WORDS = {
     "二": 2,
     "两": 2,

@@ -382,6 +382,7 @@ def _code_mode_completion_guard(
     final_answer: str,
     *,
     todo_protocol_required: bool = True,
+    execution_degraded: bool = False,
 ) -> str | None:
     """Reject premature code-mode Final Answer attempts."""
     if _final_answer_requests_user_help(final_answer):
@@ -439,7 +440,18 @@ def _code_mode_completion_guard(
             "the repository test directory, read them back, and run them."
         )
 
-    if _has_verification_requiring_code_write(steps) and not _has_code_verification(steps):
+    # The "files changed but no verification run" veto demands EXECUTED
+    # test/typecheck evidence. When the execution environment is degraded
+    # (sandbox / network blocks, detected live in the trajectory), that
+    # evidence physically cannot exist — skip the veto so the turn can
+    # close with static evidence + an explicit limitation note. The
+    # todo-protocol branches above are checklist-file contracts and hold
+    # regardless of execution health.
+    if (
+        not execution_degraded
+        and _has_verification_requiring_code_write(steps)
+        and not _has_code_verification(steps)
+    ):
         return (
             "Code mode cannot finish yet: files were changed "
             "but no verification step is recorded. "

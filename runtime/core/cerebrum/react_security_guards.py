@@ -45,7 +45,15 @@ from runtime.core.cerebrum.react_types import ReActStep
 def _user_help_requested(final_answer: str) -> bool:
     from runtime.core.cerebrum.react_guards import _final_answer_requests_user_help
 
-    return _final_answer_requests_user_help(final_answer)
+    # These guards are fail-closed security gates: only a *genuine*
+    # hand-off (a tight marker like 请确认 / please confirm / 无法继续)
+    # may escape. The loose short-answer path — any mention of
+    # token/权限/permission in a <150 char final — is too wide for them:
+    # a brief report that happens to mention those words would silently
+    # clear the guard while the risky call stays in the trajectory. The
+    # secret-in-payload guard skips this escape entirely (a leak while
+    # asking for help is still a leak).
+    return _final_answer_requests_user_help(final_answer, allow_short_loose=False)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -96,9 +104,10 @@ def _dynamic_exec_guard(
         "Almost any legitimate need has a safer alternative: "
         "``ast.literal_eval`` for parsing literals, an explicit dispatch "
         "dict for plugin loading, ``importlib.import_module`` for "
-        "well-known module names. If you genuinely need dynamic exec, "
-        "explicitly justify it in the Final Answer and confirm input "
-        "is trusted."
+        "well-known module names. Rewrite the code to one of those — a "
+        "justification in the Final Answer does not clear this guard. If "
+        "you genuinely believe dynamic exec is required and untrusted, "
+        "ask the user to confirm before continuing."
     )
 
 
@@ -149,8 +158,11 @@ def _shell_injection_guard(
         "evaluate the entire command via the shell, so any non-static "
         "argument is a code-injection risk. Pass an argv LIST instead "
         "(``subprocess.run(['cmd', arg1, arg2])``) — that bypasses the "
-        "shell entirely. If you legitimately need shell features (pipes, "
-        "globs), justify it in the Final Answer."
+        "shell entirely. Rewrite the code to an argv list — a "
+        "justification in the Final Answer does not clear this guard. If "
+        "you genuinely need shell features (pipes, globs) and the "
+        "alternative is unacceptable, ask the user to confirm before "
+        "continuing."
     )
 
 
@@ -201,9 +213,11 @@ def _unsafe_deser_guard(
         "``Loader=SafeLoader``) execute arbitrary code on attacker-"
         "controlled input. Use ``json.loads`` for data exchange, "
         "``yaml.safe_load`` for YAML, or a typed schema validator "
-        "(pydantic, msgpack with strict mode) instead. If you must use "
-        "pickle (e.g. for trusted ML model weights), explicitly justify "
-        "the trust boundary in the Final Answer."
+        "(pydantic, msgpack with strict mode) instead. Rewrite the code "
+        "to a safe loader — a justification in the Final Answer does not "
+        "clear this guard. If you genuinely must use pickle (e.g. for "
+        "trusted ML model weights) and no alternative is acceptable, ask "
+        "the user to confirm the trust boundary before continuing."
     )
 
 
@@ -496,9 +510,10 @@ def _new_destructive_call_guard(
         "rm -rf / shutil.rmtree / Path.unlink / os.remove are easy to "
         "get catastrophically wrong (wrong path, race conditions, "
         "permission loops). Either wrap the call in the project's "
-        "safe_rm helper (runtime/execution/arms/safe_rm.py), add a "
-        "test that exercises the cleanup with proper fixtures, or "
-        "explicitly justify why this code path can't be tested."
+        "safe_rm helper (runtime/execution/arms/safe_rm.py), or add a "
+        "test that exercises the cleanup with proper fixtures. A "
+        "justification in the Final Answer does not clear this guard — "
+        "only a paired test edit or safe_rm rewrite does."
     )
 
 

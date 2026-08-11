@@ -283,7 +283,11 @@ def _successful_read_paths(steps: list[ReActStep]) -> set[str]:
     return paths
 
 
-def _final_answer_requests_user_help(final_answer: str) -> bool:
+def _final_answer_requests_user_help(
+    final_answer: str,
+    *,
+    allow_short_loose: bool = True,
+) -> bool:
     """Whether the final answer is asking the user to do something
     rather than reporting a result.
 
@@ -302,8 +306,12 @@ def _final_answer_requests_user_help(final_answer: str) -> bool:
         ask, e.g. ``please confirm`` rather than the bare word
         ``confirm``. Single-word markers (``token``/``permission``)
         are too noisy in technical writing.
-      * Or accept a short answer (< 300 chars) with the original
+      * Or accept a short answer (< 150 chars) with the original
         looser markers — those really are short hand-off messages.
+        Fail-closed guards (the hard security guards) pass
+        ``allow_short_loose=False`` so only a genuine tight-marker
+        hand-off can escape them — a brief report that happens to
+        mention ``token``/``权限`` is not a hand-off.
     """
 
     raw = (final_answer or "").strip()
@@ -361,7 +369,7 @@ def _final_answer_requests_user_help(final_answer: str) -> bool:
     # tuned so that a structured Chinese paragraph (which is denser
     # than English by character count) doesn't trip — a real
     # hand-off message is closer to one or two sentences.
-    if len(raw) < 150:
+    if allow_short_loose and len(raw) < 150:
         loose_markers = (
             "权限",
             "批准",

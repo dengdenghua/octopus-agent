@@ -470,6 +470,18 @@ def run_serve(
         print(c.red(f"security error: {execution_error}"), file=sys.stderr)
         return 2
 
+    # Startup execution-health canary: probe whether a sandboxed command can
+    # run in THIS process environment. When the backend cannot apply its
+    # sandbox (the EPERM root cause) the ReAct run-evidence guards downgrade
+    # automatically instead of three-striking turns for evidence that can
+    # never exist. Best-effort — never blocks or fails startup.
+    try:
+        from runtime.core.cerebrum.env_health import run_startup_canary
+
+        run_startup_canary()
+    except Exception:  # noqa: BLE001 — canary must never block serve
+        logging.getLogger(__name__).debug("startup canary failed", exc_info=True)
+
     try:
         import uvicorn
 

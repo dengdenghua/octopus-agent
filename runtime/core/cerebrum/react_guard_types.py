@@ -36,6 +36,12 @@ class GuardContext:
     browser_operation_mode: bool = False
     grounded_source_paths: frozenset[str] = frozenset()
     model: str = ""  # New: model name for model-aware guard routing
+    # Execution-environment health signal, computed live from the trajectory
+    # (≥2 environmental tool failures — sandbox/network denials the model
+    # cannot fix by retrying). When True, execution-evidence repair guards
+    # downgrade to advisory so a degraded environment can't three-strike a
+    # turn that physically cannot produce the required evidence.
+    execution_degraded: bool = False
 
 
 @dataclass(frozen=True)

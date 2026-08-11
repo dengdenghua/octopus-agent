@@ -221,6 +221,49 @@ class TestNewDestructiveCallGuard:
             is None
         )
 
+    def test_short_report_mentioning_token_still_fires(self) -> None:
+        # Regression: the loose short-answer help path (<150 chars + any
+        # mention of token/权限) used to clear this fail-closed guard. A
+        # brief report that merely mentions "token" is NOT a hand-off — it
+        # must still fire while the risky call sits in the trajectory.
+        steps = [
+            _step(
+                1,
+                action=(
+                    'edit_file({"path": "runtime/foo.py", '
+                    '"old_string": "x", "new_string": "shutil.rmtree(t)"})'
+                ),
+            ),
+        ]
+        msg = _new_destructive_call_guard(
+            steps,
+            "已完成迁移,清理逻辑保留以处理 token 格式。",
+            is_code_mode=True,
+        )
+        assert msg is not None
+        assert "destructive" in msg.lower()
+
+    def test_genuine_tight_marker_handoff_still_short_circuits(self) -> None:
+        # A real "please confirm before continuing" hand-off (the escape the
+        # guard message advertises) must still pass through.
+        steps = [
+            _step(
+                1,
+                action=(
+                    'edit_file({"path": "runtime/foo.py", '
+                    '"old_string": "x", "new_string": "shutil.rmtree(t)"})'
+                ),
+            ),
+        ]
+        assert (
+            _new_destructive_call_guard(
+                steps,
+                "请确认是否允许使用 rmtree 做临时目录清理,否则无法继续。",
+                is_code_mode=True,
+            )
+            is None
+        )
+
 
 # ══════════════════════════════════════════════════════════════════
 # §38 — time.sleep in production guard

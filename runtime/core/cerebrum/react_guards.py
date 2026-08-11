@@ -77,6 +77,7 @@ from runtime.core.cerebrum.react_final_answer_content_guards import (  # noqa: F
     _answer_item_count_guard,
     _fabricated_citation_guard,
     _incomplete_final_answer_guard,
+    _ungrounded_external_fact_guard,
 )
 from runtime.core.cerebrum.react_goal_analysis import (  # noqa: F401 — re-exported for tool_bridge / react_convergence / react_explicit_reads / react_prompt_assembly / tests
     _explicit_source_paths,
@@ -124,6 +125,7 @@ from runtime.core.cerebrum.react_test_quality_guards import (  # noqa: F401 — 
 from runtime.core.cerebrum.react_todo_protocol_guards import (  # noqa: F401 — re-exported for react_in_flight_nudges / react_loop / tests
     _completion_phrase_without_todo_guard,
     _looks_like_completion_phrase,
+    _step_is_failed_execution,
     _todo_protocol_completion_guard,
 )
 from runtime.core.cerebrum.react_verification_guards import (  # noqa: F401 — re-exported for react_in_flight_nudges / react_loop / tests
@@ -237,6 +239,7 @@ def _invoke_code_mode_completion(ctx: GuardContext) -> str | None:
         ctx.steps,
         ctx.final_answer,
         todo_protocol_required=ctx.todo_protocol_required,
+        execution_degraded=ctx.execution_degraded,
     )
 
 
@@ -246,6 +249,14 @@ def _invoke_fabricated_citation(ctx: GuardContext) -> str | None:
     if ctx.is_code_mode:
         return None
     return _fabricated_citation_guard(ctx.steps, ctx.final_answer)
+
+
+def _invoke_ungrounded_fact(ctx: GuardContext) -> str | None:
+    # Research / chat only — code turns have their own evidence cluster
+    # (language / path / typecheck / test-coverage guards).
+    if ctx.is_code_mode:
+        return None
+    return _ungrounded_external_fact_guard(ctx.steps, ctx.final_answer)
 
 
 def _invoke_browser_completion(ctx: GuardContext) -> str | None:
@@ -362,6 +373,7 @@ GUARD_REGISTRY: list[GuardSpec] = [
     GuardSpec("browser-completion guard", "protocol", _invoke_browser_completion),
     # ── Research / chat quality (non-code turns) ──
     GuardSpec("citation-grounding guard", "research", _invoke_fabricated_citation),
+    GuardSpec("fact-grounding guard", "research", _invoke_ungrounded_fact),
     # ── Verification completeness ──
     _spec_code_mode(
         "language-verification guard", "verification", _language_mismatched_verification_guard
@@ -448,6 +460,12 @@ _ADVISORY_GUARD_CATEGORIES = frozenset({"test-quality", "code-smell"})
 _ADVISORY_GUARD_LABELS = frozenset(
     {
         "inspection-answer-fragment guard",
+        # The checklist is a coordination/UI aid, not execution evidence.
+        # Missing or stale todos remain observable through guard telemetry,
+        # but must never replace a useful final answer with internal protocol
+        # wording. Safety, write, tool-result and verification guards still
+        # enforce the actual completion contract independently.
+        "todo-protocol guard",
     }
 )
 _HARD_GUARD_LABELS = frozenset(
@@ -466,6 +484,47 @@ _HARD_GUARD_LABELS = frozenset(
         "red-verification guard",
     }
 )
+
+# Guards whose evidence contract REQUIRES RUNNING a test / typechecker /
+# verification command — not merely writing or reading files. When the
+# execution environment is degraded (sandbox / network / OS-permission
+# blocks, detected live as ≥2 environmental failures in the trajectory),
+# the model physically cannot satisfy these, so ``evaluate_guards``
+# downgrades them from ``repair`` to ``advisory`` for that turn instead of
+# three-striking a turn whose demanded evidence cannot exist.
+#
+#   path-verification guard    → demands running the suggested checks
+#   signature-typecheck guard  → demands running mypy / pyright / pyrefly
+#   language-verification guard → demands a matching-language verifier run
+#
+# Deliberately excludes read/write-based guards: test-coverage (write a
+# test file), wire-schema (write a contract test), dependency-declaration
+# (write a dep-manifest entry) and todo-protocol (write a checklist) all
+# hold even when exec is blocked. The hard-tier false/red-verification
+# guards stay fail-closed: fabrication is never environmentally justified.
+_EXECUTION_EVIDENCE_GUARDS: frozenset[str] = frozenset(
+    {
+        "language-verification guard",
+        "path-verification guard",
+        "signature-typecheck guard",
+    }
+)
+
+
+def _guard_effectively_advisory(ctx: GuardContext, spec: GuardSpec) -> bool:
+    """Whether a firing guard is telemetry-only for this turn.
+
+    Two routes to advisory: the guard is inherently advisory (style /
+    quality tiers), or the execution environment is degraded and the guard
+    demands run-produced evidence the environment cannot supply — downgrade
+    so a sandboxed / network-blocked turn isn't vetoed for evidence that
+    can never exist. Hard-tier and read/write-based guards are never
+    downgraded: fabrication and static-evidence contracts hold even when
+    exec is blocked.
+    """
+    if guard_disposition(spec.label, spec.category) == "advisory":
+        return True
+    return ctx.execution_degraded and spec.label in _EXECUTION_EVIDENCE_GUARDS
 
 
 def guard_disposition(label: str, category: str | None = None) -> str:
@@ -546,8 +605,11 @@ def evaluate_guards(
             # Preserve custom-registry behavior for external callers. Policy
             # applies to the built-in production registry: quality/style
             # findings still produce telemetry but cannot consume another
-            # model iteration or block delivery.
-            if registry is None and guard_disposition(spec.label, spec.category) == "advisory":
+            # model iteration or block delivery. The same telemetry-only
+            # treatment extends to execution-evidence guards when the
+            # trajectory shows a degraded execution environment — the
+            # demanded test/typecheck evidence physically cannot exist.
+            if registry is None and _guard_effectively_advisory(ctx, spec):
                 continue
             return (spec.label, msg)
     return None
@@ -560,6 +622,7 @@ __all__ = [
     "GUARD_REGISTRY",
     "evaluate_guards",
     "guard_disposition",
+    "_guard_effectively_advisory",
     # ── Goal-intent / evidence-path analysis (re-exported) ──
     "_explicit_source_paths",
     "_explicitly_requested_tool_names",
@@ -604,6 +667,7 @@ __all__ = [
     "_answer_item_count_guard",
     "_fabricated_citation_guard",
     "_incomplete_final_answer_guard",
+    "_ungrounded_external_fact_guard",
     # ── Security guards (re-exported) ──
     "_dynamic_exec_guard",
     "_magic_number_guard",

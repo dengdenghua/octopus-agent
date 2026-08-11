@@ -64,11 +64,33 @@ class TestRegistryShape:
         assert guard_disposition("secret-leak guard", "security") == "hard"
         assert guard_disposition("tool-result guard", "protocol") == "hard"
         assert guard_disposition("implementation-write guard", "protocol") == "hard"
-        assert guard_disposition("todo-protocol guard", "protocol") == "repair"
+        assert guard_disposition("todo-protocol guard", "protocol") == "advisory"
         assert guard_disposition("long-function guard", "code-smell") == "advisory"
 
 
 class TestEvaluateGuards:
+    def test_missing_todo_is_recorded_but_does_not_block_delivery(self) -> None:
+        recorded: list[tuple[str, str, str]] = []
+        ctx = GuardContext(
+            steps=[],
+            final_answer="A complete, useful result.",
+            is_code_mode=False,
+            todo_protocol_required=True,
+            todo_protocol_visible=True,
+            goal="coordinate a multi-step task",
+        )
+
+        assert (
+            evaluate_guards(
+                ctx,
+                recorder=lambda label, category, msg: recorded.append(
+                    (label, category, msg)
+                ),
+            )
+            is None
+        )
+        assert any(label == "todo-protocol guard" for label, _category, _msg in recorded)
+
     def test_builtin_advisory_findings_do_not_block(self, monkeypatch) -> None:
         import runtime.core.cerebrum.react_guards as guard_module
 
