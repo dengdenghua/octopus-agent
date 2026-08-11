@@ -4711,6 +4711,61 @@ def test_execute_action_preserves_code_permission_context_in_fallback_session() 
     assert captured["metadata"]["project_signals"] == {"recommended_mode": "coder"}
 
 
+def test_execute_action_preserves_personal_metadata_in_fallback_session() -> None:
+    """The dispatch layer must forward personal_mode / personal_instructions
+    into the tool-session metadata. This is the data-plane half of the
+    personal-space feature (the realtime layer covers the other half); a
+    silent drop here would surface only when a consumer appears, so the
+    passthrough is pinned at the dispatch layer itself."""
+    from runtime.platform.process.session import current_session
+
+    captured: dict[str, Any] = {}
+
+    class _Registry:
+        def has(self, _name: str) -> bool:
+            return True
+
+    class _Executor:
+        registry = _Registry()
+
+        def execute_step(self, *args: Any, **kwargs: Any) -> Any:
+            session = current_session()
+            captured["metadata"] = dict(session.metadata if session else {})
+            return SimpleNamespace(
+                result=SimpleNamespace(status="success", output={"ok": True}),
+            )
+
+    stack = SimpleNamespace(executor=_Executor())
+    agent = SimpleNamespace(agent_id="coder", capabilities={"code_mode_unlock": True})
+    intent = ParsedIntent(
+        raw="fix it",
+        intent_type="task",
+        normalized_goal="fix it",
+        user_context={
+            "mode": "code",
+            "workspace_path": "/tmp/project",
+            "personal_mode": "general",
+            "personal_instructions": "Reply in Chinese and never touch .env",
+        },
+    )
+
+    obs, step = _execute_action_via_beak(
+        stack,
+        'echo({"text": "hi"})',
+        react_task_id=TaskId(uuid4()),
+        react_step_counter=2,
+        agent=agent,
+        intent=intent,
+    )
+
+    assert step is not None
+    assert obs is not None
+    assert captured["metadata"]["personal_mode"] == "general"
+    assert captured["metadata"]["personal_instructions"] == (
+        "Reply in Chinese and never touch .env"
+    )
+
+
 def test_execute_action_via_beak_unknown_skill() -> None:
     stack = _build_stack_with_executor(_ScriptedRouter([]))
     obs, step = _execute_action_via_beak(
@@ -7778,18 +7833,22 @@ def test_parallel_react_reads_keep_selected_workspace_scope(tmp_path) -> None:
     assert "not found" not in observation
 
 
-def test_write_tool_in_parallel_block_forces_serial_dispatch() -> None:
+def test_write_tool_in_parallel_block_forces_serial_dispatch(tmp_path) -> None:
     """If the model mixes a write tool into a multi-action block we
     must still execute serially — concurrent writes can clobber
     each other and the auto-diagnostics path expects a single
     resolved tool. The events should still arrive (one pair each)
     but order is preserved."""
+    # Absolute path under tmp_path so the real write tool never leaks
+    # a CWD-relative tmp_out.txt into the checkout (repo-root variant is
+    # gitignored, but the tests/ CWD variant was not).
+    write_path = str(tmp_path / "tmp_out.txt")
     stack = _build_stack_with_executor(
         _ScriptedRouter(
             [
                 "Thought: read+write\nAction:\n"
                 '    read_file({"path": "a"})\n'
-                '    write_text_file({"path": "tmp_out.txt", "content": "x"})\n\n'
+                f'    write_text_file({{"path": "{write_path}", "content": "x"}})\n\n'
                 "Observation:",
                 "Final Answer: done",
             ]

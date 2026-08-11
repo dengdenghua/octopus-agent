@@ -576,8 +576,13 @@ def evaluate_guards(
     if ctx.model and categories is None:
         from runtime.core.cerebrum.guard_model_policy import guard_categories_for_model
 
-        # Default categories that always apply
-        base_categories = {"security", "protocol", "verification", "evidence", "other"}
+        # Default categories that always apply. "research" is deliberately
+        # in the always-on base set: the docstring contract says salvage
+        # paths retain research-grounding gates (citation / fact-grounding),
+        # which are both gated on `fetched=True` so pure code turns never
+        # fire them. Omitting it here let react_terminal's forced-convergence
+        # path silently drop research guards whenever a model was passed.
+        base_categories = {"security", "protocol", "verification", "evidence", "other", "research"}
         categories = guard_categories_for_model(ctx.model, base_categories=base_categories)
 
     specs = registry if registry is not None else GUARD_REGISTRY

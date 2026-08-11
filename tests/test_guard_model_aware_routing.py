@@ -181,6 +181,47 @@ def test_empty_model_string_treated_as_unknown():
     assert code_smell_fired
 
 
+def test_research_guards_apply_with_model_set():
+    """Research-grounding guards (citation / fact-grounding) survive the
+    model-aware category filter.
+
+    Regression for the salvage-path gap: react_terminal's forced-convergence
+    call passes a non-empty model with no explicit categories, which used to
+    collapse the category set to the always-on base (which omitted "research")
+    and silently dropped research guards. The always-on base must include
+    "research" — evaluate_guards' contract says salvage paths retain
+    research-grounding gates.
+    """
+
+    research_fired = False
+
+    def _citation_guard(ctx: GuardContext) -> str:
+        nonlocal research_fired
+        research_fired = True
+        return "citation not fetched"
+
+    registry = [
+        GuardSpec(
+            label="citation-grounding guard",
+            category="research",
+            invoke=_citation_guard,
+            enabled=True,
+        )
+    ]
+
+    # Premium model: code-smell skipped, but research must still run.
+    ctx = GuardContext(
+        steps=[],
+        final_answer="see [example.com](http://example.com)",
+        is_code_mode=False,
+        model="claude-opus-5",
+    )
+
+    result = evaluate_guards(ctx, registry=registry)
+    assert result == ("citation-grounding guard", "citation not fetched")
+    assert research_fired
+
+
 def test_multiple_categories_mixed_behavior():
     """Mixed categories: security always fires, code-smell only for cheap."""
 
