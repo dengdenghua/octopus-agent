@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { aggregateSimilarToolCalls, isAggregatedToolGroup } from "./activity-aggregator";
+import {
+  aggregateSimilarToolCalls,
+  isAggregatedToolGroup,
+} from "./activity-aggregator";
 
-function makeTool(id: string, name: string, phaseId?: string, args: Record<string, unknown> = {}) {
+function makeTool(
+  id: string,
+  name: string,
+  phaseId?: string,
+  args: Record<string, unknown> = {},
+) {
   return {
     id,
     type: "toolCall" as const,
@@ -28,7 +36,9 @@ describe("aggregateSimilarToolCalls", () => {
   });
 
   it("does not aggregate single tool calls", () => {
-    const items = [makeTool("t1", "edit_file", undefined, { file_path: "a.ts" })];
+    const items = [
+      makeTool("t1", "edit_file", undefined, { file_path: "a.ts" }),
+    ];
     const result = aggregateSimilarToolCalls(items);
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe("toolCall");
@@ -59,6 +69,37 @@ describe("aggregateSimilarToolCalls", () => {
     expect(result).toHaveLength(2);
     expect(result[0].type).toBe("aggregatedToolGroup");
     expect(result[1].type).toBe("toolCall");
+  });
+
+  it("can fold mixed tool kinds into one conversational activity receipt", () => {
+    const items = [
+      makeTool("t1", "read_file", "p1", { file_path: "a.ts" }),
+      makeTool("t2", "edit_file", "p1", { file_path: "b.ts" }),
+      makeTool("t3", "run_command", "p1", { command: "pnpm test" }),
+    ];
+    const result = aggregateSimilarToolCalls(items, {
+      groupMixedKinds: true,
+    });
+    expect(result).toHaveLength(1);
+    expect(isAggregatedToolGroup(result[0])).toBe(true);
+    if (isAggregatedToolGroup(result[0])) {
+      expect(result[0].count).toBe(3);
+      expect(result[0].aggregateKind).toBe("other");
+    }
+  });
+
+  it("can hide internal phase boundaries inside one activity receipt", () => {
+    const items = [
+      makeTool("t1", "read_file", "inspect", { file_path: "a.ts" }),
+      makeTool("t2", "edit_file", "implement", { file_path: "b.ts" }),
+      makeTool("t3", "run_command", "verify", { command: "pnpm test" }),
+    ];
+    const result = aggregateSimilarToolCalls(items, {
+      groupMixedKinds: true,
+      groupAcrossPhases: true,
+    });
+    expect(result).toHaveLength(1);
+    expect(isAggregatedToolGroup(result[0])).toBe(true);
   });
 
   it("breaks aggregation on non-tool items", () => {

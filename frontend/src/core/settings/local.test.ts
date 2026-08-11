@@ -18,6 +18,28 @@ describe("local settings defaults", () => {
     expect(getLocalSettings().context.mode).toBe("react");
   });
 
+  it("provides safe personal-space defaults and normalizes invalid stored modes", () => {
+    expect(getLocalSettings().personal_space).toEqual({
+      default_mode: "general",
+      remember_last_mode: true,
+      custom_instructions: "",
+    });
+
+    localStorage.setItem(
+      LOCAL_SETTINGS_KEY,
+      JSON.stringify({
+        personal_space: {
+          default_mode: "unknown",
+          custom_instructions: "x".repeat(2100),
+        },
+      }),
+    );
+
+    const settings = getLocalSettings().personal_space;
+    expect(settings.default_mode).toBe("general");
+    expect(settings.custom_instructions).toHaveLength(2000);
+  });
+
   it("normalizes persisted chat mode to react", () => {
     localStorage.setItem(
       LOCAL_SETTINGS_KEY,

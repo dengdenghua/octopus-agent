@@ -50,7 +50,20 @@ export interface AggregatedToolGroupItem {
   inferred?: boolean;
 }
 
-export type MaybeAggregatedTimelineItem = TimelineItemLike | AggregatedToolGroupItem;
+export interface ActivityAggregationOptions {
+  /**
+   * Fold adjacent tools from the same phase even when their visual kinds
+   * differ. The conversation timeline uses this to read like one human
+   * activity receipt; detailed per-tool evidence remains expandable.
+   */
+  groupMixedKinds?: boolean;
+  /** Treat phase changes as internal detail within the same visible receipt. */
+  groupAcrossPhases?: boolean;
+}
+
+export type MaybeAggregatedTimelineItem =
+  | TimelineItemLike
+  | AggregatedToolGroupItem;
 
 const SHELL_FILE_READING_COMMANDS = new Set([
   "cat",
@@ -111,6 +124,7 @@ function samePhase(a: ToolCallLike, b: ToolCallLike): boolean {
 
 export function aggregateSimilarToolCalls(
   items: readonly TimelineItemLike[],
+  options: ActivityAggregationOptions = {},
 ): MaybeAggregatedTimelineItem[] {
   const result: MaybeAggregatedTimelineItem[] = [];
   let currentGroup: ToolCallLike[] = [];
@@ -151,10 +165,12 @@ export function aggregateSimilarToolCalls(
     const kind = toolCallEvidenceKind(toolItem);
     if (
       currentGroup.length > 0 &&
-      currentKind === kind &&
-      currentGroup[0] && samePhase(currentGroup[0]!, toolItem)
+      (currentKind === kind || options.groupMixedKinds) &&
+      currentGroup[0] &&
+      (options.groupAcrossPhases || samePhase(currentGroup[0]!, toolItem))
     ) {
       currentGroup.push(toolItem);
+      if (currentKind !== kind) currentKind = "other";
     } else {
       flush();
       currentGroup = [toolItem];

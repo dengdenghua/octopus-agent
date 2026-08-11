@@ -393,6 +393,16 @@ describe("MessageList process trace lifecycle", () => {
       },
     } as unknown as Message;
     expect(messageClipboardText(publicSummaryOnly)).toBe("我先核对两个文件。");
+
+    const untrustedAlias = {
+      id: "assistant-untrusted-summary-alias",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        reasoning_summary: "接下来我会检查配置。",
+      },
+    } as AIMessage;
+    expect(messageClipboardText(untrustedAlias)).toBe("");
   });
 
   test("shows the assistant avatar before the first model event arrives", () => {
@@ -867,8 +877,13 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
-    const savedStepToggles = screen.getAllByTitle("Open details");
-    expect(savedStepToggles).toHaveLength(2);
+    expect(
+      screen.queryByTestId("process-details-trigger"),
+    ).not.toBeInTheDocument();
+    const savedStepRows = screen.getAllByTestId(
+      "process-timeline-event-execution",
+    );
+    expect(savedStepRows).toHaveLength(2);
     expect(screen.getByText(/old market query/)).toBeInTheDocument();
     // Explicit public summaries render as compact one-line process rows.
     expect(
@@ -879,7 +894,7 @@ describe("MessageList process trace lifecycle", () => {
       screen.getByText("Inspect the latest market request."),
     ).toBeInTheDocument();
 
-    fireEvent.click(savedStepToggles[0]!);
+    fireEvent.click(savedStepRows[0]!);
 
     expect(screen.getAllByText(/old market query/).length).toBeGreaterThan(0);
     expect(screen.getByText(/latest market query/)).toBeInTheDocument();
@@ -931,9 +946,11 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
-    // Old trace renders (collapsed) + streaming trace keeps its own row —
-    // one "Open details" toggle per rendered trace.
-    expect(screen.getAllByTitle("Open details").length).toBeGreaterThan(0);
+    // Old trace renders (collapsed) + streaming trace keeps its own row;
+    // conversation rows no longer duplicate the global workbench control.
+    expect(
+      screen.queryByTestId("process-details-trigger"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getAllByTestId("process-timeline-event-execution").length,
     ).toBeGreaterThan(0);
@@ -1208,6 +1225,9 @@ describe("MessageList reasoning privacy", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText(publicSummary)).toBeInTheDocument();
     expect(screen.queryByText(/SOUL\.md/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("process-details-trigger"),
+    ).not.toBeInTheDocument();
 
     const opened: CustomEvent[] = [];
     const handleOpen = (event: Event) => opened.push(event as CustomEvent);

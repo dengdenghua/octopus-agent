@@ -10,6 +10,7 @@ import {
   FileTextIcon,
   GitBranchIcon,
   GlobeIcon,
+  InfoIcon,
   Loader2Icon,
   MonitorIcon,
   MoreHorizontalIcon,
@@ -50,6 +51,11 @@ import {
 import { useSubtask } from "@/core/tasks/context";
 import { SubtaskHoverPreview } from "./messages/parallel-subtasks-grid";
 import { MarkdownContent } from "./messages/markdown-content";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // ── Shared UI primitives ──────────────────────────────────────────────
 
@@ -667,6 +673,16 @@ function compactReference(value: unknown, max: number): string {
   return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
 }
 
+function compactTokenCount(value: number): string {
+  if (value >= 1_000_000) {
+    return `${Number((value / 1_000_000).toFixed(1))}M`;
+  }
+  if (value >= 1_000) {
+    return `${Number((value / 1_000).toFixed(1))}K`;
+  }
+  return value.toLocaleString();
+}
+
 function ReferenceIcon({
   fallbackClassName,
   Icon,
@@ -797,6 +813,25 @@ function SummaryAgentRow({ tile }: { tile: AgentTile }) {
 // ============================================================================
 // 看板概要页 (Agent Summary Dashboard)
 // ============================================================================
+function interruptedPhaseIndex(phases: AgentPhase[]): number {
+  const activeIndex = phases.findIndex(
+    (phase) =>
+      phase.status === "running" || phase.status === "waiting_approval",
+  );
+  if (activeIndex >= 0) return activeIndex;
+
+  const pendingIndex = phases.findIndex((phase) => phase.status === "pending");
+  if (pendingIndex >= 0) return pendingIndex;
+
+  // A provider can mark every todo complete just before the response stream
+  // is interrupted. Keep earlier completed work, but do not present the final
+  // handoff step as successfully settled when the turn never finished.
+  for (let index = phases.length - 1; index >= 0; index -= 1) {
+    if (phases[index]?.status === "done") return index;
+  }
+  return -1;
+}
+
 export function AgentSummaryPage({
   phases,
   diffEntries,
@@ -806,6 +841,10 @@ export function AgentSummaryPage({
   progressOutline,
   userInput,
   terminalState,
+  contextTokens,
+  maxContextTokens,
+  isCompressingContext,
+  onCompressContext,
   onSelectTab,
   onOpenArtifact,
 }: {
@@ -824,6 +863,10 @@ export function AgentSummaryPage({
     attachments: Array<{ filename: string }>;
   } | null;
   terminalState?: "interrupted" | "failed" | null;
+  contextTokens?: number;
+  maxContextTokens?: number;
+  isCompressingContext?: boolean;
+  onCompressContext?: () => void | Promise<void>;
   onSelectTab?: (tabId: AgentWorkbenchTabId) => void;
   onOpenArtifact?: (path: string) => void;
 }) {
@@ -865,6 +908,21 @@ export function AgentSummaryPage({
       phase.status === "running" || phase.status === "waiting_approval",
   );
   const runActive = Boolean(runningPhase);
+  const hasTodoPlan =
+    phases.length > 0 && blocks.some((block) => block.kind === "todo");
+  const interruptedTaskIndex =
+    terminalState === "interrupted" && hasTodoPlan
+      ? interruptedPhaseIndex(phases)
+      : -1;
+  const displayedDonePhaseCount =
+    donePhaseCount -
+    (interruptedTaskIndex >= 0 &&
+    phases[interruptedTaskIndex]?.status === "done"
+      ? 1
+      : 0);
+  const progressSectionLabel = hasTodoPlan
+    ? t.todoList.title
+    : t.agentWorkbenchPages.progress;
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => {
       const next = new Set(prev);
@@ -956,10 +1014,7 @@ export function AgentSummaryPage({
       if (diffEntries.length > 0) {
         next.add("artifacts");
         next.delete("references");
-      } else if (
-        phases.length === 0 &&
-        totalReferenceItems > 0
-      ) {
+      } else if (phases.length === 0 && totalReferenceItems > 0) {
         next.add("references");
       } else if (phases.length > 0) {
         next.delete("references");
@@ -1066,10 +1121,32 @@ export function AgentSummaryPage({
     };
   }, [blocks, t, inputReferenceItems]);
 
-  // A tiny context sample is not a useful percentage and reads like task
-  // completion. Keep the exact token count in the context section, but only
-  // surface the compact percentage once it carries real signal.
-  const showContextEstimate = contextStats.percentage >= 5;
+  // Prefer the same real conversation-window estimate used by the composer.
+  // Falling back to observed reference text keeps the standalone workbench
+  // useful in tests and embedded surfaces that do not own thread messages.
+  const resolvedContextTokens = Math.max(
+    0,
+    contextTokens ?? contextStats.totalTokens,
+  );
+  const resolvedMaxContextTokens = Math.max(0, maxContextTokens ?? 128_000);
+  const resolvedContextPercentage =
+    resolvedMaxContextTokens > 0 && resolvedContextTokens > 0
+      ? Math.max(
+          1,
+          Math.min(
+            Math.round(
+              (resolvedContextTokens / resolvedMaxContextTokens) * 100,
+            ),
+            100,
+          ),
+        )
+      : 0;
+  const showContextEstimate = resolvedContextPercentage >= 1;
+  const formattedContextLimit = compactTokenCount(resolvedMaxContextTokens);
+  const contextUsageLabel = t.agentWorkbenchPages.contextUsed(
+    resolvedContextPercentage,
+    formattedContextLimit,
+  );
 
   const isCompletelyEmpty =
     !focusedProcessEvent &&
@@ -1083,22 +1160,28 @@ export function AgentSummaryPage({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
         {/* 思考/执行详情均在对话框内完整展示，右侧不再重复渲染。
-            Progress section is always visible when workbench is open (user requirement:
-            "靠展开工作台" to show steps, not driven by step count or auto-expand heuristics). */}
-        {!focusedProcessEvent && (
-          <section className="border-b border-border-subtle py-4">
+            The task plan stays visible even when a transcript process event is
+            focused: selecting evidence must not erase the user's todo list. */}
+        {(phases.length > 0 || showOutline) && (
+          <section
+            className="border-b border-border-subtle py-4"
+            data-testid="workbench-task-plan"
+          >
             <button
               type="button"
               aria-expanded={expandedSections.has("progress")}
               onClick={() => toggleSection("progress")}
               className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
+              data-testid="workbench-task-plan-toggle"
             >
               <h3 className="text-xs font-medium text-foreground">
-                {t.agentWorkbenchPages.progress}
+                {progressSectionLabel}
               </h3>
               <span className="ml-auto truncate text-xs text-muted-foreground">
                 {terminalState === "interrupted"
-                  ? t.backgroundTasks.interrupted
+                  ? phases.length > 0
+                    ? `${displayedDonePhaseCount}/${phases.length} ${t.agentWorkbenchPages.statusDone} · ${t.backgroundTasks.interrupted}`
+                    : t.backgroundTasks.interrupted
                   : terminalState === "failed"
                     ? t.agentWorkbench.statusError
                     : phases.length > 0
@@ -1122,46 +1205,81 @@ export function AgentSummaryPage({
                 <ChevronRightIcon className="size-3.5 text-muted-foreground" />
               )}
             </button>
-            {phases.length > 0 && (
-              <div className="mt-2 h-px overflow-hidden bg-border/35">
-                <div
-                  className={cn(
-                    "h-full transition-all",
-                    terminalState === "interrupted"
-                      ? "bg-warning/45"
-                      : terminalState === "failed"
-                        ? "bg-destructive/45"
-                        : "bg-muted-foreground/35",
-                  )}
-                  style={{
-                    width: `${Math.max(6, Math.round((donePhaseCount / phases.length) * 100))}%`,
-                  }}
-                />
-              </div>
-            )}
             {expandedSections.has("progress") &&
               (phases.length > 0 ? (
-                <ul className="mt-3 space-y-1">
-                  {phases.map((phase, index) => (
-                    <li
-                      key={phase.id}
-                      className="flex min-h-7 items-center gap-2"
-                    >
-                      <StatusGlyph status={phase.status} className="size-3.5" />
-                      <span className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 font-mono text-micro font-medium leading-4 text-muted-foreground">
-                        P{index + 1}
-                      </span>
-                      <span
-                        className="min-w-0 flex-1 truncate text-xs text-foreground"
-                        title={phase.title}
+                <ul
+                  className={cn(
+                    "mt-3 overflow-y-auto pr-0.5",
+                    hasTodoPlan ? "max-h-72 space-y-0.5" : "space-y-1",
+                  )}
+                  data-testid={
+                    hasTodoPlan
+                      ? "workbench-todo-list"
+                      : "workbench-progress-list"
+                  }
+                >
+                  {phases.map((phase, index) => {
+                    const displayStatus =
+                      index === interruptedTaskIndex
+                        ? ("warning" as const)
+                        : phase.status;
+                    const displayStatusText =
+                      displayStatus === "warning"
+                        ? t.backgroundTasks.interrupted
+                        : phaseStatusText(displayStatus);
+                    return (
+                      <li
+                        key={phase.id}
+                        className={cn(
+                          "flex gap-2",
+                          hasTodoPlan
+                            ? "-mx-2 min-h-8 items-start rounded-md px-2 py-1.5"
+                            : "min-h-7 items-center",
+                          hasTodoPlan &&
+                            (displayStatus === "running" ||
+                              displayStatus === "waiting_approval") &&
+                            "bg-info/5",
+                          displayStatus === "warning" && "bg-warning/5",
+                        )}
+                        data-task-status={displayStatus}
                       >
-                        {agentPhaseDisplayTitle(phase, t.agentPhases)}
-                      </span>
-                      <span className="shrink-0 text-mini text-muted-foreground">
-                        {phaseStatusText(phase.status)}
-                      </span>
-                    </li>
-                  ))}
+                        <StatusGlyph
+                          status={displayStatus}
+                          className={cn("size-3.5", hasTodoPlan && "mt-0.5")}
+                        />
+                        {!hasTodoPlan && (
+                          <span className="shrink-0 rounded bg-muted/65 px-1.5 py-0.5 font-mono text-micro font-medium leading-4 text-muted-foreground">
+                            P{index + 1}
+                          </span>
+                        )}
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1 text-xs",
+                            hasTodoPlan
+                              ? "line-clamp-2 leading-5"
+                              : "truncate text-foreground",
+                            hasTodoPlan &&
+                              (displayStatus === "running" ||
+                                displayStatus === "waiting_approval")
+                              ? "font-medium text-foreground"
+                              : hasTodoPlan
+                                ? "text-muted-foreground"
+                                : null,
+                          )}
+                          title={phase.title}
+                        >
+                          {agentPhaseDisplayTitle(phase, t.agentPhases)}
+                        </span>
+                        {hasTodoPlan ? (
+                          <span className="sr-only">{displayStatusText}</span>
+                        ) : (
+                          <span className="shrink-0 text-mini text-muted-foreground">
+                            {displayStatusText}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <ul className="mt-3 space-y-1">
@@ -1364,36 +1482,109 @@ export function AgentSummaryPage({
         {/* 上下文（只展示本轮事件流里可确认的内容） */}
         {!isCompletelyEmpty && (
           <section className="py-4">
-            <button
-              type="button"
-              aria-expanded={expandedSections.has("references")}
-              onClick={() => toggleSection("references")}
-              className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
-            >
-              <h3 className="text-xs font-medium text-foreground">
-                {t.agentWorkbenchPages.context}
-              </h3>
-              <span className="ml-auto truncate text-xs text-muted-foreground">
-                {totalReferenceItems > 0
-                  ? t.agentWorkbenchPages.sourceCount(totalReferenceItems)
-                  : t.agentWorkbenchPages.noSources}
-                {showContextEstimate
-                  ? ` · ${t.agentWorkbenchPages.estimatePercentage(
-                      contextStats.percentage,
-                    )}`
-                  : ""}
-              </span>
-              {expandedSections.has("references") ? (
-                <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
-              ) : (
-                <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-expanded={expandedSections.has("references")}
+                onClick={() => toggleSection("references")}
+                className="flex min-w-0 flex-1 items-center gap-1.5 text-left transition-colors hover:text-foreground"
+              >
+                <h3 className="text-xs font-medium text-foreground">
+                  {t.agentWorkbenchPages.context}
+                </h3>
+                {expandedSections.has("references") ? (
+                  <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                ) : (
+                  <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
+              </button>
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <span
+                    role="img"
+                    tabIndex={0}
+                    aria-label={t.agentWorkbenchPages.contextDescription}
+                    className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                  >
+                    <InfoIcon className="size-3.5" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="start">
+                  {t.agentWorkbenchPages.contextDescription}
+                </TooltipContent>
+              </Tooltip>
+              {!expandedSections.has("references") ? (
+                <span className="ml-auto truncate text-xs text-muted-foreground">
+                  {totalReferenceItems > 0
+                    ? t.agentWorkbenchPages.sourceCount(totalReferenceItems)
+                    : t.agentWorkbenchPages.noSources}
+                  {showContextEstimate
+                    ? ` · ${resolvedContextPercentage}%`
+                    : ""}
+                </span>
+              ) : onCompressContext ? (
+                <button
+                  type="button"
+                  onClick={() => void onCompressContext()}
+                  disabled={isCompressingContext || resolvedContextTokens <= 0}
+                  className="ml-auto h-7 shrink-0 rounded-md bg-muted px-3 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:cursor-default disabled:opacity-50"
+                >
+                  {isCompressingContext
+                    ? t.contextCompressor.compressing
+                    : t.agentWorkbenchPages.contextCompress}
+                </button>
+              ) : null}
+            </div>
             {expandedSections.has("references") && (
               <div className="mt-3">
-                {/* 上下文来源分类（可点击切换）+ 进度条 */}
+                {/* Real context-window usage. The colored source segments fill
+                    only the occupied portion; the remainder is capacity. */}
                 <div>
-                  <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                  {showContextEstimate ? (
+                    <div className="mb-3 flex items-center gap-2">
+                      <div
+                        className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full border border-border-subtle bg-background"
+                        data-testid="workbench-context-usage-bar"
+                      >
+                        <div
+                          className="flex h-full overflow-hidden rounded-full bg-muted-foreground/20"
+                          style={{ width: `${resolvedContextPercentage}%` }}
+                        >
+                          {contextStats.segments.length === 0 ? (
+                            <div className="h-full w-full bg-muted-foreground/30" />
+                          ) : (
+                            contextStats.segments.map((segment) => (
+                              <div
+                                key={segment.id}
+                                className={cn(
+                                  "h-full transition-all",
+                                  OBSERVED_REFERENCE_META[segment.id]
+                                    .barClassName,
+                                )}
+                                style={{ width: `${segment.percentage}%` }}
+                                title={`${segment.label} ${t.agentWorkbenchPages.estimatedTokens(segment.tokens)}`}
+                              />
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={contextUsageLabel}
+                            className="shrink-0 font-mono text-xs text-foreground"
+                          >
+                            {resolvedContextPercentage}%
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="end">
+                          {contextUsageLabel}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  ) : null}
+                  <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                     {observedReferenceTabs.length === 0 ? (
                       <span className="text-muted-foreground">
                         {t.agentWorkbenchPages.noSources}
@@ -1412,67 +1603,24 @@ export function AgentSummaryPage({
                             )}
                             onClick={() => setRefTab(tab.id)}
                             className={cn(
-                              "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 transition-all",
+                              "inline-flex shrink-0 items-center gap-1.5 border-b pb-1 transition-colors",
                               isActive
-                                ? "bg-muted font-medium text-foreground"
-                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                                ? "border-foreground/70 font-medium text-foreground"
+                                : "border-transparent text-muted-foreground hover:text-foreground",
                             )}
                           >
                             <span
                               className={cn(
-                                "inline-block size-1.5 rounded-full transition-all",
+                                "inline-block size-2 rounded-sm transition-all",
                                 meta.dotClassName,
-                                isActive && "scale-110",
                               )}
                             />
                             <span>{tab.label}</span>
-                            <span
-                              className={cn(
-                                "font-mono text-xs",
-                                isActive
-                                  ? "text-foreground/70"
-                                  : "text-muted-foreground/60",
-                              )}
-                            >
-                              {tab.items.length}
-                            </span>
                           </button>
                         );
                       })
                     )}
-                    {showContextEstimate && (
-                      <span className="ml-auto font-mono text-xs text-muted-foreground/60">
-                        {t.agentWorkbenchPages.estimatedTokens(
-                          contextStats.totalTokens,
-                        )}
-                      </span>
-                    )}
                   </div>
-                  {showContextEstimate ? (
-                    <div className="h-1 overflow-hidden rounded-full bg-border/35">
-                      <div
-                        className="flex h-full"
-                        style={{ width: `${contextStats.percentage}%` }}
-                      >
-                        {contextStats.segments.length === 0 ? (
-                          <div className="h-full w-full bg-muted-foreground/25" />
-                        ) : (
-                          contextStats.segments.map((segment) => (
-                            <div
-                              key={segment.id}
-                              className={cn(
-                                "h-full transition-all",
-                                OBSERVED_REFERENCE_META[segment.id]
-                                  .barClassName,
-                              )}
-                              style={{ width: `${segment.percentage}%` }}
-                              title={`${segment.label} ${t.agentWorkbenchPages.estimatedTokens(segment.tokens)}`}
-                            />
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
                 {/* 上下文列表 */}
                 <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-0.5">

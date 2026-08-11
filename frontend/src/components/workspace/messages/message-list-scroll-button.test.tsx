@@ -130,7 +130,9 @@ describe("MessageList scroll-to-latest affordance", () => {
     const button = screen.getByTestId("scroll-to-latest");
     expect(button).toHaveTextContent("Latest");
     expect(button).toHaveAccessibleName("Back to latest message");
-    expect(button).toHaveStyle({ bottom: "72px" });
+    expect(button).toHaveStyle({
+      bottom: "calc(var(--chat-input-overlay-height, 160px) + 12px)",
+    });
   });
 
   test("renders a left turn locator rail for quick jumps between user turns", () => {

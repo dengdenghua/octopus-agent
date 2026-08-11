@@ -30,6 +30,16 @@ describe("ConversationScrollButton", () => {
     stickState.scrollToBottom.mockReset();
   });
 
+  it("centers the affordance above the composer", () => {
+    render(<ConversationScrollButton>Latest</ConversationScrollButton>);
+
+    expect(screen.getByRole("button")).toHaveClass(
+      "left-1/2",
+      "-translate-x-1/2",
+      "bottom-4",
+    );
+  });
+
   it("keeps following streamed activity until the reader explicitly escapes", () => {
     stickState.escapedFromLock = false;
     const { rerender } = render(

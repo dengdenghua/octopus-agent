@@ -13,8 +13,13 @@ export const Conversation = ({ className, ...props }: ConversationProps) => (
       "relative flex-1 overflow-x-hidden overflow-y-hidden",
       className,
     )}
-    initial="smooth"
-    resize="smooth"
+    // Streaming content changes height every frame. A smooth resize scroll
+    // starts a new animation for each measurement, which can visibly wobble
+    // while the user is wheel-scrolling or when the latest button is pressed.
+    // Keep resize reconciliation deterministic; explicit user navigation can
+    // still opt into animation below.
+    initial="instant"
+    resize="instant"
     role="log"
     {...props}
   />
@@ -121,7 +126,7 @@ export const ConversationScrollButton = ({
 
   const handleScrollToBottom = useCallback(() => {
     setPendingActivityCount(0);
-    scrollToBottom();
+    scrollToBottom({ animation: "instant" });
   }, [scrollToBottom]);
 
   const label =
@@ -133,7 +138,7 @@ export const ConversationScrollButton = ({
     !isAtBottom && (
       <Button
         className={cn(
-          "absolute bottom-4 left-[50%] z-40 translate-x-[-50%] rounded-full border-border-default bg-background/92 px-3 text-xs shadow-[var(--shadow-md)] shadow-black/10 backdrop-blur-md hover:bg-background",
+          "absolute bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-full border-border-default bg-background/92 px-3 text-xs shadow-[var(--shadow-md)] shadow-black/10 backdrop-blur-md hover:bg-background",
           className,
         )}
         onClick={handleScrollToBottom}

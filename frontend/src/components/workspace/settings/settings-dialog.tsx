@@ -16,6 +16,7 @@ import {
   SearchIcon,
   XIcon,
   BoxIcon,
+  SparklesIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -73,6 +74,8 @@ const importSession = () =>
   import("@/components/workspace/settings/session-settings-page");
 const importSandbox = () =>
   import("@/components/workspace/settings/sandbox-settings-page");
+const importPersonalSpace = () =>
+  import("@/components/workspace/settings/personal-space-settings-page");
 
 const AboutSettingsPage = lazy(importAbout);
 const AccountSettingsPage = lazy(importAccount);
@@ -86,6 +89,7 @@ const AutomationSettingsPage = lazy(importAutomation);
 const McpSettingsPage = lazy(importMcp);
 const SessionSettingsPage = lazy(importSession);
 const SandboxSettingsPage = lazy(importSandbox);
+const PersonalSpaceSettingsPage = lazy(importPersonalSpace);
 
 // Run every chunk import in parallel the first time the dialog opens.
 // Browsers dedupe the ``import()`` calls against cache, so repeated opens
@@ -109,6 +113,7 @@ function preloadSettingsPages(): void {
     importMcp,
     importSession,
     importSandbox,
+    importPersonalSpace,
   ].forEach((fn) => {
     fn().catch((e) => {
       swallow(e);
@@ -136,7 +141,8 @@ type SettingsSection =
   | "observability"
   | "about"
   | "session"
-  | "sandbox";
+  | "sandbox"
+  | "personalSpace";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -308,6 +314,14 @@ export function SettingsDialog(props: SettingsDialogProps) {
     }
   };
 
+  const personalSpaceLabel = locale.toLowerCase().startsWith("zh")
+    ? "个人空间"
+    : locale.toLowerCase().startsWith("ja")
+      ? "個人スペース"
+      : locale.toLowerCase().startsWith("ko")
+        ? "개인 공간"
+        : "Personal space";
+
   const sections = useMemo(() => {
     type Section = {
       id: SettingsSection;
@@ -387,6 +401,22 @@ export function SettingsDialog(props: SettingsDialogProps) {
           "memory",
           "knowledge",
           ...t.settings.dialog.sectionKeywords.memory,
+        ],
+      },
+      {
+        id: "personalSpace",
+        label: personalSpaceLabel,
+        icon: SparklesIcon,
+        keywords: [
+          "personal space",
+          "personal mode",
+          "default mode",
+          "个人空间",
+          "个人模式",
+          "通用",
+          "构建",
+          "研究",
+          "custom instructions",
         ],
       },
       {
@@ -481,6 +511,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     t.settings.sections.appearance,
     t.settings.model.title,
     t.settings.sections.memory,
+    personalSpaceLabel,
     t.settings.sections.automation,
     settingsUxCopy.mcp.title,
     t.settings.sections.notification,
@@ -732,6 +763,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {hasSettingsResults && activeSection === "memory" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <MemorySettingsPage />
+                </Suspense>
+              )}
+              {hasSettingsResults && activeSection === "personalSpace" && (
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <PersonalSpaceSettingsPage />
                 </Suspense>
               )}
               {hasSettingsResults && activeSection === "automation" && (

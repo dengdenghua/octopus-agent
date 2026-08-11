@@ -1,47 +1,32 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Typewriter buffer for streaming text.
+ * Smooth playback for streamed text.
  *
- * Instead of rendering every delta as it arrives (which makes long replies
- * flicker at render speed), this hook plays the incoming text back at a
- * fixed tick rate — accelerating on a large backlog, easing off as it
- * catches up — so the UI reads like a smooth typewriter. When the stream
- * finishes, the remaining backlog drains and the full text is shown.
- *
- * Design mirrors the WorkBuddy client's `useStreamingTextBuffer`
- * (40ms ticks, 1–4 chars/frame, accel/decel, drain-on-finish) with two
- * important guards:
- *
- *  - `prefers-reduced-motion` users always get the full text immediately
- *    (no animation).
- *  - Emoji surrogate pairs are never split mid-glyph.
+ * Incoming deltas update refs immediately, while one persistent animation-frame
+ * loop controls what is visible. This is important: restarting a 40 ms timer for
+ * every delta can starve the renderer when tokens arrive faster than the timer.
  */
 export interface StreamingTextBufferOptions {
   targetText: string;
-  /** When false, the full text is shown immediately (no animation). */
+  /** When false, the stream has settled. */
   enabled?: boolean;
-  /**
-   * When the stream finishes (enabled flips false) with a backlog still
-   * unplayed, drain it at the typewriter pace instead of jumping straight
-   * to the full text. Without this, a backend that delivers the whole
-   * answer in one delta + immediate completion would show the text
-   * instantly — no typewriter at all. Mirrors WorkBuddy's drainOnFinish.
-   * Default true.
-   */
+  /** Keep a short animated drain after settlement. Default true. */
   drainOnFinish?: boolean;
-  /** Bump this to reset the buffer to the target text (e.g. message id). */
+  /** Bump this when the message identity changes. */
   resetKey?: string | number;
-  /** Milliseconds between ticks. Default 40. */
+  /** Target time between visible updates. Default 40 ms. */
   targetIntervalMs?: number;
-  /** Minimum chars revealed per tick. Default 1. */
+  /** Minimum approximate UTF-16 code units revealed per update. */
   minCharsPerTick?: number;
-  /** Maximum chars revealed per tick. Default 4. */
+  /** Maximum approximate UTF-16 code units revealed per update. */
   maxCharsPerTick?: number;
-  /** Backlog ratio used to size each tick (accel). Default 20. */
+  /** Backlog ratio used to accelerate playback. */
   backlogDivisor?: number;
-  /** Immediately reveal everything when backlog drops below this. */
+  /** Reveal a backlog at or below this size immediately. */
   fastDrainThreshold?: number;
+  /** Maximum animated tail after settlement. Default 240 ms. */
+  maxFinishDelayMs?: number;
 }
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
@@ -54,18 +39,45 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-/**
- * Never split an emoji surrogate pair: if `length` lands right after a
- * high surrogate (0xD800–0xDBFF) with a low surrogate next, extend by one.
- */
-function clampToSafeCharBoundary(text: string, length: number): number {
-  if (length <= 0 || length >= text.length) return length;
-  const code = text.charCodeAt(length - 1);
-  if (code >= 0xd800 && code <= 0xdbff) {
-    const next = text.charCodeAt(length);
-    if (next >= 0xdc00 && next <= 0xdfff) return length + 1;
+let graphemeSegmenter: Intl.Segmenter | null | undefined;
+
+function getGraphemeSegmenter(): Intl.Segmenter | null {
+  if (graphemeSegmenter !== undefined) return graphemeSegmenter;
+  graphemeSegmenter =
+    typeof Intl !== "undefined" && "Segmenter" in Intl
+      ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+      : null;
+  return graphemeSegmenter;
+}
+
+/** Advance by roughly `amount` code units without splitting a visible glyph. */
+function advanceToGraphemeBoundary(
+  text: string,
+  current: number,
+  amount: number,
+): number {
+  const desired = Math.min(text.length, current + amount);
+  if (desired >= text.length) return text.length;
+
+  const segmenter = getGraphemeSegmenter();
+  if (segmenter) {
+    // `current` is always a boundary, so segmenting only the remaining suffix
+    // avoids walking the entire accumulated answer on every frame.
+    let consumed = 0;
+    for (const part of segmenter.segment(text.slice(current))) {
+      consumed += part.segment.length;
+      if (current + consumed >= desired) return current + consumed;
+    }
+    return text.length;
   }
-  return length;
+
+  // Older runtimes: at least keep UTF-16 surrogate pairs intact.
+  const code = text.charCodeAt(desired - 1);
+  if (code >= 0xd800 && code <= 0xdbff) {
+    const next = text.charCodeAt(desired);
+    if (next >= 0xdc00 && next <= 0xdfff) return desired + 1;
+  }
+  return desired;
 }
 
 export function useStreamingTextBuffer({
@@ -78,126 +90,185 @@ export function useStreamingTextBuffer({
   maxCharsPerTick = 4,
   backlogDivisor = 20,
   fastDrainThreshold = 0,
+  maxFinishDelayMs = 240,
 }: StreamingTextBufferOptions): string {
   const [displayText, setDisplayText] = useState(targetText);
-  const displayRef = useRef(targetText.length);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const reducedMotionRef = useRef(prefersReducedMotion());
-  const resetKeyRef = useRef(resetKey);
-  const drainingRef = useRef(false);
-
-  // Track the OS "reduce motion" preference while mounted.
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-    const mql = window.matchMedia(REDUCED_MOTION_QUERY);
-    const handle = () => {
-      reducedMotionRef.current = mql.matches;
-    };
-    reducedMotionRef.current = mql.matches;
-    mql.addEventListener?.("change", handle);
-    return () => mql.removeEventListener?.("change", handle);
-  }, []);
-
-  // Hard reset when the target message changes identity.
-  useEffect(() => {
-    if (resetKey !== resetKeyRef.current) {
-      resetKeyRef.current = resetKey;
-      displayRef.current = targetText.length;
-      drainingRef.current = false;
-      setDisplayText(targetText);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetKey]);
-
-  // Drive the typewriter as the target text grows.
-  useEffect(() => {
-    if (reducedMotionRef.current) {
-      displayRef.current = targetText.length;
-      drainingRef.current = false;
-      setDisplayText(targetText);
-      return;
-    }
-    const finishDrain = () => {
-      displayRef.current = targetText.length;
-      drainingRef.current = false;
-      setDisplayText(targetText);
-      if (tickRef.current) {
-        clearInterval(tickRef.current);
-        tickRef.current = null;
-      }
-    };
-    if (!enabled) {
-      // Stream finished. If there's still a backlog and drainOnFinish is
-      // set, keep playing at typewriter pace (WorkBuddy drainOnFinish);
-      // otherwise reveal the full text now.
-      if (drainOnFinish && displayRef.current < targetText.length) {
-        drainingRef.current = true;
-      } else {
-        finishDrain();
-        return;
-      }
-    }
-    if (tickRef.current) {
-      clearInterval(tickRef.current);
-      tickRef.current = null;
-    }
-
-    const tick = () => {
-      const backlog = targetText.length - displayRef.current;
-      if (backlog <= 0) {
-        finishDrain();
-        return;
-      }
-      let step: number;
-      if (backlog <= fastDrainThreshold) {
-        step = backlog;
-      } else {
-        // Accelerate on a large backlog, ease off as we catch up.
-        step = Math.max(minCharsPerTick, Math.round(backlog / backlogDivisor));
-        step = Math.min(step, maxCharsPerTick);
-      }
-      step = Math.min(step, backlog);
-      displayRef.current = clampToSafeCharBoundary(
-        targetText,
-        displayRef.current + step,
-      );
-      setDisplayText(targetText.slice(0, displayRef.current));
-      if (displayRef.current >= targetText.length) {
-        finishDrain();
-      }
-    };
-
-    if (displayRef.current >= targetText.length) {
-      finishDrain();
-      return;
-    }
-    tickRef.current = setInterval(tick, targetIntervalMs);
-    return () => {
-      if (tickRef.current) {
-        clearInterval(tickRef.current);
-        tickRef.current = null;
-      }
-    };
-  }, [
-    targetText,
-    enabled,
+  const displayLengthRef = useRef(targetText.length);
+  const targetRef = useRef(targetText);
+  const enabledRef = useRef(enabled);
+  const optionsRef = useRef({
     drainOnFinish,
     targetIntervalMs,
     minCharsPerTick,
     maxCharsPerTick,
     backlogDivisor,
     fastDrainThreshold,
+    maxFinishDelayMs,
+  });
+  const frameRef = useRef<number | null>(null);
+  const lastRevealAtRef = useRef<number | null>(null);
+  const finishStartedAtRef = useRef<number | null>(null);
+  const resetKeyRef = useRef(resetKey);
+  const reducedMotionRef = useRef(prefersReducedMotion());
+
+  const revealAll = useCallback(() => {
+    const text = targetRef.current;
+    displayLengthRef.current = text.length;
+    finishStartedAtRef.current = null;
+    setDisplayText(text);
+  }, []);
+
+  const animate = useCallback(
+    (now: number) => {
+      frameRef.current = null;
+      const text = targetRef.current;
+      const current = displayLengthRef.current;
+      const opts = optionsRef.current;
+
+      if (current >= text.length) {
+        lastRevealAtRef.current = null;
+        return;
+      }
+
+      if (
+        reducedMotionRef.current ||
+        (!enabledRef.current && !opts.drainOnFinish) ||
+        (!enabledRef.current &&
+          finishStartedAtRef.current !== null &&
+          now - finishStartedAtRef.current >= opts.maxFinishDelayMs)
+      ) {
+        revealAll();
+        lastRevealAtRef.current = null;
+        return;
+      }
+
+      const lastReveal = lastRevealAtRef.current;
+      if (lastReveal === null) {
+        lastRevealAtRef.current = now;
+      } else if (now - lastReveal >= opts.targetIntervalMs) {
+        const backlog = text.length - current;
+        let step: number;
+        if (backlog <= opts.fastDrainThreshold) {
+          step = backlog;
+        } else {
+          const maxStep = Math.max(1, opts.maxCharsPerTick);
+          const minStep = Math.min(maxStep, Math.max(1, opts.minCharsPerTick));
+          step = Math.max(
+            minStep,
+            Math.round(backlog / Math.max(1, opts.backlogDivisor)),
+          );
+          step = Math.min(step, maxStep);
+        }
+        const next = advanceToGraphemeBoundary(text, current, step);
+        displayLengthRef.current = next;
+        setDisplayText(text.slice(0, next));
+        // Preserve fractional frame time instead of resetting to `now`; this
+        // keeps playback stable on 60/120 Hz displays.
+        lastRevealAtRef.current = lastReveal + opts.targetIntervalMs;
+      }
+
+      if (displayLengthRef.current < targetRef.current.length) {
+        frameRef.current = requestAnimationFrame(animate);
+      } else {
+        lastRevealAtRef.current = null;
+        finishStartedAtRef.current = null;
+      }
+    },
+    [revealAll],
+  );
+
+  const ensureAnimation = useCallback(() => {
+    if (
+      frameRef.current === null &&
+      displayLengthRef.current < targetRef.current.length
+    ) {
+      // Make fresh growth visible on the very next paint. Subsequent reveals
+      // retain the configured cadence.
+      if (lastRevealAtRef.current === null) {
+        lastRevealAtRef.current =
+          performance.now() - optionsRef.current.targetIntervalMs;
+      }
+      frameRef.current = requestAnimationFrame(animate);
+    }
+  }, [animate]);
+
+  // Update the live stream snapshot without cancelling the active frame loop.
+  // This is the key starvation guard for high-frequency deltas.
+  useEffect(() => {
+    const previousTarget = targetRef.current;
+    const wasEnabled = enabledRef.current;
+    targetRef.current = targetText;
+    enabledRef.current = enabled;
+    optionsRef.current = {
+      drainOnFinish,
+      targetIntervalMs,
+      minCharsPerTick,
+      maxCharsPerTick,
+      backlogDivisor,
+      fastDrainThreshold,
+      maxFinishDelayMs,
+    };
+
+    const identityChanged = resetKey !== resetKeyRef.current;
+    if (identityChanged || targetText.length < displayLengthRef.current) {
+      resetKeyRef.current = resetKey;
+      revealAll();
+      return;
+    }
+
+    if (wasEnabled && !enabled) {
+      finishStartedAtRef.current = performance.now();
+    } else if (enabled) {
+      finishStartedAtRef.current = null;
+    }
+
+    if (
+      reducedMotionRef.current ||
+      (!enabled && !drainOnFinish) ||
+      (targetText !== previousTarget &&
+        typeof document !== "undefined" &&
+        document.hidden)
+    ) {
+      revealAll();
+      return;
+    }
+    ensureAnimation();
+  }, [
+    targetText,
+    enabled,
+    drainOnFinish,
+    resetKey,
+    targetIntervalMs,
+    minCharsPerTick,
+    maxCharsPerTick,
+    backlogDivisor,
+    fastDrainThreshold,
+    maxFinishDelayMs,
+    ensureAnimation,
+    revealAll,
   ]);
 
-  // Cleanup on unmount.
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return;
+    }
+    const mql = window.matchMedia(REDUCED_MOTION_QUERY);
+    const handleMotionChange = () => {
+      reducedMotionRef.current = mql.matches;
+      if (mql.matches) revealAll();
+      else ensureAnimation();
+    };
+    reducedMotionRef.current = mql.matches;
+    mql.addEventListener?.("change", handleMotionChange);
+    return () => mql.removeEventListener?.("change", handleMotionChange);
+  }, [ensureAnimation, revealAll]);
+
   useEffect(
     () => () => {
-      if (tickRef.current) {
-        clearInterval(tickRef.current);
-        tickRef.current = null;
-      }
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     },
     [],
   );

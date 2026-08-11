@@ -67,6 +67,10 @@ function AgentKanbanViewImpl({
   mainAgentName,
   currentPhaseTitle: currentPhaseTitleText,
   terminalState,
+  contextTokens,
+  maxContextTokens,
+  isCompressingContext,
+  onCompressContext,
   visibilityEvents,
   setActivityView,
   onSelectTab,
@@ -99,6 +103,10 @@ function AgentKanbanViewImpl({
   mainAgentName: string | null | undefined;
   currentPhaseTitle: string;
   terminalState: "interrupted" | "failed" | null;
+  contextTokens?: number;
+  maxContextTokens?: number;
+  isCompressingContext?: boolean;
+  onCompressContext?: () => void | Promise<void>;
   visibilityEvents: LiveToolEvent[];
   setActivityView: (view: "summary" | "trace" | "screen") => void;
   onSelectTab: ((tab: AgentWorkbenchTabId) => void) | undefined;
@@ -116,10 +124,6 @@ function AgentKanbanViewImpl({
   // transparent background. Latest visibility item wins.
   const lastVisibilityEvent =
     visibilityEvents[visibilityEvents.length - 1] ?? null;
-  const visibilitySummary =
-    typeof lastVisibilityEvent?.input?.summary === "string"
-      ? lastVisibilityEvent.input.summary
-      : "";
   const visibilitySteps = useMemo<VisibilityStep[]>(() => {
     const raw = lastVisibilityEvent?.input?.steps;
     if (!Array.isArray(raw)) return [];
@@ -204,6 +208,10 @@ function AgentKanbanViewImpl({
             progressOutline={progressOutline}
             userInput={userInput}
             terminalState={terminalState}
+            contextTokens={contextTokens}
+            maxContextTokens={maxContextTokens}
+            isCompressingContext={isCompressingContext}
+            onCompressContext={onCompressContext}
             onSelectTab={onSelectTab}
             onOpenArtifact={onOpenArtifact}
           />
@@ -410,63 +418,48 @@ function AgentKanbanViewImpl({
 
       {/* Visibility decisions — de-emphasised surface: collapsed by default,
           small text, transparent background. Latest visibility item wins. */}
-      <div className="shrink-0 border-t border-border-subtle bg-background/35">
-        {lastVisibilityEvent ? (
-          <>
-            <button
-              type="button"
-              onClick={() => setVisibilityOpen((open) => !open)}
-              className="flex w-full items-center gap-1.5 px-5 py-1.5 text-left transition-colors hover:bg-muted/30"
-              aria-expanded={visibilityOpen}
-            >
-              {visibilityOpen ? (
-                <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground/60" />
-              ) : (
-                <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/60" />
-              )}
-              <span className="text-[11px] font-medium text-muted-foreground">
-                {t.agentWorkbenchPanel.visibilityPanelTitle}
-              </span>
-            </button>
-            {visibilityOpen && (
-              <div className="space-y-1.5 px-5 pb-2.5">
-                {visibilitySummary ? (
-                  <p className="text-[11px] leading-relaxed text-muted-foreground/75">
-                    {visibilitySummary}
-                  </p>
-                ) : null}
-                {visibilitySteps.length > 0 ? (
-                  visibilitySteps.map((step, index) => (
-                    <div
-                      key={`${step.decision_point}:${index}`}
-                      className="rounded-md border border-border-subtle bg-background/40 px-2 py-1.5"
-                    >
-                      <span className="font-mono text-[10px] text-muted-foreground/60">
-                        {t.agentWorkbenchPanel.visibilityStep} ·{" "}
-                        {step.decision_point}
-                      </span>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-foreground/75">
-                        {step.conclusion}
-                      </p>
-                      <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground/60">
-                        {step.basis}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-[11px] text-muted-foreground/60">
-                    {t.agentWorkbenchPanel.visibilityPanelEmpty}
-                  </p>
-                )}
-              </div>
+      {lastVisibilityEvent && visibilitySteps.length > 0 ? (
+        <div className="shrink-0 border-t border-border-subtle bg-background/35">
+          <button
+            type="button"
+            onClick={() => setVisibilityOpen((open) => !open)}
+            className="flex w-full items-center gap-1.5 px-5 py-1.5 text-left transition-colors hover:bg-muted/30"
+            aria-expanded={visibilityOpen}
+          >
+            {visibilityOpen ? (
+              <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground/60" />
+            ) : (
+              <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/60" />
             )}
-          </>
-        ) : (
-          <p className="px-5 py-1.5 text-[11px] text-muted-foreground/60">
-            {t.agentWorkbenchPanel.visibilityPanelEmpty}
-          </p>
-        )}
-      </div>
+            <span className="text-[11px] font-medium text-muted-foreground">
+              {t.agentWorkbenchPanel.visibilityPanelTitle}
+            </span>
+            <span className="rounded-full bg-muted/60 px-1.5 text-[10px] tabular-nums text-muted-foreground/65">
+              {visibilitySteps.length}
+            </span>
+          </button>
+          {visibilityOpen && (
+            <div className="space-y-1.5 px-5 pb-2.5">
+              {visibilitySteps.map((step, index) => (
+                <div
+                  key={`${step.decision_point}:${index}`}
+                  className="rounded-md border border-border-subtle bg-background/40 px-2 py-1.5"
+                >
+                  <span className="text-[10px] font-medium text-muted-foreground/60">
+                    {t.agentWorkbenchPanel.visibilityStep} {index + 1}
+                  </span>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-foreground/75">
+                    {step.conclusion}
+                  </p>
+                  <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground/60">
+                    {step.basis}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

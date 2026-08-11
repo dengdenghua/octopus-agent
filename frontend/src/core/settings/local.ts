@@ -37,6 +37,11 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   session: {
     auto_new_session_hours: 0,
   },
+  personal_space: {
+    default_mode: "general",
+    remember_last_mode: true,
+    custom_instructions: "",
+  },
 };
 
 const LOCAL_SETTINGS_KEY = "octopus.local-settings";
@@ -86,6 +91,14 @@ export interface LocalSettings {
      * the user sends the next message. `0` disables the behavior. */
     auto_new_session_hours: number;
   };
+  personal_space: {
+    /** Default operating contract for unbound personal-space tasks. */
+    default_mode: "general" | "build" | "research";
+    /** When enabled, a composer mode pick becomes the next task's default. */
+    remember_last_mode: boolean;
+    /** User-authored operating preferences appended to personal turns. */
+    custom_instructions: string;
+  };
 }
 
 function mergeLocalSettings(settings?: Partial<LocalSettings>): LocalSettings {
@@ -97,6 +110,11 @@ function mergeLocalSettings(settings?: Partial<LocalSettings>): LocalSettings {
   if (persistedMode === "chat" || persistedMode === "swarm") {
     context.mode = "react";
   }
+  const rawPersonalMode = settings?.personal_space?.default_mode;
+  const personalMode =
+    rawPersonalMode === "build" || rawPersonalMode === "research"
+      ? rawPersonalMode
+      : "general";
   return {
     ...DEFAULT_LOCAL_SETTINGS,
     context,
@@ -119,6 +137,19 @@ function mergeLocalSettings(settings?: Partial<LocalSettings>): LocalSettings {
     session: {
       ...DEFAULT_LOCAL_SETTINGS.session,
       ...settings?.session,
+    },
+    personal_space: {
+      ...DEFAULT_LOCAL_SETTINGS.personal_space,
+      ...settings?.personal_space,
+      default_mode: personalMode,
+      remember_last_mode:
+        typeof settings?.personal_space?.remember_last_mode === "boolean"
+          ? settings.personal_space.remember_last_mode
+          : true,
+      custom_instructions:
+        typeof settings?.personal_space?.custom_instructions === "string"
+          ? settings.personal_space.custom_instructions.slice(0, 2000)
+          : "",
     },
   };
 }

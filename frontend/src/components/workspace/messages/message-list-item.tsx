@@ -3,7 +3,6 @@ import "katex/dist/katex.min.css";
 import {
   FileIcon,
   Loader2Icon,
-  PanelRightOpenIcon,
   PencilIcon,
   RefreshCwIcon,
   ThumbsDownIcon,
@@ -106,97 +105,26 @@ function splitInlineThinkingDetails(content: string) {
   };
 }
 
-function getPublicReasoningSummary(message: Message): string | null {
+function getReasoningSummary(message: Message): string | null {
   const additional = isRecord(message.additional_kwargs)
     ? message.additional_kwargs
     : null;
   const octopus = isRecord(additional?.octopus) ? additional.octopus : null;
   for (const source of [additional, octopus]) {
     if (!source) continue;
-    for (const key of [
-      "public_reasoning_summary",
-      "reasoning_summary",
-      "thinking_summary",
-      "thought_summary",
-    ]) {
-      const value = source[key];
-      if (typeof value === "string" && value.trim()) {
-        const cleaned = value.trim();
-        if (!looksLikeBoilerplateThinking(cleaned)) return cleaned;
-      }
+    const value = source.public_reasoning_summary;
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
     }
   }
   return null;
 }
 
-const INTERNAL_PROGRESS_THINKING_PATTERNS = [
-  /connected to the model gateway/i,
-  /waiting for (?:the )?first (?:response )?chunk/i,
-  /model gateway status/i,
-  /waiting_for_first_chunk/i,
-  /request intake/i,
-  /task framing/i,
-  /tool routing/i,
-  /model dispatch/i,
-  /concise judgment path/i,
-  /structured timeline of thoughts and tool calls/i,
-  /\u6a21\u578b\u7f51\u5173/,
-  /\u7b49\u5f85[\s\S]*\u54cd\u5e94/,
-  /\u9762\u5411\u6700\u7ec8\u56de\u590d\u7684\u7b80\u660e\u5224\u65ad\u8def\u5f84/,
-  /\u601d\u8003\u4e0e\u5de5\u5177\u8c03\u7528\u7684\u7ed3\u6784\u5316\u65f6\u95f4\u7ebf/,
-];
-
-const BOILERPLATE_THINKING_PATTERNS = [
-  /frame the ask/i,
-  /restate the objective/i,
-  /gather context/i,
-  /reason across options/i,
-  /check for stale facts/i,
-  /give the user the result/i,
-  /avoid exposing hidden chain-of-thought/i,
-  /keep any helper roles virtual/i,
-  /this turn is in structured thinking mode/i,
-  /use the plan below only as private execution guidance/i,
-  /when you surface progress, write task-specific public checkpoints/i,
-  /request intake/i,
-  /task framing/i,
-  /tool routing/i,
-  /model dispatch/i,
-  /我会先调用必要工具/,
-  /边拿结果边整理答案/,
-  /开始直接生成回复/,
-  /开始规划/,
-  /规划完成/,
-  /还在执行中/,
-  /正在执行工具/,
-  /工具完成/,
-  /明确(?:你|用户)?的问题目标/,
-  /结合当前上下文组织回答路径/,
-  /检查是否需要补充信息/,
-];
-
-function looksLikeBoilerplateThinking(text?: string | null): boolean {
-  if (!text?.trim()) return false;
-  if (
-    INTERNAL_PROGRESS_THINKING_PATTERNS.some((pattern) => pattern.test(text))
-  ) {
-    return true;
-  }
-  const hits = BOILERPLATE_THINKING_PATTERNS.filter((pattern) =>
-    pattern.test(text),
-  ).length;
-  const hasConcreteSignals =
-    /\b(?:Thought|Action|Observation|read_file|web_search|fetch_url|list_cwd|exec_shell)\b/i.test(
-      text,
-    ) || /[\w.-]+\.(?:tsx?|jsx?|py|ya?ml|json|md|toml|css|html)\b/.test(text);
-  return hits >= 2 && !hasConcreteSignals;
-}
-
-function buildPublicThinkingSummary(message: Message): string | null {
-  // A collapsed row and its workbench detail are both user-visible surfaces.
-  // Never populate either from provider reasoning_content; the backend's
-  // explicit public summary protocol is the only allowed source.
-  return getPublicReasoningSummary(message);
+function buildReasoningSummary(message: Message): string | null {
+  // Legacy snapshots used this explicit field for readable reasoning
+  // summaries. It remains a reasoning disclosure and is never promoted to
+  // normal commentary. Provider aliases are intentionally not guessed here.
+  return getReasoningSummary(message);
 }
 
 function cleanClipboardText(value: string): string {
@@ -220,8 +148,9 @@ export function messageClipboardText(message: Message): string {
   const cleanedVisible = cleanClipboardText(visibleContent);
   if (cleanedVisible) return cleanedVisible;
 
-  // Clipboard only includes explicitly public reasoning summaries.
-  return cleanClipboardText(getPublicReasoningSummary(message) ?? "");
+  // Preserve the legacy explicit summary in clipboard output without ever
+  // falling back to raw provider reasoning or guessed alias fields.
+  return cleanClipboardText(getReasoningSummary(message) ?? "");
 }
 
 type MarkdownRenderProps = Pick<
@@ -273,7 +202,6 @@ function SegmentedReasoningPanel({
         )}
       />
       <span className="min-w-0 flex-1 truncate">{summary}</span>
-      <PanelRightOpenIcon className="size-3 shrink-0 opacity-0 transition-opacity group-hover/thinking-row:opacity-50" />
     </button>
   );
 }
@@ -577,9 +505,9 @@ function MessageContent_({
   // Body typewriter (WorkBuddy-style buffer playback): while this message is
   // actively receiving streamed tokens, play the content back at a smooth
   // tick rate instead of re-rendering markdown on every delta. When the
-  // stream ends (`enabled` flips off) the full text is revealed immediately,
-  // so the final markdown is rendered from a complete source — no dangling
-  // code fences or half-built tables linger. Guard against the target text
+  // stream ends (`enabled` flips off), the short remaining tail is drained
+  // with a bounded delay before the complete source is shown. Guard against
+  // the target text
   // shrinking mid-stream (e.g. a draft being replaced): if the buffer ever
   // exceeds the target, fall back to the source text directly.
   const bufferedBody = useStreamingTextBuffer({
@@ -597,7 +525,7 @@ function MessageContent_({
     ((message as { tool_calls?: unknown[] }).tool_calls?.length ?? 0) > 0;
   const publicThinkingSummary = useMemo(() => {
     if (isHuman) return null;
-    return buildPublicThinkingSummary(message);
+    return buildReasoningSummary(message);
   }, [isHuman, message]);
   const hasVisibleBody = Boolean(
     visibleContentToDisplay.trim() ||

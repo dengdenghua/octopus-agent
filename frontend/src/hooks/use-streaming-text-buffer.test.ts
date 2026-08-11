@@ -64,7 +64,7 @@ describe("useStreamingTextBuffer", () => {
     expect(result.current).toBe(full);
   });
 
-  it("never splits an emoji surrogate pair mid-glyph", () => {
+  it("never splits an emoji grapheme cluster mid-glyph", () => {
     mockMatchMedia(false);
     const { result, rerender } = renderHook(
       ({ text }: { text: string }) =>
@@ -98,6 +98,49 @@ describe("useStreamingTextBuffer", () => {
     expect(result.current).toBe(emojiText);
   });
 
+  it("keeps revealing while deltas arrive faster than the display cadence", () => {
+    mockMatchMedia(false);
+    const { result, rerender } = renderHook(
+      ({ text }: { text: string }) =>
+        useStreamingTextBuffer({ targetText: text }),
+      { initialProps: { text: "起" } },
+    );
+
+    const full = "持续到达的高频流式文本不应让显示计时器不断重启而完全停住";
+    for (let length = 2; length <= full.length; length += 1) {
+      rerender({ text: full.slice(0, length) });
+      act(() => {
+        vi.advanceTimersByTime(20);
+      });
+    }
+
+    expect(result.current.length).toBeGreaterThan(1);
+    expect(full.startsWith(result.current)).toBe(true);
+  });
+
+  it("keeps joined emoji sequences intact", () => {
+    mockMatchMedia(false);
+    const { result, rerender } = renderHook(
+      ({ text }: { text: string }) =>
+        useStreamingTextBuffer({
+          targetText: text,
+          minCharsPerTick: 1,
+          maxCharsPerTick: 1,
+        }),
+      { initialProps: { text: "a" } },
+    );
+    const family = "👨‍👩‍👧‍👦";
+    const full = `a${family}后续内容`;
+    rerender({ text: full });
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+
+    expect(
+      result.current === "a" || result.current.startsWith(`a${family}`),
+    ).toBe(true);
+  });
+
   it("drains fast when the stream settles", () => {
     mockMatchMedia(false);
     const { result, rerender } = renderHook(
@@ -122,21 +165,21 @@ describe("useStreamingTextBuffer", () => {
   it("drains the backlog at typewriter pace when the stream finishes", () => {
     mockMatchMedia(false);
     const { result, rerender } = renderHook(
-      ({ text }: { text: string }) =>
+      ({ text, enabled }: { text: string; enabled: boolean }) =>
         useStreamingTextBuffer({
           targetText: text,
+          enabled,
           drainOnFinish: true,
         }),
-      { initialProps: { text: "好" } },
+      { initialProps: { text: "好", enabled: true } },
     );
     // Simulate the whole answer arriving in ONE delta + immediate
     // completion (backend delivered it all at once). The buffer must
     // still play it out like a typewriter instead of jumping to full.
     const full =
       "一次性到达的完整回答，流已结束，但播放器应该继续逐字展示而不是瞬间全文。";
-    rerender({ text: full });
-    // enabled defaults true while streaming; flip to false (stream done)
-    rerender({ text: full });
+    rerender({ text: full, enabled: true });
+    rerender({ text: full, enabled: false });
     act(() => {
       vi.advanceTimersByTime(40);
     });

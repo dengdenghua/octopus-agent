@@ -114,6 +114,56 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
 
+  test("hides capability decisions when the turn has no decision trace", () => {
+    renderWorkbench(<AgentWorkbenchPanel activeTab="agent" events={[]} />);
+
+    expect(screen.queryByText("能力决策")).not.toBeInTheDocument();
+    expect(screen.queryByText("本轮暂无能力决策")).not.toBeInTheDocument();
+  });
+
+  test("presents capability decisions without exposing internal trace keys", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "visibility-1",
+            name: "visibility",
+            input: {
+              summary: "本轮能力路由 / 委派 / 技能目录决策",
+              steps: [
+                {
+                  decision_point: "context.delegation_cap",
+                  conclusion: "委派工具隐藏",
+                  basis: "未命中委派条件",
+                },
+                {
+                  decision_point: "context.skill_catalog",
+                  conclusion: "技能目录 42 条（未截断）",
+                  basis: "总数未超过上限",
+                },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /能力决策/ });
+    expect(trigger).toHaveTextContent("2");
+    fireEvent.click(trigger);
+
+    expect(screen.getByText("决策 1")).toBeInTheDocument();
+    expect(screen.getByText("委派工具隐藏")).toBeInTheDocument();
+    expect(screen.getByText("未命中委派条件")).toBeInTheDocument();
+    expect(
+      screen.queryByText("context.delegation_cap"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("本轮能力路由 / 委派 / 技能目录决策"),
+    ).not.toBeInTheDocument();
+  });
+
   test("keeps free-form todo phase titles visible", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
@@ -139,6 +189,54 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getByText("修改登录页实现")).toBeInTheDocument();
     expect(screen.getByTitle("阅读鉴权模块源码")).toBeInTheDocument();
     expect(screen.getByTitle("修改登录页实现")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /待办事项.*1\/2.*进行中/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("workbench-todo-list")).toHaveClass(
+      "max-h-72",
+      "overflow-y-auto",
+    );
+    const taskPlan = screen.getByTestId("workbench-task-plan");
+    expect(taskPlan).toHaveClass("border-b");
+    expect(taskPlan.querySelector(".h-1")).toBeNull();
+    expect(screen.queryByText("P1")).not.toBeInTheDocument();
+  });
+
+  test("keeps the todo list visible after a transcript process event is focused", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        focusedEventId="search-2"
+        focusedEventKind="execution"
+        focusedEventView="summary"
+        focusedEventNonce={1}
+        focusedProcessEvent={{
+          kind: "execution",
+          summary: "已完成市场搜索",
+          detail: "搜索结果已返回，继续整理厂商清单。",
+          status: "done",
+          count: 1,
+        }}
+        events={[
+          event({
+            id: "todo-focused",
+            name: "todo_write",
+            input: {
+              items: [
+                { content: "规划调研框架", status: "completed" },
+                { content: "收集市场数据", status: "in_progress" },
+                { content: "整理完整报告", status: "pending" },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("workbench-todo-list")).toBeInTheDocument();
+    expect(screen.getByText("规划调研框架")).toBeInTheDocument();
+    expect(screen.getByText("收集市场数据")).toBeInTheDocument();
+    expect(screen.getByText("整理完整报告")).toBeInTheDocument();
   });
 
   test("renders the main agent workstation dock placeholder", () => {
@@ -230,8 +328,16 @@ describe("<AgentWorkbenchPanel />", () => {
       screen.getByRole("button", { name: "主电脑 · 已中断" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /进展.*已中断/ }),
+      screen.getByRole("button", {
+        name: /(?:待办事项|进展).*1\/2.*已完成.*已中断/,
+      }),
     ).toBeInTheDocument();
+    const interruptedTodos = within(
+      screen.getByTestId("workbench-todo-list"),
+    ).getAllByRole("listitem");
+    expect(interruptedTodos[0]).toHaveAttribute("data-task-status", "done");
+    expect(interruptedTodos[1]).toHaveAttribute("data-task-status", "warning");
+    expect(interruptedTodos[1]).toHaveTextContent("已中断");
     expect(
       screen.queryByRole("button", { name: "主电脑 · 已完成" }),
     ).not.toBeInTheDocument();
@@ -545,7 +651,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expect(screen.getByRole("tablist", { name: /看板/ })).toBeInTheDocument();
-    expandSummarySection(/进展/);
+    expandSummarySection(/(?:待办事项|进展)/);
     expect(screen.getAllByText("处理线索").length).toBeGreaterThan(0);
     expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 执行任务中...")).toBeInTheDocument();
@@ -637,7 +743,7 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expandSummarySection(/进展/);
+    expandSummarySection(/(?:待办事项|进展)/);
 
     // Backend phase titles stay visible after their machine prefix is removed.
     expect(screen.getByText(/Read context/)).toBeInTheDocument();
@@ -680,7 +786,7 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expandSummarySection(/进展/);
+    expandSummarySection(/(?:待办事项|进展)/);
 
     expect(screen.getByText(/补齐上下文/)).toBeInTheDocument();
     expect(screen.getByText(/收拢答案/)).toBeInTheDocument();
@@ -724,7 +830,7 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expandSummarySection(/进展/);
+    expandSummarySection(/(?:待办事项|进展)/);
 
     expect(screen.getByText("P1")).toBeInTheDocument();
     expect(screen.getByText(/补齐上下文|了解代码结构/)).toBeInTheDocument();
@@ -751,7 +857,7 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expandSummarySection(/进展/);
+    expandSummarySection(/(?:待办事项|进展)/);
 
     expect(
       screen.getByText(/补齐上下文|收拢答案|Read context/),
@@ -791,7 +897,7 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expandSummarySection(/进展/);
+    expandSummarySection(/(?:待办事项|进展)/);
 
     expect(screen.getByText(/补齐上下文/)).toBeInTheDocument();
     expect(screen.getByTitle("主电脑 · 已完成")).toBeInTheDocument();
@@ -976,6 +1082,43 @@ describe("<AgentWorkbenchPanel />", () => {
         name: /\u6587\u4ef6 4 \u6761\u6765\u6e90/,
       }),
     ).toBeInTheDocument();
+  });
+
+  test("uses the real context window and exposes compression in the summary", () => {
+    const onCompressContext = vi.fn();
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "read-context-window",
+            name: "read_file",
+            input: { path: "src/context-window.ts" },
+            output: "export const contextWindow = true;",
+          }),
+        ]}
+        contextTokens={118_000}
+        maxContextTokens={200_000}
+        onCompressContext={onCompressContext}
+      />,
+    );
+
+    expandSummarySection(/上下文/);
+
+    expect(
+      screen.getByLabelText("当前对话中 AI 获取的上下文"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "已占用 59%（上限 200K）",
+      }),
+    ).toHaveTextContent("59%");
+    expect(
+      screen.getByTestId("workbench-context-usage-bar").firstElementChild,
+    ).toHaveStyle({ width: "59%" });
+
+    fireEvent.click(screen.getByRole("button", { name: "压缩" }));
+    expect(onCompressContext).toHaveBeenCalledTimes(1);
   });
 
   test("surfaces real sub-agents as task cards", () => {
@@ -2086,7 +2229,7 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expandSummarySection(/进展/);
+    expandSummarySection(/(?:待办事项|进展)/);
 
     expect(screen.getAllByText(/收拢答案/).length).toBeGreaterThan(0);
     expect(screen.getByTitle("主电脑 · 已完成")).toBeInTheDocument();
@@ -2154,7 +2297,7 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expandSummarySection(/进展/);
+    expandSummarySection(/(?:待办事项|进展)/);
 
     expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
     expect(screen.queryByText("待开始")).not.toBeInTheDocument();
@@ -2176,7 +2319,7 @@ describe("<AgentWorkbenchPanel />", () => {
       <AgentWorkbenchPanel events={[phaseOne]} />,
     );
 
-    expandSummarySection(/进展/);
+    expandSummarySection(/(?:待办事项|进展)/);
     // The current phase follows the streamed todo while preserving its title.
     expect(screen.getAllByText(/write plan\.md/).length).toBeGreaterThan(0);
     expect(screen.getAllByTitle(/write plan\.md/).length).toBeGreaterThan(0);

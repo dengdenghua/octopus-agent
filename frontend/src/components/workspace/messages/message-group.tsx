@@ -3,7 +3,7 @@ import type { AIMessage, Message } from "@/core/api/types";
 import {
   BrainIcon,
   ChevronDownIcon,
-  PanelRightOpenIcon,
+  ChevronRightIcon,
   SparklesIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -84,7 +84,6 @@ import {
   aggregateSimilarToolCalls,
   isAggregatedToolGroup,
 } from "./activity-aggregator";
-import { isOutwardFacingThinking } from "./message-grouping";
 import { projectToolNarrative } from "./narrative-block";
 
 const HIDDEN_TIMELINE_TOOL_NAMES = new Set([
@@ -280,15 +279,6 @@ function publicProcessText(value: string): string {
   );
 }
 
-function firstPublicProcessLine(value: string): string {
-  return (
-    value
-      .split(/\r?\n/)
-      .map((line) => publicProcessText(line))
-      .find(Boolean) ?? ""
-  );
-}
-
 function dedupeTimelineChunks(chunks: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -338,65 +328,154 @@ function useSmoothStickToBottom(
   ref: RefObject<HTMLDivElement | null>,
   stickToBottomRef: MutableRefObject<boolean>,
   trigger: string,
-) {
+): MutableRefObject<boolean> {
+  const targetRef = useRef(0);
+  const animationRef = useRef<number | null>(null);
+  const autoScrollingRef = useRef(false);
+
   useEffect(() => {
     const el = ref.current;
     if (!el || !stickToBottomRef.current) return;
-    const target = el.scrollHeight - el.clientHeight;
-    const start = el.scrollTop;
-    const delta = target - start;
-    if (Math.abs(delta) < 1) return;
-    if (typeof requestAnimationFrame !== "function") {
-      el.scrollTop = target;
+    targetRef.current = Math.max(0, el.scrollHeight - el.clientHeight);
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) {
+      autoScrollingRef.current = true;
+      el.scrollTop = targetRef.current;
+      autoScrollingRef.current = false;
       return;
     }
-    const steps = 5;
-    let step = 0;
-    let raf = 0;
-    const glide = () => {
-      step += 1;
-      el.scrollTop = start + (delta * step) / steps;
-      if (step < steps) raf = requestAnimationFrame(glide);
+    if (typeof requestAnimationFrame !== "function") {
+      autoScrollingRef.current = true;
+      el.scrollTop = targetRef.current;
+      autoScrollingRef.current = false;
+      return;
+    }
+    // A token update only moves the destination. Keep one animation alive so
+    // 40ms text ticks cannot repeatedly cancel an ~80ms scroll transition.
+    if (animationRef.current !== null) return;
+    const follow = () => {
+      const current = ref.current;
+      if (!current || !stickToBottomRef.current) {
+        autoScrollingRef.current = false;
+        animationRef.current = null;
+        return;
+      }
+      targetRef.current = Math.max(
+        targetRef.current,
+        current.scrollHeight - current.clientHeight,
+      );
+      const distance = targetRef.current - current.scrollTop;
+      autoScrollingRef.current = true;
+      if (Math.abs(distance) <= 1) {
+        current.scrollTop = targetRef.current;
+        autoScrollingRef.current = false;
+        animationRef.current = null;
+        return;
+      }
+      current.scrollTop += distance * 0.45;
+      animationRef.current = requestAnimationFrame(follow);
     };
-    raf = requestAnimationFrame(glide);
-    return () => cancelAnimationFrame(raf);
+    animationRef.current = requestAnimationFrame(follow);
   }, [ref, stickToBottomRef, trigger]);
+
+  useEffect(
+    () => () => {
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    },
+    [],
+  );
+
+  return autoScrollingRef;
 }
 
 /**
  * Live typewriter window for the in-flight extended thinking. The window
- * keeps a fixed height; the full raw reasoning streams in as a typewriter
- * and scrolls smoothly like a sliding window (newest line at the bottom,
- * older lines glide up out of view). Once the stream settles, the window
- * folds away back to the compact summary row.
+ * grows naturally for short thoughts, then becomes an embedded scroll window
+ * for long streams. The newest line stays at the bottom while older lines
+ * glide upward; manual scrolling pauses that follow mode until the reader
+ * returns near the bottom. Once the stream settles, the window folds away
+ * back to the compact summary row.
  */
 function LiveThinkingWindow({ text }: { text: string }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+  const [isFollowing, setIsFollowing] = useState(true);
   // Typewriter buffer: reveal the stream at a fixed tick rate (40ms, 1–4
   // chars/frame, accel on backlog) instead of flashing every delta. Full
   // text appears instantly for prefers-reduced-motion users.
   const displayText = useStreamingTextBuffer({
     targetText: text,
+    // Private reasoning often arrives in larger bursts than the final answer.
+    // Keep a small readable delay, but allow the viewport to catch up instead
+    // of accumulating seconds of invisible backlog on fast providers.
+    targetIntervalMs: 32,
+    maxCharsPerTick: 10,
+    backlogDivisor: 12,
+    fastDrainThreshold: 2,
   });
 
-  useSmoothStickToBottom(ref, stickToBottomRef, displayText);
+  const autoScrollingRef = useSmoothStickToBottom(
+    ref,
+    stickToBottomRef,
+    displayText,
+  );
+
+  // Keep short/early status updates compact. The embedded reading viewport is
+  // only useful once the stream has enough content to scroll.
+  const isLongStream = text.length >= 640 || text.split("\n").length >= 10;
 
   const handleScroll = () => {
     const el = ref.current;
+    if (!el || autoScrollingRef.current) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+    stickToBottomRef.current = isAtBottom;
+    setIsFollowing(isAtBottom);
+  };
+
+  const resumeFollowing = () => {
+    const el = ref.current;
     if (!el) return;
-    stickToBottomRef.current =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+    stickToBottomRef.current = true;
+    setIsFollowing(true);
+    autoScrollingRef.current = true;
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    requestAnimationFrame(() => {
+      autoScrollingRef.current = false;
+    });
   };
 
   return (
-    <div
-      ref={ref}
-      onScroll={handleScroll}
-      className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 text-xs leading-6 text-muted-foreground/85"
-      data-testid="live-thinking-stream"
-    >
-      {displayText}
+    <div className="relative min-w-0">
+      <div
+        ref={ref}
+        onScroll={handleScroll}
+        className={cn(
+          "live-thinking-window mt-1 ml-4 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 text-xs leading-6 text-muted-foreground/85",
+          isLongStream && "live-thinking-window-long",
+        )}
+        data-testid="live-thinking-stream"
+      >
+        {displayText}
+      </div>
+      {!isFollowing && (
+        <button
+          type="button"
+          onClick={resumeFollowing}
+          className="absolute right-2 bottom-2 flex items-center gap-1 rounded-full border border-border/70 bg-background/95 px-2 py-1 text-mini text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+          aria-label={t.message.backToLatest}
+          title={t.message.backToLatest}
+          data-testid="thinking-back-to-latest"
+        >
+          <ChevronDownIcon className="size-3" />
+          {t.message.latest}
+        </button>
+      )}
     </div>
   );
 }
@@ -415,11 +494,15 @@ function LiveExecWindow({ text }: { text: string }) {
     targetText: text,
   });
 
-  useSmoothStickToBottom(ref, stickToBottomRef, displayText);
+  const autoScrollingRef = useSmoothStickToBottom(
+    ref,
+    stickToBottomRef,
+    displayText,
+  );
 
   const handleScroll = () => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || autoScrollingRef.current) return;
     stickToBottomRef.current =
       el.scrollHeight - el.scrollTop - el.clientHeight < 24;
   };
@@ -524,27 +607,6 @@ export function MessageGroup({
     () => groupConsecutiveReasoningSteps(steps),
     [steps],
   );
-  const { currentStep, replaySteps } = useMemo(() => {
-    if (!isLiveTimeline) return { currentStep: null, replaySteps: steps };
-    return {
-      currentStep: steps[steps.length - 1] ?? null,
-      replaySteps: steps.slice(0, -1),
-    };
-  }, [isLiveTimeline, steps]);
-  const leadInSteps = useMemo(
-    () =>
-      isLiveTimeline
-        ? leadInStepsBeforeStructuredPhase(replaySteps, currentStep)
-        : [],
-    [currentStep, isLiveTimeline, replaySteps],
-  );
-  const replayOnlySteps = useMemo(
-    () =>
-      isLiveTimeline && leadInSteps.length > 0
-        ? replaySteps.slice(leadInSteps.length)
-        : replaySteps,
-    [isLiveTimeline, leadInSteps.length, replaySteps],
-  );
   // A tool-carrying AI message can also contain the answer currently being
   // streamed. Keep that text in the conversation lane instead of burying it
   // inside the process replay.
@@ -559,11 +621,19 @@ export function MessageGroup({
     }
     return null;
   }, [messages, isLoading]);
+  // A reasoning disclosure may be opened while the model is still working.
+  // Once the answer lane starts (or the turn settles), return it to the
+  // compact completed state. This runs only on the live -> completed
+  // transition, so a reader can still reopen completed thinking manually.
+  const thinkingWasLiveRef = useRef(isLiveTimeline && !streamingAnswerText);
+  useEffect(() => {
+    const thinkingIsLive = isLiveTimeline && !streamingAnswerText;
+    if (thinkingWasLiveRef.current && !thinkingIsLive) {
+      setExpandedThinkingRows({});
+    }
+    thinkingWasLiveRef.current = thinkingIsLive;
+  }, [isLiveTimeline, streamingAnswerText]);
   const rehypePlugins = useRehypeSplitWordsIntoSpans(isLoading);
-  const replayStepCount = isLiveTimeline
-    ? replayOnlySteps.length
-    : steps.length;
-  const showTimelineToggle = replayStepCount > 0;
   // The transcript has one disclosure model: compact events stay inline and
   // their detail opens in the right workbench. Expanding the same replay a
   // second time inside the conversation duplicated checkpoints and tool rows,
@@ -588,7 +658,10 @@ export function MessageGroup({
       }
     }
     // Apply activity aggregation: group consecutive similar tool calls
-    const aggregated = aggregateSimilarToolCalls(selected);
+    const aggregated = aggregateSimilarToolCalls(selected, {
+      groupMixedKinds: true,
+      groupAcrossPhases: true,
+    });
     return aggregated.map((item): TimelineItem => {
       if (isAggregatedToolGroup(item)) {
         const mappedItems: ToolCallTimelineItem[] = [];
@@ -792,8 +865,7 @@ export function MessageGroup({
       // (thinking / tool execution / process narration) so the transcript
       // reads like a plain chat with only the final answers.
       if (
-        (!detailConfig.showThinkingProcess &&
-          item.type === "reasoningGroup") ||
+        (!detailConfig.showThinkingProcess && item.type === "reasoningGroup") ||
         (!detailConfig.showToolCalls &&
           (item.type === "toolCall" ||
             item.type === "aggregatedToolGroup" ||
@@ -806,9 +878,22 @@ export function MessageGroup({
       const phaseItems = step.phaseId
         ? historicalPhaseItems.get(step.phaseId)
         : undefined;
-      if (phaseItems && phaseItems.length > 1) {
-        if (phaseItems[0] !== item) return null;
-        const completedSummary = summarizeCollapsedPhase(phaseItems, t);
+      // Public commentary is conversation and must never be replaced by a
+      // faded phase receipt. Collapse only reasoning/tool activity that shares
+      // the phase; the commentary remains full-strength above that receipt.
+      const collapsiblePhaseItems = phaseItems?.filter(
+        (phaseItem) => phaseItem.type !== "commentary",
+      );
+      if (
+        item.type !== "commentary" &&
+        collapsiblePhaseItems &&
+        collapsiblePhaseItems.length > 1
+      ) {
+        if (collapsiblePhaseItems[0] !== item) return null;
+        const completedSummary = summarizeCollapsedPhase(
+          collapsiblePhaseItems,
+          t,
+        );
         const collapsedPhaseId = step.phaseId;
         return (
           <button
@@ -856,14 +941,13 @@ export function MessageGroup({
         return (
           <div
             key={`${keyPrefix}-${item.id}`}
-            className="flex min-w-0 items-start gap-0.5"
+            className="flex min-w-0 items-start gap-1"
           >
             <div
               role="button"
               tabIndex={0}
               aria-label={commentarySummary}
               onClick={() => {
-                // 双向联动：只追加激活，不改变既有点击行为
                 activateTimelineItem(timelineItemLinkageId(item), "chat");
                 emitOpenAgentWorkbench({
                   tab: "agent",
@@ -887,7 +971,7 @@ export function MessageGroup({
                 event.preventDefault();
                 event.currentTarget.click();
               }}
-              className="group/progress-row my-1 flex min-w-0 flex-1 cursor-pointer items-start gap-1.5 text-xs leading-5 text-foreground/75 outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
+              className="group/progress-row narrative-progress-row my-2.5 flex min-w-0 flex-1 cursor-pointer items-start text-foreground outline-none transition-colors hover:text-foreground focus-visible:text-foreground"
               data-testid="public-progress-event"
               data-process-event-id={item.step.messageId ?? item.step.id}
               data-timeline-item-id={timelineItemLinkageId(item)}
@@ -899,51 +983,24 @@ export function MessageGroup({
               data-progress-sequence={item.step.progressSequence}
               data-timeline-sequence={item.step.timelineSequence}
             >
-              <span className="mt-0.5 flex shrink-0 items-center gap-1">
-                <BrainIcon
-                  className="size-3 text-muted-foreground"
-                  aria-label={t.messageGrouping.thinking}
-                />
-                <span className="relative flex size-1.5 shrink-0 items-center justify-center">
-                  <span
-                    className={cn(
-                      "absolute inline-flex size-1.5 rounded-full opacity-25",
-                      agentRunStatusLightClass(state),
-                      agentRunStatusLightPulseClass(state),
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "relative inline-flex size-1 rounded-full",
-                      agentRunStatusLightClass(state),
-                    )}
-                  />
-                </span>
-              </span>
               <div className="min-w-0 flex-1">
                 <MarkdownContent
                   content={commentaryText}
                   isLoading={isLiveTimeline && isLastOverall && isLoading}
                   rehypePlugins={rehypePlugins}
+                  className={cn(
+                    "narrative-progress-copy",
+                    isLiveTimeline &&
+                      isLastOverall &&
+                      isLoading &&
+                      "kimi-streaming-tail",
+                  )}
                 />
                 {item.step.groundingMessage && (
                   <GroundingChip message={item.step.groundingMessage} />
                 )}
               </div>
             </div>
-            {isLastOverall && showTimelineToggle && (
-              <button
-                type="button"
-                onClick={openProcessDetails}
-                className="mt-1 p-0.5 text-muted-foreground/35 transition-colors hover:text-muted-foreground"
-                aria-label={t.message.processDetails}
-                title={t.message.processDetails}
-                data-testid="process-details-trigger"
-              >
-                <span className="sr-only">{t.message.processDetails}</span>
-                <PanelRightOpenIcon className="size-3" />
-              </button>
-            )}
           </div>
         );
       }
@@ -956,7 +1013,7 @@ export function MessageGroup({
           : "";
       // While the latest thought is still streaming, the live window below
       // carries the full text; hide the row's truncated summary so the two
-      // don't duplicate. The row keeps its icon + status light + timer.
+      // don't duplicate. Public narration uses a separate commentary item.
       const liveThinkingStreamActive =
         isThinking &&
         isLastOverall &&
@@ -965,8 +1022,7 @@ export function MessageGroup({
       // Latest shell execution's live stdout (realtime-adapter mirrors
       // commandExecution.aggregatedOutput into tool_call.args.output).
       const liveExecOutput =
-        item.type === "toolCall" &&
-        typeof item.step.args.output === "string"
+        item.type === "toolCall" && typeof item.step.args.output === "string"
           ? item.step.args.output.trim()
           : "";
       // Show the typewriter output window only while the latest step is
@@ -980,8 +1036,7 @@ export function MessageGroup({
       const isAggregatedGroup = item.type === "aggregatedToolGroup";
       const aggregatedExpanded =
         isAggregatedGroup &&
-        (expandedAggregatedGroups[item.id] ??
-          detailConfig.level === "high");
+        (expandedAggregatedGroups[item.id] ?? detailConfig.level === "high");
       const coveredItems =
         compactExecutionCoverage.get(item.id) ?? ([item] as TimelineItem[]);
       const groupedTargetSummary =
@@ -1039,31 +1094,16 @@ export function MessageGroup({
           coveredItems.some(
             (coveredItem) =>
               coveredItem.type === "reasoningGroup" &&
+              coveredItem.steps.length >= 8,
+          ) ||
+          coveredItems.some(
+            (coveredItem) =>
+              coveredItem.type === "reasoningGroup" &&
               coveredItem.steps.some(
                 (step) => (step.reasoning?.length ?? 0) >= 500,
               ),
           )
         : false;
-      // Outward-facing thinking ("我将先检查目录结构…", "接下来我会查看
-      // config") is the model telling the user what it's about to do — that
-      // is conversation prose, not private deliberation. Render it as normal
-      // body text (full text, normal color, no collapse) instead of a faded
-      // tiny thinking row. Only true inner chain-of-thought stays compact.
-      const isOutwardThinking =
-        isThinking &&
-        isOutwardFacingThinking(
-          coveredItems
-            .filter(
-              (coveredItem) => coveredItem.type === "reasoningGroup",
-            )
-            .flatMap((coveredItem) =>
-              coveredItem.steps.map(
-                (reasoningStep) => reasoningStep.reasoning ?? "",
-              ),
-            )
-            .join("\n"),
-        );
-
       // Use action-display for human-readable verb + icon
       let actionVerb: string;
       let actionObject: string;
@@ -1081,7 +1121,6 @@ export function MessageGroup({
         actionObject = "";
         ActionIcon = getActionIcon(aggregateIconName(item.aggregateKind));
         factSummaryText = null;
-        // Map aggregate kind to workbench tab
         switch (item.aggregateKind) {
           case "file_write":
             actionWorkbenchTab = "diff";
@@ -1223,6 +1262,14 @@ export function MessageGroup({
             ),
       ).join("\n");
       const processEventSummary = publicProcessText(summary);
+      const thinkingDisclosureLabel = isDeepThinking
+        ? t.messageGrouping.deepThinking
+        : processEventSummary || summary;
+      const hasThinkingDetail =
+        isThinking &&
+        !isLiveTimeline &&
+        Boolean(processEventDetail.trim()) &&
+        processEventDetail.trim() !== thinkingDisclosureLabel.trim();
 
       const rowKey = isAggregatedGroup
         ? `${keyPrefix}-agg-${item.items[0]?.id ?? item.aggregateKind}`
@@ -1257,19 +1304,17 @@ export function MessageGroup({
                 });
               }}
               className={cn(
-                "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs leading-[18px] transition-colors",
+                "flex min-w-0 flex-1 text-left transition-colors",
+                isThinking
+                  ? "my-1 items-center gap-1.5 py-0.5 text-xs leading-[18px]"
+                  : "my-2 items-center gap-2 py-0.5 text-sm leading-5",
                 // Aggregated rows use a slightly larger size and stronger
                 // hover target per spec §Design/Style.
-                isAggregatedGroup && "text-sm",
-                isOutwardThinking
-                  ? // Outward-facing narration is conversation prose — keep
-                    // it readable (full opacity) like the final answer.
-                    "text-foreground/85 hover:text-foreground"
-                  : needsEffectReview
-                    ? "text-warning/80 hover:text-warning/80 dark:hover:text-warning"
-                    : isAggregatedGroup
-                      ? "text-muted-foreground hover:text-foreground"
-                      : "text-muted-foreground/60 hover:text-muted-foreground",
+                needsEffectReview
+                  ? "text-warning/80 hover:text-warning/80 dark:hover:text-warning"
+                  : isAggregatedGroup
+                    ? "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground/60 hover:text-muted-foreground",
               )}
               data-process-event-id={workbenchEventId}
               data-timeline-item-id={timelineItemLinkageId(item)}
@@ -1332,24 +1377,24 @@ export function MessageGroup({
                   className="size-4 shrink-0 rounded-sm text-micro"
                 />
               ) : (
-                <ActionIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <ActionIcon className="size-4 shrink-0 text-muted-foreground/75" />
               )}
               <span className="flex min-w-0 flex-1 items-center gap-1">
-                <span className={cn(isOutwardThinking && "whitespace-normal")}>
+                <span>
                   {isThinking ? (
-                    liveThinkingStreamActive ? (
-                      null
-                    ) : isOutwardThinking ? (
-                      // Outward-facing narration: show the full text as
-                      // conversation prose, never truncate it.
-                      processEventDetail || processEventSummary || summary
-                    ) : (
-                      processEventSummary || summary
+                    // Long, completed private reasoning gets a stable
+                    // disclosure label so it cannot be mistaken for public
+                    // progress or a formal answer. Short/legacy traces keep
+                    // their compact summary for backwards compatibility.
+                    liveThinkingStreamActive ? null : (
+                      thinkingDisclosureLabel
                     )
                   ) : actionObject ? (
                     <>
-                      <span className="text-foreground">{actionVerb}</span>
-                      <span className="ml-1.5 font-mono text-mini text-muted-foreground">
+                      <span className="font-medium text-muted-foreground/90">
+                        {actionVerb}
+                      </span>
+                      <span className="ml-1.5 text-muted-foreground/70">
                         {" "}
                         {actionObject}
                       </span>
@@ -1402,41 +1447,37 @@ export function MessageGroup({
                 <span className="sr-only" data-testid="live-process-strip" />
               )}
             </button>
-            {isThinking &&
-              !isOutwardThinking &&
-              processEventDetail &&
-              processEventDetail.trim() !==
-                (processEventSummary || summary).trim() && (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setExpandedThinkingRows((current) => ({
-                      ...current,
-                      [item.id]: !current[item.id],
-                    }));
-                  }}
-                  className="p-0.5 opacity-0 transition-opacity group-hover/process-row:opacity-100 hover:text-muted-foreground"
-                  aria-label={
-                    expandedThinkingRows[item.id]
-                      ? t.agentWorkbenchPages.collapse
-                      : t.agentWorkbenchPages.expandDetails
-                  }
-                  title={
-                    expandedThinkingRows[item.id]
-                      ? t.agentWorkbenchPages.collapse
-                      : t.agentWorkbenchPages.expandDetails
-                  }
-                  data-testid="thinking-row-toggle"
-                >
-                  <ChevronDownIcon
-                    className={cn(
-                      "size-3 transition-transform",
-                      expandedThinkingRows[item.id] ? "rotate-180" : "",
-                    )}
-                  />
-                </button>
-              )}
+            {hasThinkingDetail && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpandedThinkingRows((current) => ({
+                    ...current,
+                    [item.id]: !current[item.id],
+                  }));
+                }}
+                className="shrink-0 p-0.5 text-muted-foreground/55 transition-colors hover:text-muted-foreground"
+                aria-label={
+                  expandedThinkingRows[item.id]
+                    ? t.agentWorkbenchPages.collapse
+                    : t.agentWorkbenchPages.expandDetails
+                }
+                title={
+                  expandedThinkingRows[item.id]
+                    ? t.agentWorkbenchPages.collapse
+                    : t.agentWorkbenchPages.expandDetails
+                }
+                data-testid="thinking-row-toggle"
+              >
+                <ChevronRightIcon
+                  className={cn(
+                    "size-3 transition-transform",
+                    expandedThinkingRows[item.id] ? "rotate-90" : "",
+                  )}
+                />
+              </button>
+            )}
             {isAggregatedGroup && (
               <button
                 type="button"
@@ -1467,28 +1508,6 @@ export function MessageGroup({
                 />
               </button>
             )}
-            {isLastOverall && showTimelineToggle && (
-              <button
-                type="button"
-                onClick={openProcessDetails}
-                className="p-0.5 opacity-0 transition-opacity group-hover/process-row:opacity-100 hover:text-muted-foreground"
-                aria-label={t.message.processDetails}
-                title={t.message.processDetails}
-                data-testid="process-details-trigger"
-              >
-                <span className="sr-only">{t.message.processDetails}</span>
-                <PanelRightOpenIcon className="size-3" />
-              </button>
-            )}
-            {!isLastOverall && !isThinking && (
-              <span
-                className="shrink-0 p-0.5 text-muted-foreground/0 transition-colors group-hover/process-row:text-muted-foreground/35"
-                aria-hidden="true"
-                data-testid="row-workbench-hint"
-              >
-                <PanelRightOpenIcon className="size-3" />
-              </span>
-            )}
           </div>
           {/* Live thinking window: while the latest step is still
               streaming, show its full text typewriter-style in a fixed-
@@ -1518,31 +1537,22 @@ export function MessageGroup({
               </CollapsibleContent>
             </Collapsible>
           )}
-          {isThinking &&
-            !isOutwardThinking &&
-            processEventDetail &&
-            processEventDetail.trim() !==
-              (processEventSummary || summary).trim() && (
-              <Collapsible
-                open={
-                  expandedThinkingRows[item.id] ??
-                  detailConfig.level === "high"
-                }
+          {hasThinkingDetail && (
+            <Collapsible open={expandedThinkingRows[item.id] ?? false}>
+              <CollapsibleContent
+                className="overflow-hidden data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
+                data-testid="thinking-row-content"
               >
-                <CollapsibleContent
-                  className="overflow-hidden data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
-                  data-testid="thinking-row-content"
-                >
-                  <div className="ml-1 border-l-2 border-border/50 pl-3 py-1 text-xs leading-6 text-muted-foreground/85">
-                    <MarkdownContent
-                      content={processEventDetail}
-                      isLoading={false}
-                      rehypePlugins={rehypePlugins}
-                    />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            )}
+                <div className="ml-4 whitespace-pre-wrap border-l-2 border-border/50 py-1 pl-3 text-xs leading-6 text-muted-foreground/85">
+                  <MarkdownContent
+                    content={processEventDetail}
+                    isLoading={false}
+                    rehypePlugins={rehypePlugins}
+                  />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
           {factSummaryText && (
             <div className="truncate pb-0.5 pl-3 text-xs leading-[18px] text-muted-foreground/60">
               {factSummaryText}
@@ -1567,42 +1577,6 @@ export function MessageGroup({
     });
   }
 
-  function openProcessDetails() {
-    const last = steps[steps.length - 1];
-    if (!last) return;
-    const isThinkingOnly = steps.every(
-      (step) => step.type === "reasoning" || step.type === "commentary",
-    );
-    const kind = isThinkingOnly ? "thinking" : "execution";
-    const detail = steps
-      .map((step) =>
-        step.type === "toolCall"
-          ? publicProcessText(summarizeCurrentStep(step, t))
-          : publicProcessText(stepText(step)),
-      )
-      .filter(Boolean)
-      .join("\n");
-    const publicDetail = detail.trim();
-    const summary =
-      firstPublicProcessLine(publicDetail) || t.message.processDetails;
-    emitOpenAgentWorkbench({
-      tab: "agent",
-      eventId: last.messageId ?? last.id,
-      eventKind: kind,
-      view: kind === "thinking" ? "summary" : "trace",
-      processEvent: {
-        kind,
-        summary,
-        detail: publicDetail || summary,
-        status: runStateForCurrentStep(last, isLoading),
-        count: steps.length,
-        phaseId: last.phaseId,
-        parentItemId: last.parentItemId,
-        timelineSequence: last.timelineSequence,
-      },
-    });
-  }
-
   return (
     <ChainOfThought
       defaultOpen
@@ -1611,7 +1585,10 @@ export function MessageGroup({
       data-process-mode={codeMode ? "code" : "chat"}
     >
       {compactItemsBeforeAnswer.length > 0 && (
-        <div className="space-y-0.5" data-testid="interleaved-process-timeline">
+        <div
+          className="narrative-process-flow"
+          data-testid="interleaved-process-timeline"
+        >
           {renderCompactTimelineItems(compactItemsBeforeAnswer, "before")}
         </div>
       )}
@@ -1625,19 +1602,19 @@ export function MessageGroup({
       )}
       {compactItemsAfterAnswer.length > 0 && (
         <div
-          className="mt-0.5 space-y-0.5"
+          className="narrative-process-flow mt-1"
           data-testid="interleaved-process-timeline"
         >
           {renderCompactTimelineItems(compactItemsAfterAnswer, "after")}
         </div>
       )}
       {showFinalAnswerBoundary && (
-        // 过程段落与最终回答之间的弱化分界：仅留白 + 细分隔线，
-        // 语义 token、无装饰元素、无阴影、无动画；流式进行中不渲染避免跳动。
+        // Keep the transition conversational: whitespace separates the live
+        // process from the answer without turning the response into a card.
         <div
           aria-hidden="true"
           data-testid="final-answer-boundary"
-          className="my-2 border-t border-border/50"
+          className="h-3"
         />
       )}
       {clarificationContent && (
@@ -2498,19 +2475,6 @@ function timelineItemLinkageId(item: TimelineItem): string {
   return step.messageId ?? step.id ?? item.id;
 }
 
-function leadInStepsBeforeStructuredPhase(
-  replaySteps: CoTStep[],
-  currentStep: CoTStep | null,
-): CoTStep[] {
-  if (replaySteps.length === 0) return [];
-  const firstPhaseIndex = replaySteps.findIndex((step) =>
-    Boolean(step.phaseId),
-  );
-  if (firstPhaseIndex > 0) return replaySteps.slice(0, firstPhaseIndex);
-  if (firstPhaseIndex === 0) return [];
-  return currentStep?.phaseId ? replaySteps : [];
-}
-
 function stepText(step: CoTStep): string {
   if (step.type === "reasoning") return step.reasoning ?? "";
   if (step.type === "actionCallback") return step.actionText;
@@ -2707,9 +2671,7 @@ function summarizeCollapsedPhase(
   return t.message.completedSteps(phaseItems.length);
 }
 
-function extractExplicitPublicReasoningSummary(
-  message: Message,
-): string | null {
+function extractLegacyReasoningSummary(message: Message): string | null {
   if (message.type !== "ai") return null;
   const additional = message.additional_kwargs;
   const direct = additional?.public_reasoning_summary;
@@ -2722,27 +2684,17 @@ function extractExplicitPublicReasoningSummary(
     if (typeof nested === "string" && nested.trim()) return nested.trim();
   }
 
-  // Do NOT fall back to raw reasoning_content for public_progress messages —
-  // that is private model state. The public narrator text lives in
-  // message.content itself.
+  // This compatibility field is readable reasoning, not public commentary.
+  // The caller keeps it in the private reasoning lane.
   return null;
-}
-
-function extractPublicReasoningSummary(message: Message): string | null {
-  // The provider's raw reasoning_content is private model state. A collapsed
-  // row is still disclosure, and opening that row in the workbench discloses
-  // even more. Only the explicit public-summary protocol may create a visible
-  // thinking event; public_progress narration is handled from message.content.
-  return extractExplicitPublicReasoningSummary(message);
 }
 
 /**
  * Read the provider thinking that the realtime adapter persisted on the
  * AIMessage (`additional_kwargs.reasoning_content`). The historical render
- * path aligns with live streaming: thinking the user chose to see during the
- * turn (typewriter + collapsible row) must stay visible when the thread is
- * replayed. public_progress messages are exempt — their message.content is
- * the narrator-authored public text and raw reasoning would duplicate it.
+ * path aligns with live streaming: reasoning stays in a typewriter/collapsible
+ * row when the thread is replayed, including when the same projected message
+ * also carries public commentary in message.content.
  */
 function extractRawReasoningContent(message: Message): string | null {
   if (message.type !== "ai") return null;
@@ -2796,7 +2748,10 @@ function stripReactProtocolBlocks(text: string): string | null {
 
 export function convertToSteps(messages: Message[]): CoTStep[] {
   const steps: CoTStep[] = [];
-  const seenPublicNarrative = new Set<string>();
+  // Deduplicate within a protocol lane only. Identical text in reasoning and
+  // commentary is still two different events with different visibility.
+  const seenReasoningNarrative = new Set<string>();
+  const seenCommentaryNarrative = new Set<string>();
   const seenToolCallIds = new Set<string>();
   // 来源消息带 public_progress 协议标记的消息 id 集合（供语义角色判定）
   const publicProgressMessageIds = new Set<string>();
@@ -2821,8 +2776,8 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
   ) => {
     if (!reasoning.trim()) return;
     const fingerprint = timelineNarrativeFingerprint(reasoning);
-    if (!fingerprint || seenPublicNarrative.has(fingerprint)) return;
-    seenPublicNarrative.add(fingerprint);
+    if (!fingerprint || seenReasoningNarrative.has(fingerprint)) return;
+    seenReasoningNarrative.add(fingerprint);
     if (lastStepType === "toolCall") {
       iteration++;
     }
@@ -2868,11 +2823,11 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
     if (
       !publicCommentary ||
       !fingerprint ||
-      seenPublicNarrative.has(fingerprint)
+      seenCommentaryNarrative.has(fingerprint)
     ) {
       return;
     }
-    seenPublicNarrative.add(fingerprint);
+    seenCommentaryNarrative.add(fingerprint);
     steps.push({
       id: `${message.id}-${idSuffix}`,
       messageId: message.id,
@@ -2964,20 +2919,17 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
         seenToolCallIds.add(toolCall.id);
         return true;
       });
-      // Raw reasoning_content used to be treated as private model state that
-      // must never invent public "thinking" rows. With streaming UX, the user
-      // chose to see thinking live (typewriter + collapsible row), so the
-      // historical replay must stay consistent — fall back to the persisted
-      // reasoning_content when no explicit public summary protocol exists.
-      // public_progress messages keep the protocol-only lane (their content
-      // IS the public narrator text). The render layer applies
-      // isOutwardFacingThinking() to decide brightness/collapse.
-      const publicReasoning = extractPublicReasoningSummary(message);
+      // Reasoning remains private regardless of whether it came from the
+      // current ``reasoning_content`` field or a legacy readable summary.
+      // Public progress is carried only by message.content on a commentary
+      // item, never inferred from these strings.
+      const legacyReasoning = extractLegacyReasoningSummary(message);
+      const rawReasoning = extractRawReasoningContent(message);
       const isPublicProgress =
         message.additional_kwargs?.public_progress === true;
-      const reasoningText =
-        publicReasoning ||
-        (!isPublicProgress ? extractRawReasoningContent(message) : null);
+      const reasoningText = rawReasoning || legacyReasoning;
+      const reasoningIsLegacySummary =
+        !rawReasoning && Boolean(legacyReasoning);
       const reasoningChunks = dedupeTimelineChunks(
         reasoningText
           ? splitReasoningIntoTimelineChunks(reasoningText)
@@ -3001,16 +2953,19 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
         const commentaryFingerprint = commentary
           ? timelineNarrativeFingerprint(commentary)
           : "";
-        // Public progress messages carry narrator-authored Chinese thought
-        // content. Do NOT leak raw private reasoning_content (English) into
-        // the public timeline. The message content itself is the public text.
+        // A projected commentary message may also carry preceding reasoning
+        // metadata. Keep it in the private reasoning row; message.content is
+        // the only public prose.
         for (let index = 0; index < reasoningChunks.length; index += 1) {
           const reasoningChunk = reasoningChunks[index];
           if (
             reasoningChunk &&
-            (!commentaryFingerprint ||
-              timelineNarrativeFingerprint(reasoningChunk) !==
-                commentaryFingerprint)
+            !(
+              reasoningIsLegacySummary &&
+              commentaryFingerprint &&
+              timelineNarrativeFingerprint(reasoningChunk) ===
+                commentaryFingerprint
+            )
           ) {
             pushReasoningStep(message, reasoningChunk, `reasoning-${index}`);
           }
@@ -3018,9 +2973,9 @@ export function convertToSteps(messages: Message[]): CoTStep[] {
         if (
           commentary &&
           commentaryFingerprint &&
-          !seenPublicNarrative.has(commentaryFingerprint)
+          !seenCommentaryNarrative.has(commentaryFingerprint)
         ) {
-          seenPublicNarrative.add(commentaryFingerprint);
+          seenCommentaryNarrative.add(commentaryFingerprint);
           steps.push({
             id: `${message.id}-commentary`,
             messageId: message.id,

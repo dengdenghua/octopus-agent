@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 
@@ -87,8 +88,12 @@ export function ChatPageLayout({
   // Viewport width drives the panel clamps; re-clamped on window resize.
   // SSR renders unclamped (Infinity), the mount effect corrects it.
   const [viewportWidth, setViewportWidth] = useState<number>(() =>
-    typeof window === "undefined" ? Number.POSITIVE_INFINITY : window.innerWidth,
+    typeof window === "undefined"
+      ? Number.POSITIVE_INFINITY
+      : window.innerWidth,
   );
+  const [inputOverlayHeight, setInputOverlayHeight] = useState(0);
+  const inputOverlayRef = useRef<HTMLDivElement>(null);
   const secondaryDefaultWidth = resolveSidebarWidth(secondaryPanelWidth);
   const sidebarOpen = Boolean(sidebar) && showSidebar && !isNarrowViewport;
   const secondaryOpen = Boolean(secondaryPanel) && !isNarrowViewport;
@@ -157,6 +162,29 @@ export function ChatPageLayout({
     return () => window.removeEventListener("resize", update);
   }, []);
 
+  useEffect(() => {
+    const node = inputOverlayRef.current;
+    if (!node) return;
+
+    const measure = () => {
+      const nextHeight = Math.ceil(node.getBoundingClientRect().height);
+      if (nextHeight <= 0) return;
+      setInputOverlayHeight((current) =>
+        current === nextHeight ? current : nextHeight,
+      );
+    };
+
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   // Re-opening the drawer (or leaving the narrow viewport) always starts
   // from the collapsed peek height.
   useEffect(() => {
@@ -218,7 +246,9 @@ export function ChatPageLayout({
       <header
         className={cn(
           "flex h-11 shrink-0 items-center justify-between overflow-hidden pl-12 pr-3",
-          isNewThread ? "border-b border-transparent" : "border-b border-border-subtle",
+          isNewThread
+            ? "border-b border-transparent"
+            : "border-b border-border-subtle",
           "bg-background/80 backdrop-blur-lg",
           headerClassName,
         )}
@@ -231,6 +261,11 @@ export function ChatPageLayout({
             role="region"
             aria-label={t.sidebar.ariaChatWorkspace}
             className="relative flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none"
+            style={
+              {
+                "--chat-input-overlay-height": `${inputOverlayHeight || 160}px`,
+              } as CSSProperties
+            }
           >
             {pageTitle && <h1 className="sr-only">{pageTitle}</h1>}
             {modeSwitcher && (
@@ -248,7 +283,11 @@ export function ChatPageLayout({
                 <ErrorBoundary>{messageList}</ErrorBoundary>
               </div>
             </div>
-            <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center bg-gradient-to-t from-background via-background/92 to-transparent px-3 pb-3 pt-8">
+            <div
+              ref={inputOverlayRef}
+              data-chat-input-overlay="true"
+              className="absolute right-0 bottom-0 left-0 z-30 flex justify-center bg-gradient-to-t from-background via-background/92 to-transparent px-3 pb-3 pt-8"
+            >
               <ErrorBoundary>{inputArea}</ErrorBoundary>
             </div>
           </section>
@@ -256,15 +295,15 @@ export function ChatPageLayout({
         {sidebar && (
           <aside
             aria-hidden={!showSidebar}
-           aria-label={t.sidebar.ariaUtilityPanel}
-           style={
-             isNarrowViewport
-               ? { height: "min(58vh, 520px)", width: "100%" }
-               : { width: showSidebar ? drawerWidth : 0 }
-           }
-           className={cn(
-             "relative z-20 flex flex-col overflow-hidden bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] backdrop-blur-[10px]",
-             isNarrowViewport
+            aria-label={t.sidebar.ariaUtilityPanel}
+            style={
+              isNarrowViewport
+                ? { height: "min(58vh, 520px)", width: "100%" }
+                : { width: showSidebar ? drawerWidth : 0 }
+            }
+            className={cn(
+              "relative z-20 flex flex-col overflow-hidden bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] backdrop-blur-[10px]",
+              isNarrowViewport
                 ? cn(
                     "fixed right-0 bottom-0 left-0 z-40 rounded-t-2xl border-t border-border-default pt-0 shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)]",
                     showSidebar
@@ -301,12 +340,12 @@ export function ChatPageLayout({
         )}
         {secondaryPanel && !isNarrowViewport && (
           <aside
-           aria-label={t.sidebar.ariaAgentWorkbench}
-           style={{ width: secondaryResolvedWidth }}
-           className={cn(
-             "relative z-20 flex flex-col overflow-hidden bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] backdrop-blur-[10px]",
-             "flex-shrink-0 border-l border-border-default opacity-100 shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]",
-           )}
+            aria-label={t.sidebar.ariaAgentWorkbench}
+            style={{ width: secondaryResolvedWidth }}
+            className={cn(
+              "relative z-20 flex flex-col overflow-hidden bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] backdrop-blur-[10px]",
+              "flex-shrink-0 border-l border-border-default opacity-100 shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]",
+            )}
           >
             <div
               role="separator"

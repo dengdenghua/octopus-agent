@@ -1,8 +1,30 @@
-import { ArrowLeftIcon, ChevronRightIcon, DownloadIcon, EyeIcon, GlobeIcon, PackageIcon, SparklesIcon, TerminalIcon } from "lucide-react";
-import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, lazy } from "react";
+import {
+  ArrowLeftIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  EyeIcon,
+  GlobeIcon,
+  PackageIcon,
+  SparklesIcon,
+  TerminalIcon,
+} from "lucide-react";
+import {
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  lazy,
+} from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
-import { artifactDisplayPath, normalizeWorkspaceArtifactRef, urlOfArtifact } from "@/core/artifacts/utils";
+import {
+  artifactDisplayPath,
+  normalizeWorkspaceArtifactRef,
+  urlOfArtifact,
+} from "@/core/artifacts/utils";
 import { useArtifactContent } from "@/core/artifacts/hooks";
 import type { OutlineRound } from "@/core/threads/progress-outline";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
@@ -25,10 +47,7 @@ import type { AgentWorkbenchTabId, DiffEntry } from "./agent-workbench-utils";
 import { useAgentWorkbenchI18n } from "./use-agent-workbench-i18n";
 import { AgentDiffPage } from "./agent-workbench-pages";
 import { useAgentWorkbenchSnapshot } from "./agent-workbench-snapshot";
-import {
-  deriveAgentPhases,
-  type AgentPhase,
-} from "./agent-phases";
+import { deriveAgentPhases, type AgentPhase } from "./agent-phases";
 import { type AgentRunState, workbenchRunState } from "./agent-run-status";
 import { MachineScopeRail } from "./agent-workbench-panel/machine-scope-rail";
 import { EmptyShellView } from "./agent-workbench-panel/empty-shell-view";
@@ -77,6 +96,10 @@ function AgentWorkbenchPanelImpl({
   browserPreviewBlocks,
   resultPreviewUrl,
   mainAgentName,
+  contextTokens,
+  maxContextTokens,
+  isCompressingContext,
+  onCompressContext,
   rosterSeats = [],
 }: {
   activeTab?: AgentWorkbenchTabId;
@@ -130,6 +153,11 @@ function AgentWorkbenchPanelImpl({
   resultPreviewUrl?: string | null;
   /** Public identity shown above the main-agent evidence surface. */
   mainAgentName?: string | null;
+  /** Current conversation-window usage, shared with the composer. */
+  contextTokens?: number;
+  maxContextTokens?: number;
+  isCompressingContext?: boolean;
+  onCompressContext?: () => void | Promise<void>;
   rosterSeats?: WorkbenchRosterSeat[];
 }) {
   const { t } = useI18n();
@@ -164,7 +192,8 @@ function AgentWorkbenchPanelImpl({
   // to ensure workbench always shows task plan when expanded, regardless of
   // whether server snapshot has been populated or survived a refresh/interrupt.
   const directDerived = useMemo(
-    () => deriveAgentPhases(events, { hasAnswer, runSettled, runFailed, paused }),
+    () =>
+      deriveAgentPhases(events, { hasAnswer, runSettled, runFailed, paused }),
     [events, hasAnswer, runSettled, runFailed, paused],
   );
   // Stream-time guard: a todo plan whose phases are all "done" is NOT a
@@ -304,7 +333,12 @@ function AgentWorkbenchPanelImpl({
   );
   const requestedActiveTab: AgentWorkbenchTabId =
     activeTab ?? (focusedAgentId ? "agent" : focusedTab) ?? "agent";
-  const effectiveActiveTab: "agent" | "diff" | "terminal" | "browser" | "artifacts" =
+  const effectiveActiveTab:
+    | "agent"
+    | "diff"
+    | "terminal"
+    | "browser"
+    | "artifacts" =
     requestedActiveTab === "subagents" || requestedActiveTab === "plan"
       ? "agent"
       : requestedActiveTab;
@@ -320,7 +354,11 @@ function AgentWorkbenchPanelImpl({
         label: t.agentWorkbenchPages.terminalTab,
         Icon: TerminalIcon,
       },
-      { id: "browser", label: t.agentWorkbenchPages.browserTab, Icon: GlobeIcon },
+      {
+        id: "browser",
+        label: t.agentWorkbenchPages.browserTab,
+        Icon: GlobeIcon,
+      },
       {
         id: "artifacts",
         label: t.conversation.artifactsTitle,
@@ -493,6 +531,10 @@ function AgentWorkbenchPanelImpl({
       terminalState={
         runInterrupted ? "interrupted" : runFailed ? "failed" : null
       }
+      contextTokens={contextTokens}
+      maxContextTokens={maxContextTokens}
+      isCompressingContext={isCompressingContext}
+      onCompressContext={onCompressContext}
       setActivityView={setActivityView}
       onSelectTab={onSelectTab}
       onOpenArtifact={onOpenArtifact}
@@ -614,7 +656,11 @@ function ArtifactInlinePreviewEmbedded({
   threadId: string;
   currentTurnEntries?: DiffEntry[];
 }) {
-  const { artifacts, selectedArtifact: externalSelected, select } = useArtifacts();
+  const {
+    artifacts,
+    selectedArtifact: externalSelected,
+    select,
+  } = useArtifacts();
   const { t } = useI18n();
   const streamdownPlugins = useStreamdownPlugins();
 
@@ -630,7 +676,10 @@ function ArtifactInlinePreviewEmbedded({
     return refs;
   }, [currentTurnEntries, threadId]);
 
-  const currentTurnSet = useMemo(() => new Set(currentTurnRefs), [currentTurnRefs]);
+  const currentTurnSet = useMemo(
+    () => new Set(currentTurnRefs),
+    [currentTurnRefs],
+  );
 
   // Single flat list: current-turn first (in their natural order), then history.
   const allFiles = useMemo(() => {
@@ -764,7 +813,7 @@ function PreviewPane({
     threadId,
     enabled: !isWriteFile,
   });
-  const effectiveContent = isWriteFile ? "" : content ?? "";
+  const effectiveContent = isWriteFile ? "" : (content ?? "");
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const lang = checkCodeFile(displayPath).language;

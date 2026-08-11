@@ -426,10 +426,14 @@
 
   /* Shadow scale — four tiers matching common UI patterns */
   --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 2px 6px rgba(15, 23, 42, 0.06), 0 8px 20px rgba(15, 23, 42, 0.06);
-  --shadow-lg: 0 4px 12px rgba(15, 23, 42, 0.08), 0 16px 36px rgba(15, 23, 42, 0.08);
-  --shadow-xl: 0 8px 20px rgba(15, 23, 42, 0.1), 0 24px 60px rgba(15, 23, 42, 0.12);
+  --shadow-sm:
+    0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-md:
+    0 2px 6px rgba(15, 23, 42, 0.06), 0 8px 20px rgba(15, 23, 42, 0.06);
+  --shadow-lg:
+    0 4px 12px rgba(15, 23, 42, 0.08), 0 16px 36px rgba(15, 23, 42, 0.08);
+  --shadow-xl:
+    0 8px 20px rgba(15, 23, 42, 0.1), 0 24px 60px rgba(15, 23, 42, 0.12);
   --shadow-card: var(--shadow-xs);
   --shadow-elevated: var(--shadow-sm);
   --shadow-floating: var(--shadow-md);
@@ -974,7 +978,8 @@
    由 --primary / --background 等语义变量驱动，随浅/深色与 rouge/steel
    配色实时同步，无需为每种配色单独写死。 */
 .browser-backdrop-palette {
-  background-image: radial-gradient(
+  background-image:
+    radial-gradient(
       circle at 22% 14%,
       color-mix(in oklch, var(--primary) 22%, transparent),
       transparent 30%
@@ -1656,17 +1661,12 @@
     border-color: color-mix(in oklch, var(--border) 88%, transparent);
   }
 
-
   :root :is(.workspace-panel, .workspace-panel-subtle) {
     border-radius: var(--appearance-radius-panel) !important;
   }
 
   :root
-    :is(
-      [data-slot="card"],
-      [data-slot="dialog-content"],
-      [data-slot="alert"]
-    ) {
+    :is([data-slot="card"], [data-slot="dialog-content"], [data-slot="alert"]) {
     border-radius: var(--appearance-radius-2xl) !important;
   }
 
@@ -1741,6 +1741,61 @@
   .chat-markdown {
     min-width: 0;
     max-width: 100%;
+  }
+
+  /* Public progress is conversation, not telemetry. Keep it on the same
+     reading axis as the answer and reserve icons/muted type for actual tool
+     actions. This mirrors a person saying what they are doing between steps. */
+  .narrative-progress-row {
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.75;
+  }
+
+  .narrative-progress-copy {
+    color: inherit;
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  .narrative-progress-copy :where(p) {
+    margin-block: 0;
+  }
+
+  .narrative-process-flow > :where(* + *) {
+    margin-top: 0.15rem;
+  }
+
+  /* Give live private reasoning a real reading viewport even before enough
+     text has arrived to fill it. Keep both bounds relative to the screen so
+     the window feels substantial without pushing the composer away. */
+  .live-thinking-window {
+    max-height: min(55vh, 34rem);
+    min-width: 0;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  /* Only long streams get a substantial embedded reading viewport. Short
+     status updates should occupy their natural height instead of leaving a
+     large empty panel beneath a single line. */
+  .live-thinking-window-long {
+    min-height: min(32vh, 20rem);
+  }
+
+  @media (max-width: 640px) {
+    .narrative-progress-row {
+      font-size: 0.9375rem;
+      line-height: 1.7;
+    }
+
+    .live-thinking-window {
+      max-height: min(44vh, 26rem);
+    }
+
+    .live-thinking-window-long {
+      min-height: min(24vh, 11rem);
+    }
   }
 
   .chat-markdown :where(p, li, blockquote) {
@@ -1883,9 +1938,6 @@
     color: color-mix(in oklch, var(--foreground) 90%, var(--primary));
   }
 
-
-
-
   .octo-appearance-step-slider {
     position: relative;
     z-index: 1;
@@ -1953,7 +2005,6 @@
       0 0 0 4px color-mix(in oklch, var(--ring) 18%, transparent),
       0 10px 26px rgb(15 23 42 / 0.08);
   }
-
 }
 
 @layer base {
