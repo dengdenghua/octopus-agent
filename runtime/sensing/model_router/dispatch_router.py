@@ -70,11 +70,7 @@ class ModelDispatchRouter(ModelRouter):
             # duplicate the reply. The pre-guard gate (``request_has_
             # images(guarded)``) also keeps recovery off when a known
             # non-vision model already got its images stripped.
-            if (
-                not yielded_any
-                and request_has_images(guarded)
-                and classify_image_rejection(exc)
-            ):
+            if not yielded_any and request_has_images(guarded) and classify_image_rejection(exc):
                 try:
                     for evt in picked.call_stream(build_without_images(guarded)):
                         yield evt

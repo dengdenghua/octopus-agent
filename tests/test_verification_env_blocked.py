@@ -16,7 +16,9 @@ from runtime.sensing.gateway.realtime_turn_outcome import (
 )
 
 
-def _verification(command: str, text: str, status: ItemStatus = ItemStatus.FAILED) -> VerificationItem:
+def _verification(
+    command: str, text: str, status: ItemStatus = ItemStatus.FAILED
+) -> VerificationItem:
     return VerificationItem(
         command=command,
         kind="manual",
@@ -208,9 +210,7 @@ def test_command_execution_real_failure_not_degradable() -> None:
                     "createdAt": "2026-06-01T18:56:00Z",
                     "command": "exec_shell",
                     "inputPreview": {"command": "pytest -x"},
-                    "aggregatedOutput": (
-                        "E assert 0 == 1\nFAILED tests/test_foo.py::test_bar"
-                    ),
+                    "aggregatedOutput": ("E assert 0 == 1\nFAILED tests/test_foo.py::test_bar"),
                 },
             ],
             "error": None,

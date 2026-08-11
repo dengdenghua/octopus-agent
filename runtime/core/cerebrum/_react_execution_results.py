@@ -343,8 +343,7 @@ def _latest_failed_tool_info(steps: list[Any]) -> tuple[str, str] | None:
         candidates: list[Any] = []
         if isinstance(output, dict):
             candidates.extend(
-                output.get(key)
-                for key in ("stderr", "output", "stdout", "message", "error")
+                output.get(key) for key in ("stderr", "output", "stdout", "message", "error")
             )
         else:
             candidates.append(output)

@@ -20,6 +20,7 @@ from runtime.core.cerebrum.react_guards import (
     _goal_requests_code_mutation,
     _incomplete_final_answer_guard,
 )
+
 # Imported from the defining module directly: react_guards' re-export of
 # ``_step_is_failed_execution`` exists only in an uncommitted refactor, so at
 # the committed tip ``from react_guards import _step_is_failed_execution``
@@ -140,10 +141,7 @@ def _looks_like_observation_echo(text: str) -> bool:
         # is never legitimate prose); ``Thought:`` alone could be a quote,
         # so only flag it when an Action block is also present.
         or bool(_REACT_ACTION_CALL_RE.search(stripped))
-        or bool(
-            _REACT_THOUGHT_LINE_RE.search(stripped)
-            and _REACT_ACTION_CALL_RE.search(stripped)
-        )
+        or bool(_REACT_THOUGHT_LINE_RE.search(stripped) and _REACT_ACTION_CALL_RE.search(stripped))
     )
 
 
@@ -444,9 +442,7 @@ _INLINE_TOOL_CALL_NAMES = (
     "run_tests",
     "lint_check",
 )
-_INLINE_TOOL_CALL_RE = re.compile(
-    rf"(?m)^\s*(?:{'|'.join(_INLINE_TOOL_CALL_NAMES)})\s*\("
-)
+_INLINE_TOOL_CALL_RE = re.compile(rf"(?m)^\s*(?:{'|'.join(_INLINE_TOOL_CALL_NAMES)})\s*\(")
 
 
 def _strip_inline_tool_calls(text: str) -> str:

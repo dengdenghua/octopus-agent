@@ -209,9 +209,7 @@ def describe_image(
     last_error: Exception | None = None
     for attempt in range(2):
         try:
-            verdict = _chat(
-                cfg, image_url, prompt, max_tokens=max_tokens, timeout=timeout
-            )
+            verdict = _chat(cfg, image_url, prompt, max_tokens=max_tokens, timeout=timeout)
             if verdict and verdict.strip():
                 return verdict.strip()
             last_error = None

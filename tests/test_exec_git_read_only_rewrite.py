@@ -58,9 +58,7 @@ def test_non_git_argv_is_not_read_only() -> None:
 
 
 def test_rewrite_git_status_at_workspace_root() -> None:
-    rewritten = _read_only_git_rewrite(
-        ["git", "status", "--porcelain"], _REPO, _WORK
-    )
+    rewritten = _read_only_git_rewrite(["git", "status", "--porcelain"], _REPO, _WORK)
     assert rewritten is not None
     argv, cwd = rewritten
     assert argv == ["git", "-C", _REPO, "status", "--porcelain"]
@@ -68,9 +66,7 @@ def test_rewrite_git_status_at_workspace_root() -> None:
 
 
 def test_rewrite_keeps_global_options() -> None:
-    rewritten = _read_only_git_rewrite(
-        ["git", "--no-pager", "diff"], _REPO, _WORK
-    )
+    rewritten = _read_only_git_rewrite(["git", "--no-pager", "diff"], _REPO, _WORK)
     assert rewritten is not None
     argv, _ = rewritten
     assert argv == ["git", "-C", _REPO, "--no-pager", "diff"]

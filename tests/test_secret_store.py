@@ -70,9 +70,7 @@ def test_keychain_lookup_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
     monkeypatch.delenv("MY_KEY", raising=False)
     monkeypatch.setattr(ss, "keychain_backend", lambda: "macos-keychain")
-    monkeypatch.setattr(
-        ss, "_macos_get", lambda name: (calls.append(name), "from-keychain")[1]
-    )
+    monkeypatch.setattr(ss, "_macos_get", lambda name: (calls.append(name), "from-keychain")[1])
 
     assert ss.get_or_create_fernet_key("tok", env_var="MY_KEY") == "from-keychain"
     assert ss.get_or_create_fernet_key("tok", env_var="MY_KEY") == "from-keychain"

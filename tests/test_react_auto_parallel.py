@@ -36,11 +36,7 @@ def test_plan_parallelizes_explicit_list():
 
 
 def test_plan_parallelizes_multiple_questions():
-    goal = (
-        "帮我查一下苹果的营收是多少？"
-        "同时看一下它的毛利率变化？"
-        "再分析一下它的估值贵不贵？"
-    )
+    goal = "帮我查一下苹果的营收是多少？同时看一下它的毛利率变化？再分析一下它的估值贵不贵？"
     plan = plan_auto_parallel(goal)
     assert plan is not None
     assert plan.should_parallelize()
@@ -74,9 +70,7 @@ def test_plan_respects_max_subtasks():
 
 def test_run_auto_parallel_dispatches_and_aggregates():
     plan = plan_auto_parallel(
-        "请分别调研以下三个方向：\n"
-        "1. 云计算市场2025年规模\n"
-        "2. 人工智能芯片竞争格局"
+        "请分别调研以下三个方向：\n1. 云计算市场2025年规模\n2. 人工智能芯片竞争格局"
     )
     assert plan is not None
 
@@ -129,9 +123,7 @@ def test_run_auto_parallel_dispatches_and_aggregates():
 
 def test_run_auto_parallel_returns_failure_on_no_output():
     plan = plan_auto_parallel(
-        "请分别调研以下两个方向：\n"
-        "1. 云计算市场2025年规模\n"
-        "2. 人工智能芯片竞争格局"
+        "请分别调研以下两个方向：\n1. 云计算市场2025年规模\n2. 人工智能芯片竞争格局"
     )
     assert plan is not None
 
@@ -236,11 +228,7 @@ def _collect_until_event(gen, target_types: set[str], max_events: int = 50):
 
 
 def _parallelizable_goal() -> str:
-    return (
-        "请分别调研以下两个方向：\n"
-        "1. 云计算市场2025年规模\n"
-        "2. 人工智能芯片竞争格局"
-    )
+    return "请分别调研以下两个方向：\n1. 云计算市场2025年规模\n2. 人工智能芯片竞争格局"
 
 
 def test_react_loop_auto_parallel_completes_and_injects_observation():
@@ -260,12 +248,15 @@ def test_react_loop_auto_parallel_completes_and_injects_observation():
         "total": 2,
     }
 
-    with patch(
-        "runtime.core.cerebrum.agent_auto_parallel.plan_auto_parallel",
-        side_effect=lambda *a, **k: plan_auto_parallel(a[0]),
-    ), patch(
-        "runtime.core.cerebrum.agent_auto_parallel.run_auto_parallel",
-        return_value=mock_parallel_result,
+    with (
+        patch(
+            "runtime.core.cerebrum.agent_auto_parallel.plan_auto_parallel",
+            side_effect=lambda *a, **k: plan_auto_parallel(a[0]),
+        ),
+        patch(
+            "runtime.core.cerebrum.agent_auto_parallel.run_auto_parallel",
+            return_value=mock_parallel_result,
+        ),
     ):
         gen = stream_react_loop(
             stack=stack,
@@ -352,11 +343,7 @@ def test_splitter_appends_memory_to_each_subtask():
         plan_auto_parallel,
     )
 
-    goal = (
-        "请分别调研以下三个方向：\n"
-        "1. 云计算市场2025年规模\n"
-        "2. 人工智能芯片竞争格局"
-    )
+    goal = "请分别调研以下三个方向：\n1. 云计算市场2025年规模\n2. 人工智能芯片竞争格局"
     memory = build_thread_memory_summary(
         {
             "conversation_messages": [

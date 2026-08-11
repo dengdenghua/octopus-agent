@@ -125,9 +125,7 @@ async def bridge_orchestrator_batch(
                         }
                     )
                     subagent_items[task_id] = updated
-                    turn.items = [
-                        updated if item.id == updated.id else item for item in turn.items
-                    ]
+                    turn.items = [updated if item.id == updated.id else item for item in turn.items]
                     if terminal:
                         await _emit_completed(updated)
             elif etype == "batch_complete":

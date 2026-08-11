@@ -125,9 +125,9 @@ def explain_guard_policy(model: str | None) -> str:
         )
     return (
         f"Model '{model}' tier UNKNOWN. "
-            "Code-smell guards ENABLED (conservative default). "
-            "All guard categories active."
-        )
+        "Code-smell guards ENABLED (conservative default). "
+        "All guard categories active."
+    )
 
 
 __all__ = [

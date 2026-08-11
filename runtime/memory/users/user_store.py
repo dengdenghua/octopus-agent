@@ -708,11 +708,7 @@ def visible_facts_for_viewer(
     如何投影进提示词）。与 ``search_facts`` 一致：scope 为空时聚合
     读取该租户全部分区。
     """
-    source = (
-        _facts_for_viewer(viewer)
-        if scope is None
-        else read_memory(scope).get("facts", [])
-    )
+    source = _facts_for_viewer(viewer) if scope is None else read_memory(scope).get("facts", [])
     facts: list[dict[str, Any]] = []
     for fact in source:
         if not isinstance(fact, dict):

@@ -660,7 +660,7 @@ def _normalize_image_block(block: dict[str, Any]) -> dict[str, Any]:
         return block
     if url.startswith("data:"):
         header, _, data = url.partition(",")
-        media_type = header[len("data:"):].split(";", 1)[0] or "image/png"
+        media_type = header[len("data:") :].split(";", 1)[0] or "image/png"
         return {
             "type": "image",
             "source": {"type": "base64", "media_type": media_type, "data": data},

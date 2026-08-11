@@ -379,8 +379,7 @@ def _snapshot_to_thread_store(
         # updated_at in the sidebar. Surface at warning level so a broken
         # serialisation or store failure is at least visible in logs.
         _logger.warning(
-            "snapshot to thread_store failed for %s (%s: %s); sidebar thread "
-            "status may be stale",
+            "snapshot to thread_store failed for %s (%s: %s); sidebar thread status may be stale",
             thread_id,
             type(exc).__name__,
             exc,

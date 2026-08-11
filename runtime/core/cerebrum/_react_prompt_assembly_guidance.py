@@ -138,9 +138,7 @@ def _assemble_core_guidance(state: _AssemblyState) -> None:
         # development. Personal research/general are non-code work styles and
         # arrive here too; the helper intentionally emits nothing for them.
         if state.work_mode.scope == "personal":
-            _personal_mode_prompt = _build_personal_agent_mode_prompt(
-                state.personal_mode_value
-            )
+            _personal_mode_prompt = _build_personal_agent_mode_prompt(state.personal_mode_value)
             if _personal_mode_prompt:
                 state.system_parts.append("\n" + _personal_mode_prompt)
         if state.is_goal_mode:

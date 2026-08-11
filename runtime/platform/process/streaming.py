@@ -137,9 +137,7 @@ def _inference_domains_for_policy(allow_network: bool) -> tuple[str, ...]:
         return ()
 
 
-def _egress_domains_for_policy(
-    allow_network: bool, egress_allow_common: bool
-) -> tuple[str, ...]:
+def _egress_domains_for_policy(allow_network: bool, egress_allow_common: bool) -> tuple[str, ...]:
     """Host allowlist for a network-denied SandboxPolicy.
 
     ``allow_network=True`` needs nothing (everything reachable). Otherwise the
@@ -327,9 +325,7 @@ def stream_run(
             # is network-denied (Claude Desktop parity). Resolved lazily from
             # custom_models.json / ANTHROPIC_BASE_URL; empty for network-allowed
             # sandboxes. The "common domains" tier pre-allows dev-tool hosts.
-            inference_domains=_egress_domains_for_policy(
-                allow_network, egress_allow_common
-            ),
+            inference_domains=_egress_domains_for_policy(allow_network, egress_allow_common),
             egress_allow_common=egress_allow_common,
         )
         run_env = policy.env_for()

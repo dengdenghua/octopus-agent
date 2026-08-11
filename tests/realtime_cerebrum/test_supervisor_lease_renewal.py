@@ -92,9 +92,7 @@ def test_realtime_turn_renews_supervisor_lease(
     # the task is live). The terminal transition clears the lease object
     # itself, so the renewal is observable via the heartbeat timestamp.
     assert record.heartbeat_at, "lease must be renewed via supervisor heartbeat"
-    assert (
-        record.heartbeat_at >= record.started_at
-    ), "renewal must happen after the task started"
+    assert record.heartbeat_at >= record.started_at, "renewal must happen after the task started"
 
     # The turn still completes normally.
     assert any(n.method == "turn/completed" for n in result["notifications"])

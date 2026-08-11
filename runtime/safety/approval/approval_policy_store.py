@@ -114,9 +114,7 @@ def load_policy(path: Path) -> ApprovalPolicy:
             rules.append(rule)
     from runtime.safety.approval.permission_profiles import resolve_profile
 
-    _profile_name, effective_rules, _auto = resolve_profile(
-        raw.get("profile"), tuple(rules)
-    )
+    _profile_name, effective_rules, _auto = resolve_profile(raw.get("profile"), tuple(rules))
     return ApprovalPolicy(rules=effective_rules)
 
 

@@ -116,9 +116,7 @@ def _render_health(
                 prec = data["precision"]
                 tp = data["tp"]
                 fp = data["fp"]
-                lines.append(
-                    f"  {label:40s} precision={prec:.2%} (tp={tp}, fp={fp})"
-                )
+                lines.append(f"  {label:40s} precision={prec:.2%} (tp={tp}, fp={fp})")
         else:
             lines.append("  ✓ No noisy guards found")
         lines.append("")
@@ -166,7 +164,7 @@ def _render_health(
                 noisy_labels += f", ... ({len(noisy_guards) - 3} more)"
             actions.append(
                 f"1. Disable {len(noisy_guards)} noisy guards:\n"
-                f"   export OCTOPUS_DISABLED_GUARDS=\"{noisy_labels}\""
+                f'   export OCTOPUS_DISABLED_GUARDS="{noisy_labels}"'
             )
 
         if unjudged_candidates:

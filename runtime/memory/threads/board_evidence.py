@@ -63,7 +63,7 @@ def _json_safe_value(value: Any) -> str:
         except (TypeError, ValueError):
             text = str(value)
     if len(text) > _VALUE_LIMIT:
-        text = text[:_VALUE_LIMIT - 3].rstrip() + "..."
+        text = text[: _VALUE_LIMIT - 3].rstrip() + "..."
     return text
 
 
@@ -117,7 +117,9 @@ def save_turn_blackboard(
         _append_line(path, blob)
         return record
     except Exception:  # noqa: BLE001 — evidence persistence must never break the turn
-        _log.debug("board evidence save failed · thread=%s turn=%s", thread_id, turn_id, exc_info=True)
+        _log.debug(
+            "board evidence save failed · thread=%s turn=%s", thread_id, turn_id, exc_info=True
+        )
         return None
 
 
@@ -156,7 +158,7 @@ def list_board_evidence(
     except (OSError, UnicodeDecodeError):
         return []
     records: list[dict[str, Any]] = []
-    for line in lines[-max(1, limit):]:
+    for line in lines[-max(1, limit) :]:
         line = line.strip()
         if not line:
             continue

@@ -334,15 +334,12 @@ def _turn_verification_environment_blocked(turn: Turn) -> bool:
     (test assertion, syntax error) is NOT treated as blocked.
     """
     failed_verifications = [
-        item
-        for item in _verification_items(turn)
-        if item.status == ItemStatus.FAILED
+        item for item in _verification_items(turn) if item.status == ItemStatus.FAILED
     ]
     if failed_verifications:
         # At least one recorded verification failure is a real code error.
         if not all(
-            _verification_item_is_environment_blocked(item)
-            for item in failed_verifications
+            _verification_item_is_environment_blocked(item) for item in failed_verifications
         ):
             return False
         # All recorded verification items are environment-blocked — only
@@ -361,9 +358,7 @@ def _turn_verification_environment_blocked(turn: Turn) -> bool:
         return False
     if any(_command_is_real_code_failure(item) for item in failed_commands):
         return False
-    return all(
-        _command_execution_environment_blocked(item) for item in failed_commands
-    )
+    return all(_command_execution_environment_blocked(item) for item in failed_commands)
 
 
 def _command_is_real_code_failure(item: Any) -> bool:

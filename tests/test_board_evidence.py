@@ -142,7 +142,9 @@ def _parallel_plan() -> Any:
     return plan
 
 
-def test_run_auto_parallel_persists_board_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_auto_parallel_persists_board_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
     plan = _parallel_plan()
 
@@ -189,7 +191,9 @@ def test_run_auto_parallel_persists_board_evidence(tmp_path: Path, monkeypatch: 
     assert "turn-evid: findings.summary = 并行调研发现 X 与 Y" in text
 
 
-def test_run_auto_parallel_without_turn_id_is_noop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_auto_parallel_without_turn_id_is_noop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
     plan = _parallel_plan()
 
@@ -220,7 +224,9 @@ def test_run_auto_parallel_without_turn_id_is_noop(tmp_path: Path, monkeypatch: 
 # ── 跨轮复用闭环：上一轮证据喂给下一轮拆解 ─────────────────────────────────
 
 
-def test_board_evidence_feeds_next_turn_decomposition(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_board_evidence_feeds_next_turn_decomposition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
     # 第一轮：并行探索把证据写黑板并落盘
     board = Blackboard()
@@ -246,9 +252,7 @@ def test_board_evidence_feeds_next_turn_decomposition(tmp_path: Path, monkeypatc
     combined = "\n\n".join(part for part in (memory, evidence) if part)
 
     plan = plan_auto_parallel(
-        "请分别完成以下两个方向的深化分析：\n"
-        "1. A 方向的补充调研与结论\n"
-        "2. B 方向的补充调研与结论",
+        "请分别完成以下两个方向的深化分析：\n1. A 方向的补充调研与结论\n2. B 方向的补充调研与结论",
         context=combined,
     )
     assert plan is not None and plan.should_parallelize()

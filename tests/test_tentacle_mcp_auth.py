@@ -118,9 +118,7 @@ def _alice_jwt() -> dict[str, str]:
 
 def _use_fake_manager(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeManager.instances.clear()
-    monkeypatch.setattr(
-        "runtime.tentacle.mobile.mcp_server.SseSessionManager", _FakeManager
-    )
+    monkeypatch.setattr("runtime.tentacle.mobile.mcp_server.SseSessionManager", _FakeManager)
 
 
 def _seed_bound_session(client: TestClient) -> str:

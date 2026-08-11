@@ -99,10 +99,22 @@ def test_visible_to_none_viewer_is_legacy_pass_through() -> None:
         (_fact(visibility="private"), _viewer(actor_id="alice"), True),
         (_fact(visibility="private"), _viewer(actor_id="bob"), False),
         # team：同团队 / 管理员 / 团队外
-        (_fact(visibility="team", team_id="room-a"), _viewer(actor_id="bob", team_ids=frozenset({"room-a"})), True),
-        (_fact(visibility="team", team_id="room-a"), _viewer(actor_id="bob", team_ids=frozenset({"room-b"})), False),
+        (
+            _fact(visibility="team", team_id="room-a"),
+            _viewer(actor_id="bob", team_ids=frozenset({"room-a"})),
+            True,
+        ),
+        (
+            _fact(visibility="team", team_id="room-a"),
+            _viewer(actor_id="bob", team_ids=frozenset({"room-b"})),
+            False,
+        ),
         (_fact(visibility="team", team_id="room-a"), _viewer(actor_id="bob", is_admin=True), True),
-        (_fact(visibility="team", team_id=""), _viewer(actor_id="bob", team_ids=frozenset({"room-a"})), False),
+        (
+            _fact(visibility="team", team_id=""),
+            _viewer(actor_id="bob", team_ids=frozenset({"room-a"})),
+            False,
+        ),
         # restricted：allowed_users / allowed_roles / 管理员
         (
             _fact(visibility="restricted", allowed_users=["bob"]),
@@ -145,7 +157,10 @@ def test_owner_outranks_every_visibility() -> None:
 
 
 def test_admin_cannot_read_others_private() -> None:
-    assert fact_visible_to(_fact(visibility="private"), _viewer(actor_id="bob", is_admin=True)) is False
+    assert (
+        fact_visible_to(_fact(visibility="private"), _viewer(actor_id="bob", is_admin=True))
+        is False
+    )
 
 
 def test_junk_fact_never_visible() -> None:
@@ -249,7 +264,10 @@ def test_visible_facts_for_viewer_returns_shared_context(memory_home: Path) -> N
         visibility="restricted",
         allowed_users=["admin-user"],
     )
-    contents = [f["content"] for f in visible_facts_for_viewer(_viewer(actor_id="bob", team_ids=frozenset({"room-a"})))]
+    contents = [
+        f["content"]
+        for f in visible_facts_for_viewer(_viewer(actor_id="bob", team_ids=frozenset({"room-a"})))
+    ]
     assert "A 团队共享" in contents
     assert "A 私有" not in contents
     assert "给 admin 看" not in contents

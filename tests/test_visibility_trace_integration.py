@@ -125,9 +125,7 @@ def test_react_loop_emits_visibility_event() -> None:
     intent = _intent("把报告写完")
     intent.user_context["mode"] = "code"
 
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=3)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=3))
     assert result is not None and result.success
 
     visibility = [e for e in events if e.get("type") == "visibility"]

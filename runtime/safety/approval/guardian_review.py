@@ -149,11 +149,7 @@ class GuardianReviewer:
                 # Explicit review model if configured, else the
                 # conversation's own model (never invent a model the user
                 # may not have), else the router default.
-                model=(
-                    self._config.guardian_model
-                    or self._config.default_model
-                    or "auto"
-                ),
+                model=(self._config.guardian_model or self._config.default_model or "auto"),
                 enable_thinking=False,
                 max_tokens=600,
             )
@@ -161,9 +157,7 @@ class GuardianReviewer:
             response = self._router.call(request)
             verdict = self._parse(response.text)
             if verdict is None:
-                _logger.warning(
-                    "guardian review produced no parseable verdict for %s", tool_name
-                )
+                _logger.warning("guardian review produced no parseable verdict for %s", tool_name)
                 return None
             self._consume_budget(thread_id)
             elapsed = time.monotonic() - start

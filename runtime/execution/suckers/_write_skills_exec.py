@@ -293,9 +293,7 @@ def _resolved_egress_allow_common(explicit: bool | None) -> bool:
             return False
         policy = (sess.metadata or {}).get("sandbox_policy")
         if isinstance(policy, dict):
-            return bool(
-                policy.get("egressAllowCommon") or policy.get("egress_allow_common")
-            )
+            return bool(policy.get("egressAllowCommon") or policy.get("egress_allow_common"))
         return False
     except Exception:  # noqa: BLE001 - best-effort; deny stays deny
         return False

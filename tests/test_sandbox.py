@@ -155,9 +155,7 @@ class TestEnvironmentScrub:
 
     def test_no_network_without_inference_domains_denies_everything(self, workspace: Path) -> None:
         runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
-        result = runner.run(
-            _python("import os; print(os.environ.get('no_proxy', 'MISSING'))")
-        )
+        result = runner.run(_python("import os; print(os.environ.get('no_proxy', 'MISSING'))"))
         assert result.stdout.strip() == "*"
 
     def test_common_domains_tier_pre_allows_dev_tool_hosts(self, workspace: Path) -> None:
@@ -216,7 +214,9 @@ class TestEnvironmentScrub:
         # Only inference is pre-allowed; npm etc. must NOT appear.
         assert result.stdout.strip() == "api.octoapk.com"
 
-    def test_allow_network_keeps_real_proxy(self, workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_allow_network_keeps_real_proxy(
+        self, workspace: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("https_proxy", "http://proxy.internal:3128")
         monkeypatch.setenv("no_proxy", "localhost")
         runner = SandboxRunner(

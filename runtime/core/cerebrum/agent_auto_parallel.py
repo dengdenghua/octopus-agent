@@ -456,7 +456,9 @@ def _persist_turn_board_evidence(thread_id: str, turn_id: str | None) -> None:
             return
         save_turn_blackboard(thread_id, turn_id, board)
     except Exception:  # noqa: BLE001 — evidence bridge must never break the run
-        _log.debug("board evidence persist skipped · thread=%s turn=%s", thread_id, turn_id, exc_info=True)
+        _log.debug(
+            "board evidence persist skipped · thread=%s turn=%s", thread_id, turn_id, exc_info=True
+        )
 
 
 _ORCHESTRATOR: ParallelAgentOrchestrator | None = None

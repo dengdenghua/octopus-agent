@@ -177,12 +177,8 @@ def _phase_6d_dispatch_and_observe(
             router,
             GuardianReviewerConfig(
                 enabled=True,
-                per_turn_limit=int(
-                    intent.user_context.get("guardian_review_per_turn_limit", 3)
-                ),
-                timeout_s=float(
-                    intent.user_context.get("guardian_review_timeout_s", 15.0)
-                ),
+                per_turn_limit=int(intent.user_context.get("guardian_review_per_turn_limit", 3)),
+                timeout_s=float(intent.user_context.get("guardian_review_timeout_s", 15.0)),
                 guardian_model=(
                     str(_guardian_model).strip()
                     if isinstance(_guardian_model, str) and _guardian_model.strip()
@@ -457,9 +453,7 @@ def _phase_6d_dispatch_and_observe(
                             reviewer=_guardian_reviewer,
                             thread_id=thread_id,
                             tool_name=resolved_name,
-                            args_preview=(
-                                str(_input_preview)[:500] if _input_preview else ""
-                            ),
+                            args_preview=(str(_input_preview)[:500] if _input_preview else ""),
                             user_intent=_guardian_user_intent,
                         )
                         if _guardian_action == "deny":

@@ -8661,10 +8661,7 @@ def test_soft_land_strips_inline_tool_call_json_from_candidate() -> None:
     assert "已完成静态审计" in stripped
 
     # Nested braces inside the JSON are handled by the balanced scan.
-    nested = (
-        'exec_shell({"cmd": "make test", "env": {"K": "v", "O": {"p": 1}}})\n'
-        "结果已确认。"
-    )
+    nested = 'exec_shell({"cmd": "make test", "env": {"K": "v", "O": {"p": 1}}})\n结果已确认。'
     stripped_nested = _strip_inline_tool_calls(nested)
     assert "exec_shell" not in stripped_nested
     assert "结果已确认。" in stripped_nested
@@ -8854,9 +8851,5 @@ def test_react_action_block_leaked_into_answer_is_rejected() -> None:
     assert not _looks_like_observation_echo(
         "前端代码审计完成。发现 3 个问题:1. XSS 2. 密钥泄露 3. 依赖过旧。"
     )
-    assert not _looks_like_observation_echo(
-        "ReAct 协议包含 Thought/Action/Observation 三个块。"
-    )
-    assert not _looks_like_observation_echo(
-        "The Action field in the ReAct schema is required."
-    )
+    assert not _looks_like_observation_echo("ReAct 协议包含 Thought/Action/Observation 三个块。")
+    assert not _looks_like_observation_echo("The Action field in the ReAct schema is required.")

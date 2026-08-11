@@ -658,9 +658,8 @@ def _phase_6b_model_stream(
                         _usd_pct * 100,
                         "auto-pausing" if _budget_auto_pause_enabled else "warning only",
                     )
-                    if (
-                        _budget_auto_pause_enabled
-                        and not _pause.is_pause_requested(str(react_task_id))
+                    if _budget_auto_pause_enabled and not _pause.is_pause_requested(
+                        str(react_task_id)
                     ):
                         _pause.request_pause(
                             task_id=str(react_task_id),

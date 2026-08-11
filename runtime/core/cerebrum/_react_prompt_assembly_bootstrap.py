@@ -406,9 +406,7 @@ def _emit_turn_start_events(
             _parallel_plan = None
             _parallel_memory = ""
         if _parallel_plan is not None and _parallel_plan.should_parallelize():
-            _subtask_descriptions = [
-                t.description for t in _parallel_plan.subtasks
-            ]
+            _subtask_descriptions = [t.description for t in _parallel_plan.subtasks]
             yield {
                 "type": "auto_parallel_started",
                 "subtasks": _subtask_descriptions,
@@ -433,13 +431,8 @@ def _emit_turn_start_events(
                     exc,
                     exc_info=True,
                 )
-            _parallel_ok = bool(
-                _parallel_result is not None
-                and _parallel_result.get("success")
-            )
-            _parallel_content = str(
-                (_parallel_result or {}).get("content", "") or ""
-            ).strip()
+            _parallel_ok = bool(_parallel_result is not None and _parallel_result.get("success"))
+            _parallel_content = str((_parallel_result or {}).get("content", "") or "").strip()
             if _parallel_ok and _parallel_content:
                 obs_block = (
                     "<auto-parallel-observation>\n"

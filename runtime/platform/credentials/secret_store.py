@@ -78,9 +78,7 @@ def _macos_available() -> bool:
 
 
 def _macos_get(name: str) -> str | None:
-    code, out = _run(
-        ["security", "find-generic-password", "-s", _SERVICE, "-a", name, "-w"]
-    )
+    code, out = _run(["security", "find-generic-password", "-s", _SERVICE, "-a", name, "-w"])
     if code != 0:
         return None
     return out.strip() or None
