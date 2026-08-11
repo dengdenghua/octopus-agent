@@ -1,3 +1,12 @@
+"""Plugin publisher provenance verification.
+
+Validates the Ed25519-signed ``.codex-plugin/provenance.json`` envelope that
+attests which operator-trusted publisher published a given plugin artifact, so
+the plugin registry can reject content whose publisher can't be traced to the
+operator-controlled trust store. Leaf module: depends only on cryptography and
+``project_root``.
+"""
+
 from __future__ import annotations
 
 import base64

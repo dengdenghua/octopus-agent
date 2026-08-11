@@ -278,6 +278,113 @@ def test_search_skills_finds_registered_skill_by_description() -> None:
     assert result["results"][0]["name"] == "hidden_parallel_tool"
 
 
+def test_execute_skill_runs_discovered_read_only_skill() -> None:
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="hidden_read_tool",
+            summary="Read hidden data.",
+            affinity=["read"],
+            trusted_source="skill://public/hidden_read_tool",
+            handler=lambda query="": {"value": query.upper()},
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    result = registry.get("execute_skill").handler(
+        name="hidden_read_tool",
+        args={"query": "octopus"},
+    )
+
+    assert result == {
+        "ok": True,
+        "name": "hidden_read_tool",
+        "result": {"value": "OCTOPUS"},
+    }
+
+
+def test_execute_skill_rejects_side_effecting_or_ambiguous_skill() -> None:
+    registry = SkillRegistry()
+    calls: list[str] = []
+    registry.register(
+        Skill(
+            name="hidden_write_tool",
+            affinity=["write"],
+            trusted_source="skill://public/hidden_write_tool",
+            handler=lambda **_: calls.append("called"),
+        )
+    )
+    registry.register(
+        Skill(
+            name="untagged_tool",
+            trusted_source="skill://public/untagged_tool",
+            handler=lambda **_: calls.append("called"),
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    write_result = registry.get("execute_skill").handler(
+        name="hidden_write_tool",
+        args={},
+    )
+    ambiguous_result = registry.get("execute_skill").handler(
+        name="untagged_tool",
+        args={},
+    )
+
+    assert write_result["ok"] is False
+    assert ambiguous_result["ok"] is False
+    assert "normal tool/capability path" in write_result["error"]
+    assert calls == []
+
+
+def test_execute_skill_rejects_meta_recursion_and_disabled_skill() -> None:
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="disabled_reader",
+            affinity=["read"],
+            trusted_source="skill://public/disabled_reader",
+            handler=lambda: "should not run",
+        )
+    )
+    register_agent_meta_skills(registry)
+    registry.set_enabled("disabled_reader", False)
+
+    disabled = registry.get("execute_skill").handler(name="disabled_reader", args={})
+    recursive = registry.get("execute_skill").handler(name="query_skill", args={})
+
+    assert disabled == {
+        "ok": False,
+        "name": "disabled_reader",
+        "error": "skill is disabled",
+    }
+    assert recursive["ok"] is False
+    assert "meta skills" in recursive["error"]
+
+
+def test_execute_skill_strips_model_controlled_overrides() -> None:
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="safe_reader",
+            affinity=["read"],
+            trusted_source="skill://public/safe_reader",
+            handler=lambda **kwargs: kwargs,
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    result = registry.get("execute_skill").handler(
+        name="safe_reader",
+        args={"query": "ok", "allow_sensitive": True},
+    )
+
+    assert result["ok"] is True
+    assert result["result"] == {"query": "ok"}
+    assert result["stripped_overrides"] == ["allow_sensitive"]
+
+
 def test_search_capabilities_finds_runtime_plugin_package() -> None:
     registry = SkillRegistry()
     registry.register(

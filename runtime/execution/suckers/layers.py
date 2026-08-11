@@ -55,6 +55,7 @@ ATOMIC_SKILL_NAMES: frozenset[str] = frozenset(
         "todo_write",
         "search_skills",
         "query_skill",
+        "execute_skill",
         "search_capabilities",
         "query_capability",
         "use_capability",

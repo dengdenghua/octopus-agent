@@ -264,6 +264,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
     "todo_write": {"group": "agent_meta", "atomic": True},
     "search_skills": {"group": "agent_meta", "atomic": True},
     "query_skill": {"group": "agent_meta", "atomic": True},
+    "execute_skill": {"group": "agent_meta", "atomic": True},
     "search_capabilities": {"group": "agent_meta", "atomic": True},
     "query_capability": {"group": "agent_meta", "atomic": True},
     "use_capability": {"group": "agent_meta", "atomic": True},

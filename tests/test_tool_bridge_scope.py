@@ -286,6 +286,70 @@ def test_goal_activation_preserves_relevant_tools_after_cap():
     assert "query_skill" in names
 
 
+def test_ultracode_forces_orchestration_into_native_tool_specs() -> None:
+    registry = SkillRegistry()
+    for idx in range(10):
+        registry.register(
+            Skill(
+                name=f"dummy_{idx}",
+                description="Dummy tool.",
+                trusted_source=f"skill://public/dummy_{idx}",
+                handler=lambda **_kwargs: {},
+            ),
+            verify_tests=False,
+        )
+    registry.register(
+        Skill(
+            name="run_orchestration",
+            description="Run deterministic multi-agent orchestration.",
+            trusted_source="skill://public/run_orchestration",
+            handler=lambda **_kwargs: {},
+        ),
+        verify_tests=False,
+    )
+
+    specs = build_anthropic_tool_specs(
+        registry,
+        max_skills=1,
+        user_context={"mode": "code", "workflow_preset": "audit.ultracode"},
+        goal="audit repository",
+    )
+
+    assert "run_orchestration" in {spec.name for spec in specs}
+
+
+def test_personal_research_forces_research_workflow_into_native_tool_specs() -> None:
+    registry = SkillRegistry()
+    for idx in range(10):
+        registry.register(
+            Skill(
+                name=f"dummy_{idx}",
+                description="Dummy tool.",
+                trusted_source=f"skill://public/dummy_{idx}",
+                handler=lambda **_kwargs: {},
+            ),
+            verify_tests=False,
+        )
+    registry.register(
+        Skill(
+            name="deep-research",
+            description="Load the deep research workflow.",
+            trusted_source="skill://public/deep-research",
+            handler=lambda **_kwargs: {},
+        ),
+        verify_tests=False,
+    )
+
+    specs = build_anthropic_tool_specs(
+        registry,
+        max_skills=1,
+        user_context={"personal_mode": "research"},
+        goal="summarize this topic",
+    )
+
+    assert "deep-research" in {spec.name for spec in specs}
+
+
 def test_tool_result_allows_medium_outputs_without_truncating():
     registry = SkillRegistry()
     registry.register(
@@ -629,8 +693,12 @@ def test_agentic_stream_asserts_todo_write_capability():
     )
     assert "You DO have a `todo_write` tool" in system_text
     assert "Do not say `todo_write` is unavailable" in system_text
-    assert [tool.name for tool in first_request.tools] == ["todo_write"]
-    assert first_request.require_tool_use is True
+    tool_names = [tool.name for tool in first_request.tools]
+    assert "todo_write" in tool_names
+    assert tool_names.count("todo_write") == 1
+    # Naming an optional progress tool must advertise it without forcing a
+    # tool round; enforcement now comes only from structured todo policies.
+    assert first_request.require_tool_use is False
 
 
 def test_agentic_stream_bootstraps_plan_before_workspace_tools() -> None:
@@ -677,7 +745,10 @@ def test_agentic_stream_bootstraps_plan_before_workspace_tools() -> None:
         raw="研究项目架构，核对关键模块并整理一份完整结论",
         intent_type="task",
         normalized_goal="研究项目架构，核对关键模块并整理一份完整结论",
-        user_context={"conversation_id": "thread-plan-first"},
+        user_context={
+            "conversation_id": "thread-plan-first",
+            "todo_policy": "required",
+        },
     )
 
     events = list(stream_agentic_fallback(_stack_with_todo(router), intent, _agent()))
@@ -965,6 +1036,7 @@ def test_agentic_stream_requires_todo_before_complex_final():
         normalized_goal="analyze the frontend and run tests",
         user_context={
             "conversation_id": "thread-1",
+            "todo_policy": "required",
             "metadata": {"mode": "code"},
         },
     )
@@ -1069,6 +1141,7 @@ def test_agentic_stream_requires_todo_update_after_tools(tmp_path):
         normalized_goal="inspect the project and summarize it",
         user_context={
             "conversation_id": "thread-1",
+            "todo_policy": "required",
             "metadata": {
                 "mode": "code",
                 "workspace_path": str(tmp_path),
@@ -1317,7 +1390,11 @@ def test_agentic_double_green_converges_through_todo_without_redundant_probe():
         raw="implement and verify the cache behavior",
         intent_type="task",
         normalized_goal="implement and verify the cache behavior",
-        user_context={"conversation_id": "green-convergence", "metadata": {"mode": "code"}},
+        user_context={
+            "conversation_id": "green-convergence",
+            "todo_policy": "required",
+            "metadata": {"mode": "code"},
+        },
     )
     agent = SimpleNamespace(
         agent_id="coder",

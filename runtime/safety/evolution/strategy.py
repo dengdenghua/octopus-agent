@@ -99,6 +99,16 @@ class StrategyEngine:
 
 
 def run_strategy_cycle(agent_id: str) -> dict[str, Any]:
+    """Decision-only evolution cycle, for external orchestrators.
+
+    Computes fitness for ``agent_id`` and returns the strategy decision as a
+    structured dict WITHOUT applying it. This is the public API for external
+    schedulers / cron that want to own the action; the in-process daemon that
+    actually *acts* on such decisions is ``EvolutionAutoTrigger``
+    (``auto_trigger.py``). In-repo callers should prefer the daemon; this
+    function exists so a standalone scheduler can drive the same decision
+    logic without hosting the daemon thread.
+    """
     report = compute_fitness(agent_id)
     engine = StrategyEngine()
     decision = engine.decide(report)

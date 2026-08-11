@@ -31,6 +31,7 @@ PRIORITY_SKILLS: frozenset[str] = frozenset(
         "search_capabilities",
         "query_capability",
         "use_capability",
+        "execute_skill",
         "call_agent_parallel",
         "bb_keys",
         "bb_read",
@@ -260,8 +261,15 @@ def build_anthropic_tool_specs(
     forced: list[str] = []
     forced_set: set[str] = set()
     activation_priority = set(activation.priority_skills)
+    workflow_preset = str((user_context or {}).get("workflow_preset") or "").strip().lower()
+    personal_mode = str((user_context or {}).get("personal_mode") or "").strip().lower()
     for name in all_names:
-        if name in PRIORITY_SKILLS or name in activation_priority:
+        if (
+            name in PRIORITY_SKILLS
+            or name in activation_priority
+            or (workflow_preset == "audit.ultracode" and name == "run_orchestration")
+            or (personal_mode == "research" and name == "deep-research")
+        ):
             forced.append(name)
             forced_set.add(name)
     selected = list(forced)

@@ -89,6 +89,7 @@ def test_appends_query_skill_hint() -> None:
     )
     out = _format_skill_catalog(reg)
     assert "query_skill" in out
+    assert "execute_skill" in out
 
 
 def test_prioritizes_delegation_tools_before_catalog_truncation() -> None:
@@ -163,7 +164,7 @@ def test_default_catalog_limit_is_one_hundred() -> None:
     lines = [line for line in out.splitlines() if line.startswith("  - ")]
 
     assert len(lines) == 100
-    assert "还有 20 个,省略" in out
+    assert "还有 20 个,可搜索发现" in out
 
 
 def test_empty_registry_returns_empty_string() -> None:
@@ -257,6 +258,7 @@ def test_tfidf_selection_keeps_goal_relevant_skill_past_truncation() -> None:
 
     assert "\n  - read_file:" in out  # priority pin always survives
     assert "\n  - kubernetes_deploy:" in out  # goal-relevant, beats fillers
+    assert "还有 37 个,可搜索发现" in out
 
 
 def test_tfidf_selection_skipped_without_goal() -> None:

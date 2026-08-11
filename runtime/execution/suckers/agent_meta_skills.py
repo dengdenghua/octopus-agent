@@ -245,6 +245,7 @@ AGENT_META_SKILL_NAMES = [
     "todo_write",
     "search_skills",
     "query_skill",
+    "execute_skill",
     *CAPABILITY_SKILL_NAMES,
 ]
 
@@ -366,6 +367,118 @@ def _search_skills_for_registry(registry: SkillRegistry):
         }
 
     return _search_skills
+
+
+def _execute_skill_for_registry(registry: SkillRegistry):
+    """Build a fail-closed dispatcher for omitted, read-only skills.
+
+    This closes the progressive-disclosure gap without turning a low-risk
+    meta-tool into an approval bypass. Side-effecting or ambiguously tagged
+    skills must still be surfaced through the normal executor/native tool
+    path, where approval and durable effect receipts are available.
+    """
+
+    def _execute_skill(
+        name: str = "",
+        args: Any = None,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        skill_name = str(name or "").strip()
+        if not skill_name:
+            return {"ok": False, "error": "skill name is required"}
+        if args is None and extra:
+            misplaced = sorted(
+                key
+                for key, value in extra.items()
+                if isinstance(value, (dict, list, str)) and value
+            )
+            if misplaced:
+                return {
+                    "ok": False,
+                    "error": (
+                        "execute_skill received arguments under unrecognized "
+                        f"key(s) {misplaced}; pass them under args={{{{...}}}}"
+                    ),
+                }
+        try:
+            skill = registry.get(skill_name)
+        except KeyError:
+            return {"ok": False, "error": f"skill not found: {skill_name}"}
+        try:
+            enabled = bool(registry.is_enabled(skill.name))
+        except (AttributeError, TypeError, ValueError):
+            enabled = True
+        if not enabled:
+            return {"ok": False, "name": skill.name, "error": "skill is disabled"}
+
+        # Never allow meta-dispatch recursion. It obscures the true target and
+        # can turn a read-only wrapper into a route toward a mutating action.
+        affinities = {str(tag).strip().lower() for tag in skill.affinity}
+        if skill.name == "execute_skill" or "meta" in affinities:
+            return {
+                "ok": False,
+                "name": skill.name,
+                "error": "meta skills cannot be dispatched through execute_skill",
+            }
+
+        from runtime.execution.tool_engine.effect_receipts import is_side_effecting
+
+        if is_side_effecting(skill.affinity):
+            return {
+                "ok": False,
+                "name": skill.name,
+                "error": (
+                    "skill is side-effecting or lacks an explicit read-only affinity; "
+                    "invoke it through the normal tool/capability path so approval and "
+                    "effect receipts are enforced"
+                ),
+            }
+
+        if args is None:
+            call_args: dict[str, Any] = {}
+        elif isinstance(args, dict):
+            call_args = dict(args)
+        elif isinstance(args, str):
+            try:
+                parsed = json.loads(args)
+            except json.JSONDecodeError:
+                return {"ok": False, "name": skill.name, "error": "args must be an object"}
+            if not isinstance(parsed, dict):
+                return {"ok": False, "name": skill.name, "error": "args must be an object"}
+            call_args = dict(parsed)
+        else:
+            return {"ok": False, "name": skill.name, "error": "args must be an object"}
+
+        # Model-controlled auth/sandbox overrides are stripped exactly as on
+        # the executor path before the shared inner-dispatch gates run.
+        from runtime.safety.auth import strip_model_controlled_overrides
+
+        call_args, stripped = strip_model_controlled_overrides(call_args)
+        from runtime.execution.tool_engine.skill_gate import gate_inner_dispatch
+
+        block = gate_inner_dispatch(
+            skill,
+            call_args,
+            caller="execute_skill",
+        )
+        if block is not None:
+            return {"ok": False, "name": skill.name, "error": block.message}
+        try:
+            result = skill.handler(**call_args)
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "ok": False,
+                "name": skill.name,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        return {
+            "ok": True,
+            "name": skill.name,
+            "result": result,
+            **({"stripped_overrides": stripped} if stripped else {}),
+        }
+
+    return _execute_skill
 
 
 def register_agent_meta_skills(registry: SkillRegistry) -> int:
@@ -498,7 +611,33 @@ def register_agent_meta_skills(registry: SkillRegistry) -> int:
             ],
         )
     )
-    return capability_count + 4
+    registry.register(
+        Skill(
+            name="execute_skill",
+            summary="Execute a discovered read-only skill by name.",
+            description=(
+                "Purpose: execute an enabled read-only skill discovered via search_skills "
+                "when that skill was omitted from the compact/native tool catalog. "
+                "Side-effecting, dangerous, meta, disabled, or ambiguously tagged skills "
+                "are rejected and must use the normal tool/capability path.\n"
+                "Key params: name (required), args (object, default {}).\n"
+                'Example: execute_skill({"name": "code_search", "args": {"query": "TODO"}})'
+            ),
+            affinity=["meta", "skill", "catalog", "execute"],
+            cost_profile="low",
+            trusted_source="skill://public/execute_skill",
+            handler=_execute_skill_for_registry(registry),
+            tests=[
+                SkillTestCase(
+                    name="missing_name_returns_error",
+                    tier="golden",
+                    args={"name": ""},
+                    expect=SkillExpect(schema_keys=["ok", "error"]),
+                ),
+            ],
+        )
+    )
+    return capability_count + 5
 
 
 __all__ = [
