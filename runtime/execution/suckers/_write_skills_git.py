@@ -244,9 +244,9 @@ def _package_manager_drift(repo_root: Path) -> dict[str, Any] | None:
     if not package_json.is_file() or not modules_yaml.is_file():
         return None
     try:
-        package_manager = json.loads(
-            package_json.read_text(encoding="utf-8")
-        ).get("packageManager", "")
+        package_manager = json.loads(package_json.read_text(encoding="utf-8")).get(
+            "packageManager", ""
+        )
     except (OSError, ValueError):
         return None
     if not isinstance(package_manager, str) or "pnpm@" not in package_manager:

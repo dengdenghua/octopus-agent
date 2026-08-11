@@ -267,7 +267,7 @@ class TestCommitPrecheck:
         self._hook(
             repo,
             "commit-msg",
-            "#!/bin/sh\npnpm exec commitlint --edit \"$1\"\n",
+            '#!/bin/sh\npnpm exec commitlint --edit "$1"\n',
         )
         precheck = _git_commit_precheck(str(repo), None)
         assert precheck["blocked"] is True
@@ -283,7 +283,7 @@ class TestCommitPrecheck:
         self._hook(
             repo,
             "commit-msg",
-            "#!/bin/sh\n\"$PWD/node_modules/.bin/commitlint\" --edit \"$1\"\n",
+            '#!/bin/sh\n"$PWD/node_modules/.bin/commitlint" --edit "$1"\n',
         )
         precheck = _git_commit_precheck(str(repo), None)
         assert precheck["blocked"] is False
@@ -354,8 +354,8 @@ class TestCommitPrecheck:
             (
                 "#!/bin/sh\n"
                 "# pnpm exec commitlint runs here\n"
-                "echo \"[ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY] "
-                "Aborted removal of modules directory due to no TTY\" >&2\n"
+                'echo "[ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY] '
+                'Aborted removal of modules directory due to no TTY" >&2\n'
                 "exit 1\n"
             ),
         )

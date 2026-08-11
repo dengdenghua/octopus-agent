@@ -83,7 +83,9 @@ class TestClassifyToolFailure:
         assert got["code"] == "network_unavailable"
 
     def test_econnrefused(self) -> None:
-        got = classify_tool_failure("fetch_page", "ConnectionRefusedError: [Errno 61] Connection refused")
+        got = classify_tool_failure(
+            "fetch_page", "ConnectionRefusedError: [Errno 61] Connection refused"
+        )
         assert got is not None
         assert got["code"] == "network_unavailable"
 
@@ -105,7 +107,10 @@ class TestClassifyToolFailure:
         assert got["code"] == "git_hook_rejected"
 
     def test_unrelated_failure_is_none(self) -> None:
-        assert classify_tool_failure("exec_shell", "TypeError: 'NoneType' is not subscriptable") is None
+        assert (
+            classify_tool_failure("exec_shell", "TypeError: 'NoneType' is not subscriptable")
+            is None
+        )
 
     def test_empty_detail_is_none(self) -> None:
         assert classify_tool_failure("exec_shell", "  ") is None
@@ -156,9 +161,7 @@ class TestReceiptStructuredFailure:
             final_answer=None,
             terminated_reason="final_answer",
             effective_success=False,
-            executed_beak_steps=[
-                _failed_step("git_commit", {"stderr": _PNPM_STDERR})
-            ],
+            executed_beak_steps=[_failed_step("git_commit", {"stderr": _PNPM_STDERR})],
         )
         failure = receipt.get("failure")
         assert failure is not None
@@ -213,7 +216,9 @@ class TestTurnDisposition:
 
     def test_genuine_handoff_is_blocked_on_user(self) -> None:
         # Tight-marker hand-off (请确认 + 无法继续) after a tool failure.
-        answer = "git 提交被环境阻塞了,请确认是否允许我直接调用 node_modules/.bin 重试,否则无法继续。"
+        answer = (
+            "git 提交被环境阻塞了,请确认是否允许我直接调用 node_modules/.bin 重试,否则无法继续。"
+        )
         assert (
             _turn_disposition(
                 final_answer=answer,

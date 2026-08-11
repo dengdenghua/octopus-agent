@@ -59,6 +59,7 @@ _logger = logging.getLogger(__name__)
 # cancelled and must not be re-disposed.
 _WAITING_TERMINAL_REASONS = frozenset({"paused", "cancelled"})
 
+
 # ``react_completed.disposition`` is the semantic outcome of a finished turn.
 # It extends the raw ``success`` boolean with the one case that is neither a
 # green completion nor a red failure: a turn that ended with a genuine hand

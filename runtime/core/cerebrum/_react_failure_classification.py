@@ -83,6 +83,7 @@ _ENVIRONMENT_PATTERNS: list[tuple[str, str, str]] = [
     ),
 ]
 
+
 def classify_tool_failure(tool_name: str, detail: str) -> dict[str, Any] | None:
     """Classify a failed tool execution into ``{kind, code, readable}``.
 
@@ -101,7 +102,9 @@ def classify_tool_failure(tool_name: str, detail: str) -> dict[str, Any] | None:
 
     # A bare git-hook marker with no environmental cause above it: the hook
     # itself (commitlint rule, lint failure) rejected the operation.
-    if re.search(r"husky|commit-msg script failed|pre-commit(?: hook)? failed", normalized, re.IGNORECASE):
+    if re.search(
+        r"husky|commit-msg script failed|pre-commit(?: hook)? failed", normalized, re.IGNORECASE
+    ):
         return {
             "kind": "git_hook",
             "code": "git_hook_rejected",
