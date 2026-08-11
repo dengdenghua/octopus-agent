@@ -19,11 +19,14 @@ import logging
 from collections.abc import Callable, Generator
 from typing import Any
 
+# classify_turn_failure 从定义模块直连导入:react_execution 的 re-export
+# 只存在于并发会话未提交版本,提交态 ``from react_execution import
+# classify_turn_failure`` 会 ImportError(同 b5e2711d 模式)。
+from runtime.core.cerebrum._react_execution_results import classify_turn_failure
 from runtime.core.cerebrum.react_execution import (
     _has_unrecovered_beak_failure,
     _persist_react_trajectory,
     _react_completion_receipt,
-    classify_turn_failure,
 )
 from runtime.core.cerebrum.react_final_answer_guards import (
     _evaluate_final_answer_guards,
