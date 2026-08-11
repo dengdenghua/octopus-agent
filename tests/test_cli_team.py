@@ -247,6 +247,12 @@ def test_detect_installed_partners(monkeypatch) -> None:
             else None
         ),
     )
+    # ``_resolve_command`` is ``shutil.which(cmd) or resolve_local_command(cmd)``.
+    # Mocking only ``which`` leaves the second leg probing the real filesystem,
+    # which makes this assertion machine-dependent: a developer who actually has
+    # e.g. ~/.opencode/bin/opencode installed sees an extra partner while CI
+    # (which has none) stays green. Stub both legs so detection is hermetic.
+    monkeypatch.setattr(ct, "resolve_local_command", lambda _c: None)
     mems = ct.detect_installed_partners()
     assert {m["partner_id"] for m in mems} == {
         "claude-code",

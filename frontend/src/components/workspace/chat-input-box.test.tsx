@@ -1,4 +1,10 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
@@ -81,7 +87,11 @@ describe("<ChatInputBox /> cowork materials", () => {
       />,
     );
 
-    await openToolsMenu();
+    // Scope the negative assertions to the menu: the composer status strip
+    // always renders a permission-mode label ("Default"), so a document-wide
+    // queryByText would fail on chrome that has nothing to do with the menu.
+    const menu = await openToolsMenu();
+    const inMenu = within(menu);
 
     expect(screen.getByText("Research settings")).toBeInTheDocument();
     expect(screen.getByText("Insert Plan marker")).toBeInTheDocument();
@@ -93,16 +103,16 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(
       screen.getByText("Add image (paste / drag / select)"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Default")).not.toBeInTheDocument();
-    expect(screen.queryByText("Web search")).not.toBeInTheDocument();
-    expect(screen.queryByText("Create PPT")).not.toBeInTheDocument();
-    expect(screen.queryByText("Create page")).not.toBeInTheDocument();
-    expect(screen.queryByText("Format table")).not.toBeInTheDocument();
-    expect(screen.queryByText("Generate image")).not.toBeInTheDocument();
-    expect(screen.queryByText("Scheduled Task")).not.toBeInTheDocument();
-    expect(screen.queryByText("Project Files")).not.toBeInTheDocument();
-    expect(screen.queryByText("Research context")).not.toBeInTheDocument();
-    expect(screen.queryByText("Web Search Research")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Default")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Web search")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Create PPT")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Create page")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Format table")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Generate image")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Scheduled Task")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Project Files")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Research context")).not.toBeInTheDocument();
+    expect(inMenu.queryByText("Web Search Research")).not.toBeInTheDocument();
   });
 
   it("inserts Codex mode markers into the draft without switching mode", async () => {

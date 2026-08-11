@@ -100,6 +100,12 @@ function mockModelSettingsFetch({
         diagnostics: profileCatalog,
       });
     }
+    // Saving an entry is gated on a passing connection test, so the probe
+    // endpoint must be stubbed ahead of the generic custom-models branch
+    // (which would otherwise swallow it and answer without `ok`).
+    if (url.includes("/api/config/custom-models/test")) {
+      return jsonOk({ ok: true, latency_ms: 12, model: "upstream-model" });
+    }
     if (url.includes("/api/config/custom-models")) {
       return jsonOk({ models });
     }
