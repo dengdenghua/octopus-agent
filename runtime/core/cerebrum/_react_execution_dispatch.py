@@ -163,6 +163,8 @@ def _execute_action_via_beak(
                 "capability_mode",
                 "code_mode",
                 "agent_mode",
+                "personal_mode",
+                "personal_instructions",
                 "project_signals",
                 "codex_mode",
                 "goal_mode",

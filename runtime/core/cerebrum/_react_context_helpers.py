@@ -465,6 +465,13 @@ def _format_skill_catalog(
     _delegation_agent_mode = str(
         _uc_for_delegation.get("agent_mode") or ""
     ).strip().lower()
+    _workflow_preset = str(
+        _uc_for_delegation.get("workflow_preset") or ""
+    ).strip().lower()
+    _personal_mode = str(
+        _uc_for_delegation.get("personal_mode") or ""
+    ).strip().lower()
+    _ultracode = _workflow_preset == "audit.ultracode"
     _delegation_cap = bool(
         (_labels & {"delegation", "swarm"})
         or _delegation_mode in {"code"}
@@ -487,7 +494,11 @@ def _format_skill_catalog(
         agent_mode=_delegation_agent_mode,
         labels=sorted(_labels),
     )
-    _research_cap = bool(_labels & {"research"})
+    _research_cap = bool(
+        (_labels & {"research"})
+        or _personal_mode == "research"
+        or _delegation_mode in {"deep", "deep_research", "research"}
+    )
 
     priority = [
         # Planning + tool discovery (always on — the model needs these to
@@ -498,6 +509,7 @@ def _format_skill_catalog(
         "use_capability",
         "search_skills",
         "query_skill",
+        "execute_skill",
         # Files + code inspection/editing (always on — universal primitives).
         "list_cwd",
         "read_file",
@@ -540,6 +552,7 @@ def _format_skill_catalog(
                 "bb_write",
                 "bb_read",
                 "bb_keys",
+                *(["run_orchestration"] if _ultracode else []),
             ]
             if _delegation_cap
             else []
@@ -596,15 +609,22 @@ def _format_skill_catalog(
             pinned = [n for n in names if n in priority_set]
             rest = [n for n in names if n not in priority_set]
             budget = max(0, max_skills - len(pinned))
-            relevant = set(TfIdfSkillSearcher(registry).search(goal, k=budget))
-            names = pinned + [n for n in rest if n in relevant]
+            relevant_order = TfIdfSkillSearcher(registry).search(goal, k=budget)
+            relevant = [n for n in relevant_order if n in rest]
+            relevant_set = set(relevant)
+            # TF-IDF intentionally returns only positive matches. Fill any
+            # unused slots from the already capability-ordered remainder so a
+            # narrow query does not turn a 100-entry budget into a 2-entry
+            # catalog and silently hide useful discovery options.
+            fallback = [n for n in rest if n not in relevant_set]
+            names = pinned + (relevant + fallback)[:budget]
         except Exception:  # noqa: BLE001 — selection is an optimization, never fatal
             pass
     record_visibility(
         "context.skill_catalog",
         conclusion=(
             f"技能目录 {_catalog_total} -> {min(len(names), max_skills)} 保留"
-            if len(names) > max_skills
+            if _catalog_total > min(len(names), max_skills)
             else f"技能目录 {min(len(names), max_skills)} 条（未截断）"
         ),
         basis=(
@@ -614,7 +634,7 @@ def _format_skill_catalog(
         ),
         total=_catalog_total,
         kept=min(len(names), max_skills),
-        truncated=max(0, len(names) - max_skills),
+        truncated=max(0, _catalog_total - min(len(names), max_skills)),
         max_skills=max_skills,
     )
     lines: list[str] = ["可用工具 (skill):"]
@@ -649,11 +669,16 @@ def _format_skill_catalog(
         except (AttributeError, TypeError, KeyError, ValueError):  # noqa: BLE001
             short = "(无描述)"
         lines.append(f"  - {name}: {short}")
-    if len(names) > max_skills:
-        lines.append(f"  ... (还有 {len(names) - max_skills} 个,省略)")
+    _catalog_omitted = max(0, _catalog_total - min(len(names), max_skills))
+    if _catalog_omitted:
+        lines.append(f"  ... (还有 {_catalog_omitted} 个,可搜索发现)")
     lines.append(
         "提示: 上面只列名+短描述; 调用前若需完整参数 schema 请用 "
         '`query_skill(name="<skill_name>")`。',
+    )
+    lines.append(
+        "被目录省略的只读 skill 可在 search_skills/query_skill 后通过 "
+        '`execute_skill(name="<skill_name>", args={...})` 调用；写入/执行类仍走正常工具入口。'
     )
     lines.append(
         "Capability-first: prefer `search_capabilities`, "

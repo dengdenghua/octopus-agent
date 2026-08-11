@@ -61,6 +61,7 @@ from runtime.core.cerebrum._react_execution_results import (
     _skill_available_in_executor,
     _tool_event_extras_from_beak_step,
     _verification_kind_from_command,
+    classify_turn_failure,
 )
 
 __all__ = [
@@ -102,4 +103,5 @@ __all__ = [
     "_tool_event_extras_from_beak_step",
     "_update_working_set",
     "_verification_kind_from_command",
+    "classify_turn_failure",
 ]

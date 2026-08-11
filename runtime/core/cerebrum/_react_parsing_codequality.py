@@ -410,17 +410,73 @@ def _detect_secrets_in_payload(text: str) -> list[str]:
     return hits
 
 
+# A credential-shaped string is treated as a clearly-marked non-secret
+# fixture — the exact escape the secret-leak guard message advertises
+# ("if the string is genuinely a non-secret fixture — make that explicit")
+# — when its assignment name or the value itself carries a fixture marker
+# word. Test fixtures, docs examples, and example configs legitimately
+# embed mock keys; those must not hard-fire a fail-closed guard and 3-strike
+# the task. A single unmarked secret in the payload keeps the whole write
+# flagged: real keys are random and won't carry these marker words.
+_SECRET_FIXTURE_NAME_RE = re.compile(
+    r"(?:^|[^A-Za-z0-9_])"
+    r"(?:MOCK|FAKE|DUMMY|TEST|EXAMPLE|SAMPLE|PLACEHOLDER|FIXTURE)"
+    r"[A-Za-z0-9_]*\s*=",
+)
+_SECRET_FIXTURE_VALUE_RE = re.compile(
+    r"\b(?:mock|fake|dummy|test|example|sample|placeholder|fixture|"
+    r"nonsecret|non-secret)\b",
+    re.IGNORECASE,
+)
+
+
+def _secret_payload_is_clearly_fixture(text: str) -> bool:
+    """Whether every secret-shaped match in ``text`` is a marked fixture.
+
+    Returns False when ``text`` has no secret-shaped matches at all
+    (nothing to judge) or any match is unmarked (a real credential).
+    """
+    any_hit = False
+    for _label, pattern in _SECRET_PATTERNS:
+        for match in pattern.finditer(text):
+            any_hit = True
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            line_end = text.find("\n", match.end())
+            if line_end == -1:
+                line_end = len(text)
+            line = text[line_start:line_end]
+            if _SECRET_FIXTURE_NAME_RE.search(line):
+                continue
+            if _SECRET_FIXTURE_VALUE_RE.search(match.group(0)):
+                continue
+            return False
+    return any_hit
+
+
 def _step_introduces_secret(step: ReActStep) -> list[str]:
     """List of secret-pattern labels matched in this write step's NEW
     content. Old content is excluded so existing committed-and-rotated
     leaks don't keep tripping the guard. Empty list = nothing matched.
+
+    Test paths are exempt outright (mirroring every sibling security
+    detector — ``_step_introduces_destructive_call`` etc.): tests
+    legitimately embed mock credentials. Non-test writes are exempt only
+    when every credential-shaped string is a clearly-marked fixture.
     """
+    path = _extract_step_path(step)
+    if path and _is_test_path(path):
+        return []
     new_text, old_text = _extract_step_payloads(step)
     if not new_text and not old_text:
         return []
     new_hits = set(_detect_secrets_in_payload(new_text))
     old_hits = set(_detect_secrets_in_payload(old_text))
-    return sorted(new_hits - old_hits)
+    introduced = new_hits - old_hits
+    if not introduced:
+        return []
+    if _secret_payload_is_clearly_fixture(new_text):
+        return []
+    return sorted(introduced)
 
 
 # ──────────────────────────────────────────────────────────────────

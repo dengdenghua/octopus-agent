@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
+import uuid
 from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +26,7 @@ from runtime.core.cerebrum.react_convergence import (
 )
 from runtime.core.cerebrum.react_execution import (
     _build_research_progress_summary,
+    _execute_action_via_beak,
     _phase_6d_dispatch_and_observe,
     _phase_6g_housekeeping,
 )
@@ -76,6 +79,7 @@ from runtime.core.cerebrum.react_terminal import (
     _finalize_react_turn,
 )
 from runtime.core.cerebrum.react_types import (
+    REACT_OBSERVATION_FOLLOWUP,
     ReActResult,
     ReActStep,
 )
@@ -85,6 +89,7 @@ from runtime.platform.config.schema import (
     BUDGET_DEFAULT_MAX_USD,
 )
 from runtime.platform.models import ParsedIntent, Step, TaskId
+from runtime.platform.models.llm import Message
 from runtime.platform.models.rescue_policy import next_custom_model_fallback
 from runtime.safety.approval.approval_gate import ApprovalProvider
 
@@ -324,6 +329,91 @@ def stream_react_loop(
     final_answer_segments: list[str] = []
     final_answer_emitted = False
 
+    # ``audit.ultracode`` is a deterministic orchestration preset, not a
+    # suggestion to the model. Earlier versions only mentioned
+    # ``run_orchestration`` in the prompt, so providers routinely skipped it
+    # and the UI's "最高" setting produced a single-agent audit. Start exactly
+    # one real orchestration before the first model round and feed its evidence
+    # back into the normal ReAct history for synthesis. Resumed turns that
+    # already contain the synthetic step never launch it again.
+    _workflow_preset = str(intent.user_context.get("workflow_preset") or "").strip().lower()
+    _ultracode_already_started = any(
+        "run_orchestration" in str(prior.action or "") for prior in steps
+    )
+    if _workflow_preset == "audit.ultracode" and not _ultracode_already_started:
+        _orch_call_id = uuid.uuid4().hex[:12]
+        _orch_args = {
+            "goal": str(intent.normalized_goal or intent.raw or "").strip(),
+            "agent_id": ["critic", "explorer", "researcher"],
+            "n": 3,
+            "rounds": 2,
+            "patience": 1,
+            "verify": True,
+            "synthesize": True,
+        }
+        _orch_action = "run_orchestration(" + json.dumps(
+            _orch_args,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ) + ")"
+        yield {
+            "type": "commentary_delta",
+            "delta": "已启动多视角并行审计，将交叉核验发现后再汇总结论。",
+            "progress_source": "runtime",
+            "public_status": True,
+            "start_new_segment": True,
+            "iteration": 1,
+        }
+        yield {
+            "type": "tool_start",
+            "tool_name": "run_orchestration",
+            "tool_call_id": _orch_call_id,
+            "iteration": 1,
+            "input_preview": _orch_args,
+        }
+        _orch_started_at = time.monotonic()
+        _orch_observation, _orch_beak_step = _execute_action_via_beak(
+            stack,
+            _orch_action,
+            react_task_id=react_task_id,
+            react_step_counter=1,
+            agent=agent,
+            intent=intent,
+        )
+        if not _orch_observation:
+            _orch_observation = (
+                "(ultracode orchestration unavailable) run_orchestration is not registered "
+                "or was denied by the active agent policy. Continue with a manual multi-pass audit."
+            )
+        _orch_ok = _tool_call_succeeded(_orch_observation, _orch_beak_step)
+        if _orch_beak_step is not None:
+            executed_beak_steps.append(_orch_beak_step)
+        _orch_react_step = ReActStep(
+            iteration=1,
+            thought="Runtime-enforced audit.ultracode orchestration",
+            public_update="已启动多视角并行审计，将交叉核验发现后再汇总结论。",
+            action=_orch_action,
+            observation=_orch_observation,
+            raw_llm_output="",
+        )
+        steps.append(_orch_react_step)
+        messages.append(Message(role="assistant", content=_orch_action))
+        messages.append(
+            Message(
+                role="user",
+                content=f"Observation: {_orch_observation}\n\n{REACT_OBSERVATION_FOLLOWUP}",
+            )
+        )
+        yield {
+            "type": "tool_end",
+            "tool_name": "run_orchestration",
+            "tool_call_id": _orch_call_id,
+            "iteration": 1,
+            "status": "success" if _orch_ok else "error",
+            "output_preview": str(_orch_observation)[:1200],
+            "duration_ms": int((time.monotonic() - _orch_started_at) * 1000),
+        }
+
     # Throughput sampler — chars/sec across all delta yields. We emit a
     # ``throughput`` event every ~500ms so the UI can show a live
     # tokens-per-second indicator without flooding the WebSocket. Chars
@@ -369,6 +459,9 @@ def stream_react_loop(
     # bails fast when the model genuinely cannot follow ReAct format.
     _format_violation_bail_at = 2
     _context_pressure_signaled: bool = False
+    # Once-per-turn in-flight nudge: the first environmental tool failure
+    # (sandbox / network block) tells the model to pivot to static evidence.
+    _env_degradation_signaled: bool = False
 
     def _append_pending_live_steering() -> int:
         if steering_drain is None:
@@ -783,6 +876,7 @@ def stream_react_loop(
             _context_pressure_signaled,
             _green_verification_convergence_active,
             _force_convergence_next,
+            _env_degradation_signaled,
         ) = _apply_in_flight_nudges(
             steps=steps,
             step=step,
@@ -796,6 +890,7 @@ def stream_react_loop(
             context_pressure_signaled=_context_pressure_signaled,
             green_verification_convergence_active=_green_verification_convergence_active,
             force_convergence_next=_force_convergence_next,
+            env_degradation_signaled=_env_degradation_signaled,
         )
 
         # ── PHASE 6e · guards + step yield ────────────────────────────

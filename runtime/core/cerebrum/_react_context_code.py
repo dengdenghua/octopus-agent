@@ -147,6 +147,7 @@ def _build_code_agent_mode_prompt(agent_mode: str | None) -> str:
     """Mode-specific operating contract for Agent page project/code turns."""
     mode = (agent_mode or "coder").strip().lower()
     aliases = {
+        "develop": "coder",
         "build": "builder",
         "builder": "builder",
         "new": "builder",
@@ -155,9 +156,27 @@ def _build_code_agent_mode_prompt(agent_mode: str | None) -> str:
         "debugger": "coder",
         "architect": "architect",
         "architecture": "architect",
+        "audit": "audit",
+        "review": "audit",
+        "uxui": "uxui",
+        "ux/ui": "uxui",
     }
     canonical = aliases.get(mode, "coder")
-    if canonical == "builder":
+    if canonical == "audit":
+        body = (
+            "当前项目子模式: audit / 审计。\n"
+            "- 默认只读检查并报告,不主动改文件;只有用户明确要求修复时才进入修改。\n"
+            "- 每条发现必须带严重度、可定位证据(文件与行)、影响和建议修复顺序。\n"
+            "- 重要结论至少做一次交叉核对;没有证据的猜测标为待确认。"
+        )
+    elif canonical == "uxui":
+        body = (
+            "当前项目子模式: uxui / 体验与界面。\n"
+            "- 先观察真实页面、关键状态和响应式布局,再修改代码;不要只凭源码猜视觉结果。\n"
+            "- 关注遮挡、跳变、密度、层级、文案、键盘操作和可访问性。\n"
+            "- 修改后必须通过浏览器重新走查受影响路径并保留可复核的页面证据。"
+        )
+    elif canonical == "builder":
         body = (
             "当前项目子模式: builder / 构建者。\n"
             "- 适合从零搭建项目、补脚手架、初始化配置、生成可运行最小闭环。\n"
@@ -184,9 +203,9 @@ def _build_code_agent_mode_prompt(agent_mode: str | None) -> str:
 def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
     """Operating contract for an intensity workflow preset (e.g. audit.ultracode).
 
-    Most of the frontend's preset bundle (skill packs, verification policy) is
-    advisory metadata, but ``audit.ultracode`` carries real behaviour: it steers
-    the turn toward a DEEP multi-agent review instead of a single-pass read.
+    Every user-facing project preset carries an explicit operating contract;
+    ``audit.ultracode`` additionally triggers deterministic multi-agent
+    orchestration in the ReAct runtime.
 
     Spawn DEPTH is deliberately NOT set here — it stays governed by the operator
     orchestration budget (``OCTOPUS_ORCH_TOKEN_BUDGET``; conservative 48-spawn cap
@@ -227,6 +246,27 @@ def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
             "收集→去重→投票核验→综合;不具备该技能时,改为按模块多轮交叉审查。\n"
             "- 扇出深度由部署预算自动伸缩,你只负责发起编排,不要自行抬高 max_spawns。\n"
             "- 汇总按 严重度 + 证据(文件:行)+ 修复顺序 归并;核验未通过的发现标注为存疑。"
+        )
+    elif preset == "develop.iterate":
+        body = (
+            "当前工作流: develop.iterate / 迭代开发。\n"
+            "- 先定位最小相关面,再小步实现;每个连贯改动批次后立即运行最小有效验证。\n"
+            "- 保持现有接口与风格;涉及迁移或兼容性时先确认回滚路径。\n"
+            "- 完成时给出修改文件、验证结果和尚存风险,不能用计划代替实际交付。"
+        )
+    elif preset == "audit.review":
+        body = (
+            "当前工作流: audit.review / 标准审计。\n"
+            "- 默认只读,先形成证据化发现;除非用户明确要求修复,不要修改项目。\n"
+            "- 按严重度排序,每条包含文件/行、触发条件、影响与修复建议。\n"
+            "- 对高严重度发现做复核;无法复现或证据不足时明确标为待确认。"
+        )
+    elif preset == "uxui.regression":
+        body = (
+            "当前工作流: uxui.regression / 视觉与交互回归。\n"
+            "- 修改前记录真实页面状态和关键交互;修改后重新检查同一路径。\n"
+            "- 至少覆盖默认视口、窄屏、键盘可达性以及加载/空/错误等受影响状态。\n"
+            "- 页面证据不可用时如实说明缺口,不要仅凭代码声称视觉回归通过。"
         )
     else:
         return ""

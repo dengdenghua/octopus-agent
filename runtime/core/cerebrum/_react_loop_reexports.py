@@ -42,6 +42,7 @@ __all__ = [
     "_build_workflow_preset_prompt",
     "_checkpoint_interval",
     "_checkpoint_mirror",
+    "classify_turn_failure",
     "_code_mode_completion_guard",
     "_code_task_iteration_limit",
     "_collect_model_stream_text_with_deadline",
