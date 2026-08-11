@@ -351,11 +351,15 @@ def stream_react_loop(
             "verify": True,
             "synthesize": True,
         }
-        _orch_action = "run_orchestration(" + json.dumps(
-            _orch_args,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ) + ")"
+        _orch_action = (
+            "run_orchestration("
+            + json.dumps(
+                _orch_args,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            + ")"
+        )
         yield {
             "type": "commentary_delta",
             "delta": "已启动多视角并行审计，将交叉核验发现后再汇总结论。",

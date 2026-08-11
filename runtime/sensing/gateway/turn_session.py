@@ -136,9 +136,7 @@ def build_turn_metadata(
             value = stored_meta.get(key)
         if isinstance(value, list):
             metadata[key] = [
-                item.strip()
-                for item in value[:32]
-                if isinstance(item, str) and item.strip()
+                item.strip() for item in value[:32] if isinstance(item, str) and item.strip()
             ]
     browser_regression_enabled = ctx.get("browser_regression_enabled")
     if browser_regression_enabled is None and not explicit_conversation_mode:
@@ -159,9 +157,7 @@ def build_turn_metadata(
         _gval = ctx.get(_gkey)
         if _gval is None and not explicit_conversation_mode:
             _gval = stored_meta.get(_gkey)
-        if _gval is not None and not (
-            isinstance(_gval, str) and not _gval.strip()
-        ):
+        if _gval is not None and not (isinstance(_gval, str) and not _gval.strip()):
             metadata[_gkey] = _gval
     value = ctx.get("personal_workspace_enabled")
     if value is None and not explicit_conversation_mode:

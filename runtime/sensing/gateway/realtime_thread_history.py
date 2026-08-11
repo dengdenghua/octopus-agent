@@ -124,9 +124,7 @@ def _flatten_turns_to_messages(
                 if t == "userMessage":
                     failed_user = getattr(item, "text", "") or ""
                     user_id = getattr(item, "id", None)
-                elif t == "agentMessage" and (
-                    getattr(item, "message_kind", "answer") == "answer"
-                ):
+                elif t == "agentMessage" and (getattr(item, "message_kind", "answer") == "answer"):
                     text = (getattr(item, "text", "") or "").strip()
                     if text:
                         last_answer = text
@@ -145,10 +143,7 @@ def _flatten_turns_to_messages(
                     {
                         "type": "ai",
                         "id": None,
-                        "content": (
-                            "[上一轮任务进行到：]\n"
-                            f"{_limit_text(last_answer, 600)}"
-                        ),
+                        "content": (f"[上一轮任务进行到：]\n{_limit_text(last_answer, 600)}"),
                     }
                 )
             if error_item is not None:

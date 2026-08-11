@@ -302,11 +302,7 @@ def test_flatten_file_change_tool_calls_are_json_serializable() -> None:
     # The flattened transcript must be plain JSON — no pydantic models.
     dumped = _json.dumps(messages, ensure_ascii=False)
     assert "/repo/commitlint.config.js" in dumped
-    change = next(
-        tc["args"]["changes"][0]
-        for tc in tool_calls
-        if tc.get("name") == "file_change"
-    )
+    change = next(tc["args"]["changes"][0] for tc in tool_calls if tc.get("name") == "file_change")
     assert isinstance(change, dict)
     assert change["path"] == "/repo/commitlint.config.js"
     assert change["op"] == "update"

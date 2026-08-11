@@ -462,15 +462,9 @@ def _format_skill_catalog(
     # with "(工具未注册) 不存在名为 ... 的 skill".
     _uc_for_delegation = _uc_for_browser
     _delegation_mode = str(_uc_for_delegation.get("mode") or "").strip().lower()
-    _delegation_agent_mode = str(
-        _uc_for_delegation.get("agent_mode") or ""
-    ).strip().lower()
-    _workflow_preset = str(
-        _uc_for_delegation.get("workflow_preset") or ""
-    ).strip().lower()
-    _personal_mode = str(
-        _uc_for_delegation.get("personal_mode") or ""
-    ).strip().lower()
+    _delegation_agent_mode = str(_uc_for_delegation.get("agent_mode") or "").strip().lower()
+    _workflow_preset = str(_uc_for_delegation.get("workflow_preset") or "").strip().lower()
+    _personal_mode = str(_uc_for_delegation.get("personal_mode") or "").strip().lower()
     _ultracode = _workflow_preset == "audit.ultracode"
     _delegation_cap = bool(
         (_labels & {"delegation", "swarm"})

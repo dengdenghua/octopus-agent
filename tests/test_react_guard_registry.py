@@ -83,9 +83,7 @@ class TestEvaluateGuards:
         assert (
             evaluate_guards(
                 ctx,
-                recorder=lambda label, category, msg: recorded.append(
-                    (label, category, msg)
-                ),
+                recorder=lambda label, category, msg: recorded.append((label, category, msg)),
             )
             is None
         )
