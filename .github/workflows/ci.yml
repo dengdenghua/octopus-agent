@@ -14,6 +14,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Every gate below carries `if: always()` on purpose. Steps run in order and
+  # a failing step normally skips the rest, so one red style ratchet (the
+  # god-file line-count check, a ruff nit) used to stop `pytest` from running
+  # at all — the job reported red for a formatting issue while real test
+  # failures sat undiscovered behind it. That is how twelve tests depending on
+  # untracked machine-local state survived: CI is a clean clone and would have
+  # caught every one, but it never reached them. `always()` keeps each gate
+  # independently reported; any failure still fails the job.
   lint-and-test:
     name: Lint + Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -45,72 +53,121 @@ jobs:
         run: pip install -e ".[dev,web,serve,discord]"
 
       - name: Invariant lint (active rules)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python -m tools.lint.invariant_check runtime/ tests/
 
+      - name: Fixture visibility (no test input hidden by .gitignore)
+        if: always()
+        run: python -m tools.lint.fixture_visibility_check
+
       - name: Skill package dedup
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/skill_dedup_check.py --strict
 
       - name: Skill cross-dir dedup (all_skills vs skills/public ratchet)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/skill_cross_dir_check.py --strict
 
       - name: Protocol method drift (ServerMethod ↔ reducer.ts)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/protocol_method_drift.py --strict
 
       - name: "Exception audit (no NEW unjustified silent except: pass)"
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/exception_audit.py --strict
 
       - name: God-file check (no NEW files ≥1000 lines)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/god_file_check.py --strict
 
       - name: Import-direction ratchet (no NEW kernel→sensing/web imports)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/import_direction_check.py --strict
 
       - name: Orphan-module ratchet (no NEW exported-but-unimported modules)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/orphan_module_check.py --strict
 
       - name: Feature-flag-consumption ratchet (no NEW registered-but-unread flags)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/feature_flag_consumption_check.py --strict
 
       - name: Async-lock ratchet (no NEW await held across a sync lock)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/async_lock_check.py --strict
 
       - name: Async-blocking ratchet (no NEW blocking call in async flow)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/async_blocking_check.py --strict
 
       - name: Root hygiene (matches ROOT_LAYOUT.md allow-list)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/root_hygiene.py --strict
 
       - name: Repo URL consistency (matches pyproject.toml source of truth)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/repo_url_check.py --strict
 
       - name: Desktop-core deps (Electron bootstrap matches pyproject extras)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/desktop_core_sync_check.py --strict
 
       - name: Test-count freshness (no stale "3800+" in roadmap)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/count_tests.py --check
 
       - name: Doc-claim drift (organ/protocol counts match filesystem)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/doc_claims_check.py --strict
 
       - name: Auth-actor ratchet (no NEW bare _auth calls)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/auth_actor_check.py --strict
 
       - name: Hardcoded user paths (block per-user absolute paths in source)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/hardcoded_path_check.py --strict
 
       - name: mypy ratchet (no NEW static-type errors on hot packages)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: python tools/lint/mypy_ratchet.py
 
       - name: Ruff check
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: ruff check runtime/ tests/ tools/
 
       - name: Ruff format check
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        if: always()
         run: ruff format --check runtime/ tests/ tools/
 
       - name: pytest (with coverage)
+        # Correctness signal: never gated behind the style ratchets above.
+        if: always()
         run: pytest --cov=runtime --cov=tools --cov-report=term --cov-fail-under=70
 
       - name: Large-corpus replay latency gate
+        if: always()
         run: >-
           python -m runtime.safety.evolution.replay_latency_budget
           --corpus-size 2000
@@ -128,6 +185,7 @@ jobs:
           if-no-files-found: error
 
       - name: Production readiness gate
+        if: always()
         env:
           OCTOPUS_READINESS_HOME: ${{ runner.temp }}/octopus-readiness
           OCTOPUS_READINESS_DATA_DIR: ${{ runner.temp }}/octopus-readiness/data
@@ -143,30 +201,39 @@ jobs:
           if-no-files-found: error
 
       - name: Golden-path gate (plan→execute→replan→verify, incl. parallel/recovery)
+        if: always()
         run: pytest tests/test_golden_path_e2e.py tests/test_ganglia_runtime.py -v --tb=short
 
       - name: Delegation regression gate (timeout/fallback/retry/smart-budget)
+        if: always()
         run: pytest tests/test_delegation_enhancements.py tests/test_delegation_smart_budget.py -v --tb=short
 
       - name: Security regression gate (team_tasks authorization)
+        if: always()
         run: pytest tests/test_team_tasks_router_security.py -v --tb=short
 
       - name: Security regression gate (team_rooms authorization)
+        if: always()
         run: pytest tests/test_team_rooms_router_security.py -v --tb=short
 
       - name: Security regression gate (parallel_agents ownership)
+        if: always()
         run: pytest tests/test_parallel_agents_router_security.py -v --tb=short
 
       - name: Security regression gate (channels admin)
+        if: always()
         run: pytest tests/test_channels_router_security.py -v --tb=short
 
       - name: Security regression gate (agents admin)
+        if: always()
         run: pytest tests/test_agents_router_security.py -v --tb=short
 
       - name: Security regression gate (thread ownership)
+        if: always()
         run: pytest tests/test_agents_router_thread_ownership.py -v --tb=short
 
       - name: Security regression gate (LocalPartner admin + alias)
+        if: always()
         run: pytest tests/test_agents_router_local_partner_security.py -v --tb=short
 
       - name: Upload coverage
