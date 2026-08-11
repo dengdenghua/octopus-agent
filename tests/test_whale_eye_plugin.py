@@ -128,7 +128,22 @@ def test_describe_image_retries_transient_failure() -> None:
     """A transient transcription failure retries once and succeeds."""
     from runtime.platform.plugins.bundled.whale_eye.service import describe_image
 
-    with patch("runtime.platform.plugins.bundled.whale_eye.service._chat") as mock_chat:
+    with (
+        # ``describe_image`` calls ``resolve_config`` first and returns None
+        # early when no agnes api_key is reachable. Mocking only ``_chat``
+        # left the test depending on the developer's untracked
+        # data/custom_models.json — green here, red on CI and in any fresh
+        # clone. Stub the config too so the retry contract is what is tested.
+        patch(
+            "runtime.platform.plugins.bundled.whale_eye.service.resolve_config",
+            return_value={
+                "base_url": "https://vision.invalid/v1",
+                "model": "agnes-2.5-flash",
+                "api_key": "test-key",
+            },
+        ),
+        patch("runtime.platform.plugins.bundled.whale_eye.service._chat") as mock_chat,
+    ):
         mock_chat.side_effect = [
             RuntimeError("transient timeout"),
             "这是一张截图: 界面顶部显示标题栏。",
@@ -142,7 +157,22 @@ def test_describe_image_degrades_after_double_failure() -> None:
     """Two consecutive failures → None (caller drops the image, no crash)."""
     from runtime.platform.plugins.bundled.whale_eye.service import describe_image
 
-    with patch("runtime.platform.plugins.bundled.whale_eye.service._chat") as mock_chat:
+    with (
+        # ``describe_image`` calls ``resolve_config`` first and returns None
+        # early when no agnes api_key is reachable. Mocking only ``_chat``
+        # left the test depending on the developer's untracked
+        # data/custom_models.json — green here, red on CI and in any fresh
+        # clone. Stub the config too so the retry contract is what is tested.
+        patch(
+            "runtime.platform.plugins.bundled.whale_eye.service.resolve_config",
+            return_value={
+                "base_url": "https://vision.invalid/v1",
+                "model": "agnes-2.5-flash",
+                "api_key": "test-key",
+            },
+        ),
+        patch("runtime.platform.plugins.bundled.whale_eye.service._chat") as mock_chat,
+    ):
         mock_chat.side_effect = [RuntimeError("a"), RuntimeError("b")]
         result = describe_image(image_b64="aGVsbG8=", timeout=30)
     assert result is None
@@ -153,7 +183,22 @@ def test_describe_image_retries_empty_verdict() -> None:
     """An empty verdict counts as a failure and is retried once."""
     from runtime.platform.plugins.bundled.whale_eye.service import describe_image
 
-    with patch("runtime.platform.plugins.bundled.whale_eye.service._chat") as mock_chat:
+    with (
+        # ``describe_image`` calls ``resolve_config`` first and returns None
+        # early when no agnes api_key is reachable. Mocking only ``_chat``
+        # left the test depending on the developer's untracked
+        # data/custom_models.json — green here, red on CI and in any fresh
+        # clone. Stub the config too so the retry contract is what is tested.
+        patch(
+            "runtime.platform.plugins.bundled.whale_eye.service.resolve_config",
+            return_value={
+                "base_url": "https://vision.invalid/v1",
+                "model": "agnes-2.5-flash",
+                "api_key": "test-key",
+            },
+        ),
+        patch("runtime.platform.plugins.bundled.whale_eye.service._chat") as mock_chat,
+    ):
         mock_chat.side_effect = ["", "ok-description"]
         result = describe_image(image_b64="aGVsbG8=", timeout=30)
     assert result == "ok-description"
