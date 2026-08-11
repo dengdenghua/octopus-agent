@@ -22,8 +22,8 @@ from runtime.execution.suckers._write_skills_exec import (
     _read_only_git_rewrite,
 )
 
-_REPO = "/Users/dangbei/repo"
-_WORK = "/Users/dangbei/repo/.octopus-work/t1"
+_REPO = "/workspace/repo"
+_WORK = "/workspace/repo/.octopus-work/t1"
 
 
 def test_is_read_only_git_status() -> None:

@@ -10,9 +10,9 @@
 #   launchctl load ~/Library/LaunchAgents/com.octopus.backend.plist
 set -u
 
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 HEALTH_URL="http://127.0.0.1:8000/"
 CHECK_INTERVAL=30
-SERVER_CMD="cd /Users/dangbei/Public/octopus/octopus-agent && ./.venv/bin/python -m runtime serve --config config.local.yaml --port 8000"
 LOG=/tmp/octopus-watchdog.log
 
 echo "$(date '+%F %T') watchdog started" >> "$LOG"
@@ -25,7 +25,12 @@ while true; do
       kill "$stale" 2>/dev/null
       sleep 1
     fi
-    bash -c "$SERVER_CMD" >> /tmp/octopus-backend.log 2>&1 &
+    (
+      cd "$REPO_ROOT" || exit 1
+      exec ./.venv/bin/python -m runtime serve \
+        --config config.local.yaml \
+        --port 8000
+    ) >> /tmp/octopus-backend.log 2>&1 &
     echo "$(date '+%F %T') backend restarted (pid $!)" >> "$LOG"
   fi
   sleep "$CHECK_INTERVAL"
