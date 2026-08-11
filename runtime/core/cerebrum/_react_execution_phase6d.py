@@ -188,7 +188,9 @@ def _phase_6d_dispatch_and_observe(
                     if isinstance(_guardian_model, str) and _guardian_model.strip()
                     else None
                 ),
-                default_model=effective_model,
+                # The conversation's own model — reference state directly, the
+                # local ``effective_model`` scalar pull happens further down.
+                default_model=state.effective_model,
             ),
         )
     output_chunk_sink = state.output_chunk_sink

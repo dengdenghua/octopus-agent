@@ -387,3 +387,40 @@ def test_guardian_defaults_to_conversation_model() -> None:
         rule_engine_categories=("shell_execution",),
     )
     assert router2.last_model == "gpt-5.6-luna"
+
+
+def test_guardian_enabled_loop_turn_constructs_reviewer_without_used_before_def() -> None:
+    """Regression for the a850d026 follow-up: phase 6d built the
+    GuardianReviewer with the local ``effective_model`` before its scalar
+    pull, so any turn carrying ``guardian_review_enabled`` in user_context
+    hit ``UnboundLocalError`` the moment the phase started. Driving a real
+    loop turn to phase 6d must construct the reviewer without error."""
+    from runtime.core.cerebrum.react_loop import stream_react_loop
+    from tests.test_react_loop import (
+        _build_stack_with_executor,
+        _drain,
+        _intent,
+        _ScriptedRouter,
+    )
+
+    intent = _intent("run a safe echo")
+    intent.user_context["guardian_review_enabled"] = True
+    router = _ScriptedRouter(
+        [
+            'Thought: inspect\nAction: echo({"text": "hi"})',
+            "Final Answer: done",
+        ]
+    )
+
+    events, result = _drain(
+        stream_react_loop(
+            _build_stack_with_executor(router),
+            intent,
+            agent=None,
+            max_iterations=4,
+        )
+    )
+
+    assert result is not None and result.success
+    assert result.final_answer == "done"
+    assert any(event.get("type") == "tool_end" for event in events)
