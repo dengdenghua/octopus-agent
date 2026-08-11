@@ -50,6 +50,13 @@ test-results/
 *.sqlite3
 *.db
 *.log
+# Contract-benchmark fixtures are inputs, not runtime artifacts: the verifier
+# asserts data.db is preserved byte-for-byte and external-contact.log stays
+# empty. The blanket *.db / *.log rules above kept them out of the index, so
+# the two security cases only passed on machines holding leftovers from an
+# earlier run and failed on every fresh clone.
+!benchmarks/fixtures/**/*.db
+!benchmarks/fixtures/**/*.log
 # Agent-core write locks / backups (runtime artifacts, never committed)
 agents/**/*.lock
 agents/**/*.bak
