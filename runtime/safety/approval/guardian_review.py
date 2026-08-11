@@ -25,7 +25,7 @@ import json
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 _logger = logging.getLogger(__name__)
@@ -208,7 +208,11 @@ class GuardianReviewer:
             return None
         return GuardianVerdict(
             outcome=outcome,
-            risk=str(data.get("risk", rule_engine_risk if False else "unknown")),
+            # `_parse` has no access to the rule-engine risk, so an absent
+            # "risk" field degrades to "unknown". (Previously written as
+            # `rule_engine_risk if False else "unknown"`, where the dead
+            # branch merely hid an undefined name from the reader.)
+            risk=str(data.get("risk", "unknown")),
             reason=str(data.get("reason", ""))[:500],
         )
 

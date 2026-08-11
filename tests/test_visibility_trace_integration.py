@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from runtime.core.cerebrum._react_context_helpers import _format_skill_catalog
 from runtime.core.cerebrum._visibility_trace import (
     active_trace,
     new_trace,
     reset_active_trace,
     set_active_trace,
 )
-from runtime.core.cerebrum._react_context_helpers import _format_skill_catalog
 from runtime.core.cerebrum.capability_router import activate_capabilities
 
 
@@ -108,10 +108,10 @@ def test_react_loop_emits_visibility_event() -> None:
     """End-to-end: turn-level trace must reach PHASE 4.7 as an event."""
     from runtime.core.cerebrum.react_loop import stream_react_loop
     from tests.test_react_loop import (
-        _ScriptedRouter,
         _build_stack_with_executor,
         _drain,
         _intent,
+        _ScriptedRouter,
     )
 
     router = _ScriptedRouter(

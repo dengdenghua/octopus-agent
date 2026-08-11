@@ -295,9 +295,10 @@ def assess_approval_risk(
     # logs) is how a hijacked agent exfiltrates auth. Mirrors codex
     # policy.md "Credential Probing": high risk, denied at low/unknown
     # authorization.
-    if name.startswith(("read_", "list_", "glob_", "grep_", "cat_", "file_stats")):
-        if any(marker in preview for marker in _CREDENTIAL_PROBE_MARKERS):
-            bump("high", "credential_probing")
+    if name.startswith(("read_", "list_", "glob_", "grep_", "cat_", "file_stats")) and any(
+        marker in preview for marker in _CREDENTIAL_PROBE_MARKERS
+    ):
+        bump("high", "credential_probing")
     # Sensitive egress — network actions moving secret material out.
     # Codex requires BOTH payload AND destination authorization; we can't
     # resolve the destination here, so flag sensitive_egress so the policy

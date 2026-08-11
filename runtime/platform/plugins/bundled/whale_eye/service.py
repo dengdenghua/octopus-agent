@@ -17,10 +17,10 @@ import logging
 import mimetypes
 import os
 import urllib.request
-
-_logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT = (
     "你是资深前端工程师做视觉回归。请仔细查看这张界面截图，逐项检查并输出中文结论：\n"
@@ -207,7 +207,7 @@ def describe_image(
     if not image_url:
         return None
     last_error: Exception | None = None
-    for attempt in range(2):
+    for _attempt in range(2):
         try:
             verdict = _chat(cfg, image_url, prompt, max_tokens=max_tokens, timeout=timeout)
             if verdict and verdict.strip():

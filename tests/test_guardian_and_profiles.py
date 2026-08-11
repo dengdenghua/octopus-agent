@@ -8,7 +8,6 @@ permission profile catalog. All defaults keep existing behavior identical.
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +25,6 @@ from runtime.safety.approval.guardian_review import (
     GuardianReviewerConfig,
     decide_with_guardian,
 )
-
 
 # ── ② egress / credential rules (approval_gate) ─────────────
 
