@@ -87,6 +87,12 @@ def build_turn_metadata(
         "capability_mode",
         "code_mode",
         "agent_mode",
+        "personal_mode",
+        "mode_preset",
+        "workflow_preset",
+        "skill_pack_profile",
+        "verification_policy",
+        "mode_contract",
         "workspace_scope",
         "personal_workspace_path",
         "interaction_mode",
@@ -103,6 +109,12 @@ def build_turn_metadata(
             "capability_mode",
             "code_mode",
             "agent_mode",
+            "personal_mode",
+            "mode_preset",
+            "workflow_preset",
+            "skill_pack_profile",
+            "verification_policy",
+            "mode_contract",
             "workspace_scope",
             "personal_workspace_path",
         }:
@@ -113,6 +125,26 @@ def build_turn_metadata(
             metadata[key] = value.strip()
         elif isinstance(value, bool):
             metadata[key] = value
+    personal_instructions = ctx.get("personal_instructions")
+    if personal_instructions is None and not explicit_conversation_mode:
+        personal_instructions = stored_meta.get("personal_instructions")
+    if isinstance(personal_instructions, str) and personal_instructions.strip():
+        metadata["personal_instructions"] = personal_instructions.strip()[:2000]
+    for key in ("default_skill_packs", "default_plugins"):
+        value = ctx.get(key)
+        if value is None and not explicit_conversation_mode:
+            value = stored_meta.get(key)
+        if isinstance(value, list):
+            metadata[key] = [
+                item.strip()
+                for item in value[:32]
+                if isinstance(item, str) and item.strip()
+            ]
+    browser_regression_enabled = ctx.get("browser_regression_enabled")
+    if browser_regression_enabled is None and not explicit_conversation_mode:
+        browser_regression_enabled = stored_meta.get("browser_regression_enabled")
+    if isinstance(browser_regression_enabled, bool):
+        metadata["browser_regression_enabled"] = browser_regression_enabled
     if resolved_model is not None:
         metadata["model_name"] = resolved_model
     # Guardian independent review is an opt-in per-turn decision; pass the

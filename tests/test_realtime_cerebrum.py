@@ -182,6 +182,60 @@ def test_flatten_merges_post_final_trace_items_into_delivered_answer() -> None:
     assert [tool["name"] for tool in ai["tool_calls"]] == ["todo_write"]
 
 
+def test_flatten_keeps_reasoning_private_and_commentary_explicit() -> None:
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    shared_text = "接下来检查前端测试，再审查代码差异。"
+    turn = Turn.model_validate(
+        {
+            "id": "turn-visibility",
+            "threadId": "thread-visibility",
+            "status": "completed",
+            "startedAt": "2026-08-10T08:00:00Z",
+            "completedAt": "2026-08-10T08:00:01Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-10T08:00:00Z",
+                    "text": "继续",
+                    "attachments": [],
+                },
+                {
+                    "id": "r1",
+                    "type": "reasoning",
+                    "status": "completed",
+                    "createdAt": "2026-08-10T08:00:00Z",
+                    "summary": [shared_text],
+                    "content": "raw provider reasoning",
+                },
+                {
+                    "id": "p1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-10T08:00:01Z",
+                    "text": shared_text,
+                    "messageKind": "commentary",
+                },
+            ],
+            "error": None,
+        }
+    )
+
+    messages, _, _ = _flatten_turns_to_messages([turn])
+
+    commentary = messages[1]
+    assert commentary["content"] == shared_text
+    assert commentary["additional_kwargs"] == {
+        "reasoning_content": shared_text,
+        "message_kind": "commentary",
+        "public_progress": True,
+    }
+    assert "public_reasoning_summary" not in commentary["additional_kwargs"]
+
+
 def test_flatten_file_change_tool_calls_are_json_serializable() -> None:
     """Regression: FileChange pydantic models leaked into the flattened
     ``tool_calls[].args.changes``, so the ThreadStateStore snapshot write
@@ -2624,6 +2678,9 @@ def test_explicit_chat_turn_does_not_inherit_personal_code_metadata(tmp_path: Pa
                     "workspace_scope": "personal",
                     "personal_workspace_enabled": True,
                     "personal_workspace_path": str(tmp_path),
+                    "personal_mode": "research",
+                    "personal_instructions": "private personal rule",
+                    "workflow_preset": "develop.iterate",
                 }
             }
 
@@ -2638,6 +2695,9 @@ def test_explicit_chat_turn_does_not_inherit_personal_code_metadata(tmp_path: Pa
     assert "code_mode" not in metadata
     assert "workspace_scope" not in metadata
     assert "personal_workspace_enabled" not in metadata
+    assert "personal_mode" not in metadata
+    assert "personal_instructions" not in metadata
+    assert "workflow_preset" not in metadata
 
 
 def test_turn_metadata_preserves_declared_write_scope(tmp_path: Path) -> None:
@@ -2656,6 +2716,37 @@ def test_turn_metadata_preserves_declared_write_scope(tmp_path: Path) -> None:
     )
 
     assert metadata["allowed_write_paths"] == ["cache.py", "tests/test_cache.py"]
+
+
+def test_turn_metadata_preserves_personal_and_project_workflow_contracts() -> None:
+    from runtime.sensing.gateway.turn_session import build_turn_metadata
+
+    metadata = build_turn_metadata(
+        thread_id="th-mode-contracts",
+        body={
+            "context": {
+                "mode": "code",
+                "personal_mode": "research",
+                "personal_instructions": "Prefer primary sources.",
+                "workflow_preset": "audit.ultracode",
+                "skill_pack_profile": "audit",
+                "verification_policy": "strict",
+                "default_skill_packs": ["research", "review"],
+                "default_plugins": ["browser"],
+                "browser_regression_enabled": True,
+            }
+        },
+        store=None,
+    )
+
+    assert metadata["personal_mode"] == "research"
+    assert metadata["personal_instructions"] == "Prefer primary sources."
+    assert metadata["workflow_preset"] == "audit.ultracode"
+    assert metadata["skill_pack_profile"] == "audit"
+    assert metadata["verification_policy"] == "strict"
+    assert metadata["default_skill_packs"] == ["research", "review"]
+    assert metadata["default_plugins"] == ["browser"]
+    assert metadata["browser_regression_enabled"] is True
 
 
 def test_tool_question_keeps_react_path_when_router_exists(tmp_path: Path) -> None:
@@ -3331,6 +3422,67 @@ def test_tool_round_trip_with_approval(gateway: Any) -> None:
     # The event log preserves the full sequence.
     log_file = logs_root / "th-tool.jsonl"
     assert log_file.exists()
+
+
+def test_duplicate_tool_call_ids_keep_both_completion_receipts(gateway: Any) -> None:
+    """A provider may reuse a call id inside one streamed turn.
+
+    The bridge must complete calls in start order instead of overwriting the
+    first item or dropping the second tool_end receipt.
+    """
+    client, _ = gateway
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "read_file",
+                "tool_call_id": "duplicate",
+                "iteration": 1,
+                "input_preview": {"path": "first.txt"},
+            },
+            {
+                "type": "tool_start",
+                "tool_name": "read_file",
+                "tool_call_id": "duplicate",
+                "iteration": 1,
+                "input_preview": {"path": "second.txt"},
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "read_file",
+                "tool_call_id": "duplicate",
+                "status": "success",
+                "output_preview": "first receipt",
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "read_file",
+                "tool_call_id": "duplicate",
+                "status": "success",
+                "output_preview": "second receipt",
+            },
+            {"type": "react_completed", "success": True},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-duplicate-tool-id",
+                "input": [{"type": "text", "text": "read both"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    commands = [item for item in turn["items"] if item["type"] == "commandExecution"]
+    assert len(commands) == 2
+    assert [item["status"] for item in commands] == ["completed", "completed"]
+    assert [item["aggregatedOutput"] for item in commands] == [
+        "first receipt",
+        "second receipt",
+    ]
 
 
 def test_tool_rejected_propagates(gateway: Any) -> None:

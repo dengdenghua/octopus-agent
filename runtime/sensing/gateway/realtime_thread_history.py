@@ -68,8 +68,9 @@ def _flatten_turns_to_messages(
 
     Rules:
       * userMessage     → ``HumanMessage``
-      * public reasoning summary + plan → folded into ``additional_kwargs``
-                          of the next ``AIMessage`` in the same turn; raw
+      * reasoning summary + plan → folded into ``additional_kwargs`` of the
+                          next ``AIMessage`` in the same turn. Summaries stay
+                          in the private ``reasoning_content`` lane; raw
                           provider reasoning content is never copied
       * agentMessage    → ``AIMessage`` (Thought/Action/Observation
                           prefixes pass through; the frontend's
@@ -193,9 +194,9 @@ def _flatten_turns_to_messages(
                     if not isinstance(existing_kwargs, dict):
                         existing_kwargs = {}
                         message["additional_kwargs"] = existing_kwargs
-                    incoming_reasoning = incoming_kwargs.get("public_reasoning_summary")
+                    incoming_reasoning = incoming_kwargs.get("reasoning_content")
                     if isinstance(incoming_reasoning, str) and incoming_reasoning.strip():
-                        existing_reasoning = existing_kwargs.get("public_reasoning_summary")
+                        existing_reasoning = existing_kwargs.get("reasoning_content")
                         parts = [
                             part
                             for part in (
@@ -204,7 +205,7 @@ def _flatten_turns_to_messages(
                             )
                             if part.strip()
                         ]
-                        existing_kwargs["public_reasoning_summary"] = "\n\n".join(parts)
+                        existing_kwargs["reasoning_content"] = "\n\n".join(parts)
                     if "thinking_plan" in incoming_kwargs:
                         existing_kwargs["thinking_plan"] = incoming_kwargs["thinking_plan"]
                 if tool_calls:
@@ -264,7 +265,8 @@ def _flatten_turns_to_messages(
             elif t == "reasoning":
                 # ``content`` contains provider chain-of-thought and is
                 # intentionally excluded from every user-facing legacy
-                # snapshot. ``summary`` is the protocol's explicit public lane.
+                # snapshot. A readable ``summary`` remains reasoning metadata;
+                # it must never be promoted to public commentary.
                 summary = getattr(item, "summary", None) or []
                 if summary:
                     pending_reasoning.append("\n".join(summary))
@@ -306,11 +308,16 @@ def _flatten_turns_to_messages(
                     }
                 )
             elif t == "agentMessage":
+                message_kind = getattr(item, "message_kind", "answer") or "answer"
+                additional_kwargs = _build_ai_kwargs(pending_reasoning, pending_plan)
+                additional_kwargs["message_kind"] = message_kind
+                if message_kind == "commentary":
+                    additional_kwargs["public_progress"] = True
                 ai = {
                     "type": "ai",
                     "id": getattr(item, "id", None),
                     "content": getattr(item, "text", "") or "",
-                    "additional_kwargs": _build_ai_kwargs(pending_reasoning, pending_plan),
+                    "additional_kwargs": additional_kwargs,
                 }
                 if pending_tool_calls:
                     ai["tool_calls"] = list(pending_tool_calls)
@@ -456,7 +463,10 @@ def _build_ai_kwargs(
 ) -> dict[str, Any]:
     kw: dict[str, Any] = {}
     if reasoning:
-        kw["public_reasoning_summary"] = "\n\n".join(reasoning)
+        # A reasoning summary is readable, but it is still not an assistant
+        # message. Keep it in the private reasoning lane so the frontend can
+        # render it as a muted disclosure instead of conversational prose.
+        kw["reasoning_content"] = "\n\n".join(reasoning)
     if plan is not None:
         kw["thinking_plan"] = plan
     return kw

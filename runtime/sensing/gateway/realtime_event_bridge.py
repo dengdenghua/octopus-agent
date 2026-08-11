@@ -126,6 +126,10 @@ class _ReactBridgeState:
         # reasoning item is open or for legacy streams without this field.
         self.reasoning_started_monotonic: float | None = None
         self.tools: dict[str, CommandExecutionItem] = {}
+        # Provider call ids are not guaranteed to be present or unique. Keep
+        # an ordered alias queue so two calls with the same (or empty) id are
+        # completed in start order instead of overwriting/orphaning one item.
+        self.tool_call_queues: dict[str, list[str]] = {}
         self.tool_public_narrative_started: dict[str, bool] = {}
         self.phases: list[AgentPhaseSnapshot] = []
         self.workbench_snapshot_version = 0
@@ -482,7 +486,8 @@ class _ReactBridgeState:
         )
         # Flush any open prose so the tool item appears after the
         # reasoning that produced it.
-        call_id = str(evt.get("tool_call_id") or "")
+        provider_call_id = str(evt.get("tool_call_id") or "")
+        call_id = provider_call_id
         # Disambiguate when the same tool_call_id appears twice (e.g.
         # swarm sub_tool ids built from ``agent-round-skill`` collide
         # if the same role calls the same skill twice in a round).
@@ -505,7 +510,11 @@ class _ReactBridgeState:
         # Keep the lifecycle lookup key aligned with incoming tool_end events.
         # If an adapter omits tool_call_id, both start/end use the empty key;
         # the item itself still gets a generated id for the public protocol.
-        call_key = call_id
+        # Empty provider ids cannot be dictionary keys for more than one open
+        # call. The public item id is already unique, so use it internally and
+        # retain the empty id only as an alias queue key.
+        call_key = call_id or item.id
+        self.tool_call_queues.setdefault(provider_call_id, []).append(call_key)
         start_narrative = None if has_open_public_prose else _tool_start_public_narrative(evt)
         self.tool_public_narrative_started[call_key] = bool(start_narrative)
         if start_narrative:
@@ -516,7 +525,10 @@ class _ReactBridgeState:
                 start_narrative,
                 start_new_segment=True,
             )
-        await self.flush(turn, log, emitter)
+        # A second tool_start may be a parallel sibling. Flush only prose;
+        # closing foreground tools here would fabricate a completion before
+        # their tool_end events arrive and would discard their receipts.
+        await self.flush(turn, log, emitter, close_tools=False)
         self._bind_timeline(item)
         self.tools[call_key] = item
         turn.items.append(item)
@@ -531,6 +543,31 @@ class _ReactBridgeState:
             workspace_focus=_workspace_focus_for_tool(item),
         )
 
+    def _resolve_open_tool_key(self, provider_call_id: str) -> str | None:
+        """Resolve a possibly duplicated/empty provider id to an open item."""
+
+        queue = self.tool_call_queues.get(provider_call_id)
+        if queue:
+            while queue and queue[0] not in self.tools:
+                queue.pop(0)
+            if queue:
+                return queue[0]
+            self.tool_call_queues.pop(provider_call_id, None)
+        # Compatibility with bridge state created before alias queues were
+        # introduced (and with tests that inject tools directly).
+        if provider_call_id in self.tools:
+            return provider_call_id
+        return None
+
+    def _consume_tool_alias(self, provider_call_id: str, call_key: str) -> None:
+        queue = self.tool_call_queues.get(provider_call_id)
+        if not queue:
+            return
+        with contextlib.suppress(ValueError):
+            queue.remove(call_key)
+        if not queue:
+            self.tool_call_queues.pop(provider_call_id, None)
+
     async def append_tool_output(
         self,
         turn: Turn,
@@ -539,7 +576,8 @@ class _ReactBridgeState:
         evt: dict[str, Any],
     ) -> None:
         call_id = str(evt.get("tool_call_id") or "")
-        item = self.tools.get(call_id)
+        call_key = self._resolve_open_tool_key(call_id)
+        item = self.tools.get(call_key) if call_key is not None else None
         delta = evt.get("delta")
         if item is None or not isinstance(delta, str) or not delta:
             return
@@ -565,7 +603,8 @@ class _ReactBridgeState:
     ) -> None:
         call_id = str(evt.get("tool_call_id") or "")
         task_id = str(evt.get("task_id") or "")
-        item = self.tools.get(call_id)
+        call_key = self._resolve_open_tool_key(call_id)
+        item = self.tools.get(call_key) if call_key is not None else None
         if item is None or not task_id:
             return
 
@@ -692,11 +731,14 @@ class _ReactBridgeState:
         evt: dict[str, Any],
     ) -> None:
         call_id = str(evt.get("tool_call_id") or "")
-        item = self.tools.pop(call_id, None)
+        call_key = self._resolve_open_tool_key(call_id)
+        item = self.tools.pop(call_key, None) if call_key is not None else None
         if item is None:
             # Unknown tool_call_id — skip rather than synthesize.
             return
-        emitted_start_narrative = self.tool_public_narrative_started.pop(call_id, False)
+        assert call_key is not None
+        self._consume_tool_alias(call_id, call_key)
+        emitted_start_narrative = self.tool_public_narrative_started.pop(call_key, False)
         status = evt.get("status", "success")
         if status == "rejected":
             item.status = ItemStatus.DECLINED
@@ -799,6 +841,7 @@ class _ReactBridgeState:
         emitter: EventEmitter,
         *,
         status: ItemStatus = ItemStatus.COMPLETED,
+        close_tools: bool = True,
     ) -> None:
         """Close the currently open prose lane with its true outcome.
 
@@ -834,13 +877,14 @@ class _ReactBridgeState:
         # carries a spurious inProgress spinner. Background processes are
         # intentionally owned by their watcher after the turn ends; closing
         # them here would publish a false completion before the process exits.
-        for item_id, tool in list(self.tools.items()):
-            preview = tool.input_preview
-            if isinstance(preview, dict) and preview.get("background") is True:
-                continue
-            tool.status = status
-            await self._emit_completed(turn, log, emitter, tool)
-            del self.tools[item_id]
+        if close_tools:
+            for item_id, tool in list(self.tools.items()):
+                preview = tool.input_preview
+                if isinstance(preview, dict) and preview.get("background") is True:
+                    continue
+                tool.status = status
+                await self._emit_completed(turn, log, emitter, tool)
+                del self.tools[item_id]
 
     async def finalize_workbench(
         self,

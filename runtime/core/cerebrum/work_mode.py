@@ -144,7 +144,17 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
         or completion_policy == "goal"
     )
 
-    is_code = bool(
+    # An isolated personal workspace is a capability surface, not by itself a
+    # request to behave like a coding agent. Personal general/research turns
+    # keep file tools available through ``capability_mode=code`` while using
+    # their own operating contracts. Personal build remains full code mode.
+    _personal_non_code_mode = (
+        not (isinstance(project_wp, str) and project_wp.strip())
+        and isinstance(effective_wp, str)
+        and bool(effective_wp.strip())
+        and personal_mode in {"general", "research"}
+    )
+    is_code = not _personal_non_code_mode and bool(
         uc.get("mode") == "code"
         or metadata.get("mode") == "code"
         or uc.get("capability_mode")

@@ -29,6 +29,23 @@ def test_personal_workspace_flips_into_code():
     assert wm.effective_workspace == "/tmp/thread-123"
 
 
+def test_personal_general_and_research_are_work_styles_not_code_behavior():
+    base = {
+        "mode": "code",
+        "capability_mode": "code",
+        "personal_workspace_enabled": True,
+        "personal_workspace_path": "/tmp/personal",
+    }
+    general = resolve_work_mode({**base, "personal_mode": "general"})
+    research = resolve_work_mode({**base, "personal_mode": "research"})
+    build = resolve_work_mode({**base, "personal_mode": "build"})
+
+    assert general.scope == research.scope == build.scope == "personal"
+    assert general.is_code is False
+    assert research.is_code is False
+    assert build.is_code is True
+
+
 def test_workspace_scope_personal_also_enables():
     wm = resolve_work_mode({"workspace_scope": "personal", "personal_workspace_path": "/tmp/x"})
     assert wm.is_code is True and wm.scope == "personal"
