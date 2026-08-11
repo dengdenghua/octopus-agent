@@ -59,10 +59,13 @@ verify-full-stack:  ## Run the FastAPI + Vite localhost/127 smoke only
 	bash scripts/verify_local.sh --full-stack-only
 
 # ─── Lint ────────────────────────────────────────────
-lint: lint-invariants lint-mypy lint-ruff  ## Run all linters
+lint: lint-invariants lint-fixtures lint-mypy lint-ruff  ## Run all linters
 
 lint-invariants:  ## Run Octopus invariant checks (active: LINT-02/03/04/05/09)
 	$(PYTHON) -m tools.lint.invariant_check runtime/ tests/
+
+lint-fixtures:  ## No test fixture input may be hidden from git by .gitignore
+	$(PYTHON) -m tools.lint.fixture_visibility_check
 
 lint-mypy:  ## Run the mypy ratchet (no NEW type errors on hot packages)
 	$(PYTHON) tools/lint/mypy_ratchet.py
