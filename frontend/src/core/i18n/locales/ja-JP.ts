@@ -3080,6 +3080,10 @@ export const jaJP: Translations = {
       "このタスクはプロジェクトファイルの変更が必要ですが、有効なファイル変更が記録されませんでした。",
     verificationRequired:
       "コード変更を検証してからでないと Octopus はこのターンを終了できません。テスト、lint、typecheck、ビルドを実行して続行。",
+    environmentBlocked:
+      "環境上の制約でタスクがブロックされています — 理由は下記のとおりです。",
+    blockedOnUser:
+      "タスクを続けるには、あなたの入力が必要です。",
     streamEndpointUnavailable:
       "バックエンドのチャット/チームストリームエンドポイントが有効でないか利用不可。完全な Octopus バックエンドを起動するかフロントエンドプロキシを確認。",
     iteration: (count: number) => `第 ${count} ラウンド`,

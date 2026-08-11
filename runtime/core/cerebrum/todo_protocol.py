@@ -9,49 +9,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from runtime.core.cerebrum.react_guards import _has_successful_code_write
-from runtime.core.cerebrum.react_parsing import (
-    _has_code_verification,
-    _has_successful_verification_observation,
-    _is_code_write_step,
-    _latest_todo_items,
-    _parse_action,
-)
 from runtime.core.cerebrum.react_types import ReActStep
 from runtime.core.cerebrum.work_mode import SWARM_ALIASES
 
-_SHORT_ACK_RE = re.compile(
-    r"^\s*("
-    r"hi|hello|hey|hello everyone|hello all|hi everyone|hi all|hi team|"
-    r"thanks|thank you|ok|okay|yes|no|"
-    r"嗯|好|好的|行|可以|谢谢|你好|大家好|早上好|上午好|中午好|下午好|晚上好|哈喽"
-    r")[.!?。！？\s]*$",
-    re.IGNORECASE,
-)
-
-_COMPLEXITY_CUE_RE = re.compile(
-    r"("
-    r"implement|fix|debug|refactor|review|audit|optimi[sz]e|verify|test|build|"
-    r"research|investigate|compare|analy[sz]e|report|plan|todo|"
-    r"继续|开始|开干|修|优化|审计|排查|调研|研究|分析|实现|测试|验证|打包|"
-    r"改成|改为|换成|改造|重做|新增|添加|接入|迁移|上线|部署|搭建|改版|美化|"
-    r"多步|复杂|全局|完整|报告|方案|流程|团队|协作|深度"
-    r")",
-    re.IGNORECASE,
-)
-
-_CODE_OR_TOOL_CUE_RE = re.compile(
-    r"("
-    r"\b(read_file|write_file|edit_text_file|edit_file|multi_edit_file|exec_shell|web_search|todo_write)\b|"
-    r"\.(py|ts|tsx|js|jsx|json|yaml|yml|md|css|html|go|rs)\b|"
-    r"\b(npm|pytest|pnpm|yarn|vite|tsc|git)\b"
-    r")",
-    re.IGNORECASE,
-)
-
-_SINGLE_SOURCE_RE = re.compile(
-    r"(?:\u4e00\u4e2a|1\s*\u4e2a)\s*(?:\u5b98\u65b9|\u53ef\u9760)?\s*(?:\u6765\u6e90|\u7f51\u9875|\u9875\u9762)|"
-    r"\b(?:one|single)\s+(?:official\s+|reliable\s+)?source\b",
+_FOLLOWUP_EXECUTION_RE = re.compile(
+    r"(?:\u7136\u540e|\u63a5\u7740|\u968f\u540e|\u5e76(?:\u4e14)?|\u540c\u65f6)\s*"
+    r"(?:\u4fee\u6539|\u5b9e\u73b0|\u4fee\u590d|\u66f4\u65b0|\u521b\u5efa|\u65b0\u589e|\u91cd\u6784|\u6267\u884c|\u8fd0\u884c)|"
+    r"\b(?:then|and then|also|and)\s+"
+    r"(?:implement|fix|modify|edit|update|create|refactor|run|execute)\b",
     re.IGNORECASE,
 )
 _CONCISE_RESULT_RE = re.compile(
@@ -60,44 +25,11 @@ _CONCISE_RESULT_RE = re.compile(
     r"\b(?:one sentence|brief|concise|short conclusion|only (?:answer|report|return))\b",
     re.IGNORECASE,
 )
-_WEB_LOOKUP_RE = re.compile(
-    r"(?:\u7f51\u9875\u8c03\u7814|\u641c\u7d22|\u67e5\u627e|\u5b98\u65b9\u6765\u6e90)|"
-    r"\b(?:web research|search|look up|official source)\b",
-    re.IGNORECASE,
-)
-_FOLLOWUP_EXECUTION_RE = re.compile(
-    r"(?:\u7136\u540e|\u63a5\u7740|\u968f\u540e|\u5e76(?:\u4e14)?|\u540c\u65f6)\s*"
-    r"(?:\u4fee\u6539|\u5b9e\u73b0|\u4fee\u590d|\u66f4\u65b0|\u521b\u5efa|\u65b0\u589e|\u91cd\u6784|\u6267\u884c|\u8fd0\u884c)|"
-    r"\b(?:then|and then|also|and)\s+"
-    r"(?:implement|fix|modify|edit|update|create|refactor|run|execute)\b",
-    re.IGNORECASE,
-)
-_LEADING_EXECUTION_RE = re.compile(
-    r"^\s*(?:\u4fee\u6539|\u5b9e\u73b0|\u4fee\u590d|\u66f4\u65b0|\u521b\u5efa|\u65b0\u589e|\u91cd\u6784|\u6267\u884c|\u8fd0\u884c)|"
-    r"^\s*(?:implement|fix|modify|edit|update|create|refactor|run|execute)\b",
-    re.IGNORECASE,
-)
-_EXPLICIT_SOURCE_PATH_RE = re.compile(
-    r"(?<![\w./-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\."
-    r"(?:py|tsx|ts|jsx|json|js|yaml|yml|md|css|html|go|rs)\b",
-    re.IGNORECASE,
-)
 _READ_ONLY_RE = re.compile(
     r"(?:只读|不要(?:修改|写入|创建|新增)|不(?:修改|写入|创建|新增)|严禁(?:修改|写入|创建|新增))|"
     r"\b(?:read[ -]?only|do not (?:modify|edit|write|create)|without (?:modifying|editing|writing|creating))\b",
     re.IGNORECASE,
 )
-_NO_TODO_RE = re.compile(
-    r"(?:不要|无需|不需要|禁止|不得|不可)\s*(?:调用|使用)?\s*todo_write\b|"
-    r"(?:不要|无需|不需要|禁止|不得|不可)\s*(?:创建|生成|维护|使用)?\s*(?:任务)?清单|"
-    r"\b(?:do\s+not|don't|never)\s+(?:call|use|create|write)?\s*todo_write\b|"
-    r"\bwithout\s+(?:calling|using|creating|writing)\s+todo_write\b|"
-    r"\b(?:no\s+(?:task\s+)?checklist|"
-    r"without\s+(?:a\s+)?(?:task\s+)?checklist)\b",
-    re.IGNORECASE,
-)
-
-
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 
 
@@ -108,54 +40,8 @@ def _effective_length(text: str) -> int:
     return len(text) + 2 * len(_CJK_RE.findall(text))
 
 
-def _is_narrow_single_source_lookup(text: str) -> bool:
-    """Return whether a turn is a bounded lookup, not a multi-step project.
-
-    Code workspaces are the common default surface, so mode alone cannot make a
-    one-source factual lookup checklist-worthy. Keep the exemption deliberately
-    narrow and reject prompts that continue into implementation or execution.
-    """
-
-    return bool(
-        _SINGLE_SOURCE_RE.search(text)
-        and _CONCISE_RESULT_RE.search(text)
-        and _WEB_LOOKUP_RE.search(text)
-        and not _LEADING_EXECUTION_RE.search(text)
-        and not _FOLLOWUP_EXECUTION_RE.search(text)
-    )
-
-
-def _is_narrow_local_inspection(text: str) -> bool:
-    """Return whether a turn is a bounded read-only comparison of named files.
-
-    A code workspace should not turn inspection of a finite, explicit file set
-    into a project checklist. Exact source evidence is enforced separately by
-    the final-answer guards, so skipping the checklist here does not permit an
-    answer before the requested files have been read. Open-ended audits and any
-    task that continues into execution still require a checklist.
-    """
-
-    source_paths = {
-        match.group(0).rstrip(".,;:!?，。；：！？")
-        for match in _EXPLICIT_SOURCE_PATH_RE.finditer(text)
-    }
-    return bool(
-        1 <= len(source_paths) <= 6
-        and _READ_ONLY_RE.search(text)
-        and not _LEADING_EXECUTION_RE.search(text)
-        and not _FOLLOWUP_EXECUTION_RE.search(text)
-    )
-
-
 def _is_narrow_read_only_command(text: str) -> bool:
-    """Return whether a turn is one bounded command with a concise result.
-
-    Code mode is also the default home for tiny shell probes. Requiring a
-    project checklist for a single explicitly read-only command adds another
-    model round-trip and can contaminate the final synthesis with unrelated
-    conversation context. Safety and approval policy still govern the command
-    independently; this exemption only removes checklist ceremony.
-    """
+    """Return whether a turn is one bounded read-only command."""
 
     return bool(
         len(text) <= 300
@@ -246,23 +132,39 @@ def should_require_todo_protocol(
     goal: str,
     user_context: dict[str, Any] | None = None,
 ) -> bool:
-    """Whether this turn should require a visible todo checklist.
+    """Whether the turn has an explicit contract requiring a checklist.
 
-    This intentionally biases toward requiring todos in execution-heavy modes,
-    while keeping short acknowledgements and pure chat free of checklist noise.
+    ``required`` is deliberately *not* inferred from task wording, length, or
+    mode names such as code/research.  Those heuristics are open-ended: a user
+    can express the same continuation or analysis intent in infinitely many
+    ways, and one false positive turns a progress aid into an execution gate.
+
+    Ordinary multi-step work still receives the optional checklist guidance
+    and the model may call ``todo_write``.  The runtime only enforces it when a
+    structured orchestration contract (goal/team/swarm) requires it. Natural
+    language never changes this enforcement state.
     """
 
     text = (goal or "").strip()
-    if not text or _SHORT_ACK_RE.match(text):
+    if not text:
         return False
-    # A checklist is a user-facing coordination aid, not a safety boundary.
-    # Respect an explicit request to skip it instead of overriding the user's
-    # interaction contract with code-mode defaults.
-    if _NO_TODO_RE.search(text):
-        return False
-
     mode = context_mode(user_context)
     metadata = user_context.get("metadata") if isinstance(user_context, dict) else None
+
+    todo_policy = user_context.get("todo_policy") if isinstance(user_context, dict) else None
+    if todo_policy is None and isinstance(metadata, dict):
+        todo_policy = metadata.get("todo_policy")
+    if isinstance(todo_policy, str):
+        normalized_policy = todo_policy.strip().lower()
+        if normalized_policy in {"disabled", "off", "optional"}:
+            return False
+        if normalized_policy in {"required", "on"}:
+            return True
+    elif todo_policy is True:
+        return True
+    elif todo_policy is False:
+        return False
+
     goal_mode = None
     if isinstance(user_context, dict):
         goal_mode = user_context.get("goal_mode") or user_context.get("completion_policy")
@@ -281,30 +183,7 @@ def should_require_todo_protocol(
     if isinstance(capability, str) and capability.lower() in SWARM_ALIASES | {"team", "collab"}:
         return True
 
-    if mode in SWARM_ALIASES | {"team"}:
-        return True
-    if _is_narrow_local_inspection(text):
-        return False
-    if _is_narrow_single_source_lookup(text):
-        return False
-    if _is_narrow_read_only_command(text):
-        return False
-    # Short read-only analysis follow-ups ("不足点呢", "解释一下这段代码")
-    # in code/research modes should not be forced into checklist ceremony.
-    # Broad read-only audits and long report tasks still require a checklist
-    # — only short inquiry follow-ups with an analysis cue are exempted here.
-    # The completion guard (change ②) provides a safety net for any
-    # read-only turn that slips past this trigger-layer exemption.
-    if _is_read_only_analysis_goal(text):
-        return False
-    if mode in {"code", "deep", "deep_research", "research"}:
-        return True
-
-    if "\n" in text or _effective_length(text) >= 80:
-        return True
-    if _COMPLEXITY_CUE_RE.search(text):
-        return True
-    return bool(_CODE_OR_TOOL_CUE_RE.search(text))
+    return mode in SWARM_ALIASES | {"team"}
 
 
 def render_todo_protocol_guidance(*, required: bool, mode: str = "") -> str:
@@ -345,26 +224,9 @@ def _todo_prewrite_guard(
     required: bool,
     visible: bool,
 ) -> str | None:
-    """Require a visible checklist before substantial multi-step tool work.
+    """Compatibility hook; checklist absence never blocks tool execution."""
 
-    Long tasks start with a user-visible execution contract.  Grounding and
-    implementation happen after that contract exists, so research-heavy turns
-    cannot finish most of their work and only manufacture a checklist at the
-    final-answer boundary.
-    """
-
-    if not (required and visible) or _latest_todo_items(steps):
-        return None
-
-    parsed = [entry for action in actions if (entry := _parse_action(action))]
-    if not parsed or any(name.lower() == "todo_write" for name, _args in parsed):
-        return None
-
-    return (
-        "[todo-before-work] The runtime did not execute this tool work because "
-        "this multi-step task still has no visible checklist. Call todo_write "
-        "now with a complete, non-empty plan, then start the first plan item."
-    )
+    return None
 
 
 def _todo_completion_before_write_guard(
@@ -373,40 +235,8 @@ def _todo_completion_before_write_guard(
     *,
     required: bool,
 ) -> str | None:
-    """Reject an all-completed code checklist with no write evidence.
+    """Compatibility hook; checklist status never blocks a tool call."""
 
-    Discovery items may be completed while implementation remains pending.
-    The invalid shape is specifically an entirely-completed checklist before
-    any successful workspace mutation (and without a write in the same action
-    batch).  Letting that state execute makes the provider believe the task is
-    done while the Final Answer guard can only push it into a retry loop.
-    """
-
-    if not required or _has_successful_code_write(steps):
-        return None
-    parsed = [entry for action in actions if (entry := _parse_action(action))]
-    if any(_is_code_write_step(ReActStep(iteration=0, action=action)) for action in actions):
-        return None
-    for name, args in parsed:
-        if name != "todo_write":
-            continue
-        # Match the three input aliases the todo_write tool accepts
-        # (items / todos / tasks — see agent_meta_skills._todo_write).
-        raw_items = args.get("items") or args.get("todos") or args.get("tasks") or []
-        items = raw_items if isinstance(raw_items, list) else []
-        statuses = {
-            str(item.get("status") or "").strip().lower()
-            for item in items
-            if isinstance(item, dict)
-        }
-        if items and statuses and statuses <= {"completed", "complete", "done"}:
-            return (
-                "[todo-completion-before-write] The runtime did not accept this "
-                "all-completed checklist because no successful workspace write/edit "
-                "is recorded. Keep the implementation item in_progress, execute the "
-                "real write/edit tool, read the changed artifact back, verify it, and "
-                "only then mark the checklist completed."
-            )
     return None
 
 
@@ -417,75 +247,6 @@ def _todo_reconciliation_guard(
     required: bool,
     visible: bool,
 ) -> str | None:
-    """Require plan reconciliation when execution changes phase.
+    """Compatibility hook; stale plans never pause phase transitions."""
 
-    The initial checklist is only a hypothesis.  Once execution produces a
-    durable mutation or verification result, the model must publish a fresh
-    full snapshot before moving to a different kind of work.  The current
-    write/repair/verification chain remains uninterrupted: inserting a plan
-    update between an edit and its verifier would weaken, not improve, task
-    completion.  Read-only evidence never triggers this gate either, which
-    avoids the old read→todo→read loop.
-    """
-    if not (required and visible) or not steps or not _latest_todo_items(steps):
-        return None
-
-    parsed_actions = [entry for action in actions if (entry := _parse_action(action))]
-    if any(name == "todo_write" for name, _args in parsed_actions):
-        return None
-
-    # A source/document repair and its verification commands form one atomic
-    # execution phase.  Let the model finish that chain, including multiple
-    # complementary verifiers (tests then lint/typecheck), before requiring a
-    # revised public plan.  The gate below catches the first different tool.
-    candidate_steps = [
-        ReActStep(iteration=index + 1, action=action) for index, action in enumerate(actions)
-    ]
-    if any(_is_code_write_step(step) for step in candidate_steps) or any(
-        _has_code_verification([step]) for step in candidate_steps
-    ):
-        return None
-
-    latest_todo_index = -1
-    for index in range(len(steps) - 1, -1, -1):
-        step_actions = steps[index].actions or (
-            [steps[index].action] if steps[index].action else []
-        )
-        if any(
-            parsed is not None and parsed[0] == "todo_write"
-            for action in step_actions
-            if (parsed := _parse_action(action)) is not None
-        ):
-            latest_todo_index = index
-            break
-    if latest_todo_index < 0:
-        return None
-
-    evidence_steps = steps[latest_todo_index + 1 :]
-    successful_write = any(
-        _is_code_write_step(step)
-        and (
-            any(result.get("ok") is True for result in step.action_results)
-            if step.action_results
-            else bool((step.observation or "").strip())
-            and "failed" not in (step.observation or "").lower()
-            and "error" not in (step.observation or "").lower()
-        )
-        for step in evidence_steps
-    )
-    successful_verification = _has_successful_verification_observation(evidence_steps)
-    if not (successful_write or successful_verification):
-        return None
-
-    milestones = []
-    if successful_write:
-        milestones.append("workspace/document write")
-    if successful_verification:
-        milestones.append("green verification")
-    return (
-        "[todo-reconciliation-required] The runtime paused this phase transition because "
-        f"the plan predates a completed {' and '.join(milestones)} milestone. Call "
-        "todo_write next with the complete revised checklist: mark only evidence-backed "
-        "items completed, select one current item, and add/remove/reword/reorder items when "
-        "the discovered code or documentation changed the scope. Then continue the work."
-    )
+    return None

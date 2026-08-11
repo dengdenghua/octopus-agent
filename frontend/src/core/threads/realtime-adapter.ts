@@ -556,6 +556,14 @@ function turnToMessages(turn: Turn): Message[] {
         if (isFailedMessage) {
           const turnError =
             turn.error && typeof turn.error === "object" ? turn.error : null;
+          // A "blocked_on_user" disposition is a genuine hand-off (the agent
+          // asked the user for input), not an agent failure — surface it as a
+          // waiting/amber state instead of a red "failed".
+          const disposition =
+            typeof turnError?.disposition === "string"
+              ? turnError.disposition
+              : "";
+          const blockedOnUser = disposition === "blocked_on_user";
           const failureDetail =
             (typeof turnError?.message === "string" &&
               turnError.message.trim()) ||
@@ -564,12 +572,18 @@ function turnToMessages(turn: Turn): Message[] {
           const failureCode =
             (typeof turnError?.code === "string" && turnError.code.trim()) ||
             "agent_response_failed";
-          kwargs.response_state = "failed";
+          const failureKind =
+            typeof turnError?.failure_kind === "string"
+              ? turnError.failure_kind
+              : "";
+          kwargs.response_state = blockedOnUser ? "blocked" : "failed";
           kwargs.error = {
             message: failureDetail,
             will_retry: false,
             info: {
               code: failureCode,
+              ...(disposition ? { disposition } : {}),
+              ...(failureKind ? { failure_kind: failureKind } : {}),
               details: turnError?.details,
             },
           };
@@ -806,6 +820,11 @@ function appendFailedTurnReceipt(out: Message[], turn: Turn): void {
     typeof turnError?.message === "string" ? turnError.message.trim() : "";
   const turnErrorCode =
     typeof turnError?.code === "string" ? turnError.code.trim() : "";
+  const disposition =
+    typeof turnError?.disposition === "string" ? turnError.disposition : "";
+  const failureKind =
+    typeof turnError?.failure_kind === "string" ? turnError.failure_kind : "";
+  const blockedOnUser = disposition === "blocked_on_user";
   const message = verificationMessage || turnErrorMessage || "turn failed";
   const verificationRequired = turn.items.some(
     (item) =>
@@ -824,11 +843,15 @@ function appendFailedTurnReceipt(out: Message[], turn: Turn): void {
     type: "ai",
     content: "",
     additional_kwargs: {
-      response_state: "failed",
+      response_state: blockedOnUser ? "blocked" : "failed",
       error: {
         message,
         will_retry: false,
-        info: { code },
+        info: {
+          code,
+          ...(disposition ? { disposition } : {}),
+          ...(failureKind ? { failure_kind: failureKind } : {}),
+        },
       },
     },
   });

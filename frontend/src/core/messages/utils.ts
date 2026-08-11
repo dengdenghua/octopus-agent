@@ -278,6 +278,7 @@ export function groupMessages<T>(
         groups.push({ id: message.id, type: "assistant", messages: [message] });
       } else if (
         message.additional_kwargs?.response_state === "failed" ||
+        message.additional_kwargs?.response_state === "blocked" ||
         message.additional_kwargs?.error
       ) {
         // Failed turns carry their detailed diagnostic as structured metadata.
@@ -562,6 +563,7 @@ export function isSettledAssistantAnswer(
     metadata?.response_state === "paused" ||
     metadata?.response_state === "cancelled" ||
     metadata?.response_state === "failed" ||
+    metadata?.response_state === "blocked" ||
     metadata?.run_status === "streaming"
   ) {
     return false;
@@ -574,7 +576,8 @@ export type AssistantTerminalState =
   | "paused"
   | "cancelled"
   | "interrupted"
-  | "failed";
+  | "failed"
+  | "blocked";
 
 export function latestAssistantTerminalState(
   messages: Message[],
@@ -587,7 +590,8 @@ export function latestAssistantTerminalState(
       state === "paused" ||
       state === "cancelled" ||
       state === "interrupted" ||
-      state === "failed"
+      state === "failed" ||
+      state === "blocked"
     ) {
       return state;
     }

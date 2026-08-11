@@ -32,6 +32,7 @@ tier: "core"
 | `_react_execution_phase6g.py` | PHASE 6g + 6d — loop-tail housekeeping and pre-dispatch guard cluster for the ReAct loop. |
 | `_react_execution_progress.py` | Working-set / phase / progress-summary helpers and trajectory persistence + planner learning throttles for the ReAct loop. |
 | `_react_execution_results.py` | Tool-result / observation shaping for the ReAct loop. |
+| `_react_failure_classification.py` | Classification of failed tool executions for readable failure surfacing. |
 | `_react_loop_reexports.py` | Lazy compatibility exports for helpers historically owned by react_loop. |
 | `_react_parsing_codequality.py` | Code-quality detectors for ReAct write steps. |
 | `_react_parsing_core.py` | Core ReAct text parsing + incremental Thought streaming. |
@@ -50,6 +51,7 @@ tier: "core"
 | `checkpoint_integrity.py` | — |
 | `checkpoint_mirror.py` | Distributed checkpoint mirror — P3 fourth slice. |
 | `completion_receipt.py` | — |
+| `env_health.py` | Startup execution-health canary. |
 | `guard_model_policy.py` | Model-aware guard routing — apply code-smell guards only to cheap models. |
 | `input_mentions.py` | Parse @plugin/@skill/@agent and runtime surface mentions from prompts. |
 | `leader.py` | Leader Process · single-owner supervisor for long-running tasks. |
@@ -127,6 +129,18 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def context_budget_tokens_for_model(model)` | Return the coarse context budget used by pressure + compression. |
+
+### `_react_execution_results.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def classify_turn_failure(steps)` | Classify the turn's latest tool failure into a readable taxonomy. |
+
+### `_react_failure_classification.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def classify_tool_failure(tool_name, detail)` | Classify a failed tool execution into ``{kind, code, readable}``. |
 
 ### `_react_parsing_core.py`
 
@@ -207,6 +221,16 @@ tier: "core"
 | --- | --- | --- |
 | class | `class CompletionReceipt` | Machine-readable proof that a run reached a defensible terminal state. |
 | func | `def build_completion_receipt(statuses, contract_issues, contract_warnings, artifact_count, output_present)` |  |
+
+### `env_health.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def set_execution_canary(degraded)` | Record the startup probe result (True = execution degraded). |
+| func | `def execution_canary()` | Return the recorded startup probe result, or None if never probed. |
+| func | `def execution_canary_degraded()` | Whether the startup probe found execution degraded (False if unknown). |
+| func | `def probe_execution_health(cwd, timeout_s)` | Run one harmless command through the configured sandbox backend. |
+| func | `def run_startup_canary(cwd)` | Probe and record execution health; return the degraded flag. |
 
 ### `guard_model_policy.py`
 
@@ -413,7 +437,7 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def context_mode(user_context)` | Return the best-effort runtime mode from a thread context. |
-| func | `def should_require_todo_protocol(goal, user_context)` | Whether this turn should require a visible todo checklist. |
+| func | `def should_require_todo_protocol(goal, user_context)` | Whether the turn has an explicit contract requiring a checklist. |
 | func | `def render_todo_protocol_guidance(required, mode)` | Render a compact system guidance block for checklist behavior. |
 
 ### `token_juicer.py`

@@ -60,6 +60,11 @@ describe("settled assistant answer detection", () => {
     ).toBe(false);
     expect(
       isSettledAssistantAnswer(
+        ai("blocked draft", { response_state: "blocked" }),
+      ),
+    ).toBe(false);
+    expect(
+      isSettledAssistantAnswer(
         ai("still arriving", { run_status: "streaming" }),
       ),
     ).toBe(false);
@@ -88,6 +93,21 @@ describe("settled assistant answer detection", () => {
       ]),
     ).toBe("interrupted");
     expect(latestAssistantTerminalState([ai("complete")])).toBeNull();
+  });
+
+  it("treats blocked (needs user input) as a terminal state", () => {
+    expect(
+      latestAssistantTerminalState([
+        ai("blocked handoff", { response_state: "blocked" }),
+      ]),
+    ).toBe("blocked");
+    // A later blocked receipt supersedes an earlier failure receipt.
+    expect(
+      latestAssistantTerminalState([
+        ai("older failure", { response_state: "failed" }),
+        ai("blocked handoff", { response_state: "blocked" }),
+      ]),
+    ).toBe("blocked");
   });
 });
 
@@ -320,6 +340,39 @@ describe("groupMessages", () => {
       "tool-late",
     ]);
     expect(result.at(-1)?.id).toBe("ai-interrupted");
+  });
+
+  it("keeps a blocked (needs user input) receipt as a terminal assistant group", () => {
+    const result = groupMessages(
+      [
+        { id: "user-1", type: "human", content: "deploy" },
+        {
+          id: "ai-process",
+          type: "ai",
+          content: "",
+          tool_calls: [
+            { id: "shell-1", name: "shell", args: { command: "git push" } },
+          ],
+        },
+        {
+          id: "ai-blocked",
+          type: "ai",
+          content: "",
+          additional_kwargs: {
+            response_state: "blocked",
+            error: { disposition: "blocked_on_user", failure_kind: "environment" },
+          },
+        },
+      ] as Message[],
+      (group) => group,
+    );
+
+    expect(result.map((group) => group.type)).toEqual([
+      "human",
+      "assistant:processing",
+      "assistant",
+    ]);
+    expect(result.at(-1)?.id).toBe("ai-blocked");
   });
 
   it("folds late tool calls before an interrupted terminal receipt", () => {

@@ -3094,6 +3094,10 @@ export const enUS: Translations = {
       "This task requires a project file change, but no successful file change was recorded.",
     verificationRequired:
       "Code changes need verification before Octopus can finish this turn. Run tests, lint, typecheck, or build, then continue.",
+    environmentBlocked:
+      "This task is blocked by an environment constraint — the reason is below.",
+    blockedOnUser:
+      "This task needs your input before it can continue.",
     streamEndpointUnavailable:
       "The backend chat/team stream endpoint is not enabled or is unavailable. Start the full Octopus backend or check the frontend proxy.",
     iteration: (count: number) => `Round ${count}`,

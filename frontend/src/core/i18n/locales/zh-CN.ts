@@ -2866,6 +2866,8 @@ export const zhCN: Translations = {
       "该任务要求修改项目文件，但本轮没有产生有效的文件变更。",
     verificationRequired:
       "代码改动需要先完成验证，Octopus 才会结束本轮。请运行测试、lint、typecheck 或构建后继续。",
+    environmentBlocked: "任务被环境约束阻塞，原因见下方。",
+    blockedOnUser: "任务需要你的输入才能继续。",
     streamEndpointUnavailable:
       "当前后端未启用或暂不可用对话/团队流接口，请启动完整 Octopus 后端或检查前端代理。",
     iteration: (count: number) => `第 ${count} 轮`,

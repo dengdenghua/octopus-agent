@@ -454,6 +454,44 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     });
   });
 
+  it("labels a blocked_on_user hand-off as blocked, not failed", () => {
+    // A genuine "needs your input" turn (blocked_on_user disposition) is a
+    // hand-off, so the realtime layer must NOT render it as a red failure —
+    // the sidebar shows a waiting state and the message stays amber.
+    const turn: Turn = {
+      ...makeTurn(
+        [
+          userMsg("deploy"),
+          {
+            ...agentMsg("git 提交被环境阻塞了,请确认后重试。"),
+            status: "failed",
+          },
+        ],
+        "failed",
+      ),
+      error: {
+        message: "环境阻塞：pnpm 想在无 TTY 环境下交互确认删除 node_modules，因此中止了。",
+        code: "pnpm_modules_purge_no_tty",
+        disposition: "blocked_on_user",
+        failure_kind: "environment",
+      },
+    };
+    const state = conversationToAgentThreadState(makeConv([turn]));
+
+    const ai = state.messages.find(
+      (message) => message.type === "ai" && message.id === "a1",
+    ) as AIMessage | undefined;
+    expect(ai?.additional_kwargs?.response_state).toBe("blocked");
+    expect(ai?.additional_kwargs?.error).toMatchObject({
+      message: "环境阻塞：pnpm 想在无 TTY 环境下交互确认删除 node_modules，因此中止了。",
+      info: {
+        code: "pnpm_modules_purge_no_tty",
+        disposition: "blocked_on_user",
+        failure_kind: "environment",
+      },
+    });
+  });
+
   it("merges multiple reasoning items into one block separated by blank lines", () => {
     const state = conversationToAgentThreadState(
       makeConv([

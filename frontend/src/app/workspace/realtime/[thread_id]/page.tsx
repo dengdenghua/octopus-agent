@@ -3,14 +3,11 @@ import {
   CircleDotIcon,
   CopyIcon,
   FileTextIcon,
-  MessageCircleIcon,
   PanelRightIcon,
   SearchIcon,
   Settings2Icon,
   UserIcon,
-  UserPlusIcon,
   UsersRoundIcon,
-  WifiIcon,
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -137,11 +134,7 @@ import {
 import { startDeepResearch, type ResearchJob } from "@/core/research/api";
 import { getRecordingStatus } from "@/core/teach-repeat/api";
 import type { RecordingStatus } from "@/core/teach-repeat/types";
-import {
-  ACTIVE_AGENT_EVENT,
-  ACTIVE_AGENT_KEY,
-  useActiveAgentId,
-} from "@/core/agents/active";
+import { ACTIVE_AGENT_EVENT, useActiveAgentId } from "@/core/agents/active";
 import { getAssistantDisplayName } from "@/core/agents/assistant-naming";
 import {
   dedupeAgentsByName,
@@ -774,9 +767,6 @@ function TaskCollaboratorControl({
     : 1;
   const teamModeMeta = useTeamModeMeta();
   const activeMeta = isTeamDraft ? teamModeMeta[teamMode] : null;
-  const ActiveIcon = activeMeta?.icon ?? UserPlusIcon;
-  const displayRoster = roster.slice(0, 5);
-  const extraRosterCount = Math.max(0, roster.length - displayRoster.length);
   const totalCount = Math.max(teamSize, roster.length || 1);
   const countLabel = formatCollaboratorCount(
     totalCount,
@@ -1202,7 +1192,26 @@ function RealtimePageContent({
   // project dir is bound; threaded into the turn context as personal_mode. It no
   // longer downgrades capability: personal space still runs against an isolated
   // coding workspace, while a selected folder binds a user project workspace.
-  const [personalMode, setPersonalMode] = useState<PersonalMode>("general");
+  const [personalMode, setPersonalMode] = useState<PersonalMode>(
+    () => settings.personal_space.default_mode,
+  );
+  const lastPersonalDefaultRef = useRef(settings.personal_space.default_mode);
+  useEffect(() => {
+    const nextDefault = settings.personal_space.default_mode;
+    if (lastPersonalDefaultRef.current === nextDefault) return;
+    lastPersonalDefaultRef.current = nextDefault;
+    setPersonalMode(nextDefault);
+  }, [settings.personal_space.default_mode]);
+  const handlePersonalModeChange = useCallback(
+    (nextMode: PersonalMode) => {
+      setPersonalMode(nextMode);
+      if (settings.personal_space.remember_last_mode) {
+        lastPersonalDefaultRef.current = nextMode;
+        setSettings("personal_space", { default_mode: nextMode });
+      }
+    },
+    [setSettings, settings.personal_space.remember_last_mode],
+  );
   // REC floating recorder overlay (replaces the old confirm() start/stop flow).
   const [recOverlayOpen, setRecOverlayOpen] = useState(false);
   const [recIsRecording, setRecIsRecording] = useState(false);
@@ -1395,8 +1404,9 @@ function RealtimePageContent({
   // 为 octopus，避免助手页面被解析成别的 agent；发送层 agent_name
   // 同源修正存量数据。
   const effectiveAgentId =
-    (threadId === "octopus-assistant" ? "octopus" : resolvedThreadOwnerAgentId) ||
-    activeAgentId;
+    (threadId === "octopus-assistant"
+      ? "octopus"
+      : resolvedThreadOwnerAgentId) || activeAgentId;
   // 助理（octopus）是私人助手本体：不走编码/工作空间工作台，固定进入
   // 纯对话长对话，隐藏工作空间选择器。
   const isOctopusAssistant = effectiveAgentId === "octopus";
@@ -1433,11 +1443,9 @@ function RealtimePageContent({
       ? resolvedThreadOwnerAgentId
       : null,
   );
-  const displayAgent =
-    isOctopusAssistant
-      ? effectiveAgent
-      : resolvedThreadOwnerAgentId &&
-          resolvedThreadOwnerAgentId !== activeAgentId
+  const displayAgent = isOctopusAssistant
+    ? effectiveAgent
+    : resolvedThreadOwnerAgentId && resolvedThreadOwnerAgentId !== activeAgentId
       ? threadOwnerAgent
       : activeAgent;
   const currentTaskAgentName = displayAgent?.name ?? effectiveAgentId;
@@ -2188,27 +2196,38 @@ function RealtimePageContent({
           !isProjectCodeMode && isCodingWorkspaceMode ? true : undefined,
         capability_mode: isCodingWorkspaceMode ? "code" : undefined,
         code_mode: isCodingWorkspaceMode ? "solo" : undefined,
-        agent_mode: isCodingWorkspaceMode ? projectAgentMode : undefined,
-        mode_preset: isCodingWorkspaceMode ? projectModePreset.id : undefined,
-        workflow_preset: isCodingWorkspaceMode
+        // Project presets describe how to operate on a bound user project.
+        // Personal space has its own general/build/research contract; sending
+        // the default project "develop" bundle here made all three personal
+        // modes behave like development mode.
+        agent_mode: isProjectCodeMode ? projectAgentMode : undefined,
+        mode_preset: isProjectCodeMode ? projectModePreset.id : undefined,
+        workflow_preset: isProjectCodeMode
           ? workflowPresetForMode(projectAgentMode, auditIntensity)
           : undefined,
+        // UX/UI is not just a prompt label: enable the runtime's browser
+        // regression contract so visual work must be inspected after changes.
+        browser_regression_enabled:
+          isProjectCodeMode && projectAgentMode === "uxui" ? true : undefined,
         // Personal-space work mode. Backend keeps this as scope steering while the
         // same code capability/tool chain remains available in personal workspace.
         personal_mode: !isProjectCodeMode ? personalMode : undefined,
-        skill_pack_profile: isCodingWorkspaceMode
+        personal_instructions: !isProjectCodeMode
+          ? settings.personal_space.custom_instructions.trim() || undefined
+          : undefined,
+        skill_pack_profile: isProjectCodeMode
           ? projectModePreset.skillPackProfile
           : undefined,
-        verification_policy: isCodingWorkspaceMode
+        verification_policy: isProjectCodeMode
           ? projectModePreset.verificationPolicy
           : undefined,
-        default_skill_packs: isCodingWorkspaceMode
+        default_skill_packs: isProjectCodeMode
           ? projectModePreset.defaultSkillPacks
           : undefined,
-        default_plugins: isCodingWorkspaceMode
+        default_plugins: isProjectCodeMode
           ? projectModePreset.defaultPlugins
           : undefined,
-        mode_contract: isCodingWorkspaceMode
+        mode_contract: isProjectCodeMode
           ? projectModePreset.promptContract
           : undefined,
         project_signals: projectSignals,
@@ -2274,6 +2293,7 @@ function RealtimePageContent({
       qc,
       setIsNewThread,
       settings.context,
+      settings.personal_space.custom_instructions,
       stageThreadRoute,
       streamMode,
       threadId,
@@ -2424,7 +2444,7 @@ function RealtimePageContent({
     if (humanMessages.length === 0) return null;
 
     const last = humanMessages[humanMessages.length - 1]!;
-    const rawOf = (m: (typeof thread.messages)[number]) =>
+    const rawOf = (m: (typeof humanMessages)[number]) =>
       typeof m.content === "string"
         ? m.content
         : m.content
@@ -2600,6 +2620,7 @@ function RealtimePageContent({
   );
   const agentRunInterrupted = lastTurnTerminalState === "interrupted";
   const agentRunPaused = lastTurnTerminalState === "paused";
+  const agentRunBlocked = lastTurnTerminalState === "blocked";
   const hasAgentAnswer = useMemo(
     () =>
       lastTurnTerminalState === null &&
@@ -2629,6 +2650,7 @@ function RealtimePageContent({
   const agentRunFailed =
     agentRunSettled &&
     !agentRunInterrupted &&
+    !agentRunBlocked &&
     !hasCompletedAgentOutput &&
     !hasPausedOrPendingBackgroundTask;
   const sidebarRunState = useMemo<
@@ -2636,6 +2658,7 @@ function RealtimePageContent({
   >(() => {
     if (hasPausedOrPendingBackgroundTask) return "waiting";
     if (agentRunInterrupted) return null;
+    if (agentRunBlocked) return "waiting";
     if (agentRunFailed || (thread.error && !thread.isLoading)) return "error";
     if (agentRunSettled) return null;
     if (
@@ -2655,6 +2678,7 @@ function RealtimePageContent({
   }, [
     agentDisplayEvents,
     agentRunInterrupted,
+    agentRunBlocked,
     agentRunFailed,
     agentRunSettled,
     hasActiveBackgroundTask,
@@ -3073,7 +3097,6 @@ function RealtimePageContent({
       activeAgentId,
       navigate,
       settings,
-      taskWorkspaceRoute,
       threadIdentityQuery,
     ],
   );
@@ -3681,7 +3704,7 @@ function RealtimePageContent({
                           projectDetection={projectDetection}
                           onProjectAgentModeChange={setProjectAgentMode}
                           onAuditIntensityChange={setAuditIntensity}
-                          onPersonalModeChange={setPersonalMode}
+                          onPersonalModeChange={handlePersonalModeChange}
                           onProjectDetectionChange={setProjectDetection}
                           onManualOverrideChange={setModeManualOverride}
                           modeIntentSuggestion={modeIntentSuggestion}
@@ -3810,6 +3833,10 @@ function RealtimePageContent({
                     mainAgentName={
                       displayAgent?.display_name || effectiveAgentId
                     }
+                    contextTokens={contextTokens}
+                    maxContextTokens={maxContextTokens}
+                    isCompressingContext={isCompressingContext}
+                    onCompressContext={handleCompressContext}
                     rosterSeats={collaborationRosterSeats}
                     onClose={closeAgentWorkbenchPanel}
                     onSelectTab={selectAgentWorkbenchTab}

@@ -102,7 +102,7 @@ type OutputSummary = {
 export type FailurePresentation = {
   message: string;
   detail: string;
-  kind: "error" | "network" | "verification" | "guard" | "lifecycle";
+  kind: "error" | "network" | "verification" | "guard" | "lifecycle" | "environment" | "blocked";
   code?: string;
   eventId?: string;
 };
@@ -504,7 +504,12 @@ export function MessageOutputSummary({
   }
 
   const isFailure = Boolean(failure);
-  const isNetworkFailure = failure?.kind === "network";
+  // Network loss, an environment block, and a "needs your input" hand-off are
+  // not agent failures — render them as amber/warning, not destructive red.
+  const isWarningFailure =
+    failure?.kind === "network" ||
+    failure?.kind === "environment" ||
+    failure?.kind === "blocked";
 
   const friendlyVerificationName = (toolName: string): string => {
     switch (toolName) {
@@ -637,14 +642,14 @@ export function MessageOutputSummary({
         className={cn(
           "flex min-w-0 flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs",
           isFailure
-            ? isNetworkFailure
+            ? isWarningFailure
               ? "border-warning/20 bg-warning/50/[0.04]"
               : "border-destructive/20 bg-destructive/[0.035]"
             : "border-success/20 bg-success/50/[0.055]",
         )}
       >
         {isFailure ? (
-          isNetworkFailure ? (
+          isWarningFailure ? (
             <AlertTriangleIcon className="size-4 shrink-0 text-warning" />
           ) : (
             <XCircleIcon className="size-4 shrink-0 text-destructive" />

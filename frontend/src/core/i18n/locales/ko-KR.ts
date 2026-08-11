@@ -3025,6 +3025,10 @@ export const koKR: Translations = {
       "이 작업은 프로젝트 파일 변경이 필요하지만, 성공적인 파일 변경이 기록되지 않았습니다.",
     verificationRequired:
       "코드 변경사항은 Octopus가 이번 턴을 종료하기 전에 검증이 필요합니다. 테스트, lint, typecheck, 또는 빌드를 실행한 후 계속하세요.",
+    environmentBlocked:
+      "환경 제약으로 작업이 차단되었습니다 — 아래에 이유가 있습니다.",
+    blockedOnUser:
+      "계속하려면 사용자의 입력이 필요합니다.",
     streamEndpointUnavailable:
       "백엔드 채팅/팀 스트림 엔드포인트가 활성화되지 않았거나 사용할 수 없습니다. 전체 Octopus 백엔드를 시작하거나 프론트엔드 프록시를 확인하세요.",
     iteration: (count: number) => `${count}번째 라운드`,

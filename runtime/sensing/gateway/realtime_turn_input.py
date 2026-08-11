@@ -85,12 +85,50 @@ def _should_default_planning_mode(text: str, params: TurnParams) -> bool:
     # request planning explicitly with planningMode=true or `/codex plan`.
     if mode in ("chat", "react", "code"):
         return False
-    from runtime.core.cerebrum.todo_protocol import should_require_todo_protocol
-
+    # Planning-oriented modes always get the plan-first nudge. This mirrors
+    # the pre-2026-08 behavior where ``should_require_todo_protocol``
+    # defaulted to True for these modes before it was narrowed to explicit
+    # contracts; planning-mode defaulting is a non-blocking nudge, so the
+    # mode signal stays here rather than moving into the enforcement rule.
+    if mode in {"deep", "deep_research", "research"}:
+        return True
     metadata = _input_metadata(params)
     context = metadata.get("context")
     user_context = context if isinstance(context, dict) else metadata
-    return should_require_todo_protocol(text, user_context)
+    from runtime.core.cerebrum.todo_protocol import should_require_todo_protocol
+
+    # A structured orchestration contract (goal/team/swarm) always warrants a
+    # plan-first nudge. ``should_require_todo_protocol`` is deliberately
+    # contract-only — natural language never drives its enforcement — but
+    # planning-mode defaulting is a separate, non-blocking UX heuristic (see
+    # the docstring above), so complex natural-language tasks still get the
+    # nudge via ``_looks_complex``.
+    if should_require_todo_protocol(text, user_context):
+        return True
+    return _looks_complex(text)
+
+
+# Planning-mode defaulting is a prompt nudge, not an enforcement gate (see
+# ``_should_default_planning_mode``). todo-protocol enforcement is contract-
+# only (``todo_protocol.should_require_todo_protocol``), so this module keeps
+# its own light multi-step heuristic instead of delegating — otherwise a
+# natural-language implementation/research request would stop defaulting to
+# plan-mode. Being generous here is fine: plan-mode no longer blocks tool
+# execution, it only nudges the prompt.
+_COMPLEX_EXECUTION_RE = re.compile(
+    r"("
+    r"完整|全面|深度|彻底|全局|多步|复杂|"
+    r"实现|修复|重构|改造|调研|研究|审计|排查|开发|设计|搭建|迁移|部署|集成|接入|"
+    r"implement|fix|refactor|research|investigate|analy[sz]e|audit|develop|"
+    r"design|build|migrate|deploy|integrate"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _looks_complex(text: str) -> bool:
+    """Light multi-step signal for the plan-mode nudge only."""
+    return bool(_COMPLEX_EXECUTION_RE.search(text or ""))
 
 
 # Keyword → built-in topology id auto-dispatch.

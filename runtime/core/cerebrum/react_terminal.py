@@ -23,12 +23,16 @@ from runtime.core.cerebrum.react_execution import (
     _has_unrecovered_beak_failure,
     _persist_react_trajectory,
     _react_completion_receipt,
+    classify_turn_failure,
 )
 from runtime.core.cerebrum.react_final_answer_guards import (
     _evaluate_final_answer_guards,
     _guard_reason_for_user,
     _guard_soft_landing_answer,
     _looks_like_observation_echo,
+)
+from runtime.core.cerebrum.react_goal_analysis import (
+    _final_answer_requests_user_help,
 )
 from runtime.core.cerebrum.react_guards import guard_disposition
 from runtime.core.cerebrum.react_model_deadlines import (
@@ -49,6 +53,50 @@ from runtime.core.cerebrum.react_types import (
 from runtime.platform.models.llm import Message, ModelRequest
 
 _logger = logging.getLogger(__name__)
+
+# Terminal states that map to a neutral "waiting" (user must act) rather than
+# a red failure — these are already preserved by the gateway as paused /
+# cancelled and must not be re-disposed.
+_WAITING_TERMINAL_REASONS = frozenset({"paused", "cancelled"})
+
+# ``react_completed.disposition`` is the semantic outcome of a finished turn.
+# It extends the raw ``success`` boolean with the one case that is neither a
+# green completion nor a red failure: a turn that ended with a genuine hand
+# off to the user (tight-marker help request, e.g. "please confirm the API
+# key"). Such a turn still had an unresolved tool failure in its trajectory —
+# ``success`` stays False so guard enforcement is unchanged — but the UI
+# should render it as "needs your input" (amber / waiting), not as a failure.
+#
+# Value set: ``completed`` | ``paused`` | ``cancelled`` | ``blocked_on_user``
+#            | ``failed``
+def _turn_disposition(
+    *,
+    final_answer: str | None,
+    terminated_reason: str,
+    final_success: bool,
+) -> str:
+    if terminated_reason in _WAITING_TERMINAL_REASONS:
+        return terminated_reason
+    if final_success:
+        return "completed"
+    # A turn that ended with a genuine hand-off to the user (tight-marker
+    # help request in the final answer) after an unresolved tool failure is
+    # "needs your input", not a hard failure. Gated on a plain ``final_answer``
+    # termination: guard impasses and repair-tier warnings already carry their
+    # own presentation (guardBlocked / delivered-with-warning) and must not be
+    # re-labelled as a user hand-off. ``allow_short_loose=False`` keeps this
+    # honest — a short report that merely *mentions* token/权限 is not a
+    # hand-off and must still surface as a failure.
+    if (
+        terminated_reason == "final_answer"
+        and final_answer
+        and _final_answer_requests_user_help(
+            final_answer,
+            allow_short_loose=False,
+        )
+    ):
+        return "blocked_on_user"
+    return "failed"
 
 
 def _finalize_react_turn(
@@ -243,7 +291,7 @@ def _finalize_react_turn(
                         _user_guard_message = _guard_reason_for_user(_guard_label, _guard_message)
                         final_answer = (
                             "我还不能把这个任务标记为完成。\n\n"
-                            f"[{_guard_label}]\n{_user_guard_message}\n\n"
+                            f"{_user_guard_message}\n\n"
                             "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
                         )
                         terminated_reason = "guard_impasse"
@@ -293,6 +341,12 @@ def _finalize_react_turn(
         "guard_impasse",
         "model_stall",
     }
+    disposition = _turn_disposition(
+        final_answer=final_answer,
+        terminated_reason=terminated_reason,
+        final_success=final_success,
+    )
+    failure = classify_turn_failure(executed_beak_steps)
     _persist_react_trajectory(
         stack,
         react_task_id=react_task_id,
@@ -330,6 +384,8 @@ def _finalize_react_turn(
         "terminated_reason": terminated_reason,
         "has_final_answer": bool(final_answer),
         "success": final_success,
+        "disposition": disposition,
+        "failure": failure,
         "completion_receipt": completion_receipt,
     }
     return ReActResult(

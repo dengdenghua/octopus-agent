@@ -6,6 +6,8 @@ skills (status / diff / log / add / commit / branch).
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,12 @@ from ._write_skills_common import (
 _GIT_READ_TIMEOUT_S = 15.0
 _GIT_WRITE_TIMEOUT_S = 30.0
 _GIT_OUTPUT_CAP = 200_000
+
+# A hook that shells out to ``pnpm exec`` / ``pnpm install`` is the classic
+# no-TTY abort: the sandbox corepack pnpm wants to purge a node_modules a
+# different pnpm major installed, and with no TTY it cannot ask for the
+# confirmation — ``ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY``.
+_GIT_HOOK_PNPM_RISK_RE = re.compile(r"\bpnpm\s+(exec|install|add|rebuild|dlx)\b")
 
 
 def _run_git(
@@ -215,6 +223,116 @@ def _git_add(
     return {"added": safe_paths, "exit_code": 0}
 
 
+def _pnpm_major(pm: str) -> str | None:
+    """Extract the major version from a ``pnpm@X.Y.Z`` packageManager spec."""
+    m = re.search(r"pnpm@(\d+)", pm)
+    return m.group(1) if m else None
+
+
+def _package_manager_drift(repo_root: Path) -> dict[str, Any] | None:
+    """Detect a pnpm major mismatch between package.json and node_modules.
+
+    The classic failure is the sandbox corepack pnpm (a newer major) refusing
+    to operate on a node_modules installed by the repo's pinned pnpm:
+    ``ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY``. ``node_modules/.modules.yaml``
+    records the pnpm that installed the tree; ``package.json`` pins the
+    intended one. A major mismatch is the drift that makes any ``pnpm`` call
+    inside a git hook abort in a no-TTY sandbox.
+    """
+    package_json = repo_root / "package.json"
+    modules_yaml = repo_root / "node_modules" / ".modules.yaml"
+    if not package_json.is_file() or not modules_yaml.is_file():
+        return None
+    try:
+        package_manager = json.loads(
+            package_json.read_text(encoding="utf-8")
+        ).get("packageManager", "")
+    except (OSError, ValueError):
+        return None
+    if not isinstance(package_manager, str) or "pnpm@" not in package_manager:
+        return None
+    installed = ""
+    try:
+        for line in modules_yaml.read_text(encoding="utf-8", errors="replace").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("packageManager:"):
+                installed = stripped.split(":", 1)[1].strip()
+                break
+    except OSError:
+        return None
+    if not installed or "pnpm@" not in installed:
+        return None
+    pinned_major = _pnpm_major(package_manager)
+    installed_major = _pnpm_major(installed)
+    if pinned_major and installed_major and pinned_major != installed_major:
+        return {
+            "detail": (
+                f"package.json 固定 pnpm {pinned_major}.x，但 node_modules 由 "
+                f"pnpm {installed_major}.x 安装——major 不一致时 pnpm 会要求交互清理"
+                "目录并在无 TTY 环境直接中止"
+            ),
+            "pinned": package_manager,
+            "installed": installed,
+        }
+    return None
+
+
+def _git_commit_precheck(
+    repo_dir: str | Path,
+    sandbox_dir: str | None,
+) -> dict[str, Any]:
+    """Inspect the repo for conditions known to abort a commit in a no-TTY
+    agent sandbox.
+
+    Checks the repo's git hooks (``.husky/*``) for ``pnpm exec`` /
+    ``pnpm install`` calls, and for pnpm major drift between
+    ``package.json`` and the installed ``node_modules``. Returns
+    ``{"blocked": bool, "risks": [...], "readable": str}``; ``_git_commit``
+    uses it to enrich a failed commit with a human reason instead of the raw
+    pnpm stderr the user cannot decode.
+    """
+    resolved, err = _ensure_sandbox(repo_dir, sandbox_dir)
+    if err or not resolved.is_dir():
+        return {"blocked": False, "risks": [], "readable": ""}
+
+    risks: list[dict[str, Any]] = []
+    hooks_dir = resolved / ".husky"
+    if hooks_dir.is_dir():
+        for hook in sorted(hooks_dir.glob("*")):
+            if not hook.is_file() or hook.name.startswith("."):
+                continue
+            try:
+                text = hook.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if _GIT_HOOK_PNPM_RISK_RE.search(text):
+                risks.append(
+                    {
+                        "hook": hook.name,
+                        "risk": "pnpm_exec_in_hook",
+                        "detail": (
+                            f".husky/{hook.name} 直接调用 pnpm exec/install，在无 TTY "
+                            "沙箱可能触发 node_modules 清理确认而中止"
+                        ),
+                    }
+                )
+
+    drift = _package_manager_drift(resolved)
+    if drift is not None:
+        risks.append({"risk": "package_manager_drift", **drift})
+
+    blocked = bool(risks)
+    readable = ""
+    if blocked:
+        readable = (
+            "提交前预检发现 git 钩子可能被环境阻塞："
+            + "；".join(risk["detail"] for risk in risks)
+            + "。若提交失败，可让钩子直接调用 node_modules/.bin 下的可执行文件、"
+            "在钩子或命令环境里 export CI=true，或设置 .npmrc confirmModulesPurge=false。"
+        )
+    return {"blocked": blocked, "risks": risks, "readable": readable}
+
+
 def _git_commit(
     repo_dir: str = "",
     message: str = "",
@@ -234,6 +352,8 @@ def _git_commit(
             return {"error": "author must be 'Name <email>' format"}
         argv.extend(["--author", author])
 
+    precheck = _git_commit_precheck(repo_dir, sandbox_dir)
+
     r = _run_git(
         repo_dir,
         argv,
@@ -243,7 +363,14 @@ def _git_commit(
     if "error" in r:
         return r
     if r["exit_code"] != 0:
-        return {"error": "git_commit_failed", **r}
+        result = {"error": "git_commit_failed", "precheck": precheck, **r}
+        # Enrich the cryptic failure with the precheck's human reason when a
+        # hook / package-manager risk was present — the commit died for the
+        # reason we can already name.
+        if precheck["blocked"]:
+            result["error"] = "git_commit_precheck_blocked"
+            result["readable"] = precheck["readable"]
+        return result
 
     head = _run_git(
         repo_dir,
@@ -252,7 +379,12 @@ def _git_commit(
         sandbox_dir=sandbox_dir,
     )
     sha = head.get("stdout", "").strip() if "error" not in head else ""
-    return {"sha": sha, "stdout": r["stdout"], "stderr": r["stderr"]}
+    result = {"sha": sha, "stdout": r["stdout"], "stderr": r["stderr"]}
+    if precheck["blocked"]:
+        # Commit went through despite the risk (e.g. CI=true already set) —
+        # surface the flag so the agent knows the hook may abort next time.
+        result["precheck"] = precheck
+    return result
 
 
 def _git_branch(

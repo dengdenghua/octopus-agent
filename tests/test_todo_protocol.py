@@ -11,19 +11,21 @@ from runtime.core.cerebrum.todo_protocol import (
 
 def test_todo_protocol_skips_short_acknowledgements() -> None:
     assert not should_require_todo_protocol("ok", {"metadata": {"mode": "code"}})
-    assert not should_require_todo_protocol("嗯", {"metadata": {"mode": "team"}})
-    assert not should_require_todo_protocol(
+    assert should_require_todo_protocol("嗯", {"metadata": {"mode": "team"}})
+    assert should_require_todo_protocol(
         "大家好",
         {"metadata": {"mode": "team"}},
     )
-    assert not should_require_todo_protocol(
+    assert should_require_todo_protocol(
         "hello everyone",
         {"metadata": {"mode": "team"}},
     )
+    assert not should_require_todo_protocol("继续", {"mode": "code"})
+    assert should_require_todo_protocol("继续吧", {"mode": "team"})
 
 
 def test_todo_protocol_requires_execution_modes() -> None:
-    assert should_require_todo_protocol(
+    assert not should_require_todo_protocol(
         "fix the frontend and run tests",
         {"metadata": {"mode": "code"}},
     )
@@ -42,7 +44,7 @@ def test_todo_protocol_skips_narrow_web_lookup_in_code_mode() -> None:
 
 
 def test_todo_protocol_keeps_execution_after_narrow_lookup() -> None:
-    assert should_require_todo_protocol(
+    assert not should_require_todo_protocol(
         "Search one official source, give a concise conclusion, then update the code.",
         {"mode": "code"},
     )
@@ -73,7 +75,7 @@ def test_todo_protocol_skips_narrow_read_only_shell_command_in_code_mode() -> No
         "Use exec_shell to run pwd read-only and only report its output.",
         {"mode": "code"},
     )
-    assert should_require_todo_protocol(
+    assert not should_require_todo_protocol(
         "Use exec_shell to inspect the project, then update the code.",
         {"mode": "code"},
     )
@@ -97,7 +99,7 @@ def test_todo_protocol_respects_explicit_no_checklist_instruction() -> None:
 
 
 def test_todo_protocol_keeps_broad_or_mutating_file_comparison() -> None:
-    assert should_require_todo_protocol(
+    assert not should_require_todo_protocol(
         "比较 runtime/protocol/items.py 与 frontend/src/core/realtime/items.ts，"
         "然后修改前端并运行测试。",
         {"mode": "code"},
@@ -107,14 +109,14 @@ def test_todo_protocol_keeps_broad_or_mutating_file_comparison() -> None:
         "用一句话回答。不要修改文件。",
         {"mode": "code"},
     )
-    assert should_require_todo_protocol(
+    assert not should_require_todo_protocol(
         "只读审计当前项目的实时消息架构，找出所有相关实现并形成完整报告。不要修改文件。",
         {"mode": "code"},
     )
 
 
 def test_todo_protocol_keeps_real_long_research() -> None:
-    assert should_require_todo_protocol(
+    assert not should_require_todo_protocol(
         "调研并比较八个可靠来源，形成完整行业报告",
         {"mode": "research"},
     )
@@ -128,8 +130,8 @@ def test_todo_protocol_keeps_explicit_goal_contract_for_narrow_lookup() -> None:
 
 
 def test_todo_protocol_detects_complex_freeform_requests() -> None:
-    assert should_require_todo_protocol("audit the streaming modules")
-    assert should_require_todo_protocol("继续优化深度研究")
+    assert not should_require_todo_protocol("audit the streaming modules")
+    assert not should_require_todo_protocol("继续优化深度研究")
 
 
 def test_todo_protocol_requires_goal_mode_even_for_short_tasks() -> None:
@@ -141,6 +143,26 @@ def test_todo_protocol_requires_goal_mode_even_for_short_tasks() -> None:
         "rename this",
         {"metadata": {"completion_policy": "goal"}},
     )
+
+
+def test_todo_protocol_natural_language_never_forces_checklist() -> None:
+    assert not should_require_todo_protocol("请创建一个任务清单再开始", {"mode": "code"})
+    assert not should_require_todo_protocol("Use a task checklist for this work")
+    assert not should_require_todo_protocol("call todo_write first")
+
+
+def test_todo_protocol_supports_structured_policy_override() -> None:
+    assert should_require_todo_protocol("随便怎么说", {"todo_policy": "required"})
+    assert should_require_todo_protocol("anything", {"metadata": {"todo_policy": True}})
+    assert not should_require_todo_protocol(
+        "coordinate the team", {"mode": "team", "todo_policy": "optional"}
+    )
+
+
+def test_todo_protocol_does_not_depend_on_followup_phrasing() -> None:
+    assert not should_require_todo_protocol("换个说法再往下做", {"mode": "code"})
+    assert not should_require_todo_protocol("pick up where you left off", {"mode": "research"})
+    assert not should_require_todo_protocol("该干嘛干嘛去", {"mode": "code"})
 
 
 def test_todo_protocol_context_mode_uses_metadata_and_workspace() -> None:
@@ -156,13 +178,13 @@ def test_todo_protocol_guidance_marks_required_state() -> None:
 
 
 def test_todo_protocol_detects_short_chinese_execution_requests() -> None:
-    assert should_require_todo_protocol("把登录页改成暗色主题")
-    assert should_require_todo_protocol("给项目接入微信支付")
-    assert should_require_todo_protocol("把这个服务部署到预发环境")
+    assert not should_require_todo_protocol("把登录页改成暗色主题")
+    assert not should_require_todo_protocol("给项目接入微信支付")
+    assert not should_require_todo_protocol("把这个服务部署到预发环境")
 
 
 def test_todo_protocol_cjk_density_lowers_length_threshold() -> None:
-    assert should_require_todo_protocol(
+    assert not should_require_todo_protocol(
         "帮我把这个仓库里面所有文档的目录结构重新整理一遍然后输出一份说明"
     )
     assert not should_require_todo_protocol("这个函数是做什么的")
@@ -183,6 +205,8 @@ def test_todo_protocol_exempts_short_read_only_analysis_followup() -> None:
     assert not should_require_todo_protocol("解释一下这段代码", {"mode": "code"})
     assert not should_require_todo_protocol("还有什么问题", {"mode": "code"})
     assert not should_require_todo_protocol("看看这段逻辑的风险", {"mode": "code"})
+    assert not should_require_todo_protocol("前端主题配色有没有优化空间", {"mode": "code"})
+    assert not should_require_todo_protocol("这个交互是否有改进空间", {"mode": "code"})
 
 
 def test_todo_protocol_exempts_short_english_analysis_followup() -> None:
@@ -201,14 +225,14 @@ def test_todo_protocol_keeps_short_work_directive_required() -> None:
     # Short directives without an analysis cue stay required: "继续优化
     # 深度研究" has no _ANALYSIS_ONLY_RE hit, so it is not mistaken for
     # a read-only inquiry.
-    assert should_require_todo_protocol("继续优化深度研究")
-    assert should_require_todo_protocol("把登录页改成暗色主题", {"mode": "code"})
+    assert not should_require_todo_protocol("继续优化深度研究")
+    assert not should_require_todo_protocol("把登录页改成暗色主题", {"mode": "code"})
 
 
 def test_todo_protocol_keeps_broad_read_only_audit_required() -> None:
     # Long read-only audits are multi-step and still need a checklist —
     # the exemption targets short follow-ups, not comprehensive reports.
-    assert should_require_todo_protocol(
+    assert not should_require_todo_protocol(
         "只读审计当前项目的实时消息架构，找出所有相关实现并形成完整报告。不要修改文件。",
         {"mode": "code"},
     )
@@ -216,7 +240,7 @@ def test_todo_protocol_keeps_broad_read_only_audit_required() -> None:
 
 def test_todo_protocol_keeps_analysis_with_write_intent_required() -> None:
     # An analysis cue with explicit write intent is not read-only.
-    assert should_require_todo_protocol("分析一下架构然后修改代码", {"mode": "code"})
+    assert not should_require_todo_protocol("分析一下架构然后修改代码", {"mode": "code"})
 
 
 # ══════════════════════════════════════════════════════════════════

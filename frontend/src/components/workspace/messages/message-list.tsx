@@ -489,6 +489,10 @@ type StructuredFailure = {
   code?: string;
   detail: string;
   eventId?: string;
+  /** Backend turn disposition: "failed" | "blocked_on_user" (see react_terminal). */
+  disposition?: string;
+  /** Backend failure classification kind: "environment" | "git_hook" | "". */
+  failure_kind?: string;
 };
 
 function asFailureRecord(value: unknown): Record<string, unknown> | null {
@@ -510,12 +514,22 @@ export function structuredFailureFromMessages(
       typeof error.message === "string" && error.message.trim()
         ? error.message.trim()
         : "turn failed";
+    const disposition =
+      typeof info?.disposition === "string" && info.disposition.trim()
+        ? info.disposition.trim()
+        : "";
+    const failureKind =
+      typeof info?.failure_kind === "string" && info.failure_kind.trim()
+        ? info.failure_kind.trim()
+        : "";
     return {
       detail,
       eventId: message.id,
       ...(typeof info?.code === "string" && info.code.trim()
         ? { code: info.code.trim() }
         : {}),
+      ...(disposition ? { disposition } : {}),
+      ...(failureKind ? { failure_kind: failureKind } : {}),
     };
   }
   return null;
@@ -528,12 +542,23 @@ function latestTurnMessages(messages: Message[]): Message[] {
   return messages;
 }
 
-function failureKind(
+export function failureKind(
   detail: string,
   code?: string,
+  disposition?: string,
+  failureKindHint?: string,
 ): FailurePresentation["kind"] {
   const signal = `${code ?? ""}\n${detail}`;
   const normalized = signal.toLowerCase();
+  // A genuine "needs your input" hand-off is never a failure — amber/waiting.
+  if (disposition === "blocked_on_user") {
+    return "blocked";
+  }
+  // Backend environment classification wins over the heuristic below so the
+  // frontend never re-labels a structured environment block as a network loss.
+  if (failureKindHint === "environment") {
+    return "environment";
+  }
   const isClientClose =
     /client closed/.test(normalized) ||
     /websocket closed \(1000/.test(normalized);
@@ -565,6 +590,14 @@ function failureKind(
     )
   ) {
     return "lifecycle";
+  }
+  // Unstructured / legacy environment blocks (codes or raw stderr).
+  if (
+    /pnpm.*no.?tty|aborted removal of modules|permission denied|eacces|command not found|not found:|sandbox.*(?:blocked|denied)/i.test(
+      signal,
+    )
+  ) {
+    return "environment";
   }
   return "error";
 }
@@ -937,26 +970,44 @@ export function MessageList({
   );
   const presentFailure = useCallback(
     (failure: StructuredFailure): FailurePresentation => {
-      const kind = failureKind(failure.detail, failure.code);
+      const kind = failureKind(
+        failure.detail,
+        failure.code,
+        failure.disposition,
+        failure.failure_kind,
+      );
       const requiresWorkspaceWrite =
         /Code mode cannot finish this implementation task yet:\s*no successful file write\/edit execution is recorded/i.test(
           failure.detail,
         );
+      // Environment / blocked hand-offs surface the readable reason from the
+      // backend (``turn.error.message``) verbatim; the i18n strings are only
+      // the fallback when no detail came through.
       const message =
-        kind === "network"
-          ? t.streaming.networkLost
-          : kind === "verification"
-            ? t.streaming.verificationRequired
-            : kind === "guard"
-              ? t.streaming.guardBlocked
-              : kind === "lifecycle"
-                ? t.streaming.lifecycleFailed
-                : requiresWorkspaceWrite
-                  ? t.streaming.workspaceWriteRequired
-                  : t.streaming.turnFailed;
+        kind === "blocked"
+          ? (failure.detail !== "turn failed"
+              ? failure.detail
+              : t.streaming.blockedOnUser)
+          : kind === "environment"
+            ? (failure.detail !== "turn failed"
+                ? failure.detail
+                : t.streaming.environmentBlocked)
+            : kind === "network"
+              ? t.streaming.networkLost
+              : kind === "verification"
+                ? t.streaming.verificationRequired
+                : kind === "guard"
+                  ? t.streaming.guardBlocked
+                  : kind === "lifecycle"
+                    ? t.streaming.lifecycleFailed
+                    : requiresWorkspaceWrite
+                      ? t.streaming.workspaceWriteRequired
+                      : t.streaming.turnFailed;
       return { ...failure, kind, message };
     },
     [
+      t.streaming.blockedOnUser,
+      t.streaming.environmentBlocked,
       t.streaming.networkLost,
       t.streaming.guardBlocked,
       t.streaming.lifecycleFailed,
@@ -992,6 +1043,20 @@ export function MessageList({
     threadErrorMessage,
   ]);
   const isNetworkError = failureReceipt?.kind === "network";
+  // Environment blocks and "needs your input" hand-offs are not agent
+  // failures — render them amber, not destructive red.
+  const isWarningFailure =
+    isNetworkError ||
+    failureReceipt?.kind === "environment" ||
+    failureReceipt?.kind === "blocked";
+  const failureHeaderText =
+    failureReceipt?.kind === "blocked"
+      ? t.streaming.blockedOnUser
+      : failureReceipt?.kind === "environment"
+        ? t.streaming.environmentBlocked
+        : isNetworkError
+          ? t.streaming.networkLost
+          : t.message.taskFailed;
   const isVerificationRequiredError = failureReceipt?.kind === "verification";
   const errorBannerText = failureReceipt?.message ?? null;
   const verificationAuditNotice =
@@ -1146,13 +1211,7 @@ export function MessageList({
         role,
       };
     },
-    [
-      agentRosterMap,
-      currentAgent,
-      soleRosterEntry,
-      thread.values,
-      threadId,
-    ],
+    [agentRosterMap, currentAgent, soleRosterEntry, thread.values, threadId],
   );
   // Recomputed on every streamed frame (groupedMessages is rebuilt each
   // flush), but the scroll-spy effect and the locator rail key off array
@@ -1866,7 +1925,8 @@ export function MessageList({
                 "message-turn flex flex-col gap-3",
                 !isLatestTurn && "message-turn-history",
                 // ChatGPT-style entrance: animate new turns appearing, skip history
-                isLatestTurn && "animate-[message-entrance_220ms_cubic-bezier(0.33,1,0.68,1)]",
+                isLatestTurn &&
+                  "animate-[message-entrance_220ms_cubic-bezier(0.33,1,0.68,1)]",
               )}
               data-message-turn={turn.key}
               data-turn-rendering={isLatestTurn ? "active" : "history"}
@@ -1985,15 +2045,18 @@ export function MessageList({
         })}
 
         {/* Follow-up suggestions: show after the last turn when conversation is idle */}
-        {onSendFollowUp && project && messageTurns.length > 0 && !thread.isLoading && (
-          <FollowUpSuggestions
-            project={project}
-            agentId={threadId}
-            isLoading={thread.isLoading}
-            onSelect={onSendFollowUp}
-            className="ml-11 mt-4"
-          />
-        )}
+        {onSendFollowUp &&
+          project &&
+          messageTurns.length > 0 &&
+          !thread.isLoading && (
+            <FollowUpSuggestions
+              project={project}
+              agentId={threadId}
+              isLoading={thread.isLoading}
+              onSelect={onSendFollowUp}
+              className="ml-11 mt-4"
+            />
+          )}
 
         {footer}
 
@@ -2005,23 +2068,19 @@ export function MessageList({
               role="alert"
               className={cn(
                 "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-[var(--shadow-xs)]",
-                isNetworkError
+                isWarningFailure
                   ? "border-warning/30/70 bg-warning/5 text-warning dark:border-warning/50"
                   : "border-destructive/25 bg-destructive/8 text-destructive dark:border-destructive/35 dark:bg-destructive/12",
               )}
             >
-              {isNetworkError ? (
+              {isWarningFailure ? (
                 <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-warning" />
               ) : (
                 <XCircleIcon className="mt-0.5 size-4 shrink-0" />
               )}
               <div className="min-w-0 flex-1 leading-6">
                 <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
-                  <span>
-                    {isNetworkError
-                      ? t.streaming.networkLost
-                      : t.message.taskFailed}
-                  </span>
+                  <span>{failureHeaderText}</span>
                   {!isNetworkError && failedCompletedFileCount > 0 && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-background/60 px-2 py-0.5 text-xs font-normal text-foreground/70">
                       {t.message.completedChanges} · {failedCompletedFileCount}
@@ -2035,7 +2094,11 @@ export function MessageList({
             </div>
           )}
 
-        <div style={{ height: `${paddingBottom}px` }} />
+        <div
+          style={{
+            height: `max(${paddingBottom}px, var(--chat-input-overlay-height, ${paddingBottom}px))`,
+          }}
+        />
       </ConversationContent>
 
       <TurnLocatorRail
@@ -2050,7 +2113,12 @@ export function MessageList({
         activityLabel={t.message.newUpdates}
         aria-label={t.message.backToLatest}
         title={t.message.backToLatest}
-        style={{ bottom: "72px" }}
+        style={{
+          // Keep the affordance in the reading surface, not on top of the
+          // absolutely-positioned composer. The layout publishes its measured
+          // height, including expanded todos, approvals and multiline input.
+          bottom: "calc(var(--chat-input-overlay-height, 160px) + 12px)",
+        }}
       >
         {t.message.latest}
       </ConversationScrollButton>

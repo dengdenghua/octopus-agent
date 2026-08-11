@@ -2478,6 +2478,8 @@ export interface Translations {
     lifecycleFailed: string;
     workspaceWriteRequired: string;
     verificationRequired: string;
+    environmentBlocked: string;
+    blockedOnUser: string;
     streamEndpointUnavailable: string;
     iteration: (count: number) => string;
     toolCalls: (count: number) => string;

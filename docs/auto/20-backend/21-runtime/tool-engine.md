@@ -136,7 +136,7 @@ tier: "core"
 
 ## Who imports this
 
-**16** file(s) reference this package:
+**17** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -147,8 +147,9 @@ tier: "core"
   - `runtime/core/cerebrum/_react_execution_phase6d.py`
   - `runtime/core/cerebrum/react_parallel_dispatch.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 3 file(s)
+- **`runtime/execution/`** · 4 file(s)
   - `runtime/execution/suckers/_ephemeral_tool_exec.py`
+  - `runtime/execution/suckers/agent_meta_skills.py`
   - `runtime/execution/suckers/capability_skills.py`
   - `runtime/execution/suckers/forged_persistence.py`
 - **`runtime/platform/`** · 1 file(s)

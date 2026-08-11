@@ -310,16 +310,22 @@ def _react_completion_receipt(
     if run_status == "failed" and failure:
         receipt["message"] = failure
         receipt["code"] = "tool_execution_failed"
+    # Structured classification rides alongside the raw message so the
+    # gateway / UI can show a one-line human reason (``failure.readable``)
+    # instead of the raw stderr when the cause is environmental.
+    classified = classify_turn_failure(executed_beak_steps)
+    if run_status == "failed" and classified:
+        receipt["failure"] = classified
     return receipt
 
 
-def _latest_failed_tool_message(steps: list[Any], *, limit: int = 900) -> str:
-    """Return the latest actionable tool failure for the terminal receipt.
+def _latest_failed_tool_info(steps: list[Any]) -> tuple[str, str] | None:
+    """Return ``(tool_name, redacted detail)`` of the latest failed tool.
 
-    ReAct can emit a perfectly readable final answer after a command fails.
-    The turn is still correctly marked failed, but without this detail the
-    realtime layer only receives ``terminated_reason=final_answer`` and the UI
-    has no choice but to show a generic retry banner.
+    Walks the trajectory backwards so a turn that recovered after a transient
+    failure is only inspected for its *final* failure — the one the user
+    actually hit. Bookkeeping writes (todo/blackboard) are skipped because a
+    failed todo_write is never the reason a turn failed.
     """
 
     for step in reversed(steps):
@@ -364,9 +370,59 @@ def _latest_failed_tool_message(steps: list[Any], *, limit: int = 900) -> str:
             detail = redact_text(detail)
         except Exception:  # pragma: no cover - diagnostics must not mask failure
             detail = "tool execution failed"
-        detail = " ".join(detail.split())
-        return f"{tool_name} failed: {detail}"[:limit]
-    return ""
+        return tool_name, detail
+    return None
+
+
+def _latest_failed_tool_message(steps: list[Any], *, limit: int = 900) -> str:
+    """Return the latest actionable tool failure for the terminal receipt.
+
+    ReAct can emit a perfectly readable final answer after a command fails.
+    The turn is still correctly marked failed, but without this detail the
+    realtime layer only receives ``terminated_reason=final_answer`` and the UI
+    has no choice but to show a generic retry banner.
+    """
+
+    info = _latest_failed_tool_info(steps)
+    if info is None:
+        return ""
+    tool_name, detail = info
+    detail = " ".join(detail.split())
+    return f"{tool_name} failed: {detail}"[:limit]
+
+
+def classify_turn_failure(steps: list[Any]) -> dict[str, Any] | None:
+    """Classify the turn's latest tool failure into a readable taxonomy.
+
+    Uses ``_latest_failed_tool_info`` (same walk as the receipt message) so
+    the structured ``{kind, code, readable, tool, detail}`` attached to the
+    completion receipt and the realtime ``turn.error`` always describes the
+    failure the UI will actually blame. A trajectory that recovered (later
+    substantive success) has nothing to classify — same contract as
+    ``_has_unrecovered_beak_failure``. Returns ``None`` when the failure is
+    not recognisably environmental / git-hook.
+    """
+
+    if not _has_unrecovered_beak_failure(steps):
+        return None
+    info = _latest_failed_tool_info(steps)
+    if info is None:
+        return None
+    tool_name, detail = info
+    from runtime.core.cerebrum._react_failure_classification import (
+        classify_tool_failure,
+    )
+
+    classified = classify_tool_failure(tool_name, detail)
+    if classified is None:
+        return None
+    return {
+        "kind": classified["kind"],
+        "code": classified["code"],
+        "readable": classified["readable"],
+        "tool": tool_name,
+        "detail": detail,
+    }
 
 
 def _skill_available_in_executor(executor: Any, skill_name: str) -> bool:

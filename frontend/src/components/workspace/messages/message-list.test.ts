@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import type { LiveToolEvent } from "../live-tool-timeline";
+import { failureKind } from "./message-list";
 import {
   shouldOpenProcessTraceByDefault,
   shouldShowProcessTrace,
@@ -229,5 +230,60 @@ describe("message-list: Subtask creation from tool_call", () => {
     expect(update.status).toBe("failed");
     expect(update.progress).toBe(1);
     expect(update.error).toBe("Error: timeout exceeded");
+  });
+});
+
+describe("message-list: failureKind classification", () => {
+  test("blocked_on_user disposition is always blocked, never a network loss", () => {
+    expect(
+      failureKind("network is unreachable", "network_unavailable", "blocked_on_user"),
+    ).toBe("blocked");
+    expect(
+      failureKind(
+        "net::ERR_CONNECTION_REFUSED",
+        undefined,
+        "blocked_on_user",
+        "environment",
+      ),
+    ).toBe("blocked");
+  });
+
+  test("structured environment kind maps to environment even for network-like text", () => {
+    expect(
+      failureKind("network is unreachable", "network_unavailable", "failed", "environment"),
+    ).toBe("environment");
+  });
+
+  test("legacy environment markers are still recognised without structure", () => {
+    expect(
+      failureKind("Aborted removal of modules directory due to no TTY"),
+    ).toBe("environment");
+    expect(
+      failureKind("zsh: command not found: pnpm"),
+    ).toBe("environment");
+    expect(
+      failureKind("Permission denied: /tmp/x"),
+    ).toBe("environment");
+  });
+
+  test("genuine network failures stay network", () => {
+    expect(
+      failureKind("fetch failed: network error"),
+    ).toBe("network");
+    expect(
+      failureKind("econnrefused", "ECONNREFUSED"),
+    ).toBe("network");
+  });
+
+  test("ordinary guard / verification codes keep their kinds", () => {
+    expect(
+      failureKind("todo-protocol guard: incomplete", "guard_impasse"),
+    ).toBe("guard");
+    expect(
+      failureKind("no verification step was recorded", "verification_required"),
+    ).toBe("verification");
+    expect(
+      failureKind("boom", "agent_response_failed"),
+    ).toBe("error");
   });
 });

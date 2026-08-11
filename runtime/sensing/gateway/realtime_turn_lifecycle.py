@@ -641,11 +641,19 @@ async def _start_turn(
             return turn
         if turn.status == TurnStatus.FAILED:
             log.turn_completed(thread_id, turn.id, turn.status)
-            runtime._record_failed_turn_proposal(
-                turn,
-                intent=intent,
-                failure_source="react_failed",
-            )
+            # A "blocked_on_user" disposition is a genuine hand-off, not a
+            # failure — do not feed it to the failure-sampling evolution
+            # ledger as a turn_failure sample.
+            _turn_error = turn.error if isinstance(turn.error, dict) else None
+            if not (
+                _turn_error
+                and _turn_error.get("disposition") == "blocked_on_user"
+            ):
+                runtime._record_failed_turn_proposal(
+                    turn,
+                    intent=intent,
+                    failure_source="react_failed",
+                )
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
 
