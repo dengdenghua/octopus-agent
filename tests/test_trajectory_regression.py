@@ -336,4 +336,6 @@ def test_guard_impasse_converges_on_real_loop(monkeypatch) -> None:
     assert router.calls <= 8, f"loop burned {router.calls} iterations before stopping"
     assert result is not None
     # And it tells the truth — an impasse report, not a "paused" fiction.
-    assert "停止了重试" in (result.final_answer or "")
+    # Wording tracks the shared guard-impasse template
+    # (``react_final_answer_guards._guard_impasse_final_answer``).
+    assert "已停止重复尝试" in (result.final_answer or "")
