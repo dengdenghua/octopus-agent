@@ -57,6 +57,11 @@ test-results/
 # earlier run and failed on every fresh clone.
 !benchmarks/fixtures/**/*.db
 !benchmarks/fixtures/**/*.log
+# Same class of bug for the replay golden log: *.jsonl above hid the recorded
+# event stream that replay.test.ts diffs the TS reducer against, so three
+# cross-language parity tests failed on every fresh clone. Test fixtures under
+# __fixtures__/ are committed inputs, never runtime output.
+!**/__fixtures__/*.jsonl
 # Agent-core write locks / backups (runtime artifacts, never committed)
 agents/**/*.lock
 agents/**/*.bak
