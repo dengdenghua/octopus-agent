@@ -292,6 +292,7 @@ export const MessageListItem = memo(function MessageListItem({
   chatFontSize,
   suppressReasoningPanel = false,
   enableClarificationActions = false,
+  isLastMessage = true,
 }: {
   className?: string;
   message: Message;
@@ -299,6 +300,7 @@ export const MessageListItem = memo(function MessageListItem({
   chatFontSize?: "small" | "medium" | "large";
   suppressReasoningPanel?: boolean;
   enableClarificationActions?: boolean;
+  isLastMessage?: boolean;
 }) {
   const { t } = useI18n();
   const isHuman = message.type === "human";
@@ -316,7 +318,10 @@ export const MessageListItem = memo(function MessageListItem({
   const clipboardText = useMemo(() => messageClipboardText(message), [message]);
   const showMessageActions =
     !isLoading &&
-    (isHuman || (assistantIsSettledAnswer && clipboardText.length > 0));
+    (isHuman ||
+      (assistantIsSettledAnswer &&
+        clipboardText.length > 0 &&
+        isLastMessage));
   const params = useParams();
   const threadIdForFeedback = params.threadId ?? params.thread_id ?? null;
   const submitFeedback = useCallback(

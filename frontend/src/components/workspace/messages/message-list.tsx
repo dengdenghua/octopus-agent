@@ -1498,6 +1498,7 @@ export function MessageList({
           enableClarificationActions={
             !thread.isLoading && messages[messages.length - 1] === msg
           }
+          isLastMessage={messages[messages.length - 1] === msg}
         />
       </div>
     );
@@ -1520,6 +1521,7 @@ export function MessageList({
           enableClarificationActions={
             !thread.isLoading && messages[messages.length - 1] === msg
           }
+          isLastMessage={messages[messages.length - 1] === msg}
         />
       </>
     );
