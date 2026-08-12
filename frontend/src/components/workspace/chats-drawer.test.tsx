@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { eventBus } from "@/core/events";
 import { renderWithProviders } from "@/test/harness";
 
 import { ChatsDrawer } from "./chats-drawer";
@@ -21,7 +22,7 @@ describe("ChatsDrawer", () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const openSettings = vi.fn();
-    window.addEventListener("octopus:open-settings", openSettings);
+    const offOpenSettings = eventBus.on("ui:open-settings", openSettings);
 
     renderWithProviders(<ChatsDrawer open onOpenChange={onOpenChange} />, {
       locale: "zh-CN",
@@ -31,7 +32,7 @@ describe("ChatsDrawer", () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
     await waitFor(() => expect(openSettings).toHaveBeenCalledTimes(1));
-    window.removeEventListener("octopus:open-settings", openSettings);
+    offOpenSettings();
   });
 
   it("keeps primary workspace destinations reachable on narrow screens", async () => {
