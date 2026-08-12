@@ -50,6 +50,13 @@ _MODEL_STAGE_TIMEOUT_S: dict[str, tuple[float, float, float]] = {
 }
 
 
+def _reasoning_only_watchdog_s(*, has_tool_evidence: bool, recovery: bool) -> float | None:
+    """Bound post-tool private reasoning before it becomes an idle loop."""
+    if not has_tool_evidence:
+        return None
+    return 30.0 if recovery else 45.0
+
+
 def _stage_model_timeout_s(base_timeout_s: float, stage: str) -> float:
     """Clamp a model round's timeout to its stage ceiling.
 

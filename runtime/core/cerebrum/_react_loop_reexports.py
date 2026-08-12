@@ -102,6 +102,7 @@ __all__ = [
     "_should_auto_checkpoint",
     "_skill_available_in_executor",
     "_stage_model_timeout_s",
+    "_reasoning_only_watchdog_s",
     "_stage_update_timeout_fallback",
     "_summarize_observation",
     "_todo_completion_before_write_guard",

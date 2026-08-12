@@ -27,6 +27,7 @@ from runtime.core.cerebrum.react_loop_state import _LoopControl, _LoopState
 from runtime.core.cerebrum.react_model_deadlines import (
     _MODEL_STREAM_DEADLINE,
     _iter_model_stream_with_deadline,
+    _reasoning_only_watchdog_s,
     _stage_model_timeout_s,
 )
 from runtime.core.cerebrum.react_parsing import (
@@ -240,6 +241,11 @@ def _phase_6b_model_stream(
             _iteration_soft_timed_out = False
             _base_iteration_timeout = _model_iteration_timeout_s(model_iteration_timeout_s_config)
             _has_tool_evidence = _request_has_tool_evidence
+            _reasoning_watchdog_s = _reasoning_only_watchdog_s(
+                has_tool_evidence=_has_tool_evidence,
+                recovery=_iteration_recovery_mode,
+            )
+            _reasoning_started_at = time.monotonic()
             if _iteration_recovery_mode and _evidence_convergence_active is not None:
                 _iteration_timeout = _stage_model_timeout_s(
                     _base_iteration_timeout, "evidence_synthesis"
@@ -496,6 +502,18 @@ def _phase_6b_model_stream(
                             _final_stream_started = True
                             _visible_stream_state["chars"] = _streamed_final_chars
                 elif evt.type == "thinking_delta":
+                    if (
+                        _reasoning_watchdog_s is not None
+                        and time.monotonic() - _reasoning_started_at >= _reasoning_watchdog_s
+                    ):
+                        _iteration_soft_timed_out = True
+                        _logger.warning(
+                            "react_loop iter %d stalled in private reasoning for %.1fs; "
+                            "switching to convergence",
+                            i + 1,
+                            _reasoning_watchdog_s,
+                        )
+                        break
                     thinking_parts.append(evt.delta)
                     yield {
                         "type": "thinking_delta",
