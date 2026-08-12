@@ -298,7 +298,17 @@ class ToolExecutor:
                     span.set_attribute("octopus.immunity.verdict", "reject")
                 for attr_key, attr_value in (span_attrs or {}).items():
                     span.set_attribute(attr_key, attr_value)
-                step = _make_reject_step(step_id, node_id, call, status, reason)
+                protocol_tags: list[str] = []
+                if waiting is not None and bool(waiting[1].get("approval_required")):
+                    protocol_tags.extend(("waiting_user", "approval_required"))
+                step = _make_reject_step(
+                    step_id,
+                    node_id,
+                    call,
+                    status,
+                    reason,
+                    protocol_tags=protocol_tags,
+                )
                 self.journal.write_step(task_id, arm_id, step, actor=actor)
                 return step
 

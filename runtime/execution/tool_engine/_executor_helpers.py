@@ -649,6 +649,7 @@ def _make_reject_step(
     call: ToolCall,
     status: ExecutionStatus,
     reason: str = "",
+    protocol_tags: list[str] | None = None,
 ) -> Step:
     return Step(
         step_id=step_id,
@@ -659,7 +660,7 @@ def _make_reject_step(
             status=status,
             output=None,
             error_type=status,
-            stderr_tags=[status] + ([reason] if reason else []),
+            stderr_tags=[status] + list(protocol_tags or []) + ([reason] if reason else []),
         ),
         immune_verdict=status if status == "immune_reject" else None,
     )

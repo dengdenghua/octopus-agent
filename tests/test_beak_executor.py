@@ -383,6 +383,8 @@ class TestExecutorApprovalGate:
 
         assert calls == []
         assert step.result.status == "immune_reject"
+        assert "waiting_user" in step.result.stderr_tags
+        assert "approval_required" in step.result.stderr_tags
         assert "approval required before executing exec_shell" in step.result.stderr_tags[-1]
         assert record is not None
         assert record.status == TaskRunStatus.WAITING_APPROVAL
