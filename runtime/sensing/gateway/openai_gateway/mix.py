@@ -27,6 +27,13 @@ Config (all optional, env-driven so it works on any deployment):
     default.
   - ``OCTOPUS_MIX_N``  proposer count when no explicit pool (default 3).
 
+When neither the preset nor the env sets a pool, Mix infers one from the
+operator's declared cost tiers in ``custom_models.json`` (see
+``_read_tagged_catalog``): the draft stage draws on the cheap ``economy`` /
+``balanced`` entries, and the aggregator prefers the strong ``performance``
+tier. Explicit config always wins; a catalog with no tags falls back to the
+planner-default behaviour above.
+
 Degrades safely: if every proposer fails (or no router is configured), it
 falls back to a single normal turn — never errors out.
 """
@@ -148,6 +155,10 @@ def _proposer_pool() -> list[str]:
     if raw:
         models = [m.strip() for m in raw.split(",") if m.strip()]
         return models[:_MAX_PROPOSERS]
+    # No explicit pool → infer from the operator's declared cost tiers.
+    tagged = _tagged_proposer_pool()
+    if tagged:
+        return tagged
     return []
 
 
@@ -155,7 +166,67 @@ def _aggregator_model() -> str:
     cfg_agg = load_mix_config().get("aggregator")
     if isinstance(cfg_agg, str) and cfg_agg.strip():
         return cfg_agg.strip()
-    return (os.environ.get("OCTOPUS_MIX_AGGREGATOR") or "").strip()
+    env_agg = (os.environ.get("OCTOPUS_MIX_AGGREGATOR") or "").strip()
+    if env_agg:
+        return env_agg
+    # No explicit aggregator → infer from the declared cost tiers.
+    return _tagged_aggregator_model() or ""
+
+
+def _read_tagged_catalog() -> dict[str, list[str]]:
+    """Group custom-model ids by their ``tier`` tag (economy/balanced/performance).
+
+    Only entries with an explicit tag participate — an untagged entry carries
+    no cost signal and can't be placed in a tier. Best-effort: a missing or
+    malformed catalog yields all-empty groups (Mix then keeps the planner
+    default). Mirrors the cheap-routing picker's reading of the same field.
+    """
+    grouped: dict[str, list[str]] = {"economy": [], "balanced": [], "performance": []}
+    try:
+        from runtime.platform.models.custom_model_flags import read_custom_models
+
+        data = read_custom_models()
+    except Exception:  # noqa: BLE001 — best-effort, never break the mix turn
+        return grouped
+    if not isinstance(data, dict):
+        return grouped
+    for entry in data.values():
+        if not isinstance(entry, dict):
+            continue
+        tier = str(entry.get("tier") or "").strip().lower()
+        if tier not in grouped:
+            continue
+        model_id = str(entry.get("id") or entry.get("name") or "").strip()
+        if not model_id:
+            raw_models = entry.get("models")
+            if isinstance(raw_models, list) and raw_models:
+                model_id = str(raw_models[0]).strip()
+        if model_id:
+            grouped[tier].append(model_id)
+    return grouped
+
+
+def _tagged_proposer_pool() -> list[str]:
+    """Proposer pool inferred from custom_models.json cost tiers.
+
+    ``economy`` entries first, ``balanced`` as the fallback — the draft stage
+    only wants cheap models, so ``performance``-tagged ones are deliberately
+    NOT proposers. Capped at ``_MAX_PROPOSERS`` like an explicit pool.
+    """
+    grouped = _read_tagged_catalog()
+    pool = grouped["economy"] + grouped["balanced"]
+    return pool[:_MAX_PROPOSERS]
+
+
+def _tagged_aggregator_model() -> str | None:
+    """Aggregator inferred from custom_models.json: the strong ``performance``
+    tier, falling back to ``balanced``. ``None`` → keep the planner default.
+    Deterministic sorted pick so the choice is stable across calls."""
+    grouped = _read_tagged_catalog()
+    for tier in ("performance", "balanced"):
+        if grouped[tier]:
+            return sorted(grouped[tier])[0]
+    return None
 
 
 def _proposer_specs(requested_model: str) -> list[tuple[str, str]]:
