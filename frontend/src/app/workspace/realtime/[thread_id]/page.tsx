@@ -310,9 +310,11 @@ type CompactableThread = {
 const URL_PATTERN = /https?:\/\/[^\s，,]+/gi;
 
 // Tool names / payloads that imply the run must end with a report-style
-// deliverable before it can be considered settled.
+// deliverable before it can be considered settled. Word boundaries keep the
+// bare `research` from matching `researcher` inside a run_orchestration
+// payload (see core/threads/report-deliverable.ts for the same literal).
 const REPORT_DELIVERABLE_PATTERN =
-  /deep-research|report|docx|pptx|pdf|research|swarm/i;
+  /\b(?:report|docx|pptx|pdf|research|swarm)\b|deep[-_]research/i;
 
 function extractResearchUrls(text: string): { topic: string; urls: string[] } {
   const urls = Array.from(new Set(text.match(URL_PATTERN) ?? []));
