@@ -99,6 +99,27 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
+def _orch_launch_announcement(args: dict[str, Any]) -> str:
+    """Progress line emitted when ``run_orchestration`` launches.
+
+    Built from the ACTUAL args so the announcement never lies when the preset
+    changes — the agent ids become the parallel perspectives, and the
+    rounds/verify/synthesize flags shape the tail. Falls back to a generic
+    line when there is nothing agent-specific to describe.
+    """
+    agents = [str(a).strip() for a in (args.get("agent_id") or []) if str(a or "").strip()]
+    if not agents:
+        return "已启动并行审计，将交叉核验发现后再汇总结论。"
+    perspective = "多视角" if len(agents) > 1 else ""
+    clauses: list[str] = []
+    rounds = args.get("rounds")
+    clauses.append(f"{rounds} 轮交叉核验" if rounds else "交叉核验")
+    if args.get("verify"):
+        clauses.append("逐条验证")
+    clauses.append("汇总结论" if args.get("synthesize") else "汇总")
+    return f"已启动{perspective}并行审计：{'/'.join(agents)} 并行，{'，'.join(clauses)}。"
+
+
 # Backward-compatible helper surface plus the actual loop entry points.
 __all__ = _reexports.__all__ + [
     "ReActResult",
@@ -243,6 +264,11 @@ def stream_react_loop(
         _is_research_mode = _assembly.is_research_mode
         _active_max_tokens_budget = _assembly.active_max_tokens_budget
         _active_max_usd_budget = _assembly.active_max_usd_budget
+        _effective_goal = _assembly.effective_goal or intent.normalized_goal
+        # Downstream execution and final-answer guards must evaluate the
+        # durable contract, not only a short steering follow-up such as “继续”.
+        if _effective_goal != intent.normalized_goal:
+            intent = intent.model_copy(update={"normalized_goal": _effective_goal})
 
         # ── PHASE 4/4.5 · start events + auto-delegation ───────────────
         # Moved verbatim to react_prompt_assembly._emit_turn_start_events.
@@ -360,9 +386,10 @@ def stream_react_loop(
             )
             + ")"
         )
+        _orch_announcement = _orch_launch_announcement(_orch_args)
         yield {
             "type": "commentary_delta",
-            "delta": "已启动多视角并行审计，将交叉核验发现后再汇总结论。",
+            "delta": _orch_announcement,
             "progress_source": "runtime",
             "public_status": True,
             "start_new_segment": True,
@@ -395,7 +422,7 @@ def stream_react_loop(
         _orch_react_step = ReActStep(
             iteration=1,
             thought="Runtime-enforced audit.ultracode orchestration",
-            public_update="已启动多视角并行审计，将交叉核验发现后再汇总结论。",
+            public_update=_orch_announcement,
             action=_orch_action,
             observation=_orch_observation,
             raw_llm_output="",
@@ -599,7 +626,7 @@ def stream_react_loop(
     # are synced at each extracted-phase call site (currently 6c).
     state = _LoopState(
         stack=stack,
-        goal=intent.normalized_goal,
+        goal=_effective_goal,
         executor=executor,
         react_task_id=react_task_id,
         pause_controller=_pause,

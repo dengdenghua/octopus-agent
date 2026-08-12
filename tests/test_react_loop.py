@@ -51,6 +51,7 @@ from runtime.core.cerebrum.react_loop import (
     _native_tool_calls_missing_required_args,
     _normalized_tool_call_from_react_action,
     _observed_read_fallback_update,
+    _orch_launch_announcement,
     _parse_action,
     _parse_reasoning_action_fallback,
     _parse_step,
@@ -1182,6 +1183,61 @@ def test_audit_ultracode_executes_orchestration_before_first_model_round() -> No
         for event in events
     )
     assert router.calls == 0, "orchestration must run before the first model request"
+    # The launch announcement reflects the REAL orchestration args (agent
+    # perspectives + round count), not a fixed sentence that would lie the
+    # moment the preset changes.
+    deltas = [e["delta"] for e in events if e.get("type") == "commentary_delta"]
+    assert any(
+        "critic/explorer/researcher" in d and "2 轮交叉核验" in d and "汇总结论" in d
+        for d in deltas
+    )
+
+
+def test_orch_launch_announcement_reflects_args() -> None:
+    """The announcement is built from the actual orchestration args — agent ids
+    become the parallel perspectives, and rounds/verify/synthesize shape the
+    tail, so the copy tracks the preset instead of a hardcoded sentence."""
+    line = _orch_launch_announcement(
+        {
+            "agent_id": ["critic", "explorer", "researcher"],
+            "n": 3,
+            "rounds": 2,
+            "verify": True,
+            "synthesize": True,
+        }
+    )
+    assert line.startswith("已启动多视角并行审计")
+    assert "critic/explorer/researcher 并行" in line
+    assert "2 轮交叉核验" in line
+    assert "逐条验证" in line
+    assert line.endswith("汇总结论。")
+
+
+def test_orch_launch_announcement_single_agent_drops_multi_perspective() -> None:
+    line = _orch_launch_announcement(
+        {"agent_id": ["researcher"], "rounds": 1, "verify": True, "synthesize": True}
+    )
+    assert "多视角" not in line
+    assert "researcher 并行" in line
+    assert line.startswith("已启动并行审计")
+
+
+def test_orch_launch_announcement_empty_agents_falls_back_to_generic() -> None:
+    line = _orch_launch_announcement({"rounds": 2, "verify": True, "synthesize": True})
+    assert line == "已启动并行审计，将交叉核验发现后再汇总结论。"
+
+
+def test_orch_launch_announcement_flags_shape_tail() -> None:
+    # no rounds → uncounted 交叉核验; verify off → no 逐条验证;
+    # synthesize off → ends with 汇总 instead of 汇总结论
+    line = _orch_launch_announcement(
+        {"agent_id": ["critic", "explorer"], "rounds": 0, "verify": False, "synthesize": False}
+    )
+    assert "2 轮" not in line
+    assert "交叉核验" in line
+    assert "逐条验证" not in line
+    assert line.endswith("汇总。")
+    assert "汇总结论" not in line
 
 
 def test_personal_agent_mode_prompt_steers_build_mode() -> None:
@@ -5885,7 +5941,7 @@ def test_zero_anchor_answer_after_tool_evidence_finishes_on_first_response() -> 
     )
 
 
-def test_guarded_plain_answer_soft_lands_after_one_unchanged_retry() -> None:
+def test_guarded_plain_answer_fails_closed_after_one_unchanged_retry() -> None:
     plain_answer = "组件在 idle 和 streaming 两个 phase 会返回 null。"
     router = _ScriptedRouter(
         [
@@ -5903,11 +5959,10 @@ def test_guarded_plain_answer_soft_lands_after_one_unchanged_retry() -> None:
     events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None
-    assert result.terminated_reason == "final_answer_with_warning"
-    assert result.success is True
-    assert result.final_answer == plain_answer
-    assert "guard" not in result.final_answer
-    assert "质量提示" not in result.final_answer
+    assert result.terminated_reason == "guard_impasse"
+    assert result.success is False
+    assert result.final_answer != plain_answer
+    assert "没有完成" in result.final_answer
     assert router.calls == 3
     assert any(event["type"] == "text_delta" for event in events)
 
@@ -5958,6 +6013,44 @@ def test_zero_anchor_unfinished_diagnosis_forces_action_instead_of_bailing() -> 
     assert result.final_answer == "repair verified"
     assert any(event["type"] == "tool_start" for event in events)
     assert sum(event["type"] == "commentary_delta" for event in events) >= 2
+
+
+def test_zero_anchor_plan_promise_is_not_salvaged_as_final() -> None:
+    """A plan-statement after tool evidence must NOT be treated as the final
+    answer. Regression for the realtime audit thread tAUhAq-cjtzfSOmxq-JGu5:
+    deepseek-v4-flash opened with "我来分析这个项目，先并行摸清仓库结构…确定审计
+    的重点范围。" — a pure plan, zero execution — and because a run_orchestration
+    had already run, ``_plain_answer_can_finish`` went true and the plan was
+    salvaged as the terminal answer. The completeness guard must reject the
+    plan-prose, push the loop to actually execute, and only then let it finish.
+    """
+    plan_prose = (
+        "我来分析这个项目，先并行摸清仓库结构、当前分支改动和近期提交，确定审计的重点范围。"
+    )
+    stack = _build_stack_with_executor(
+        _ScriptedRouter(
+            [
+                'Thought: inspect repo\nAction: echo({"text": "audit scope mapped"})',
+                plan_prose,
+                plan_prose,
+                'Thought: actually read the tree\nAction: read_file({"path": "docs/architecture.md"})',
+                "Final Answer: 审计重点在 runtime 与 frontend 两端的模块映射，二者定义一致。",
+            ]
+        )
+    )
+
+    events, result = _drain(
+        stream_react_loop(stack, _intent("分析项目"), agent=None, max_iterations=6)
+    )
+
+    assert result is not None and result.success
+    # The plan must never become the terminal answer.
+    assert result.final_answer == "审计重点在 runtime 与 frontend 两端的模块映射，二者定义一致。"
+    assert "摸清" not in result.final_answer
+    # The loop must have forced a real read before finishing — the guard
+    # rejected two plan-prose attempts and the model only ended the turn
+    # after an actual tool call.
+    assert "read_file" in [e["tool_name"] for e in events if e["type"] == "tool_start"]
 
 
 def test_stream_executes_xml_tool_call_without_showing_fake_tool_text() -> None:
@@ -6273,6 +6366,8 @@ def test_stream_emits_forced_final_answer_after_max_iterations() -> None:
     assert result is not None and result.success
     assert result.final_answer == "forced report"
     assert result.terminated_reason == "max_iter"
+    assert result.completion_decision["outcome"] == "partial"
+    assert result.completion_decision["resumable"] is True
     text_deltas = [e for e in events if e["type"] == "text_delta"]
     assert text_deltas[-1]["delta"] == "forced report"
     completed = [e for e in events if e["type"] == "react_completed"]
@@ -8678,7 +8773,7 @@ def test_soft_land_never_exposes_environment_or_guard_diagnostics() -> None:
     assert delivered_clean == "已完成。"
 
 
-def test_repair_guard_soft_lands_after_one_stalled_retry() -> None:
+def test_repair_guard_fails_closed_after_one_stalled_retry() -> None:
     from runtime.core.cerebrum.react_final_answer_guards import (
         _guard_rejection_outcome,
         _guard_soft_landing_answer,
@@ -8688,10 +8783,47 @@ def test_repair_guard_soft_lands_after_one_stalled_retry() -> None:
     steps = [ReActStep(iteration=1, action='read_file({"path": "a"})', observation="x")]
 
     assert _guard_rejection_outcome(state, "todo-protocol guard", steps) == "retry"
-    assert _guard_rejection_outcome(state, "todo-protocol guard", steps) == "soft_land"
+    assert _guard_rejection_outcome(state, "todo-protocol guard", steps) == "hard_stop"
     delivered = _guard_soft_landing_answer("已完成分析。", "todo-protocol guard")
     assert delivered == "已完成分析。"
     assert "guard" not in delivered
+
+
+def test_incomplete_guard_rejects_immediate_future_action_wording() -> None:
+    from runtime.core.cerebrum.react_final_answer_content_guards import (
+        _incomplete_final_answer_guard,
+    )
+
+    candidate = "我现在立刻定位 waiting_escalation 的实际代码，然后直接修改。"
+    assert _incomplete_final_answer_guard(candidate) is not None
+
+
+def test_effective_goal_keeps_unfinished_execution_contract_for_arbitrary_steering() -> None:
+    from runtime.core.cerebrum.react_goal_analysis import derive_effective_execution_goal
+
+    original = "实现方案 3 并修改代码"
+    history = [
+        {"role": "user", "content": original},
+        {
+            "role": "assistant",
+            "content": "我现在立刻定位 waiting_escalation 的实际代码，然后直接修改。",
+        },
+        {"role": "user", "content": "你到底在干嘛"},
+    ]
+    effective = derive_effective_execution_goal("你到底在干嘛", history)
+    assert original in effective
+    assert "当前用户补充：你到底在干嘛" in effective
+
+
+def test_effective_goal_does_not_resurrect_cancelled_execution() -> None:
+    from runtime.core.cerebrum.react_goal_analysis import derive_effective_execution_goal
+
+    history = [
+        {"role": "user", "content": "修改代码"},
+        {"role": "assistant", "content": "我接下来会读取文件，然后修改。"},
+        {"role": "user", "content": "不用继续了"},
+    ]
+    assert derive_effective_execution_goal("不用继续了", history) == "不用继续了"
 
 
 def test_soft_land_does_not_append_runtime_policy_note() -> None:
