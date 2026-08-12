@@ -55,6 +55,7 @@ Suckers = skill pool.
 | `_delegation_skills_vote.py` | ``_call_agent_vote`` · the consensus / vote gate. |
 | `_ephemeral_events.py` | Event emission helpers for ephemeral sub-agent runs. |
 | `_ephemeral_tool_exec.py` | Tool execution helpers for ephemeral sub-agent runs. |
+| `_lsp_candidates.py` | Seed a language server with the files a reference search must cover. |
 | `_memory_skills_handlers.py` | Registrar for memory_skills · extracted from memory_skills.py. |
 | `_write_skills_background.py` | Background-process machinery for write_skills · extracted from write_skills.py. |
 | `_write_skills_common.py` | Shared helpers & constants for write_skills · extracted from write_skills.py. |
@@ -148,6 +149,13 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def orchestration_progress_scope(callback)` | Install a progress callback for orchestrations run inside the scope. |
+
+### `_lsp_candidates.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def identifier_at(path, line, character)` | Read the identifier under a 1-based line/character position. |
+| func | `def candidate_files(name, root, extensions, limit)` | Files that mention ``name``, plus whether the list was truncated. |
 
 ### `_memory_skills_handlers.py`
 
