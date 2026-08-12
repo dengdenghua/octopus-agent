@@ -277,6 +277,9 @@ function SwarmPanel() {
   const { t } = useI18n();
   const [events, setEvents] = useState<SubToolRecord[]>([]);
   const [connected, setConnected] = useState(false);
+  // Resume cursor: the last SSE ``id:`` seen, so a reconnect asks the
+  // server to replay the gap instead of silently losing it.
+  const lastEventIdRef = useRef<string | null>(null);
 
   // Consume the global journal SSE feed. Now that
   // ``ephemeral_runner._emit_sub_tool_event`` mirrors to the journal,
@@ -287,9 +290,11 @@ function SwarmPanel() {
     const base = getBackendBaseURL();
     return openSseStream({
       url: `${base}/api/stream`,
+      lastEventId: () => lastEventIdRef.current,
       onOpen: () => setConnected(true),
       onReconnecting: () => setConnected(false),
       onEvent: (msg) => {
+        if (msg.id != null) lastEventIdRef.current = msg.id;
         try {
           const p = JSON.parse(msg.data) as {
             event_type?: string;
@@ -669,6 +674,9 @@ function JournalPanel() {
   const [connected, setConnected] = useState(false);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
+  // Resume cursor: the last SSE ``id:`` seen, so a reconnect asks the
+  // server to replay the gap instead of silently losing it.
+  const lastEventIdRef = useRef<string | null>(null);
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
@@ -690,10 +698,12 @@ function JournalPanel() {
     const base = getBackendBaseURL();
     return openSseStream({
       url: `${base}/api/stream`,
+      lastEventId: () => lastEventIdRef.current,
       onOpen: () => setConnected(true),
       onReconnecting: () => setConnected(false),
       onEvent: (msg) => {
         if (pausedRef.current) return;
+        if (msg.id != null) lastEventIdRef.current = msg.id;
         try {
           const p = JSON.parse(msg.data) as JournalEvent;
           setEvents((prev) => {

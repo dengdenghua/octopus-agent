@@ -302,11 +302,14 @@ export function subscribeFileOps(
   onEvent: (e: FileOpEvent) => void,
   onError?: (err: Error) => void,
 ): () => void {
-  // Implementation note.
-  // Implementation note.
+  // Track the last seen SSE event id so a reconnect can resume from the
+  // server's ``Last-Event-ID`` replay instead of losing the gap.
+  let lastId: string | null = null;
   return openSseStream({
     url: `${getBackendBaseURL()}/api/files/stream`,
+    lastEventId: () => lastId,
     onEvent: (msg) => {
+      if (msg.id != null) lastId = msg.id;
       if (msg.event !== "file_op") return;
       try {
         onEvent(JSON.parse(msg.data) as FileOpEvent);
@@ -333,9 +336,14 @@ export function subscribePreviewRefresh(
   onEvent: (e: PreviewRefreshEvent) => void,
   onError?: (err: Error) => void,
 ): () => void {
+  // Track the last seen SSE event id so a reconnect resumes from the
+  // server's ``Last-Event-ID`` replay instead of losing the gap.
+  let lastId: string | null = null;
   return openSseStream({
     url: `${getBackendBaseURL()}/api/preview/stream`,
+    lastEventId: () => lastId,
     onEvent: (msg) => {
+      if (msg.id != null) lastId = msg.id;
       if (msg.event !== "preview_refresh") return;
       try {
         onEvent(JSON.parse(msg.data) as PreviewRefreshEvent);
