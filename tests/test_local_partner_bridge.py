@@ -463,6 +463,40 @@ def test_failure_diagnosis_common_cli_failures() -> None:
         assert hint_part in diagnosis.hint
 
 
+def test_startup_banner_does_not_forge_a_permission_failure() -> None:
+    """Codex prints ``sandbox: read-only`` on every run.
+
+    A bare ``sandbox`` marker matched that banner line, so an unrelated
+    upstream model rejection was reported as "权限或工作区信任不足" and sent
+    the operator to fix workspace trust instead of model routing.
+    """
+
+    real_output = (
+        "OpenAI Codex v0.147.0-alpha.6.5\n"
+        "workdir: /tmp/octo-wt-x/wt\n"
+        "model: gpt-5.6-sol\n"
+        "approval: never\n"
+        "sandbox: read-only\n"
+        'ERROR: {"error":{"message":"CC Switch local proxy failed while handling '
+        "Codex endpoint /responses. upstream_status: HTTP 400; cause: The "
+        "'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT "
+        'account."}}'
+    )
+
+    diagnosis = diagnose_partner_failure("codex-cli", "codex", stderr=real_output)
+
+    assert diagnosis.kind == "model"
+    assert "模型" in diagnosis.title
+
+    # A genuine sandbox denial must still land on permission.
+    denied = diagnose_partner_failure(
+        "codex-cli",
+        "codex",
+        stderr="sandbox: read-only\nSandboxViolation: blocked by sandbox policy",
+    )
+    assert denied.kind == "permission"
+
+
 # ── shared-blackboard envelope + env pass-through ────────────────────
 
 

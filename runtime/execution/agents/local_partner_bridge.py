@@ -222,6 +222,12 @@ def diagnose_partner_failure(
             "invalid model",
             "unknown model",
             "unsupported model",
+            # Upstream phrasing puts the model first ("The 'x' model is not
+            # supported when using Codex with a ChatGPT account"), so the
+            # "<adj> model" markers above never fire on it.
+            "model is not supported",
+            "not supported when using",
+            "model_not_supported",
         )
     ):
         if partner_id == "trae-cli":
@@ -239,7 +245,13 @@ def diagnose_partner_failure(
             "untrusted",
             "requires approval",
             "approval required",
-            "sandbox",
+            # A bare "sandbox" matched Codex's own startup banner line
+            # ("sandbox: read-only"), stamping every Codex failure as a
+            # permission problem. Match denials, not the mode announcement.
+            "sandbox denied",
+            "sandbox violation",
+            "blocked by sandbox",
+            "sandbox policy",
         )
     ):
         return PartnerFailureDiagnosis(
