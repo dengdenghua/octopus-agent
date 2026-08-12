@@ -207,7 +207,7 @@ def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
             continue
         name = _normalize_action_name(xml.group("name").strip())
         if isinstance(payload, list) and name == "todo_write":
-            args: dict[str, Any] = {"items": payload}
+            args = {"items": payload}
         elif isinstance(payload, dict):
             args = payload
             if name == "todo_write" and "todos" in args and "items" not in args:

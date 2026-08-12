@@ -155,7 +155,7 @@ def _workbench_snapshot(
         workspace_focus.item_id
         if workspace_focus is not None and current_phase_is_actionable
         else current_phase.active_item_id
-        if current_phase_is_actionable
+        if current_phase is not None and current_phase_is_actionable
         else None
     )
     return WorkbenchSnapshotV2(

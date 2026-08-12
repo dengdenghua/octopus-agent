@@ -31,7 +31,9 @@ class EscalationPolicy:
         if not isinstance(value, dict):
             return cls()
         allowed = {"timeout_seconds", "repeat_after_seconds", "max_reminders"}
-        data = {k: v for k, v in value.items() if k in allowed and isinstance(v, (int, float))}
+        data: dict[str, Any] = {
+            k: v for k, v in value.items() if k in allowed and isinstance(v, (int, float))
+        }
         if "max_reminders" in data:
             data["max_reminders"] = max(0, int(data["max_reminders"]))
         return cls(**data)

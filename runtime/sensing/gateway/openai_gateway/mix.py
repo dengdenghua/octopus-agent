@@ -364,6 +364,7 @@ def _tagged_aggregator_model(complex_turn: bool | None = None) -> str | None:
     Deterministic sorted pick so the choice is stable across calls.
     """
     grouped = _read_tagged_catalog()
+    tiers: tuple[str, ...]
     if complex_turn is True:
         tiers = ("performance",)
     elif complex_turn is False:
