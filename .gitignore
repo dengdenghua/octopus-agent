@@ -222,6 +222,7 @@ ura-artifacts/
 evidence/
 # Local design-QA screenshots and codex audit captures
 .codex-audit/
+.codex-audits/
 .design-qa/
 design-qa.md
 kimi_replay_capture/
