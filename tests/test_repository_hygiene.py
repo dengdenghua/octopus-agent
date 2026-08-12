@@ -9,47 +9,36 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
-FORBIDDEN_TRACKED_PREFIXES = (
-    "data/",
-    "logs/",
-    ".venv/",
-    "venv/",
-    "env/",
-    "build/",
-    "dist/",
-    ".octopus/local/",
-    ".octopus/research/",
-    ".octopus/archive/",
-    "frontend/node_modules/",
-    "frontend/dist/",
-    "frontend/release/",
-    "frontend/release-",
-    "frontend/.vite/",
-    "frontend/playwright-report/",
-    "frontend/coverage/",
-)
 
-FORBIDDEN_TRACKED_SUFFIXES = (
-    ".jsonl",
-    ".sqlite",
-    ".sqlite3",
-    ".db",
-    ".log",
-    ".tmp",
-    ".bak",
-    ".lock",
-)
+def _ignored_tracked_files(paths: list[str]) -> list[str]:
+    """Return the tracked paths that ``.gitignore`` would exclude.
 
-ALLOWED_TRACKED_PATHS = {
-    "agents/coder/sessions/.gitkeep",
-    "agents/desktop_operator/sessions/.gitkeep",
-    "agents/ecommerce_mind/sessions/.gitkeep",
-    "agents/general/sessions/.gitkeep",
-    "agents/vibe_selling/sessions/.gitkeep",
-    "docs/openapi-snapshot.json",
-    "docs/auto/index.json",
-    "uv.lock",
-}
+    Deriving the verdict from ``.gitignore`` instead of a second hand-kept
+    suffix list keeps the two from drifting. A blanket rule like ``*.jsonl``
+    plus a deliberate ``!**/__fixtures__/*.jsonl`` negation is one decision
+    expressed in one place; a parallel list in this test only ever learns
+    about the blanket half, so it flagged committed fixtures as runtime
+    garbage. Anything still reported here was force-added past a rule that
+    the repository does mean to enforce.
+    """
+    if not paths:
+        return []
+    try:
+        proc = subprocess.run(
+            ["git", "check-ignore", "--stdin", "--no-index"],
+            cwd=ROOT,
+            input="\n".join(paths),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except FileNotFoundError as exc:  # pragma: no cover - git absent
+        pytest.skip(f"git check-ignore unavailable ({exc})")
+    # Exit 0 = at least one match, 1 = no matches; anything else is a real
+    # failure and must not be read as a clean bill of health.
+    if proc.returncode not in (0, 1):
+        pytest.fail(f"git check-ignore failed ({proc.returncode}): {proc.stderr.strip()}")
+    return [line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()]
 
 
 def _tracked_files() -> list[str]:
@@ -73,19 +62,16 @@ def _tracked_files() -> list[str]:
 
 
 def test_runtime_artifacts_are_not_tracked() -> None:
-    violations: list[str] = []
-    for path in _tracked_files():
-        if path in ALLOWED_TRACKED_PATHS:
-            continue
-        if any(path.startswith(prefix) for prefix in FORBIDDEN_TRACKED_PREFIXES):
-            violations.append(path)
-            continue
-        if any(path.endswith(suffix) for suffix in FORBIDDEN_TRACKED_SUFFIXES):
-            violations.append(path)
-            continue
-        if "/sessions/" in path and not path.endswith("/.gitkeep"):
-            violations.append(path)
-    assert violations == []
+    tracked = _tracked_files()
+    violations = _ignored_tracked_files(tracked)
+    # Session transcripts are per-run state that no ``.gitignore`` rule covers,
+    # because the directories themselves are committed via ``.gitkeep``.
+    violations += [
+        path
+        for path in tracked
+        if "/sessions/" in path and not path.endswith("/.gitkeep") and path not in violations
+    ]
+    assert sorted(violations) == []
 
 
 def test_gitignore_keeps_runtime_artifacts_local() -> None:
