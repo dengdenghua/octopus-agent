@@ -21,7 +21,6 @@ from runtime.core.cerebrum.react_execution import (
 from runtime.core.cerebrum.react_final_answer_guards import _step_is_environmental_failure
 from runtime.core.cerebrum.react_guards import (
     _code_semantic_followup_guard,
-    _completion_phrase_without_todo_guard,
     _failed_verification_followup_guard,
     _redundant_green_verification_guard,
     _unverified_write_followup_guard,
@@ -109,12 +108,10 @@ def _apply_in_flight_nudges(
         _midflight_nudges.append(
             _format_background_task_heartbeat(list(known_background_tasks.keys()))
         )
-    _completion_nudge = _completion_phrase_without_todo_guard(
-        _steps_with_current,
-        todo_protocol_required=todo_protocol_required and todo_protocol_visible,
-    )
-    if _completion_nudge:
-        _midflight_nudges.append(f"[completion-tracker]\n{_completion_nudge}")
+    # Do not infer task state from prose such as "done" / "修好了". The
+    # checklist and tool receipts are the state machine; natural-language
+    # commentary is presentation only. Phrase-based nudging caused equivalent
+    # work to behave differently when providers or users changed wording.
     _verify_nudge = _unverified_write_followup_guard(
         _steps_with_current,
         is_code_mode=is_code_mode,

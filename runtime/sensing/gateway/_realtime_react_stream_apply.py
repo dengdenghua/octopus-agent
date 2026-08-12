@@ -303,7 +303,15 @@ async def _apply_react_event(
         await state.flush(turn, log, emitter)
         return
     if kind == "react_completed":
-        success = evt.get("success") is not False
+        decision = evt.get("completion_decision")
+        decision = decision if isinstance(decision, dict) else None
+        if decision is not None:
+            turn.completion_decision = dict(decision)
+        success = (
+            bool(decision.get("success"))
+            if decision is not None and "success" in decision
+            else evt.get("success") is not False
+        )
         # A paused/cancelled turn is already INTERRUPTED (resumable via
         # Continue). The loop's trailing react_completed carries
         # success=False for a pause, which must NOT downgrade the resumable
@@ -330,7 +338,7 @@ async def _apply_react_event(
         if not success:
             turn.status = TurnStatus.FAILED
             reason = str(evt.get("terminated_reason") or "react_failed")
-            disposition = str(evt.get("disposition") or "failed")
+            disposition = str((decision or {}).get("outcome") or evt.get("disposition") or "failed")
             failure = evt.get("failure")
             failure = failure if isinstance(failure, dict) else None
             receipt = evt.get("completion_receipt")
@@ -356,6 +364,7 @@ async def _apply_react_event(
                 "disposition": disposition,
                 "failure_kind": str(failure.get("kind") or "") if failure else "",
                 "details": receipt if isinstance(receipt, dict) else None,
+                "completion_decision": decision,
             }
             log.turn_updated(
                 turn.thread_id,

@@ -22,12 +22,14 @@ from types import SimpleNamespace
 import pytest
 
 from runtime.core.cerebrum._react_execution_results import (
+    _has_structured_user_block,
     _react_completion_receipt,
     classify_turn_failure,
 )
 from runtime.core.cerebrum._react_failure_classification import (
     classify_tool_failure,
 )
+from runtime.core.cerebrum.completion_decision import decide_completion
 from runtime.core.cerebrum.react_terminal import _turn_disposition
 
 _PNPM_STDERR = (
@@ -176,6 +178,90 @@ class TestReceiptStructuredFailure:
             executed_beak_steps=[_success_step("echo")],
         )
         assert "failure" not in receipt
+
+    def test_cleaned_delivery_receipt_is_completed_with_warning(self) -> None:
+        decision = decide_completion(
+            terminated_reason="final_answer_with_warning",
+            effective_success=True,
+        )
+        receipt = _react_completion_receipt(
+            final_answer="clean answer",
+            terminated_reason="final_answer_with_warning",
+            effective_success=True,
+            executed_beak_steps=[_success_step("read_file")],
+            completion_decision=decision.to_dict(),
+        )
+        assert decision.outcome == "completed_with_warning"
+        assert decision.success is True
+        assert receipt["ready"] is True
+        assert "completed_with_warning" in receipt["warnings"]
+
+    def test_terminal_handoff_is_preserved_as_failed_receipt_message(self) -> None:
+        handoff = "最终汇总超过了单轮时限。已完成的工具结果仍保留；点击继续可从当前进度重新收敛。"
+        decision = decide_completion(
+            terminated_reason="model_stall",
+            effective_success=False,
+        )
+        receipt = _react_completion_receipt(
+            final_answer=handoff,
+            terminated_reason="model_stall",
+            effective_success=False,
+            executed_beak_steps=[],
+            completion_decision=decision.to_dict(),
+        )
+
+        assert receipt["ready"] is False
+        assert receipt["message"] == handoff
+        assert receipt["code"] == "model_stall"
+
+
+class TestCompletionDecision:
+    @pytest.mark.parametrize(
+        ("reason", "effective_success", "outcome", "success", "resumable"),
+        [
+            ("final_answer", True, "completed", True, False),
+            ("final_answer_with_warning", True, "completed_with_warning", True, False),
+            ("max_iter", True, "partial", True, True),
+            ("paused", True, "paused", False, True),
+            ("cancelled", True, "cancelled", False, False),
+            ("guard_impasse", True, "failed", False, False),
+            ("model_stall", False, "failed", False, False),
+        ],
+    )
+    def test_reason_mapping(
+        self,
+        reason: str,
+        effective_success: bool,
+        outcome: str,
+        success: bool,
+        resumable: bool,
+    ) -> None:
+        decision = decide_completion(
+            terminated_reason=reason,
+            effective_success=effective_success,
+        )
+        assert decision.outcome == outcome
+        assert decision.success is success
+        assert decision.resumable is resumable
+
+    def test_explicit_blocked_signal_wins_without_parsing_answer_text(self) -> None:
+        decision = decide_completion(
+            terminated_reason="final_answer",
+            effective_success=False,
+            blocked_on_user=True,
+        )
+        assert decision.outcome == "blocked_on_user"
+        assert decision.resumable is True
+
+    def test_executor_protocol_tags_signal_user_block(self) -> None:
+        step = _failed_step("exec_shell", {"error": "approval hold"}, status="immune_reject")
+        step.result.stderr_tags = ["immune_reject", "waiting_user", "approval_required"]
+        assert _has_structured_user_block([step]) is True
+
+    def test_plain_failure_is_not_a_user_block(self) -> None:
+        step = _failed_step("exec_shell", {"error": "boom"})
+        step.result.stderr_tags = ["failed"]
+        assert _has_structured_user_block([step]) is False
 
 
 # ══════════════════════════════════════════════════════════
@@ -396,3 +482,53 @@ async def test_react_completed_generic_failure_keeps_legacy_error() -> None:
     assert turn.error is not None
     assert turn.error["code"] == "react_failed"
     assert turn.error["disposition"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_gateway_persists_canonical_completion_decision() -> None:
+    from runtime.protocol import Turn, TurnParams, TurnStatus
+    from runtime.sensing.gateway.realtime_cerebrum import _ReactBridgeState
+    from runtime.sensing.gateway.realtime_react_stream import _apply_react_event
+
+    class _StubLog:
+        def item_started(self, *a, **k) -> None:  # noqa: ARG002
+            pass
+
+        def item_delta(self, *a, **k) -> None:  # noqa: ARG002
+            pass
+
+        def item_completed(self, *a, **k) -> None:  # noqa: ARG002
+            pass
+
+    class _StubEmitter:
+        async def notify(self, *a, **k) -> None:  # noqa: ARG002
+            pass
+
+    class _StubRuntime:
+        def _record_react_trace_event(self, *a, **k) -> None:  # noqa: ARG002
+            pass
+
+    turn = Turn(
+        id="turn-1",
+        threadId="th-1",
+        params=TurnParams(threadId="th-1", input=[]),
+    )
+    decision = decide_completion(
+        terminated_reason="max_iter",
+        effective_success=True,
+    ).to_dict()
+    await _apply_react_event(
+        _StubRuntime(),  # type: ignore[arg-type]
+        turn,
+        _StubLog(),  # type: ignore[arg-type]
+        _StubEmitter(),  # type: ignore[arg-type]
+        _ReactBridgeState(),
+        {
+            "type": "react_completed",
+            "success": True,
+            "completion_decision": decision,
+        },
+    )
+
+    assert turn.status == TurnStatus.IN_PROGRESS
+    assert turn.completion_decision == decision

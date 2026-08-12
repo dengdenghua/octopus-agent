@@ -250,6 +250,30 @@ def _has_unrecovered_beak_failure(steps: list[Any]) -> bool:
     return True
 
 
+def _has_structured_user_block(steps: list[Any]) -> bool:
+    """Return whether the latest unresolved tool step explicitly awaits approval.
+
+    This consumes executor-authored protocol tags, never the model's final
+    prose. A later substantive success clears the block through the same
+    recovery rule used for tool failures.
+    """
+
+    if not _has_unrecovered_beak_failure(steps):
+        return False
+    for step in reversed(steps):
+        result = getattr(step, "result", None)
+        tags = {
+            str(tag).strip().lower()
+            for tag in (getattr(result, "stderr_tags", None) or [])
+            if str(tag).strip()
+        }
+        if {"waiting_user", "approval_required"}.issubset(tags):
+            return True
+        if not _beak_step_effective_success(step):
+            return False
+    return False
+
+
 def _format_background_task_heartbeat(task_ids: list[str]) -> str:
     """Render the periodic 'background tasks still running' nudge.
 
@@ -272,10 +296,18 @@ def _react_completion_receipt(
     terminated_reason: str,
     effective_success: bool,
     executed_beak_steps: list[Any],
+    completion_decision: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    if terminated_reason == "final_answer" and final_answer and effective_success:
+    decision_outcome = str((completion_decision or {}).get("outcome") or "")
+    if decision_outcome in {"completed", "completed_with_warning"} or (
+        terminated_reason in {"final_answer", "final_answer_with_warning"}
+        and final_answer
+        and effective_success
+    ):
         run_status = "completed"
-    elif terminated_reason in {"paused", "cancelled"}:
+    elif decision_outcome in {"paused", "cancelled", "blocked_on_user"} or (
+        terminated_reason in {"paused", "cancelled"}
+    ):
         run_status = "pending"
     else:
         run_status = "failed"
@@ -297,8 +329,10 @@ def _react_completion_receipt(
             artifact_count += len(files)
 
     warnings: list[str] = []
-    if terminated_reason != "final_answer":
+    if terminated_reason not in {"final_answer", "final_answer_with_warning"}:
         warnings.append(f"terminated:{terminated_reason}")
+    if decision_outcome == "completed_with_warning":
+        warnings.append("completed_with_warning")
 
     receipt = build_completion_receipt(
         statuses,
@@ -310,6 +344,14 @@ def _react_completion_receipt(
     if run_status == "failed" and failure:
         receipt["message"] = failure
         receipt["code"] = "tool_execution_failed"
+    elif run_status == "failed" and final_answer:
+        # Guard impasses and model stalls already produce a scrubbed,
+        # user-facing handoff that explains what happened and how to resume.
+        # Preserve it in the structured failure receipt; otherwise the
+        # gateway only sees the opaque terminal code (``guard_impasse`` /
+        # ``model_stall``) and the UI falls back to “turn failed”.
+        receipt["message"] = final_answer.strip()
+        receipt["code"] = terminated_reason or "react_failed"
     # Structured classification rides alongside the raw message so the
     # gateway / UI can show a one-line human reason (``failure.readable``)
     # instead of the raw stderr when the cause is environmental.

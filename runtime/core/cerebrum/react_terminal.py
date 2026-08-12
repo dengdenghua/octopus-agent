@@ -22,7 +22,11 @@ from typing import Any
 # classify_turn_failure 从定义模块直连导入:react_execution 的 re-export
 # 只存在于并发会话未提交版本,提交态 ``from react_execution import
 # classify_turn_failure`` 会 ImportError(同 b5e2711d 模式)。
-from runtime.core.cerebrum._react_execution_results import classify_turn_failure
+from runtime.core.cerebrum._react_execution_results import (
+    _has_structured_user_block,
+    classify_turn_failure,
+)
+from runtime.core.cerebrum.completion_decision import decide_completion
 from runtime.core.cerebrum.react_execution import (
     _has_unrecovered_beak_failure,
     _persist_react_trajectory,
@@ -31,13 +35,12 @@ from runtime.core.cerebrum.react_execution import (
 from runtime.core.cerebrum.react_final_answer_guards import (
     _evaluate_final_answer_guards,
     _guard_reason_for_user,
-    _guard_soft_landing_answer,
     _looks_like_observation_echo,
+    _try_clean_downgrade,
 )
 from runtime.core.cerebrum.react_goal_analysis import (
     _final_answer_requests_user_help,
 )
-from runtime.core.cerebrum.react_guards import guard_disposition
 from runtime.core.cerebrum.react_model_deadlines import (
     _MODEL_STREAM_DEADLINE,
     _collect_model_stream_text_with_deadline,
@@ -63,7 +66,8 @@ _logger = logging.getLogger(__name__)
 _WAITING_TERMINAL_REASONS = frozenset({"paused", "cancelled"})
 
 
-# ``react_completed.disposition`` is the semantic outcome of a finished turn.
+# ``react_completed.disposition`` is retained as a compatibility projection of
+# the canonical ``completion_decision.outcome``.
 # It extends the raw ``success`` boolean with the one case that is neither a
 # green completion nor a red failure: a turn that ended with a genuine hand
 # off to the user (tight-marker help request, e.g. "please confirm the API
@@ -283,22 +287,26 @@ def _finalize_react_turn(
                     model=effective_model,
                 )
                 if _guard_hit is not None:
-                    _guard_label, _guard_message = _guard_hit
-                    if guard_disposition(_guard_label) == "repair":
-                        # Forced convergence is already the last model call.
-                        # Do not replace a useful report with a generic failure
-                        # merely because a process/evidence contract is still
-                        # imperfect; deliver it with an explicit warning.
-                        final_answer = _guard_soft_landing_answer(final_answer, _guard_label)
+                    # The terminal convergence call is the last chance to
+                    # deliver.  If its only defect is leaked ReAct protocol,
+                    # keep the useful prose and remove the private tool lane
+                    # instead of turning a successful turn into a guard
+                    # impasse (or asking the model to retry indefinitely).
+                    _downgrade = _try_clean_downgrade(final_answer)
+                    if _downgrade is not None:
+                        final_answer = _downgrade
                         terminated_reason = "final_answer_with_warning"
-                    else:
-                        _user_guard_message = _guard_reason_for_user(_guard_label, _guard_message)
-                        final_answer = (
-                            "我还不能把这个任务标记为完成。\n\n"
-                            f"{_user_guard_message}\n\n"
-                            "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
-                        )
-                        terminated_reason = "guard_impasse"
+                        _guard_hit = None
+
+                if _guard_hit is not None:
+                    _guard_label, _guard_message = _guard_hit
+                    _user_guard_message = _guard_reason_for_user(_guard_label, _guard_message)
+                    final_answer = (
+                        "我还不能把这个任务标记为完成。\n\n"
+                        f"{_user_guard_message}\n\n"
+                        "请点击继续让我接着执行, 或提供必要的权限/登录/信息后我再继续。"
+                    )
+                    terminated_reason = "guard_impasse"
         except (AttributeError, TypeError, ValueError) as exc:
             _logger.warning(
                 "react_loop 强制收敛失败 (%s): %s",
@@ -338,18 +346,24 @@ def _finalize_react_turn(
 
     unresolved_tool_failure = _has_unrecovered_beak_failure(executed_beak_steps)
     effective_success = not unresolved_tool_failure and terminated_reason != "model_stall"
-    final_success = effective_success and terminated_reason not in {
-        "paused",
-        "cancelled",
-        "error",
-        "guard_impasse",
-        "model_stall",
-    }
-    disposition = _turn_disposition(
-        final_answer=final_answer,
-        terminated_reason=terminated_reason,
-        final_success=final_success,
+    structured_blocked_on_user = _has_structured_user_block(executed_beak_steps)
+    # Compatibility only for historical/custom tool adapters that predate
+    # executor-authored waiting_user tags. New executions use the structured
+    # signal above and do not depend on how the model phrases its answer.
+    legacy_blocked_on_user = bool(
+        not effective_success
+        and not structured_blocked_on_user
+        and terminated_reason == "final_answer"
+        and final_answer
+        and _final_answer_requests_user_help(final_answer, allow_short_loose=False)
     )
+    completion_decision = decide_completion(
+        terminated_reason=terminated_reason,
+        effective_success=effective_success,
+        blocked_on_user=structured_blocked_on_user or legacy_blocked_on_user,
+    )
+    final_success = completion_decision.success
+    disposition = completion_decision.outcome
     failure = classify_turn_failure(executed_beak_steps)
     _persist_react_trajectory(
         stack,
@@ -381,6 +395,7 @@ def _finalize_react_turn(
         terminated_reason=terminated_reason,
         effective_success=effective_success,
         executed_beak_steps=executed_beak_steps,
+        completion_decision=completion_decision.to_dict(),
     )
     yield {
         "type": "react_completed",
@@ -389,6 +404,7 @@ def _finalize_react_turn(
         "has_final_answer": bool(final_answer),
         "success": final_success,
         "disposition": disposition,
+        "completion_decision": completion_decision.to_dict(),
         "failure": failure,
         "completion_receipt": completion_receipt,
     }
@@ -398,4 +414,5 @@ def _finalize_react_turn(
         terminated_reason=terminated_reason,
         success=final_success,
         completion_receipt=completion_receipt,
+        completion_decision=completion_decision.to_dict(),
     )

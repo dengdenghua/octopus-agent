@@ -151,6 +151,7 @@ class ReActResult:
     terminated_reason: str = "final_answer"
     success: bool = True
     completion_receipt: dict[str, object] = field(default_factory=dict)
+    completion_decision: dict[str, object] = field(default_factory=dict)
 
     def to_trace_text(self) -> str:
         from runtime.core.cerebrum.react_parsing import (
