@@ -555,7 +555,6 @@ describe("MessageGroup reasoning grouping", () => {
     // text; the truncated row summary is hidden so text isn't duplicated.
     const stream = screen.getByTestId("live-thinking-stream");
     expect(stream).toHaveClass("live-thinking-window", "ml-4");
-    expect(stream).not.toHaveClass("max-h-40");
     expect(stream).toHaveTextContent("Compare configuration evidence");
     expect(screen.getAllByText("Compare configuration evidence")).toHaveLength(
       1,
@@ -571,7 +570,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).toHaveTextContent("Compare configuration evidence");
   });
 
-  it("keeps live thinking in the main conversation scroll", () => {
+  it("caps long live thinking in a fixed-height waterfall window", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-live-thinking-scroll",
@@ -588,12 +587,42 @@ describe("MessageGroup reasoning grouping", () => {
       { locale: "zh-CN" },
     );
 
+    // 长思考不能把正文顶下去：窗口定高、内部瀑布流滚动。
     const stream = screen.getByTestId("live-thinking-stream");
-    expect(stream).not.toHaveClass("overflow-y-auto");
+    expect(stream).toHaveClass("overflow-y-auto", "max-h-32");
     expect(stream).toHaveTextContent("持续生成的深度思考内容");
+  });
+
+  it("streams thinking expanded, then collapses it once the turn settles", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-thinking-lifecycle",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: "逐步核对证据链".repeat(40),
+        },
+      },
+    ];
+
+    const { rerender } = renderWithProviders(
+      <MessageGroup messages={messages as never} isLoading />,
+      { locale: "zh-CN" },
+    );
+
+    // 流式中：窗口默认展开
+    expect(screen.getByTestId("live-thinking-window")).toHaveAttribute(
+      "data-state",
+      "open",
+    );
+
+    // 完成后：窗口收起，思考回到紧凑行，展开区默认折叠
+    rerender(<MessageGroup messages={messages as never} />);
     expect(
-      screen.queryByTestId("thinking-back-to-latest"),
+      screen.queryByTestId("live-thinking-stream"),
     ).not.toBeInTheDocument();
+    const detail = screen.queryByTestId("thinking-row-content");
+    if (detail) expect(detail).toHaveAttribute("data-state", "closed");
   });
 
   it("keeps wording-based internal reasoning muted, collapsed, and markdown-formatted on demand", () => {
@@ -1803,6 +1832,50 @@ describe("MessageGroup streaming lifecycle", () => {
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
+  it("keeps later thinking below the answer it followed", () => {
+    // 正文按它产生的时刻落位：早于正文的过程在上，晚于正文的思考在下。
+    const messages: AIMessage[] = [
+      {
+        id: "ai-think-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: { public_reasoning_summary: "先看现有实现" },
+      },
+      {
+        id: "ai-answer",
+        type: "ai",
+        content: "方向是这样，我继续核对。",
+        tool_calls: [
+          { id: "read-1", name: "read_file", args: { path: "a.ts" } },
+        ],
+      },
+      {
+        id: "ai-think-2",
+        type: "ai",
+        content: "",
+        additional_kwargs: { public_reasoning_summary: "再核对一处调用点" },
+      },
+    ];
+
+    renderWithProviders(
+      <MessageGroup messages={messages as never} isLoading />,
+      { locale: "zh-CN" },
+    );
+
+    const answer = screen.getByText("方向是这样，我继续核对。");
+    const first = screen.getByText(/先看现有实现/);
+    const later = screen.getByText(/再核对一处调用点/);
+
+    // 早于正文的思考在正文之前
+    expect(
+      first.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // 晚于正文的思考在正文之后，而不是被顶回上方
+    expect(
+      answer.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("opens right-side process details without leaked protocol or internal blocks", () => {
     const messages: AIMessage[] = [
       {
@@ -2261,15 +2334,17 @@ describe("MessageGroup 紧凑模式叙事保真", () => {
     for (let round = 1; round <= 6; round += 1) {
       expect(screen.getByText(`已确认第 ${round} 轮事实`)).toBeInTheDocument();
     }
-    // 第 1 轮意图（该轮 intent 锚点）与最近一轮思考（latestThinking）可见
-    expect(screen.getByText(/第 1 轮意图/)).toBeInTheDocument();
-    expect(screen.getByText(/第 6 轮意图/)).toBeInTheDocument();
-    // 中间轮的意图仍被压缩掉，完整事件链留在工作台
-    expect(screen.queryByText(/第 3 轮意图/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/第 4 轮意图/)).not.toBeInTheDocument();
+    // 思考是时间线事件而非状态挂件：每轮意图都留在它发生的位置，
+    // 这样成绩单读起来是 思考 → 执行 → 事实 → 思考，而不是一个
+    // 永远停在原地的“最新思考”窗口。
+    for (let round = 1; round <= 6; round += 1) {
+      expect(
+        screen.getByText(new RegExp(`第 ${round} 轮意图`)),
+      ).toBeInTheDocument();
+    }
     expect(
       screen.getAllByTestId("process-timeline-event-thinking"),
-    ).toHaveLength(2);
+    ).toHaveLength(6);
     // 纯过程组没有最终回答，不出现分界
     expect(screen.queryByTestId("final-answer-boundary")).toBeNull();
   });

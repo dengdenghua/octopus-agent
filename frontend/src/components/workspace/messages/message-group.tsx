@@ -394,15 +394,17 @@ function useSmoothStickToBottom(
 }
 
 /**
- * Live typewriter content for the in-flight extended thinking.
+ * Live typewriter window for the in-flight extended thinking.
  *
- * This stays in normal document flow. A nested scroll viewport made the
- * thought stream drift away from the formal answer: thinking was scrolling
- * inside its own box while the answer kept growing below it. The conversation
- * viewport is the only owner of vertical scrolling, so the turn remains one
- * chronological stream.
+ * Reasoning can run for thousands of characters. Letting it grow in document
+ * flow pushed the answer far down the transcript, so the window is capped at
+ * a fixed height and scrolls internally: newest text enters at the bottom
+ * (waterfall), history stays reachable by scrolling up. Scrolling away pauses
+ * follow-mode until the reader returns to the bottom.
  */
 function LiveThinkingWindow({ text }: { text: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
   // Typewriter buffer: reveal the stream at a fixed tick rate (40ms, 1–4
   // chars/frame, accel on backlog) instead of flashing every delta. Full
   // text appears instantly for prefers-reduced-motion users.
@@ -417,9 +419,24 @@ function LiveThinkingWindow({ text }: { text: string }) {
     fastDrainThreshold: 2,
   });
 
+  const autoScrollingRef = useSmoothStickToBottom(
+    ref,
+    stickToBottomRef,
+    displayText,
+  );
+
+  const handleScroll = () => {
+    const el = ref.current;
+    if (!el || autoScrollingRef.current) return;
+    stickToBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
+
   return (
     <div
-      className="live-thinking-window mt-1 ml-4 min-w-0 whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 text-[13px] leading-6 text-muted-foreground"
+      ref={ref}
+      onScroll={handleScroll}
+      className="live-thinking-window mt-1 ml-4 max-h-32 min-w-0 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 text-[13px] leading-6 text-muted-foreground"
       data-testid="live-thinking-stream"
     >
       {displayText}
@@ -557,17 +574,18 @@ export function MessageGroup({
   // A tool-carrying AI message can also contain the answer currently being
   // streamed. Keep that text in the conversation lane instead of burying it
   // inside the process replay.
-  const streamingAnswerText = useMemo(() => {
+  const streamingAnswer = useMemo(() => {
     if (!isLoading) return null;
     for (const msg of messages) {
       if (msg.type !== "ai" || !hasToolCalls(msg)) continue;
       if (msg.additional_kwargs?.public_progress === true) continue;
       if (isLikelyFinalAnswerContent(msg)) continue;
       const text = extractContentFromMessage(msg);
-      if (text && text.trim()) return text;
+      if (text && text.trim()) return { text, messageId: msg.id };
     }
     return null;
   }, [messages, isLoading]);
+  const streamingAnswerText = streamingAnswer?.text ?? null;
   // A reasoning disclosure may be opened while the model is still working.
   // Once the answer lane starts (or the turn settles), return it to the
   // compact completed state. This runs only on the live -> completed
@@ -691,23 +709,37 @@ export function MessageGroup({
     timelineLinkage.activeSource,
     compactTimelineItems,
   ]);
-  const hasPublicCommentary = compactTimelineItems.some(
-    (item) => item.type === "commentary",
-  );
-  const firstExecutionIndex = compactTimelineItems.findIndex(
-    (item) => item.type !== "reasoningGroup",
-  );
-  // New public checkpoints carry real answer-like interleaving, so a terminal
-  // answer follows the whole process lane. Legacy streams without commentary
-  // retain their familiar thinking → answer → execution composition.
+  // The answer body belongs at the point in the timeline where it was
+  // produced, so a turn reads chronologically (thought → action → answer →
+  // further action) instead of pinning every process row above a trailing
+  // answer lane. Position comes from the answer message's own order in the
+  // turn, matched against each timeline item's source message.
+  const answerSplitIndex = useMemo(() => {
+    if (!streamingAnswer) return -1;
+    const messageOrder = new Map<string, number>();
+    messages.forEach((message, index) => {
+      if (message.id) messageOrder.set(message.id, index);
+    });
+    const answerOrder = streamingAnswer.messageId
+      ? messageOrder.get(streamingAnswer.messageId)
+      : undefined;
+    if (answerOrder === undefined) return -1;
+    const splitAt = compactTimelineItems.findIndex((item) => {
+      const order = messageOrder.get(timelineItemMessageId(item) ?? "");
+      if (order === undefined) return false;
+      if (order > answerOrder) return true;
+      // A tool call carried by the answer message itself starts after its
+      // text streamed, so it belongs below the answer.
+      return order === answerOrder && isExecutionTimelineItem(item);
+    });
+    return splitAt;
+  }, [streamingAnswer, messages, compactTimelineItems]);
   const compactItemsBeforeAnswer =
-    streamingAnswerText && !hasPublicCommentary && firstExecutionIndex >= 0
-      ? compactTimelineItems.slice(0, firstExecutionIndex)
+    answerSplitIndex >= 0
+      ? compactTimelineItems.slice(0, answerSplitIndex)
       : compactTimelineItems;
   const compactItemsAfterAnswer =
-    streamingAnswerText && !hasPublicCommentary && firstExecutionIndex >= 0
-      ? compactTimelineItems.slice(firstExecutionIndex)
-      : [];
+    answerSplitIndex >= 0 ? compactTimelineItems.slice(answerSplitIndex) : [];
   // 最终回答视觉分层：流式结束后，在过程段落与最终回答正文之间加分界。
   // 判定口径与 groupMessages 一致（tool_calls + isLikelyFinalAnswerContent 的
   // 消息会以独立 assistant 组在下方渲染正文），且必须是同组最后一条可见正文，
@@ -1176,8 +1208,7 @@ export function MessageGroup({
       const effectReceipt = isAggregatedGroup
         ? (item.items
             .map((toolItem) => resolveReceipt(toolItem.step))
-            .find((receipt) => receipt?.state === "indeterminate") ??
-          undefined)
+            .find((receipt) => receipt?.state === "indeterminate") ?? undefined)
         : item.type === "toolCall"
           ? (item.step.effectReceipt ??
             (workbenchEventId
@@ -2062,6 +2093,10 @@ export function selectCompactTimelineItems(
     .reverse()
     .find((item) => item.type === "reasoningGroup");
   const selected = new Set<TimelineItem>();
+  // Thinking is a timeline event, not a status widget. Earlier reasoning must
+  // stay on the lane at the position it happened, otherwise the transcript
+  // reads as one perpetually-latest thought window instead of
+  // "thought → did → said → thought".
   let visibleCommentary: CommentaryTimelineItem[];
   if (commentary.length <= MAX_PUBLIC_PROGRESS_ANCHORS) {
     // 短对话：行为完全不变，commentary 全量保留
@@ -2099,11 +2134,14 @@ export function selectCompactTimelineItems(
   ) {
     const start = boundaries[boundaryIndex]! + 1;
     const end = boundaries[boundaryIndex + 1]!;
-    const intervalExecutionItems = items
+    const intervalItems = items
       .slice(start, end)
-      .filter(isExecutionTimelineItem);
-    for (const execItem of intervalExecutionItems) {
-      selected.add(execItem);
+      .filter(
+        (item) =>
+          isExecutionTimelineItem(item) || item.type === "reasoningGroup",
+      );
+    for (const intervalItem of intervalItems) {
+      selected.add(intervalItem);
     }
   }
   return items.filter((item) => selected.has(item));
@@ -2149,6 +2187,20 @@ function executionCoverageByVisibleItem(
     coverage.get(anchor.item.id)!.push(item);
   }
   return coverage;
+}
+
+/**
+ * Source message id for a timeline item, used to order process rows against
+ * the answer body they were interleaved with.
+ */
+export function timelineItemMessageId(item: TimelineItem): string | undefined {
+  if (item.type === "toolCall" || item.type === "commentary") {
+    return item.step.messageId;
+  }
+  if (item.type === "aggregatedToolGroup") {
+    return item.items[0]?.step.messageId;
+  }
+  return item.steps[0]?.messageId;
 }
 
 function isExecutionTimelineItem(

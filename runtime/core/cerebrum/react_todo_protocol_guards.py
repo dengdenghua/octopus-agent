@@ -271,41 +271,15 @@ def _completion_phrase_without_todo_guard(
     ``todo_protocol_required`` lets the loop turn this off for
     free-form chat where checklists aren't expected.
     """
-    if not todo_protocol_required or not steps:
-        return None
-    todos = _latest_todo_items(steps)
-    if not todos:
-        # Caller's job to surface "no todo_write yet" via the existing
-        # completion guard at Final Answer time. Mid-flight we don't
-        # nag if no checklist exists — the model may just be warming up.
-        return None
-
-    last = steps[-1]
-    last_thought = str(getattr(last, "thought", "") or "")
-    last_obs = str(getattr(last, "observation", "") or "")
-    if not (_looks_like_completion_phrase(last_thought) or _looks_like_completion_phrase(last_obs)):
-        return None
-
-    # Did the model just call todo_write? Then it already did the
-    # right thing — don't pile on.
-    parsed = _parse_action(last.action)
-    if parsed is not None and parsed[0] == "todo_write":
-        return None
-
-    # Are there still incomplete todos? Otherwise the completion
-    # phrase is plausibly the wrap-up at the end and the existing
-    # final-answer guard takes over.
-    incomplete = [item for item in todos if str(item.get("status") or "").lower() != "completed"]
-    if not incomplete:
-        return None
-
-    return (
-        "Detected a completion phrase ('done' / 'finished' / "
-        "'已完成' / '搞定' / similar) but the latest action was not "
-        "todo_write. Update the visible checklist NOW: mark the "
-        "just-finished item completed before moving on. The user can "
-        "only see your progress through the checklist."
-    )
+    # A checklist is a projection of execution state, never a gate on the
+    # model's prose.  Completion words are especially unreliable across
+    # providers (and across languages); treating them as a reason to inject
+    # another todo_write round caused the exact empty-loop behaviour users
+    # saw.  The authoritative completion decision is made from tool/item
+    # receipts at turn finalization.  Keep this function for compatibility
+    # with older callers, but make it telemetry-only.
+    del steps, todo_protocol_required
+    return None
 
 
 __all__ = [

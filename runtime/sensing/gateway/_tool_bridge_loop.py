@@ -1542,34 +1542,13 @@ def stream_agentic_fallback(
                     )
                 )
                 continue
-            if not _round_convergence_mode and _todo_protocol_required and _has_todo_write:
-                _todo_guard_message: str | None = None
-                if not _todo_seen:
-                    _todo_guard_message = (
-                        "[SYSTEM CHECK - task checklist required]\n"
-                        "This turn is multi-step or execution-heavy. Do not "
-                        "give the final answer yet. Call `todo_write` now "
-                        "with a complete checklist for the work, then "
-                        "continue."
-                    )
-                elif _tool_work_since_todo:
-                    _todo_guard_message = (
-                        "[SYSTEM CHECK - checklist update required]\n"
-                        "You used tools after the latest checklist update. "
-                        "Before the final answer, call `todo_write` again "
-                        "with the complete list and mark completed or "
-                        "in-progress items accurately."
-                    )
-                if _todo_guard_message and _todo_guard_nudges < 2:
-                    _todo_guard_nudges += 1
-                    accumulated_text = ""
-                    messages.append(
-                        Message(
-                            role="user",
-                            content=_todo_guard_message,
-                        )
-                    )
-                    continue
+            # todo_write is a user-visible projection of the trajectory, not
+            # a prerequisite for delivery.  Older code injected a synthetic
+            # user turn here and forced another model call whenever the
+            # checklist was missing or stale.  That made a successful task
+            # spin, and was the source of the recurring todo-protocol error.
+            # Keep the live todo item if the model emits one, but never make
+            # its presence or freshness authoritative for the turn.
             if (
                 not _round_convergence_mode
                 and _code_change_task
@@ -2022,21 +2001,9 @@ def stream_agentic_fallback(
             round_tool_calls,
             tool_result_blocks,
         )
-        if _todo_protocol_required and _has_todo_write and _plan_milestones:
-            messages.append(
-                Message(
-                    role="user",
-                    content=(
-                        "[SYSTEM CHECK - dynamic plan reconciliation checkpoint]\n"
-                        f"Completed milestone: {', '.join(_plan_milestones)}. "
-                        "Finish the current write/repair/verification chain, then before "
-                        "switching to a different phase call `todo_write` with the complete "
-                        "revised checklist. Mark only evidence-backed items complete; preserve "
-                        "stable IDs for unchanged work; add, remove, reword, or reorder items "
-                        "when the discovered code or documentation changed the scope."
-                    ),
-                )
-            )
+        # Milestones remain available for telemetry and public progress, but
+        # do not inject protocol instructions into the model context. The
+        # canonical task state is updated by actual tool/item receipts.
         if _tool_batch_redirected:
             _append_pending_steering()
             continue
@@ -2116,50 +2083,22 @@ def stream_agentic_fallback(
             _pending_code_semantic_nudge = ""
 
         if _green_verification_convergence_active and not _code_semantic_repair_required:
-            _todo_completed_this_round = any(call.name == "todo_write" for call in round_tool_calls)
-            if _green_convergence_todo_only and _todo_completed_this_round:
-                _green_convergence_todo_only = False
-                _force_convergence_next = True
-                messages.append(
-                    Message(
-                        role="user",
-                        content=(
-                            "[SYSTEM CHECK - green verification convergence]\n"
-                            "The final checklist update is recorded. Do not call or "
-                            "request any more tools. Produce the concise final answer "
-                            "from the completed implementation and verification evidence."
-                        ),
-                    )
+            # Successful independent verification is terminal evidence. Do
+            # not add a checklist-only round after it; the todo list is a
+            # projection and may be stale without invalidating the result.
+            _green_convergence_todo_only = False
+            _force_convergence_next = True
+            messages.append(
+                Message(
+                    role="user",
+                    content=(
+                        "[SYSTEM CHECK - green verification convergence]\n"
+                        "Two independent clean verifier calls succeeded after "
+                        "the latest code mutation. Do not call or request any "
+                        "more tools. Produce the concise final answer now."
+                    ),
                 )
-            elif not _green_convergence_todo_only:
-                if _todo_protocol_required and _has_todo_write and _tool_work_since_todo:
-                    _green_convergence_todo_only = True
-                    messages.append(
-                        Message(
-                            role="user",
-                            content=(
-                                "[SYSTEM CHECK - green verification convergence]\n"
-                                "Two independent clean verifier calls succeeded after "
-                                "the latest code mutation. Terminal evidence is complete. "
-                                "Do not run another test, lint, shell, read, or environment "
-                                "probe. Call `todo_write` once now to record the final "
-                                "checklist state; that is the only remaining tool action."
-                            ),
-                        )
-                    )
-                else:
-                    _force_convergence_next = True
-                    messages.append(
-                        Message(
-                            role="user",
-                            content=(
-                                "[SYSTEM CHECK - green verification convergence]\n"
-                                "Two independent clean verifier calls succeeded after "
-                                "the latest code mutation. Do not call or request any "
-                                "more tools. Produce the concise final answer now."
-                            ),
-                        )
-                    )
+            )
 
         if round_i + 1 >= _tool_round_budget and _tool_round_budget < max_tool_rounds:
             yield (

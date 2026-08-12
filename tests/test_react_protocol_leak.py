@@ -163,3 +163,37 @@ def test_non_completeness_guard_feedback_is_unchanged_with_evidence():
     original = "Run the requested verification."
 
     assert _guard_repair_feedback("verification guard", original, steps) == original
+
+
+_FENCED_ACTION_EXAMPLE = (
+    "以下是一个 Action 调用示例：\n\n"
+    "```\n"
+    "Action:\n"
+    '    read_file({"path": "a.py"})\n'
+    "```\n\n"
+    "请按这个格式继续调用。"
+)
+
+
+def test_looks_like_protocol_leak_ignores_fenced_examples() -> None:
+    # A quoted ``Action:`` example inside a markdown fence is legitimate
+    # prose, not leaked protocol.
+    assert _looks_like_protocol_leak(_FENCED_ACTION_EXAMPLE) is False
+
+
+def test_strip_react_protocol_blocks_preserves_fenced_examples() -> None:
+    cleaned = _strip_react_protocol_blocks(_FENCED_ACTION_EXAMPLE)
+    assert "Action:" in cleaned
+    assert "read_file" in cleaned
+    assert "以下是一个 Action 调用示例" in cleaned
+
+
+def test_parse_step_keeps_fenced_example_in_final() -> None:
+    # Fenced protocol examples must survive the parse so the user sees the
+    # model's quoted illustration instead of a silently emptied answer.
+    text = f"Final Answer: {_FENCED_ACTION_EXAMPLE}"
+    step, final = _parse_step(text, iteration=1)
+    assert final is not None
+    assert "Action:" in final
+    assert "read_file" in final
+    assert step.raw_llm_output == text
