@@ -268,6 +268,103 @@ def test_aggregator_falls_back_to_balanced_without_performance(monkeypatch) -> N
     assert mix._aggregator_model() == "deepseek-v4-flash"
 
 
+# ── Complexity-aware aggregator (simple → balanced, complex → performance) ──
+
+
+def test_aggregator_infers_balanced_for_simple_request(monkeypatch) -> None:
+    """A simple (value-tier) request draws the balanced aggregator — not the
+    expensive performance tier."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "econ": {"id": "agnes-2.5-flash", "tier": "economy"},
+            "mid": {"id": "deepseek-v4-flash", "tier": "balanced"},
+            "perf": {"id": "kimi-k3", "tier": "performance"},
+        },
+    )
+    assert mix._aggregator_model(_intent("What is 2+2?")) == "deepseek-v4-flash"
+
+
+def test_aggregator_infers_performance_for_complex_request(monkeypatch) -> None:
+    """A complex (performance-tier) request draws the strong performance
+    aggregator, never demoting to balanced."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "econ": {"id": "agnes-2.5-flash", "tier": "economy"},
+            "mid": {"id": "deepseek-v4-flash", "tier": "balanced"},
+            "perf1": {"id": "kimi-k3", "tier": "performance"},
+            "perf2": {"id": "ark-code-latest", "tier": "performance"},
+        },
+    )
+    complex_goal = (
+        "请系统分析这份技术方案:\n"
+        "1. 对比三种架构的吞吐、延迟、成本与运维复杂度\n"
+        "2. 评估数据一致性与故障恢复路径\n"
+        "3. 给出带风险等级的迁移路线图\n"
+        "4. 附上可执行的验证清单"
+    )
+    assert mix._aggregator_model(_intent(complex_goal)) == "ark-code-latest"
+
+
+def test_aggregator_simple_without_balanced_escalates_to_performance(monkeypatch) -> None:
+    """A simple request with no balanced tier escalates UP to performance —
+    the aggregator must stay stronger than the drafters, never dropping to
+    the cheap economy tier (matching turn_complexity's never-demote chain)."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "econ": {"id": "agnes-2.5-flash", "tier": "economy"},
+            "perf": {"id": "ark-code-latest", "tier": "performance"},
+        },
+    )
+    assert mix._aggregator_model(_intent("What is 2+2?")) == "ark-code-latest"
+
+
+def test_aggregator_complex_without_performance_keeps_planner_default(monkeypatch) -> None:
+    """A complex request with no performance tier does NOT demote to balanced —
+    it keeps the planner default (empty), the same never-demote contract the
+    rest of the system uses."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "econ": {"id": "agnes-2.5-flash", "tier": "economy"},
+            "mid": {"id": "deepseek-v4-flash", "tier": "balanced"},
+        },
+    )
+    complex_goal = "长任务:\n" + "\n".join(
+        f"第{i}步,逐项核对并落地,涉及多模块跨仓库联动" for i in range(3)
+    )
+    assert mix._aggregator_model(_intent(complex_goal)) == ""
+
+
+def test_aggregator_explicit_config_ignores_complexity(monkeypatch) -> None:
+    """Explicit aggregator config wins regardless of request complexity."""
+    monkeypatch.setenv("OCTOPUS_MIX_AGGREGATOR", "explicit-agg")
+    _install_custom_models(
+        monkeypatch,
+        {
+            "mid": {"id": "deepseek-v4-flash", "tier": "balanced"},
+            "perf": {"id": "kimi-k3", "tier": "performance"},
+        },
+    )
+    complex_goal = "复杂:\n" + "\n".join(f"第{i}步综合多源数据并交叉验证" for i in range(4))
+    assert mix._aggregator_model(_intent(complex_goal)) == "explicit-agg"
+    assert mix._aggregator_model(_intent("What is 2+2?")) == "explicit-agg"
+
+
+def test_aggregator_none_intent_keeps_historical_fallback(monkeypatch) -> None:
+    """No intent (no complexity signal) → historical performance→balanced."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "mid": {"id": "deepseek-v4-flash", "tier": "balanced"},
+            "perf": {"id": "kimi-k3", "tier": "performance"},
+        },
+    )
+    assert mix._aggregator_model(None) == "kimi-k3"
+
+
 def test_aggregator_empty_without_performance_or_balanced(monkeypatch) -> None:
     """Economy-only catalog → aggregator stays on the planner default."""
     _install_custom_models(
@@ -315,7 +412,8 @@ def test_proposer_specs_uses_tagged_pool(monkeypatch) -> None:
 
 def test_run_mix_chat_uses_tagged_proposers_and_aggregator(monkeypatch) -> None:
     """The tagged pool flows through a real run_mix_chat: drafts come from the
-    cheap tier and the aggregator is the performance model."""
+    cheap tier, and the aggregator is picked complexity-aware — a simple
+    request draws balanced, a complex one the performance model."""
     monkeypatch.delenv("OCTOPUS_MIX_PROPOSERS", raising=False)
     _install_custom_models(
         monkeypatch,
@@ -351,6 +449,22 @@ def test_run_mix_chat_uses_tagged_proposers_and_aggregator(monkeypatch) -> None:
     )
 
     assert seen_proposers == ["agnes-2.5-flash", "deepseek-v4-flash"]
+    # simple request ("What is 2+2?" → value tier) → balanced aggregator
+    assert captured["model"] == "deepseek-v4-flash"
+
+    complex_goal = "跨仓库审计:\n" + "\n".join(
+        f"第{i}步,梳理调用链并交叉核对各模块实现" for i in range(3)
+    )
+    mix.run_mix_chat(
+        object(),
+        _intent(complex_goal),
+        "octopus-mix",
+        "code_arm",
+        actor="u1",
+        agent=None,
+        run_chat=fake_run_chat,
+    )
+    # complex request (performance tier) → performance aggregator
     assert captured["model"] == "kimi-k3"
 
 

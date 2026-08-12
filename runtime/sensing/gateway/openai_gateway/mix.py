@@ -30,9 +30,11 @@ Config (all optional, env-driven so it works on any deployment):
 When neither the preset nor the env sets a pool, Mix infers one from the
 operator's declared cost tiers in ``custom_models.json`` (see
 ``_read_tagged_catalog``): the draft stage draws on the cheap ``economy`` /
-``balanced`` entries, and the aggregator prefers the strong ``performance``
-tier. Explicit config always wins; a catalog with no tags falls back to the
-planner-default behaviour above.
+``balanced`` entries, and the aggregator is picked complexity-aware — a
+complex (``performance``-verdict) request draws the strong ``performance``
+tier, a simple one prefers ``balanced`` and only escalates upward. Explicit
+config always wins; a catalog with no tags falls back to the planner-default
+behaviour above.
 
 Degrades safely: if every proposer fails (or no router is configured), it
 falls back to a single normal turn — never errors out.
@@ -263,15 +265,17 @@ def _proposer_pool() -> list[str]:
     return []
 
 
-def _aggregator_model() -> str:
+def _aggregator_model(intent: Any = None) -> str:
     cfg_agg = load_mix_config().get("aggregator")
     if isinstance(cfg_agg, str) and cfg_agg.strip():
         return cfg_agg.strip()
     env_agg = (os.environ.get("OCTOPUS_MIX_AGGREGATOR") or "").strip()
     if env_agg:
         return env_agg
-    # No explicit aggregator → infer from the declared cost tiers.
-    return _tagged_aggregator_model() or ""
+    # No explicit aggregator → infer from the declared cost tiers,
+    # complexity-aware: complex requests draw performance, simple ones
+    # prefer balanced.
+    return _tagged_aggregator_model(_complexity_flag(intent)) or ""
 
 
 def _read_tagged_catalog() -> dict[str, list[str]]:
@@ -319,12 +323,54 @@ def _tagged_proposer_pool() -> list[str]:
     return pool[:_MAX_PROPOSERS]
 
 
-def _tagged_aggregator_model() -> str | None:
-    """Aggregator inferred from custom_models.json: the strong ``performance``
-    tier, falling back to ``balanced``. ``None`` → keep the planner default.
-    Deterministic sorted pick so the choice is stable across calls."""
+def _complexity_flag(intent: Any) -> bool | None:
+    """Map an intent to the aggregator's complexity signal.
+
+    ``True`` → a complex (``performance``-verdict) request, ``False`` → a
+    simple (``local``/``value``-verdict) one, ``None`` → no signal available
+    (keep the default fallback). Reuses the same ``turn_complexity``
+    classifier the chat fast-path and sub-agent routing use, so the inferred
+    aggregator aligns with the rest of the system. Best-effort: a missing
+    goal or an import failure yields ``None`` rather than breaking the turn.
+    """
+    if intent is None:
+        return None
+    goal = (getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or "").strip()
+    if not goal:
+        return None
+    try:
+        from runtime.core.cerebrum.turn_complexity import estimate_turn_complexity
+
+        verdict = estimate_turn_complexity(goal)
+    except Exception:  # noqa: BLE001 — best-effort; default when unavailable
+        return None
+    return verdict == "performance"
+
+
+def _tagged_aggregator_model(complex_turn: bool | None = None) -> str | None:
+    """Aggregator inferred from custom_models.json cost tiers.
+
+    Complexity-aware when ``complex_turn`` is given (see ``_complexity_flag``):
+      * ``True``  — a complex request draws the strong ``performance`` tier
+        and NEVER demotes to ``balanced`` (matching turn_complexity's
+        "never demote" chain); no performance tier → ``None`` → planner
+        default.
+      * ``False`` — a simple request prefers ``balanced`` and only escalates
+        upward to ``performance`` when no balanced model is declared. The
+        aggregator never draws the cheap ``economy`` tier — it must stay
+        stronger than the drafters to be worth the mixture.
+      * ``None``  — no signal: keep the historical performance→balanced
+        fallback.
+    Deterministic sorted pick so the choice is stable across calls.
+    """
     grouped = _read_tagged_catalog()
-    for tier in ("performance", "balanced"):
+    if complex_turn is True:
+        tiers = ("performance",)
+    elif complex_turn is False:
+        tiers = ("balanced", "performance")
+    else:
+        tiers = ("performance", "balanced")
+    for tier in tiers:
         if grouped[tier]:
             return sorted(grouped[tier])[0]
     return None
@@ -416,7 +462,7 @@ def run_mix_chat(
     # tool-enabled turn on the aggregator model.
     skip_reason = _skip_proposers_reason(intent)
     if skip_reason:
-        aggregator_model = _aggregator_model()
+        aggregator_model = _aggregator_model(intent)
         result = run_chat(
             stack,
             intent,
@@ -492,7 +538,7 @@ def run_mix_chat(
         # thread finishes on its own and its result is simply unused.
         pool.shutdown(wait=False)
 
-    aggregator_model = _aggregator_model()
+    aggregator_model = _aggregator_model(intent)
 
     # ── Stage 2: aggregator — full turn, WITH tools ──────────
     if not drafts:
