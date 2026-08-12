@@ -66,10 +66,11 @@ def _clear_cheap_model_env(monkeypatch):
 @pytest.fixture(autouse=True)
 def _no_custom_models(monkeypatch):
     """Deterministic baseline: no custom_models.json present, so cheap
-    routing falls back to the hard-coded default. A real custom_models.json
-    on a dev box would otherwise inject a self-configured model and change
-    the asserted defaults; tests that exercise the custom-models picker
-    override this fixture per-test."""
+    routing resolves to ``None`` and the bridge leaves ``model_name``
+    unset (the ephemeral runner then falls back to the planner/main
+    model). A real custom_models.json on a dev box would otherwise inject
+    a self-configured model and change the asserted defaults; tests that
+    exercise the custom-models picker override this fixture per-test."""
     from runtime.platform.models import custom_model_flags
 
     monkeypatch.setattr(custom_model_flags, "read_custom_models", lambda: None)
@@ -91,18 +92,23 @@ def test_resolve_returns_env_override_when_set(monkeypatch) -> None:
 
 def test_resolve_strips_whitespace_and_ignores_blank(monkeypatch) -> None:
     monkeypatch.setenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", "   ")
-    # Blank → falls through to default.
-    assert bridge._resolve_cheap_subagent_model() == "glm-4-flash"
+    # Blank → falls through; no cheap config anywhere → None (runner
+    # falls back to the planner model).
+    assert bridge._resolve_cheap_subagent_model() is None
 
 
-def test_resolve_returns_default_when_no_env() -> None:
-    assert bridge._resolve_cheap_subagent_model() == "glm-4-flash"
+def test_resolve_returns_none_when_no_cheap_model_configured() -> None:
+    # No env, no config, no custom models → None, never an invented
+    # model id the operator may not have (which would only 404).
+    assert bridge._resolve_cheap_subagent_model() is None
 
 
-def test_resolve_picks_generic_custom_model_over_agent_plan(monkeypatch) -> None:
-    """When the operator has self-configured OpenAI-compatible endpoints, the
-    cheap model picks a real generic one instead of a single-model Agent-Plan
-    endpoint (which 404s for any model id outside its allowlist)."""
+def test_resolve_picks_declared_cheap_over_agent_plan(monkeypatch) -> None:
+    """Only entries the operator EXPLICITLY declared cheap (``tier: "economy"``)
+    are candidates: the Agent-Plan endpoint is excluded (it 404s for any model
+    id outside its allowlist) and the plain OpenAI-compatible ``deepseek``
+    entry — no ``tier`` — is skipped even though its name contains ``flash``.
+    Deterministic sorted pick = agnes."""
     _install_custom_models(
         monkeypatch,
         {
@@ -119,18 +125,99 @@ def test_resolve_picks_generic_custom_model_over_agent_plan(monkeypatch) -> None
             "agnes": {
                 "id": "agnes-2.5-flash",
                 "provider": "openai",
+                "tier": "economy",
                 "base_url": "https://apihub.agnes-ai.com/v1",
             },
         },
     )
-    # Agent-Plan endpoint excluded; deterministic sorted pick = agnes.
     assert bridge._resolve_cheap_subagent_model() == "agnes-2.5-flash"
 
 
-def test_resolve_falls_back_when_only_agent_plan_endpoints(monkeypatch) -> None:
+def test_resolve_ignores_openai_model_without_tier_declaration(monkeypatch) -> None:
+    """The core contract: an OpenAI-compatible, non-Agent-Plan endpoint with
+    no explicit ``tier: "economy"`` is NOT a cheap candidate — cheapness is a
+    declaration, never guessed from a name or alphabetical order."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "flashy": {
+                "id": "deepseek-v4-flash",
+                "provider": "openai",
+                "base_url": "https://opencode.ai/zen/go/v1",
+            },
+        },
+    )
+    assert bridge._resolve_cheap_subagent_model() is None
+
+
+def test_resolve_ignores_balanced_and_performance_tier_for_cheap(
+    monkeypatch,
+) -> None:
+    """The cheap slot is strictly ``economy``: entries tagged
+    ``balanced`` or ``performance`` are NOT cheap candidates, even
+    though they are legitimate cost tiers on the three-tier scale."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "deepseek": {
+                "id": "deepseek-v4-flash",
+                "provider": "openai",
+                "tier": "balanced",
+                "base_url": "https://opencode.ai/zen/go/v1",
+            },
+            "luna": {
+                "id": "gpt-5.6-luna",
+                "provider": "openai",
+                "tier": "performance",
+                "base_url": "https://opencode.ai/zen/go/v1",
+            },
+        },
+    )
+    assert bridge._resolve_cheap_subagent_model() is None
+
+
+def test_resolve_picks_economy_over_balanced(monkeypatch) -> None:
+    """When a catalog mixes ``economy`` and ``balanced`` entries, only
+    the economy one is a cheap candidate — deterministic sorted pick."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "deepseek": {
+                "id": "deepseek-v4-flash",
+                "provider": "openai",
+                "tier": "balanced",
+                "base_url": "https://opencode.ai/zen/go/v1",
+            },
+            "agnes": {
+                "id": "agnes-2.5-flash",
+                "provider": "openai",
+                "tier": "economy",
+                "base_url": "https://apihub.agnes-ai.com/v1",
+            },
+        },
+    )
+    assert bridge._resolve_cheap_subagent_model() == "agnes-2.5-flash"
+
+
+def test_resolve_tier_match_is_case_insensitive(monkeypatch) -> None:
+    _install_custom_models(
+        monkeypatch,
+        {
+            "agnes": {
+                "id": "agnes-2.5-flash",
+                "provider": "openai",
+                "tier": "Economy",
+                "base_url": "https://apihub.agnes-ai.com/v1",
+            },
+        },
+    )
+    assert bridge._resolve_cheap_subagent_model() == "agnes-2.5-flash"
+
+
+def test_resolve_returns_none_when_only_agent_plan_endpoints(monkeypatch) -> None:
     """If every custom endpoint is a single-model Agent-Plan one, do not
-    return any of them (every cheap call would 404) — keep the hard-coded
-    default instead."""
+    return any of them (every cheap call would 404) — return None so the
+    runner falls back to the planner/main model instead."""
     _install_custom_models(
         monkeypatch,
         {
@@ -146,7 +233,7 @@ def test_resolve_falls_back_when_only_agent_plan_endpoints(monkeypatch) -> None:
             },
         },
     )
-    assert bridge._resolve_cheap_subagent_model() == "glm-4-flash"
+    assert bridge._resolve_cheap_subagent_model() is None
 
 
 def test_resolve_ignores_non_openai_provider(monkeypatch) -> None:
@@ -161,12 +248,12 @@ def test_resolve_ignores_non_openai_provider(monkeypatch) -> None:
             },
         },
     )
-    assert bridge._resolve_cheap_subagent_model() == "glm-4-flash"
+    assert bridge._resolve_cheap_subagent_model() is None
 
 
-def test_resolve_falls_back_when_custom_models_empty(monkeypatch) -> None:
+def test_resolve_returns_none_when_custom_models_empty(monkeypatch) -> None:
     _install_custom_models(monkeypatch, {})
-    assert bridge._resolve_cheap_subagent_model() == "glm-4-flash"
+    assert bridge._resolve_cheap_subagent_model() is None
 
 
 def test_agent_plan_endpoint_marker() -> None:
@@ -190,6 +277,7 @@ def test_call_subagent_uses_resolved_custom_model_when_cheap(
             "deepseek": {
                 "id": "deepseek-v4-flash",
                 "provider": "openai",
+                "tier": "economy",
                 "base_url": "https://opencode.ai/zen/go/v1",
             },
         },
@@ -205,13 +293,19 @@ def test_call_subagent_uses_resolved_custom_model_when_cheap(
 # ── call_subagent + use_cheap_model ──────────────────────────
 
 
-def test_call_subagent_injects_cheap_model_into_context(capture_runner) -> None:
+def test_call_subagent_without_cheap_config_leaves_model_to_runner(
+    capture_runner,
+) -> None:
+    """Cheap requested but nothing resolves → bridge does NOT invent a
+    model id; ``model_name`` stays unset and the ephemeral runner falls
+    back to the planner/main model (verified end-to-end in
+    test_ephemeral_runner.py::TestDispatchModelOverrideEndToEnd)."""
     bridge.call_subagent(
         agent_id="researcher",
         prompt="dig into X",
         use_cheap_model=True,
     )
-    assert capture_runner["context"].get("model_name") == "glm-4-flash"
+    assert capture_runner["context"].get("model_name") is None
 
 
 def test_call_subagent_explicit_model_name_wins_over_cheap(capture_runner) -> None:
@@ -246,14 +340,25 @@ def test_call_subagent_env_override_is_used_when_cheap(
 # ── _call_agent_parallel role-based defaults ─────────────────
 
 
-def test_parallel_researcher_defaults_to_cheap(capture_runner) -> None:
+def test_parallel_researcher_defaults_to_cheap(monkeypatch, capture_runner) -> None:
     """A researcher spec with no explicit ``cheap`` flag auto-routes
-    to the cheap model."""
+    to the cheap model (here the resolved custom one)."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "deepseek": {
+                "id": "deepseek-v4-flash",
+                "provider": "openai",
+                "tier": "economy",
+                "base_url": "https://opencode.ai/zen/go/v1",
+            },
+        },
+    )
     delegation_skills._call_agent_parallel(
         specs=[{"role": "researcher", "task": "find X"}],
         timeout_s=5,
     )
-    assert capture_runner["context"].get("model_name") == "glm-4-flash"
+    assert capture_runner["context"].get("model_name") == "deepseek-v4-flash"
 
 
 def test_parallel_explicit_cheap_false_disables_auto_route(capture_runner) -> None:
@@ -277,14 +382,26 @@ def test_parallel_architect_defaults_to_primary(capture_runner) -> None:
 
 
 def test_parallel_explicit_cheap_true_on_architect_routes_cheap(
+    monkeypatch,
     capture_runner,
 ) -> None:
     """Explicit ``cheap: True`` overrides the architect default."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "deepseek": {
+                "id": "deepseek-v4-flash",
+                "provider": "openai",
+                "tier": "economy",
+                "base_url": "https://opencode.ai/zen/go/v1",
+            },
+        },
+    )
     delegation_skills._call_agent_parallel(
         specs=[{"role": "architect", "task": "summarize Y", "cheap": True}],
         timeout_s=5,
     )
-    assert capture_runner["context"].get("model_name") == "glm-4-flash"
+    assert capture_runner["context"].get("model_name") == "deepseek-v4-flash"
 
 
 def test_role_defaults_helper_classification() -> None:

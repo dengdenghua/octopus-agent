@@ -754,6 +754,126 @@ def test_auto_derive_returns_none_for_value_when_no_custom(
     assert _resolve_tier_model("value") == "glm-4-flash"
 
 
+def test_auto_derive_performance_prefers_tagged_over_position(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """An explicit ``tier: "performance"`` tag beats the position
+    heuristic: the declared strong model wins even when it is not the
+    last catalog entry."""
+    monkeypatch.delenv("OCTOPUS_MODEL_PERFORMANCE", raising=False)
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "alpha": {"models": ["a-model"]},
+            "perf": {
+                "tier": "performance",
+                "models": ["declared-strong"],
+            },
+            "omega": {"models": ["z-model"]},
+        },
+    )
+    assert _resolve_tier_model("performance") == "declared-strong"
+
+
+def test_auto_derive_value_prefers_economy_tag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Value slot honors the operator's cost tag: ``economy`` entries
+    are the cheap candidates, and the deterministic sorted pick wins
+    even when a ``balanced`` entry appears earlier in the catalog."""
+    monkeypatch.delenv("OCTOPUS_MODEL_VALUE", raising=False)
+    monkeypatch.delenv("OCTOPUS_SMART_ROUTING_CHEAP_MODEL", raising=False)
+    monkeypatch.delenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", raising=False)
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "balanced-first": {
+                "tier": "balanced",
+                "models": ["b-model"],
+            },
+            "economy": {
+                "tier": "economy",
+                "models": ["e-model"],
+            },
+        },
+    )
+    assert _resolve_tier_model("value") == "e-model"
+
+
+def test_auto_derive_value_falls_back_to_balanced_without_economy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """No ``economy`` entry but a ``balanced`` one exists — the value
+    slot uses balanced rather than falling through to glm-4-flash.
+    The ``performance``-tagged entry must NOT leak into value's cheap
+    candidates."""
+    monkeypatch.delenv("OCTOPUS_MODEL_VALUE", raising=False)
+    monkeypatch.delenv("OCTOPUS_SMART_ROUTING_CHEAP_MODEL", raising=False)
+    monkeypatch.delenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", raising=False)
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "only-balanced": {
+                "tier": "balanced",
+                "models": ["b-model"],
+            },
+            "perf": {
+                "tier": "performance",
+                "models": ["p-model"],
+            },
+        },
+    )
+    assert _resolve_tier_model("value") == "b-model"
+
+
+def test_auto_derive_performance_uses_strongest_slot_of_tagged_entry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A tagged performance entry with multiple upstream models offers
+    ``models[-1]`` (strongest slot), mirroring entry-reference semantics."""
+    monkeypatch.delenv("OCTOPUS_MODEL_PERFORMANCE", raising=False)
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "multi": {
+                "tier": "performance",
+                "models": ["mid", "strong"],
+            },
+        },
+    )
+    assert _resolve_tier_model("performance") == "strong"
+
+
+def test_auto_derive_value_uses_cheap_slot_of_tagged_entry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A tagged economy entry with several upstream models offers its
+    cheap slot (``models[0]``) to the value tier."""
+    monkeypatch.delenv("OCTOPUS_MODEL_VALUE", raising=False)
+    monkeypatch.delenv("OCTOPUS_SMART_ROUTING_CHEAP_MODEL", raising=False)
+    monkeypatch.delenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", raising=False)
+    _write_custom_models(
+        monkeypatch,
+        tmp_path,
+        {
+            "econ": {
+                "tier": "economy",
+                "models": ["cheap-slot", "expensive-slot"],
+            },
+        },
+    )
+    assert _resolve_tier_model("value") == "cheap-slot"
+
+
 # ── Short-message window (post-OctopusRouter-removal) ──────────
 
 

@@ -298,7 +298,9 @@ class TestDispatchModelOverrideEndToEnd:
         assert router.call_log[0].model == "gpt-5.5"
 
     def test_use_cheap_model_reaches_router(self, monkeypatch):
-        monkeypatch.delenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", raising=False)
+        # Pin the cheap default via env so the assertion is deterministic
+        # and independent of any real custom_models.json on the dev box.
+        monkeypatch.setenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", "my-org-cheap")
         from runtime.execution.subagents import bridge
         from runtime.execution.suckers.ephemeral_agents import (
             set_ephemeral_role_runner,
@@ -322,8 +324,45 @@ class TestDispatchModelOverrideEndToEnd:
         assert router.call_log, "runner was never invoked"
         # cheap routing injected the resolved cheap default into context;
         # the runner must have used it instead of the planner default.
-        assert router.call_log[0].model == bridge._resolve_cheap_subagent_model()
+        assert router.call_log[0].model == "my-org-cheap"
         assert router.call_log[0].model != "mimo2.5"
+
+    def test_cheap_with_no_resolvable_model_falls_back_to_planner(
+        self,
+        monkeypatch,
+    ):
+        """The core contract behind removing the hard-coded cheap default:
+        when no cheap model is configured anywhere, cheap-routed subagents
+        must NOT be sent to an invented model id (that 404s) — they run on
+        the planner/main model instead."""
+        monkeypatch.delenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", raising=False)
+        from runtime.platform.models import custom_model_flags
+
+        monkeypatch.setattr(custom_model_flags, "read_custom_models", lambda: None)
+        from runtime.execution.subagents import bridge
+        from runtime.execution.suckers.ephemeral_agents import (
+            set_ephemeral_role_runner,
+        )
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+        from runtime.sensing.model_router import MockModelRouter
+
+        router = MockModelRouter(response="ok")
+        set_ephemeral_role_runner(
+            make_llm_ephemeral_runner(router, default_model="planner-main"),
+        )
+
+        assert bridge._resolve_cheap_subagent_model() is None
+        bridge.call_subagent(
+            agent_id="researcher",
+            prompt="dig into X",
+            use_cheap_model=True,
+        )
+
+        assert router.call_log, "runner was never invoked"
+        # No model_name injected → runner falls back to the planner default.
+        assert router.call_log[0].model == "planner-main"
 
 
 class TestEndToEnd:

@@ -11,15 +11,16 @@ import os
 import random
 import uuid
 
-# Permissive default for the cheap subagent model. Operators should
-# override this to point at their org's actual cheap model — either
-# via the ``OCTOPUS_SUBAGENT_CHEAP_MODEL`` env var or via the
-# ``subagent_cheap_model`` service-provider key. When neither is set we
-# prefer a self-configured OpenAI-compatible model from
-# ``custom_models.json`` (see ``_resolve_cheap_custom_model``) so cheap
-# subagents land on a real, working endpoint; ``glm-4-flash`` is the
-# last-resort fallback for deployments with no custom models at all.
-_DEFAULT_CHEAP_SUBAGENT_MODEL: str = "glm-4-flash"
+# Cheap-subagent model resolution: operators override via the
+# ``OCTOPUS_SUBAGENT_CHEAP_MODEL`` env var or the ``subagent_cheap_model``
+# service-provider key; otherwise ``_resolve_cheap_custom_model`` picks a
+# self-configured OpenAI-compatible model from ``custom_models.json``. When
+# nothing resolves we return None (see ``_resolve_cheap_subagent_model``)
+# and the ephemeral runner falls back to the planner/main model — the one
+# model we know is configured and working. There is deliberately NO
+# hard-coded last resort: a model id the operator never declared would just
+# 404 (or land on a fallback endpoint that 404s it), so it is never worth
+# inventing one here.
 
 
 # ── Sub-agent visualisation: codename + avatar ────────────────
@@ -149,12 +150,18 @@ def _is_agent_plan_endpoint(base_url: str) -> bool:
 def _resolve_cheap_custom_model() -> str | None:
     """Pick a cheap-routable model id from ``custom_models.json``, or None.
 
-    Selects the first OpenAI-compatible entry (provider ``openai`` / empty)
-    that declares a ``base_url`` and is NOT a single-model Agent-Plan
+    Only entries the operator tagged ``tier: "economy"`` (the cost tier of a
+    ``performance`` / ``balanced`` / ``economy`` scale; legacy ``"cheap"`` is
+    accepted too) are candidates — we never guess cheapness from a model id,
+    since a name marker (``flash``/``mini``/…) or alphabetical order says
+    nothing about price and can route cheap work onto the most expensive
+    model. A candidate must also be OpenAI-compatible (provider ``openai`` /
+    empty), declare a ``base_url``, and NOT be a single-model Agent-Plan
     endpoint — those 404 for any model id outside their allowlist. The pick
     is deterministic (model ids sorted) so operators and tests get a stable
-    choice. Returns ``None`` when no usable entry exists; callers then fall
-    back to ``_DEFAULT_CHEAP_SUBAGENT_MODEL``.
+    choice. Returns ``None`` when no entry is tagged economy; callers then
+    leave ``model_name`` unset so the ephemeral runner falls back to the
+    planner/main model (the one guaranteed to be configured).
     """
     try:
         from runtime.platform.models.custom_model_flags import read_custom_models
@@ -176,6 +183,12 @@ def _resolve_cheap_custom_model() -> str | None:
             continue
         if _is_agent_plan_endpoint(base_url):
             continue
+        # Cheapness is an explicit operator declaration, not a heuristic:
+        # only entries tagged ``economy`` (the legacy ``cheap`` value is
+        # accepted too) are candidates for cheap subagent routing.
+        tier = str(entry.get("tier") or "").strip().lower()
+        if tier not in ("economy", "cheap"):
+            continue
         model_id = str(entry.get("id") or entry.get("name") or "").strip()
         if not model_id:
             raw_models = entry.get("models")
@@ -195,11 +208,14 @@ def _resolve_cheap_subagent_model() -> str | None:
     Resolution order:
     1. ``OCTOPUS_SUBAGENT_CHEAP_MODEL`` env var (operator override)
     2. ``subagent_cheap_model`` service-provider config key
-    3. a self-configured OpenAI-compatible model from ``custom_models.json``
-       (so unconfigured deployments route cheap subagents to a real,
-       working endpoint — the hard-coded fallback below used to land on a
-       single-model Agent-Plan endpoint and 404 every call)
-    4. ``"glm-4-flash"`` (last resort when no custom models are declared)
+    3. a ``custom_models.json`` entry the operator explicitly declared
+       cheap (``tier: "cheap"``) — the only trustworthy signal, since a
+       hard-coded default used to land on a single-model Agent-Plan
+       endpoint and 404 every call
+    4. ``None`` — the bridge leaves ``model_name`` unset and the ephemeral
+       runner falls back to the planner/main model. Deliberately NO hard-
+       coded last resort: a model id the operator never configured would
+       only 404, while the planner default is the one model we know works.
     """
     env_val = os.environ.get("OCTOPUS_SUBAGENT_CHEAP_MODEL")
     if env_val and env_val.strip():
@@ -215,4 +231,7 @@ def _resolve_cheap_subagent_model() -> str | None:
     custom = _resolve_cheap_custom_model()
     if custom:
         return custom
-    return _DEFAULT_CHEAP_SUBAGENT_MODEL
+    # No cheap model configured anywhere → leave model_name unset so the
+    # ephemeral runner uses its default (the planner/main model). Better
+    # than inventing a model id the operator may not have — that 404s.
+    return None

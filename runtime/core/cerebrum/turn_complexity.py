@@ -163,12 +163,40 @@ def _resolve_tier_model(tier: str) -> str | None:
     return None
 
 
-def _auto_derive_tier_from_custom_models(tier: str) -> str | None:
-    """Pick a tier model from the ordered custom-model catalog.
+def _entry_tier_slot(entry: dict, tier: str) -> str | None:
+    """Pick the model name an entry offers for one smart-routing tier.
 
-    Local/value use the first usable model and performance uses the last.
-    This preserves the single-entry ``models[0]``/``models[-1]`` contract
-    while avoiding a flash-only first entry becoming the strongest tier.
+    ``value``/``local`` take the cheap slot (``models[0]``); ``performance``
+    takes the strongest slot (``models[-1]``). Mirrors ``_lookup_entry_reference``
+    slot semantics so tagged auto-derive and explicit entry references agree.
+    Returns ``None`` when the entry has no usable model id.
+    """
+    raw_models = entry.get("models")
+    if isinstance(raw_models, list) and raw_models:
+        upstreams = [str(m).strip() for m in raw_models if str(m or "").strip()]
+        if not upstreams:
+            return None
+        return upstreams[-1] if tier == "performance" else upstreams[0]
+    # Legacy single-model entry predating the ``models`` list refactor.
+    primary = entry.get("model")
+    if isinstance(primary, str) and primary.strip():
+        if tier == "performance":
+            perf = entry.get("model_performance")
+            if isinstance(perf, str) and perf.strip():
+                return perf.strip()
+        return primary.strip()
+    return None
+
+
+def _auto_derive_tier_from_custom_models(tier: str) -> str | None:
+    """Pick a tier model from the custom-model catalog.
+
+    Preference is the operator's EXPLICIT ``tier`` tag — ``performance`` for
+    the performance slot, ``economy`` (falling back to ``balanced``) for the
+    local/value slot — so declared cost tiers win regardless of catalog
+    order. When no entry carries a tag, falls back to the historical position
+    heuristic (first usable model = cheap slot, last = strongest) so untagged
+    legacy catalogs keep working.
     """
     try:
         from runtime.platform.process.paths import app_paths
@@ -183,8 +211,38 @@ def _auto_derive_tier_from_custom_models(tier: str) -> str | None:
         return None
     if not isinstance(data, dict) or not data:
         return None
+
+    # 1) Tagged pass — the operator's declared cost tier is ground truth.
+    def _collect_tagged(want: tuple[str, ...]) -> list[str]:
+        hits: list[str] = []
+        for entry in data.values():
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("tier") or "").strip().lower() not in want:
+                continue
+            slot = _entry_tier_slot(entry, tier)
+            if slot:
+                hits.append(slot)
+        return sorted(hits)
+
+    if tier == "performance":
+        tagged = _collect_tagged(("performance",))
+        if tagged:
+            return tagged[0]
+    else:
+        # value/local prefer the declared ``economy`` tier; ``balanced``
+        # only steps in when no economy entry exists, so a balanced model
+        # never steals the cheap slot from a declared-economy one.
+        economy = _collect_tagged(("economy",))
+        if economy:
+            return economy[0]
+        balanced = _collect_tagged(("balanced",))
+        if balanced:
+            return balanced[0]
+
+    # 2) Legacy fallback — position heuristic for untagged catalogs.
     candidates: list[str] = []
-    for _entry_id, entry in data.items():
+    for entry in data.values():
         if not isinstance(entry, dict):
             continue
         raw_models = entry.get("models")
