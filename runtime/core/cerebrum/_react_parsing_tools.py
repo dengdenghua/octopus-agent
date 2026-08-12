@@ -100,6 +100,18 @@ _ACTION_XML_CONTAINER_RE = re.compile(
     r"<Action>\s*(?P<body>.*?)\s*</Action>",
     re.IGNORECASE | re.DOTALL,
 )
+# Ark/Seed-compatible providers occasionally serialize a function call as
+# ``<seed:tool_call><function name="list_cwd"></function></seed:tool_call>``
+# in the assistant text lane.  It is still an explicit, closed execution
+# envelope; treating it as prose makes the loop terminate with guard_impasse
+# before the tool ever runs.  Keep the boundary strict and accept only a
+# function name plus an optional JSON object body.
+_SEEDED_TOOL_CALL_RE = re.compile(
+    r"<seed:tool_call\s*>\s*<function\s+name\s*=\s*[\"']?"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_./:-]*)[\"']?\s*>"
+    r"(?P<body>.*?)</function>\s*</seed:tool_call\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
 _SPECIAL_TOOL_ENVELOPE_MARKERS = (
     "<|tool_calls_section_begin|>",
     "<|tool_calls_begin|>",
@@ -107,6 +119,7 @@ _SPECIAL_TOOL_ENVELOPE_MARKERS = (
     "<|tool_calls_section_end|>",
     "<tool_calls",
     "<invoke name=",
+    "<seed:tool_call",
 )
 
 _ACTION_CALL_RE = re.compile(
@@ -165,6 +178,23 @@ def _xml_args_from_body(body: str) -> dict[str, Any]:
 
 def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
     actions: list[str] = []
+    # Seed/Ark text-wire calls are checked before generic envelopes so their
+    # namespace is never accidentally rendered as ordinary answer prose.
+    for xml in _SEEDED_TOOL_CALL_RE.finditer(text):
+        raw_body = (xml.group("body") or "").strip()
+        args: dict[str, Any] = {}
+        if raw_body:
+            try:
+                parsed = json.loads(raw_body)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                args = parsed
+        name = _normalize_action_name(xml.group("name").strip())
+        actions.append(_format_action(name, args))
+    if actions:
+        return actions
+
     # DeepSeek-compatible endpoints may expose a complete tool call through a
     # ``<main><tool_name>{json}</tool_name></main>`` envelope.  ``todo_write``
     # commonly carries a top-level JSON array while ordinary tools carry an

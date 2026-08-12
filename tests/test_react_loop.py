@@ -3570,6 +3570,15 @@ def test_parse_step_recovers_xml_tool_call() -> None:
     assert step.action == 'write_text_file({"path": "plan.md", "content": "# Plan"})'
 
 
+def test_parse_step_recovers_seed_namespaced_tool_call() -> None:
+    step, final = _parse_step(
+        '<seed:tool_call><function name="list_cwd"></function></seed:tool_call>',
+        iteration=1,
+    )
+    assert step.actions == ['list_cwd({})']
+    assert final is None
+
+
 def test_parse_step_recovers_xml_tool_call_after_final_answer_label() -> None:
     text = (
         "Final Answer: 我直接启动调研。<tool_call>\n"

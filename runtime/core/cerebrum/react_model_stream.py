@@ -398,6 +398,7 @@ def _phase_6b_model_stream(
                                 "<tool_call>" in answer_so_far
                                 or "<tool_invocation" in answer_so_far
                                 or "<function=" in answer_so_far
+                                or "<seed:tool_call" in answer_so_far.lower()
                                 or _looks_like_special_tool_envelope(answer_so_far)
                                 or _looks_like_observation_echo(answer_so_far)
                                 or _stream_has_protocol(answer_so_far)
@@ -444,7 +445,13 @@ def _phase_6b_model_stream(
                             and not _looks_like_observation_echo(joined)
                             and not _stream_has_protocol(joined)
                             and not joined.lstrip().startswith(
-                                ("<tool_call>", "<tool_invocation", "<function=", "<final_answer")
+                                (
+                                    "<tool_call>",
+                                    "<tool_invocation",
+                                    "<function=",
+                                    "<seed:tool_call",
+                                    "<final_answer",
+                                )
                             )
                             and not _looks_like_special_tool_envelope(joined[:100])
                         ):

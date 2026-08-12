@@ -317,6 +317,7 @@ _REACT_LEAK_SECTION_HEADER_RE = re.compile(r"(?im)^\s*(?:Thought|Action|Observat
 _REACT_LEAK_TOOL_CALL_LINE_RE = re.compile(r"(?im)^\s*\w+\s*\(\s*\{")
 _REACT_LEAK_RECEIPT_MARKER_RE = re.compile(r"\(real tool execution succeeded\)", re.IGNORECASE)
 _REACT_LEAK_PROTOCOL_LINE_RE = re.compile(r"(?im)^\s*(?:Thought|Action|Observation)\s*:")
+_REACT_LEAK_FENCED_CODE_RE = re.compile(r"```[\s\S]*?```|`[^`\n]*`")
 
 
 def _has_react_protocol_stream_prefix(text: str) -> bool:
@@ -342,10 +343,14 @@ def _looks_like_protocol_leak(text: str) -> bool:
     True for an inline ``Action: name({...})`` call shape, or an
     ``Action:``/``Thought:``/``Observation:`` header followed by an indented
     tool-call line. A ``Thought:`` header with no call is NOT treated as a
-    leak (it can be a legitimate quote)."""
+    leak (it can be a legitimate quote). Content inside markdown code fences
+    is treated as quoted material and never counts as a leak (models commonly
+    quote an ``Action:`` example when explaining the protocol)."""
     if not text:
         return False
-    s = text.lstrip()
+    # Strip fenced code blocks first — quoted examples inside fences are
+    # legitimate prose, not leaked protocol.
+    s = _REACT_LEAK_FENCED_CODE_RE.sub(" ", text).lstrip()
     return bool(
         _REACT_LEAK_ACTION_CALL_RE.search(s)
         or (_REACT_LEAK_SECTION_HEADER_RE.search(s) and _REACT_LEAK_TOOL_CALL_LINE_RE.search(s))
@@ -359,17 +364,30 @@ def _strip_react_protocol_blocks(text: str) -> str:
     Handles both a header-only line followed by indented tool-call lines
     (``Action:\\n    read_file({...})\\n    glob_files({...})``) and an inline
     ``Action: name({...})`` on one line. Also drops the synthetic
-    ``(real tool execution succeeded)`` receipt marker. The result is the
-    cleaned answer body; an empty/whitespace result means the whole text was
-    protocol and should not be delivered as an answer."""
+    ``(real tool execution succeeded)`` receipt marker. Content inside
+    markdown code fences is quoted material and is preserved verbatim. The
+    result is the cleaned answer body; an empty/whitespace result means the
+    whole text was protocol and should not be delivered as an answer."""
     if not text:
         return text
     lines = text.split("\n")
     out: list[str] = []
+    in_fence = False
     i = 0
     n = len(lines)
     while i < n:
         line = lines[i]
+        # Preserve markdown code fences verbatim: quoted protocol examples
+        # are legitimate prose, never leaked protocol.
+        if line.lstrip().startswith("```"):
+            out.append(line)
+            in_fence = not in_fence
+            i += 1
+            continue
+        if in_fence:
+            out.append(line)
+            i += 1
+            continue
         if _REACT_LEAK_RECEIPT_MARKER_RE.search(line):
             # Drop the whole synthetic receipt line, including the tool name.
             # If a JSON receipt immediately follows, consume that complete
