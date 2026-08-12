@@ -38,7 +38,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { emitAgentChanged, eventBus } from "@/core/events";
+import {
+  emitAgentChanged,
+  emitOpenSettings,
+  eventBus,
+} from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   useDeleteThread,
@@ -226,7 +230,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
     // settings dialog. Opening both in the same event turn causes Radix to
     // immediately dismiss the second surface on narrow screens.
     window.setTimeout(() => {
-      window.dispatchEvent(new Event("octopus:open-settings"));
+      emitOpenSettings();
     }, 0);
   }, [onOpenChange]);
 

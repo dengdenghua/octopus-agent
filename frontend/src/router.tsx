@@ -9,6 +9,7 @@ import {
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { emitOpenSettings } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
 function StorageRedirect() {
   const search = window.location.hash.includes("?")
@@ -31,12 +32,14 @@ function SettingsRoute() {
 
   useEffect(() => {
     const section = new URLSearchParams(location.search).get("section");
-    window.dispatchEvent(
-      new CustomEvent("octopus:open-settings", {
-        detail: section ? { tab: section } : undefined,
-      }),
-    );
     navigate("/workspace/realtime/new", { replace: true });
+    // Emit after navigation lands so the settings listener is mounted before
+    // the payload arrives; dispatching first lost the tab when the sidebar
+    // attached late.
+    const handle = window.setTimeout(() => {
+      emitOpenSettings(section ?? undefined);
+    }, 0);
+    return () => window.clearTimeout(handle);
   }, [location.search, navigate]);
 
   return <PageLoading />;

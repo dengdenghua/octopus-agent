@@ -38,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { emitOpenSettings } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
 import { useGlobalShortcuts } from "@/hooks/use-global-shortcuts";
 
@@ -60,7 +61,7 @@ export function CommandPalette() {
 
   const handleOpenSettings = useCallback(() => {
     setOpen(false);
-    window.dispatchEvent(new Event("octopus:open-settings"));
+    emitOpenSettings();
   }, []);
 
   const handleShowShortcuts = useCallback(() => {
