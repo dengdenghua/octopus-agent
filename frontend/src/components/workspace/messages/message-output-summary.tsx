@@ -827,22 +827,6 @@ function ChangeRow({
   return (
     <li className="min-w-0 text-sm">
       <div className="group/process-row flex min-w-0 items-center gap-2 py-1 text-[13px] leading-5 text-muted-foreground">
-        {hasHunks && (
-          <button
-            type="button"
-            aria-label={t.message.changesSummary}
-            aria-expanded={open}
-            onClick={() => setOpen((prev) => !prev)}
-            className="shrink-0 rounded-sm text-muted-foreground/60 transition-colors hover:text-foreground"
-          >
-            <ChevronDownIcon
-              className={cn(
-                "size-3.5 transition-transform",
-                !open && "-rotate-90",
-              )}
-            />
-          </button>
-        )}
         <FilePenLineIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
         <span className="shrink-0 font-medium text-muted-foreground/90">
           {change.created ? t.message.fileCreated : t.message.fileEdited}
@@ -874,6 +858,25 @@ function ChangeRow({
           <span className="mx-1 text-muted-foreground"> </span>
           <span className="text-destructive">-{change.removed}</span>
         </span>
+        {/* Disclosure sits at the row's trailing edge: the file name is what a
+            reader scans for, so the affordance follows the content instead of
+            indenting every path behind a chevron. */}
+        {hasHunks && (
+          <button
+            type="button"
+            aria-label={t.message.changesSummary}
+            aria-expanded={open}
+            onClick={() => setOpen((prev) => !prev)}
+            className="shrink-0 rounded-sm text-muted-foreground/60 transition-colors hover:text-foreground"
+          >
+            <ChevronDownIcon
+              className={cn(
+                "size-3.5 transition-transform",
+                !open && "-rotate-90",
+              )}
+            />
+          </button>
+        )}
       </div>
       {hasHunks && open && (
         <div className="ml-4 flex flex-col gap-1.5 border-l-2 border-border/50 py-1.5 pl-3">

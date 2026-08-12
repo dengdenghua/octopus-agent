@@ -1824,11 +1824,13 @@
     }
   }
 
-  /* Live private reasoning is part of the conversation flow. The transcript
-     owns vertical scrolling; a nested reasoning viewport would let thoughts
-     drift away from the formal answer below them. */
+  /* Live private reasoning streams inside a fixed-height waterfall window so a
+     long chain of thought cannot push the answer off-screen. The window owns
+     its own scrolling and auto-anchors to the newest line while streaming. */
   .live-thinking-window {
     min-width: 0;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
   }
 
   @media (max-width: 640px) {
@@ -1836,7 +1838,6 @@
       font-size: 0.9375rem;
       line-height: 1.7;
     }
-
   }
 
   .chat-markdown :where(p, li, blockquote) {

@@ -274,6 +274,53 @@ describe("MessageOutputSummary", () => {
     expect(screen.getAllByText("-1").length).toBeGreaterThan(0);
   });
 
+  it("puts the hunk disclosure at the end of the file row", () => {
+    const message: AIMessage = {
+      id: "ai-hunks",
+      type: "ai",
+      content: "Done",
+      tool_calls: [
+        {
+          id: "change-hunks",
+          name: "file_change",
+          args: {
+            changes: [
+              {
+                path: "runtime/app.py",
+                op: "update",
+                diff: ["@@", "-old", "+new"].join("\n"),
+                hunks: [
+                  {
+                    id: "hunk-1",
+                    oldStart: 1,
+                    oldLines: 1,
+                    newStart: 1,
+                    newLines: 1,
+                    body: "-old\n+new",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    renderWithProviders(<MessageOutputSummary messages={[message]} />, {
+      locale: "zh-CN",
+    });
+
+    // 展开箭头在行尾，不在文件名前面：文件名才是扫读目标。
+    const path = screen.getByText("runtime/app.py");
+    const toggle = screen
+      .getByRole("region", { name: "文件变更汇总" })
+      .querySelector("button[aria-expanded]");
+    expect(toggle).not.toBeNull();
+    expect(
+      path.compareDocumentPosition(toggle!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("labels newly created files as generated artifacts", () => {
     const message: AIMessage = {
       id: "ai-1",

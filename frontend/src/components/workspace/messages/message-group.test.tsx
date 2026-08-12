@@ -621,8 +621,10 @@ describe("MessageGroup reasoning grouping", () => {
     expect(
       screen.queryByTestId("live-thinking-stream"),
     ).not.toBeInTheDocument();
-    const detail = screen.queryByTestId("thinking-row-content");
-    if (detail) expect(detail).toHaveAttribute("data-state", "closed");
+    expect(screen.getByTestId("thinking-row-content")).toHaveAttribute(
+      "data-state",
+      "closed",
+    );
   });
 
   it("keeps wording-based internal reasoning muted, collapsed, and markdown-formatted on demand", () => {
