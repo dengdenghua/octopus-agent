@@ -88,11 +88,14 @@ REQUIRED_TOPICS: tuple[ReadinessTopic, ...] = (
     ReadinessTopic(
         id="registry_install_surface",
         title="Verified registry install surface",
-        path="frontend/src/app/plugins/page.tsx",
+        # The registry is embedded in the Agent workbench rather than exposed
+        # as a standalone route. Keep this check anchored to the real user
+        # entry point so deleting the legacy route cannot make readiness stale.
+        path="frontend/src/components/workspace/agents/agent-world-unified.tsx",
         required_terms=(
-            "fetchPluginRegistryUpdates",
-            "installPluginFromRegistry",
-            "Install verified registry plugin",
+            "RegistryPluginsPanel",
+            "registry-plugins-panel",
+            "@/components/store/registry-plugins-panel",
         ),
     ),
     ReadinessTopic(

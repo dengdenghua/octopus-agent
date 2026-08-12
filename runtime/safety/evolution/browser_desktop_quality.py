@@ -231,7 +231,6 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "frontend/src/components/workspace/replay-panel.tsx",
             "frontend/src/components/workspace/agent-operator-panel.tsx",
             "frontend/src/components/workspace/agent-operator-panel.test.tsx",
-            "frontend/src/app/workspace/replay/page.tsx",
         ),
         required_terms=(
             "capture_screen",

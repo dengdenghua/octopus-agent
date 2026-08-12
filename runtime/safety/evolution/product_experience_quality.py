@@ -131,7 +131,6 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
             "frontend/src/components/workspace/agent-operator-panel.tsx",
             "frontend/src/components/workspace/agent-operator/index.tsx",
             "frontend/src/components/workspace/agent-operator-panel.test.tsx",
-            "frontend/src/app/workspace/replay/page.tsx",
             "frontend/src/core/agent-trace/api.ts",
         ),
         required_terms=(
@@ -139,7 +138,7 @@ CHECKS: tuple[ProductExperienceCheck, ...] = (
             "rerunBrowserDesktopRepairRecipeEvidenceBatch",
             "promoteSourceCases: false",
             "Source cases remain operator-gated",
-            "replay_workspace",
+            "operator_panel",
         ),
     ),
 )

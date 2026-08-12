@@ -250,7 +250,6 @@ REQUIREMENTS: tuple[CertificationRequirement, ...] = (
             "frontend/src/components/workspace/embedded-browser/browser-panel.tsx",
             "frontend/src/components/workspace/replay-panel.tsx",
             "frontend/src/components/workspace/agent-operator/index.tsx",
-            "frontend/src/app/workspace/replay/page.tsx",
         ),
         required_terms=(
             "compute_browser_desktop_quality",
