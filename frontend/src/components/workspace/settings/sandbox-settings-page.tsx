@@ -54,12 +54,6 @@ const PRESET_EGRESS_DOMAINS: readonly string[] = [
 type ExecutionEnvironment = "sandbox" | "local";
 type SandboxPermissionMode = "default" | "acceptEdits" | "bypassPermissions";
 type NetworkTier = "deny" | "common" | "full";
-type ReplyStyleKey =
-  | "default"
-  | "professional"
-  | "friendly"
-  | "concise"
-  | "socratic";
 
 export default function SandboxSettingsPage() {
   const { t } = useI18n();
@@ -78,8 +72,6 @@ export default function SandboxSettingsPage() {
     context.execution_environment === "local" ? "local" : "sandbox";
   const permission = normalizePermissionMode(context.permission_mode);
   const networkTier: NetworkTier = normalizeNetworkAccess(context.network_access) ?? "deny";
-  const replyStyle =
-    typeof context.reply_style === "string" ? context.reply_style : "default";
   const guardianEnabled = context.guardian_review_enabled === true;
   // Empty = follow the conversation's own model (the user's chosen model
   // is always available); only a non-empty override switches reviewer.
@@ -131,22 +123,6 @@ export default function SandboxSettingsPage() {
           network_access: next,
         } as Partial<typeof settings.context>);
         toast.success(copy.toastNetworkSwitched(label));
-      } catch {
-        toast.error(copy.toastFailed(label));
-      }
-    },
-    [context, copy, setSettings, settings],
-  );
-
-  const applyReplyStyle = useCallback(
-    (next: ReplyStyleKey) => {
-      const label = copy.replyStyle[next]?.label ?? next;
-      try {
-        setSettings("context", {
-          ...context,
-          reply_style: next,
-        } as Partial<typeof settings.context>);
-        toast.success(copy.toastReplyStyleSwitched(label));
       } catch {
         toast.error(copy.toastFailed(label));
       }
@@ -371,60 +347,6 @@ export default function SandboxSettingsPage() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* ─── Reply style (personality module) ─── */}
-        <div className="mt-8">
-          <h3 className="text-sm font-semibold text-foreground">
-            {copy.replyStyleTitle}
-          </h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {copy.replyStyleDesc}
-          </p>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {(
-              [
-                "default",
-                "professional",
-                "friendly",
-                "concise",
-                "socratic",
-              ] as const
-            ).map((id) => {
-                const active = replyStyle === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => applyReplyStyle(id)}
-                    disabled={active}
-                    aria-pressed={active}
-                    aria-label={`reply-style-${id}`}
-                    className={cn(
-                      "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
-                      active
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/40"
-                        : "border-border-default hover:border-primary/40",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">
-                        {copy.replyStyle[id].label}
-                      </span>
-                      {active && (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                          {copy.activeTag}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs leading-snug text-muted-foreground">
-                      {copy.replyStyle[id].description}
-                    </p>
-                  </button>
-                );
-              },
-            )}
-          </div>
         </div>
 
         <p className="mt-4 text-xs text-muted-foreground/80">{copy.scopeNote}</p>

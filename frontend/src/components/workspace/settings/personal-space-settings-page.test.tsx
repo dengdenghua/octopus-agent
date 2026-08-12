@@ -33,4 +33,17 @@ describe("PersonalSpaceSettingsPage", () => {
 
     expect(getLocalSettings().personal_space.remember_last_mode).toBe(false);
   });
+
+  it("keeps reply style under conversation personalization", () => {
+    renderWithProviders(<PersonalSpaceSettingsPage />, { locale: "zh-CN" });
+
+    expect(
+      screen.getByRole("button", { name: "reply-style-default" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(
+      screen.getByRole("button", { name: "reply-style-professional" }),
+    );
+
+    expect(getLocalSettings().context.reply_style).toBe("professional");
+  });
 });

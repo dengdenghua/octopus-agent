@@ -9,6 +9,12 @@ import { cn } from "@/lib/utils";
 import { SettingsSection } from "./settings-section";
 
 type PersonalMode = "general" | "build" | "research";
+type ReplyStyleKey =
+  | "default"
+  | "professional"
+  | "friendly"
+  | "concise"
+  | "socratic";
 
 const COPY = {
   zh: {
@@ -103,7 +109,7 @@ const MODE_OPTIONS = [
 ];
 
 export default function PersonalSpaceSettingsPage() {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const language = locale.slice(0, 2).toLowerCase();
   const copy =
     language === "zh"
@@ -115,9 +121,24 @@ export default function PersonalSpaceSettingsPage() {
           : COPY.en;
   const [settings, setSettings] = useLocalSettings();
   const personal = settings.personal_space;
+  const context = settings.context as typeof settings.context & {
+    reply_style?: string;
+  };
+  const replyStyle: ReplyStyleKey =
+    context.reply_style === "professional" ||
+    context.reply_style === "friendly" ||
+    context.reply_style === "concise" ||
+    context.reply_style === "socratic"
+      ? context.reply_style
+      : "default";
+  const replyCopy = t.sandboxSettings;
 
   const setMode = (default_mode: PersonalMode) => {
     setSettings("personal_space", { default_mode });
+  };
+
+  const setReplyStyle = (next: ReplyStyleKey) => {
+    setSettings("context", { ...context, reply_style: next });
   };
 
   return (
@@ -163,6 +184,52 @@ export default function PersonalSpaceSettingsPage() {
                 </button>
               );
             })}
+          </div>
+        </section>
+
+        <section className="space-y-3" aria-labelledby="personal-reply-style">
+          <div>
+            <h3 id="personal-reply-style" className="text-sm font-medium">
+              {replyCopy.replyStyleTitle}
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {replyCopy.replyStyleDesc}
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {(["default", "professional", "friendly", "concise", "socratic"] as const).map(
+              (id) => {
+                const active = replyStyle === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setReplyStyle(id)}
+                    disabled={active}
+                    aria-pressed={active}
+                    aria-label={`reply-style-${id}`}
+                    className={cn(
+                      "flex flex-col gap-2 rounded-xl border p-3 text-left transition-colors",
+                      active
+                        ? "border-primary/45 bg-primary/8 ring-1 ring-primary/15"
+                        : "border-border-default bg-card hover:bg-muted/40",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{replyCopy.replyStyle[id].label}</span>
+                      {active && (
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                          {replyCopy.activeTag}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs leading-snug text-muted-foreground">
+                      {replyCopy.replyStyle[id].description}
+                    </p>
+                  </button>
+                );
+              },
+            )}
           </div>
         </section>
 
