@@ -263,7 +263,7 @@ def _is_code_change_task(intent: ParsedIntent) -> bool:
     nested = raw_metadata if isinstance(raw_metadata, dict) else {}
     mode = str(context.get("mode") or nested.get("mode") or "").lower()
     code_mode = context.get("code_mode", nested.get("code_mode"))
-    if mode != "code" and code_mode is not True:
+    if mode not in {"code", "build", "developer"} and code_mode is not True:
         return False
     goal = str(intent.normalized_goal or "").lower()
     return any(
@@ -276,6 +276,7 @@ def _is_code_change_task(intent: ParsedIntent) -> bool:
             "update",
             "modify",
             "create",
+            "build",
             "add ",
             "bug",
             "vulnerability",
@@ -284,9 +285,55 @@ def _is_code_change_task(intent: ParsedIntent) -> bool:
             "重构",
             "修改",
             "新增",
+            "开发",
+            "构建",
             "漏洞",
         )
     )
+
+
+_EVIDENCE_TASK_RE = re.compile(
+    r"评价|评审|评估|分析|走查|审阅|检查|排查|调研|研究|"
+    r"review\b|audit\b|inspect\b|assess\b|evaluate\b|analy[sz]e\b|"
+    r"walk\s*through|investigate\b",
+    re.IGNORECASE,
+)
+
+
+def _is_evidence_task(intent: ParsedIntent) -> bool:
+    """Whether the answer must be grounded in real workspace evidence."""
+    context = intent.user_context or {}
+    if bool(context.get("no_evidence_required")):
+        return False
+    mode_values = {
+        str(context.get(key) or "").strip().lower()
+        for key in ("mode", "capability_mode", "agent_mode", "workflow_preset")
+    }
+    if mode_values & {
+        "audit",
+        "ux",
+        "ui",
+        "design",
+        "review",
+        "code",
+        "build",
+        "research",
+        "deep_research",
+        "deep-research",
+    }:
+        return True
+    goal = str(intent.normalized_goal or intent.raw or "")
+    lowered = goal.lower()
+    # An explicit verification command already carries its own execution
+    # contract; don't turn the generic word "analyze" in that request into a
+    # second, competing gate.
+    if "run tests" in lowered or "运行测试" in goal:
+        return False
+    if re.search(r"\binspect\s+project\b", lowered) and not re.search(
+        r"frontend|backend|source|code|file|文件|代码|前端|后端", lowered
+    ):
+        return False
+    return bool(_EVIDENCE_TASK_RE.search(goal))
 
 
 def _is_security_change_task(intent: ParsedIntent) -> bool:

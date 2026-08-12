@@ -62,6 +62,7 @@ from ._tool_bridge_policy import (
     REFLECTION_INTERVAL,
     _filter_tool_specs_for_workspace_contract,
     _is_code_change_task,
+    _is_evidence_task,
     _is_security_change_task,
     _is_shell_mutation,
     _is_shell_terminal_verifier,
@@ -515,6 +516,9 @@ def stream_agentic_fallback(
         ),
     )
     _code_change_task = _is_code_change_task(intent)
+    # Reviews/analyses are read-only, but a prose-only answer is still a
+    # false completion. Require one real inspection before synthesis.
+    _evidence_task = _is_evidence_task(intent) and not _code_change_task
     if _code_change_task:
         available_code_tools = [
             name
@@ -558,6 +562,20 @@ def stream_agentic_fallback(
                     "repair the implementation or test, and rerun verification; "
                     "do not mark the task complete or pause while the latest "
                     "verification is failing.\n"
+                ),
+            ),
+        )
+    if _evidence_task:
+        messages.insert(
+            0,
+            Message(
+                role="system",
+                content=(
+                    "EVIDENCE-GROUNDED REVIEW CONTRACT:\n"
+                    "This is an analysis or review task. Do not answer from the "
+                    "prompt alone or merely announce that you will inspect later. "
+                    "Use at least one real workspace inspection tool first, then "
+                    "synthesize only from the returned evidence."
                 ),
             ),
         )
@@ -805,6 +823,7 @@ def stream_agentic_fallback(
     _code_semantic_guard_nudges = 0
     _code_completion_nudges = 0
     _code_no_action_stops = 0
+    _evidence_no_action_stops = 0
     _quality_failovers = 0
     _browser_observed_evidence: set[str] = set()
     _browser_guard_nudges = 0
@@ -1005,6 +1024,7 @@ def stream_agentic_fallback(
                             or _code_semantic_repair_required
                         )
                     )
+                    or (_evidence_task and _completed_tool_count == 0)
                     or bool(_browser_required_evidence - _browser_observed_evidence)
                 )
             ),
@@ -1522,6 +1542,28 @@ def stream_agentic_fallback(
                             )
                         )
                         continue
+            if (
+                not _round_convergence_mode
+                and _evidence_task
+                and _completed_tool_count == 0
+                and _evidence_no_action_stops < 1
+            ):
+                _evidence_no_action_stops += 1
+                accumulated_text = ""
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "[SYSTEM CHECK - evidence required]\n"
+                            "No workspace evidence was collected. Do not finish "
+                            "with a plan or a generic opinion. Call a real read, "
+                            "list, search, or browser inspection tool now; if the "
+                            "requested source is unavailable, verify that fact "
+                            "with a tool and report the concrete blocker."
+                        ),
+                    )
+                )
+                continue
             if (
                 not _round_convergence_mode
                 and _code_change_task
