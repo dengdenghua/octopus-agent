@@ -153,7 +153,7 @@ def test_strict_explicit_reads_remove_unrelated_native_tool_schemas() -> None:
 # ── unit: tool_calls → step synthesis ────────────────────────────────
 
 
-def test_step_from_tool_calls_single() -> None:
+def test_step_from_tool_calls_does_not_guess_public_update_from_provider_text() -> None:
     step = step_from_tool_calls(
         [ToolCall(id="a", name="read_file", input={"path": "x.py"})],
         text="reading",
@@ -162,7 +162,7 @@ def test_step_from_tool_calls_single() -> None:
     assert step.actions == ['read_file({"path": "x.py"})']
     assert step.action == 'read_file({"path": "x.py"})'
     assert step.thought == ""
-    assert step.public_update == "reading"
+    assert step.public_update == ""
 
 
 def test_native_tool_schema_requires_model_authored_public_update() -> None:
@@ -662,7 +662,7 @@ def test_observed_read_sequence_requires_public_updates_without_ui_flags() -> No
     assert result is not None and result.success
 
 
-def test_native_provider_omission_gets_private_safe_public_repair() -> None:
+def test_native_provider_omission_does_not_promote_tool_round_text() -> None:
     from runtime.core.cerebrum.react_loop import stream_react_loop
 
     orientation = "我先核对配置文件的实际内容，确认最终结论所需的依据。"
@@ -718,19 +718,17 @@ def test_native_provider_omission_gets_private_safe_public_repair() -> None:
                 break
 
     assert result is not None and result.final_answer == "配置依据已经确认。"
-    assert result.steps[0].public_update == orientation
-    repair_request = router.requests[1]
-    assert repair_request.tools == []
-    assert repair_request.enable_thinking is False
-    repair_input = "\n".join(str(message.content) for message in repair_request.messages)
-    assert "config.yaml" in repair_input
-    assert "read_file" not in repair_input
+    assert result.steps[0].public_update == ""
+    assert len(router.requests) == 3
     model_updates = [
         event["delta"]
         for event in events
         if event.get("type") == "commentary_delta" and event.get("progress_source") == "model"
     ]
-    assert "".join(model_updates) == orientation
+    # The explicit post-tool evidence narrator remains public. What is gone is
+    # the unsafe fallback that promoted arbitrary text attached to the native
+    # tool call itself.
+    assert model_updates == [orientation]
 
 
 def test_escape_hatch_forces_text_mode(monkeypatch) -> None:

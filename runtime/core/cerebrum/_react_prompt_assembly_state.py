@@ -54,6 +54,7 @@ class _AssemblyState:
     # ── derived inputs ──────────────────────────────────────────────────
     user_context: dict = field(default_factory=dict)
     metadata: dict = field(default_factory=dict)
+    effective_goal: str = ""
 
     # ── shared buffers ──────────────────────────────────────────────────
     system_parts: list = field(default_factory=list)
@@ -225,6 +226,22 @@ def _assemble_messages(state: _AssemblyState) -> None:
                 and content
             ):
                 messages.append(Message(role=role, content=content))
+    _current_goal = str(state.intent.normalized_goal or state.intent.raw or "").strip()
+    if state.effective_goal and state.effective_goal != _current_goal:
+        messages.append(
+            Message(
+                role="system",
+                content=(
+                    "<active-execution-contract>\n"
+                    "The earlier execution request is still unfinished. The latest user "
+                    "message steers that same task and does not replace its completion "
+                    "requirements. Continue the work now; do not merely announce another "
+                    "future action.\n"
+                    f"Effective goal:\n{state.effective_goal}\n"
+                    "</active-execution-contract>"
+                ),
+            )
+        )
     _no_startup_code_context_modes = {
         "chat",
         "conversation",
@@ -245,7 +262,7 @@ def _assemble_messages(state: _AssemblyState) -> None:
     ):
         startup_context = _build_code_context_prelude(
             state.effective_wp.strip(),
-            str(state.intent.normalized_goal or state.intent.raw or ""),
+            state.effective_goal or str(state.intent.normalized_goal or state.intent.raw or ""),
         )
         if startup_context:
             messages.append(Message(role="user", content=startup_context))

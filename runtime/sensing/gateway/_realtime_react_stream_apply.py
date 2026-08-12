@@ -108,25 +108,6 @@ async def _apply_react_event(
             del logged_update
         return
     if kind == "text_delta":
-        # Do not promote a provider's last reasoning paragraph merely because
-        # it *sounds* like a conclusion.  For a tool-backed conversational
-        # turn, add one protocol-authored public beat before the answer instead:
-        # reasoning stays private/foldable, while the handoff is explicit
-        # commentary and therefore remains visible in the transcript.
-        if (
-            state.agent_message is None
-            and state.reasoning is not None
-            and state.progress_sequence > 0
-            and not state.final_answer_handoff_emitted
-        ):
-            await state.append_commentary(
-                turn,
-                log,
-                emitter,
-                "已经整理好了，下面给出完整答复。",
-                start_new_segment=True,
-            )
-            state.final_answer_handoff_emitted = True
         await state.append_agent_message(turn, log, emitter, evt.get("delta", ""))
         return
     if kind == "commentary_delta":

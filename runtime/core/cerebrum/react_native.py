@@ -279,11 +279,7 @@ def step_from_tool_calls(
         thought=thought,
         public_update=(
             structured_evidence_update
-            or (
-                ""
-                if evidence_round
-                else (structured_public_update or tagged_public_update or (text or "").strip())
-            )
+            or ("" if evidence_round else (structured_public_update or tagged_public_update))
         ),
         action="; ".join(actions),
         observation="",

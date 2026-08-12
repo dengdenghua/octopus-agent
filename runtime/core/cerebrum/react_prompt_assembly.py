@@ -42,6 +42,7 @@ from runtime.core.cerebrum._react_prompt_assembly_state import (
     _assemble_messages,
     _AssemblyState,
 )
+from runtime.core.cerebrum.react_goal_analysis import derive_effective_execution_goal
 
 __all__ = [
     "_PromptAssembly",
@@ -78,6 +79,7 @@ class _PromptAssembly:
     is_research_mode: bool = False
     active_max_tokens_budget: Any = None
     active_max_usd_budget: Any = None
+    effective_goal: str = ""
 
 
 def _assemble_prompt_and_messages(
@@ -126,6 +128,10 @@ def _assemble_prompt_and_messages(
         user_context=intent.user_context or {},
     )
     state.metadata = state.user_context.get("metadata") or {}
+    state.effective_goal = derive_effective_execution_goal(
+        str(intent.normalized_goal or intent.raw or ""),
+        state.user_context.get("conversation_messages"),
+    )
 
     _assemble_early_sections(state)
     _assemble_core_guidance(state)
@@ -157,4 +163,5 @@ def _assemble_prompt_and_messages(
         is_research_mode=state.is_research_mode,
         active_max_tokens_budget=state.active_max_tokens_budget,
         active_max_usd_budget=state.active_max_usd_budget,
+        effective_goal=state.effective_goal,
     )

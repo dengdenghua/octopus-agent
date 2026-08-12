@@ -148,7 +148,7 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
         state.volatile_parts.append(state.resume_context_prompt)
     state.is_goal_mode = _wm.is_goal
     state.is_code_mode = _wm.is_code
-    _goal = str(state.intent.normalized_goal or state.intent.raw or "")
+    _goal = state.effective_goal or str(state.intent.normalized_goal or state.intent.raw or "")
     state.read_only_turn = _explicit_read_only_goal(_goal)
     state.observed_read_sequence = state.read_only_turn and _explicit_observed_read_sequence(_goal)
     state.observed_read_groups = (
@@ -309,7 +309,9 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
         state.max_iterations,
         browser_operation_mode=state.browser_operation_mode,
     )
-    state.goal_for_mode = str(state.intent.normalized_goal or state.intent.raw or "")
+    state.goal_for_mode = state.effective_goal or str(
+        state.intent.normalized_goal or state.intent.raw or ""
+    )
     state.max_iterations = _code_task_iteration_limit(
         state.goal_for_mode,
         state.max_iterations,

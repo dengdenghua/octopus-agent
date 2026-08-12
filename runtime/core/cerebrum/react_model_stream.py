@@ -3,7 +3,7 @@
 Extracted from ``react_loop.py`` (Wave 2 of the split documented in
 ``docs/design/react-loop-split-plan.md``). Builds the per-iteration
 ``ModelRequest``, streams the model response with a deadline, surfaces
-Thought prose / native orientation / the post-anchor Final Answer as
+Thought prose / the post-anchor Final Answer as
 live deltas, and handles soft timeouts, cancellation, failover, retry,
 and budget auto-pause bookkeeping.
 
@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import re
 import time
 from collections.abc import Callable, Generator
 from typing import Any
@@ -34,12 +33,10 @@ from runtime.core.cerebrum.react_parsing import (
     _ACTION_RE,
     _FINAL_RE,
     _THOUGHT_RE,
+    _has_react_protocol_stream_prefix,
+    _looks_like_protocol_leak,
     _looks_like_special_tool_envelope,
     extract_streamable_thought,
-)
-from runtime.core.cerebrum.react_public_updates import (
-    _PUBLIC_EVIDENCE_STREAM_GATE_CHARS,
-    _safe_public_update,
 )
 from runtime.core.cerebrum.react_types import _safe_react_error_message
 from runtime.platform.models.llm import (
@@ -57,6 +54,60 @@ _logger = logging.getLogger(__name__)
 # before exposing it. This keeps ordinary long answers progressive while
 # giving the protocol-echo detector enough text to make a safe decision.
 _ZERO_ANCHOR_STREAM_GATE_CHARS = 24
+
+_REACT_STREAM_LEADERS = (
+    "thought:",
+    "action:",
+    "observation:",
+    "(real tool execution succeeded)",
+)
+
+
+def _stream_answer_body(text: str) -> str:
+    """Return the visible answer lane from a growing provider text buffer."""
+
+    final_match = _FINAL_RE.search(text or "")
+    return final_match.group(1) if final_match else (text or "")
+
+
+def _safe_stream_end(text: str) -> int:
+    """Return the exclusive end that is safe to expose for this delta.
+
+    Only a possible protocol-leader suffix is held back.  Ordinary prose is
+    still released token-by-token, so this protection does not turn short
+    answers back into a single post-response dump.
+    """
+
+    if not text:
+        return 0
+    # Protocol markers are short. Inspect only the tail so both ``\nAct`` and
+    # an already completed ``Action: echo`` leader remain private until the
+    # strict parser can see the complete call. No word-boundary assumption is
+    # needed; holding a rare prose suffix such as "act" for one chunk is safer
+    # than exposing half a control token.
+    tail_start = max(0, len(text) - 64)
+    folded = text.casefold()
+
+    def _at_protocol_boundary(index: int) -> bool:
+        return index == 0 or text[index - 1].isspace() or text[index - 1] in "。.!！?？:：;；"
+
+    for leader in _REACT_STREAM_LEADERS:
+        marker_at = folded.rfind(leader, tail_start)
+        if marker_at != -1 and _at_protocol_boundary(marker_at):
+            return marker_at
+        for prefix_len in range(1, len(leader)):
+            prefix = leader[:prefix_len]
+            if folded.endswith(prefix):
+                prefix_at = len(text) - prefix_len
+                if _at_protocol_boundary(prefix_at):
+                    return prefix_at
+    return len(text)
+
+
+def _stream_has_protocol(text: str) -> bool:
+    """Strict completed-marker check for an in-flight answer lane."""
+
+    return _has_react_protocol_stream_prefix(text) or _looks_like_protocol_leak(text)
 
 
 def _phase_6b_model_stream(
@@ -110,9 +161,6 @@ def _phase_6b_model_stream(
     _throughput_interval_s = state.throughput_interval_s
     _is_code_mode = state.is_code_mode
     _browser_operation_mode = state.browser_operation_mode
-    _todo_protocol_required = state.todo_protocol_required
-    _todo_protocol_visible = state.todo_protocol_visible
-    _realtime_public_orientation = state.realtime_public_orientation
     # Scalar mailbox — pulled in, pushed back in the finally below.
     effective_model = state.effective_model
     _native_mode = state.native_mode
@@ -189,20 +237,6 @@ def _phase_6b_model_stream(
             # turns show signs of life long before the terminal answer.
             _thought_stream_cursor = 0
             _thought_stream_open = False
-            # Native tool models keep private thinking in a separate channel,
-            # so ordinary text before the first tool call is safe public prose.
-            # Stream that model-authored orientation from the main call itself:
-            # an extra narrator request added seconds of latency and frequently
-            # timed out on the same provider before showing anything.
-            _native_orientation_candidate = bool(
-                _native_mode
-                and _realtime_public_orientation
-                and i == 0
-                and not steps
-                and str(intent.normalized_goal or "").strip()
-            )
-            _native_orientation_emitted = ""
-            _native_orientation_disabled = False
             _iteration_soft_timed_out = False
             _base_iteration_timeout = _model_iteration_timeout_s(model_iteration_timeout_s_config)
             _has_tool_evidence = _request_has_tool_evidence
@@ -273,84 +307,44 @@ def _phase_6b_model_stream(
                 if evt.type == "text_delta":
                     text_parts.append(evt.delta)
                     joined = "".join(text_parts)
-                    if _native_orientation_candidate and not _native_orientation_disabled:
-                        folded = joined.lstrip().casefold()
-                        if (
-                            _FINAL_RE.search(joined)
-                            or _THOUGHT_RE.search(joined)
-                            or _ACTION_RE.search(joined)
-                            or _looks_like_observation_echo(joined)
-                            or "<tool_call" in folded
-                            or "<tool_invocation" in folded
-                            or "<function=" in folded
-                            or _looks_like_special_tool_envelope(joined)
-                        ):
-                            _native_orientation_disabled = True
-                        else:
-                            _orientation = _safe_public_update(joined)[:420].rstrip()
-                            if _orientation and not _native_orientation_emitted:
-                                _orientation_key = (
-                                    re.sub(r"\s+", " ", _orientation).strip().casefold()
-                                )
-                                _orientation_ready = len(
-                                    _orientation
-                                ) >= _PUBLIC_EVIDENCE_STREAM_GATE_CHARS or bool(
-                                    re.search(r"[。.!！?？；;]\s*$", _orientation)
-                                )
-                                if (
-                                    _orientation_ready
-                                    and _orientation_key != _last_public_update_key
-                                ):
-                                    yield {
-                                        "type": "commentary_delta",
-                                        "delta": _orientation,
-                                        "progress_source": "model",
-                                        "start_new_segment": True,
-                                        "iteration": i + 1,
-                                    }
-                                    _native_orientation_emitted = _orientation
-                                    _last_public_update_key = _orientation_key
-                            elif _orientation.startswith(_native_orientation_emitted) and len(
-                                _orientation
-                            ) > len(_native_orientation_emitted):
-                                _orientation_suffix = _orientation[
-                                    len(_native_orientation_emitted) :
-                                ]
-                                yield {
-                                    "type": "commentary_delta",
-                                    "delta": _orientation_suffix,
-                                    "progress_source": "model",
-                                    "start_new_segment": False,
-                                    "iteration": i + 1,
-                                }
-                                _native_orientation_emitted = _orientation
-                                _last_public_update_key = (
-                                    re.sub(r"\s+", " ", _orientation).strip().casefold()
-                                )
                     if _final_stream_started:
-                        # Already past the anchor — every subsequent
-                        # token is part of the user-visible answer.
+                        # Already past the anchor.  Re-evaluate the complete
+                        # answer lane before releasing more text: providers can
+                        # begin a ReAct Action several deltas after ordinary
+                        # prose, and the marker itself may straddle chunks.
                         if evt.delta:
                             joined = "".join(text_parts)
-                            if not _final_stream_guarded and _final_answer_needs_pre_emit_guard(
-                                joined,
-                                is_code_mode=_is_code_mode,
-                                browser_operation_mode=_browser_operation_mode,
+                            answer_so_far = _stream_answer_body(joined)
+                            if (
+                                _stream_has_protocol(answer_so_far)
+                                or _looks_like_observation_echo(answer_so_far)
+                                or (
+                                    not _final_stream_guarded
+                                    and _final_answer_needs_pre_emit_guard(
+                                        answer_so_far,
+                                        is_code_mode=_is_code_mode,
+                                        browser_operation_mode=_browser_operation_mode,
+                                    )
+                                )
                             ):
+                                _final_stream_guarded = True
                                 _final_stream_started = False
                                 continue
-                            yield {
-                                "type": "text_delta",
-                                "delta": evt.delta,
-                                "iteration": i + 1,
-                            }
-                            _final_delta_emitted_this_iteration = True
-                            _streamed_final_chars += len(evt.delta)
-                            _visible_stream_state["chars"] += len(evt.delta)
-                            _throughput_chars += len(evt.delta)
-                            _tp = _maybe_emit_throughput(_throughput_chars)
-                            if _tp is not None:
-                                yield _tp
+                            safe_end = _safe_stream_end(answer_so_far)
+                            if safe_end > _streamed_final_chars:
+                                delta_out = answer_so_far[_streamed_final_chars:safe_end]
+                                yield {
+                                    "type": "text_delta",
+                                    "delta": delta_out,
+                                    "iteration": i + 1,
+                                }
+                                _final_delta_emitted_this_iteration = True
+                                _streamed_final_chars = safe_end
+                                _visible_stream_state["chars"] = safe_end
+                                _throughput_chars += len(delta_out)
+                                _tp = _maybe_emit_throughput(_throughput_chars)
+                                if _tp is not None:
+                                    yield _tp
                     else:
                         # Look for the Final Answer anchor in the joined
                         # buffer. Once it appears we can flush the
@@ -405,16 +399,20 @@ def _phase_6b_model_stream(
                                 or "<tool_invocation" in answer_so_far
                                 or "<function=" in answer_so_far
                                 or _looks_like_special_tool_envelope(answer_so_far)
+                                or _looks_like_observation_echo(answer_so_far)
+                                or _stream_has_protocol(answer_so_far)
                                 or "```" in answer_so_far
                             ):
                                 # Keep buffering; the post-loop emitter
                                 # will decide what (if anything) is
-                                # safe to surface.
+                                # safe to surface. A leaked ReAct
+                                # ``Action:`` block inside the Final Answer
+                                # body is scrubbed by ``_parse_step`` before
+                                # delivery, so never pre-stream the raw markup.
                                 pass
                             elif answer_so_far:
                                 if (
                                     _evidence_convergence_active is not None
-                                    or (_todo_protocol_required and _todo_protocol_visible)
                                     or _final_answer_needs_pre_emit_guard(
                                         answer_so_far,
                                         is_code_mode=_is_code_mode,
@@ -423,25 +421,28 @@ def _phase_6b_model_stream(
                                 ):
                                     _final_stream_guarded = True
                                     continue
-                                yield {
-                                    "type": "text_delta",
-                                    "delta": answer_so_far,
-                                    "iteration": i + 1,
-                                }
-                                _final_delta_emitted_this_iteration = True
-                                _streamed_final_chars = len(answer_so_far)
-                                _throughput_chars += len(answer_so_far)
-                                _tp = _maybe_emit_throughput(_throughput_chars)
-                                if _tp is not None:
-                                    yield _tp
+                                safe_end = _safe_stream_end(answer_so_far)
+                                if safe_end:
+                                    delta_out = answer_so_far[:safe_end]
+                                    yield {
+                                        "type": "text_delta",
+                                        "delta": delta_out,
+                                        "iteration": i + 1,
+                                    }
+                                    _final_delta_emitted_this_iteration = True
+                                    _streamed_final_chars = safe_end
+                                    _throughput_chars += len(delta_out)
+                                    _tp = _maybe_emit_throughput(_throughput_chars)
+                                    if _tp is not None:
+                                        yield _tp
                                 _final_stream_started = True
-                                _visible_stream_state["chars"] = len(answer_so_far)
+                                _visible_stream_state["chars"] = _streamed_final_chars
                         elif (
                             len(joined) >= _ZERO_ANCHOR_STREAM_GATE_CHARS
-                            and not _native_orientation_emitted
                             and not _THOUGHT_RE.match(joined.lstrip())
                             and not _ACTION_RE.match(joined.lstrip())
                             and not _looks_like_observation_echo(joined)
+                            and not _stream_has_protocol(joined)
                             and not joined.lstrip().startswith(
                                 ("<tool_call>", "<tool_invocation", "<function=", "<final_answer")
                             )
@@ -458,7 +459,6 @@ def _phase_6b_model_stream(
                             # clear ReAct format isn't coming.
                             if (
                                 _evidence_convergence_active is not None
-                                or (_todo_protocol_required and _todo_protocol_visible)
                                 or _final_answer_needs_pre_emit_guard(
                                     joined,
                                     is_code_mode=_is_code_mode,
@@ -472,20 +472,22 @@ def _phase_6b_model_stream(
                             # yielding the whole joined buffer here would
                             # dump the 24+ chars accumulated so far in one
                             # frame, defeating the streaming UX.
-                            delta_out = joined[_streamed_final_chars:]
-                            yield {
-                                "type": "text_delta",
-                                "delta": delta_out,
-                                "iteration": i + 1,
-                            }
-                            _final_delta_emitted_this_iteration = True
-                            _streamed_final_chars = len(joined)
-                            _throughput_chars += len(delta_out)
-                            _tp = _maybe_emit_throughput(_throughput_chars)
-                            if _tp is not None:
-                                yield _tp
+                            safe_end = _safe_stream_end(joined)
+                            if safe_end > _streamed_final_chars:
+                                delta_out = joined[_streamed_final_chars:safe_end]
+                                yield {
+                                    "type": "text_delta",
+                                    "delta": delta_out,
+                                    "iteration": i + 1,
+                                }
+                                _final_delta_emitted_this_iteration = True
+                                _streamed_final_chars = safe_end
+                                _throughput_chars += len(delta_out)
+                                _tp = _maybe_emit_throughput(_throughput_chars)
+                                if _tp is not None:
+                                    yield _tp
                             _final_stream_started = True
-                            _visible_stream_state["chars"] = len(joined)
+                            _visible_stream_state["chars"] = _streamed_final_chars
                 elif evt.type == "thinking_delta":
                     thinking_parts.append(evt.delta)
                     yield {
@@ -498,6 +500,39 @@ def _phase_6b_model_stream(
                     if _tp is not None:
                         yield _tp
                 elif evt.type == "done":
+                    # Release the held suffix only after the provider has
+                    # completed the response and the whole candidate is known
+                    # to be protocol-free.  If a late Action appeared, leave
+                    # the suffix private; PHASE 6c will execute the parsed call
+                    # and obtain a fresh, clean final answer on the next round.
+                    if _final_stream_started and not _final_stream_guarded:
+                        joined = "".join(text_parts)
+                        answer_so_far = _stream_answer_body(joined)
+                        if (
+                            _stream_has_protocol(answer_so_far)
+                            or _looks_like_observation_echo(answer_so_far)
+                            or _final_answer_needs_pre_emit_guard(
+                                answer_so_far,
+                                is_code_mode=_is_code_mode,
+                                browser_operation_mode=_browser_operation_mode,
+                            )
+                        ):
+                            _final_stream_guarded = True
+                            _final_stream_started = False
+                        elif len(answer_so_far) > _streamed_final_chars:
+                            delta_out = answer_so_far[_streamed_final_chars:]
+                            yield {
+                                "type": "text_delta",
+                                "delta": delta_out,
+                                "iteration": i + 1,
+                            }
+                            _final_delta_emitted_this_iteration = True
+                            _streamed_final_chars = len(answer_so_far)
+                            _visible_stream_state["chars"] = _streamed_final_chars
+                            _throughput_chars += len(delta_out)
+                            _tp = _maybe_emit_throughput(_throughput_chars)
+                            if _tp is not None:
+                                yield _tp
                     resp = evt.final
             if resp is None:
                 from runtime.platform.models.llm import ModelResponse

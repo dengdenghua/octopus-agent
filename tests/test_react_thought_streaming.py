@@ -154,6 +154,90 @@ def test_thought_streams_before_tool_execution() -> None:
     assert event_types.index("thinking_delta") < event_types.index("tool_start")
 
 
+def test_late_split_action_never_leaks_from_final_answer_stream() -> None:
+    """A model may start with valid prose and append a text-protocol Action.
+
+    The marker is deliberately split at ``Act``/``ion``.  The prose remains
+    progressive, the tool executes once, and no part of the private call is
+    exposed as an answer delta.
+    """
+
+    first = 'Final Answer: 阶段结论：当前文件可以正常读取。\nAction: echo({"text": "once"})'
+    router = _ChunkedCapturingRouter(
+        [first, "Final Answer: 已核对完成。"],
+        chunks_by_call={
+            1: [
+                "Final Answer: 阶段结论：当前文件可以正常读取。",
+                "\nAct",
+                'ion: echo({"text": "once"})',
+            ],
+        },
+    )
+    stack = _build_stack_with_executor(router)
+
+    events, result = _drain(
+        stream_react_loop(stack, _intent("核对一次"), agent=None, max_iterations=3)
+    )
+
+    assert result is not None and result.final_answer == "已核对完成。"
+    visible = "".join(
+        str(event.get("delta") or "") for event in events if event.get("type") == "text_delta"
+    )
+    assert "阶段结论：当前文件可以正常读取" in visible
+    assert "Action:" not in visible
+    assert "echo(" not in visible
+    tool_starts = [
+        event
+        for event in events
+        if event.get("type") == "tool_start" and event.get("tool_name") == "echo"
+    ]
+    assert len(tool_starts) == 1
+
+
+def test_visible_todo_does_not_buffer_safe_final_answer() -> None:
+    """A checklist is UI coordination state, not a streaming safety gate.
+
+    The old implementation buffered every final whenever todo_write was
+    visible, making long task answers arrive as one late burst. A completed
+    checklist must keep normal provider-sized answer deltas progressive.
+    """
+
+    answer = "任务结果已经整理完成，下面给出完整说明和可复核的最终结论。"
+    router = _ChunkedCapturingRouter(
+        [
+            (
+                "Thought: record progress\n"
+                'Action: todo_write({"todos":[{"title":"整理结果","status":"completed"}]})'
+            ),
+            f"Final Answer: {answer}",
+        ],
+        chunks_by_call={
+            2: [
+                "Final Answer: 任务结果已经整理完成，",
+                "下面给出完整说明和",
+                "可复核的最终结论。",
+            ]
+        },
+    )
+    intent = _intent("协调并整理一份完整结果")
+    intent.user_context["mode"] = "team"
+
+    events, result = _drain(
+        stream_react_loop(
+            _build_stack_with_executor(router),
+            intent,
+            agent=None,
+            max_iterations=3,
+        )
+    )
+
+    assert result is not None and result.final_answer == answer
+    deltas = [event["delta"] for event in events if event["type"] == "text_delta"]
+    assert "".join(deltas) == answer
+    assert len(deltas) >= 2
+    assert deltas[0] != answer
+
+
 def test_native_thinking_suppresses_text_thought_extraction() -> None:
     """Providers with a native thinking channel must not get the text
     Thought re-streamed on top (the two would duplicate)."""

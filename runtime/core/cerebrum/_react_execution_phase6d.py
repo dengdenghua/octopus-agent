@@ -281,6 +281,11 @@ def _phase_6d_dispatch_and_observe(
             and tool_action_requested
             and maybe_final is None
             and _realtime_public_orientation
+            # Native tool schemas already require a structured public_update.
+            # If a provider omits it, do not spend a second model call trying
+            # to classify arbitrary prose as commentary: the real tool row is
+            # sufficient activity feedback and private text stays private.
+            and not state.native_mode
             and not _prior_result_handoff
         ):
             try:

@@ -36,8 +36,9 @@ from runtime.core.cerebrum.react_final_answer_guards import (
     _final_answer_needs_pre_emit_guard,
     _guard_impasse_final_answer,
     _guard_rejection_outcome,
-    _guard_soft_landing_answer,
+    _guard_repair_feedback,
     _looks_like_observation_echo,
+    _try_clean_downgrade,
     _unfinished_implementation_recovery_needed,
 )
 from runtime.core.cerebrum.react_loop_state import (
@@ -283,7 +284,6 @@ def _phase_6c_parse_and_guard(
             maybe_final
             and not _final_stream_started
             and _evidence_convergence_active is None
-            and not (_todo_protocol_required and _todo_protocol_visible)
             and not _final_answer_needs_pre_emit_guard(
                 maybe_final,
                 is_code_mode=_is_code_mode,
@@ -339,19 +339,25 @@ def _phase_6c_parse_and_guard(
                 ),
             )
             if _guard_hit is not None:
-                _guard_label, _guard_message = _guard_hit
-                _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
-                if _guard_outcome == "soft_land":
-                    final_answer = _guard_soft_landing_answer(text, _guard_label)
+                # Solution-A: a guard rejection that is purely a leaked ReAct
+                # protocol block (Thought/Action/Observation leaked into the
+                # answer) is downgraded to a one-shot cleaned delivery rather
+                # than retried in a loop. The model usually already did the
+                # work (tools ran); only the answer markup was dirty.
+                _downgrade = _try_clean_downgrade(text)
+                if _downgrade is not None:
+                    final_answer = _downgrade
                     terminated_reason = "final_answer_with_warning"
                     steps.append(step)
                     return _LoopControl.BREAK
+                _guard_label, _guard_message = _guard_hit
+                _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
                 if _guard_outcome == "hard_stop":
                     # Same loop-level bound as the main guard site: the
                     # chat-flush path rejects and continues too, so an
                     # unsatisfiable guard here would livelock identically.
                     _logger.warning(
-                        "react_loop guard impasse (chat-flush) · %s rejected 3x "
+                        "react_loop guard impasse (chat-flush) · %s repeatedly rejected "
                         "with no intervening tool execution — terminating",
                         _guard_label,
                     )
@@ -363,7 +369,7 @@ def _phase_6c_parse_and_guard(
                 step.observation = (
                     (((step.observation or "") + "\n\n") if step.observation else "")
                     + f"[{_guard_label}]\n"
-                    + _guard_message
+                    + _guard_repair_feedback(_guard_label, _guard_message, steps)
                 )
                 maybe_final = None
             else:
@@ -495,19 +501,26 @@ def _phase_6c_parse_and_guard(
                             ),
                         )
                     if _guard_hit is not None:
+                        # Solution-A: leaked-protocol rejection → one-shot
+                        # cleaned delivery instead of a retry loop.
+                        _downgrade = _try_clean_downgrade(text)
+                        if _downgrade is not None:
+                            final_answer = _downgrade
+                            terminated_reason = "final_answer_with_warning"
+                            # The raw candidate was withheld by the protocol
+                            # pre-emit guard.  Keep this false so PHASE 7 emits
+                            # the cleaned answer exactly once.
+                            final_answer_emitted = False
+                            steps.append(step)
+                            return _LoopControl.BREAK
                         _guard_label, _guard_message = _guard_hit
                         _guard_outcome = _guard_rejection_outcome(
                             _guard_impasse_state, _guard_label, steps
                         )
-                        if _guard_outcome == "soft_land":
-                            final_answer = _guard_soft_landing_answer(text, _guard_label)
-                            terminated_reason = "final_answer_with_warning"
-                            steps.append(step)
-                            return _LoopControl.BREAK
                         if _guard_outcome == "hard_stop":
                             _logger.warning(
                                 "react_loop guard impasse (plain-answer recovery) · "
-                                "%s rejected 3x with no intervening tool execution — "
+                                "%s repeatedly rejected with no intervening tool execution — "
                                 "terminating",
                                 _guard_label,
                             )
@@ -522,7 +535,7 @@ def _phase_6c_parse_and_guard(
                         step.observation = (
                             (((step.observation or "") + "\n\n") if step.observation else "")
                             + f"[{_guard_label}]\n"
-                            + _guard_message
+                            + _guard_repair_feedback(_guard_label, _guard_message, steps)
                         )
                     if _guard_hit is not None:
                         consecutive_format_violations = 0

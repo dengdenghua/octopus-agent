@@ -20,12 +20,6 @@ from runtime.core.cerebrum.react_guards import (
     _goal_requests_code_mutation,
     _incomplete_final_answer_guard,
 )
-
-# Imported from the defining module directly: react_guards' re-export of
-# ``_step_is_failed_execution`` exists only in an uncommitted refactor, so at
-# the committed tip ``from react_guards import _step_is_failed_execution``
-# raised ImportError and broke 24 test modules at collection.
-from runtime.core.cerebrum.react_todo_protocol_guards import _step_is_failed_execution
 from runtime.core.cerebrum.react_loop_controls import (
     _disabled_guard_labels,
     _guard_hit_recorder,
@@ -38,7 +32,14 @@ from runtime.core.cerebrum.react_parsing import (
     _detect_shell_injection_in_payload,
     _detect_unsafe_deser_in_payload,
     _looks_like_unfinished_work,
+    _strip_react_protocol_blocks,
 )
+
+# Imported from the defining module directly: react_guards' re-export of
+# ``_step_is_failed_execution`` exists only in an uncommitted refactor, so at
+# the committed tip ``from react_guards import _step_is_failed_execution``
+# raised ImportError and broke 24 test modules at collection.
+from runtime.core.cerebrum.react_todo_protocol_guards import _step_is_failed_execution
 from runtime.core.cerebrum.react_types import REACT_OBSERVATION_FOLLOWUP, ReActStep
 
 _logger = logging.getLogger(__name__)
@@ -329,14 +330,64 @@ def _note_guard_impasse(
 
 
 def _guard_rejection_outcome(state: dict, label: str, steps: list) -> str:
-    """Return ``retry``, ``soft_land`` or ``hard_stop`` for a rejection."""
+    """Return ``retry`` or ``hard_stop`` for a repeated rejection.
+
+    A rejected candidate can never become successful merely because retrying
+    stalled.  Protocol-only contamination is handled separately by
+    ``_try_clean_downgrade``; every remaining guard represents missing truth,
+    evidence, or requested work and must fail closed.
+    """
     from runtime.core.cerebrum.react_guards import guard_disposition
 
     disposition = guard_disposition(label)
     limit = 3 if disposition == "hard" else 2
     if not _note_guard_impasse(state, label, steps, rejection_limit=limit):
         return "retry"
-    return "hard_stop" if disposition == "hard" else "soft_land"
+    return "hard_stop"
+
+
+def _trajectory_has_successful_tool_evidence(steps: list[ReActStep]) -> bool:
+    """Whether a prior step produced usable evidence for final synthesis.
+
+    The completeness guard often rejects a progress promise *after* the
+    requested reads/tests already succeeded.  Treating that rejection like
+    missing evidence tells the model to run another tool, which creates the
+    familiar ``I will inspect ...`` -> guard -> inspect-again loop.  Structured
+    receipts are authoritative when present; older trajectories fall back to
+    a non-failed action with a real observation.
+    """
+
+    for prior in steps:
+        results = getattr(prior, "action_results", None) or []
+        if any(isinstance(result, dict) and result.get("ok") is True for result in results):
+            return True
+        action = (getattr(prior, "action", "") or "").strip().lower()
+        observation = (getattr(prior, "observation", "") or "").strip()
+        if (
+            action
+            and action not in {"none", "n/a", "na"}
+            and observation
+            and observation != "N/A"
+            and not _step_is_failed_execution(prior)
+        ):
+            return True
+    return False
+
+
+def _guard_repair_feedback(label: str, message: str, steps: list[ReActStep]) -> str:
+    """Build the next-round instruction without causing redundant tool work."""
+
+    if label != "final-answer completeness guard" or not _trajectory_has_successful_tool_evidence(
+        steps
+    ):
+        return message
+    return (
+        "The candidate was a progress promise, not a final answer. Successful tool evidence "
+        "already exists in the recorded Observations. Do not call another tool, repeat an "
+        "inspection, or announce future work. Synthesize the complete Final Answer now from "
+        "the existing evidence: lead with the concrete result, include the material findings "
+        "and verification outcome, and mention only genuine remaining limitations."
+    )
 
 
 # Markers that distinguish an ENVIRONMENTAL tool failure (sandbox/network
@@ -417,7 +468,37 @@ def _guard_soft_landing_answer(
     callers and telemetry hooks do not need a second compatibility path.
     """
     del label, steps
-    return _strip_inline_tool_calls(candidate or "")
+    return _clean_protocol_leak(candidate or "")
+
+
+def _clean_protocol_leak(text: str) -> str:
+    """Strip ReAct protocol blocks AND inline tool-call JSON from answer
+    prose so a leaked-protocol candidate becomes a clean deliverable. Used
+    by the soft-landing path and by ``_try_clean_downgrade``."""
+    return _strip_inline_tool_calls(_strip_react_protocol_blocks(text or ""))
+
+
+def _try_clean_downgrade(final_answer: str) -> str | None:
+    """For a guard rejection that is purely a leaked-protocol answer, return
+    the cleaned body when it still carries real content (so the caller can
+    deliver it once instead of looping on retries). Returns None otherwise —
+    callers keep their normal retry / hard-stop / soft-land logic.
+
+    This is the Solution-A escape hatch: a model that writes
+    ``Thought:``/``Action: name({...})`` into the answer channel has usually
+    already done the work (the Action was parsed and executed upstream); only
+    the answer markup was dirty. Rather than reject-and-retry until the loop
+    deadlocks or the turn is interrupted, deliver the scrubbed answer once.
+    """
+    if not _looks_like_observation_echo(final_answer):
+        return None
+    cleaned = _clean_protocol_leak(final_answer)
+    # Do not use a prose-length threshold here: concise but complete answers
+    # such as "已完成。" or "OK" are valid deliveries. Require actual word/CJK
+    # content after cleaning; punctuation-only or protocol-only candidates
+    # stay on the normal retry path.
+    substantive = re.sub(r"[`*_>#\-\s]", "", cleaned)
+    return cleaned if re.search(r"[\w\u3400-\u9fff]", substantive) else None
 
 
 # Tool names the model may write into answer prose as an inline JSON call
@@ -442,7 +523,10 @@ _INLINE_TOOL_CALL_NAMES = (
     "run_tests",
     "lint_check",
 )
-_INLINE_TOOL_CALL_RE = re.compile(rf"(?m)^\s*(?:{'|'.join(_INLINE_TOOL_CALL_NAMES)})\s*\(")
+_INLINE_TOOL_CALL_RE = re.compile(
+    rf"(?<![\w.])(?:{'|'.join(_INLINE_TOOL_CALL_NAMES)})\s*\(",
+    re.IGNORECASE,
+)
 
 
 def _strip_inline_tool_calls(text: str) -> str:
@@ -456,7 +540,7 @@ def _strip_inline_tool_calls(text: str) -> str:
     i = 0
     n = len(text)
     while i < n:
-        m = _INLINE_TOOL_CALL_RE.match(text, i)
+        m = _INLINE_TOOL_CALL_RE.search(text, i)
         if not m:
             parts.append(text[i:])
             break
@@ -649,7 +733,6 @@ def _phase_6e_guards_and_step_emit(
         if maybe_final:
             _deferred_final_emit = not _final_stream_started and (
                 _evidence_convergence_active is not None
-                or (_todo_protocol_required and _todo_protocol_visible)
                 or _final_answer_needs_pre_emit_guard(
                     maybe_final,
                     is_code_mode=_is_code_mode,
@@ -670,19 +753,20 @@ def _phase_6e_guards_and_step_emit(
                 grounded_source_paths=_final_guard_grounded_source_paths,
             )
             if _guard_hit is not None:
-                _guard_label, _guard_message = _guard_hit
-                _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
-                if _guard_outcome == "soft_land":
-                    final_answer = _guard_soft_landing_answer(
-                        maybe_final,
-                        _guard_label,
-                        steps=steps,
-                    )
+                # Solution-A: a guard rejection that is purely a leaked ReAct
+                # protocol block is downgraded to a one-shot cleaned delivery
+                # rather than retried in a loop. The model usually already did
+                # the work (tools ran); only the answer markup was dirty.
+                _downgrade = _try_clean_downgrade(maybe_final)
+                if _downgrade is not None:
+                    final_answer = _downgrade
                     terminated_reason = "final_answer_with_warning"
                     steps.append(step)
                     return _LoopControl.BREAK
+                _guard_label, _guard_message = _guard_hit
+                _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
                 if _guard_outcome == "hard_stop":
-                    # Same guard, three rejections, zero new action-bearing
+                    # Same guard, repeated rejections, zero new action-bearing
                     # steps in between: pushing back again only burns the
                     # remaining budget and ends in the auto-pause path's
                     # misleading "paused" report. Terminate with the truth.
@@ -706,7 +790,10 @@ def _phase_6e_guards_and_step_emit(
                 # convergence state already allows exactly one checklist
                 # update. Clearing it here caused green agents to resume an
                 # unbounded test/lint cycle after that update.
-                if _guard_label != "todo-protocol guard":
+                if _guard_label != "todo-protocol guard" and not (
+                    _guard_label == "final-answer completeness guard"
+                    and _trajectory_has_successful_tool_evidence(steps)
+                ):
                     _green_verification_convergence_active = False
                     _green_convergence_todo_used = False
                     _clean_verification_rounds_after_write = 0
@@ -714,7 +801,7 @@ def _phase_6e_guards_and_step_emit(
                 step.observation = (
                     (((step.observation or "") + "\n\n") if step.observation else "")
                     + f"[{_guard_label}]\n"
-                    + _guard_message
+                    + _guard_repair_feedback(_guard_label, _guard_message, steps)
                 )
             elif _deferred_final_emit:
                 _delta = (

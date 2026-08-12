@@ -11,9 +11,122 @@ never import react_guards.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from runtime.core.cerebrum.react_parsing import _parse_action
 from runtime.core.cerebrum.react_types import ReActStep
+
+
+def _conversation_message_text(content: Any) -> str:
+    """Return visible text from a persisted conversation message payload."""
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        value = item.get("text") or item.get("content")
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip())
+    return "\n".join(parts).strip()
+
+
+def _assistant_left_execution_open(text: str) -> bool:
+    """Whether the latest assistant message promises work instead of delivering it.
+
+    This deliberately examines the assistant's lifecycle statement, not the
+    wording of the user's follow-up.  Consequently arbitrary nudges can resume
+    the same unfinished contract without maintaining an endless synonym list
+    for "continue".
+    """
+    visible = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not visible:
+        return False
+    future = re.search(
+        r"(?:^|[。.!！；;]\s*)(?:我)?(?:现在(?:立刻|马上)|"
+        r"(?:会|将|先|接下来|下一步|随后|马上|这就|开始|继续|准备)"
+        r"(?:会|将|先)?\s*)"
+        r"(?:检查|查看|读取|搜索|定位|核对|验证|测试|运行|执行|修改|修复|实现|补充|提交|审查)|"
+        r"\b(?:i(?:'ll| will)|let me|next i(?:'ll| will))\b[^.!?]{0,80}"
+        r"\b(?:inspect|read|search|locate|verify|test|run|execute|edit|fix|implement|commit|review)\b",
+        visible,
+        re.IGNORECASE,
+    )
+    unfinished = re.search(
+        r"(?:尚未|还没|未完成|没有完成|准备|然后|再|下一步|接下来)|"
+        r"\b(?:not yet|not completed|next|then|after that|ready to)\b",
+        visible,
+        re.IGNORECASE,
+    )
+    return bool(future and unfinished)
+
+
+def _goal_explicitly_cancels_execution(goal: str) -> bool:
+    """Recognise explicit cancellation so an old contract is never resurrected."""
+    return bool(
+        re.search(
+            r"(?:不用|无需|不要|别|停止|取消|终止|暂停)(?:再|继续|执行|修改|实现|做|处理)?|"
+            r"\b(?:stop|cancel|abort|pause|do not continue|don't continue|never mind)\b",
+            str(goal or ""),
+            re.IGNORECASE,
+        )
+    )
+
+
+def derive_effective_execution_goal(current_goal: str, conversation_messages: Any) -> str:
+    """Carry an explicitly requested unfinished execution contract across turns.
+
+    A conversational steering message is not itself proof that the original
+    implementation request disappeared.  When the immediately preceding
+    assistant message only promised execution, retain the latest actionable
+    user request as the guard/tool goal.  Explicit cancellation and a new
+    actionable request always win.
+    """
+    current = str(current_goal or "").strip()
+    if not current or _goal_explicitly_cancels_execution(current):
+        return current
+    if (
+        _goal_requests_code_mutation(current)
+        or _goal_requests_project_inspection(current)
+        or _explicitly_requested_tool_names(current)
+    ):
+        return current
+    if not isinstance(conversation_messages, list):
+        return current
+
+    history = [item for item in conversation_messages[:-1] if isinstance(item, dict)]
+    if not history:
+        return current
+    latest_assistant = next(
+        (
+            _conversation_message_text(item.get("content"))
+            for item in reversed(history)
+            if item.get("role") == "assistant"
+        ),
+        "",
+    )
+    if not _assistant_left_execution_open(latest_assistant):
+        return current
+
+    prior_goal = next(
+        (
+            text
+            for item in reversed(history)
+            if item.get("role") == "user"
+            and (text := _conversation_message_text(item.get("content")))
+            and (
+                _goal_requests_code_mutation(text)
+                or _goal_requests_project_inspection(text)
+                or _explicitly_requested_tool_names(text)
+            )
+        ),
+        "",
+    )
+    if not prior_goal:
+        return current
+    return f"{prior_goal}\n\n当前用户补充：{current}"
 
 
 def _inspection_goal_text(goal: str) -> str:

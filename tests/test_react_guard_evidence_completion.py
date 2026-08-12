@@ -148,6 +148,49 @@ def test_incomplete_final_answer_rejects_start_work_promise_with_supported_concl
     assert "not a completed answer" in message
 
 
+def test_incomplete_final_answer_rejects_moqing_plan_promise() -> None:
+    # Regression (thread tAUhAq-cjtzfSOmxq-JGu5): deepseek-v4-flash opened a
+    # realtime audit with "我来分析这个项目，先并行摸清仓库结构…确定审计的重点
+    # 范围。" — a pure plan statement, zero tool execution. The verb 摸清 was
+    # missing from the evidence-action keyword list, so the first "查看" phrasing
+    # got rejected, the model rephrased with 摸清, and the turn silently completed
+    # with a plan instead of a result. 摸清 family must be caught like 探清.
+    message = _incomplete_final_answer_guard(
+        "我来分析这个项目，先并行摸清仓库结构、当前分支改动和近期提交，确定审计的重点范围。"
+    )
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_accepts_delivered_moqing_conclusion() -> None:
+    # A completed audit that reports it *did* map the repo (past tense) must keep
+    # passing — neither preparatory_start nor future_action matches 摸清了, so the
+    # verb alone must not trigger the guard.
+    assert (
+        _incomplete_final_answer_guard(
+            "结论：我摸清了仓库结构，共 40 个包，核心逻辑在 runtime/core。"
+        )
+        is None
+    )
+
+
+def test_incomplete_final_answer_rejects_collect_plan_promise() -> None:
+    # Regression (same thread as the 摸清 leak): a follow-up turn reopened with
+    # "直接进入实质分析，先并行收集仓库结构、Git 工作区和最近提交的数据。" —
+    # again a plan-statement with zero execution. 收集/拉取/采集/搜集 were missing
+    # from the evidence-action verb list, so the future-intent + action shape
+    # passed the guard. A delivered report that *did* collect ("我收集了全部配置，
+    # 结论是…") must still pass.
+    assert (
+        _incomplete_final_answer_guard(
+            "直接进入实质分析，先并行收集仓库结构、Git 工作区和最近提交的数据。"
+        )
+        is not None
+    )
+    assert _incomplete_final_answer_guard("我收集了全部配置，结论是配置统一。") is None
+
+
 def test_incomplete_final_answer_rejects_deferred_conclusion_announcement() -> None:
     message = _incomplete_final_answer_guard("我先核对两端定义，之后再给出结论。")
 

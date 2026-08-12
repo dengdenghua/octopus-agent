@@ -296,6 +296,115 @@ def _split_action_lines(action_block: str) -> list[str]:
     return lines
 
 
+# ── ReAct protocol-block leak handling ───────────────────────────
+#
+# Some models (e.g. deepseek) emit ReAct protocol markup — ``Thought:``,
+# ``Action: name({...})``, ``Observation:`` — inside the Final Answer text
+# channel instead of routing the ``Action`` through the tool-call channel.
+# The leaked block is noise the user must never see, but the surrounding
+# narration may still be a usable answer. These helpers strip the protocol
+# markup so the answer can be delivered cleanly (and, upstream, re-routed as
+# a real tool call). Defined at this lowest level of the parsing stack so
+# both ``_parse_step`` and the guard machinery can use them without a
+# circular import (``react_final_answer_guards`` imports from here).
+
+# A standalone ``Action: name({...})`` call shape — never legitimate prose.
+_REACT_LEAK_ACTION_CALL_RE = re.compile(
+    r"(?im)Action\s*:\s*\n?\s*\w+\s*\(\s*\{.*?\}\s*\)",
+    re.DOTALL,
+)
+_REACT_LEAK_SECTION_HEADER_RE = re.compile(r"(?im)^\s*(?:Thought|Action|Observation)\s*:\s*$")
+_REACT_LEAK_TOOL_CALL_LINE_RE = re.compile(r"(?im)^\s*\w+\s*\(\s*\{")
+_REACT_LEAK_RECEIPT_MARKER_RE = re.compile(r"\(real tool execution succeeded\)", re.IGNORECASE)
+_REACT_LEAK_PROTOCOL_LINE_RE = re.compile(r"(?im)^\s*(?:Thought|Action|Observation)\s*:")
+
+
+def _has_react_protocol_stream_prefix(text: str) -> bool:
+    """Whether an in-flight answer has reached a protocol-only boundary.
+
+    This predicate intentionally accepts an incomplete ``Action:`` line.  It
+    is used only by the stream holdback path, where waiting is safer than
+    exposing half a tool call.  The completed response still goes through the
+    strict action parser before anything executes.
+    """
+
+    return bool(
+        text
+        and (
+            _REACT_LEAK_PROTOCOL_LINE_RE.search(text) or _REACT_LEAK_RECEIPT_MARKER_RE.search(text)
+        )
+    )
+
+
+def _looks_like_protocol_leak(text: str) -> bool:
+    """Heuristic: does the text carry ReAct protocol markup in answer form?
+
+    True for an inline ``Action: name({...})`` call shape, or an
+    ``Action:``/``Thought:``/``Observation:`` header followed by an indented
+    tool-call line. A ``Thought:`` header with no call is NOT treated as a
+    leak (it can be a legitimate quote)."""
+    if not text:
+        return False
+    s = text.lstrip()
+    return bool(
+        _REACT_LEAK_ACTION_CALL_RE.search(s)
+        or (_REACT_LEAK_SECTION_HEADER_RE.search(s) and _REACT_LEAK_TOOL_CALL_LINE_RE.search(s))
+    )
+
+
+def _strip_react_protocol_blocks(text: str) -> str:
+    """Remove ``Thought:``/``Action:``/``Observation:`` protocol blocks the
+    model leaked into answer text, keeping any surrounding narration.
+
+    Handles both a header-only line followed by indented tool-call lines
+    (``Action:\\n    read_file({...})\\n    glob_files({...})``) and an inline
+    ``Action: name({...})`` on one line. Also drops the synthetic
+    ``(real tool execution succeeded)`` receipt marker. The result is the
+    cleaned answer body; an empty/whitespace result means the whole text was
+    protocol and should not be delivered as an answer."""
+    if not text:
+        return text
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i]
+        if _REACT_LEAK_RECEIPT_MARKER_RE.search(line):
+            # Drop the whole synthetic receipt line, including the tool name.
+            # If a JSON receipt immediately follows, consume that complete
+            # payload too; it is tool protocol, not answer prose.
+            i += 1
+            while i < n and not lines[i].strip():
+                i += 1
+            if i < n and lines[i].lstrip().startswith(("{", "[")):
+                payload = "\n".join(lines[i:]).lstrip()
+                try:
+                    _, consumed = json.JSONDecoder().raw_decode(payload)
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    pass
+                else:
+                    consumed_lines = payload[:consumed].count("\n") + 1
+                    i += consumed_lines
+            continue
+        protocol_line = _REACT_LEAK_PROTOCOL_LINE_RE.match(line)
+        if protocol_line:
+            # Thought/Action/Observation are private protocol lanes. Drop the
+            # complete line rather than trying to salvage its tail (the old
+            # regex consumed the first character of that tail and could leak
+            # observations). A header-only block also owns its indented body.
+            header_only = _REACT_LEAK_SECTION_HEADER_RE.match(line) is not None
+            i += 1
+            if header_only:
+                while i < n and (not lines[i].strip() or lines[i].startswith((" ", "\t"))):
+                    i += 1
+            continue
+        out.append(line)
+        i += 1
+    cleaned = "\n".join(out).strip()
+    return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+
 def _parse_step(text: str, iteration: int) -> tuple[ReActStep, str | None]:
     step = ReActStep(iteration=iteration, raw_llm_output=text)
 
@@ -338,8 +447,29 @@ def _parse_step(text: str, iteration: int) -> tuple[ReActStep, str | None]:
         step.observation = obs_m.group(1).strip()
 
     final_answer = _extract_final_answer(text)
-    if step.action and final_answer and _extract_tool_action_from_loose_output(final_answer):
+    if (
+        step.action
+        and final_answer
+        and (
+            _extract_tool_action_from_loose_output(final_answer)
+            or _looks_like_protocol_leak(final_answer)
+        )
+    ):
+        # A candidate that contains the Action which is about to execute is a
+        # progress/update fragment, never a terminal delivery.  Suppress it and
+        # let the next model round synthesize the answer from the real result.
         final_answer = None
+
+    # Solution-B hygiene: when there is NO pending tool action, a final-answer
+    # candidate that still carries ReAct protocol markup (``Action:`` /
+    # ``Thought:`` / ``Observation:`` leaked into the answer channel) is
+    # scrubbed so the user never sees raw protocol. When an action IS pending
+    # we leave the answer untouched — the loop executes the action and the
+    # existing guard machinery (react_final_answer_guards) catches any residual
+    # leak without disturbing the action/finalization handshake.
+    if not step.action and final_answer and _looks_like_protocol_leak(final_answer):
+        _cleaned = _strip_react_protocol_blocks(final_answer)
+        final_answer = _cleaned if _cleaned.strip() else None
 
     return step, final_answer
 

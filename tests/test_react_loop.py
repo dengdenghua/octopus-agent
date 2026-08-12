@@ -751,6 +751,33 @@ def test_react_loop_single_turn_final_answer() -> None:
     assert router.calls == 1
 
 
+def test_completeness_guard_uses_existing_tool_evidence_instead_of_repeating_work() -> None:
+    router = _CapturingRouter(
+        [
+            (
+                "Thought: inspect once\n"
+                "Update: 我会读取一次回显内容，确认实际结果。\n"
+                'Action: echo({"text": "verified-result"})'
+            ),
+            "Final Answer: 我接下来再检查一次，然后给出结果。",
+            "Final Answer: 已确认回显结果为 verified-result。",
+        ]
+    )
+    intent = _intent("读取一次回显并告诉我结果")
+    intent.user_context["mode"] = "react"
+
+    result = run_react_loop(
+        _build_stack_with_executor(router), intent, agent=None, max_iterations=4
+    )
+
+    assert result is not None and result.success
+    assert router.calls == 3
+    assert result.final_answer == "已确认回显结果为 verified-result。"
+    repair_context = "\n".join(str(message.content) for message in router.requests[2].messages)
+    assert "Successful tool evidence already exists" in repair_context
+    assert "Do not call another tool" in repair_context
+
+
 def test_react_loop_recovers_from_transient_model_error_after_progress() -> None:
     router = _TransientFailureRouter()
 
@@ -1726,7 +1753,7 @@ def test_realtime_quiet_tool_result_gets_model_authored_evidence_checkpoint() ->
     assert "对比两份流式结果" in checkpoint_input
 
 
-def test_native_first_turn_streams_model_opening_before_first_tool() -> None:
+def test_native_first_turn_does_not_guess_provider_text_as_public_progress() -> None:
     from runtime.platform.models.llm import ToolCall
     from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
 
@@ -1798,15 +1825,8 @@ def test_native_first_turn_streams_model_opening_before_first_tool() -> None:
         for event in events
         if event["type"] == "commentary_delta" and event.get("progress_source") == "model"
     ]
-    assert "".join(event["delta"] for event in public_opening) == opening
-    assert [event["start_new_segment"] for event in public_opening] == [
-        True,
-        False,
-        False,
-    ]
-    assert events.index(public_opening[-1]) < next(
-        index for index, event in enumerate(events) if event["type"] == "tool_start"
-    )
+    assert public_opening == []
+    assert any(event["type"] == "tool_start" for event in events)
     first_request_prompt = "\n".join(
         str(message.content) for message in router.requests[0].messages
     )

@@ -121,7 +121,6 @@ async def test_tool_backed_answer_gets_public_handoff_without_promoting_reasonin
     assert reasoning[0].content == "原始内部推理"
     assert [item.text for item in commentary] == [
         "我先检查项目结构。",
-        "已经整理好了，下面给出完整答复。",
     ]
     assert len(answers) == 1
     assert answers[0].text == "完整答复"
