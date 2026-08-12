@@ -198,6 +198,26 @@ class WorkspaceFocus(BaseModel):
     preview_url: str | None = Field(default=None, alias="previewUrl")
 
 
+class EvidenceReference(BaseModel):
+    """One confirmed source or result supporting the current workbench state.
+
+    Unlike raw tool output, this survives replay without asking the client to
+    reverse-engineer filenames or success from presentation text.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    kind: Literal["file", "web", "verification", "artifact"]
+    title: str
+    uri: str | None = None
+    status: Literal["observed", "pending", "passed", "failed"] = "observed"
+    origin: Literal["grounding", "tool", "verification", "artifact"]
+    source_item_id: str | None = Field(default=None, alias="sourceItemId")
+    phase_id: str | None = Field(default=None, alias="phaseId")
+    detail: str | None = None
+
+
 class WorkbenchSnapshotV2(BaseModel):
     """Current workbench frame for a turn.
 
@@ -222,6 +242,7 @@ class WorkbenchSnapshotV2(BaseModel):
     current_phase_id: str | None = Field(default=None, alias="currentPhaseId")
     current_item_id: str | None = Field(default=None, alias="currentItemId")
     workspace_focus: WorkspaceFocus | None = Field(default=None, alias="workspaceFocus")
+    evidence: list[EvidenceReference] = Field(default_factory=list)
     updated_at: datetime = Field(default_factory=now_utc, alias="updatedAt")
 
 
@@ -568,6 +589,13 @@ class Turn(BaseModel):
     task_id: str | None = Field(default=None, alias="taskId")
     checkpoint_id: int | None = Field(default=None, alias="checkpointId")
     outcome_reason: str | None = Field(default=None, alias="outcomeReason")
+    # Canonical semantic result emitted by the agent loop. ``status`` remains
+    # the compact transport lifecycle; this payload preserves distinctions
+    # such as completed-with-warning and partial-but-resumable delivery.
+    completion_decision: dict[str, Any] | None = Field(
+        default=None,
+        alias="completionDecision",
+    )
 
 
 __all__ = [
@@ -578,6 +606,7 @@ __all__ = [
     "CommandAction",
     "CommandExecutionItem",
     "ErrorItem",
+    "EvidenceReference",
     "FileChange",
     "FileChangeItem",
     "FileHunk",
