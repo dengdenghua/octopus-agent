@@ -4714,7 +4714,7 @@ export const jaJP: Translations = {
       noFavorites: "お気に入りがまだありません",
     },
     defaultTabTitle: "AI ブラウザーデスクトップ",
-    pageTitle: "AI Browser",
+    pageTitle: "AI ブラウザ",
     pageSubtitle: (pinned: boolean) =>
       pinned ? "タブワークスペース · 固定済み" : "タブワークスペース",
     searchPlaceholder: "タブを検索...",
