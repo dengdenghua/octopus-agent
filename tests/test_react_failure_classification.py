@@ -224,7 +224,7 @@ class TestCompletionDecision:
             ("max_iter", True, "partial", True, True),
             ("paused", True, "paused", False, True),
             ("cancelled", True, "cancelled", False, False),
-            ("guard_impasse", True, "failed", False, False),
+            ("guard_impasse", True, "partial", True, True),
             ("model_stall", False, "failed", False, False),
         ],
     )

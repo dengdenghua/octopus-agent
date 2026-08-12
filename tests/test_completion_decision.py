@@ -113,3 +113,23 @@ def test_completion_decision_to_dict_shape() -> None:
         "resumable": True,
         "retryable": False,
     }
+
+
+def test_guard_impasse_with_clean_trajectory_is_resumable_partial() -> None:
+    decision = decide_completion(
+        terminated_reason="guard_impasse",
+        effective_success=True,
+    )
+    assert decision.outcome == "partial"
+    assert decision.success is True
+    assert decision.resumable is True
+    assert decision.retryable is True
+
+
+def test_guard_impasse_without_evidence_remains_failed() -> None:
+    decision = decide_completion(
+        terminated_reason="guard_impasse",
+        effective_success=False,
+    )
+    assert decision.outcome == "failed"
+    assert decision.success is False

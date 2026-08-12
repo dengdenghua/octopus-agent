@@ -87,6 +87,18 @@ def decide_completion(
             success=True,
             resumable=True,
         )
+    # A completeness guard can exhaust its bounded retries after the model has
+    # already performed useful work but keeps emitting a future-work sentence.
+    # Preserve the distinction in the raw termination reason while exposing a
+    # resumable partial result to the UI instead of a terminal red failure.
+    if reason == "guard_impasse" and effective_success:
+        return CompletionDecision(
+            outcome="partial",
+            reason=reason,
+            success=True,
+            resumable=True,
+            retryable=True,
+        )
     if effective_success and reason == "final_answer":
         return CompletionDecision(
             outcome="completed",

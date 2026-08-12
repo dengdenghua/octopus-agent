@@ -78,6 +78,19 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
         visible,
         re.IGNORECASE,
     )
+    # Long-form reports often start with a short roadmap ("我将检查…") before
+    # presenting the actual findings.  Do not classify that opening sentence as
+    # the whole answer: headings, enumerated findings, and a substantial body
+    # are strong delivery evidence.  This keeps the guard focused on genuinely
+    # plan-only candidates while preserving its protection for one-line plans.
+    delivered_report = (
+        len(visible) >= 120
+        and bool(re.search(r"(?:^|\n)\s*(?:#{1,6}\s|\d+[.)、]\s|[-*]\s)", raw))
+        and bool(result_signal)
+        and not negated_completion
+    )
+    if delivered_report:
+        return None
     if (
         evidence_action
         and (preparatory_start or future_action)

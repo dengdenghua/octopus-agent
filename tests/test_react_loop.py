@@ -3069,7 +3069,8 @@ def test_forced_convergence_completeness_guard_marks_impasse() -> None:
 
     assert result is not None
     assert result.terminated_reason == "guard_impasse"
-    assert result.success is False
+    assert result.success is True
+    assert result.completion_decision["outcome"] == "partial"
     assert "还不能把这个任务标记为完成" in result.final_answer
 
 
@@ -4065,7 +4066,7 @@ def test_code_mode_completion_guard_rejects_claimed_test_without_test_write() ->
     assert "test-file write" in guard
 
 
-def test_completion_phrase_guard_requires_immediate_todo_update() -> None:
+def test_completion_phrase_guard_is_telemetry_only() -> None:
     steps = [
         ReActStep(
             iteration=1,
@@ -4089,8 +4090,10 @@ def test_completion_phrase_guard_requires_immediate_todo_update() -> None:
         todo_protocol_required=True,
     )
 
-    assert guard is not None
-    assert "todo_write" in guard
+    # Completion wording is not an authoritative state transition. The
+    # checklist is updated from receipts, so prose must never inject another
+    # model round or create the recurring todo-protocol loop.
+    assert guard is None
 
 
 def test_completion_phrase_guard_allows_todo_write_update() -> None:

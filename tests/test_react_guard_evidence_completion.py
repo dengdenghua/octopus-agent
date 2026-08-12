@@ -207,6 +207,18 @@ def test_incomplete_final_answer_accepts_delivered_conclusion_still() -> None:
     )
 
 
+def test_incomplete_final_answer_accepts_long_report_with_roadmap_opening() -> None:
+    report = (
+        "我将先检查当前项目，再给出结论。\n\n"
+        "## 审计结论\n"
+        "1. 核心运行链路已经完成统一收敛，工具执行结果会进入同一条时间线。\n"
+        "2. 中断和等待状态不会再被最终答复误标为完成。\n"
+        "3. 回归测试已覆盖状态同步、协议清洗和终态交付。\n\n"
+        "因此本轮没有发现阻断性问题，剩余风险是旧历史记录需要刷新。"
+    )
+    assert _incomplete_final_answer_guard(report) is None
+
+
 def test_inspection_answer_fragment_guard_rejects_bare_source_line() -> None:
     message = _code_mode_inspection_answer_fragment_guard(
         'str = ""',
