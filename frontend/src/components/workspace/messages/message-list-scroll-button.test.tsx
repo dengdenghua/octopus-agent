@@ -133,6 +133,10 @@ describe("MessageList scroll-to-latest affordance", () => {
     expect(button).toHaveStyle({
       bottom: "calc(var(--chat-input-overlay-height, 160px) + 12px)",
     });
+    expect(screen.getByTestId("conversation-bottom-safe-area")).toHaveStyle({
+      height:
+        "calc(max(180px, var(--chat-input-overlay-height, 180px)) + 56px)",
+    });
   });
 
   test("renders a left turn locator rail for quick jumps between user turns", () => {

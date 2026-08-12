@@ -19,4 +19,16 @@ describe("global appearance chrome rules", () => {
       /\[data-slot="card"\][\s\S]*?\[data-slot="dialog-content"\][\s\S]*?border-radius:\s*var\(--appearance-radius-2xl\)\s*!important;/,
     );
   });
+
+  it("never applies implicit all-property transitions to shared controls", () => {
+    expect(css).toMatch(
+      /\[data-slot="switch"\][\s\S]*?transition-property:\s*[\s\S]*?color,[\s\S]*?background-color,[\s\S]*?box-shadow,[\s\S]*?transform\s*!important;/,
+    );
+    expect(css).toMatch(
+      /\.message-list-scroll-viewport\s*\{[\s\S]*?scrollbar-gutter:\s*stable;[\s\S]*?transition:\s*none;/,
+    );
+    expect(css).toMatch(
+      /\.stable-scroll-viewport\s*\{[\s\S]*?scrollbar-gutter:\s*stable;[\s\S]*?transition:\s*none;/,
+    );
+  });
 });

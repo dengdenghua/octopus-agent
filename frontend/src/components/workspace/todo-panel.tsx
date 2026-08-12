@@ -55,7 +55,14 @@ function extractLatestTodos(events: LiveToolEvent[]): TodoItem[] {
   const todoWrites = events
     .filter((event) => event.name === "todo_write" && event.input)
     .sort((a, b) => a.startedAt - b.startedAt);
-  const latest = todoWrites[todoWrites.length - 1];
+  const sourceTodos = todoWrites.filter(
+    (event) => event.input?.source !== "turn.phases",
+  );
+  // turn.phases is a compatibility projection, not a second checklist. Prefer
+  // the latest source todo so this panel and the workbench consume the same
+  // statuses even when the projection arrives later over the socket.
+  const latest =
+    sourceTodos[sourceTodos.length - 1] ?? todoWrites[todoWrites.length - 1];
   if (!latest?.input) return [];
 
   const rawItems = coerceTodoItems(latest.input.items ?? latest.input.todos);

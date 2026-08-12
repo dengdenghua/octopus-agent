@@ -19,6 +19,7 @@ import type {
 import type { Todo } from "@/core/todos";
 import { isPrivateAgentGroundingSource } from "@/core/realtime/items";
 import { itemStreamText } from "@/core/realtime/reducer";
+import { sanitizeLegacyGuardDiagnostic } from "@/core/messages/utils";
 
 import type {
   AgentMessageItem,
@@ -111,6 +112,9 @@ export function conversationToAgentThreadState(
         messages: cached.messages,
         artifacts: cached.artifacts,
         ...(cached.todos !== undefined ? { todos: cached.todos } : {}),
+        ...(cached.latestGrounding !== undefined
+          ? { latest_grounding: cached.latestGrounding }
+          : {}),
       };
     }
   }
@@ -118,8 +122,12 @@ export function conversationToAgentThreadState(
   const messages: Message[] = [];
   const artifacts: string[] = base?.artifacts ? [...base.artifacts] : [];
   let todos: Todo[] | undefined = base?.todos ? [...base.todos] : undefined;
+  let latestGrounding: GroundingSource[] | undefined = base?.latest_grounding
+    ? [...base.latest_grounding]
+    : undefined;
 
   for (const turn of conv.turns) {
+    latestGrounding = safeGroundingSources(turn.grounding);
     const turnArtifacts = turnArtifactsFrom(turn);
     if (turnArtifacts.length > 0) artifacts.push(...turnArtifacts);
 
@@ -131,7 +139,12 @@ export function conversationToAgentThreadState(
   }
 
   if (base === undefined) {
-    topLevelViewCache.set(conv.turns, { messages, artifacts, todos });
+    topLevelViewCache.set(conv.turns, {
+      messages,
+      artifacts,
+      todos,
+      latestGrounding,
+    });
   }
 
   return {
@@ -139,6 +152,9 @@ export function conversationToAgentThreadState(
     messages,
     artifacts,
     ...(todos !== undefined ? { todos } : {}),
+    ...(latestGrounding !== undefined
+      ? { latest_grounding: latestGrounding }
+      : {}),
     ...(base?.agent_roster !== undefined
       ? { agent_roster: base.agent_roster }
       : {}),
@@ -205,8 +221,25 @@ const itemMessageCache = new WeakMap<Item, Message>();
 // Only populated on the no-``base`` path (see conversationToAgentThreadState).
 const topLevelViewCache = new WeakMap<
   Turn[],
-  { messages: Message[]; artifacts: string[]; todos: Todo[] | undefined }
+  {
+    messages: Message[];
+    artifacts: string[];
+    todos: Todo[] | undefined;
+    latestGrounding: GroundingSource[] | undefined;
+  }
 >();
+
+function safeGroundingSources(
+  grounding: GroundingSource[] | undefined,
+): GroundingSource[] {
+  return (grounding ?? []).filter(
+    (source) =>
+      source &&
+      typeof source.path === "string" &&
+      source.path.trim() !== "" &&
+      !isPrivateAgentGroundingSource(source),
+  );
+}
 
 function turnToMessagesStable(turn: Turn): Message[] {
   const cached = turnMessagesCache.get(turn);
@@ -539,6 +572,9 @@ function turnToMessages(turn: Turn): Message[] {
         if (turn.outcomeReason) {
           kwargs.outcome_reason = turn.outcomeReason;
         }
+        if (turn.completionDecision) {
+          kwargs.completion_decision = turn.completionDecision;
+        }
         if (turn.objectiveId) kwargs.objective_id = turn.objectiveId;
         if (turn.taskId) kwargs.task_id = turn.taskId;
         if (turn.checkpointId) kwargs.checkpoint_id = turn.checkpointId;
@@ -564,11 +600,12 @@ function turnToMessages(turn: Turn): Message[] {
               ? turnError.disposition
               : "";
           const blockedOnUser = disposition === "blocked_on_user";
-          const failureDetail =
+          const failureDetail = sanitizeLegacyGuardDiagnostic(
             (typeof turnError?.message === "string" &&
               turnError.message.trim()) ||
-            split.finalAnswer?.trim() ||
-            "turn failed";
+              split.finalAnswer?.trim() ||
+              "turn failed",
+          );
           const failureCode =
             (typeof turnError?.code === "string" && turnError.code.trim()) ||
             "agent_response_failed";
@@ -825,7 +862,9 @@ function appendFailedTurnReceipt(out: Message[], turn: Turn): void {
   const failureKind =
     typeof turnError?.failure_kind === "string" ? turnError.failure_kind : "";
   const blockedOnUser = disposition === "blocked_on_user";
-  const message = verificationMessage || turnErrorMessage || "turn failed";
+  const message = sanitizeLegacyGuardDiagnostic(
+    verificationMessage || turnErrorMessage || "turn failed",
+  );
   const verificationRequired = turn.items.some(
     (item) =>
       item.type === "verification" &&
@@ -1132,7 +1171,7 @@ function userMessageToHuman(item: UserMessageItem): HumanMessage {
 }
 
 function errorToAi(item: ErrorItem): AIMessage {
-  const message = item.message || "turn failed";
+  const message = sanitizeLegacyGuardDiagnostic(item.message || "turn failed");
   return {
     type: "ai",
     id: item.id,
@@ -1208,7 +1247,9 @@ export function conversationLastError(conv: Conversation): Error | undefined {
   if (last.status !== "failed") return undefined;
   if (last.error && typeof last.error === "object") {
     const m = (last.error as { message?: unknown }).message;
-    const message = typeof m === "string" ? m : "turn failed";
+    const message = sanitizeLegacyGuardDiagnostic(
+      typeof m === "string" ? m : "turn failed",
+    );
     if (!/^turn failed$/i.test(message.trim())) {
       return new Error(message);
     }
@@ -1217,7 +1258,9 @@ export function conversationLastError(conv: Conversation): Error | undefined {
   for (let i = last.items.length - 1; i >= 0; i--) {
     const item = last.items[i];
     if (item !== undefined && item.type === "error") {
-      return new Error((item as ErrorItem).message);
+      return new Error(
+        sanitizeLegacyGuardDiagnostic((item as ErrorItem).message),
+      );
     }
   }
   for (let i = last.items.length - 1; i >= 0; i--) {
@@ -1227,7 +1270,11 @@ export function conversationLastError(conv: Conversation): Error | undefined {
       item.status === "failed" &&
       itemStreamText(item as AgentMessageItem).trim()
     ) {
-      return new Error(itemStreamText(item as AgentMessageItem).trim());
+      return new Error(
+        sanitizeLegacyGuardDiagnostic(
+          itemStreamText(item as AgentMessageItem).trim(),
+        ),
+      );
     }
   }
   const verificationMessage = failedVerificationMessage(last);

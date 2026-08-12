@@ -107,7 +107,7 @@ describe("PublicThinkingStatus", () => {
             id: "read-running",
             name: "read_file",
             input: {
-              path: "/Users/dangbei/Public/octopus/octopus-agent/src/app.ts",
+              path: "/Users/example/Public/octopus/octopus-agent/src/app.ts",
             },
           }),
         ]}

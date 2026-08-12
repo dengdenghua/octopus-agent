@@ -52,7 +52,6 @@ import { cn } from "@/lib/utils";
 import { ArtifactFileList } from "../artifacts/artifact-file-list";
 import {
   AGENT_WORKBENCH_LOCATE_EVENT,
-  emitOpenAgentWorkbench,
   type AgentWorkbenchLocateDetail,
 } from "../agent-workbench-events";
 import type { LiveToolEvent } from "../live-tool-timeline";
@@ -980,29 +979,37 @@ export function MessageList({
         /Code mode cannot finish this implementation task yet:\s*no successful file write\/edit execution is recorded/i.test(
           failure.detail,
         );
+      const hasStructuredReadableDetail =
+        Boolean(failure.code) &&
+        failure.detail !== "turn failed" &&
+        !/^[a-z][a-z0-9_.-]{1,80}$/i.test(failure.detail);
       // Environment / blocked hand-offs surface the readable reason from the
       // backend (``turn.error.message``) verbatim; the i18n strings are only
       // the fallback when no detail came through.
       const message =
         kind === "blocked"
-          ? (failure.detail !== "turn failed"
-              ? failure.detail
-              : t.streaming.blockedOnUser)
+          ? failure.detail !== "turn failed"
+            ? failure.detail
+            : t.streaming.blockedOnUser
           : kind === "environment"
-            ? (failure.detail !== "turn failed"
-                ? failure.detail
-                : t.streaming.environmentBlocked)
+            ? failure.detail !== "turn failed"
+              ? failure.detail
+              : t.streaming.environmentBlocked
             : kind === "network"
               ? t.streaming.networkLost
               : kind === "verification"
                 ? t.streaming.verificationRequired
                 : kind === "guard"
-                  ? t.streaming.guardBlocked
+                  ? hasStructuredReadableDetail
+                    ? failure.detail
+                    : t.streaming.guardBlocked
                   : kind === "lifecycle"
                     ? t.streaming.lifecycleFailed
                     : requiresWorkspaceWrite
                       ? t.streaming.workspaceWriteRequired
-                      : t.streaming.turnFailed;
+                      : hasStructuredReadableDetail
+                        ? failure.detail
+                        : t.streaming.turnFailed;
       return { ...failure, kind, message };
     },
     [
@@ -1485,6 +1492,7 @@ export function MessageList({
     msg: (typeof messages)[number],
     keyPrefix: string | undefined,
     beforeContent?: ReactNode,
+    suppressReasoningPanel = false,
   ) => {
     const key = `${keyPrefix}/${msg.id}`;
     return (
@@ -1494,7 +1502,9 @@ export function MessageList({
           message={msg}
           isLoading={thread.isLoading && msg.id === thread.streamingMessage?.id}
           chatFontSize={settings.display.chat_font_size}
-          suppressReasoningPanel={Boolean(beforeContent)}
+          suppressReasoningPanel={
+            Boolean(beforeContent) || suppressReasoningPanel
+          }
           enableClarificationActions={
             !thread.isLoading && messages[messages.length - 1] === msg
           }
@@ -1508,6 +1518,7 @@ export function MessageList({
     msg: (typeof messages)[number],
     keyPrefix: string | undefined,
     beforeContent?: ReactNode,
+    suppressReasoningPanel = false,
   ) => {
     const key = `${keyPrefix}/${msg.id}`;
     const content = (
@@ -1517,7 +1528,9 @@ export function MessageList({
           message={msg}
           isLoading={thread.isLoading && msg.id === thread.streamingMessage?.id}
           chatFontSize={settings.display.chat_font_size}
-          suppressReasoningPanel={Boolean(beforeContent)}
+          suppressReasoningPanel={
+            Boolean(beforeContent) || suppressReasoningPanel
+          }
           enableClarificationActions={
             !thread.isLoading && messages[messages.length - 1] === msg
           }
@@ -1595,6 +1608,25 @@ export function MessageList({
     showAssistantAvatar = true,
   ) => {
     if (group.type === "human" || group.type === "assistant") {
+      const groupIndex = groupedMessages.indexOf(group);
+      const turnHasProcessingLane = (() => {
+        if (groupIndex < 0) return false;
+        for (let index = groupIndex - 1; index >= 0; index -= 1) {
+          const previous = groupedMessages[index]!;
+          if (previous.type === "human") break;
+          if (previous.type === "assistant:processing") return true;
+        }
+        for (
+          let index = groupIndex + 1;
+          index < groupedMessages.length;
+          index += 1
+        ) {
+          const next = groupedMessages[index]!;
+          if (next.type === "human") break;
+          if (next.type === "assistant:processing") return true;
+        }
+        return false;
+      })();
       let injectedBeforeContent = false;
       const renderedMessages = group.messages.map((msg) => {
         const beforeContent =
@@ -1603,8 +1635,18 @@ export function MessageList({
             : undefined;
         if (beforeContent) injectedBeforeContent = true;
         return showAssistantAvatar || msg.type !== "ai"
-          ? renderMessageWithHeader(msg, group.id, beforeContent)
-          : renderMessageContent(msg, group.id, beforeContent);
+          ? renderMessageWithHeader(
+              msg,
+              group.id,
+              beforeContent,
+              turnHasProcessingLane,
+            )
+          : renderMessageContent(
+              msg,
+              group.id,
+              beforeContent,
+              turnHasProcessingLane,
+            );
       });
       return (
         <>
@@ -2097,8 +2139,13 @@ export function MessageList({
           )}
 
         <div
+          data-testid="conversation-bottom-safe-area"
           style={{
-            height: `max(${paddingBottom}px, var(--chat-input-overlay-height, ${paddingBottom}px))`,
+            // The composer is an overlay. Reserve its measured height plus a
+            // small reading-safe zone so an expanded reasoning block can be
+            // scrolled completely above both the composer and the floating
+            // "latest" affordance.
+            height: `calc(max(${paddingBottom}px, var(--chat-input-overlay-height, ${paddingBottom}px)) + 56px)`,
           }}
         />
       </ConversationContent>

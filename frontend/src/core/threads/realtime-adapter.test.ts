@@ -433,6 +433,30 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     ).toContain("内部守卫要求缺少执行证据");
   });
 
+  it("sanitizes model-facing guard feedback from legacy failed turns", () => {
+    const failedAnswer: AgentMessageItem = {
+      ...agentMsg(
+        "任务未能完成：始终无法满足「final-answer completeness guard」要求。最后一次拦截原因: The proposed Final Answer only announces a future inspection. Execute the stated read action.",
+        "legacy-guard-answer",
+      ),
+      status: "failed",
+    };
+    const conversation = makeConv([
+      makeTurn([userMsg("optimize"), failedAnswer], "failed"),
+    ]);
+    const state = conversationToAgentThreadState(conversation);
+    const ai = state.messages[1] as AIMessage;
+    const error = ai.additional_kwargs?.error as
+      | { message?: string }
+      | undefined;
+
+    expect(error?.message).toContain("尚未形成可交付结果");
+    expect(error?.message).not.toMatch(
+      /guard|Final Answer|Execute the stated/i,
+    );
+    expect(conversationLastError(conversation)?.message).toBe(error?.message);
+  });
+
   it("adds a structured receipt to failed verification-only turns", () => {
     const failedVerification: VerificationItem = {
       ...verification("verification required"),
@@ -470,7 +494,8 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
         "failed",
       ),
       error: {
-        message: "环境阻塞：pnpm 想在无 TTY 环境下交互确认删除 node_modules，因此中止了。",
+        message:
+          "环境阻塞：pnpm 想在无 TTY 环境下交互确认删除 node_modules，因此中止了。",
         code: "pnpm_modules_purge_no_tty",
         disposition: "blocked_on_user",
         failure_kind: "environment",
@@ -483,7 +508,8 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     ) as AIMessage | undefined;
     expect(ai?.additional_kwargs?.response_state).toBe("blocked");
     expect(ai?.additional_kwargs?.error).toMatchObject({
-      message: "环境阻塞：pnpm 想在无 TTY 环境下交互确认删除 node_modules，因此中止了。",
+      message:
+        "环境阻塞：pnpm 想在无 TTY 环境下交互确认删除 node_modules，因此中止了。",
       info: {
         code: "pnpm_modules_purge_no_tty",
         disposition: "blocked_on_user",
@@ -539,6 +565,7 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     };
     expect(ai.type).toBe("ai");
     expect(ai.additional_kwargs?.grounding).toEqual(grounding);
+    expect(state.latest_grounding).toEqual(grounding);
   });
 
   it("does not attach legacy teammate profile grounding to an AI reply", () => {

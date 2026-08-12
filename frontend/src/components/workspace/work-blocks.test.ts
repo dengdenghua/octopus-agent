@@ -260,7 +260,7 @@ describe("work blocks", () => {
         status: "running",
         input: {
           command: "cat ~/.ssh/id_rsa && pnpm test",
-          cwd: "/Users/dangbei/Public/octopus/octopus-agent",
+          cwd: "/Users/example/Public/octopus/octopus-agent",
         },
       }),
     ]);

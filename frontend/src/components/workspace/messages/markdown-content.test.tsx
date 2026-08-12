@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
 
-import { MarkdownContent } from "./markdown-content";
+import {
+  MarkdownContent,
+  stabilizeMarkdownTableCodePipes,
+} from "./markdown-content";
 
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -135,6 +138,23 @@ describe("<MarkdownContent /> Mermaid", () => {
 });
 
 describe("<MarkdownContent /> streaming state", () => {
+  it("keeps pipes inside inline code from splitting Markdown table cells", () => {
+    const source = [
+      "| layer | selector | file |",
+      "| --- | --- | --- |",
+      '| theme | `[data-theme="steel|apricot|mint"]` | `globals.css` |',
+    ].join("\n");
+
+    expect(stabilizeMarkdownTableCodePipes(source)).toContain(
+      '`[data-theme="steel\\|apricot\\|mint"]`',
+    );
+  });
+
+  it("does not rewrite pipes inside fenced code examples", () => {
+    const source = "```ts\nconst modes = `steel|mint`;\n```";
+    expect(stabilizeMarkdownTableCodePipes(source)).toBe(source);
+  });
+
   it("gives long technical content its own responsive layout boundary", () => {
     renderMarkdown("A compact answer");
 
@@ -150,6 +170,22 @@ describe("<MarkdownContent /> streaming state", () => {
     expect(
       screen.getByText("Python 与 TypeScript 定义一致。"),
     ).toBeInTheDocument();
+  });
+
+  it("hides legacy guard boilerplate from persisted replies", () => {
+    renderMarkdown(
+      [
+        "已确认 teal 主题仅定义 --chart-1。",
+        "",
+        "---",
+        "",
+        "质量提示：「code-mode guard」未通过证据门禁。此前给出的收尾答案未满足要求（该次提交是模型自身发起的，未被系统接受）；为避免继续空转，现将已有结果交付。",
+      ].join("\n"),
+    );
+
+    expect(screen.getByText(/已确认 teal/)).toBeInTheDocument();
+    expect(screen.queryByText(/质量提示/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/code-mode guard/)).not.toBeInTheDocument();
   });
 
   it("hides inline leaked read-only control tags without dropping nearby prose", () => {

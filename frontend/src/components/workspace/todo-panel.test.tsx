@@ -63,6 +63,42 @@ describe("TodoPanel", () => {
     expect(screen.queryByText("旧计划")).not.toBeInTheDocument();
     expect(screen.getByText("新计划")).toBeInTheDocument();
   });
+
+  it("does not let a later turn.phases projection override source todos", () => {
+    renderWithProviders(
+      <TodoPanel
+        liveToolEvents={[
+          todoEvent(
+            {
+              items: [
+                { content: "已完成定位", status: "completed" },
+                { content: "正在实现", status: "in_progress" },
+              ],
+            },
+            1,
+          ),
+          todoEvent(
+            {
+              source: "turn.phases",
+              items: [
+                { content: "已完成定位", status: "in_progress" },
+                { content: "正在实现", status: "pending" },
+              ],
+            },
+            2,
+          ),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("正在实现")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (content) => content.includes("1/2") && content.includes("50%"),
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("renders todo_write JSON string payloads from native tool calls", () => {
     renderWithProviders(
       <TodoPanel

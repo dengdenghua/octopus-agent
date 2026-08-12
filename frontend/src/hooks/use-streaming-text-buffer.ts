@@ -132,10 +132,7 @@ export function useStreamingTextBuffer({
 
       if (
         reducedMotionRef.current ||
-        (!enabledRef.current && !opts.drainOnFinish) ||
-        (!enabledRef.current &&
-          finishStartedAtRef.current !== null &&
-          now - finishStartedAtRef.current >= opts.maxFinishDelayMs)
+        (!enabledRef.current && !opts.drainOnFinish)
       ) {
         revealAll();
         lastRevealAtRef.current = null;
@@ -158,6 +155,20 @@ export function useStreamingTextBuffer({
             Math.round(backlog / Math.max(1, opts.backlogDivisor)),
           );
           step = Math.min(step, maxStep);
+        }
+        if (!enabledRef.current && finishStartedAtRef.current !== null) {
+          // Spread the remaining tail across the bounded finish window rather
+          // than revealing everything in one last frame at the deadline. A
+          // coalesced provider chunk can leave dozens of characters queued;
+          // the old hard cut-over produced the visible “pause, then dump”
+          // effect even though both transport lanes were streaming normally.
+          const elapsed = Math.max(0, now - finishStartedAtRef.current);
+          const remainingMs = Math.max(0, opts.maxFinishDelayMs - elapsed);
+          const remainingTicks = Math.max(
+            1,
+            Math.ceil(remainingMs / Math.max(1, opts.targetIntervalMs)),
+          );
+          step = Math.max(step, Math.ceil(backlog / remainingTicks));
         }
         const next = advanceToGraphemeBoundary(text, current, step);
         displayLengthRef.current = next;

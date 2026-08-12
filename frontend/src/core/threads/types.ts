@@ -1,6 +1,7 @@
 import type { Message, Thread } from "@/core/api/types";
 
 import type { Todo } from "../todos";
+import type { GroundingSource } from "../realtime/items";
 
 export interface AgentRosterEntry {
   agent_id?: string | null;
@@ -54,6 +55,8 @@ export interface AgentThreadState extends Record<string, unknown> {
   current_speaker?: string | null;
   execution_metrics?: ExecutionMetrics | null;
   execution_plan?: ExecutionPlan | null;
+  /** Sources actually injected into the latest turn's model context. */
+  latest_grounding?: GroundingSource[];
 }
 
 export interface AgentThread extends Thread<AgentThreadState> {}

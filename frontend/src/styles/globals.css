@@ -1728,6 +1728,14 @@
       [data-slot="tabs-trigger"],
       [data-slot="switch"]
     ) {
+    /* Never let the shared motion token silently animate layout geometry.
+       A duration without an explicit property falls back to `all`, which made
+       streaming height changes and scrollbar appearance look like an
+       accordion. Keep the useful visual feedback while width, height, gap,
+       padding and position update synchronously. */
+    transition-property:
+      color, background-color, border-color, text-decoration-color, fill,
+      stroke, opacity, box-shadow, transform !important;
     transition-duration: var(--motion-duration-fast) !important;
     transition-timing-function: var(--motion-ease-out) !important;
   }
@@ -1766,21 +1774,61 @@
     margin-top: 0.15rem;
   }
 
-  /* Give live private reasoning a real reading viewport even before enough
-     text has arrived to fill it. Keep both bounds relative to the screen so
-     the window feels substantial without pushing the composer away. */
-  .live-thinking-window {
-    max-height: min(55vh, 34rem);
-    min-width: 0;
+  /* Keep the transcript width fixed when its vertical scrollbar appears and
+     contain wheel momentum inside the conversation. Without this, streaming
+     height changes can shift the entire text column by a few pixels. */
+  .message-list-scroll-viewport {
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
+    transition: none;
   }
 
-  /* Only long streams get a substantial embedded reading viewport. Short
-     status updates should occupy their natural height instead of leaving a
-     large empty panel beneath a single line. */
-  .live-thinking-window-long {
-    min-height: min(32vh, 20rem);
+  /* Streaming and expandable panels must not animate their scroll geometry.
+     Reserving the gutter also prevents the content column from shifting when
+     a list becomes scrollable. */
+  .stable-scroll-viewport {
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    transition: none;
+  }
+
+  /* The collapsed workbench drawer can leave less than 100px for its empty
+     state after the tab header and machine rail are accounted for. Keep the
+     compact state readable instead of letting its description clip below the
+     drawer edge; larger workbench surfaces retain the full explanation. */
+  .workbench-empty-page {
+    container: workbench-empty / size;
+  }
+
+  @container workbench-empty (max-height: 140px) {
+    .workbench-empty-page {
+      padding: 0.75rem;
+    }
+
+    .workbench-empty-page-content {
+      gap: 0.5rem;
+    }
+
+    .workbench-empty-page-icon > div {
+      width: 2rem;
+      height: 2rem;
+    }
+
+    .workbench-empty-page-icon svg {
+      width: 1rem;
+      height: 1rem;
+    }
+
+    .workbench-empty-page-description {
+      display: none;
+    }
+  }
+
+  /* Live private reasoning is part of the conversation flow. The transcript
+     owns vertical scrolling; a nested reasoning viewport would let thoughts
+     drift away from the formal answer below them. */
+  .live-thinking-window {
+    min-width: 0;
   }
 
   @media (max-width: 640px) {
@@ -1789,13 +1837,6 @@
       line-height: 1.7;
     }
 
-    .live-thinking-window {
-      max-height: min(44vh, 26rem);
-    }
-
-    .live-thinking-window-long {
-      min-height: min(24vh, 11rem);
-    }
   }
 
   .chat-markdown :where(p, li, blockquote) {

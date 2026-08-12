@@ -28,25 +28,15 @@ import {
   AlertTriangleIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
-  DownloadIcon,
   ExternalLinkIcon,
-  FileCheck2Icon,
-  FilePlus2Icon,
+  FilePenLineIcon,
   LinkIcon,
   Loader2Icon,
-  RotateCcwIcon,
-  UserCheckIcon,
   WandSparklesIcon,
   XCircleIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 
 import { useArtifacts } from "../artifacts";
 
@@ -102,7 +92,14 @@ type OutputSummary = {
 export type FailurePresentation = {
   message: string;
   detail: string;
-  kind: "error" | "network" | "verification" | "guard" | "lifecycle" | "environment" | "blocked";
+  kind:
+    | "error"
+    | "network"
+    | "verification"
+    | "guard"
+    | "lifecycle"
+    | "environment"
+    | "blocked";
   code?: string;
   eventId?: string;
 };
@@ -479,21 +476,6 @@ export function MessageOutputSummary({
     () => extractOriginalPrompt(scanMessages),
     [scanMessages],
   );
-  const [changesOpen, setChangesOpen] = useState(summary.changes.length <= 3);
-  const reviewAssignees = useMemo(
-    () => [
-      { value: "self", label: t.message.reviewSelf },
-      { value: "team", label: t.message.reviewTeam },
-      { value: "security", label: t.message.reviewSecurity },
-    ],
-    [t.message],
-  );
-  const [reviewAssignee, setReviewAssignee] = useState(
-    reviewAssignees[0]!.value,
-  );
-  const [reverting, setReverting] = useState(false);
-  const [changesAccepted, setChangesAccepted] = useState(false);
-
   if (
     !failure &&
     summary.artifacts.length === 0 &&
@@ -556,10 +538,6 @@ export function MessageOutputSummary({
         normalizeWorkspaceArtifactRef(artifact.path, threadId),
       ),
   );
-  const hasOnlyFinalOutputChanges =
-    reviewableChanges.length > 0 &&
-    reviewableChanges.every((change) => finalOutputChanges.includes(change));
-  const effectiveChangesOpen = hasOnlyFinalOutputChanges || changesOpen;
   const totalAdded = reviewableChanges.reduce(
     (sum, item) => sum + item.added,
     0,
@@ -580,56 +558,10 @@ export function MessageOutputSummary({
           editedChanges.length,
         )
       : t.message.filesEdited(editedChanges.length);
-  const ChangeSummaryIcon = hasOnlyCreatedChanges
-    ? FilePlus2Icon
-    : FileCheck2Icon;
-  const visibleChanges = effectiveChangesOpen
-    ? reviewableChanges
-    : reviewableChanges.slice(0, 3);
-  // A truncated diff may end mid-hunk; reverse-applying it would
-  // conflict or corrupt the file, so it never enters the revert batch.
-  const revertableChanges = reviewableChanges.filter(
-    (change) => change.diff?.trim() && !change.diffTruncated,
-  );
-  const showAuditActions = reviewableChanges.length > 0;
-
-  const handleRevertAll = async () => {
-    if (revertableChanges.length === 0 || reverting) return;
-    setReverting(true);
-    try {
-      const base = getBackendBaseURL();
-      for (const change of revertableChanges) {
-        const response = await fetch(`${base}/api/fs/revert-diff`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            path: change.path,
-            diff: change.diff,
-            thread_id: threadId,
-            delete_empty: change.created,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(await responseErrorMessage(response));
-        }
-      }
-      notifyWorkspaceChanged();
-      toast.success(t.message.revertSuccess(revertableChanges.length));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t.message.revertFailed,
-      );
-    } finally {
-      setReverting(false);
-    }
-  };
-
-  const handleReviewAssigneeChange = (value: string) => {
-    setReviewAssignee(value);
-    const label =
-      reviewAssignees.find((item) => item.value === value)?.label ?? value;
-    toast.info(t.message.reviewAssigned(label));
-  };
+  // Inline code changes already communicate the useful receipt in each file
+  // row. Do not stack a second "任务产物 / 已编辑 N 个文件" banner above them;
+  // keep the banner only for failures or turns without a diff.
+  const showReceiptBanner = isFailure || reviewableChanges.length === 0;
 
   return (
     <div
@@ -638,80 +570,90 @@ export function MessageOutputSummary({
         className,
       )}
     >
-      <div
-        className={cn(
-          "flex min-w-0 flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs",
-          isFailure
-            ? isWarningFailure
-              ? "border-warning/20 bg-warning/50/[0.04]"
-              : "border-destructive/20 bg-destructive/[0.035]"
-            : "border-success/20 bg-success/50/[0.055]",
-        )}
-      >
-        {isFailure ? (
-          isWarningFailure ? (
-            <AlertTriangleIcon className="size-4 shrink-0 text-warning" />
+      {showReceiptBanner && (
+        <div
+          className={cn(
+            "flex min-w-0 flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs",
+            isFailure
+              ? isWarningFailure
+                ? "border-warning/20 bg-warning/50/[0.04]"
+                : "border-destructive/20 bg-destructive/[0.035]"
+              : "border-success/20 bg-success/50/[0.055]",
+          )}
+        >
+          {isFailure ? (
+            isWarningFailure ? (
+              <AlertTriangleIcon className="size-4 shrink-0 text-warning" />
+            ) : (
+              <XCircleIcon className="size-4 shrink-0 text-destructive" />
+            )
           ) : (
-            <XCircleIcon className="size-4 shrink-0 text-destructive" />
-          )
-        ) : (
-          <CheckCircle2Icon className="size-4 shrink-0 text-success" />
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-medium text-foreground/85">
-            {isFailure
-              ? (failure?.message ?? t.message.taskFailed)
-              : t.message.taskOutputs}
+            <CheckCircle2Icon className="size-4 shrink-0 text-success" />
+          )}
+          <div className="min-w-0 flex-1">
+            <div
+              className={cn(
+                "font-medium text-foreground/85",
+                isFailure
+                  ? "whitespace-pre-wrap break-words leading-5"
+                  : "truncate",
+              )}
+            >
+              {isFailure
+                ? (failure?.message ?? t.message.taskFailed)
+                : t.message.taskOutputs}
+            </div>
+            {!isFailure && (
+              <div className="truncate text-xs text-muted-foreground">
+                {t.message.taskCompleted}
+                {reviewableChanges.length > 0 ? ` · ${changeSummaryLabel}` : ""}
+                {visibleArtifacts.length > 0
+                  ? ` · ${t.message.artifactsCreated(visibleArtifacts.length)}`
+                  : ""}
+                {summary.verifications.length > 0
+                  ? ` · ${t.message.verificationRan} ${
+                      summary.verifications.filter((entry) => entry.passed)
+                        .length
+                    }/${summary.verifications.length}`
+                  : ""}
+              </div>
+            )}
           </div>
-          {!isFailure && (
-            <div className="truncate text-xs text-muted-foreground">
-              {t.message.taskCompleted}
-              {reviewableChanges.length > 0 ? ` · ${changeSummaryLabel}` : ""}
-              {visibleArtifacts.length > 0
-                ? ` · ${t.message.artifactsCreated(visibleArtifacts.length)}`
-                : ""}
-              {summary.verifications.length > 0
-                ? ` · ${t.message.verificationRan} ${
-                    summary.verifications.filter((entry) => entry.passed).length
-                  }/${summary.verifications.length}`
-                : ""}
+          {reviewableChanges.length > 0 && (
+            <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-xs shadow-[var(--shadow-xs)]">
+              <span className="text-success">+{totalAdded}</span>
+              <span className="mx-1 text-muted-foreground"> </span>
+              <span className="text-destructive">-{totalRemoved}</span>
             </div>
           )}
+          {resultUrl && (
+            <a
+              href={resultUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
+              title={t.message.resultUrl}
+            >
+              <LinkIcon className="size-3" />
+              {t.message.openResult}
+            </a>
+          )}
+          {isFailure && originalPrompt && (
+            <button
+              type="button"
+              onClick={handleMakeSimilar}
+              title={t.message.retryTaskHint}
+              className={cn(
+                "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
+                "border-destructive/30 bg-destructive/[0.08] text-destructive hover:border-destructive/50 hover:bg-destructive/15",
+              )}
+            >
+              <WandSparklesIcon className="size-3" />
+              {t.message.retryTask}
+            </button>
+          )}
         </div>
-        {reviewableChanges.length > 0 && (
-          <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-xs shadow-[var(--shadow-xs)]">
-            <span className="text-success">+{totalAdded}</span>
-            <span className="mx-1 text-muted-foreground"> </span>
-            <span className="text-destructive">-{totalRemoved}</span>
-          </div>
-        )}
-        {resultUrl && (
-          <a
-            href={resultUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
-            title={t.message.resultUrl}
-          >
-            <LinkIcon className="size-3" />
-            {t.message.openResult}
-          </a>
-        )}
-        {isFailure && originalPrompt && (
-          <button
-            type="button"
-            onClick={handleMakeSimilar}
-            title={t.message.retryTaskHint}
-            className={cn(
-              "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
-              "border-destructive/30 bg-destructive/[0.08] text-destructive hover:border-destructive/50 hover:bg-destructive/15",
-            )}
-          >
-            <WandSparklesIcon className="size-3" />
-            {t.message.retryTask}
-          </button>
-        )}
-      </div>
+      )}
       {visibleArtifacts.length > 0 && (
         <section aria-label={t.message.artifactsSummary} className="space-y-2">
           <div className="text-sm font-semibold text-foreground">
@@ -806,130 +748,22 @@ export function MessageOutputSummary({
       )}
 
       {reviewableChanges.length > 0 && (
-        <Collapsible
-          open={effectiveChangesOpen}
-          onOpenChange={(open) => {
-            if (!hasOnlyFinalOutputChanges) setChangesOpen(open);
-          }}
-        >
-          <section
-            aria-label={t.message.changesSummary}
-            className="overflow-hidden rounded-lg border border-border-default bg-muted/25"
-          >
-            <div className="flex flex-wrap items-start gap-2 px-3 py-2.5 sm:flex-nowrap sm:items-center">
-              <ChangeSummaryIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/45" />
-              {hasOnlyFinalOutputChanges ? (
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-foreground">
-                    {changeSummaryLabel}
-                  </span>
-                  <span className="mt-0.5 block font-mono text-xs leading-none">
-                    <span className="text-success">+{totalAdded}</span>
-                    <span className="mx-1 text-muted-foreground"> </span>
-                    <span className="text-destructive">-{totalRemoved}</span>
-                  </span>
-                </span>
-              ) : (
-                <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-foreground">
-                      {changeSummaryLabel}
-                    </span>
-                    <span className="mt-0.5 block font-mono text-xs leading-none">
-                      <span className="text-success">+{totalAdded}</span>
-                      <span className="mx-1 text-muted-foreground"> </span>
-                      <span className="text-destructive">-{totalRemoved}</span>
-                    </span>
-                  </span>
-                  <ChevronDownIcon
-                    className={cn(
-                      "size-4 shrink-0 text-muted-foreground/60 transition-transform",
-                      !changesOpen && "-rotate-90",
-                    )}
-                  />
-                </CollapsibleTrigger>
-              )}
-              {showAuditActions && (
-                <div
-                  aria-label={t.message.auditActions}
-                  className="ml-auto flex shrink-0 items-center gap-1.5"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setChangesAccepted(true)}
-                    disabled={changesAccepted}
-                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-transparent px-2 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/60 disabled:cursor-default disabled:text-success disabled:opacity-100 dark:disabled:text-success"
-                  >
-                    <CheckCircle2Icon className="size-3 text-muted-foreground/70" />
-                    {changesAccepted ? t.message.accepted : t.message.accept}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleRevertAll()}
-                    disabled={reverting || revertableChanges.length === 0}
-                    className={cn(
-                      "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-transparent px-2 text-xs font-medium text-foreground/80 transition-colors",
-                      "hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-55",
-                    )}
-                  >
-                    {reverting ? (
-                      <Loader2Icon className="size-3 animate-spin text-muted-foreground/70" />
-                    ) : (
-                      <RotateCcwIcon className="size-3 text-muted-foreground/70" />
-                    )}
-                    {t.common.revert}
-                  </button>
-                  <label className="relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-border-default bg-transparent px-2 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/60">
-                    <UserCheckIcon className="size-3 text-muted-foreground/70" />
-                    {t.common.review}
-                    <ChevronDownIcon className="size-3 text-muted-foreground/55" />
-                    <select
-                      aria-label={t.message.assignReviewTo}
-                      value={reviewAssignee}
-                      onChange={(event) =>
-                        handleReviewAssigneeChange(event.target.value)
-                      }
-                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                    >
-                      {reviewAssignees.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              )}
-            </div>
-            <CollapsibleContent>
-              <ul className="divide-y divide-border-default border-t border-border-default">
-                {visibleChanges.map((change) => (
-                  <ChangeRow
-                    key={change.path}
-                    change={change}
-                    threadId={threadId}
-                    onOpenArtifact={
-                      finalOutputChanges.includes(change)
-                        ? () => openArtifact(change.path)
-                        : undefined
-                    }
-                  />
-                ))}
-                {!effectiveChangesOpen && reviewableChanges.length > 3 && (
-                  <li className="px-3 py-2 text-xs text-muted-foreground">
-                    {t.message.moreFiles(reviewableChanges.length - 3)}
-                  </li>
-                )}
-              </ul>
-            </CollapsibleContent>
-            {visibleArtifacts.length > 0 && (
-              <div className="border-t border-border-default px-3 py-2 text-xs text-muted-foreground">
-                <DownloadIcon className="mr-1 inline size-3.5 align-[-2px]" />
-                {t.message.downloadStillInArtifactsPanel}
-              </div>
-            )}
-          </section>
-        </Collapsible>
+        <section aria-label={t.message.changesSummary} className="min-w-0">
+          <ul className="max-h-72 space-y-0.5 overflow-y-auto">
+            {reviewableChanges.map((change) => (
+              <ChangeRow
+                key={change.path}
+                change={change}
+                threadId={threadId}
+                onOpenArtifact={
+                  finalOutputChanges.includes(change)
+                    ? () => openArtifact(change.path)
+                    : undefined
+                }
+              />
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );
@@ -991,8 +825,8 @@ function ChangeRow({
   };
 
   return (
-    <li className="text-sm">
-      <div className="flex items-center gap-3 px-3 py-2">
+    <li className="min-w-0 text-sm">
+      <div className="group/process-row flex min-w-0 items-center gap-2 py-1 text-[13px] leading-5 text-muted-foreground">
         {hasHunks && (
           <button
             type="button"
@@ -1009,14 +843,8 @@ function ChangeRow({
             />
           </button>
         )}
-        <span
-          className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-xs",
-            change.created
-              ? "bg-success/10 text-success"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
+        <FilePenLineIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+        <span className="shrink-0 font-medium text-muted-foreground/90">
           {change.created ? t.message.fileCreated : t.message.fileEdited}
         </span>
         {onOpenArtifact ? (
@@ -1048,7 +876,7 @@ function ChangeRow({
         </span>
       </div>
       {hasHunks && open && (
-        <div className="flex flex-col gap-1.5 px-3 pb-2 pl-9">
+        <div className="ml-4 flex flex-col gap-1.5 border-l-2 border-border/50 py-1.5 pl-3">
           {change.hunks.map((hunk) => (
             <HunkDecisionRow
               key={hunk.id}

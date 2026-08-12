@@ -499,7 +499,11 @@ describe("MessageGroup reasoning grouping", () => {
       "再整理成可执行步骤",
     );
     expect(thinkingEvent).not.toHaveTextContent("先扫一遍上下文");
-    expect(thinkingEvent).toHaveClass("text-xs", "text-muted-foreground/60");
+    expect(thinkingEvent).toHaveClass(
+      "text-[13px]",
+      "text-muted-foreground/75",
+      "min-h-7",
+    );
     expect(thinkingEvent).not.toHaveClass("narrative-progress-row");
     expect(screen.queryByText("01")).not.toBeInTheDocument();
     expect(screen.queryByText("02")).not.toBeInTheDocument();
@@ -567,7 +571,7 @@ describe("MessageGroup reasoning grouping", () => {
     ).toHaveTextContent("Compare configuration evidence");
   });
 
-  it("pauses live-thinking follow mode on manual scroll and resumes on demand", () => {
+  it("keeps live thinking in the main conversation scroll", () => {
     const messages: AIMessage[] = [
       {
         id: "ai-live-thinking-scroll",
@@ -585,22 +589,8 @@ describe("MessageGroup reasoning grouping", () => {
     );
 
     const stream = screen.getByTestId("live-thinking-stream");
-    Object.defineProperty(stream, "scrollHeight", {
-      configurable: true,
-      value: 1000,
-    });
-    Object.defineProperty(stream, "clientHeight", {
-      configurable: true,
-      value: 200,
-    });
-    stream.scrollTop = 300;
-    fireEvent.scroll(stream);
-
-    const resume = screen.getByTestId("thinking-back-to-latest");
-    expect(resume).toHaveAccessibleName("回到最新消息");
-
-    fireEvent.click(resume);
-    expect(stream.scrollTop).toBe(800);
+    expect(stream).not.toHaveClass("overflow-y-auto");
+    expect(stream).toHaveTextContent("持续生成的深度思考内容");
     expect(
       screen.queryByTestId("thinking-back-to-latest"),
     ).not.toBeInTheDocument();
@@ -633,7 +623,11 @@ describe("MessageGroup reasoning grouping", () => {
 
     const row = screen.getByTestId("process-timeline-event-thinking");
     expect(row).not.toHaveClass("narrative-progress-row", "text-foreground");
-    expect(row).toHaveClass("text-xs", "text-muted-foreground/60");
+    expect(row).toHaveClass(
+      "text-[13px]",
+      "text-muted-foreground/75",
+      "min-h-7",
+    );
     expect(screen.getByTestId("thinking-row-content")).toHaveAttribute(
       "data-state",
       "closed",
@@ -678,7 +672,7 @@ describe("MessageGroup reasoning grouping", () => {
     const reasoningRow = screen.getByTestId("process-timeline-event-thinking");
     const commentaryRow = screen.getByTestId("public-progress-event");
     expect(reasoningRow).toHaveTextContent(sharedText);
-    expect(reasoningRow).toHaveClass("text-xs", "text-muted-foreground/60");
+    expect(reasoningRow).toHaveClass("text-[13px]", "text-muted-foreground/75");
     expect(reasoningRow).not.toHaveClass("narrative-progress-row");
     expect(commentaryRow).toHaveTextContent(sharedText);
     expect(commentaryRow).toHaveClass(
@@ -714,7 +708,7 @@ describe("MessageGroup reasoning grouping", () => {
     );
     expect(reasoningTrace).not.toHaveTextContent("Latest trace thought 1.");
     expect(reasoningTrace).toHaveTextContent("Latest trace thought 4.");
-    expect(reasoningTrace).toHaveClass("text-muted-foreground/60");
+    expect(reasoningTrace).toHaveClass("text-muted-foreground/75");
 
     const opened: CustomEvent[] = [];
     const handleOpen = (event: Event) => opened.push(event as CustomEvent);
@@ -1154,7 +1148,7 @@ describe("MessageGroup reasoning grouping", () => {
       "这个问题需要先确认赛道边界，否则机会点会太泛。",
     );
     expect(reasoning).toHaveTextContent("先拆分候选细分赛道。");
-    expect(reasoning).toHaveClass("text-muted-foreground/60");
+    expect(reasoning).toHaveClass("text-muted-foreground/75");
     expect(screen.queryByTitle(/过程回放/)).not.toBeInTheDocument();
   });
 
@@ -1443,14 +1437,14 @@ describe("MessageGroup reasoning grouping", () => {
             id: "read-group-1",
             name: "read_file",
             args: {
-              path: "/Users/dangbei/Public/octopus/octopus-agent/frontend/src/components/workspace/messages/message-group.tsx",
+              path: "/Users/example/Public/octopus/octopus-agent/frontend/src/components/workspace/messages/message-group.tsx",
             },
           },
           {
             id: "read-1",
             name: "read_file",
             args: {
-              path: "/Users/dangbei/Public/octopus/octopus-agent/runtime/protocol/items.py",
+              path: "/Users/example/Public/octopus/octopus-agent/runtime/protocol/items.py",
             },
           },
           {
@@ -1458,7 +1452,7 @@ describe("MessageGroup reasoning grouping", () => {
             name: "exec_shell",
             args: {
               command:
-                "cat /Users/dangbei/Public/octopus/octopus-agent/runtime/protocol/items.py",
+                "cat /Users/example/Public/octopus/octopus-agent/runtime/protocol/items.py",
             },
           },
           {
@@ -1466,7 +1460,7 @@ describe("MessageGroup reasoning grouping", () => {
             name: "exec_shell",
             args: {
               command:
-                "cp /Users/dangbei/Public/octopus/octopus-agent/runtime/protocol/items.py /tmp/_items_readonly_copy.py",
+                "cp /Users/example/Public/octopus/octopus-agent/runtime/protocol/items.py /tmp/_items_readonly_copy.py",
             },
           },
           {
@@ -1474,7 +1468,7 @@ describe("MessageGroup reasoning grouping", () => {
             name: "exec_shell",
             args: {
               command:
-                "sed -n '1,240p' /Users/dangbei/Public/octopus/octopus-agent/frontend/src/core/realtime/reducer.ts",
+                "sed -n '1,240p' /Users/example/Public/octopus/octopus-agent/frontend/src/core/realtime/reducer.ts",
             },
           },
         ],
@@ -2537,6 +2531,26 @@ describe("MessageGroup 收敛摘要行", () => {
 });
 
 describe("reasoning duration replay", () => {
+  it("深度思考按钮只有一次标题，图标不重复朗读", () => {
+    const message = {
+      id: "ai-deep-thinking-label",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        reasoning_content: "深入分析需求与执行证据。".repeat(60),
+        reasoning_duration_ms: 12_000,
+      },
+    } as AIMessage;
+
+    renderWithProviders(<MessageGroup messages={[message]} />, {
+      locale: "zh-CN",
+    });
+
+    const thinkingRow = screen.getByTestId("process-timeline-event-thinking");
+    expect(thinkingRow).toHaveAccessibleName(/^深度思考思考了 12\.0s/);
+    expect(thinkingRow).not.toHaveAccessibleName(/深度思考.*深度思考/);
+  });
+
   it("回放时显示后端持久化的思考耗时", () => {
     const message = {
       id: "ai-1",

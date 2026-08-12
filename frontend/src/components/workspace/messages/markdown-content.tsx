@@ -11,7 +11,10 @@ import {
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { FileReferenceChip } from "@/components/ui/file-reference-chip";
-import { stripLeakedRendererMarkup } from "@/core/messages/utils";
+import {
+  sanitizeLegacyGuardDiagnostic,
+  stripLeakedRendererMarkup,
+} from "@/core/messages/utils";
 import { useLocalSettings } from "@/core/settings";
 import { useStreamdownPlugins } from "@/core/streamdown";
 import { cn } from "@/lib/utils";
@@ -59,7 +62,44 @@ function isExternalUrl(href: string | undefined): boolean {
  * display repairs already-persisted replies as well as new streams.
  */
 export function stripLeakedControlMarkup(value: string): string {
-  return stripLeakedRendererMarkup(value, { trim: false });
+  const withoutControlTags = stripLeakedRendererMarkup(value, { trim: false });
+  // Compatibility repair for replies persisted before guard diagnostics were
+  // moved to structured turn state. Match only the exact legacy boilerplate,
+  // not ordinary prose that happens to discuss a guard by name.
+  const withoutLegacyNotice = withoutControlTags
+    .replace(
+      /(?:\n{0,2}---\s*)?\n*\s*质量提示：「[^\n」]+ guard」未通过证据门禁。此前给出的收尾答案未满足要求（该次提交是模型自身发起的，未被系统接受）；为避免继续空转，现将已有结果交付。(?:\n{2,}另：本回合检测到工具执行环境受限[\s\S]*?环境中重试。)?/g,
+      "",
+    )
+    .replace(/\n{3,}/g, "\n\n");
+  return sanitizeLegacyGuardDiagnostic(withoutLegacyNotice);
+}
+
+/**
+ * Protect pipes inside inline-code spans that live in Markdown table rows.
+ *
+ * GFM recognizes ``|`` as a cell separator before it resolves inline code,
+ * so model output such as ``| selector | `[data-theme="steel|mint"]` |``
+ * is otherwise split into extra columns. Escaping only pipes enclosed by
+ * backticks preserves ordinary table delimiters and renders the code text
+ * without a visible backslash. Fenced code blocks are deliberately ignored.
+ */
+export function stabilizeMarkdownTableCodePipes(value: string): string {
+  let inFence = false;
+  return value
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence || !line.includes("|")) return line;
+      return line.replace(/(`+)([\s\S]*?)\1/g, (span, ticks, code) => {
+        const escaped = String(code).replace(/(^|[^\\])\|/g, "$1\\|");
+        return `${ticks}${escaped}${ticks}`;
+      });
+    })
+    .join("\n");
 }
 
 export type MarkdownContentProps = {
@@ -193,7 +233,9 @@ export const MarkdownContent = memo(
     }, [componentsFromProps, isLoading]);
 
     if (!content) return null;
-    const publicContent = stripLeakedControlMarkup(content);
+    const publicContent = stabilizeMarkdownTableCodePipes(
+      stripLeakedControlMarkup(content),
+    );
     if (!publicContent) return null;
 
     // Pass the prose-size variant *into* MessageResponse's className rather

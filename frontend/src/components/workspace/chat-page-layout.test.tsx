@@ -8,6 +8,7 @@ import { ChatPageLayout } from "./chat-page-layout";
 describe("ChatPageLayout input overlay measurement", () => {
   let overlayHeight = 148;
   const originalResizeObserver = globalThis.ResizeObserver;
+  const originalInnerWidth = window.innerWidth;
 
   beforeEach(() => {
     overlayHeight = 148;
@@ -35,6 +36,10 @@ describe("ChatPageLayout input overlay measurement", () => {
 
   afterEach(() => {
     Object.assign(globalThis, { ResizeObserver: originalResizeObserver });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: originalInnerWidth,
+    });
     vi.restoreAllMocks();
   });
 
@@ -54,11 +59,44 @@ describe("ChatPageLayout input overlay measurement", () => {
       "--chat-input-overlay-height": "148px",
     });
 
+    overlayHeight = 149;
+    fireEvent(window, new Event("resize"));
+
+    expect(workspace).toHaveStyle({
+      "--chat-input-overlay-height": "148px",
+    });
+
     overlayHeight = 284;
     fireEvent(window, new Event("resize"));
 
     expect(workspace).toHaveStyle({
       "--chat-input-overlay-height": "284px",
     });
+  });
+
+  test("moves the secondary workbench into a drawer on common 1024px viewports", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+
+    renderWithProviders(
+      <ChatPageLayout
+        header={<div>Header</div>}
+        messageList={<div>Messages</div>}
+        inputArea={<div>Composer</div>}
+        secondaryPanel={<div>Workbench</div>}
+      />,
+    );
+
+    const workbench = screen.getByRole("complementary", {
+      name: "Agent workbench",
+    });
+    expect(workbench).toHaveClass("fixed", "right-0", "bottom-0", "left-0");
+    expect(
+      screen.getByRole("button", {
+        name: "Expand or collapse the agent workbench drawer",
+      }),
+    ).toBeInTheDocument();
   });
 });

@@ -139,7 +139,7 @@ describe("LiveToolEvent normalization", () => {
     ).toHaveLength(1);
   });
 
-  test("marks the latest active todo complete when the turn finishes", () => {
+  test("preserves explicit todo states when the turn finishes", () => {
     const finalized = finalizeTurnHistory(
       [
         {
@@ -180,7 +180,7 @@ describe("LiveToolEvent normalization", () => {
     ]);
     expect(latestTodo?.input?.todos).toEqual([
       { text: "Done step", status: "completed" },
-      { text: "Final step", status: "completed" },
+      { text: "Final step", status: "in_progress" },
       { text: "Future step", status: "pending" },
     ]);
   });

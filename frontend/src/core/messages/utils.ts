@@ -186,6 +186,25 @@ export function groupMessages<T>(
     });
   }
 
+  // AI progress/reasoning is chronological conversation content. If a final
+  // answer has already been emitted, do not append a later thought back into
+  // the older processing group above it — that makes the thought stream
+  // visually stay at the top while the answer keeps growing below. Tool
+  // callbacks retain the association-aware helper above because they may
+  // arrive late and must stay attached to their originating call.
+  function appendToLatestProcessingGroup(message: Message) {
+    const latest = groups[groups.length - 1];
+    if (latest?.type === "assistant:processing") {
+      latest.messages.push(message);
+      return;
+    }
+    groups.push({
+      id: message.id,
+      type: "assistant:processing",
+      messages: [message],
+    });
+  }
+
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index]!;
     if (isHiddenFromUIMessage(message)) {
@@ -254,7 +273,7 @@ export function groupMessages<T>(
         // Public checkpoints are answer-like prose, but they belong to the
         // chronological process lane rather than becoming standalone final
         // answer bubbles with a repeated assistant header.
-        appendToCurrentProcessingGroup(message);
+        appendToLatestProcessingGroup(message);
       } else if (hasToolCalls(message)) {
         // Tool-call message: render public thinking / execution first.
         // If this same message carries a long final answer, append it
@@ -290,7 +309,7 @@ export function groupMessages<T>(
         (isDuplicatedProcessPrelude(message, index, messages) ||
           isProcessPrelude(message, index, messages))
       ) {
-        appendToCurrentProcessingGroup(message);
+        appendToLatestProcessingGroup(message);
       } else if (hasReasoning(message) && !hasContent(message)) {
         // Reasoning-only intermediate message (no content, no tool
         // calls yet). Append to the processing group so it renders in
@@ -298,7 +317,7 @@ export function groupMessages<T>(
         // inside MessageGroup, rather than creating a separate assistant
         // group that would render AFTER the processing lane and reverse
         // the visual order.
-        appendToCurrentProcessingGroup(message);
+        appendToLatestProcessingGroup(message);
       } else if (hasContent(message)) {
         // Plain AI response (with or without reasoning). Render as a
         // normal assistant message — MessageListItem will draw a
@@ -430,6 +449,40 @@ export function stripLeakedRendererMarkup(
   }
   const stripped = lines.join("\n").replace(/^\n+/, "");
   return options.trim === false ? stripped : stripped.trim();
+}
+
+/**
+ * Repair failure prose persisted before terminal diagnostics were separated
+ * from model-facing guard feedback.  Keep this deliberately narrow: ordinary
+ * discussions of guards (for example in a code review) must remain intact.
+ */
+export function sanitizeLegacyGuardDiagnostic(content: string): string {
+  const text = content.trim();
+  const guardMatch = text.match(
+    /(?:「|\b)([a-z][a-z0-9-]*(?:[ -][a-z0-9-]+)* guard)(?:」|\b)/i,
+  );
+  const isFailureDiagnostic =
+    /任务未(?:能|完成)|这轮任务没有完成|质量提示|未通过证据门禁|最后一次拦截原因/i.test(
+      text,
+    ) ||
+    (/(?:系统|system).{0,120}(?:拦截|阻止|拒绝|blocked|rejected)/i.test(text) &&
+      /(?:我.{0,80}(?:回复|最终答案|收尾)|my final answer)/i.test(text));
+  if (!guardMatch || !isFailureDiagnostic) return content;
+
+  const label = guardMatch[1]?.toLowerCase() ?? "";
+  const reason = label.includes("final-answer completeness")
+    ? "收尾内容仍像进行中说明，尚未形成可交付结果。"
+    : label.includes("todo-protocol")
+      ? "任务清单状态与实际执行结果没有同步。"
+      : label.includes("code-mode")
+        ? "代码任务缺少可确认的修改或验证结果。"
+        : "系统未能确认本轮已经形成可交付结果。";
+
+  return [
+    "这轮任务没有完成。我已停止重复尝试，并保留了当前进度。",
+    `原因：${reason}`,
+    "可以点击重试继续；如果仍失败，请补充必要的信息、权限或换一种执行方式。",
+  ].join("\n\n");
 }
 
 function stripReactProtocol(content: string): string {

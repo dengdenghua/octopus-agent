@@ -10,19 +10,19 @@ describe("pickLocalDirectory", () => {
   it("uses the desktop bridge when available", async () => {
     const open = vi.fn().mockResolvedValue({
       canceled: false,
-      filePaths: ["/Users/dangbei/Project"],
+      filePaths: ["/Users/example/Project"],
     });
     vi.stubGlobal("octopus", { dialog: { open } });
 
-    await expect(pickLocalDirectory("/Users/dangbei")).resolves.toBe(
-      "/Users/dangbei/Project",
+    await expect(pickLocalDirectory("/Users/example")).resolves.toBe(
+      "/Users/example/Project",
     );
     expect(open).toHaveBeenCalledWith({
       title: "选择工作区文件夹",
       buttonLabel: "选取",
       message: "请选择一个文件夹作为工作区",
       properties: ["openDirectory", "createDirectory"],
-      defaultPath: "/Users/dangbei",
+      defaultPath: "/Users/example",
     });
   });
 
@@ -31,19 +31,19 @@ describe("pickLocalDirectory", () => {
       ok: true,
       json: vi.fn().mockResolvedValue({
         success: true,
-        path: "/Users/dangbei/Project",
+        path: "/Users/example/Project",
         canceled: false,
         error: null,
       }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(pickLocalDirectory("/Users/dangbei")).resolves.toBe(
-      "/Users/dangbei/Project",
+    await expect(pickLocalDirectory("/Users/example")).resolves.toBe(
+      "/Users/example/Project",
     );
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        "/api/fs/pick-directory?default_path=%2FUsers%2Fdangbei",
+        "/api/fs/pick-directory?default_path=%2FUsers%2Fexample",
       ),
       expect.objectContaining({ headers: expect.any(Object) }),
     );

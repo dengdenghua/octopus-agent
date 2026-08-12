@@ -1,4 +1,3 @@
-import { swallow } from "@/core/utils/log";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -186,73 +185,6 @@ export function finalizeLiveToolEvents(
   });
 }
 
-function completeActiveTodoItems(
-  input: LiveToolEvent["input"],
-): LiveToolEvent["input"] {
-  if (!input) return input;
-  const nextInput = { ...input };
-  const normalizeItems = (value: unknown): unknown => {
-    if (Array.isArray(value)) {
-      return value.map((item) => {
-        if (!item || typeof item !== "object" || Array.isArray(item)) {
-          return item;
-        }
-        const record = item as Record<string, unknown>;
-        if (record.status !== "in_progress") return item;
-        return { ...record, status: "completed" };
-      });
-    }
-    if (typeof value === "string" && value.trim()) {
-      try {
-        return JSON.stringify(normalizeItems(JSON.parse(value)));
-      } catch (e) {
-        swallow(e);
-        return value;
-      }
-    }
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      const record = value as Record<string, unknown>;
-      if ("todos" in record) {
-        return { ...record, todos: normalizeItems(record.todos) };
-      }
-      if ("items" in record) {
-        return { ...record, items: normalizeItems(record.items) };
-      }
-    }
-    return value;
-  };
-
-  if ("todos" in nextInput) {
-    nextInput.todos = normalizeItems(nextInput.todos);
-  }
-  if ("items" in nextInput) {
-    nextInput.items = normalizeItems(nextInput.items);
-  }
-  return nextInput;
-}
-
-function completeLatestTodoWriteOnSuccess(
-  events: LiveToolEvent[],
-  nextStatus: Extract<LiveToolEvent["status"], "done" | "error">,
-): LiveToolEvent[] {
-  if (nextStatus !== "done") return events;
-  let latestIndex = -1;
-  let latestStartedAt = -Infinity;
-  events.forEach((event, index) => {
-    if (event.name !== "todo_write" || !event.input) return;
-    if (event.startedAt >= latestStartedAt) {
-      latestStartedAt = event.startedAt;
-      latestIndex = index;
-    }
-  });
-  if (latestIndex < 0) return events;
-  return events.map((event, index) =>
-    index === latestIndex
-      ? { ...event, input: completeActiveTodoItems(event.input) }
-      : event,
-  );
-}
-
 function buildRunLifecycleEvents(
   runStartedAt: number,
   status: Extract<LiveToolEvent["status"], "done" | "error">,
@@ -305,10 +237,10 @@ export function finalizeTurnHistory(
     nextStatus,
     output,
   );
-  const finalizedEvents = completeLatestTodoWriteOnSuccess(
-    finalizeLiveToolEvents(events, nextStatus, output),
-    nextStatus,
-  );
+  // Finalize the tool event lifecycle, but never rewrite checklist item
+  // statuses. The checklist is model/runtime-authored task state; receiving a
+  // final answer is not evidence that its active or pending rows completed.
+  const finalizedEvents = finalizeLiveToolEvents(events, nextStatus, output);
   const lifecycleIds = new Set(lifecycleEvents.map((event) => event.id));
   const lifecycleNames = new Set(lifecycleEvents.map((event) => event.name));
   return [

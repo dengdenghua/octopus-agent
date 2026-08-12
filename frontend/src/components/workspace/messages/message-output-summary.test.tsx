@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AIMessage, Message, ToolMessage } from "@/core/api/types";
@@ -258,7 +258,15 @@ describe("MessageOutputSummary", () => {
       locale: "zh-CN",
     });
 
-    expect(screen.getByText("已编辑 1 个文件")).toBeInTheDocument();
+    expect(screen.queryByText("已编辑 1 个文件")).not.toBeInTheDocument();
+    expect(screen.queryByText("任务产物")).not.toBeInTheDocument();
+    const diffTimeline = screen.getByRole("region", {
+      name: "文件变更汇总",
+    });
+    expect(diffTimeline.className).not.toMatch(/\b(?:rounded|border|bg-)/);
+    expect(diffTimeline.querySelector("li")?.className).not.toMatch(
+      /\b(?:rounded|border|bg-)/,
+    );
     expect(
       screen.getByText("runtime/safety/regeneration/native_llm_replay.py"),
     ).toBeInTheDocument();
@@ -299,7 +307,9 @@ describe("MessageOutputSummary", () => {
       { locale: "zh-CN" },
     );
 
-    expect(screen.getByText(/任务完成 · 已生成 1 个产物/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/任务完成 · 已生成 1 个产物/),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("已编辑 1 个文件")).not.toBeInTheDocument();
     expect(screen.getByText("新建")).toBeInTheDocument();
     expect(
@@ -308,9 +318,13 @@ describe("MessageOutputSummary", () => {
       ),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText("nas_market_research_plan.md")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "接受" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /撤销/ })).toBeInTheDocument();
-    expect(screen.getByLabelText("审核交给")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "接受" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /撤销/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("审核交给")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText("nas_market_research_plan.md"));
 
@@ -323,7 +337,7 @@ describe("MessageOutputSummary", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders audit notice on the diff summary with undo and review owner controls", async () => {
+  it("renders only compact file rows for an inline diff", () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true }),
@@ -368,19 +382,14 @@ describe("MessageOutputSummary", () => {
     expect(
       screen.queryByText("需要先审核这次产物变更"),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /撤销/ })).toBeInTheDocument();
-    expect(screen.getByLabelText("审核交给")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /撤销/ }));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/api/fs/revert-diff"),
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining('"thread_id":"thread-1"'),
-      }),
-    );
+    expect(screen.queryByText("任务产物")).not.toBeInTheDocument();
+    expect(screen.queryByText("已生成 1 个产物")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /撤销/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("审核交给")).not.toBeInTheDocument();
+    expect(screen.getByText("runtime/generated/report.md")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("scans the turn slice for verifications without a duplicate task action", () => {
@@ -533,6 +542,36 @@ describe("MessageList failure visibility", () => {
       "This turn stopped before finishing. Continue the chat or retry.",
     );
     expect(banner).not.toHaveTextContent("beak step 3 failed");
+  });
+
+  it("shows a structured terminal handoff instead of replacing it with a generic failure", () => {
+    const handoff =
+      "最终汇总超过了单轮时限。已完成的工具结果仍保留；点击继续可从当前进度重新收敛。";
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "继续完成分析" },
+      {
+        id: "failed-handoff",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          response_state: "failed",
+          error: {
+            message: handoff,
+            info: { code: "model_stall", disposition: "failed" },
+          },
+        },
+      },
+    ];
+
+    renderMessageList(mockThread({ messages }));
+
+    const receipt = screen.getByText(handoff);
+    expect(receipt).toBeInTheDocument();
+    expect(receipt.className).not.toContain("truncate");
+    expect(receipt.className).toContain("whitespace-pre-wrap");
+    expect(
+      screen.queryByText("本轮任务未完成。可继续发送消息或重试。"),
+    ).not.toBeInTheDocument();
   });
 
   it("never shows a live activity pulse beside an authoritative failure", () => {
@@ -713,8 +752,10 @@ describe("MessageList failure visibility", () => {
 
     renderMessageList(thread);
 
-    expect(screen.getByRole("button", { name: /撤销/ })).toBeInTheDocument();
-    expect(screen.getByLabelText("审核交给")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /撤销/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("审核交给")).not.toBeInTheDocument();
     // The receipt owns the failure display; the fallback banner stays off.
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });

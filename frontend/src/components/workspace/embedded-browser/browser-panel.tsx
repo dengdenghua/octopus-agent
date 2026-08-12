@@ -90,9 +90,9 @@ export function BrowserPanel() {
   }, [canGoForward, electron, setUrl]);
 
   return (
-    <div className="flex h-full flex-col rounded-lg border bg-background">
+    <div className="flex h-full flex-col overflow-hidden bg-background">
       {/* Implementation note. */}
-      <div className="flex items-center gap-1 border-b px-2 py-1.5">
+      <div className="flex min-h-11 items-center gap-1 border-b border-border-subtle bg-background px-2 py-1.5">
         <Button
           variant="ghost"
           size="icon"
@@ -130,7 +130,7 @@ export function BrowserPanel() {
           onBlur={handleNavigate}
           placeholder={t.browser.urlPlaceholder}
           aria-label={t.browser.urlPlaceholder}
-          className="flex-1 border-0 bg-muted px-2 py-1 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-primary"
+          className="flex-1 rounded-md border-0 bg-muted/60 px-3 py-1 text-sm shadow-none focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-primary"
         />
       </div>
 

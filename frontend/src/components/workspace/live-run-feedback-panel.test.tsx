@@ -67,7 +67,7 @@ describe("LiveRunFeedbackPanel", () => {
           toolEvent("read_file", {
             status: "running",
             input: {
-              path: "/Users/dangbei/Public/octopus/octopus-agent/README.md",
+              path: "/Users/example/Public/octopus/octopus-agent/README.md",
             },
           }),
         ]}

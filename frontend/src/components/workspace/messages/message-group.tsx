@@ -394,88 +394,35 @@ function useSmoothStickToBottom(
 }
 
 /**
- * Live typewriter window for the in-flight extended thinking. The window
- * grows naturally for short thoughts, then becomes an embedded scroll window
- * for long streams. The newest line stays at the bottom while older lines
- * glide upward; manual scrolling pauses that follow mode until the reader
- * returns near the bottom. Once the stream settles, the window folds away
- * back to the compact summary row.
+ * Live typewriter content for the in-flight extended thinking.
+ *
+ * This stays in normal document flow. A nested scroll viewport made the
+ * thought stream drift away from the formal answer: thinking was scrolling
+ * inside its own box while the answer kept growing below it. The conversation
+ * viewport is the only owner of vertical scrolling, so the turn remains one
+ * chronological stream.
  */
 function LiveThinkingWindow({ text }: { text: string }) {
-  const { t } = useI18n();
-  const ref = useRef<HTMLDivElement | null>(null);
-  const stickToBottomRef = useRef(true);
-  const [isFollowing, setIsFollowing] = useState(true);
   // Typewriter buffer: reveal the stream at a fixed tick rate (40ms, 1–4
   // chars/frame, accel on backlog) instead of flashing every delta. Full
   // text appears instantly for prefers-reduced-motion users.
   const displayText = useStreamingTextBuffer({
     targetText: text,
     // Private reasoning often arrives in larger bursts than the final answer.
-    // Keep a small readable delay, but allow the viewport to catch up instead
-    // of accumulating seconds of invisible backlog on fast providers.
+    // Keep a small readable delay, but allow the transcript to catch up
+    // instead of accumulating seconds of invisible backlog on fast providers.
     targetIntervalMs: 32,
     maxCharsPerTick: 10,
     backlogDivisor: 12,
     fastDrainThreshold: 2,
   });
 
-  const autoScrollingRef = useSmoothStickToBottom(
-    ref,
-    stickToBottomRef,
-    displayText,
-  );
-
-  // Keep short/early status updates compact. The embedded reading viewport is
-  // only useful once the stream has enough content to scroll.
-  const isLongStream = text.length >= 640 || text.split("\n").length >= 10;
-
-  const handleScroll = () => {
-    const el = ref.current;
-    if (!el || autoScrollingRef.current) return;
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-    stickToBottomRef.current = isAtBottom;
-    setIsFollowing(isAtBottom);
-  };
-
-  const resumeFollowing = () => {
-    const el = ref.current;
-    if (!el) return;
-    stickToBottomRef.current = true;
-    setIsFollowing(true);
-    autoScrollingRef.current = true;
-    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
-    requestAnimationFrame(() => {
-      autoScrollingRef.current = false;
-    });
-  };
-
   return (
-    <div className="relative min-w-0">
-      <div
-        ref={ref}
-        onScroll={handleScroll}
-        className={cn(
-          "live-thinking-window mt-1 ml-4 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 text-xs leading-6 text-muted-foreground/85",
-          isLongStream && "live-thinking-window-long",
-        )}
-        data-testid="live-thinking-stream"
-      >
-        {displayText}
-      </div>
-      {!isFollowing && (
-        <button
-          type="button"
-          onClick={resumeFollowing}
-          className="absolute right-2 bottom-2 flex items-center gap-1 rounded-full border border-border/70 bg-background/95 px-2 py-1 text-mini text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
-          aria-label={t.message.backToLatest}
-          title={t.message.backToLatest}
-          data-testid="thinking-back-to-latest"
-        >
-          <ChevronDownIcon className="size-3" />
-          {t.message.latest}
-        </button>
-      )}
+    <div
+      className="live-thinking-window mt-1 ml-4 min-w-0 whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 text-[13px] leading-6 text-muted-foreground"
+      data-testid="live-thinking-stream"
+    >
+      {displayText}
     </div>
   );
 }
@@ -1326,7 +1273,7 @@ export function MessageGroup({
               className={cn(
                 "flex min-w-0 flex-1 text-left transition-colors",
                 isThinking
-                  ? "my-1 items-center gap-1.5 py-0.5 text-xs leading-[18px]"
+                  ? "my-1 min-h-7 items-center gap-1.5 py-1 text-[13px] leading-5"
                   : "my-2 items-center gap-2 py-0.5 text-sm leading-5",
                 // Aggregated rows use a slightly larger size and stronger
                 // hover target per spec §Design/Style.
@@ -1334,7 +1281,7 @@ export function MessageGroup({
                   ? "text-warning/80 hover:text-warning/80 dark:hover:text-warning"
                   : isAggregatedGroup
                     ? "text-muted-foreground hover:text-foreground"
-                    : "text-muted-foreground/60 hover:text-muted-foreground",
+                    : "text-muted-foreground/75 hover:text-muted-foreground",
               )}
               data-process-event-id={workbenchEventId}
               data-timeline-item-id={timelineItemLinkageId(item)}
@@ -1352,12 +1299,12 @@ export function MessageGroup({
                   {isDeepThinking ? (
                     <SparklesIcon
                       className="size-3 text-muted-foreground"
-                      aria-label={t.messageGrouping.deepThinking}
+                      aria-hidden="true"
                     />
                   ) : (
                     <BrainIcon
                       className="size-3 text-muted-foreground"
-                      aria-label={t.messageGrouping.thinking}
+                      aria-hidden="true"
                     />
                   )}
                   <span className="relative flex size-1.5 shrink-0 items-center justify-center">
@@ -1563,7 +1510,7 @@ export function MessageGroup({
                 className="overflow-hidden data-[state=open]:animate-[collapsible-down_150ms_ease-out] data-[state=closed]:animate-[collapsible-up_150ms_ease-out]"
                 data-testid="thinking-row-content"
               >
-                <div className="ml-4 whitespace-pre-wrap border-l-2 border-border/50 py-1 pl-3 text-xs leading-6 text-muted-foreground/85">
+                <div className="ml-4 whitespace-pre-wrap border-l-2 border-border/50 py-1.5 pl-3 text-[13px] leading-6 text-muted-foreground">
                   <MarkdownContent
                     content={processEventDetail}
                     isLoading={false}

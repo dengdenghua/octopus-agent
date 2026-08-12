@@ -191,6 +191,41 @@ describe("useStreamingTextBuffer", () => {
     expect(result.current).toBe(full);
   });
 
+  it("spreads the settled tail across the finish window without a final dump", () => {
+    mockMatchMedia(false);
+    const { result, rerender } = renderHook(
+      ({ text, enabled }: { text: string; enabled: boolean }) =>
+        useStreamingTextBuffer({
+          targetText: text,
+          enabled,
+          targetIntervalMs: 40,
+          maxFinishDelayMs: 240,
+        }),
+      { initialProps: { text: "开", enabled: true } },
+    );
+    const full = `开${"流式内容".repeat(18)}`;
+    rerender({ text: full, enabled: true });
+    rerender({ text: full, enabled: false });
+
+    const lengths: number[] = [];
+    for (let elapsed = 40; elapsed <= 200; elapsed += 40) {
+      act(() => {
+        vi.advanceTimersByTime(40);
+      });
+      lengths.push(result.current.length);
+    }
+
+    expect(lengths[0]).toBeGreaterThan(1);
+    expect(lengths[0]).toBeLessThan(full.length);
+    expect(lengths.at(-1)).toBeGreaterThan(lengths[0]!);
+    expect(lengths).toEqual([...lengths].sort((a, b) => a - b));
+
+    act(() => {
+      vi.advanceTimersByTime(80);
+    });
+    expect(result.current).toBe(full);
+  });
+
   it("reveals the full text immediately on finish when drainOnFinish is off", () => {
     mockMatchMedia(false);
     const { result, rerender } = renderHook(

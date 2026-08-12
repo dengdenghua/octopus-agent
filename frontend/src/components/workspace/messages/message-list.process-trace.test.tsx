@@ -1316,11 +1316,11 @@ describe("MessageList output summaries", () => {
     const settledThread = mockThread({ messages });
     rerender(messageListTree({ thread: settledThread }));
 
-    const summaryLabel = screen.getAllByText(
-      /\u5df2\u7f16\u8f91 1 \u4e2a\u6587\u4ef6/,
-    )[0]!;
-    expect(summaryLabel).toBeInTheDocument();
-    expect(summaryLabel.closest(".ml-11")).toBeInTheDocument();
+    // Settled inline changes render like tool/thinking timeline rows. The
+    // old “已编辑 1 个文件” receipt bubble was intentionally removed.
+    expect(
+      screen.queryByText(/\u5df2\u7f16\u8f91 1 \u4e2a\u6587\u4ef6/),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText("data/workspaces/thread-1/nas_market_research_plan.md"),
     ).toBeInTheDocument();

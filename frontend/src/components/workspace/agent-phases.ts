@@ -97,9 +97,16 @@ function extractTodoPhases(
   blocks: WorkBlock[],
   options: DeriveAgentPhasesOptions,
 ): AgentPhase[] | null {
-  const todo = [...events]
-    .reverse()
-    .find((event) => event.name === "todo_write");
+  const newestFirst = [...events].reverse();
+  // A real todo_write/first-class todo item owns checklist truth.  The
+  // server-phases event is a compatibility projection for old workbench
+  // clients and can lag one update behind the source checklist; preferring it
+  // here made the inline plan and right workbench disagree after reconnects.
+  const todo =
+    newestFirst.find(
+      (event) =>
+        event.name === "todo_write" && event.input?.source !== "turn.phases",
+    ) ?? newestFirst.find((event) => event.name === "todo_write");
   const raw = todo?.input?.items ?? todo?.input?.todos;
   if (!Array.isArray(raw) || raw.length < 2) return null;
 
@@ -228,15 +235,12 @@ function normalizePhaseStatus(
   )
     return "error";
   if (options.runFailed && status === "pending") return "pending";
-  if (
-    !options.runFailed &&
-    options.hasAnswer &&
-    (status === "running" ||
-      status === "waiting_approval" ||
-      status === "pending")
-  ) {
-    return "done";
-  }
+  // A final answer is prose, not completion evidence. Preserve explicit todo
+  // truth on a successful terminal turn: only a todo update may turn pending
+  // or running into done. This also keeps interrupted/partial deliveries from
+  // painting the remaining checklist green merely because some answer text
+  // exists.
+  if (!options.runFailed && options.hasAnswer) return status;
   if (status === "pending") return "pending";
   if (status === "waiting_approval") return status;
   if (status !== "running") return status;

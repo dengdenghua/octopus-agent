@@ -95,7 +95,7 @@ describe("agent phases", () => {
     });
   });
 
-  test("marks stale unfinished todo phases complete after a settled answer", () => {
+  test("preserves unfinished todo phases after a settled answer", () => {
     const state = deriveAgentPhases(
       [
         event({
@@ -121,14 +121,49 @@ describe("agent phases", () => {
     expect(state.phases.map((phase) => phase.status)).toEqual([
       "done",
       "done",
-      "done",
-      "done",
+      "pending",
+      "pending",
     ]);
-    expect(state.currentPhase?.status).toBe("done");
+    expect(state.currentPhase?.status).toBe("pending");
     expect(progressForPhases(state.phases, state.currentPhase!)).toEqual({
-      current: 4,
+      current: 3,
       total: 4,
     });
+  });
+
+  test("prefers source todo state over a later server phase projection", () => {
+    const state = deriveAgentPhases(
+      [
+        event({
+          id: "todo-source",
+          name: "todo_write",
+          input: {
+            items: [
+              { content: "Inspect architecture", status: "completed" },
+              { content: "Implement fix", status: "in_progress" },
+            ],
+          },
+        }),
+        event({
+          id: "server-phases:turn-1",
+          name: "todo_write",
+          startedAt: 2000,
+          input: {
+            source: "turn.phases",
+            items: [
+              { content: "Inspect architecture", status: "in_progress" },
+              { content: "Implement fix", status: "pending" },
+            ],
+          },
+        }),
+      ],
+      { hasAnswer: true, runSettled: true },
+    );
+
+    expect(state.phases.map((phase) => phase.status)).toEqual([
+      "done",
+      "running",
+    ]);
   });
 
   test("marks the first unfinished todo phase failed when a settled run has no deliverable", () => {

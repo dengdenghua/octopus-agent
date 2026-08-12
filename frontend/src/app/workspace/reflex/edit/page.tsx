@@ -93,6 +93,13 @@ type TestResp = {
 
 type StatusKind = "idle" | "ok" | "warn" | "err";
 
+function localizeReflexError(error: string, fallback: string) {
+  if (error.trim().toLowerCase() === "no rules file") {
+    return "未找到规则文件，请先创建规则或从磁盘重新加载。";
+  }
+  return error || fallback;
+}
+
 export default function ReflexEditorPage() {
   const { t } = useI18n();
   const { resolvedTheme } = useTheme();
@@ -120,7 +127,7 @@ export default function ReflexEditorPage() {
       if (!r.ok) {
         setStatus(
           t.reflexEditor.statusLoadFailed(
-            r.error ?? t.reflexEditor.statusUnknown,
+            localizeReflexError(r.error ?? "", t.reflexEditor.statusUnknown),
           ),
           "err",
         );
@@ -332,9 +339,7 @@ export default function ReflexEditorPage() {
                     <div
                       className={cn(
                         "font-medium",
-                        test.failed === 0
-                          ? "text-success"
-                          : "text-destructive",
+                        test.failed === 0 ? "text-success" : "text-destructive",
                       )}
                     >
                       {t.reflexEditor.testSummary(

@@ -19,6 +19,11 @@ const MIN_SIDEBAR_PX = 280;
 const MAX_SIDEBAR_PX = 800;
 const MIN_SECONDARY_PX = 320;
 const MAX_SECONDARY_PX = 900;
+// A persistent workbench beside the global navigation leaves too little room
+// for the conversation on common 1024px laptop/tablet widths. Keep the chat as
+// the primary reading surface and switch only the secondary workbench to its
+// bottom drawer presentation before the mobile breakpoint.
+const WORKBENCH_OVERLAY_BREAKPOINT_PX = 1180;
 // Usable width the chat column must keep when panels are open; panel
 // widths restored from storage on a smaller viewport are clamped to this.
 const MIN_CHAT_COLUMN_PX = 360;
@@ -78,6 +83,8 @@ export function ChatPageLayout({
   // width (which animates) instead of fighting breakpoint classes.
   const defaultWidth = resolveSidebarWidth(sidebarWidth);
   const [isNarrowViewport, setIsNarrowViewport] = useState(false);
+  const [isWorkbenchOverlayViewport, setIsWorkbenchOverlayViewport] =
+    useState(false);
   // Narrow-viewport workbench drawer opens in a collapsed "peek" state and
   // only grows to its full 72vh height after an explicit tap / swipe-up on
   // the grab handle, so the first open doesn't take over the screen.
@@ -96,7 +103,7 @@ export function ChatPageLayout({
   const inputOverlayRef = useRef<HTMLDivElement>(null);
   const secondaryDefaultWidth = resolveSidebarWidth(secondaryPanelWidth);
   const sidebarOpen = Boolean(sidebar) && showSidebar && !isNarrowViewport;
-  const secondaryOpen = Boolean(secondaryPanel) && !isNarrowViewport;
+  const secondaryOpen = Boolean(secondaryPanel) && !isWorkbenchOverlayViewport;
   // The sidebar is clamped first, reserving only the secondary panel's
   // minimum; the secondary panel then yields to the sidebar's actual width.
   // With both panels dragged wide, this keeps the chat column usable
@@ -155,6 +162,9 @@ export function ChatPageLayout({
   useEffect(() => {
     const update = () => {
       setIsNarrowViewport(window.innerWidth < 768);
+      setIsWorkbenchOverlayViewport(
+        window.innerWidth < WORKBENCH_OVERLAY_BREAKPOINT_PX,
+      );
       setViewportWidth(window.innerWidth);
     };
     update();
@@ -169,9 +179,15 @@ export function ChatPageLayout({
     const measure = () => {
       const nextHeight = Math.ceil(node.getBoundingClientRect().height);
       if (nextHeight <= 0) return;
-      setInputOverlayHeight((current) =>
-        current === nextHeight ? current : nextHeight,
-      );
+      setInputOverlayHeight((current) => {
+        // Font rasterisation and fractional layout can make ResizeObserver
+        // alternate by one pixel while scrolling. That moves the spacer and
+        // floating controls on every observation and looks like the UI is
+        // breathing. Ignore that noise while still accepting real composer,
+        // approval, or todo expansion changes immediately.
+        if (current > 0 && Math.abs(current - nextHeight) <= 1) return current;
+        return nextHeight;
+      });
     };
 
     measure();
@@ -188,11 +204,11 @@ export function ChatPageLayout({
   // Re-opening the drawer (or leaving the narrow viewport) always starts
   // from the collapsed peek height.
   useEffect(() => {
-    if (!secondaryPanel || !isNarrowViewport) {
+    if (!secondaryPanel || !isWorkbenchOverlayViewport) {
       setMobileDrawerExpanded(false);
       setDrawerDragDelta(0);
     }
-  }, [secondaryPanel, isNarrowViewport]);
+  }, [secondaryPanel, isWorkbenchOverlayViewport]);
 
   // Grab-handle gestures: a tap toggles, a swipe up expands, a swipe down
   // collapses. Pointer capture keeps the gesture on the handle even if the
@@ -338,7 +354,7 @@ export function ChatPageLayout({
             <ErrorBoundary>{sidebar}</ErrorBoundary>
           </aside>
         )}
-        {secondaryPanel && !isNarrowViewport && (
+        {secondaryPanel && !isWorkbenchOverlayViewport && (
           <aside
             aria-label={t.sidebar.ariaAgentWorkbench}
             style={{ width: secondaryResolvedWidth }}
@@ -362,7 +378,7 @@ export function ChatPageLayout({
             <ErrorBoundary>{secondaryPanel}</ErrorBoundary>
           </aside>
         )}
-        {secondaryPanel && isNarrowViewport && (
+        {secondaryPanel && isWorkbenchOverlayViewport && (
           <>
             {/* Backdrop keeps the overlay dismissible without relying on
                 controls inside the panel; taps close via onSecondaryClose. */}

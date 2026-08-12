@@ -844,7 +844,12 @@ export default function StoragePage() {
       }
     };
     void init();
-  }, [copy.service.networkError, ensureNASService, maybeAutoDownloadVision, refreshNAS]);
+  }, [
+    copy.service.networkError,
+    ensureNASService,
+    maybeAutoDownloadVision,
+    refreshNAS,
+  ]);
 
   useEffect(() => {
     const reconnect = () => {
@@ -1746,7 +1751,10 @@ function VideoLibraryView({
     (hit: NASVideoSearchHit, video: NASFileAsset) => {
       const hits = searchHits
         .filter((item) => item.video_path === hit.video_path)
-        .map((item) => ({ videoPath: item.video_path, timeSec: item.time_sec }));
+        .map((item) => ({
+          videoPath: item.video_path,
+          timeSec: item.time_sec,
+        }));
       const index = Math.max(
         0,
         hits.findIndex((item) => item.timeSec === hit.time_sec),
@@ -1918,16 +1926,12 @@ function VideoLibraryView({
                           <button
                             key={`${hit.video_path}-${hit.time_sec}`}
                             type="button"
-                            onClick={() =>
-                              video && openSearchHit(hit, video)
-                            }
+                            onClick={() => video && openSearchHit(hit, video)}
                             className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left last:border-b-0 hover:bg-muted"
                           >
                             <PlayIcon className="size-4 shrink-0 text-primary" />
                             <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                              {video
-                                ? video.name
-                                : basename(hit.video_path)}
+                              {video ? video.name : basename(hit.video_path)}
                             </span>
                             <span className="shrink-0 text-xs text-muted-foreground">
                               {formatSeconds(hit.time_sec)}
@@ -1974,9 +1978,7 @@ function VideoLibraryView({
                             <FileSearchIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-medium">
-                                {video
-                                  ? video.name
-                                  : basename(hit.video_path)}{" "}
+                                {video ? video.name : basename(hit.video_path)}{" "}
                                 · {formatSeconds(hit.time_sec)}
                               </span>
                               <span className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
@@ -2392,6 +2394,7 @@ function ImageAssetTile({
   const imageUrl = useNASAsset(
     `/v1/files/${encodeURIComponent(asset.asset_id)}/content`,
   );
+  const [imageFailed, setImageFailed] = useState(false);
   return (
     <button
       type="button"
@@ -2399,10 +2402,11 @@ function ImageAssetTile({
       className="group min-w-0 overflow-hidden rounded-lg bg-muted/40 text-left"
     >
       <span className="flex aspect-square w-full items-center justify-center overflow-hidden">
-        {imageUrl ? (
+        {imageUrl && !imageFailed ? (
           <img
             src={imageUrl}
             alt={item.name}
+            onError={() => setImageFailed(true)}
             className="size-full object-cover transition-transform duration-base group-hover:scale-[1.02]"
           />
         ) : (
@@ -2834,7 +2838,7 @@ function LocalDiskView({
     disk("Pictures", "~/Pictures", "文件夹", "8,426 项", FileImageIcon),
     disk("Public", "~/Public", "文件夹", "4 项", FolderIcon),
   ];
-  const [currentPath, setCurrentPath] = useState("/Users/dangbei");
+  const [currentPath, setCurrentPath] = useState("/");
   const [entries, setEntries] = useState<DiskItem[]>(fallbackFolders);
   const [isLoading, setIsLoading] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
@@ -2862,7 +2866,7 @@ function LocalDiskView({
           setBrowseError(
             error instanceof Error ? error.message : "目录读取失败",
           );
-          if (currentPath === "/Users/dangbei") setEntries(fallbackFolders);
+          if (currentPath === "/") setEntries(fallbackFolders);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -3168,10 +3172,7 @@ function SourcesView({
                     ? "连接中"
                     : "重新连接"}
               </Button>
-              <Button
-                variant="secondary"
-                className="rounded-md bg-muted"
-              >
+              <Button variant="secondary" className="rounded-md bg-muted">
                 <ShieldCheckIcon className="size-4" />
                 查看隐私策略
               </Button>
@@ -3284,10 +3285,7 @@ function SearchResultsView({
                     {hit.path}
                   </div>
                 </div>
-                <Badge
-                  variant="outline"
-                  className="rounded-full border-border"
-                >
+                <Badge variant="outline" className="rounded-full border-border">
                   {Math.round(hit.score * 100)}%
                 </Badge>
                 <QuickFileActions />

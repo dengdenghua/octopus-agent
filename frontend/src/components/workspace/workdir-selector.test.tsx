@@ -96,7 +96,7 @@ describe("<WorkDirSelector />", () => {
     const onWorkDirChange = vi.fn();
     localStorage.setItem(
       "octopus:recentWorkdirs",
-      JSON.stringify(["/Users/dangbei/Public"]),
+      JSON.stringify(["/Users/example/Public"]),
     );
 
     renderWithProviders(
@@ -111,7 +111,7 @@ describe("<WorkDirSelector />", () => {
     fireEvent.click(screen.getByTitle("Personal space"));
     fireEvent.click(await screen.findByText("Public"));
 
-    expect(onWorkDirChange).toHaveBeenCalledWith("/Users/dangbei/Public");
+    expect(onWorkDirChange).toHaveBeenCalledWith("/Users/example/Public");
   });
 
   it("opens a different recent workspace in a new task when the current thread is locked", async () => {
@@ -120,14 +120,14 @@ describe("<WorkDirSelector />", () => {
     localStorage.setItem(
       "octopus:recentWorkdirs",
       JSON.stringify([
-        "/Users/dangbei/OtherProject",
-        "/Users/dangbei/Public/octopus-agent",
+        "/Users/example/OtherProject",
+        "/Users/example/Public/octopus-agent",
       ]),
     );
 
     renderWithProviders(
       <WorkDirSelector
-        workDir="/Users/dangbei/Public/octopus-agent"
+        workDir="/Users/example/Public/octopus-agent"
         onWorkDirChange={onWorkDirChange}
         lockToCurrentThread
         onOpenWorkDirInNewTask={onOpenWorkDirInNewTask}
@@ -137,14 +137,14 @@ describe("<WorkDirSelector />", () => {
 
     fireEvent.click(
       screen.getByTitle(
-        "Current task is bound to this workspace: /Users/dangbei/Public/octopus-agent",
+        "Current task is bound to this workspace: /Users/example/Public/octopus-agent",
       ),
     );
     fireEvent.click(await screen.findByText("OtherProject"));
 
     expect(onWorkDirChange).not.toHaveBeenCalled();
     expect(onOpenWorkDirInNewTask).toHaveBeenCalledWith(
-      "/Users/dangbei/OtherProject",
+      "/Users/example/OtherProject",
     );
   });
 
@@ -153,7 +153,7 @@ describe("<WorkDirSelector />", () => {
     const onOpenWorkDirInNewTask = vi.fn();
     localStorage.setItem(
       "octopus:recentWorkdirs",
-      JSON.stringify(["/Users/dangbei/NewProject"]),
+      JSON.stringify(["/Users/example/NewProject"]),
     );
 
     renderWithProviders(
@@ -171,7 +171,7 @@ describe("<WorkDirSelector />", () => {
 
     expect(onWorkDirChange).not.toHaveBeenCalled();
     expect(onOpenWorkDirInNewTask).toHaveBeenCalledWith(
-      "/Users/dangbei/NewProject",
+      "/Users/example/NewProject",
     );
   });
 
@@ -204,10 +204,10 @@ describe("<WorkDirSelector />", () => {
       "Enter workspace directory path:",
     );
     expect(input).toHaveValue("");
-    fireEvent.change(input, { target: { value: "/Users/dangbei/proj" } });
+    fireEvent.change(input, { target: { value: "/Users/example/proj" } });
     fireEvent.submit(input.closest("form")!);
 
-    expect(onWorkDirChange).toHaveBeenCalledWith("/Users/dangbei/proj");
+    expect(onWorkDirChange).toHaveBeenCalledWith("/Users/example/proj");
   });
 
   it("binds the absolute path returned by the local backend picker", async () => {
@@ -218,7 +218,7 @@ describe("<WorkDirSelector />", () => {
         ok: true,
         json: vi.fn().mockResolvedValue({
           success: true,
-          path: "/Users/dangbei/PickedProject",
+          path: "/Users/example/PickedProject",
           canceled: false,
           error: null,
         }),
@@ -237,7 +237,7 @@ describe("<WorkDirSelector />", () => {
 
     await waitFor(() => {
       expect(onWorkDirChange).toHaveBeenCalledWith(
-        "/Users/dangbei/PickedProject",
+        "/Users/example/PickedProject",
       );
     });
   });

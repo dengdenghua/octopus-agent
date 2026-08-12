@@ -18,8 +18,35 @@ import {
   latestAssistantTerminalState,
   parseUploadedFiles,
   stripInternalToolProtocol,
+  sanitizeLegacyGuardDiagnostic,
   stripUploadedFilesTag,
 } from "./utils";
+
+describe("legacy guard diagnostics", () => {
+  it("removes internal policy names and model repair instructions", () => {
+    const cleaned = sanitizeLegacyGuardDiagnostic(
+      "任务未能完成：始终无法满足「final-answer completeness guard」要求。最后一次拦截原因: The proposed Final Answer only announces a future inspection. Execute the stated read action.",
+    );
+
+    expect(cleaned).toContain("这轮任务没有完成");
+    expect(cleaned).toContain("尚未形成可交付结果");
+    expect(cleaned).not.toMatch(/guard|Final Answer|Execute the stated/i);
+  });
+
+  it("preserves ordinary source-code discussion", () => {
+    const text = "请检查 final-answer completeness guard 的实现和测试。";
+    expect(sanitizeLegacyGuardDiagnostic(text)).toBe(text);
+  });
+
+  it("repairs first-person explanations of internal guard failures", () => {
+    const cleaned = sanitizeLegacyGuardDiagnostic(
+      '我连续多次尝试给出最终答案，但系统反复拦截了我的回复，提示"final-answer completeness guard"未通过。',
+    );
+
+    expect(cleaned).toContain("尚未形成可交付结果");
+    expect(cleaned).not.toContain("guard");
+  });
+});
 
 describe("settled assistant answer detection", () => {
   const ai = (
@@ -249,6 +276,36 @@ describe("groupMessages", () => {
     ]);
   });
 
+  it("keeps reasoning emitted after an answer below that answer", () => {
+    const result = groupMessages(
+      [
+        { id: "1", type: "human", content: "检查" },
+        {
+          id: "2",
+          type: "ai",
+          content: "先给出阶段性结论。",
+        },
+        {
+          id: "3",
+          type: "ai",
+          content: "",
+          additional_kwargs: {
+            reasoning_content: "继续核对剩余证据。",
+          },
+        },
+      ] as Message[],
+      (group) => group,
+    );
+
+    expect(result.map((group) => group.type)).toEqual([
+      "human",
+      "assistant",
+      "assistant:processing",
+    ]);
+    expect(result[1]?.messages.map((message) => message.id)).toEqual(["2"]);
+    expect(result[2]?.messages.map((message) => message.id)).toEqual(["3"]);
+  });
+
   it("routes a short protocol answer beside its process from the first token", () => {
     const answer = {
       id: "2",
@@ -360,7 +417,10 @@ describe("groupMessages", () => {
           content: "",
           additional_kwargs: {
             response_state: "blocked",
-            error: { disposition: "blocked_on_user", failure_kind: "environment" },
+            error: {
+              disposition: "blocked_on_user",
+              failure_kind: "environment",
+            },
           },
         },
       ] as Message[],
