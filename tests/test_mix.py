@@ -354,6 +354,118 @@ def test_run_mix_chat_uses_tagged_proposers_and_aggregator(monkeypatch) -> None:
     assert captured["model"] == "kimi-k3"
 
 
+# ── Execution-intent proposer skip ───────────────────────────
+
+
+def test_skip_proposers_detects_execution_verbs_zh() -> None:
+    assert mix._skip_proposers_reason(_intent("帮我写一个部署脚本")) == "execution_intent"
+    assert mix._skip_proposers_reason(_intent("创建项目并启动服务")) == "execution_intent"
+    assert mix._skip_proposers_reason(_intent("修复这个 bug 并提交")) == "execution_intent"
+
+
+def test_skip_proposers_detects_execution_verbs_en() -> None:
+    assert mix._skip_proposers_reason(_intent("Write a python script")) == "execution_intent"
+    assert mix._skip_proposers_reason(_intent("deploy the service to prod")) == "execution_intent"
+    assert mix._skip_proposers_reason(_intent("fix the failing test")) == "execution_intent"
+
+
+def test_skip_proposers_keeps_analysis_intent() -> None:
+    assert mix._skip_proposers_reason(_intent("比较 kimi 和 deepseek 的优缺点")) is None
+    assert mix._skip_proposers_reason(_intent("explain the difference between X and Y")) is None
+    assert mix._skip_proposers_reason(_intent("What is 2+2?")) is None
+    assert mix._skip_proposers_reason(None) is None  # no goal → no signal
+    assert mix._skip_proposers_reason("   ") is None
+
+
+def test_run_mix_chat_skips_proposers_on_execution_intent(monkeypatch) -> None:
+    """An execution-oriented request bypasses the proposer stage entirely —
+    the full tool-enabled turn runs directly on the aggregator model, and
+    the mix metadata explains why."""
+    monkeypatch.delenv("OCTOPUS_MIX_PROPOSERS", raising=False)
+
+    called_proposer = []
+
+    def fake_proposer(stack, intent, agent, model=None, **_kwargs):  # noqa: ANN001
+        called_proposer.append(model)
+        return ("should never run", {})
+
+    monkeypatch.setattr(mix, "_direct_llm_fallback_with_usage", fake_proposer)
+
+    captured: dict[str, Any] = {}
+
+    def fake_run_chat(stack, intent, model, default_arm, *, optimizer=None, actor=None, agent=None):  # noqa: ANN001
+        captured["intent"] = intent
+        captured["model"] = model
+        return _envelope("deployed.")
+
+    out = mix.run_mix_chat(
+        object(),
+        _intent("帮我部署这个服务到生产环境"),
+        "octopus-mix",
+        "code_arm",
+        actor="u1",
+        agent=None,
+        run_chat=fake_run_chat,
+    )
+
+    assert called_proposer == []  # proposers never ran
+    assert captured["model"] == ""  # aggregator model unset → planner default
+    meta = out["octopus"]["mix"]
+    assert meta["skipped_proposers"] == "execution_intent"
+    assert meta["proposers"] == 0
+    # the original intent runs unmodified — no drafts injected
+    assert "mix_proposals" not in (captured["intent"].user_context or {})
+    # skip-path still reports the virtual model id
+    assert out["model"] == "octopus-mix"
+
+
+def test_run_mix_chat_keeps_proposers_on_analysis_intent(monkeypatch) -> None:
+    """A pure analysis request keeps the full mixture — proposers run and the
+    aggregator sees their drafts."""
+    monkeypatch.delenv("OCTOPUS_MIX_PROPOSERS", raising=False)
+    monkeypatch.delenv("OCTOPUS_MIX_N", raising=False)
+
+    proposer_calls = []
+
+    def fake_proposer(stack, intent, agent, model=None, **_kwargs):  # noqa: ANN001
+        lens = intent.user_context["conversation_messages"][0]["content"]
+        proposer_calls.append(lens[:18])
+        return (f"draft::{lens[:18]}", {})
+
+    monkeypatch.setattr(mix, "_direct_llm_fallback_with_usage", fake_proposer)
+
+    captured: dict[str, Any] = {}
+
+    def fake_run_chat(stack, intent, model, default_arm, *, optimizer=None, actor=None, agent=None):  # noqa: ANN001
+        captured["intent"] = intent
+        return _envelope("final synthesized answer")
+
+    out = mix.run_mix_chat(
+        object(),
+        _intent("比较这两个方案的优劣，给出建议"),
+        "octopus-mix",
+        "code_arm",
+        actor="u1",
+        agent=None,
+        run_chat=fake_run_chat,
+    )
+
+    assert len(proposer_calls) == 3  # full mixture still ran
+    assert "skipped_proposers" not in out["octopus"]["mix"]
+    convo = captured["intent"].user_context["conversation_messages"]
+    assert convo[-1]["role"] == "system"  # drafts injected as trailing system msg
+
+
+def test_aggregator_prompt_forces_action_not_restatement() -> None:
+    """The strengthened aggregator prompt tells the synthesizer to COMPLETE
+    the request with tools, not just restate the drafts."""
+    content = mix._format_proposals(["draft one", "draft two"])
+    assert "NOT the deliverable" in content
+    assert "actually perform it" in content
+    assert "with your tools" in content
+    assert "starting points" in content
+
+
 def test_proposer_calls_pass_max_tokens_cap(monkeypatch) -> None:
     """Proposers are draft-only advisors with no tool access — they must
     not get the ~131K-token ceiling a full agentic turn gets."""

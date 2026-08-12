@@ -44,6 +44,7 @@ import contextvars
 import json
 import logging
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
@@ -73,6 +74,106 @@ _LENSES: tuple[str, ...] = (
 
 _DEFAULT_N = 3
 _MAX_PROPOSERS = 6
+
+# ── Execution-intent markers ─────────────────────────────────
+#
+# MoA proposers are draft-only advisors with no tools. On a request whose
+# whole point is to ACT — write / build / deploy / fix something — their
+# drafts are pure latency + tokens: the aggregator has to do the real work
+# either way, and the drafts can even anchor it into restating rather than
+# executing. So requests carrying an execution verb skip the proposer stage
+# and run the single full tool-enabled turn directly. Pure analysis/synthesis
+# requests keep the full mixture (multiple draft perspectives genuinely help
+# a synthesis-only answer). Deliberately conservative — a missed verb only
+# means the mixture still runs, which is the pre-existing behaviour.
+
+_EXECUTION_VERBS_ZH: tuple[str, ...] = (
+    "写",
+    "创建",
+    "建立",
+    "生成",
+    "修改",
+    "编辑",
+    "更新",
+    "删除",
+    "构建",
+    "编译",
+    "部署",
+    "运行",
+    "执行",
+    "修复",
+    "安装",
+    "配置",
+    "启动",
+    "停止",
+    "重启",
+    "重构",
+    "迁移",
+    "提交",
+    "推送",
+    "克隆",
+    "下载",
+    "上传",
+    "初始化",
+    "搜索",
+    "查找",
+    "搭建",
+    "实现",
+    "开发",
+)
+
+_EXECUTION_VERBS_EN: tuple[str, ...] = (
+    r"\bwrite\b",
+    r"\bcreate\b",
+    r"\bbuild\b",
+    r"\bdeploy\b",
+    r"\brun\b",
+    r"\bexecute\b",
+    r"\bfix\b",
+    r"\brepair\b",
+    r"\binstall\b",
+    r"\bsetup\b",
+    r"\bconfigure\b",
+    r"\bgenerate\b",
+    r"\brefactor\b",
+    r"\bmodify\b",
+    r"\bupdate\b",
+    r"\bremove\b",
+    r"\bdelete\b",
+    r"\bcompile\b",
+    r"\bclone\b",
+    r"\bcommit\b",
+    r"\bpush\b",
+    r"\bdownload\b",
+    r"\bupload\b",
+    r"\binit\b",
+    r"\bscaffold\b",
+    r"\bstart\b",
+    r"\bstop\b",
+    r"\brestart\b",
+)
+
+
+def _skip_proposers_reason(intent: Any) -> str | None:
+    """Return a skip reason when the request is clearly execution-oriented.
+
+    ``None`` → keep the full proposer stage. The returned string is surfaced
+    in the ``octopus.mix`` metadata so a client can see why proposers were
+    skipped (e.g. ``"execution_intent"``).
+    """
+    goal = ""
+    if isinstance(intent, ParsedIntent):
+        goal = intent.normalized_goal or intent.raw or ""
+    goal = (goal or "").strip()
+    if not goal:
+        return None
+    low = goal.lower()
+    if any(verb in goal for verb in _EXECUTION_VERBS_ZH):
+        return "execution_intent"
+    if any(re.search(pattern, low) for pattern in _EXECUTION_VERBS_EN):
+        return "execution_intent"
+    return None
+
 
 # Proposers are draft-only advisors with no tool access (see module
 # docstring) — they don't need the ~131K-token ceiling a full agentic
@@ -271,11 +372,15 @@ def _format_proposals(drafts: list[str]) -> str:
     lines = [
         "You are the AGGREGATOR in a mixture-of-agents system. Several "
         "reference models independently drafted answers to the user's latest "
-        "message (below). Treat them as ADVICE, not ground truth: synthesize "
-        "ONE final answer that is more correct, complete, and useful than any "
-        "single draft. Resolve disagreements by reasoning, and use tools to "
-        "verify when it matters. Never mention the drafts, the references, or "
-        "this process — just give the user the best answer.",
+        "message (below). Treat them as ADVICE, not ground truth. Your job is "
+        "to deliver the user's request to COMPLETION: synthesize a final "
+        "answer that is more correct, complete, and useful than any single "
+        "draft, and — when the request asks for an action (writing files, "
+        "running commands, checking facts) — actually perform it with your "
+        "tools. Drafts are starting points, NOT the deliverable; do not just "
+        "restate them. Resolve disagreements by reasoning, and verify claims "
+        "with tools when it matters. Never mention the drafts, the references, "
+        "or this process — just give the user the best outcome.",
         "",
     ]
     for i, draft in enumerate(drafts, 1):
@@ -304,6 +409,32 @@ def run_mix_chat(
     import; it runs the aggregator as a normal, fully tool-enabled turn.
     """
     specs = _proposer_specs(requested_model)
+
+    # Execution-oriented request → the proposer stage would be pure latency
+    # and tokens (draft-only, no tools), and could even anchor the aggregator
+    # into restating instead of acting. Skip straight to the single full
+    # tool-enabled turn on the aggregator model.
+    skip_reason = _skip_proposers_reason(intent)
+    if skip_reason:
+        aggregator_model = _aggregator_model()
+        result = run_chat(
+            stack,
+            intent,
+            aggregator_model,
+            default_arm,
+            optimizer=optimizer,
+            actor=actor,
+            agent=agent,
+        )
+        if isinstance(result, dict):
+            result.setdefault("octopus", {})["mix"] = {
+                "skipped_proposers": skip_reason,
+                "proposers": 0,
+                "drafts_used": 0,
+                "aggregator_model": aggregator_model or "default",
+            }
+            result["model"] = requested_model
+        return result
 
     # ── Stage 1: proposers — parallel, NO tools ──────────────
     def _one(spec: tuple[str, str]) -> str | None:
