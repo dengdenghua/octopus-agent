@@ -109,102 +109,119 @@ export function CommandPalette() {
   const PAGE_ITEMS = useMemo(
     () => [
       {
+        id: "new-chat",
         to: "/workspace/realtime/new",
         label: t.sidebar.newChat,
         icon: MessageSquarePlusIcon,
         keywords: "chat new realtime conversation",
       },
       {
+        id: "agents",
         to: "/workspace/agents",
         label: t.agents.title,
         icon: UsersIcon,
         keywords: "agent team",
       },
       {
+        id: "skills",
         to: "/workspace/agents?surface=chat&tab=skills",
-        label: t.skillsPage.pageTitle,
+        label: `${t.sidebar.navHR} · ${t.plugins.tabSkillMarket}`,
         icon: SparklesIcon,
         keywords: "skill",
       },
       {
+        id: "plugins",
         to: "/workspace/agents?surface=chat&tab=plugins",
-        label: t.metaSkills.title,
+        label: `${t.sidebar.navHR} · ${t.metaSkills.title}`,
         icon: BoxesIcon,
         keywords: "skill pack meta workflow template plugin",
       },
       {
-        to: "/workspace/store",
-        label: t.sidebar.navStore,
+        id: "hub",
+        to: "/workspace/agents?surface=chat",
+        label: t.sidebar.navHR,
         icon: StoreIcon,
-        keywords: "market store shop",
+        keywords: "hub agents roles market store shop asset center",
       },
       {
+        id: "channels",
         to: "/workspace/channels",
         label: t.channels.title,
         icon: CableIcon,
         keywords: "channel connector messaging",
       },
       {
-        to: "/workspace/mcp",
+        id: "mcp",
+        to: "/workspace/settings?section=tools",
         label: t.sidebar.navMcp,
         icon: PlugIcon,
         keywords: "mcp integration",
       },
       {
+        id: "architecture",
         to: "/workspace/architecture",
         label: t.architecture.title,
         icon: NetworkIcon,
         keywords: "architecture docs design",
       },
       {
+        id: "observability",
         to: "/workspace/observability",
         label: t.observabilityPage.pageTitle,
         icon: ActivityIcon,
         keywords: "observability monitoring health",
       },
       {
+        id: "diagnostics",
         to: "/workspace/observability",
         label: t.sidebar.diagnostics,
         icon: StethoscopeIcon,
         keywords: "diagnostics debug troubleshoot",
       },
       {
+        id: "intelligence",
         to: "/workspace/intelligence",
         label: t.intelligence.title,
         icon: ZapIcon,
         keywords: "intelligence subscription automation schedule",
       },
       {
+        id: "knowledge",
         to: "/workspace/knowledge",
         label: t.sidebar.navKnowledgeGraph,
         icon: BrainCircuitIcon,
         keywords: "knowledge base memory wiki files",
       },
       {
+        id: "desktop-organizer",
         to: "/workspace/desktop-organizer",
         label: t.sidebar.navDesktopOrganizer,
         icon: FolderIcon,
         keywords: "desktop organizer folder",
       },
       {
+        id: "evolution",
         to: "/workspace/evolution",
         label: t.evolutionDashboard.title,
         icon: DnaIcon,
         keywords: "evolution dna self",
       },
       {
+        id: "reflex",
         to: "/workspace/reflex",
         label: t.reflexPage.pageTitle,
         icon: RadarIcon,
         keywords: "reflex rule monitor",
       },
       {
-        to: "/workspace/browser",
-        label: t.sidebar.browser,
+        id: "browser",
+        to: "/browser",
+        label: t.sidebar.navBrowserSurface,
         icon: GlobeIcon,
-        keywords: "browser web preview",
+        keywords: "browser ai tabs history bookmarks copilot",
       },
       {
+        id: "computer",
         to: "/workspace/computer",
         label: t.agentWorkbench.computerView,
         icon: CpuIcon,
@@ -261,7 +278,7 @@ export function CommandPalette() {
               const Icon = item.icon;
               return (
                 <CommandItem
-                  key={item.to}
+                  key={item.id}
                   value={`${item.label} ${item.to} ${item.keywords}`}
                   onSelect={() => handleNavigate(item.to)}
                 >

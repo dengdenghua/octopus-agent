@@ -488,30 +488,6 @@ export const enUS: Translations = {
     create: "Create project",
   },
 
-  // Application Registry
-  applicationRegistry: {
-    loading: "Loading plugins",
-    errorTitle: "Plugin list unavailable",
-    retryLabel: "Reload",
-    title: "Plugins",
-    refreshAria: "Refresh plugins",
-    createPlugin: "Create plugin",
-    searchAria: "Search plugins",
-    searchPlaceholder: "Search plugins, capabilities or actions",
-    enabled: "enabled",
-    capabilities: "capabilities",
-    actions: "actions",
-    all: "All",
-    pluginPackageOnly: "Plugin package only",
-    enabledStatus: "Enabled",
-    disabledStatus: "Disabled",
-    entries: "entries",
-    permissions: "permissions",
-    open: "Open",
-    registered: "Registered",
-    noMatches: "No matching plugins",
-  },
-
   // Clarification Questionnaire
   clarificationQuestionnaire: {
     title: "Please answer the following questions",
@@ -1104,6 +1080,7 @@ export const enUS: Translations = {
       "Submit a task above; when parallel help is needed, progress will appear here.",
     taskListView: "Tasks",
     computerView: "Computer",
+    executionView: "Execution view",
     reportView: "Report",
     traceFeedEmpty: "Agent hasn't started working",
     liveEventStream: "Live events",
@@ -1315,7 +1292,7 @@ export const enUS: Translations = {
     filesTab: "Files",
     diffTab: "Diff",
     terminalTab: "Terminal",
-    browserTab: "Browser",
+    browserTab: "Task Preview",
   },
 
   // Agent workbench panel (kanban / screen timeline)
@@ -1338,6 +1315,9 @@ export const enUS: Translations = {
     collapseWorkbench: "Collapse workbench",
     tabList: "Tab list",
     summaryLabel: "Summary",
+    latestTurnContext: "Latest turn",
+    latestTurnContextDescription:
+      "This workbench reflects the latest conversation turn, even while older messages are in view.",
     agentStatusRunning: "Running",
     agentStatusError: "Error",
     agentStatusDone: "Finished",
@@ -1711,7 +1691,6 @@ export const enUS: Translations = {
     projects: "Projects",
     channels: "Channels",
     pairing: "Pairing Auth",
-    browser: "Browser Preview",
     moveToProject: "Move to project",
     newProject: "New project",
     // Additional fields
@@ -1729,14 +1708,11 @@ export const enUS: Translations = {
     navReflex: "Reflex Rules",
     navIntelligence: "Automation",
     navMcp: "MCP",
-    navStore: "Market",
     navEvolution: "Evolution",
-    navReplay: "Replay",
     navPlugins: "Plugins",
     navHR: "Agents",
     navComputer: "Local Assistant",
     navDesktopOrganizer: "Desktop Organizer",
-    navMobile: "Mobile",
     navArchitecture: "Architecture",
     groupTools: "Tools",
     groupAdvancedTools: "Advanced Tools",
@@ -1798,7 +1774,7 @@ export const enUS: Translations = {
     backToProjectList: "Back to projects",
     openThreadFilesTooltip: "Open project files",
     // Surface switch + task statuses
-    navBrowserSurface: "Browser",
+    navBrowserSurface: "AI Browser",
     sectionOngoing: "Ongoing",
     noOngoingTasks: "No running tasks",
     sectionTaskHistory: "Task history",
@@ -3096,8 +3072,7 @@ export const enUS: Translations = {
       "Code changes need verification before Octopus can finish this turn. Run tests, lint, typecheck, or build, then continue.",
     environmentBlocked:
       "This task is blocked by an environment constraint — the reason is below.",
-    blockedOnUser:
-      "This task needs your input before it can continue.",
+    blockedOnUser: "This task needs your input before it can continue.",
     streamEndpointUnavailable:
       "The backend chat/team stream endpoint is not enabled or is unavailable. Start the full Octopus backend or check the frontend proxy.",
     iteration: (count: number) => `Round ${count}`,
@@ -3274,14 +3249,14 @@ export const enUS: Translations = {
     description: "Adjust how Octopus looks and behaves for you.",
     sections: {
       account: "Account",
-      subscription: "Plan & Billing",
+      subscription: "Plan & Usage",
       appearance: "Appearance",
-      memory: "Memory & History",
+      memory: "Memory",
       tools: "Tools",
       skills: "Skills",
       notification: "Notification",
       browser: "Browser Preferences",
-      observability: "Observability",
+      observability: "Run diagnostics",
       privacy: "Privacy & Security",
       about: "About",
       automation: "Execution & Permissions",
@@ -4750,7 +4725,7 @@ Strategy:
       noFavorites: "No favorites yet",
     },
     defaultTabTitle: "AI Browser Desktop",
-    pageTitle: "Browser",
+    pageTitle: "AI Browser",
     pageSubtitle: (pinned: boolean) =>
       pinned ? "Tab Workspace · Pinned" : "Tab Workspace",
     searchPlaceholder: "Search tabs...",
@@ -4904,7 +4879,7 @@ Strategy:
     surfaceModeScreenshot: "Screenshot",
     selectDevicePreset: "Select device preset",
     continueInFullBrowser: "Continue in full browser",
-    takeoverButton: "Takeover",
+    takeoverButton: "Open AI Browser",
     sessionNeedsAttention: (issues) =>
       `Browser session needs attention: ${issues}`,
     reconnectButton: "Reconnect",
@@ -5570,140 +5545,6 @@ Strategy:
       connectCodeLabel: "Connect code (paste in phone settings)",
       manualFillPrefix: "Or enter manually: address",
       manualFillCode: "· code",
-    },
-  },
-
-  // Workflow Editor
-  workflowEditor: {
-    title: "Workflow Editor",
-    untitled: "Untitled Workflow",
-    newWorkflow: "+ New",
-    savedWorkflows: "Workflows",
-    placeholder: "Workflow name",
-    descPlaceholder: "Description...",
-    layoutApplied: "Layout applied",
-    saved: "Workflow saved",
-    saveFailed: "Failed to save workflow",
-    loadFailed: "Failed to load workflow",
-    deleted: "Workflow deleted",
-    deleteFailed: "Failed to delete workflow",
-    valid: "Workflow is valid",
-    fixErrors: "Fix validation errors before running",
-    executed: "Workflow executed successfully",
-    executeFailed: "Execution failed",
-    codeCopied: "Python code copied to clipboard",
-    start: "Start",
-    end: "End",
-    nodePaletteTitle: "Nodes",
-    save: "Save",
-    run: "Run",
-    savedToJsonFile:
-      "Saved · workflow registered as a skill · LLM can call it directly",
-    runBackendNotReady:
-      "Execution backend isn't ready yet · workflows can only be edited locally for now",
-    dismiss: "Dismiss",
-    more: "more",
-    noSavedWorkflows: "No saved workflows",
-    selectNodeToConfigure: "Select a node to configure",
-    searchNodes: "Search nodes...",
-    runningWorkflow: "Running workflow...",
-    executionCompleted: "Execution completed",
-    executionFailed: "Execution failed",
-    runResults: "Run Results",
-    viewResultJson: "View result JSON",
-    importN8n: "Import n8n",
-    saving: "Saving...",
-    running: "Running...",
-    runCompleted: "Run completed",
-    runFailed: "Run failed",
-    statusPrefix: "Status",
-    importSuccess: (name, nodeCount) =>
-      `Imported: ${name} (${nodeCount} nodes)`,
-    nodes: {
-      llm: "LLM",
-      tool: "Tool",
-      condition: "Condition",
-      code: "Code",
-      subagent: "Sub-Agent",
-      loop: "Loop",
-      parallel: "Parallel",
-      humanInput: "Human Input",
-      memory: "Memory",
-      http: "HTTP Request",
-    },
-    config: {
-      label: "Label",
-      model: "Model",
-      systemPrompt: "System Prompt",
-      temperature: "Temperature",
-      maxTokens: "Max Tokens",
-      toolName: "Tool Name",
-      parameters: "Parameters (JSON)",
-      conditionExpr: "Condition Expression",
-      language: "Language",
-      code: "Code",
-      agentName: "Agent Name",
-      agentConfig: "Agent Config (JSON)",
-      loopBody: "Loop Body Node ID",
-      maxIterations: "Max Iterations",
-      breakCondition: "Break Condition",
-      branchNodes: "Branch Node IDs (comma-separated)",
-      aggregation: "Aggregation Strategy",
-      aggregationMergeAll: "Merge All",
-      aggregationFirstResult: "First Result",
-      aggregationMajorityVote: "Majority Vote",
-      promptMessage: "Prompt Message",
-      url: "URL",
-      method: "Method",
-      headers: "Headers (JSON)",
-      body: "Body",
-      operation: "Operation",
-      memoryKey: "Memory Key",
-      valueExpression: "Value Expression",
-      timeout: "Timeout (seconds)",
-      responseFormat: "Response Format",
-    },
-    palette: {
-      flow: "Flow",
-      ai: "AI",
-      actions: "Actions",
-      data: "Data",
-    },
-    toolbar: {
-      save: "Save (Ctrl+S)",
-      undo: "Undo (Ctrl+Z)",
-      redo: "Redo (Ctrl+Y)",
-      copy: "Copy (Ctrl+C)",
-      paste: "Paste (Ctrl+V)",
-      delete: "Delete (Del)",
-      autoLayout: "Auto Layout",
-      validate: "Validate",
-      exportCode: "Export Python",
-      run: "Run",
-      running: "Running...",
-    },
-    nodeDescriptions: {
-      start: "Workflow entry point",
-      end: "Workflow exit point",
-      condition: "If/else conditional branch",
-      loop: "Iterate with break condition",
-      parallel: "Fan-out / fan-in parallel execution",
-      llm: "Large Language Model call",
-      subagent: "Delegate to another agent",
-      tool: "Execute a tool / function",
-      code: "Run custom Python / JS code",
-      http: "Make an HTTP API call",
-      memory: "Read or write to memory store",
-      humanInput: "Pause and wait for user input",
-    },
-    nodeLabels: {
-      noModelSet: "No model set",
-      noToolSelected: "No tool selected",
-      noAgentSelected: "No agent selected",
-      noCodeWritten: "No code written",
-      noUrlConfigured: "No URL configured",
-      pausesForInput: "Pauses for input",
-      workflowEntryPoint: "Workflow entry point",
     },
   },
 
@@ -7006,44 +6847,6 @@ Strategy:
     toastBrowserAuthCancelled: "Cancelled",
   },
 
-  // Skills page
-  skillsPage: {
-    pageTitle: "Skills",
-    pageSubtitle:
-      "Manage your skill library — install and enable what you need.",
-    disclaimer:
-      "Skills come from community developers. Octopus is not responsible for any risk, liability, or damage from using third-party skills.",
-    createButton: "Create skill",
-    tabInstalled: "Installed",
-    loadingSkills: "Loading skills...",
-    noInstalledTitle: "No skills installed",
-    noInstalledHint:
-      "The runtime loaded with an empty skill catalog. Register groups via runtime.execution.all_skills.register_all during bootstrap.",
-    categories: {
-      sourcing: "Sourcing & selection",
-      research: "Market research",
-      browse: "Browse & search",
-      file: "Files & coding",
-      comm: "Comm & collab",
-      content: "Content generation",
-      memory: "Memory",
-      system: "System",
-      other: "Other",
-    },
-    searchPlaceholder: "Search skills (name/description/tags)",
-    matchCount: (matched: number, total: number) =>
-      `${matched} match / ${total} total`,
-    totalCount: (n: number) => `${n} skills total`,
-    noMatch: (query: string) => `No skills matching "${query}"`,
-    tooltipSource: (source: string) => `Source: ${source}`,
-    tooltipCost: (cost: string) => `Cost: ${cost}`,
-    tooltipTags: (tags: string) => `Tags: ${tags}`,
-    tooltipTested: "✓ Tested",
-    tooltipUntested: "• Untested",
-    testedDotTitle: "Tested",
-    noDescription: "No description",
-  },
-
   // Activity indicators (file ops + preview refresh)
   activityIndicators: {
     recentFileActivity: (n: number) => `Recent file activity · ${n} events`,
@@ -7353,11 +7156,6 @@ Strategy:
     statusDeleted: (path: string) => `deleted ${path}`,
     statusNothingToDelete: "nothing to delete",
     clearAddendumPath: (path: string) => `to clear: rm ${path}`,
-  },
-
-  // Workflows wrapper page
-  workflowsWrapperPage: {
-    loadingEditor: "Loading editor...",
   },
 
   // AppAuth wrapper page
@@ -9125,64 +8923,6 @@ Strategy:
     confirmRemoveTitle: "Remove system right-click menu?",
     confirmRemoveDescription:
       "This will remove the Octopus one-click organize command from the Windows desktop right-click menu.",
-  },
-
-  // Replay page
-  replay: {
-    pageDescription:
-      "A consolidated view of the replay gate, browser/desktop replay reviews, and task-run replay cases.",
-    applyPromotions: "Apply promotions",
-    refresh: "Refresh",
-    rerunResult: (attempted: number, passed: number, failed: number) =>
-      `Reran ${attempted} repair recipes: ${passed} passed, ${failed} failed; source cases still require manual review.`,
-    applyResult: (applied: number, skipped: number, failed: number) =>
-      `applied ${applied}, skipped ${skipped}, failed ${failed}`,
-    tabCases: (count: number) => `Replay cases (${count})`,
-    tabEvaluations: (count: number) => `Replay evaluations (${count})`,
-    loadingCases: "Loading replay cases…",
-    emptyCases:
-      "No replay cases yet. Replay cases are generated automatically after a task run completes.",
-    loadingEvaluations: "Loading replay evaluations…",
-    emptyEvaluations:
-      "No replay evaluations yet. Evaluations are computed automatically after replay cases are generated.",
-  },
-
-  // Workflows page (editor under maintenance)
-  workflows: {
-    maintenanceBadge: "Editor under maintenance",
-    title: "Workflow editor temporarily unavailable",
-    description:
-      "The backend does not currently provide a workflow-editor API. To avoid failures when saving, running, or importing, the editor entry is temporarily disabled.",
-    newRealtimeTask: "New realtime task",
-    viewSkills: "View skills",
-    altRealtimeTitle: "Realtime tasks",
-    altRealtimeDesc:
-      "Describe the process directly to the Agent, capturing steps and results as it executes.",
-    altRealtimeLabel: "Start",
-    altSkillsTitle: "Skill library",
-    altSkillsDesc:
-      "Turn stable actions into reusable skills and invoke them directly in tasks.",
-    altSkillsLabel: "View skills",
-    altAutomationTitle: "Automation",
-    altAutomationDesc:
-      "Handle recurring processes with subscriptions and scheduled tasks — get them running first, then formalize.",
-    altAutomationLabel: "Go to automation",
-    altReflexTitle: "Reflex",
-    altReflexDesc:
-      "Maintain trigger rules, reply policies, and lightweight process dispatch.",
-    altReflexLabel: "Open rules",
-    cardTransitionLabel: "Recommended transition",
-    cardTransitionTitle: "Run processes with realtime tasks first",
-    cardTransitionDesc:
-      "Successful paths gradually accumulate in messages, tool traces, and skills.",
-    cardAssetsLabel: "Reusable assets",
-    cardAssetsTitle: "Stable actions go into the skill library",
-    cardAssetsDesc:
-      "Lighter than the editor, and a better fit for the current plugin and skill ecosystem.",
-    cardLaterLabel: "Future restoration",
-    cardLaterTitle: "Editing reopens once the API is available",
-    cardLaterDesc:
-      "Prevents users from entering a half-finished editor and failing to save.",
   },
 
   // Knowledge page

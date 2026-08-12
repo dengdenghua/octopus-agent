@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
 
-import { SettingsDialog } from "./settings-dialog";
+import {
+  normalizeSettingsSection,
+  SettingsDialog,
+} from "./settings-dialog";
 
 vi.mock("@/providers/AuthProvider", () => ({
   useAuth: () => ({
@@ -23,6 +26,14 @@ describe("SettingsDialog", () => {
       return 1;
     });
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  it("maps legacy section ids to the new categories", () => {
+    expect(normalizeSettingsSection("mcp")).toBe("tools");
+    expect(normalizeSettingsSection("personalSpace")).toBe("conversation");
+    expect(normalizeSettingsSection("automation")).toBe("automationSecurity");
+    expect(normalizeSettingsSection("sandbox")).toBe("automationSecurity");
+    expect(normalizeSettingsSection("unknown")).toBe("appearance");
   });
 
   it("returns the content viewport to the top when switching sections", async () => {
@@ -48,10 +59,10 @@ describe("SettingsDialog", () => {
     if (!viewport) return;
     viewport.scrollTop = 160;
 
-    await user.click(screen.getByRole("button", { name: "MCP 服务" }));
+    await user.click(screen.getByRole("button", { name: "工具与集成" }));
 
     await waitFor(() => expect(viewport.scrollTop).toBe(0));
-    expect(screen.getByRole("button", { name: "MCP 服务" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "工具与集成" })).toHaveAttribute(
       "aria-current",
       "page",
     );

@@ -417,7 +417,7 @@ export function useSlashCommands({
       description: t.slashCommands.settings,
       icon: SettingsIcon,
       action: () => {
-        window.location.hash = "#settings";
+        window.dispatchEvent(new Event("octopus:open-settings"));
         setIsOpen(false);
       },
     });

@@ -20,6 +20,11 @@ test.skip(
 );
 
 test.describe("Visual regression · workspace surfaces", () => {
+  // These screenshots share the same local thread/backend state. Running the
+  // flow serially avoids concurrent hydration requests turning a stable
+  // empty screen into a transient skeleton and producing false diffs.
+  test.describe.configure({ mode: "serial" });
+
   test("chat composer surface (new realtime thread)", async ({
     authedPage: page,
   }) => {
@@ -32,11 +37,24 @@ test.describe("Visual regression · workspace surfaces", () => {
     });
     // Wait a beat for layout/theme to settle before freezing the frame.
     await expect
-      .poll(async () => {
-        const box = await page.getByTestId("chat-composer-input").boundingBox();
-        return box?.y;
-      }, { timeout: 5_000 })
+      .poll(
+        async () => {
+          const box = await page
+            .getByTestId("chat-composer-input")
+            .boundingBox();
+          return box?.y;
+        },
+        { timeout: 5_000 },
+      )
       .toBeDefined();
+    await expect(
+      page.getByRole("heading", { name: /Hello, I am Octopus|你好，我是/ }),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator(".animate-skeleton-entrance")).toHaveCount(0, {
+      timeout: 15_000,
+    });
 
     await expect(page).toHaveScreenshot("chat-composer.png", {
       maxDiffPixelRatio: 0.02,
@@ -53,6 +71,15 @@ test.describe("Visual regression · workspace surfaces", () => {
     await expect(page.getByTestId("chat-composer-input")).toBeVisible({
       timeout: 15_000,
     });
+    // The composer mounts before the missing-thread recovery finishes. Wait
+    // for the settled empty state so the screenshot cannot capture the
+    // transient skeleton or an intermediate error frame.
+    await expect(page.getByText(/还没有消息|No messages yet/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByRole("button", { name: /重试|Retry/i }),
+    ).toBeVisible();
 
     await expect(page).toHaveScreenshot("recoverable-empty-state.png", {
       maxDiffPixelRatio: 0.02,
@@ -72,6 +99,34 @@ test.describe("Visual regression · workspace surfaces", () => {
     await expect(page.locator("textarea").first()).toBeVisible();
 
     await expect(page).toHaveScreenshot("workspace-shell.png", {
+      maxDiffPixelRatio: 0.02,
+      animations: "disabled",
+    });
+  });
+
+  test("agent workbench uses a bottom drawer at 1024px", async ({
+    authedPage: page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 720 });
+    await page.goto("/#/workspace/realtime/new?agent=general");
+    await page.waitForLoadState("domcontentloaded");
+
+    await expect(page.getByTestId("chat-composer-input")).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.getByRole("button", { name: "Open right panel" }).click();
+
+    const workbench = page.getByRole("complementary", {
+      name: "Agent workbench",
+    });
+    await expect(workbench).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: "Expand or collapse the agent workbench drawer",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+
+    await expect(page).toHaveScreenshot("workbench-drawer-1024.png", {
       maxDiffPixelRatio: 0.02,
       animations: "disabled",
     });

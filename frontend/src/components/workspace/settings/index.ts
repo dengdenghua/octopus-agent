@@ -1,1 +1,6 @@
-export { SettingsDialog } from "./settings-dialog";
+export {
+  SETTINGS_SECTIONS,
+  SettingsDialog,
+  normalizeSettingsSection,
+  type SettingsSection,
+} from "./settings-dialog";

@@ -125,7 +125,13 @@ describe("<AgentWorkbenchPanel />", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
+        isLoading
         events={[
+          event({
+            id: "legacy-noise",
+            name: "grep_text",
+            output: "oklch(0.55 0.13 215) globals.cs runtime/wrong.py",
+          }),
           event({
             id: "visibility-1",
             name: "visibility",
@@ -200,6 +206,11 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(taskPlan).toHaveClass("border-b");
     expect(taskPlan.querySelector(".h-1")).toBeNull();
     expect(screen.queryByText("P1")).not.toBeInTheDocument();
+    const todoRows = within(
+      screen.getByTestId("workbench-todo-list"),
+    ).getAllByRole("listitem");
+    expect(todoRows[0]).toHaveAttribute("data-task-status", "done");
+    expect(todoRows[1]).toHaveAttribute("data-task-status", "running");
   });
 
   test("keeps the todo list visible after a transcript process event is focused", () => {
@@ -341,6 +352,10 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.queryByRole("button", { name: "主电脑 · 已完成" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByText("最新一轮")).toHaveAttribute(
+      "title",
+      "工作台始终显示最新一轮任务状态，即使当前正在查看较早消息。",
+    );
   });
 
   test("empty shell admits the turn is live before the first tool event", () => {
@@ -1046,6 +1061,127 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("sleep tech")).not.toBeInTheDocument();
   });
 
+  test("shows confirmed local file-search matches as file context", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "glob-context-1",
+            name: "glob_files",
+            input: { pattern: "**/approval_gate.py", path: "." },
+            output: {
+              files: ["runtime/safety/approval/approval_gate.py"],
+            },
+          }),
+          event({
+            id: "grep-context-1",
+            name: "grep_text",
+            startedAt: 1250,
+            input: { pattern: "waiting_user" },
+            output: [
+              {
+                path: "runtime/sensing/gateway/computer_control_session.py",
+                line: 131,
+              },
+            ],
+          }),
+          event({
+            id: "empty-search-context-1",
+            name: "search_files",
+            startedAt: 1500,
+            input: { pattern: "not-a-source" },
+            output: [],
+          }),
+        ]}
+      />,
+    );
+
+    expandSummarySection(/上下文/);
+
+    expect(screen.getByText("approval_gate.py")).toBeInTheDocument();
+    expect(screen.getByText("computer_control_session.py")).toBeInTheDocument();
+    expect(screen.queryByText("not-a-source")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "文件 2 条来源" }),
+    ).toBeInTheDocument();
+  });
+
+  test("shows sources injected before tool execution in context", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "todo-only",
+            name: "todo_write",
+            input: { todos: [{ content: "Inspect", status: "in_progress" }] },
+          }),
+        ]}
+        groundingSources={[
+          {
+            kind: "source",
+            title: "approval_gate.py",
+            path: "runtime/safety/approval/approval_gate.py:44",
+          },
+          {
+            kind: "doc",
+            title: "Runtime architecture",
+            path: "docs/runtime-architecture.md",
+          },
+        ]}
+      />,
+    );
+
+    expandSummarySection(/上下文/);
+
+    expect(screen.getByText("approval_gate.py")).toBeInTheDocument();
+    expect(screen.getByText("Runtime architecture")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "文件 2 条来源" }),
+    ).toBeInTheDocument();
+  });
+
+  test("shows typed workbench evidence without parsing tool output", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "snapshot-evidence",
+            name: "todo_write",
+            input: {
+              workbenchSnapshot: {
+                schemaVersion: 2,
+                version: 3,
+                status: "running",
+                phases: [],
+                evidence: [
+                  {
+                    id: "tool:read-1:runtime/protocol/items.py",
+                    kind: "file",
+                    title: "items.py",
+                    uri: "runtime/protocol/items.py",
+                    status: "observed",
+                    origin: "tool",
+                    sourceItemId: "read-1",
+                  },
+                ],
+                updatedAt: "2026-08-12T00:00:00.000Z",
+              },
+            },
+          }),
+        ]}
+      />,
+    );
+
+    expandSummarySection(/上下文/);
+
+    expect(screen.getByText("items.py")).toBeInTheDocument();
+    expect(screen.queryByText("wrong.py")).not.toBeInTheDocument();
+    expect(screen.queryByText("globals.cs")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "文件 1 条来源" }),
+    ).toBeInTheDocument();
+  });
+
   test("counts user-fed context files (uploaded + attachments) in context stats", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
@@ -1292,7 +1428,7 @@ describe("<AgentWorkbenchPanel />", () => {
 
     // The sub-agent was still selected: switching to the computer view lands
     // straight on its independent process.
-    fireEvent.click(screen.getByRole("button", { name: "电脑视图" }));
+    fireEvent.click(screen.getByRole("button", { name: "执行画面" }));
     await waitFor(() => {
       expect(screen.getByText("Agent 集群 - 独立进程")).toBeInTheDocument();
     });
@@ -2098,7 +2234,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
     expect(screen.getByRole("button", { name: /^上下文/ })).toHaveAttribute(
       "aria-expanded",
-      "false",
+      "true",
     );
 
     const generatedLabel = "生成产物";
@@ -2236,7 +2372,7 @@ describe("<AgentWorkbenchPanel />", () => {
     // Summary page shows phases with StatusGlyph icons instead of text
   });
 
-  test("keeps completed progress visible and context secondary", () => {
+  test("keeps completed progress and context visible", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         hasAnswer
@@ -2265,9 +2401,9 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expect(progress).toHaveAttribute("aria-expanded", "true");
     expect(progress).not.toHaveTextContent("来源");
-    expect(context).toHaveAttribute("aria-expanded", "false");
+    expect(context).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByText(/估算 token/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Agent UX Research")).not.toBeInTheDocument();
+    expect(screen.getByText("Agent UX Research")).toBeInTheDocument();
   });
 
   test("does not show waiting copy for a completed empty selected phase", () => {

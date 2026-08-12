@@ -112,15 +112,19 @@ export function WorkspaceNavChatList({
   showOnlyProjects?: boolean;
 }) {
   const { t } = useI18n();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const { data: projects = [] } = useProjects();
   const { mutate: deleteProject } = useDeleteProject();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const skillsSeen = useFeatureSeen(
     "skills",
-    pathname.startsWith("/workspace/skills"),
+    pathname === "/workspace/agents" &&
+      new URLSearchParams(search).get("tab") === "skills",
   );
+  const skillsTabActive =
+    pathname === "/workspace/agents" &&
+    new URLSearchParams(search).get("tab") === "skills";
 
   useEffect(() => {
     setMounted(true);
@@ -152,11 +156,11 @@ export function WorkspaceNavChatList({
         <SidebarMenu>
           <SidebarMenuItem className="group-data-[collapsible=icon]:px-0 px-1.5 mt-0">
             <SidebarMenuButton
-              isActive={pathname.startsWith("/workspace/skills")}
+              isActive={skillsTabActive}
               asChild
               className="text-muted-foreground rounded-lg py-1 text-sm transition-colors duration-fast hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium"
             >
-              <Link to="/workspace/skills">
+              <Link to="/workspace/agents?surface=chat&tab=skills">
                 <SparklesIcon className="size-[15px]" />
                 <span className="flex items-center gap-1.5">
                   {t.sidebar.skills}

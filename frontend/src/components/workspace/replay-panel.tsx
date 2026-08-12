@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 // ═══════════════════════════════════════════════════════════
 // Shared replay components · used by both AgentOperatorPanel
 // (inside /workspace/observability) and the standalone
-// /workspace/replay page. Extracted here so the two surfaces
+// observability and agent-operator surfaces. Extracted here so both surfaces
 // stay in sync without duplicating the rendering logic.
 // ═══════════════════════════════════════════════════════════
 

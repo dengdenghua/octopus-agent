@@ -406,30 +406,6 @@ export interface Translations {
     create: string;
   };
 
-  // Application Registry
-  applicationRegistry: {
-    loading: string;
-    errorTitle: string;
-    retryLabel: string;
-    title: string;
-    refreshAria: string;
-    createPlugin: string;
-    searchAria: string;
-    searchPlaceholder: string;
-    enabled: string;
-    capabilities: string;
-    actions: string;
-    all: string;
-    pluginPackageOnly: string;
-    enabledStatus: string;
-    disabledStatus: string;
-    entries: string;
-    permissions: string;
-    open: string;
-    registered: string;
-    noMatches: string;
-  };
-
   // Clarification Questionnaire
   clarificationQuestionnaire: {
     title: string;
@@ -934,6 +910,7 @@ export interface Translations {
     composerHint: string;
     taskListView: string;
     computerView: string;
+    executionView: string;
     reportView: string;
     traceFeedEmpty: string;
     liveEventStream: string;
@@ -1130,6 +1107,8 @@ export interface Translations {
     collapseWorkbench: string;
     tabList: string;
     summaryLabel: string;
+    latestTurnContext: string;
+    latestTurnContextDescription: string;
     agentStatusRunning: string;
     agentStatusError: string;
     agentStatusDone: string;
@@ -1492,7 +1471,6 @@ export interface Translations {
     projects: string;
     channels: string;
     pairing: string;
-    browser: string;
     moveToProject: string;
     newProject: string;
     // Additional fields
@@ -1510,14 +1488,11 @@ export interface Translations {
     navReflex: string;
     navIntelligence: string;
     navMcp: string;
-    navStore: string;
     navEvolution: string;
-    navReplay: string;
     navPlugins: string;
     navHR: string;
     navComputer: string;
     navDesktopOrganizer: string;
-    navMobile: string;
     navArchitecture: string;
     groupTools: string;
     groupAdvancedTools: string;
@@ -4773,137 +4748,6 @@ export interface Translations {
     };
   };
 
-  // Workflow Editor
-  workflowEditor: {
-    title: string;
-    untitled: string;
-    newWorkflow: string;
-    savedWorkflows: string;
-    placeholder: string;
-    descPlaceholder: string;
-    layoutApplied: string;
-    saved: string;
-    saveFailed: string;
-    loadFailed: string;
-    deleted: string;
-    deleteFailed: string;
-    valid: string;
-    fixErrors: string;
-    executed: string;
-    executeFailed: string;
-    codeCopied: string;
-    start: string;
-    end: string;
-    nodePaletteTitle: string;
-    save: string;
-    run: string;
-    savedToJsonFile: string;
-    runBackendNotReady: string;
-    dismiss: string;
-    more: string;
-    noSavedWorkflows: string;
-    selectNodeToConfigure: string;
-    searchNodes: string;
-    runningWorkflow: string;
-    executionCompleted: string;
-    executionFailed: string;
-    runResults: string;
-    viewResultJson: string;
-    importN8n: string;
-    saving: string;
-    running: string;
-    runCompleted: string;
-    runFailed: string;
-    statusPrefix: string;
-    importSuccess: (name: string, nodeCount: number) => string;
-    nodes: {
-      llm: string;
-      tool: string;
-      condition: string;
-      code: string;
-      subagent: string;
-      loop: string;
-      parallel: string;
-      humanInput: string;
-      memory: string;
-      http: string;
-    };
-    config: {
-      label: string;
-      model: string;
-      systemPrompt: string;
-      temperature: string;
-      maxTokens: string;
-      toolName: string;
-      parameters: string;
-      conditionExpr: string;
-      language: string;
-      code: string;
-      agentName: string;
-      agentConfig: string;
-      loopBody: string;
-      maxIterations: string;
-      breakCondition: string;
-      branchNodes: string;
-      aggregation: string;
-      aggregationMergeAll: string;
-      aggregationFirstResult: string;
-      aggregationMajorityVote: string;
-      promptMessage: string;
-      url: string;
-      method: string;
-      headers: string;
-      body: string;
-      operation: string;
-      memoryKey: string;
-      valueExpression: string;
-      timeout: string;
-      responseFormat: string;
-    };
-    palette: {
-      flow: string;
-      ai: string;
-      actions: string;
-      data: string;
-    };
-    toolbar: {
-      save: string;
-      undo: string;
-      redo: string;
-      copy: string;
-      paste: string;
-      delete: string;
-      autoLayout: string;
-      validate: string;
-      exportCode: string;
-      run: string;
-      running: string;
-    };
-    nodeDescriptions: {
-      start: string;
-      end: string;
-      condition: string;
-      loop: string;
-      parallel: string;
-      llm: string;
-      subagent: string;
-      tool: string;
-      code: string;
-      http: string;
-      memory: string;
-      humanInput: string;
-    };
-    nodeLabels: {
-      noModelSet: string;
-      noToolSelected: string;
-      noAgentSelected: string;
-      noCodeWritten: string;
-      noUrlConfigured: string;
-      pausesForInput: string;
-      workflowEntryPoint: string;
-    };
-  };
-
   // Agent detail/profile
   agentDetail: {
     overview: string;
@@ -6118,40 +5962,6 @@ export interface Translations {
     toastBrowserAuthCancelled: string;
   };
 
-  // Skills page (app/workspace/skills/page.tsx)
-  skillsPage: {
-    pageTitle: string;
-    pageSubtitle: string;
-    disclaimer: string;
-    createButton: string;
-    tabInstalled: string;
-    loadingSkills: string;
-    noInstalledTitle: string;
-    noInstalledHint: string;
-    categories: {
-      sourcing: string;
-      research: string;
-      browse: string;
-      file: string;
-      comm: string;
-      content: string;
-      memory: string;
-      system: string;
-      other: string;
-    };
-    searchPlaceholder: string;
-    matchCount: (matched: number, total: number) => string;
-    totalCount: (n: number) => string;
-    noMatch: (query: string) => string;
-    tooltipSource: (source: string) => string;
-    tooltipCost: (cost: string) => string;
-    tooltipTags: (tags: string) => string;
-    tooltipTested: string;
-    tooltipUntested: string;
-    testedDotTitle: string;
-    noDescription: string;
-  };
-
   // FileActivityIndicator + PreviewRefreshIndicator (observability chrome)
   activityIndicators: {
     recentFileActivity: (n: number) => string;
@@ -6436,11 +6246,6 @@ export interface Translations {
     statusDeleted: (path: string) => string;
     statusNothingToDelete: string;
     clearAddendumPath: (path: string) => string;
-  };
-
-  // Workflows wrapper page (app/workspace/workflows/page.tsx)
-  workflowsWrapperPage: {
-    loadingEditor: string;
   };
 
   // AppAuth wrapper page (app/workspace/app-auth/page.tsx)
@@ -7889,51 +7694,6 @@ export interface Translations {
     backToWorkspace: string;
     confirmRemoveTitle: string;
     confirmRemoveDescription: string;
-  };
-
-  // Replay page
-  replay: {
-    pageDescription: string;
-    applyPromotions: string;
-    refresh: string;
-    rerunResult: (attempted: number, passed: number, failed: number) => string;
-    applyResult: (applied: number, skipped: number, failed: number) => string;
-    tabCases: (count: number) => string;
-    tabEvaluations: (count: number) => string;
-    loadingCases: string;
-    emptyCases: string;
-    loadingEvaluations: string;
-    emptyEvaluations: string;
-  };
-
-  // Workflows page (editor under maintenance)
-  workflows: {
-    maintenanceBadge: string;
-    title: string;
-    description: string;
-    newRealtimeTask: string;
-    viewSkills: string;
-    altRealtimeTitle: string;
-    altRealtimeDesc: string;
-    altRealtimeLabel: string;
-    altSkillsTitle: string;
-    altSkillsDesc: string;
-    altSkillsLabel: string;
-    altAutomationTitle: string;
-    altAutomationDesc: string;
-    altAutomationLabel: string;
-    altReflexTitle: string;
-    altReflexDesc: string;
-    altReflexLabel: string;
-    cardTransitionLabel: string;
-    cardTransitionTitle: string;
-    cardTransitionDesc: string;
-    cardAssetsLabel: string;
-    cardAssetsTitle: string;
-    cardAssetsDesc: string;
-    cardLaterLabel: string;
-    cardLaterTitle: string;
-    cardLaterDesc: string;
   };
 
   // Knowledge page

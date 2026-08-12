@@ -477,30 +477,6 @@ export const koKR: Translations = {
     create: "프로젝트 생성",
   },
 
-  // Application Registry
-  applicationRegistry: {
-    loading: "플러그인 로딩 중",
-    errorTitle: "플러그인 목록을 사용할 수 없습니다",
-    retryLabel: "다시 로드",
-    title: "플러그인",
-    refreshAria: "플러그인 새로 고침",
-    createPlugin: "플러그인 만들기",
-    searchAria: "플러그인 검색",
-    searchPlaceholder: "플러그인, 기능 또는 액션 검색",
-    enabled: "활성화됨",
-    capabilities: "기능",
-    actions: "액션",
-    all: "전체",
-    pluginPackageOnly: "플러그인 패키지만",
-    enabledStatus: "활성화됨",
-    disabledStatus: "비활성화됨",
-    entries: "항목",
-    permissions: "권한",
-    open: "열기",
-    registered: "등록됨",
-    noMatches: "일치하는 플러그인이 없습니다",
-  },
-
   // Clarification Questionnaire
   clarificationQuestionnaire: {
     title: "다음 질문에 답해 주세요",
@@ -1078,6 +1054,7 @@ export const koKR: Translations = {
       "위에서 작업을 제출하세요. 병렬 협업이 필요하면 진행 상황이 여기에 표시됩니다.",
     taskListView: "작업",
     computerView: "컴퓨터",
+    executionView: "실행 화면",
     reportView: "보고서",
     traceFeedEmpty: "Agent가 아직 작업을 시작하지 않았습니다",
     liveEventStream: "실시간 이벤트",
@@ -1282,7 +1259,7 @@ export const koKR: Translations = {
     filesTab: "파일",
     diffTab: "Diff",
     terminalTab: "터미널",
-    browserTab: "브라우저",
+    browserTab: "작업 미리보기",
   },
 
   // Agent workbench panel (kanban / screen timeline)
@@ -1305,6 +1282,9 @@ export const koKR: Translations = {
     collapseWorkbench: "워크벤치 접기",
     tabList: "탭 목록",
     summaryLabel: "요약",
+    latestTurnContext: "최신 턴",
+    latestTurnContextDescription:
+      "이전 메시지를 보고 있어도 이 워크벤치는 최신 대화 턴의 상태를 표시합니다.",
     agentStatusRunning: "실행 중",
     agentStatusError: "오류",
     agentStatusDone: "종료됨",
@@ -1677,7 +1657,6 @@ export const koKR: Translations = {
     projects: "프로젝트",
     channels: "메시지 채널",
     pairing: "페어링 인증",
-    browser: "브라우저 미리보기",
     moveToProject: "프로젝트로 이동",
     newProject: "새 프로젝트",
     // Additional fields
@@ -1695,14 +1674,11 @@ export const koKR: Translations = {
     navReflex: "반사 규칙",
     navIntelligence: "자동화",
     navMcp: "MCP",
-    navStore: "마켓",
     navEvolution: "자기 진화",
-    navReplay: "재생",
     navPlugins: "플러그인",
     navHR: "인재",
     navComputer: "로컬 어시스턴트",
     navDesktopOrganizer: "데스크톱 정리",
-    navMobile: "모바일",
     navArchitecture: "아키텍처",
     groupTools: "도구",
     groupAdvancedTools: "고급 도구",
@@ -1765,7 +1741,7 @@ export const koKR: Translations = {
     backToProjectList: "프로젝트 목록으로 돌아가기",
     openThreadFilesTooltip: "프로젝트 파일 열기",
     // Surface switch + task statuses
-    navBrowserSurface: "브라우저",
+    navBrowserSurface: "AI 브라우저",
     sectionOngoing: "진행 중",
     noOngoingTasks: "실행 중인 작업이 없습니다",
     sectionTaskHistory: "작업 기록",
@@ -3027,8 +3003,7 @@ export const koKR: Translations = {
       "코드 변경사항은 Octopus가 이번 턴을 종료하기 전에 검증이 필요합니다. 테스트, lint, typecheck, 또는 빌드를 실행한 후 계속하세요.",
     environmentBlocked:
       "환경 제약으로 작업이 차단되었습니다 — 아래에 이유가 있습니다.",
-    blockedOnUser:
-      "계속하려면 사용자의 입력이 필요합니다.",
+    blockedOnUser: "계속하려면 사용자의 입력이 필요합니다.",
     streamEndpointUnavailable:
       "백엔드 채팅/팀 스트림 엔드포인트가 활성화되지 않았거나 사용할 수 없습니다. 전체 Octopus 백엔드를 시작하거나 프론트엔드 프록시를 확인하세요.",
     iteration: (count: number) => `${count}번째 라운드`,
@@ -4658,7 +4633,7 @@ export const koKR: Translations = {
       noFavorites: "즐겨찾기가 없습니다",
     },
     defaultTabTitle: "AI 브라우저 데스크톱",
-    pageTitle: "브라우저",
+    pageTitle: "AI 브라우저",
     pageSubtitle: (pinned: boolean) =>
       pinned ? "탭 워크스페이스 · 고정됨" : "탭 워크스페이스",
     searchPlaceholder: "탭 검색...",
@@ -4810,7 +4785,7 @@ export const koKR: Translations = {
     surfaceModeScreenshot: "스크린샷",
     selectDevicePreset: "기기 프리셋 선택",
     continueInFullBrowser: "전체 브라우저에서 계속",
-    takeoverButton: "인계받기",
+    takeoverButton: "AI 브라우저 열기",
     sessionNeedsAttention: (issues) => `브라우저 세션 확인 필요: ${issues}`,
     reconnectButton: "다시 연결",
     semanticSnapshotFallback: "페이지 시맨틱 스냅샷",
@@ -5470,140 +5445,6 @@ export const koKR: Translations = {
           "마일스톤 주도 · Project OS에 넘겨 작업 분해 → 실행 → 검수",
       },
     ],
-  },
-
-  // Workflow Editor
-  workflowEditor: {
-    title: "워크플로 편집기",
-    untitled: "제목 없는 워크플로",
-    newWorkflow: "+ 새로 만들기",
-    savedWorkflows: "Workflows",
-    placeholder: "워크플로 이름",
-    descPlaceholder: "설명...",
-    layoutApplied: "레이아웃 적용됨",
-    saved: "저장됨",
-    saveFailed: "워크플로 저장 실패",
-    loadFailed: "워크플로 로드 실패",
-    deleted: "워크플로 삭제됨",
-    deleteFailed: "워크플로 삭제 실패",
-    valid: "검증 통과",
-    fixErrors: "실행 전 검증 오류를 수정하세요",
-    executed: "워크플로가 성공적으로 실행되었습니다",
-    executeFailed: "실행 실패",
-    codeCopied: "Python 코드가 클립보드에 복사되었습니다",
-    start: "Start",
-    end: "End",
-    nodePaletteTitle: "Nodes",
-    save: "Save",
-    run: "Run",
-    savedToJsonFile:
-      "저장됨 · 워크플로가 스킬로 등록됨 · LLM이 직접 호출할 수 있습니다",
-    runBackendNotReady:
-      "실행 백엔드가 아직 준비되지 않았습니다 · 현재 워크플로는 로컬에서만 편집할 수 있습니다",
-    dismiss: "Dismiss",
-    more: "more",
-    noSavedWorkflows: "저장된 워크플로가 없습니다",
-    selectNodeToConfigure: "구성할 노드 선택",
-    searchNodes: "노드 검색...",
-    runningWorkflow: "워크플로 실행 중...",
-    executionCompleted: "실행 완료",
-    executionFailed: "실행 실패",
-    runResults: "실행 결과",
-    viewResultJson: "결과 JSON 보기",
-    importN8n: "n8n 가져오기",
-    saving: "저장 중...",
-    running: "실행 중...",
-    runCompleted: "실행 완료",
-    runFailed: "실행 실패",
-    statusPrefix: "Status",
-    importSuccess: (name, nodeCount) =>
-      `가져오기 완료: ${name} (${nodeCount} 노드)`,
-    nodes: {
-      llm: "LLM",
-      tool: "Tool",
-      condition: "Condition",
-      code: "Code",
-      subagent: "서브 Agent",
-      loop: "Loop",
-      parallel: "Parallel",
-      humanInput: "사용자 입력",
-      memory: "Memory",
-      http: "HTTP 요청",
-    },
-    config: {
-      label: "Label",
-      model: "Model",
-      systemPrompt: "시스템 프롬프트",
-      temperature: "Temperature",
-      maxTokens: "최대 토큰",
-      toolName: "도구 이름",
-      parameters: "매개변수 (JSON)",
-      conditionExpr: "조건 표현식",
-      language: "Language",
-      code: "Code",
-      agentName: "Agent 이름",
-      agentConfig: "Agent 구성 (JSON)",
-      loopBody: "루프 본문 노드 ID",
-      maxIterations: "최대 반복 횟수",
-      breakCondition: "중단 조건",
-      branchNodes: "분기 노드 ID (쉼표로 구분)",
-      aggregation: "집계 전략",
-      aggregationMergeAll: "모두 병합",
-      aggregationFirstResult: "첫 번째 결과",
-      aggregationMajorityVote: "다수결 투표",
-      promptMessage: "프롬프트 메시지",
-      url: "URL",
-      method: "Method",
-      headers: "헤더 (JSON)",
-      body: "Body",
-      operation: "Operation",
-      memoryKey: "메모리 키",
-      valueExpression: "값 표현식",
-      timeout: "시간 초과 (초)",
-      responseFormat: "응답 형식",
-    },
-    palette: {
-      flow: "Flow",
-      ai: "AI",
-      actions: "Actions",
-      data: "Data",
-    },
-    toolbar: {
-      save: "저장 (Ctrl+S)",
-      undo: "실행 취소 (Ctrl+Z)",
-      redo: "다시 실행 (Ctrl+Y)",
-      copy: "복사 (Ctrl+C)",
-      paste: "붙여넣기 (Ctrl+V)",
-      delete: "삭제 (Del)",
-      autoLayout: "자동 레이아웃",
-      validate: "Validate",
-      exportCode: "Python 내보내기",
-      run: "Run",
-      running: "실행 중...",
-    },
-    nodeDescriptions: {
-      start: "워크플로 입구",
-      end: "워크플로 출구",
-      condition: "조건부 분기 (if/else)",
-      loop: "중단 조건이 있는 반복",
-      parallel: "팬아웃/팬인 병렬 실행",
-      llm: "대형 언어 모델 호출",
-      subagent: "다른 Agent에 위임",
-      tool: "도구/함수 실행",
-      code: "사용자 정의 Python / JS 코드 실행",
-      http: "HTTP API 호출",
-      memory: "메모리 저장소 읽기/쓰기",
-      humanInput: "일시정지 후 사용자 입력 대기",
-    },
-    nodeLabels: {
-      noModelSet: "모델 미설정",
-      noToolSelected: "도구 미선택",
-      noAgentSelected: "Agent 미선택",
-      noCodeWritten: "코드 미작성",
-      noUrlConfigured: "URL 미구성",
-      pausesForInput: "입력 대기 중",
-      workflowEntryPoint: "워크플로 입구",
-    },
   },
 
   // Agent detail/profile
@@ -6891,44 +6732,6 @@ export const koKR: Translations = {
     toastBrowserAuthCancelled: "취소됨",
   },
 
-  // Skills page
-  skillsPage: {
-    pageTitle: "Skills",
-    pageSubtitle:
-      "스킬 라이브러리를 관리하세요 — 필요한 스킬을 설치하고 활성화하세요.",
-    disclaimer:
-      "스킬은 커뮤니티 개발자가 제공합니다. Octopus는 서드파티 스킬 사용으로 인한 위험, 책임, 손해에 대해 책임지지 않습니다.",
-    createButton: "스킬 만들기",
-    tabInstalled: "Installed",
-    loadingSkills: "스킬 로드 중...",
-    noInstalledTitle: "설치된 스킬 없음",
-    noInstalledHint:
-      "런타임이 빈 스킬 카탈로그로 로드되었습니다. 부트스트랩 중 runtime.execution.all_skills.register_all로 스킬 그룹을 등록하세요.",
-    categories: {
-      sourcing: "소싱 및 선택",
-      research: "시장 조사",
-      browse: "탐색 및 검색",
-      file: "파일 및 코딩",
-      comm: "커뮤니케이션 및 협업",
-      content: "콘텐츠 생성",
-      memory: "Memory",
-      system: "System",
-      other: "Other",
-    },
-    searchPlaceholder: "스킬 검색 (이름/설명/태그)",
-    matchCount: (matched: number, total: number) =>
-      `${matched}개 일치 / 총 ${total}`,
-    totalCount: (n: number) => `총 ${n}개 스킬`,
-    noMatch: (query: string) => `"${query}"와 일치하는 스킬 없음`,
-    tooltipSource: (source: string) => `출처: ${source}`,
-    tooltipCost: (cost: string) => `비용: ${cost}`,
-    tooltipTags: (tags: string) => `태그: ${tags}`,
-    tooltipTested: "✓ 테스트됨",
-    tooltipUntested: "• 미테스트",
-    testedDotTitle: "Tested",
-    noDescription: "설명 없음",
-  },
-
   // Activity indicators (file ops + preview refresh)
   activityIndicators: {
     recentFileActivity: (n: number) => `최근 파일 활동 · ${n}건`,
@@ -7236,11 +7039,6 @@ export const koKR: Translations = {
     statusDeleted: (path: string) => `삭제됨 ${path}`,
     statusNothingToDelete: "삭제할 항목 없음",
     clearAddendumPath: (path: string) => `지울 대상: rm ${path}`,
-  },
-
-  // Workflows wrapper page
-  workflowsWrapperPage: {
-    loadingEditor: "편집기 로드 중...",
   },
 
   // AppAuth wrapper page
@@ -8980,64 +8778,6 @@ export const koKR: Translations = {
     confirmRemoveTitle: "시스템 우클릭 메뉴를 제거하시겠습니까?",
     confirmRemoveDescription:
       "Windows 데스크톱 우클릭 메뉴에서 Octopus 한 번에 정리 명령을 제거합니다.",
-  },
-
-  // Replay page
-  replay: {
-    pageDescription:
-      "리플레이 게이트, 브라우저/데스크톱 리플레이 리뷰, task-run 리플레이 케이스의 통합 뷰.",
-    applyPromotions: "승격 적용",
-    refresh: "새로고침",
-    rerunResult: (attempted: number, passed: number, failed: number) =>
-      `수정 레시피 ${attempted}개를 다시 실행: ${passed}개 통과, ${failed}개 실패. 소스 케이스는 여전히 수동 검토가 필요합니다.`,
-    applyResult: (applied: number, skipped: number, failed: number) =>
-      `적용 ${applied}, 건너뜀 ${skipped}, 실패 ${failed}`,
-    tabCases: (count: number) => `리플레이 케이스 (${count})`,
-    tabEvaluations: (count: number) => `리플레이 평가 (${count})`,
-    loadingCases: "리플레이 케이스 로딩 중…",
-    emptyCases:
-      "리플레이 케이스가 없습니다. task-run 완료 후 자동으로 생성됩니다.",
-    loadingEvaluations: "리플레이 평가 로딩 중…",
-    emptyEvaluations:
-      "리플레이 평가가 없습니다. 리플레이 케이스 생성 후 자동으로 계산됩니다.",
-  },
-
-  // Workflows page (editor under maintenance)
-  workflows: {
-    maintenanceBadge: "에디터 점검 중",
-    title: "워크플로 에디터를 일시적으로 사용할 수 없습니다",
-    description:
-      "현재 백엔드에 workflow-editor API가 없습니다. 저장, 실행 또는 가져오기 실패를 방지하기 위해 에디터 진입을 일시적으로 닫았습니다.",
-    newRealtimeTask: "실시간 작업 만들기",
-    viewSkills: "스킬 보기",
-    altRealtimeTitle: "실시간 작업",
-    altRealtimeDesc:
-      "프로세스를 Agent에 직접 설명하고 실행하면서 단계와 결과를 축적합니다.",
-    altRealtimeLabel: "시작",
-    altSkillsTitle: "스킬 라이브러리",
-    altSkillsDesc:
-      "안정적인 동작을 재사용 가능한 스킬로 정리하고 작업에서 바로 호출합니다.",
-    altSkillsLabel: "스킬 보기",
-    altAutomationTitle: "자동화",
-    altAutomationDesc:
-      "구독과 예약 작업으로 주기적인 프로세스를 처리하고, 먼저 실행한 후 확정합니다.",
-    altAutomationLabel: "자동화로 이동",
-    altReflexTitle: "Reflex",
-    altReflexDesc:
-      "트리거 규칙, 응답 정책, 경량 프로세스 디스패치를 관리합니다.",
-    altReflexLabel: "규칙 열기",
-    cardTransitionLabel: "권장 전환 방안",
-    cardTransitionTitle: "먼저 실시간 작업으로 프로세스 실행",
-    cardTransitionDesc:
-      "성공 경로가 메시지, 도구 트레이스, 스킬에 점차 축적됩니다.",
-    cardAssetsLabel: "재사용 가능한 자산",
-    cardAssetsTitle: "안정적인 동작은 스킬 라이브러리로",
-    cardAssetsDesc:
-      "에디터보다 가볍고 현재 플러그인 및 스킬 생태계에 적합합니다.",
-    cardLaterLabel: "향후 복구",
-    cardLaterTitle: "API가 제공되면 편집을 다시 엽니다",
-    cardLaterDesc:
-      "사용자가 미완성 에디터에 들어가 저장에 실패하는 것을 방지합니다.",
   },
 
   // Knowledge page

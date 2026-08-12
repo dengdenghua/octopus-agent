@@ -10,7 +10,7 @@ import {
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import type { OutlineRound } from "@/core/threads/progress-outline";
-import type { VisibilityStep } from "@/core/realtime/items";
+import type { GroundingSource, VisibilityStep } from "@/core/realtime/items";
 import type { WorkBlock } from "../work-blocks";
 import { pickCurrentWorkBlock } from "../work-blocks";
 import type {
@@ -61,6 +61,8 @@ function AgentKanbanViewImpl({
   focusedEventId,
   progressOutline,
   userInput,
+  groundingSources,
+  preferStructuredReferences,
   mainPhases,
   mainRunState,
   screenProgress,
@@ -97,6 +99,8 @@ function AgentKanbanViewImpl({
   focusedEventId: string | null | undefined;
   progressOutline: OutlineRound[] | undefined;
   userInput: AgentKanbanUserInput;
+  groundingSources: GroundingSource[];
+  preferStructuredReferences: boolean;
   mainPhases: AgentPhase[];
   mainRunState: AgentRunState;
   screenProgress: { current: number; total: number };
@@ -157,7 +161,7 @@ function AgentKanbanViewImpl({
             ? [
                 {
                   id: "screen" as const,
-                  label: t.agentWorkbench.computerView,
+                  label: t.agentWorkbench.executionView,
                 },
               ]
             : []),
@@ -176,6 +180,14 @@ function AgentKanbanViewImpl({
             {view.label}
           </button>
         ))}
+        {!selectedRosterSeat && !selectedAgent && (
+          <span
+            className="rounded-full border border-border-subtle bg-background/55 px-1.5 py-0.5 text-micro text-muted-foreground"
+            title={t.agentWorkbenchPanel.latestTurnContextDescription}
+          >
+            {t.agentWorkbenchPanel.latestTurnContext}
+          </span>
+        )}
         <span className="ml-auto text-xs text-muted-foreground font-mono">
           {selectedRosterSeat
             ? selectedRosterSeat.name
@@ -207,6 +219,8 @@ function AgentKanbanViewImpl({
             focusedEventId={focusedEventId}
             progressOutline={progressOutline}
             userInput={userInput}
+            groundingSources={groundingSources}
+            preferStructuredReferences={preferStructuredReferences}
             terminalState={terminalState}
             contextTokens={contextTokens}
             maxContextTokens={maxContextTokens}

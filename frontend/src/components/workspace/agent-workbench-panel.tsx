@@ -27,6 +27,7 @@ import {
 } from "@/core/artifacts/utils";
 import { useArtifactContent } from "@/core/artifacts/hooks";
 import type { OutlineRound } from "@/core/threads/progress-outline";
+import type { GroundingSource } from "@/core/realtime/items";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
 import { useArtifacts } from "@/components/workspace/artifacts/context";
@@ -72,6 +73,7 @@ function AgentWorkbenchPanelImpl({
   events,
   progressOutline,
   userInput,
+  groundingSources,
   focusedAgentId,
   focusedAgentView,
   focusedAgentNonce,
@@ -111,6 +113,8 @@ function AgentWorkbenchPanelImpl({
     uploadedFiles: Array<{ filename: string; path: string }>;
     attachments: Array<{ filename: string }>;
   } | null;
+  /** Sources the runtime actually injected into this turn before tool use. */
+  groundingSources?: GroundingSource[];
   focusedAgentId?: string | null;
   /** Which activity view a focusedAgentId intent lands on; defaults to the
    * live computer screen when the caller doesn't say. */
@@ -180,7 +184,30 @@ function AgentWorkbenchPanelImpl({
     inferredWorkDir,
     phases: snapshotPhases,
     visibleDiffEntries,
+    evidence,
   } = workbenchSnapshot;
+  const typedGroundingSources = useMemo<GroundingSource[]>(
+    () =>
+      evidence
+        .filter((item) => item.kind === "file" && Boolean(item.uri?.trim()))
+        .map((item) => ({
+          kind: "source",
+          title: item.title,
+          path: item.uri!.trim(),
+        })),
+    [evidence],
+  );
+  const effectiveGroundingSources = useMemo(() => {
+    const seen = new Set<string>();
+    return [...typedGroundingSources, ...(groundingSources ?? [])].filter(
+      (source) => {
+        const key = `${source.kind}:${source.path}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      },
+    );
+  }, [groundingSources, typedGroundingSources]);
   // Visibility (capability routing / delegation / skill-catalog) decisions,
   // surfaced as a de-emphasised collapsed section on the Agent kanban view.
   const visibilityEvents = useMemo(
@@ -196,25 +223,14 @@ function AgentWorkbenchPanelImpl({
       deriveAgentPhases(events, { hasAnswer, runSettled, runFailed, paused }),
     [events, hasAnswer, runSettled, runFailed, paused],
   );
-  // Stream-time guard: a todo plan whose phases are all "done" is NOT a
-  // completed turn while the stream is still running — the model may keep
-  // working or extend the plan (e.g. 4/4 → 5 items), and may mark items
-  // completed before the work behind them has actually finished. Until the
-  // turn settles, no phase is presented as "done": checkmarks only appear
-  // once ``runSettled`` restores the real terminal state.
   const phases = useMemo<AgentPhase[]>(() => {
-    const base =
-      snapshotPhases.length > 0 ? snapshotPhases : directDerived.phases;
-    if (isLoading && base.length > 0) {
-      return base.map((phase) =>
-        phase.status === "done"
-          ? ({ ...phase, status: "running" as const } as AgentPhase)
-          : phase,
-      );
-    }
-    return base;
-  }, [snapshotPhases, directDerived.phases, isLoading]);
-  const currentPhase = snapshotCurrentPhase ?? directDerived.currentPhase;
+    return snapshotPhases.length > 0 ? snapshotPhases : directDerived.phases;
+  }, [snapshotPhases, directDerived.phases]);
+  const currentPhase =
+    phases.find((phase) => phase.status === "waiting_approval") ??
+    phases.find((phase) => phase.status === "running") ??
+    snapshotCurrentPhase ??
+    directDerived.currentPhase;
 
   const {
     selectedEffectKey,
@@ -257,14 +273,11 @@ function AgentWorkbenchPanelImpl({
     onSelectTab,
   });
 
-  // Start lean: only the file tree is shown. Diff / terminal / browser stay
-  // hidden until there's something in them — they auto-reveal when a run
-  // focuses them (latestWorkspaceFocusTab → activeTab → the auto-open effect
-  // below) or when the user adds them from the tab menu. Tab CONTENT is already
-  // lazy (only the active tab mounts), so this is purely about decluttering the
-  // bar, not load cost.
+  // Keep task preview discoverable as a first-class workbench surface. Diff and
+  // terminal remain opt-in until a run focuses them; tab CONTENT is still lazy,
+  // so showing the browser tab does not create an extra browser session.
   const [closedTabs, setClosedTabs] = useState<Set<AgentWorkbenchTabId>>(
-    () => new Set<AgentWorkbenchTabId>(["diff", "terminal", "browser"]),
+    () => new Set<AgentWorkbenchTabId>(["diff", "terminal"]),
   );
   // Browser tab source: while the run streams, the inline srcDoc blocks are
   // the freshest view; once the run settles a deployed URL wins. The override
@@ -523,6 +536,8 @@ function AgentWorkbenchPanelImpl({
       focusedEventId={focusedEventId}
       progressOutline={progressOutline}
       userInput={userInput ?? null}
+      groundingSources={effectiveGroundingSources}
+      preferStructuredReferences={evidence.length > 0}
       mainPhases={mainPhases}
       mainRunState={mainRunState}
       screenProgress={screenProgress}

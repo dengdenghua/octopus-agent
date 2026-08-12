@@ -21,6 +21,7 @@ type CapabilitySurface = "browser" | "knowledge" | "integrations" | "skills";
 interface CapabilityQualityStripProps {
   surface: CapabilitySurface;
   includeBrowserDesktop?: boolean;
+  compact?: boolean;
   className?: string;
 }
 
@@ -49,6 +50,7 @@ const SURFACE_COPY: Record<
 export function CapabilityQualityStrip({
   surface,
   includeBrowserDesktop = false,
+  compact = false,
   className,
 }: CapabilityQualityStripProps) {
   const [scorecard, setScorecard] = useState<AgentCompetitorScorecard | null>(
@@ -133,7 +135,9 @@ export function CapabilityQualityStrip({
   return (
     <section
       className={cn(
-        "workspace-panel-subtle flex flex-col gap-3 rounded-lg border border-border-default bg-background/75 px-4 py-3 md:flex-row md:items-center md:justify-between",
+        compact
+          ? "workspace-panel-subtle flex min-h-10 items-center gap-2 rounded-lg border border-border-default bg-background/75 px-3 py-1.5"
+          : "workspace-panel-subtle flex flex-col gap-3 rounded-lg border border-border-default bg-background/75 px-4 py-3 md:flex-row md:items-center md:justify-between",
         className,
       )}
     >
@@ -141,7 +145,9 @@ export function CapabilityQualityStrip({
         <div className="flex items-center gap-2 text-sm font-semibold">
           <span
             className={cn(
-              "flex size-7 items-center justify-center rounded-lg",
+              compact
+                ? "flex size-6 items-center justify-center rounded-md"
+                : "flex size-7 items-center justify-center rounded-lg",
               ready
                 ? "bg-success/10 text-success"
                 : "bg-primary/10 text-primary",
@@ -155,27 +161,46 @@ export function CapabilityQualityStrip({
           </span>
           {copy.title}
         </div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          {copy.description}
-        </p>
+        {!compact ? (
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {copy.description}
+          </p>
+        ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 text-xs",
+          compact && "ml-auto shrink-0",
+        )}
+      >
         {summary ? (
           <>
-            <QualityPill
-              icon={<CheckCircle2Icon className="size-3.5" />}
-              label="Overall"
-              value={String(summary.overall)}
-              tone={summary.overall >= 90 ? "good" : "warn"}
-            />
-            <QualityPill
-              icon={<ShieldCheckIcon className="size-3.5" />}
-              label="Evidence"
-              value={String(summary.evidenceAdjusted)}
-              tone={summary.evidenceAdjusted >= 90 ? "good" : "warn"}
-            />
-            {summary.behavioral ? (
+            {compact ? (
+              <QualityPill
+                icon={<GlobeIcon className="size-3.5" />}
+                label="Browser"
+                value={summary.browser ? String(summary.browser.score) : String(summary.overall)}
+                tone={summary.browser && summary.browser.stale > 0 ? "warn" : "good"}
+              />
+            ) : null}
+            {!compact ? (
+              <QualityPill
+                icon={<CheckCircle2Icon className="size-3.5" />}
+                label="Overall"
+                value={String(summary.overall)}
+                tone={summary.overall >= 90 ? "good" : "warn"}
+              />
+            ) : null}
+            {!compact ? (
+              <QualityPill
+                icon={<ShieldCheckIcon className="size-3.5" />}
+                label="Evidence"
+                value={String(summary.evidenceAdjusted)}
+                tone={summary.evidenceAdjusted >= 90 ? "good" : "warn"}
+              />
+            ) : null}
+            {!compact && summary.behavioral ? (
               <QualityPill
                 icon={<ActivityIcon className="size-3.5" />}
                 label="Behavior"
@@ -189,7 +214,7 @@ export function CapabilityQualityStrip({
                 tone={summary.behavioral.ready ? "good" : "warn"}
               />
             ) : null}
-            {summary.ecosystem !== null ? (
+            {!compact && summary.ecosystem !== null ? (
               <QualityPill
                 icon={<ActivityIcon className="size-3.5" />}
                 label="Eco"
@@ -197,7 +222,7 @@ export function CapabilityQualityStrip({
                 tone={summary.ecosystem >= 90 ? "good" : "warn"}
               />
             ) : null}
-            {summary.browser ? (
+            {!compact && summary.browser ? (
               <QualityPill
                 icon={<GlobeIcon className="size-3.5" />}
                 label="Browser"

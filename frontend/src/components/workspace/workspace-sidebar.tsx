@@ -41,7 +41,11 @@ import { toast } from "sonner";
 import { swallow } from "@/core/utils/log";
 import { useEvent, eventBus, emitProjectsChanged } from "@/core/events";
 
-import { SettingsDialog } from "./settings";
+import {
+  SettingsDialog,
+  normalizeSettingsSection,
+  type SettingsSection,
+} from "./settings/settings-dialog";
 import { AgentFooter } from "./sidebar-footer";
 import { FileTree } from "./file-tree";
 
@@ -421,33 +425,15 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsDefaultSection, setSettingsDefaultSection] = useState<
-    | "appearance"
-    | "memory"
-    | "notification"
-    | "about"
-    | "account"
-    | "models"
-    | "automation"
-    | "privacy"
-  >("appearance");
+  const [settingsDefaultSection, setSettingsDefaultSection] =
+    useState<SettingsSection>("appearance");
   const pendingSettingsOpenRef = useRef<number | null>(null);
   const pendingSettingsFocusRef = useRef<number | null>(null);
   const restoreSettingsFocusRef = useRef(false);
 
   const openSettingsSection = useCallback(
     (tab?: string) => {
-      const next =
-        tab === "account" ||
-        tab === "appearance" ||
-        tab === "models" ||
-        tab === "memory" ||
-        tab === "notification" ||
-        tab === "about" ||
-        tab === "automation" ||
-        tab === "privacy"
-          ? tab
-          : "appearance";
+      const next: SettingsSection = normalizeSettingsSection(tab);
 
       const openDialog = () => {
         pendingSettingsOpenRef.current = null;
@@ -889,7 +875,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
     }
   };
-  const browserSurfaceActive = isBrowserSurfaceRoute(pathname);
   const sidebarConversationThreads = conversationThreads;
   const allHistoryThreads = [
     ...sidebarConversationThreads,
@@ -1003,7 +988,9 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <SidebarHeader className="h-11 shrink-0 border-b border-white/40 bg-transparent p-0 pl-[10px] pr-2 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
           <div className="grid h-full w-full grid-cols-[auto_minmax(0,1fr)] items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
             <WorkspaceSurfaceHeader
-              active={browserSurfaceActive ? "browser" : "agent"}
+              // The workspace preview belongs to the Octopus task surface.
+              // Only the standalone /browser route represents the AI Browser.
+              active="agent"
               className="group-data-[collapsible=icon]:hidden"
             />
             <div className="flex shrink-0 items-center justify-self-end">
@@ -1316,13 +1303,6 @@ function isChatSurfaceRoute(pathname: string) {
   );
 }
 
-function isBrowserSurfaceRoute(pathname: string) {
-  return (
-    pathname === "/workspace/browser" ||
-    pathname.startsWith("/workspace/browser/")
-  );
-}
-
 function isCompanySurfaceRoute(pathname: string) {
   return (
     pathname === "/workspace/agents" ||
@@ -1338,11 +1318,7 @@ function isCompanySurfaceRoute(pathname: string) {
     pathname === "/workspace/evolution" ||
     pathname.startsWith("/workspace/evolution/") ||
     pathname === "/workspace/knowledge" ||
-    pathname.startsWith("/workspace/knowledge/") ||
-    pathname === "/workspace/plugins" ||
-    pathname.startsWith("/workspace/plugins/") ||
-    pathname === "/workspace/skills" ||
-    pathname.startsWith("/workspace/skills/")
+    pathname.startsWith("/workspace/knowledge/")
   );
 }
 
@@ -1555,6 +1531,7 @@ export function WorkspaceSurfaceSwitch({
             to={item.to}
             aria-current={isActive ? "page" : undefined}
             aria-label={item.label}
+            title={item.label}
             role="tab"
             aria-selected={isActive}
             className={cn(

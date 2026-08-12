@@ -15,10 +15,9 @@ import {
   SettingsIcon,
   SearchIcon,
   XIcon,
-  BoxIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -66,14 +65,14 @@ const importPrivacy = () =>
   import("@/components/workspace/settings/privacy-settings-page");
 const importAutomation = () =>
   import("@/components/workspace/settings/automation-settings-page");
+const importAutomationSecurity = () =>
+  import("@/components/workspace/settings/automation-security-settings-page");
 const importMcp = () =>
   import("@/components/workspace/settings/mcp-settings-page").then((mod) => ({
     default: mod.McpSettingsPage,
   }));
 const importSession = () =>
   import("@/components/workspace/settings/session-settings-page");
-const importSandbox = () =>
-  import("@/components/workspace/settings/sandbox-settings-page");
 const importPersonalSpace = () =>
   import("@/components/workspace/settings/personal-space-settings-page");
 
@@ -85,10 +84,9 @@ const NotificationSettingsPage = lazy(importNotification);
 const ModelSettingsPage = lazy(importModel);
 const SubscriptionSettingsPage = lazy(importSubscription);
 const PrivacySettingsPage = lazy(importPrivacy);
-const AutomationSettingsPage = lazy(importAutomation);
+const AutomationSecuritySettingsPage = lazy(importAutomationSecurity);
 const McpSettingsPage = lazy(importMcp);
 const SessionSettingsPage = lazy(importSession);
-const SandboxSettingsPage = lazy(importSandbox);
 const PersonalSpaceSettingsPage = lazy(importPersonalSpace);
 
 // Run every chunk import in parallel the first time the dialog opens.
@@ -110,9 +108,9 @@ function preloadSettingsPages(): void {
     importSubscription,
     importPrivacy,
     importAutomation,
+    importAutomationSecurity,
     importMcp,
     importSession,
-    importSandbox,
     importPersonalSpace,
   ].forEach((fn) => {
     fn().catch((e) => {
@@ -128,21 +126,39 @@ import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { octApi } from "@/core/oct/api";
 
-type SettingsSection =
-  | "account"
-  | "subscription"
-  | "appearance"
-  | "models"
-  | "memory"
-  | "automation"
-  | "mcp"
-  | "privacy"
-  | "notification"
-  | "observability"
-  | "about"
-  | "session"
-  | "sandbox"
-  | "personalSpace";
+export const SETTINGS_SECTIONS = [
+  "account",
+  "subscription",
+  "appearance",
+  "models",
+  "conversation",
+  "session",
+  "memory",
+  "notification",
+  "tools",
+  "automationSecurity",
+  "privacy",
+  "observability",
+  "about",
+] as const;
+
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
+const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSection> = {
+  mcp: "tools",
+  personalSpace: "conversation",
+  automation: "automationSecurity",
+  sandbox: "automationSecurity",
+};
+
+export function normalizeSettingsSection(
+  section?: string,
+): SettingsSection {
+  if (section && SETTINGS_SECTIONS.includes(section as SettingsSection)) {
+    return section as SettingsSection;
+  }
+  return (section && LEGACY_SETTINGS_SECTIONS[section]) || "appearance";
+}
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -314,27 +330,52 @@ export function SettingsDialog(props: SettingsDialogProps) {
     }
   };
 
-  const personalSpaceLabel = locale.toLowerCase().startsWith("zh")
-    ? "个人空间"
+  const conversationLabel = locale.toLowerCase().startsWith("zh")
+    ? "对话与个性化"
     : locale.toLowerCase().startsWith("ja")
-      ? "個人スペース"
+      ? "会話とパーソナライズ"
       : locale.toLowerCase().startsWith("ko")
-        ? "개인 공간"
-        : "Personal space";
+        ? "대화 및 개인화"
+        : "Conversation & personalization";
+  const sessionLabel = locale.toLowerCase().startsWith("zh")
+    ? "会话"
+    : locale.toLowerCase().startsWith("ja")
+      ? "セッション"
+      : locale.toLowerCase().startsWith("ko")
+        ? "세션"
+        : "Sessions";
 
   const sections = useMemo(() => {
+    type SectionGroup = "account" | "preferences" | "capabilities" | "system";
     type Section = {
       id: SettingsSection;
       label: string;
       icon: React.ComponentType<{ className?: string }>;
       keywords: string[];
+      group: SectionGroup;
       disabled?: boolean;
       disabledReason?: string;
     };
 
+    const toolsLabel = locale.toLowerCase().startsWith("zh")
+      ? "工具与集成"
+      : locale.toLowerCase().startsWith("ja")
+        ? "ツールと連携"
+        : locale.toLowerCase().startsWith("ko")
+          ? "도구 및 통합"
+          : "Tools & integrations";
+    const automationSecurityLabel = locale.toLowerCase().startsWith("zh")
+      ? "自动化与安全"
+      : locale.toLowerCase().startsWith("ja")
+        ? "自動化とセキュリティ"
+        : locale.toLowerCase().startsWith("ko")
+          ? "자동화 및 보안"
+          : "Automation & security";
+
     const all: Section[] = [
       {
         id: "account",
+        group: "account",
         label: t.settings.sections.account,
         icon: SettingsIcon,
         keywords: [
@@ -347,6 +388,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       },
       {
         id: "subscription",
+        group: "account",
         label: t.settings.sections.subscription,
         icon: CreditCardIcon,
         keywords: [
@@ -359,6 +401,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       },
       {
         id: "appearance",
+        group: "preferences",
         label: t.settings.sections.appearance,
         icon: PaletteIcon,
         keywords: [
@@ -373,6 +416,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       },
       {
         id: "models",
+        group: "preferences",
         label: t.settings.model.title,
         icon: CpuIcon,
         keywords: [
@@ -384,17 +428,37 @@ export function SettingsDialog(props: SettingsDialogProps) {
         ],
       },
       {
-        id: "notification",
-        label: t.settings.sections.notification,
-        icon: BellIcon,
+        id: "conversation",
+        group: "preferences",
+        label: conversationLabel,
+        icon: SparklesIcon,
         keywords: [
-          "notification",
-          "alert",
-          ...t.settings.dialog.sectionKeywords.notification,
+          "conversation",
+          "personalization",
+          "personal space",
+          "custom instructions",
+          "对话",
+          "个性化",
+          "个人空间",
+          "个人模式",
+        ],
+      },
+      {
+        id: "session",
+        group: "preferences",
+        label: sessionLabel,
+        icon: MessageSquareIcon,
+        keywords: [
+          "session",
+          "会话",
+          "auto",
+          "timeout",
+          "自动新起会话",
         ],
       },
       {
         id: "memory",
+        group: "preferences",
         label: t.settings.sections.memory,
         icon: BrainIcon,
         keywords: [
@@ -404,37 +468,24 @@ export function SettingsDialog(props: SettingsDialogProps) {
         ],
       },
       {
-        id: "personalSpace",
-        label: personalSpaceLabel,
-        icon: SparklesIcon,
+        id: "notification",
+        group: "preferences",
+        label: t.settings.sections.notification,
+        icon: BellIcon,
         keywords: [
-          "personal space",
-          "personal mode",
-          "default mode",
-          "个人空间",
-          "个人模式",
-          "通用",
-          "构建",
-          "研究",
-          "custom instructions",
+          "notification",
+          "alert",
+          ...t.settings.dialog.sectionKeywords.notification,
         ],
       },
       {
-        id: "automation",
-        label: t.settings.sections.automation,
-        icon: ZapIcon,
-        keywords: [
-          "automation",
-          "schedule",
-          "cron",
-          ...t.settings.dialog.sectionKeywords.automation,
-        ],
-      },
-      {
-        id: "mcp",
-        label: settingsUxCopy.mcp.title,
+        id: "tools",
+        group: "capabilities",
+        label: toolsLabel,
         icon: ServerIcon,
         keywords: [
+          "tools",
+          "integrations",
           "mcp",
           "tool",
           "server",
@@ -442,7 +493,30 @@ export function SettingsDialog(props: SettingsDialogProps) {
         ],
       },
       {
+        id: "automationSecurity",
+        group: "capabilities",
+        label: automationSecurityLabel,
+        icon: ZapIcon,
+        keywords: [
+          "automation",
+          "security",
+          "sandbox",
+          "execution",
+          "permission",
+          "browser",
+          "desktop",
+          "approval",
+          "沙箱",
+          "执行",
+          "权限",
+          "自动化",
+          ...t.settings.dialog.sectionKeywords.automation,
+          ...t.settings.dialog.sectionKeywords.sandbox,
+        ],
+      },
+      {
         id: "privacy",
+        group: "capabilities",
         label: t.settings.sections.privacy,
         icon: ShieldIcon,
         keywords: [
@@ -454,6 +528,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       },
       {
         id: "observability",
+        group: "system",
         label: t.settings.sections.observability,
         icon: ActivityIcon,
         keywords: [
@@ -465,6 +540,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       },
       {
         id: "about",
+        group: "system",
         label: t.settings.sections.about,
         icon: InfoIcon,
         keywords: [
@@ -472,34 +548,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
           "version",
           "help",
           ...t.settings.dialog.sectionKeywords.about,
-        ],
-      },
-      {
-        id: "session",
-        label: "会话",
-        icon: MessageSquareIcon,
-        keywords: [
-          "session",
-          "会话",
-          "auto",
-          "新起",
-          "timeout",
-          "自动新起会话",
-        ],
-      },
-      {
-        id: "sandbox",
-        label: t.settings.sections.sandbox,
-        icon: BoxIcon,
-        keywords: [
-          "sandbox",
-          "execution",
-          "permission",
-          "沙箱",
-          "执行",
-          "权限",
-          "完全访问",
-          ...t.settings.dialog.sectionKeywords.sandbox,
         ],
       },
     ];
@@ -511,14 +559,13 @@ export function SettingsDialog(props: SettingsDialogProps) {
     t.settings.sections.appearance,
     t.settings.model.title,
     t.settings.sections.memory,
-    personalSpaceLabel,
-    t.settings.sections.automation,
-    settingsUxCopy.mcp.title,
+    conversationLabel,
+    sessionLabel,
+    locale,
     t.settings.sections.notification,
     t.settings.sections.about,
     t.settings.sections.observability,
     t.settings.sections.privacy,
-    t.settings.sections.sandbox,
     t.settings.dialog.sectionKeywords,
   ]);
   const [settingsQuery, setSettingsQuery] = useState("");
@@ -533,6 +580,35 @@ export function SettingsDialog(props: SettingsDialogProps) {
     );
   }, [normalizedSettingsQuery, sections]);
   const hasSettingsResults = visibleSections.length > 0;
+  const sectionGroupLabels = useMemo(() => {
+    const isZh = locale.toLowerCase().startsWith("zh");
+    const isJa = locale.toLowerCase().startsWith("ja");
+    const isKo = locale.toLowerCase().startsWith("ko");
+    return {
+      account: isZh
+        ? "账户与方案"
+        : isJa
+          ? "アカウントとプラン"
+          : isKo
+            ? "계정 및 요금제"
+            : "Account & plan",
+      preferences: isZh
+        ? "使用偏好"
+        : isJa
+          ? "環境設定"
+          : isKo
+            ? "환경 설정"
+            : "Preferences",
+      capabilities: isZh
+        ? "能力与安全"
+        : isJa
+          ? "機能とセキュリティ"
+          : isKo
+            ? "기능 및 보안"
+            : "Capabilities & security",
+      system: isZh ? "系统" : isJa ? "システム" : isKo ? "시스템" : "System",
+    } as const;
+  }, [locale]);
 
   useEffect(() => {
     if (!dialogProps.open || !normalizedSettingsQuery || !hasSettingsResults) {
@@ -668,42 +744,62 @@ export function SettingsDialog(props: SettingsDialogProps) {
             >
               <ul className="flex w-max flex-nowrap gap-1 pr-1 md:block md:w-full md:space-y-1">
                 {visibleSections.map(
-                  ({ id, label, icon: Icon, disabled, disabledReason }) => {
+                  ({
+                    id,
+                    label,
+                    icon: Icon,
+                    group,
+                    disabled,
+                    disabledReason,
+                  }, index) => {
                     const active = activeSection === id;
                     return (
-                      <li key={id} className="shrink-0 md:w-full">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (disabled) return;
-                            setActiveSection(id as SettingsSection);
-                          }}
-                          disabled={disabled}
-                          title={disabled ? disabledReason : undefined}
-                          aria-disabled={disabled || undefined}
-                          aria-current={active ? "page" : undefined}
-                          className={cn(
-                            // Match sidebar NavRow: opacity + leading 2px
-                            // accent bar instead of a full primary fill.
-                            "group/sec relative flex min-h-[46px] w-auto min-w-max items-center gap-2 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] md:min-h-0 md:w-full md:gap-3",
-                            disabled
-                              ? "cursor-not-allowed opacity-40"
-                              : "opacity-75 hover:opacity-100 hover:bg-muted/50",
-                            active &&
-                              "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_70%,transparent)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-r before:bg-primary/70",
-                          )}
-                        >
-                          <Icon className="size-4" />
-                          <span className="flex-1 truncate text-left">
-                            {label}
-                          </span>
-                          {disabled && (
-                            <span className="rounded border border-border-default px-1 py-0.5 text-xs font-medium leading-none text-muted-foreground">
-                              {t.common.guest}
+                      <Fragment key={id}>
+                        {index === 0 ||
+                        visibleSections[index - 1]?.group !== group ? (
+                          <li
+                            aria-hidden="true"
+                            className="hidden items-center gap-2 px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 first:pt-0 md:flex"
+                          >
+                            <span className="h-px flex-1 bg-border-subtle" />
+                            <span>{sectionGroupLabels[group]}</span>
+                            <span className="h-px flex-1 bg-border-subtle" />
+                          </li>
+                        ) : null}
+                        <li className="shrink-0 md:w-full">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (disabled) return;
+                              setActiveSection(id as SettingsSection);
+                            }}
+                            disabled={disabled}
+                            title={disabled ? disabledReason : undefined}
+                            aria-disabled={disabled || undefined}
+                            aria-current={active ? "page" : undefined}
+                            className={cn(
+                              // Keep the nav quiet: one active tint and a
+                              // slim leading accent are enough for hierarchy.
+                              "group/sec relative flex min-h-[46px] w-auto min-w-max items-center gap-2 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] md:min-h-0 md:w-full md:gap-3",
+                              disabled
+                                ? "cursor-not-allowed opacity-40"
+                                : "opacity-75 hover:opacity-100 hover:bg-muted/50",
+                              active &&
+                                "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_70%,transparent)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-r before:bg-primary/70",
+                            )}
+                          >
+                            <Icon className="size-4" />
+                            <span className="flex-1 truncate text-left">
+                              {label}
                             </span>
-                          )}
-                        </button>
-                      </li>
+                            {disabled && (
+                              <span className="rounded border border-border-default px-1 py-0.5 text-xs font-medium leading-none text-muted-foreground">
+                                {t.common.guest}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      </Fragment>
                     );
                   },
                 )}
@@ -719,7 +815,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
             ref={contentScrollRootRef}
             className="h-full min-h-0 min-w-0 rounded-lg border [&_[data-slot=scroll-area-viewport]>div]:!block [&_[data-slot=scroll-area-viewport]>div]:!w-full [&_[data-slot=scroll-area-viewport]>div]:!min-w-0"
           >
-            <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-hidden p-3 sm:p-6">
+            <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden p-3 sm:p-5">
               {/* Each tab gets its own Suspense boundary so switching
                   to an uncached tab doesn't blank out the currently
                   mounted one. Combined with preloadSettingsPages() this
@@ -765,29 +861,24 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   <MemorySettingsPage />
                 </Suspense>
               )}
-              {hasSettingsResults && activeSection === "personalSpace" && (
+              {hasSettingsResults && activeSection === "conversation" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <PersonalSpaceSettingsPage />
                 </Suspense>
               )}
-              {hasSettingsResults && activeSection === "automation" && (
-                <Suspense fallback={<SettingsPageSkeleton />}>
-                  <AutomationSettingsPage />
-                </Suspense>
-              )}
-              {hasSettingsResults && activeSection === "mcp" && (
+              {hasSettingsResults && activeSection === "tools" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <McpSettingsPage />
+                </Suspense>
+              )}
+              {hasSettingsResults && activeSection === "automationSecurity" && (
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <AutomationSecuritySettingsPage />
                 </Suspense>
               )}
               {hasSettingsResults && activeSection === "privacy" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <PrivacySettingsPage />
-                </Suspense>
-              )}
-              {hasSettingsResults && activeSection === "sandbox" && (
-                <Suspense fallback={<SettingsPageSkeleton />}>
-                  <SandboxSettingsPage />
                 </Suspense>
               )}
               {hasSettingsResults && activeSection === "notification" && (

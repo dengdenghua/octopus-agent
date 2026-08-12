@@ -8,11 +8,6 @@ export function Footer() {
   const { t } = useI18n();
   const year = useMemo(() => new Date().getFullYear(), []);
 
-  // Implementation note.
-  // registered and the page was superseded by ``/workspace/workflows``
-  // Implementation note.
-  // a mkdocs path the SPA doesn't ship · catches 404 in the router
-  // catch-all, so it now points at the About page we actually ship.
   const links = useMemo(
     () => [
       {
@@ -26,7 +21,10 @@ export function Footer() {
         title: t.landingFooter.resourcesTitle,
         items: [
           { label: "GitHub", href: GITHUB_URL },
-          { label: t.landingFooter.skillMarketLink, href: "/workspace" },
+          {
+            label: t.landingFooter.skillMarketLink,
+            href: "/workspace/agents?surface=chat&tab=skills",
+          },
         ],
       },
       {

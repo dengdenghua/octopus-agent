@@ -11,6 +11,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+import { activateTimelineItem } from "@/core/threads/timeline-linkage";
 import { emitLocateAgentWorkbenchEvent } from "../agent-workbench-events";
 import type { AgentWorkbenchTabId } from "../agent-workbench-utils";
 import {
@@ -144,8 +145,8 @@ function WorkbenchTabHeaderImpl({
           })}
         </div>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Tooltip content={t.agentWorkbenchPanel.tabList}>
+          <Tooltip content={t.agentWorkbenchPanel.tabList}>
+            <DropdownMenuTrigger asChild>
               <button
                 type="button"
                 className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
@@ -153,8 +154,8 @@ function WorkbenchTabHeaderImpl({
               >
                 <LayoutGridIcon className="size-3.5" />
               </button>
-            </Tooltip>
-          </DropdownMenuTrigger>
+            </DropdownMenuTrigger>
+          </Tooltip>
           <DropdownMenuContent align="end" className="w-40">
             {workbenchTabs.map(({ id, label, Icon }) => {
               const visible = !closedTabs.has(id);
@@ -180,11 +181,16 @@ function WorkbenchTabHeaderImpl({
               type="button"
               className="flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border-subtle hover:bg-muted/45 hover:text-foreground"
               aria-label={t.agentWorkbenchPanel.locateTranscriptEvent}
-              onClick={() =>
+              onClick={() => {
+                // Use the shared timeline linkage so aggregated tool groups
+                // expand before the conversation scrolls to the exact step.
+                activateTimelineItem(locatableTranscriptEventId, "sidebar");
+                // Keep the legacy event for older message renderers and
+                // direct transcript anchors.
                 emitLocateAgentWorkbenchEvent({
                   eventId: locatableTranscriptEventId,
-                })
-              }
+                });
+              }}
             >
               <LocateFixedIcon className="size-3.5" />
             </button>

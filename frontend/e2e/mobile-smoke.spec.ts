@@ -97,13 +97,13 @@ test.describe("Mobile workspace smoke", () => {
 
     const sections = [
       /^(账户|Account)$/,
-      /^(订阅与账单|Plan & Billing)$/,
+      /^(订阅与用量|Plan & Usage)$/,
       /^(外观|Appearance)$/,
       /^(通知|Notification)$/,
-      /^(记忆与历史|Memory & History)$/,
-      /^(执行与权限|Execution & Permissions)$/,
-      /^(MCP 服务|MCP services)$/,
-      /^(可观测性|Observability)$/,
+      /^(记忆|Memory)$/,
+      /^(工具与集成|Tools & integrations)$/,
+      /^(自动化与安全|Automation & security)$/,
+      /^(运行诊断|Run diagnostics)$/,
       /^(关于|About)$/,
     ];
     for (const sectionName of sections) {
@@ -172,10 +172,15 @@ test.describe("Mobile workspace smoke", () => {
     await page.goto("/#/workspace/skills");
     await page.waitForLoadState("domcontentloaded");
 
-    const search = page.getByTestId("skills-search-input");
+    await expect(page).toHaveURL(/#\/workspace\/agents\?surface=chat&tab=skills/);
+    await expect(
+      page.getByRole("tab", { name: /技能|Skills|Skill Market/i }),
+    ).toBeVisible();
+    const search = page.getByTestId("agents-search-input");
     await expect(search).toBeVisible({ timeout: 15_000 });
-    const list = page.getByTestId("skills-category-list");
-    await expect(list).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^(全部|All)$/ }).first(),
+    ).toBeVisible();
     await expectNoHorizontalOverflow(page, search, "skills search");
   });
 });

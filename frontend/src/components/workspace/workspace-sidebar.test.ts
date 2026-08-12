@@ -116,10 +116,10 @@ describe("workspace sidebar project grouping", () => {
     const threads = [
       makeThread("chat-1", "chat"),
       makeThread("team-1", "team", {
-        workspace_path: "/Users/dangbei/Public/octopus/octopus-agent",
+        workspace_path: "/Users/example/Public/octopus/octopus-agent",
       }),
       makeThread("code-1", "code", {
-        workspace_path: "/Users/dangbei/Public/octopus/octopus-agent",
+        workspace_path: "/Users/example/Public/octopus/octopus-agent",
       }),
     ];
 
@@ -351,7 +351,7 @@ describe("workspace sidebar project grouping", () => {
         { mode: "team" },
         {
           project: "Team · Eve",
-          workspace_path: "/Users/dangbei/Public/octopus/octopus-agent",
+          workspace_path: "/Users/example/Public/octopus/octopus-agent",
         },
       ),
     ).toBe("octopus-agent");
@@ -465,7 +465,7 @@ describe("workspace sidebar project grouping", () => {
         { mode: "code" },
         {
           project: "总项目",
-          workspace_path: "/Users/dangbei/Public/octopus/octopus-agent",
+          workspace_path: "/Users/example/Public/octopus/octopus-agent",
         },
       ),
     ).toBe("总项目");

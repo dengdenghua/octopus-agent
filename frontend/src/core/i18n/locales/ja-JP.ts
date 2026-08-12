@@ -481,30 +481,6 @@ export const jaJP: Translations = {
     create: "プロジェクトを作成",
   },
 
-  // Application Registry
-  applicationRegistry: {
-    loading: "プラグインを読み込み中",
-    errorTitle: "プラグインリストは利用不可",
-    retryLabel: "Reload",
-    title: "Plugins",
-    refreshAria: "プラグインを更新",
-    createPlugin: "プラグインを作成",
-    searchAria: "プラグインを検索",
-    searchPlaceholder: "プラグイン、機能、アクションを検索",
-    enabled: "enabled",
-    capabilities: "capabilities",
-    actions: "actions",
-    all: "All",
-    pluginPackageOnly: "プラグインパッケージのみ",
-    enabledStatus: "Enabled",
-    disabledStatus: "Disabled",
-    entries: "entries",
-    permissions: "permissions",
-    open: "Open",
-    registered: "Registered",
-    noMatches: "一致するプラグインがありません",
-  },
-
   // Clarification Questionnaire
   clarificationQuestionnaire: {
     title: "以下の質問にお答えください",
@@ -1086,6 +1062,7 @@ export const jaJP: Translations = {
       "上記でタスクを送信してください。並列ヘルプが必要な場合はここに進捗が表示されます。",
     taskListView: "Tasks",
     computerView: "Computer",
+    executionView: "実行画面",
     reportView: "Report",
     traceFeedEmpty: "Agent はまだ作業を開始していません",
     liveEventStream: "ライブイベント",
@@ -1295,7 +1272,7 @@ export const jaJP: Translations = {
     filesTab: "ファイル",
     diffTab: "Diff",
     terminalTab: "ターミナル",
-    browserTab: "ブラウザ",
+    browserTab: "タスクプレビュー",
   },
 
   // Agent workbench panel (kanban / screen timeline)
@@ -1319,6 +1296,9 @@ export const jaJP: Translations = {
     collapseWorkbench: "ワークベンチを折りたたむ",
     tabList: "タブリスト",
     summaryLabel: "Summary",
+    latestTurnContext: "最新ターン",
+    latestTurnContextDescription:
+      "過去のメッセージを表示中でも、このワークベンチは最新ターンの状態を示します。",
     agentStatusRunning: "Running",
     agentStatusError: "Error",
     agentStatusDone: "Finished",
@@ -1695,7 +1675,6 @@ export const jaJP: Translations = {
     projects: "プロジェクト",
     channels: "メッセージチャネル",
     pairing: "ペアリング認証",
-    browser: "ブラウザプレビュー",
     moveToProject: "プロジェクトへ移動",
     newProject: "新しいプロジェクト",
     // Additional fields
@@ -1713,14 +1692,11 @@ export const jaJP: Translations = {
     navReflex: "反射ルール",
     navIntelligence: "自動化",
     navMcp: "MCP",
-    navStore: "マーケット",
     navEvolution: "自己進化",
-    navReplay: "リプレイ",
     navPlugins: "プラグイン",
     navHR: "人材",
     navComputer: "ローカルアシスタント",
     navDesktopOrganizer: "デスクトップ整理",
-    navMobile: "モバイル",
     navArchitecture: "アーキテクチャ",
     groupTools: "ツール",
     groupAdvancedTools: "高度なツール",
@@ -1784,7 +1760,7 @@ export const jaJP: Translations = {
     backToProjectList: "プロジェクト一覧に戻る",
     openThreadFilesTooltip: "プロジェクトファイルを開く",
     // Surface switch + task statuses
-    navBrowserSurface: "ブラウザ",
+    navBrowserSurface: "AI ブラウザ",
     sectionOngoing: "進行中",
     noOngoingTasks: "実行中のタスクはありません",
     sectionTaskHistory: "タスク履歴",
@@ -3082,8 +3058,7 @@ export const jaJP: Translations = {
       "コード変更を検証してからでないと Octopus はこのターンを終了できません。テスト、lint、typecheck、ビルドを実行して続行。",
     environmentBlocked:
       "環境上の制約でタスクがブロックされています — 理由は下記のとおりです。",
-    blockedOnUser:
-      "タスクを続けるには、あなたの入力が必要です。",
+    blockedOnUser: "タスクを続けるには、あなたの入力が必要です。",
     streamEndpointUnavailable:
       "バックエンドのチャット/チームストリームエンドポイントが有効でないか利用不可。完全な Octopus バックエンドを起動するかフロントエンドプロキシを確認。",
     iteration: (count: number) => `第 ${count} ラウンド`,
@@ -4739,7 +4714,7 @@ export const jaJP: Translations = {
       noFavorites: "お気に入りがまだありません",
     },
     defaultTabTitle: "AI ブラウザーデスクトップ",
-    pageTitle: "Browser",
+    pageTitle: "AI Browser",
     pageSubtitle: (pinned: boolean) =>
       pinned ? "タブワークスペース · 固定済み" : "タブワークスペース",
     searchPlaceholder: "タブを検索...",
@@ -4894,7 +4869,7 @@ export const jaJP: Translations = {
     surfaceModeScreenshot: "Screenshot",
     selectDevicePreset: "デバイスプリセットを選択",
     continueInFullBrowser: "完全ブラウザーで続行",
-    takeoverButton: "Takeover",
+    takeoverButton: "AI ブラウザを開く",
     sessionNeedsAttention: (issues) => `ブラウザセッションが要注意：${issues}`,
     reconnectButton: "Reconnect",
     semanticSnapshotFallback: "ページセマンティックスナップショット",
@@ -5556,140 +5531,6 @@ export const jaJP: Translations = {
           "マイルストーン駆動 · Project OS に委ねてタスク分解 → 実行 → 検収。",
       },
     ],
-  },
-
-  // Workflow Editor
-  workflowEditor: {
-    title: "ワークフローエディター",
-    untitled: "無題のワークフロー",
-    newWorkflow: "+ 新規",
-    savedWorkflows: "Workflows",
-    placeholder: "ワークフロー名",
-    descPlaceholder: "Description...",
-    layoutApplied: "レイアウトを適用しました",
-    saved: "ワークフローを保存しました",
-    saveFailed: "ワークフローの保存に失敗しました",
-    loadFailed: "ワークフローの読み込みに失敗しました",
-    deleted: "ワークフローを削除しました",
-    deleteFailed: "ワークフローの削除に失敗しました",
-    valid: "ワークフローは有効です",
-    fixErrors: "実行前に検証エラーを修正してください",
-    executed: "ワークフローを正常に実行しました",
-    executeFailed: "実行に失敗しました",
-    codeCopied: "Python コードをクリップボードにコピーしました",
-    start: "Start",
-    end: "End",
-    nodePaletteTitle: "Nodes",
-    save: "Save",
-    run: "Run",
-    savedToJsonFile:
-      "保存済み · ワークフローがスキルとして登録され · LLM が直接呼び出し可能",
-    runBackendNotReady:
-      "実行バックエンドがまだ準備できていません · ワークフローは現在ローカル編集のみ",
-    dismiss: "Dismiss",
-    more: "more",
-    noSavedWorkflows: "保存されたワークフローがありません",
-    selectNodeToConfigure: "設定するノードを選択",
-    searchNodes: "ノードを検索...",
-    runningWorkflow: "ワークフローを実行中...",
-    executionCompleted: "実行完了",
-    executionFailed: "実行失敗",
-    runResults: "実行結果",
-    viewResultJson: "結果 JSON を表示",
-    importN8n: "n8n をインポート",
-    saving: "Saving...",
-    running: "Running...",
-    runCompleted: "実行完了",
-    runFailed: "実行失敗",
-    statusPrefix: "Status",
-    importSuccess: (name, nodeCount) =>
-      `インポート成功：${name} (${nodeCount} ノード)`,
-    nodes: {
-      llm: "LLM",
-      tool: "Tool",
-      condition: "Condition",
-      code: "Code",
-      subagent: "Sub-Agent",
-      loop: "Loop",
-      parallel: "Parallel",
-      humanInput: "ヒューマン入力",
-      memory: "Memory",
-      http: "HTTP リクエスト",
-    },
-    config: {
-      label: "Label",
-      model: "Model",
-      systemPrompt: "システムプロンプト",
-      temperature: "Temperature",
-      maxTokens: "最大 Token",
-      toolName: "ツール名",
-      parameters: "パラメーター（JSON）",
-      conditionExpr: "条件式",
-      language: "Language",
-      code: "Code",
-      agentName: "Agent 名",
-      agentConfig: "Agent 設定（JSON）",
-      loopBody: "ループボディノード ID",
-      maxIterations: "最大反復回数",
-      breakCondition: "中断条件",
-      branchNodes: "分岐ノード ID（カンマ区切り）",
-      aggregation: "集計戦略",
-      aggregationMergeAll: "すべてマージ",
-      aggregationFirstResult: "最初の結果",
-      aggregationMajorityVote: "多数決",
-      promptMessage: "プロンプトメッセージ",
-      url: "URL",
-      method: "Method",
-      headers: "ヘッダー（JSON）",
-      body: "Body",
-      operation: "Operation",
-      memoryKey: "メモリキー",
-      valueExpression: "値式",
-      timeout: "タイムアウト（秒）",
-      responseFormat: "レスポンス形式",
-    },
-    palette: {
-      flow: "Flow",
-      ai: "AI",
-      actions: "Actions",
-      data: "Data",
-    },
-    toolbar: {
-      save: "保存 (Ctrl+S)",
-      undo: "元に戻す (Ctrl+Z)",
-      redo: "やり直し (Ctrl+Y)",
-      copy: "コピー (Ctrl+C)",
-      paste: "貼り付け (Ctrl+V)",
-      delete: "削除 (Del)",
-      autoLayout: "自動レイアウト",
-      validate: "Validate",
-      exportCode: "コードをエクスポート",
-      run: "Run",
-      running: "Running...",
-    },
-    nodeDescriptions: {
-      start: "ワークフロー開始点",
-      end: "ワークフロー終了点",
-      condition: "If/else 条件分岐",
-      loop: "中断条件付きループ",
-      parallel: "ファンアウト / ファンイン並列実行",
-      llm: "大規模言語モデル呼び出し",
-      subagent: "他の agent に委譲",
-      tool: "ツール / 関数を実行",
-      code: "カスタム Python / JS コードを実行",
-      http: "HTTP API コールを実行",
-      memory: "メモリストアの読み取り / 書き込み",
-      humanInput: "一時停止してユーザー入力を待機",
-    },
-    nodeLabels: {
-      noModelSet: "モデル未設定",
-      noToolSelected: "ツール未選択",
-      noAgentSelected: "agent 未選択",
-      noCodeWritten: "コード未記述",
-      noUrlConfigured: "URL 未設定",
-      pausesForInput: "入力待機中",
-      workflowEntryPoint: "ワークフロー開始点",
-    },
   },
 
   // Agent detail/profile
@@ -6989,44 +6830,6 @@ export const jaJP: Translations = {
     toastBrowserAuthCancelled: "Cancelled",
   },
 
-  // Skills page
-  skillsPage: {
-    pageTitle: "Skills",
-    pageSubtitle:
-      "スキルライブラリを管理 — 必要なものをインストールして有効化。",
-    disclaimer:
-      "スキルはコミュニティデベロッパーから提供されます。Octopus はサードパーティスキルの使用によるいかなるリスク、責任、損害についても責任を負いません。",
-    createButton: "スキルを作成",
-    tabInstalled: "Installed",
-    loadingSkills: "スキルを読み込み中...",
-    noInstalledTitle: "インストールされたスキルがありません",
-    noInstalledHint:
-      "ランタイムが空のスキルカタログでロードされました。runtime.execution.all_skills.register_all でブート時にスキルグループを登録してください。",
-    categories: {
-      sourcing: "調達 & 選品",
-      research: "市場調査 & 分析",
-      browse: "閲覧 & 検索",
-      file: "ファイル & コーディング",
-      comm: "コミュニケーション & コラボ",
-      content: "コンテンツ生成",
-      memory: "Memory",
-      system: "System",
-      other: "Other",
-    },
-    searchPlaceholder: "スキルを検索 (名前/説明/タグ)",
-    matchCount: (matched: number, total: number) =>
-      `一致 ${matched} / 合計 ${total}`,
-    totalCount: (n: number) => `合計 ${n} スキル`,
-    noMatch: (query: string) => `「${query}」に一致するスキルがありません`,
-    tooltipSource: (source: string) => `ソース：${source}`,
-    tooltipCost: (cost: string) => `コスト：${cost}`,
-    tooltipTags: (tags: string) => `タグ：${tags}`,
-    tooltipTested: "✓ テスト済み",
-    tooltipUntested: "• 未テスト",
-    testedDotTitle: "Tested",
-    noDescription: "説明なし",
-  },
-
   // Activity indicators (file ops + preview refresh)
   activityIndicators: {
     recentFileActivity: (n: number) => `最近のファイルアクティビティ · ${n} 件`,
@@ -7338,11 +7141,6 @@ export const jaJP: Translations = {
     statusDeleted: (path: string) => `${path} を削除しました`,
     statusNothingToDelete: "削除対象なし",
     clearAddendumPath: (path: string) => `クリア：rm ${path}`,
-  },
-
-  // Workflows wrapper page
-  workflowsWrapperPage: {
-    loadingEditor: "エディタを読み込み中...",
   },
 
   // AppAuth wrapper page
@@ -9112,63 +8910,6 @@ export const jaJP: Translations = {
     confirmRemoveTitle: "システム右クリックメニューを削除しますか？",
     confirmRemoveDescription:
       "Windows デスクトップの右クリックメニューから Octopus 一括整理コマンドを削除します。",
-  },
-
-  // Replay page
-  replay: {
-    pageDescription:
-      "リプレイゲート、ブラウザ/デスクトップリプレイレビュー、task-run リプレイケースの統合ビュー。",
-    applyPromotions: "プロモーションを適用",
-    refresh: "更新",
-    rerunResult: (attempted: number, passed: number, failed: number) =>
-      `${attempted} 件の修復レシピを再実行：${passed} 件成功、${failed} 件失敗。ソースケースは引き続き手動レビューが必要です。`,
-    applyResult: (applied: number, skipped: number, failed: number) =>
-      `適用 ${applied}、スキップ ${skipped}、失敗 ${failed}`,
-    tabCases: (count: number) => `リプレイケース (${count})`,
-    tabEvaluations: (count: number) => `リプレイ評価 (${count})`,
-    loadingCases: "リプレイケースを読み込み中…",
-    emptyCases:
-      "リプレイケースはまだありません。task-run 完了後に自動生成されます。",
-    loadingEvaluations: "リプレイ評価を読み込み中…",
-    emptyEvaluations:
-      "リプレイ評価はまだありません。リプレイケース生成後に自動計算されます。",
-  },
-
-  // Workflows page (editor under maintenance)
-  workflows: {
-    maintenanceBadge: "エディターメンテナンス中",
-    title: "ワークフローエディターは一時的に利用できません",
-    description:
-      "現在バックエンドに workflow-editor API がありません。保存・実行・インポート時の失敗を避けるため、エディター入口を一時的に閉じています。",
-    newRealtimeTask: "リアルタイムタスクを作成",
-    viewSkills: "スキルを見る",
-    altRealtimeTitle: "リアルタイムタスク",
-    altRealtimeDesc:
-      "プロセスを Agent に直接伝え、実行しながらステップと結果を蓄積します。",
-    altRealtimeLabel: "開始",
-    altSkillsTitle: "スキルライブラリ",
-    altSkillsDesc:
-      "安定した動作を再利用可能なスキルとして整理し、タスクで直接呼び出せます。",
-    altSkillsLabel: "スキルを見る",
-    altAutomationTitle: "自動化",
-    altAutomationDesc:
-      "サブスクリプションと定期タスクで周期的なプロセスを処理し、まず動かしてから定着させます。",
-    altAutomationLabel: "自動化へ",
-    altReflexTitle: "Reflex",
-    altReflexDesc:
-      "トリガールール、返信ポリシー、軽量プロセスディスパッチを管理します。",
-    altReflexLabel: "ルールを開く",
-    cardTransitionLabel: "推奨の移行案",
-    cardTransitionTitle: "まずリアルタイムタスクでプロセスを実行",
-    cardTransitionDesc:
-      "成功した経路はメッセージ、ツールトレース、スキルに徐々に蓄積されます。",
-    cardAssetsLabel: "再利用可能なアセット",
-    cardAssetsTitle: "安定した動作はスキルライブラリへ",
-    cardAssetsDesc:
-      "エディターより軽量で、現在のプラグインとスキルエコシステムに適しています。",
-    cardLaterLabel: "今後の復旧",
-    cardLaterTitle: "API が利用可能になったら編集を再開",
-    cardLaterDesc: "未完成のエディターに入って保存に失敗することを防ぎます。",
   },
 
   // Knowledge page
