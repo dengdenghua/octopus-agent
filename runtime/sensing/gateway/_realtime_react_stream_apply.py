@@ -244,6 +244,7 @@ async def _apply_react_event(
                     **({"eventId": logged_update.event_id} if logged_update is not None else {}),
                 },
             )
+            await state.update_grounding_evidence(turn, log, emitter, validated_sources)
         return
     if kind == "visibility":
         # Turn-assembly decision trace (capability routing / delegation

@@ -144,6 +144,9 @@ def _tool_event_extras_from_beak_step(
         return {}
 
     extras: dict[str, Any] = {}
+    evidence = _structured_tool_evidence(beak_step, tool_name, output)
+    if evidence:
+        extras["evidence"] = evidence
     effect_receipt = output.get("effect_receipt")
     if isinstance(effect_receipt, dict):
         effect_key = effect_receipt.get("effect_key")
@@ -194,6 +197,71 @@ def _tool_event_extras_from_beak_step(
             "stderr_tail": stderr if isinstance(stderr, str) else None,
         }
     return extras
+
+
+def _structured_tool_evidence(
+    beak_step: Step,
+    tool_name: str,
+    output: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Project successful file tools into lifecycle evidence at the source."""
+
+    if getattr(getattr(beak_step, "result", None), "status", "success") != "success":
+        return []
+    if output.get("error") or output.get("success") is False:
+        return []
+    read_tools = {"read_file", "read_text_file", "read_file_range"}
+    search_tools = {"grep", "grep_text", "glob", "glob_files", "search_files"}
+    if tool_name not in read_tools | search_tools:
+        return []
+
+    paths: list[str] = []
+    if tool_name in read_tools:
+        action_args = getattr(getattr(beak_step, "action", None), "args", {}) or {}
+        candidate = action_args.get("path") or action_args.get("file_path")
+        if isinstance(candidate, str):
+            paths.append(candidate)
+    _collect_structured_paths(output, paths)
+
+    evidence: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for raw_path in paths:
+        path = raw_path.strip()
+        if (
+            not path
+            or path in {".", ".."}
+            or any(char in path for char in "*?[]{}\n\r")
+            or path in seen
+        ):
+            continue
+        normalized = path.replace("\\", "/")
+        leaf = normalized.rsplit("/", 1)[-1]
+        if not leaf or ("." not in leaf and "/" not in normalized):
+            continue
+        seen.add(path)
+        evidence.append(
+            {
+                "kind": "file",
+                "title": leaf,
+                "uri": path,
+                "status": "observed",
+                "origin": "tool",
+            }
+        )
+    return evidence
+
+
+def _collect_structured_paths(value: Any, paths: list[str]) -> None:
+    if isinstance(value, dict):
+        path = value.get("path")
+        if isinstance(path, str):
+            paths.append(path)
+        for key, nested in value.items():
+            if key != "content":
+                _collect_structured_paths(nested, paths)
+    elif isinstance(value, list):
+        for nested in value:
+            _collect_structured_paths(nested, paths)
 
 
 def _beak_step_effective_success(step: Any) -> bool:

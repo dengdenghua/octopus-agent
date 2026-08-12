@@ -1114,24 +1114,30 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert snapshots
     assert snapshots[0].params["snapshot"]["version"] == 1
     assert snapshots[0].params["snapshot"]["workspaceFocus"]["view"] == "trace"
+    assert snapshots[1].params["snapshot"]["version"] == 2
+    assert snapshots[1].params["snapshot"]["phases"][1]["status"] == "running"
     final_snapshot = snapshots[-1].params["snapshot"]
-    assert final_snapshot["version"] == 2
+    assert final_snapshot["version"] == 3
     assert [phase["status"] for phase in final_snapshot["phases"]] == [
         "done",
         "done",
         "pending",
     ]
+    assert all(phase.get("activeItemId") is None for phase in final_snapshot["phases"])
+    assert final_snapshot["currentItemId"] is None
 
     turn = out["response"].result["turn"]
     assert turn["phases"][1]["status"] == "done"
     assert turn["workspaceFocus"]["itemId"] == "todo-1"
     assert turn["workbenchSnapshot"]["currentPhaseId"] == "todo-phase:2"
-    assert turn["workbenchSnapshot"]["version"] == 2
+    assert turn["workbenchSnapshot"]["currentItemId"] is None
+    assert turn["workbenchSnapshot"]["version"] == 3
     assert resume is not None and resume.result is not None
     resumed_turn = resume.result["turns"][0]
     assert resumed_turn["phases"][1]["title"] == "Patch realtime protocol"
     assert resumed_turn["workspaceFocus"]["view"] == "trace"
-    assert resumed_turn["workbenchSnapshot"]["version"] == 2
+    assert resumed_turn["workbenchSnapshot"]["currentItemId"] is None
+    assert resumed_turn["workbenchSnapshot"]["version"] == 3
 
 
 def test_team_subagent_lifecycle_maps_to_first_class_item(

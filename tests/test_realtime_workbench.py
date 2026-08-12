@@ -14,9 +14,19 @@ implementing over planning, planning over exploring.
 
 from __future__ import annotations
 
+from runtime.protocol import (
+    AgentPhaseSnapshot,
+    CommandExecutionItem,
+    GroundingSource,
+    ItemStatus,
+    WorkspaceFocus,
+)
 from runtime.sensing.gateway.realtime_workbench import (
+    _grounding_evidence,
     _phase_kind,
     _phases_from_todo_preview,
+    _tool_evidence,
+    _workbench_snapshot,
 )
 
 # ── _phase_kind: the five business phases ──────────────────────────
@@ -182,3 +192,98 @@ def test_phases_from_todo_preview_phase_kind_survives_machine_prefix() -> None:
     assert phases[0].title == "Deploy the service"
     assert phases[1].phase_kind == "testing"
     assert phases[1].title == "验证行为"
+
+
+def test_grounding_sources_become_replayable_workbench_evidence() -> None:
+    evidence = _grounding_evidence(
+        [GroundingSource(kind="source", title="Gateway", path="runtime/gateway.py:12")]
+    )
+
+    assert len(evidence) == 1
+    assert evidence[0].uri == "runtime/gateway.py:12"
+    assert evidence[0].origin == "grounding"
+
+
+def test_successful_file_search_records_only_confirmed_result_paths() -> None:
+    item = CommandExecutionItem(
+        id="cmd-search",
+        command="grep_text",
+        input_preview={"pattern": "EvidenceReference", "glob": "**/*.py"},
+        aggregated_output=(
+            '{"matches":[{"path":"runtime/protocol/items.py","line":201}],"count":1}'
+        ),
+        status=ItemStatus.COMPLETED,
+    )
+
+    evidence = _tool_evidence(item, phase_id="todo-phase:1")
+
+    assert [entry.uri for entry in evidence] == ["runtime/protocol/items.py"]
+    assert evidence[0].source_item_id == "cmd-search"
+    assert evidence[0].phase_id == "todo-phase:1"
+
+
+def test_failed_tool_never_manufactures_workbench_evidence() -> None:
+    item = CommandExecutionItem(
+        command="read_file",
+        input_preview={"path": "runtime/missing.py"},
+        status=ItemStatus.FAILED,
+    )
+
+    assert _tool_evidence(item) == []
+
+
+def test_logical_read_error_never_manufactures_workbench_evidence() -> None:
+    item = CommandExecutionItem(
+        command="read_file",
+        input_preview={"path": "runtime/missing.py"},
+        aggregated_output='{"error":"not found: runtime/missing.py"}',
+        status=ItemStatus.COMPLETED,
+    )
+
+    assert _tool_evidence(item) == []
+
+
+def test_terminal_pending_phase_does_not_retain_stale_current_tool() -> None:
+    snapshot = _workbench_snapshot(
+        version=3,
+        phases=[
+            AgentPhaseSnapshot(id="phase-1", index=1, total=2, title="Implement", status="done"),
+            AgentPhaseSnapshot(
+                id="phase-2", index=2, total=2, title="Optional follow-up", status="pending"
+            ),
+        ],
+        workspace_focus=WorkspaceFocus(
+            itemId="tool-finished",
+            view="terminal",
+            title="Finished command",
+        ),
+    )
+
+    assert snapshot.current_phase_id == "phase-2"
+    assert snapshot.current_item_id is None
+    # Preserve the last useful surface for inspection without claiming that
+    # its finished tool is still the live work item.
+    assert snapshot.workspace_focus is not None
+    assert snapshot.workspace_focus.item_id == "tool-finished"
+
+
+def test_running_phase_keeps_current_tool_focus() -> None:
+    snapshot = _workbench_snapshot(
+        version=1,
+        phases=[
+            AgentPhaseSnapshot(
+                id="phase-1",
+                index=1,
+                total=1,
+                title="Verify",
+                status="running",
+            )
+        ],
+        workspace_focus=WorkspaceFocus(
+            itemId="tool-running",
+            view="terminal",
+            title="Running command",
+        ),
+    )
+
+    assert snapshot.current_item_id == "tool-running"

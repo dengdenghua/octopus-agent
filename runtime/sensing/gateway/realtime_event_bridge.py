@@ -22,7 +22,9 @@ from runtime.protocol import (
     AgentMessageItem,
     AgentPhaseSnapshot,
     CommandExecutionItem,
+    EvidenceReference,
     FileChangeItem,
+    GroundingSource,
     ItemStatus,
     ReasoningItem,
     ServerMethod,
@@ -53,9 +55,11 @@ from runtime.sensing.gateway._event_bridge_tool_items import (
 )
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 from runtime.sensing.gateway.realtime_workbench import (
+    _grounding_evidence,
     _phases_from_todo_preview,
     _phases_with_active_item,
     _terminal_workbench_phases,
+    _tool_evidence,
     _workbench_snapshot,
     _workspace_focus_for_file_change,
     _workspace_focus_for_tool,
@@ -132,6 +136,7 @@ class _ReactBridgeState:
         self.tool_call_queues: dict[str, list[str]] = {}
         self.tool_public_narrative_started: dict[str, bool] = {}
         self.phases: list[AgentPhaseSnapshot] = []
+        self.evidence: list[EvidenceReference] = []
         self.workbench_snapshot_version = 0
         self.background_tasks: list[asyncio.Task[None]] = []
         self._delta_buf: list[str] = []
@@ -764,6 +769,23 @@ class _ReactBridgeState:
         # per-hunk accept/reject. We only do this on success — a
         # failed tool call has nothing to show.
         if item.status == ItemStatus.COMPLETED:
+            structured_evidence: list[EvidenceReference] = []
+            raw_evidence = evt.get("evidence")
+            if isinstance(raw_evidence, list):
+                for index, raw in enumerate(raw_evidence):
+                    if not isinstance(raw, dict):
+                        continue
+                    payload = {
+                        **raw,
+                        "id": raw.get("id") or f"tool:{item.id}:{index}",
+                        "sourceItemId": item.id,
+                        "phaseId": item.phase_id,
+                    }
+                    with contextlib.suppress(TypeError, ValueError):
+                        structured_evidence.append(EvidenceReference.model_validate(payload))
+            self._record_evidence(
+                structured_evidence or _tool_evidence(item, phase_id=item.phase_id)
+            )
             related_change_item_ids: list[str] = []
             related_files: list[str] = []
             file_item = _file_change_item_from_tool_evt(evt)
@@ -799,6 +821,21 @@ class _ReactBridgeState:
                 # isn't reachable from here — use the local ``_emit_completed``
                 # so we don't reach across class boundaries.
                 await self._emit_completed(turn, log, emitter, file_item)
+                self._record_evidence(
+                    [
+                        EvidenceReference(
+                            id=f"change:{file_item.id}:{path}",
+                            kind="file",
+                            title=path.replace("\\", "/").rsplit("/", 1)[-1],
+                            uri=path,
+                            status="passed",
+                            origin="tool",
+                            source_item_id=file_item.id,
+                            phase_id=file_item.phase_id,
+                        )
+                        for path in related_files
+                    ]
+                )
 
             verification_item = _verification_item_from_tool_evt(
                 item,
@@ -811,6 +848,7 @@ class _ReactBridgeState:
                 turn.items.append(verification_item)
                 await self._emit_started(turn, log, emitter, verification_item)
                 await self._emit_completed(turn, log, emitter, verification_item)
+                self._record_verification_evidence(verification_item)
         else:
             verification_item = _verification_item_from_tool_evt(
                 item,
@@ -823,6 +861,7 @@ class _ReactBridgeState:
                 turn.items.append(verification_item)
                 await self._emit_started(turn, log, emitter, verification_item)
                 await self._emit_completed(turn, log, emitter, verification_item)
+                self._record_verification_evidence(verification_item)
         if emitted_start_narrative:
             done_narrative = _tool_done_public_narrative(evt)
             if done_narrative:
@@ -833,6 +872,53 @@ class _ReactBridgeState:
                     done_narrative,
                     start_new_segment=True,
                 )
+        await self._emit_turn_update(
+            turn,
+            log,
+            emitter,
+            workspace_focus=turn.workspace_focus,
+        )
+
+    async def update_grounding_evidence(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        sources: list[GroundingSource],
+    ) -> None:
+        self._record_evidence(_grounding_evidence(sources))
+        await self._emit_turn_update(
+            turn,
+            log,
+            emitter,
+            workspace_focus=turn.workspace_focus,
+        )
+
+    def _record_verification_evidence(self, item: Any) -> None:
+        status = "passed" if item.status == ItemStatus.COMPLETED else "failed"
+        title = item.summary or item.command
+        self._record_evidence(
+            [
+                EvidenceReference(
+                    id=f"verification:{item.id}",
+                    kind="verification",
+                    title=title,
+                    status=status,
+                    origin="verification",
+                    source_item_id=item.id,
+                    phase_id=item.phase_id,
+                    detail=item.command if title != item.command else None,
+                )
+            ]
+        )
+
+    def _record_evidence(self, evidence: list[EvidenceReference]) -> None:
+        by_id = {item.id: item for item in self.evidence}
+        for item in evidence:
+            by_id[item.id] = item
+        # A long research turn can touch thousands of search hits. The
+        # snapshot is a useful recent-evidence index, not a second event log.
+        self.evidence = list(by_id.values())[-200:]
 
     async def flush(
         self,
@@ -943,6 +1029,7 @@ class _ReactBridgeState:
             version=self.workbench_snapshot_version,
             phases=phases,
             workspace_focus=turn.workspace_focus,
+            evidence=self.evidence,
         )
         turn.workbench_snapshot = snapshot
         phases_payload = [phase.model_dump(by_alias=True, mode="json") for phase in phases]

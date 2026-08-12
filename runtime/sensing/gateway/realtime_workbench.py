@@ -16,7 +16,9 @@ from typing import Any, Literal
 from runtime.protocol import (
     AgentPhaseSnapshot,
     CommandExecutionItem,
+    EvidenceReference,
     FileChangeItem,
+    GroundingSource,
     TurnStatus,
     WorkbenchSnapshotV2,
     WorkspaceFocus,
@@ -137,13 +139,19 @@ def _workbench_snapshot(
     version: int,
     phases: list[AgentPhaseSnapshot],
     workspace_focus: WorkspaceFocus | None,
+    evidence: list[EvidenceReference] | None = None,
 ) -> WorkbenchSnapshotV2:
     current_phase = _current_workbench_phase(phases)
+    current_phase_is_actionable = current_phase is not None and current_phase.status in {
+        "running",
+        "waiting_approval",
+        "error",
+    }
     current_item_id = (
         workspace_focus.item_id
-        if workspace_focus is not None
+        if workspace_focus is not None and current_phase_is_actionable
         else current_phase.active_item_id
-        if current_phase is not None
+        if current_phase_is_actionable
         else None
     )
     return WorkbenchSnapshotV2(
@@ -153,7 +161,98 @@ def _workbench_snapshot(
         current_phase_id=current_phase.id if current_phase is not None else None,
         current_item_id=current_item_id,
         workspace_focus=workspace_focus,
+        evidence=list(evidence or []),
     )
+
+
+def _grounding_evidence(sources: list[GroundingSource]) -> list[EvidenceReference]:
+    return [
+        EvidenceReference(
+            id=f"grounding:{source.kind}:{source.path}",
+            kind="file",
+            title=source.title or source.path.rsplit("/", 1)[-1],
+            uri=source.path,
+            status="observed",
+            origin="grounding",
+        )
+        for source in sources
+        if source.path.strip()
+    ]
+
+
+def _tool_evidence(
+    item: CommandExecutionItem,
+    *,
+    phase_id: str | None = None,
+) -> list[EvidenceReference]:
+    """Extract confirmed local references from a successful read/search tool."""
+
+    if item.status != "completed":
+        return []
+    command = item.command.strip().lower()
+    read_tools = {"read_file", "read_text_file", "read_file_range"}
+    search_tools = {"grep", "grep_text", "glob", "glob_files", "search_files"}
+    if command not in read_tools | search_tools:
+        return []
+
+    paths: list[str] = []
+    preview = item.input_preview
+    if command in read_tools and isinstance(preview, dict):
+        candidate = preview.get("path") or preview.get("file_path")
+        if isinstance(candidate, str):
+            paths.append(candidate)
+
+    output = item.aggregated_output
+    if output:
+        with contextlib.suppress(json.JSONDecodeError):
+            parsed = json.loads(output)
+            if isinstance(parsed, dict) and (parsed.get("error") or parsed.get("ok") is False):
+                return []
+            _collect_evidence_paths(parsed, paths)
+
+    result: list[EvidenceReference] = []
+    seen: set[str] = set()
+    for raw_path in paths:
+        path = raw_path.strip()
+        if not _is_concrete_evidence_path(path) or path in seen:
+            continue
+        seen.add(path)
+        result.append(
+            EvidenceReference(
+                id=f"tool:{item.id}:{path}",
+                kind="file",
+                title=path.replace("\\", "/").rsplit("/", 1)[-1],
+                uri=path,
+                status="observed",
+                origin="tool",
+                source_item_id=item.id,
+                phase_id=phase_id,
+            )
+        )
+    return result
+
+
+def _collect_evidence_paths(value: Any, paths: list[str]) -> None:
+    if isinstance(value, dict):
+        path = value.get("path")
+        if isinstance(path, str):
+            paths.append(path)
+        for key, nested in value.items():
+            if key != "content":
+                _collect_evidence_paths(nested, paths)
+    elif isinstance(value, list):
+        for nested in value:
+            _collect_evidence_paths(nested, paths)
+
+
+def _is_concrete_evidence_path(path: str) -> bool:
+    if not path or path in {".", ".."} or "\n" in path or "\r" in path:
+        return False
+    if any(char in path for char in "*?[]{}"):
+        return False
+    normalized = path.replace("\\", "/")
+    leaf = normalized.rsplit("/", 1)[-1]
+    return bool(leaf and ("." in leaf or "/" in normalized))
 
 
 def _workbench_status(

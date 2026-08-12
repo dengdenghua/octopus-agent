@@ -319,7 +319,11 @@ async def test_public_timeline_coordinates_interleave_commentary_tool_and_answer
         turn,
         log,
         emitter,
-        {"tool_call_id": "read-1", "tool_name": "read_file"},
+        {
+            "tool_call_id": "read-1",
+            "tool_name": "read_file",
+            "input_preview": {"path": "runtime/protocol/items.py"},
+        },
     )
     await state.complete_tool(
         turn,
@@ -343,6 +347,10 @@ async def test_public_timeline_coordinates_interleave_commentary_tool_and_answer
     assert commentary.phase_id
     assert tool.phase_id == commentary.phase_id
     assert answer.phase_id == commentary.phase_id
+    assert turn.workbench_snapshot is not None
+    assert [entry.uri for entry in turn.workbench_snapshot.evidence] == [
+        "runtime/protocol/items.py"
+    ]
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,17 @@ from runtime.execution.tool_engine.effect_receipts import (
     is_side_effecting,
 )
 from runtime.memory.journal import InMemoryJournal, JSONLJournal, ToolEffectIntentEvent
-from runtime.platform.models import ArmId, Budget, BudgetLimits, SkillId, TaskId
+from runtime.platform.models import (
+    ArmId,
+    Budget,
+    BudgetLimits,
+    CostEntry,
+    ExecutionResult,
+    SkillId,
+    Step,
+    TaskId,
+    ToolCall,
+)
 from runtime.platform.process.session import Session
 from runtime.safety.auth import TrustEngine
 
@@ -47,6 +57,31 @@ def _run(executor: ToolExecutor, task_id: TaskId, *, args=None):
         arm_id=ArmId("react_arm"),
         budget=Budget(task_id=task_id, limits=BudgetLimits(tokens=10_000, usd=1.0)),
     )
+
+
+def test_successful_file_tool_emits_structured_evidence() -> None:
+    call = ToolCall(caller="test", sucker_id=SkillId("grep_text"), args={"pattern": "x"})
+    step = Step(
+        step_id=1,
+        node_id="read",
+        action=call,
+        result=ExecutionResult(
+            call_id=call.call_id,
+            status="success",
+            output={"matches": [{"path": "runtime/protocol/items.py", "line": 1}]},
+            cost=CostEntry(),
+        ),
+    )
+
+    assert _tool_event_extras_from_beak_step(step, "grep_text")["evidence"] == [
+        {
+            "kind": "file",
+            "title": "items.py",
+            "uri": "runtime/protocol/items.py",
+            "status": "observed",
+            "origin": "tool",
+        }
+    ]
 
 
 def test_committed_effect_replays_without_running_handler_again():
