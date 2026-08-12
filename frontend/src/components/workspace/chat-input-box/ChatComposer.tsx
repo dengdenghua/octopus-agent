@@ -14,13 +14,7 @@ import {
   SquareIcon,
   TargetIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useMentionAutocomplete } from "../mention-autocomplete";
 
@@ -53,10 +47,7 @@ import { usePetSettings } from "@/core/pet/pet-settings";
 import { cn } from "@/lib/utils";
 import { normalizePermissionMode } from "@/core/permissions";
 import { uploadFiles } from "@/core/uploads";
-import type {
-  ResearchMaterial,
-  ResearchSourceKind,
-} from "@/core/research/api";
+import type { ResearchMaterial, ResearchSourceKind } from "@/core/research/api";
 import {
   codexComposerModeMarker,
   parseCodexComposerModeMarker,
@@ -758,10 +749,21 @@ export function ChatComposer({
       const images = Array.isArray(detail?.images)
         ? detail.images.filter((file) => file instanceof File)
         : [];
-      if (images.length === 0) return;
-      addPendingImages(images, {
-        sourceLabel: detail?.sourceLabel?.trim() || "浏览器截图",
-      });
+      const contextText =
+        event.type === "octopus:inject-composer-images"
+          ? detail?.text?.trim() || ""
+          : "";
+      if (images.length > 0) {
+        addPendingImages(images, {
+          sourceLabel: detail?.sourceLabel?.trim() || "浏览器截图",
+        });
+      }
+      if (contextText) {
+        setDraft((current) =>
+          current.trim() ? `${current.trim()}\n\n${contextText}` : contextText,
+        );
+      }
+      if (images.length === 0 && !contextText) return;
       setTimeout(() => textareaRef.current?.focus(), 0);
     };
     window.addEventListener("octopus:send-failed", handler as EventListener);
@@ -849,7 +851,7 @@ export function ChatComposer({
       className={cn(
         "group relative",
         "rounded-lg border border-border-default/80 bg-background/80 shadow-[var(--shadow-xs)] backdrop-blur-sm",
-        "transition-all duration-base ease-out",
+        "transition-[background-color,border-color,box-shadow] duration-base ease-out",
         "hover:border-border-default hover:shadow-[var(--shadow-sm)]",
         "focus-within:border-primary/25 focus-within:shadow-[0_0_0_3px_rgba(138,127,255,0.08),var(--shadow-sm)]",
         className,

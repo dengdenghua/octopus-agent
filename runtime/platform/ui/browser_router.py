@@ -407,12 +407,53 @@ def create_browser_router(
                             text = page.locator("body").inner_text(timeout=5000)
                         except backend._browser_runtime_errors():
                             text = ""
+                        dom_nodes: list[dict[str, Any]] = []
+                        try:
+                            dom_nodes = page.evaluate(
+                                """
+                                () => {
+                                  const selectorFor = (el) => {
+                                    if (el.id) return `#${CSS.escape(el.id)}`;
+                                    const parts = [];
+                                    let node = el;
+                                    while (node && node.nodeType === 1 && parts.length < 4) {
+                                      let part = node.tagName.toLowerCase();
+                                      if (node.getAttribute('data-testid')) {
+                                        part += `[data-testid="${CSS.escape(node.getAttribute('data-testid'))}"]`;
+                                      } else if (node.classList.length) {
+                                        part += '.' + Array.from(node.classList).slice(0, 2).map(CSS.escape).join('.');
+                                      }
+                                      const parent = node.parentElement;
+                                      if (parent) {
+                                        const siblings = Array.from(parent.children).filter((child) => child.tagName === node.tagName);
+                                        if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(node) + 1})`;
+                                      }
+                                      parts.unshift(part);
+                                      node = parent;
+                                    }
+                                    return parts.join(' > ');
+                                  };
+                                  return Array.from(document.querySelectorAll(
+                                    'button, a, input, textarea, select, [role], [contenteditable="true"]'
+                                  )).slice(0, 120).map((el) => ({
+                                    tag: el.tagName.toLowerCase(),
+                                    role: el.getAttribute('role') || '',
+                                    name: el.getAttribute('aria-label') || el.getAttribute('name') || '',
+                                    text: (el.innerText || el.value || '').replace(/\\s+/g, ' ').trim().slice(0, 180),
+                                    selector: selectorFor(el),
+                                  }));
+                                }
+                                """
+                            )
+                        except backend._browser_runtime_errors():
+                            dom_nodes = []
                         snapshot = {
                             "role": "document",
                             "name": page.title(),
                             "url": page.url,
                             "text": text[:5000],
                             "truncated": len(text) > 5000,
+                            "nodes": dom_nodes,
                         }
                         session["current_url"] = page.url
                         session["current_title"] = page.title()

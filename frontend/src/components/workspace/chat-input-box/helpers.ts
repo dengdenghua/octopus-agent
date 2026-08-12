@@ -10,6 +10,7 @@ export interface ComposerImageInjectionDetail {
   threadId?: string | null;
   images?: File[] | null;
   sourceLabel?: string | null;
+  text?: string | null;
 }
 
 export interface WorkspaceFileInjectionDetail {

@@ -1,14 +1,17 @@
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  CheckIcon,
   ChevronDownIcon,
   ExternalLinkIcon,
   FileTextIcon,
   GlobeIcon,
   ImageIcon,
   Loader2Icon,
+  MoreHorizontalIcon,
   MousePointerClickIcon,
   MonitorIcon,
+  PencilIcon,
   PlayIcon,
   RefreshCwIcon,
   ServerIcon,
@@ -40,6 +43,13 @@ import {
   WebviewTab,
   type WebviewTabHandle,
 } from "@/components/browser/webview-tab";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,6 +102,67 @@ async function dataUrlToFile(
   return new File([blob], filename, {
     type: blob.type || fallbackMime,
   });
+}
+
+async function renderAnnotatedScreenshot(
+  screenshot: string,
+  points: Array<{ x: number; y: number }>,
+  note: string,
+): Promise<string> {
+  if (typeof document === "undefined" || !screenshot) return screenshot;
+  const image = new Image();
+  image.src = `data:image/png;base64,${screenshot}`;
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Failed to render annotation"));
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (!context) return `data:image/png;base64,${screenshot}`;
+  context.drawImage(image, 0, 0);
+  const radius = Math.max(18, Math.round(canvas.width / 80));
+  context.font = `600 ${Math.max(16, radius * 0.85)}px sans-serif`;
+  points.forEach((point, index) => {
+    context.beginPath();
+    context.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    context.fillStyle = "rgba(124, 58, 237, 0.18)";
+    context.fill();
+    context.lineWidth = Math.max(3, Math.round(radius / 6));
+    context.strokeStyle = "#7c3aed";
+    context.stroke();
+    context.fillStyle = "#5b21b6";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(String(index + 1), point.x, point.y);
+  });
+  if (note.trim()) {
+    const padding = Math.max(12, Math.round(canvas.width / 120));
+    const maxWidth = canvas.width - padding * 2;
+    const metrics = context.measureText(note.trim());
+    const boxWidth = Math.min(
+      maxWidth,
+      Math.max(180, metrics.width + padding * 2),
+    );
+    const boxHeight = Math.max(34, radius * 1.8);
+    context.fillStyle = "rgba(255, 255, 255, 0.94)";
+    context.strokeStyle = "rgba(124, 58, 237, 0.45)";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.roundRect(padding, padding, boxWidth, boxHeight, 8);
+    context.fill();
+    context.stroke();
+    context.fillStyle = "#3b0764";
+    context.textAlign = "left";
+    context.textBaseline = "middle";
+    context.fillText(
+      note.trim().slice(0, 160),
+      padding * 1.5,
+      padding + boxHeight / 2,
+    );
+  }
+  return canvas.toDataURL("image/png");
 }
 
 interface BrowserSessionHealth {
@@ -190,6 +261,13 @@ interface BrowserSemanticSnapshot {
   url?: string;
   text?: string;
   truncated?: boolean;
+  nodes?: Array<{
+    tag: string;
+    role: string;
+    name: string;
+    text: string;
+    selector: string;
+  }>;
 }
 
 interface ScreenshotPointerPoint {
@@ -604,9 +682,16 @@ export function BrowserPreviewPanel({
   const [detectedServices, setDetectedServices] = useState<DetectedService[]>(
     [],
   );
+  const [localServicesExpanded, setLocalServicesExpanded] = useState(false);
   const [scanningPorts, setScanningPorts] = useState(false);
-  const [semanticSnapshot] = useState<BrowserSemanticSnapshot | null>(null);
+  const [semanticSnapshot, setSemanticSnapshot] =
+    useState<BrowserSemanticSnapshot | null>(null);
   const [semanticOpen, setSemanticOpen] = useState(false);
+  const [annotationMode, setAnnotationMode] = useState(false);
+  const [annotationText, setAnnotationText] = useState("");
+  const [annotationPoints, setAnnotationPoints] = useState<
+    Array<{ x: number; y: number }>
+  >([]);
   const [pointerMode] = useState<"click" | "double">("click");
   const [hoverPoint, setHoverPoint] = useState<ScreenshotPointerPoint | null>(
     null,
@@ -900,6 +985,14 @@ export function BrowserPreviewPanel({
     sessionIdentity,
   ]);
 
+  const handleRetry = useCallback(() => {
+    if (urlInput.trim()) {
+      void handleNavigate();
+    } else {
+      void handleLaunch();
+    }
+  }, [handleLaunch, handleNavigate, urlInput]);
+
   const handleRefreshScreenshot = useCallback(async () => {
     if (!session) return;
     try {
@@ -961,6 +1054,101 @@ export function BrowserPreviewPanel({
       toast.error(bp.attachScreenshotFailed);
     }
   }, [bp, pageInfo.url, screenshot, session, sessionId, threadId]);
+
+  const handleAnnotateScreenshot = useCallback(
+    (event: ReactMouseEvent<HTMLImageElement>) => {
+      if (
+        !annotationMode ||
+        screenshotSize.width <= 0 ||
+        screenshotSize.height <= 0
+      ) {
+        return;
+      }
+      const rect = event.currentTarget.getBoundingClientRect();
+      setAnnotationPoints((points) => [
+        ...points,
+        {
+          x: Math.round(
+            ((event.clientX - rect.left) / Math.max(1, rect.width)) *
+              screenshotSize.width,
+          ),
+          y: Math.round(
+            ((event.clientY - rect.top) / Math.max(1, rect.height)) *
+              screenshotSize.height,
+          ),
+        },
+      ]);
+    },
+    [annotationMode, screenshotSize.height, screenshotSize.width],
+  );
+
+  const handleSendAnnotation = useCallback(async () => {
+    if (!screenshot) return;
+    let currentSemantic = semanticSnapshot;
+    if (session) {
+      try {
+        currentSemantic = await browserApi.semanticSnapshot(sessionIdentity);
+        setSemanticSnapshot(currentSemantic);
+      } catch {
+        // The screenshot is still useful when the page has no readable DOM.
+      }
+    }
+    const annotatedScreenshot = await renderAnnotatedScreenshot(
+      screenshot,
+      annotationPoints,
+      annotationText,
+    );
+    const image = await dataUrlToFile(
+      annotatedScreenshot,
+      `browser-annotation-${Date.now()}.png`,
+    );
+    const domLines = (currentSemantic?.nodes ?? [])
+      .filter((node) => node.name || node.text)
+      .slice(0, 40)
+      .map(
+        (node) =>
+          `- <${node.tag}>${node.role ? ` role=${node.role}` : ""}${node.name ? ` name="${node.name}"` : ""}${node.text ? ` text="${node.text}"` : ""}${node.selector ? ` selector="${node.selector}"` : ""}`,
+      );
+    const points = annotationPoints.length
+      ? annotationPoints.map((point) => `(${point.x}, ${point.y})`).join(", ")
+      : "未标注坐标";
+    const context = [
+      "[浏览器页面标注]",
+      `页面：${pageInfo.title || "未命名页面"}`,
+      `URL：${pageInfo.url || urlInput || "未知"}`,
+      `标注坐标：${points}`,
+      annotationText.trim() ? `用户备注：${annotationText.trim()}` : "",
+      "",
+      "[页面 DOM 摘要]",
+      ...(domLines.length ? domLines : ["暂无可用 DOM 摘要"]),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    window.dispatchEvent(
+      new CustomEvent("octopus:inject-composer-images", {
+        detail: {
+          threadId,
+          images: image ? [image] : [],
+          sourceLabel: "浏览器标注",
+          text: context,
+        },
+      }),
+    );
+    setAnnotationMode(false);
+    setAnnotationText("");
+    setAnnotationPoints([]);
+  }, [
+    annotationPoints,
+    annotationText,
+    pageInfo.title,
+    pageInfo.url,
+    screenshot,
+    session,
+    semanticSnapshot,
+    sessionIdentity,
+    threadId,
+    urlInput,
+  ]);
 
   const handleBack = useCallback(async () => {
     if (!session) return;
@@ -1347,92 +1535,116 @@ export function BrowserPreviewPanel({
           </div>
         </form>
 
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="grid size-7 shrink-0 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
+              title={t.common.more}
+              aria-label={t.common.more}
+            >
+              <MoreHorizontalIcon className="size-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              disabled={!canLivePreview}
+              onSelect={() =>
+                setSurfaceMode(
+                  effectiveSurfaceMode === "live" ? "screenshot" : "live",
+                )
+              }
+            >
+              {effectiveSurfaceMode === "live" ? (
+                <MonitorIcon className="size-3.5" />
+              ) : (
+                <ImageIcon className="size-3.5" />
+              )}
+              {effectiveSurfaceMode === "live"
+                ? bp.surfaceModeLive
+                : bp.surfaceModeScreenshot}
+            </DropdownMenuItem>
+            <div className="px-2 py-1.5">
+              <label className="mb-1 block text-xs text-muted-foreground">
+                {bp.selectDevicePreset}
+              </label>
+              <select
+                value={devicePreview}
+                onChange={(event) =>
+                  void handleDevicePreviewChange(
+                    event.target.value as DevicePreviewPreset,
+                  )
+                }
+                disabled={viewportChanging}
+                className="h-8 w-full rounded-md border border-border-default bg-background px-2 text-xs font-medium text-foreground outline-none"
+                aria-label={bp.selectDevicePreset}
+              >
+                {(
+                  Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]
+                ).map((preset) => {
+                  const device = DEVICE_PREVIEW_PRESETS[preset];
+                  return (
+                    <option key={preset} value={preset}>
+                      {preset === "desktop" ? bp.desktopLabel : device.label}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            <DropdownMenuItem
+              onSelect={() => void handleAttachScreenshotToComposer()}
+            >
+              <ImageIcon className="size-3.5" />
+              {bp.attachScreenshotToComposer}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setAutoRefresh((value) => !value)}
+            >
+              {autoRefresh ? (
+                <SquareIcon className="size-3.5" />
+              ) : (
+                <RefreshCwIcon className="size-3.5" />
+              )}
+              {autoRefresh
+                ? t.browser.stopAutoRefresh
+                : t.browser.startAutoRefresh}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  sessionHealthy ? "bg-success" : "bg-destructive",
+                )}
+              />
+              {sessionHealthy ? "Session healthy" : "Session needs attention"}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {runtimeLabel}
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <button
           type="button"
-          onClick={() =>
-            setSurfaceMode(
-              effectiveSurfaceMode === "live" ? "screenshot" : "live",
-            )
-          }
-          disabled={!canLivePreview}
+          disabled={!screenshot}
+          onClick={() => {
+            setAnnotationMode((value) => !value);
+            setAnnotationPoints([]);
+          }}
           className={cn(
-            "hidden h-7 shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 text-xs font-medium transition-colors sm:inline-flex",
-            effectiveSurfaceMode === "live"
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:border-border-default hover:bg-muted/65 hover:text-foreground",
-            !canLivePreview && "pointer-events-none opacity-35",
+            "flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
+            annotationMode
+              ? "border-primary/25 bg-primary/10 text-primary"
+              : "border-transparent text-muted-foreground hover:border-border-default hover:bg-muted/65 hover:text-foreground",
+            !screenshot && "pointer-events-none opacity-35",
           )}
-          title={bp.toggleSurfaceMode}
+          title="标注截图并发送到对话"
+          aria-label="标注截图并发送到对话"
         >
-          {effectiveSurfaceMode === "live" ? (
-            <MonitorIcon className="size-3" />
-          ) : (
-            <ImageIcon className="size-3" />
-          )}
-          {effectiveSurfaceMode === "live"
-            ? bp.surfaceModeLive
-            : bp.surfaceModeScreenshot}
+          <PencilIcon className="size-3.5" />
+          <span className="hidden sm:inline">标注</span>
         </button>
-
-        <select
-          value={devicePreview}
-          onChange={(event) =>
-            void handleDevicePreviewChange(
-              event.target.value as DevicePreviewPreset,
-            )
-          }
-          disabled={viewportChanging}
-          className="hidden h-7 max-w-[var(--text-truncate-sm)] shrink-0 rounded-md border border-border-default bg-background/70 px-1.5 text-xs font-medium text-muted-foreground outline-none hover:text-foreground md:block"
-          title={bp.selectDevicePreset}
-          aria-label={bp.selectDevicePreset}
-        >
-          {(Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]).map(
-            (preset) => {
-              const device = DEVICE_PREVIEW_PRESETS[preset];
-              return (
-                <option key={preset} value={preset}>
-                  {preset === "desktop" ? bp.desktopLabel : device.label}
-                </option>
-              );
-            },
-          )}
-        </select>
-
-        <button
-          onClick={() => setAutoRefresh(!autoRefresh)}
-          className={cn(
-            "hidden size-7 place-items-center rounded-md border border-transparent transition-colors lg:grid",
-            autoRefresh
-              ? "border-primary/20 bg-primary/15 text-primary"
-              : "text-muted-foreground hover:border-border-default hover:bg-muted/65 hover:text-foreground",
-          )}
-          title={
-            autoRefresh ? t.browser.stopAutoRefresh : t.browser.startAutoRefresh
-          }
-        >
-          {autoRefresh ? (
-            <SquareIcon className="size-3" />
-          ) : (
-            <RefreshCwIcon className="size-3" />
-          )}
-        </button>
-
-        <span
-          className={cn(
-            "hidden size-7 shrink-0 place-items-center rounded-md text-xs lg:grid",
-            sessionHealthy
-              ? "text-muted-foreground"
-              : "bg-destructive/10 text-destructive",
-          )}
-          title={`${sessionHealthy ? "Session healthy" : sessionIssues.join(", ") || "needs reset"} · ${runtimeLabel}`}
-        >
-          <span
-            className={cn(
-              "size-1.5 rounded-full",
-              sessionHealthy ? "bg-success" : "bg-destructive",
-            )}
-          />
-        </span>
 
         <button
           type="button"
@@ -1500,8 +1712,54 @@ export function BrowserPreviewPanel({
         </div>
       )}
 
+      {error && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-destructive/25 bg-destructive/8 px-2 py-1.5 text-xs">
+          <span className="min-w-0 flex-1 truncate text-destructive">
+            {error}
+          </span>
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="h-6 shrink-0 rounded-md border border-destructive/25 px-2 font-medium text-destructive transition-colors hover:bg-destructive/10"
+          >
+            重试
+          </button>
+        </div>
+      )}
+
       {/* Screenshot area */}
       <div className="relative flex-1 overflow-auto bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.08),transparent_34%),linear-gradient(180deg,hsl(var(--muted)/0.34),hsl(var(--background)))] [&::-webkit-scrollbar]:size-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80 [&::-webkit-scrollbar-track]:bg-transparent">
+        {annotationMode && (
+          <div className="absolute inset-x-3 top-3 z-40 flex items-center gap-2 rounded-lg border border-primary/20 bg-background/95 p-2 shadow-[var(--shadow-floating)] backdrop-blur">
+            <PencilIcon className="size-3.5 shrink-0 text-primary" />
+            <input
+              value={annotationText}
+              onChange={(event) => setAnnotationText(event.target.value)}
+              placeholder="写下要修改的地方，可点击截图标记位置"
+              aria-label="截图标注说明"
+              className="h-7 min-w-0 flex-1 bg-transparent text-xs outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => void handleSendAnnotation()}
+              className="flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <CheckIcon className="size-3.5" />
+              发送
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAnnotationMode(false);
+                setAnnotationPoints([]);
+              }}
+              className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="取消标注"
+            >
+              <XIcon className="size-3.5" />
+            </button>
+          </div>
+        )}
         {effectiveSurfaceMode === "live" ? (
           <div className="flex min-h-full items-center justify-center p-3">
             <div
@@ -1599,7 +1857,13 @@ export function BrowserPreviewPanel({
                     ? "object-contain"
                     : "object-cover object-left-top",
                 )}
-                onClick={(event) => void handleScreenshotPointer(event)}
+                onClick={(event) => {
+                  if (annotationMode) {
+                    handleAnnotateScreenshot(event);
+                  } else {
+                    void handleScreenshotPointer(event);
+                  }
+                }}
                 onError={() => setScreenshot("")}
                 onMouseMove={handleScreenshotHover}
                 onMouseLeave={() => setHoverPoint(null)}
@@ -1609,6 +1873,18 @@ export function BrowserPreviewPanel({
                 )}
                 style={{ cursor: "crosshair" }}
               />
+              {annotationPoints.map((point, index) => (
+                <div
+                  key={`${point.x}-${point.y}-${index}`}
+                  className="pointer-events-none absolute z-30 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-primary bg-primary/20 text-xs font-bold text-primary shadow-[var(--shadow-xs)]"
+                  style={{
+                    left: `${(point.x / screenshotSize.width) * 100}%`,
+                    top: `${(point.y / screenshotSize.height) * 100}%`,
+                  }}
+                >
+                  {index + 1}
+                </div>
+              ))}
               {hoverPoint && screenshotSize.width > 0 && (
                 <div className="pointer-events-none absolute bottom-2 left-2 z-30 rounded-full border border-border-default bg-background/88 px-2 py-1 font-mono text-xs text-muted-foreground shadow-[var(--shadow-xs)] backdrop-blur">
                   x {hoverPoint.x} · y {hoverPoint.y}
@@ -1636,16 +1912,30 @@ export function BrowserPreviewPanel({
             {detectedServices.length > 0 ? (
               <div className="w-full max-w-sm space-y-3 rounded-lg border border-border-default bg-background/82 p-3 shadow-[var(--shadow-xs)] backdrop-blur">
                 <div className="flex items-center gap-2">
-                  <div className="grid size-7 place-items-center rounded-lg bg-primary/10 text-primary">
-                    <ServerIcon className="size-3.5" />
-                  </div>
-                  <span className="text-xs font-semibold text-foreground">
-                    {bp.localServices}
-                  </span>
                   <button
+                    type="button"
+                    aria-expanded={localServicesExpanded}
+                    onClick={() => setLocalServicesExpanded((value) => !value)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
+                    <div className="grid size-7 place-items-center rounded-lg bg-primary/10 text-primary">
+                      <ServerIcon className="size-3.5" />
+                    </div>
+                    <span className="text-xs font-semibold text-foreground">
+                      {bp.localServices}
+                    </span>
+                    <ChevronDownIcon
+                      className={cn(
+                        "ml-auto size-3.5 text-muted-foreground transition-transform",
+                        !localServicesExpanded && "-rotate-90",
+                      )}
+                    />
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleRescanPorts}
                     disabled={scanningPorts}
-                    className="ml-auto flex h-6 items-center gap-1 rounded-md border border-border-default px-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                    className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-border-default px-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
                   >
                     {scanningPorts ? (
                       <Loader2Icon className="size-3 animate-spin" />
@@ -1655,52 +1945,54 @@ export function BrowserPreviewPanel({
                     {bp.scanButton}
                   </button>
                 </div>
-                <div className="space-y-1.5">
-                  {detectedServices.map((svc) => (
-                    <button
-                      key={svc.port}
-                      onClick={() => handleQuickNavigate(svc.url)}
-                      className="group flex w-full items-center gap-3 rounded-lg border border-border-default bg-muted/25 px-3 py-2 text-left shadow-[var(--shadow-xs)] transition-colors hover:border-primary/25 hover:bg-primary/5"
-                    >
-                      <div
-                        className={cn(
-                          "flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-bold transition-transform group-hover:scale-[1.03]",
-                          svc.type === "frontend"
-                            ? "bg-info/10 text-info"
-                            : svc.type === "backend"
-                              ? "bg-success/10 text-success"
-                              : "bg-muted text-muted-foreground",
-                        )}
+                {localServicesExpanded && (
+                  <div className="space-y-1.5">
+                    {detectedServices.map((svc) => (
+                      <button
+                        key={svc.port}
+                        onClick={() => handleQuickNavigate(svc.url)}
+                        className="group flex w-full items-center gap-3 rounded-lg border border-border-default bg-muted/25 px-3 py-2 text-left shadow-[var(--shadow-xs)] transition-colors hover:border-primary/25 hover:bg-primary/5"
                       >
-                        {svc.port}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-foreground">
-                          {svc.name}
+                        <div
+                          className={cn(
+                            "flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-bold transition-transform group-hover:scale-[1.03]",
+                            svc.type === "frontend"
+                              ? "bg-info/10 text-info"
+                              : svc.type === "backend"
+                                ? "bg-success/10 text-success"
+                                : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {svc.port}
                         </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          localhost:{svc.port}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-foreground">
+                            {svc.name}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            localhost:{svc.port}
+                          </div>
                         </div>
-                      </div>
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
-                          svc.type === "frontend"
-                            ? "bg-info/10 text-info"
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+                            svc.type === "frontend"
+                              ? "bg-info/10 text-info"
+                              : svc.type === "backend"
+                                ? "bg-success/10 text-success"
+                                : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {svc.type === "frontend"
+                            ? bp.serviceTypeFrontend
                             : svc.type === "backend"
-                              ? "bg-success/10 text-success"
-                              : "bg-muted text-muted-foreground",
-                        )}
-                      >
-                        {svc.type === "frontend"
-                          ? bp.serviceTypeFrontend
-                          : svc.type === "backend"
-                            ? bp.serviceTypeBackend
-                            : bp.serviceTypeOther}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                              ? bp.serviceTypeBackend
+                              : bp.serviceTypeOther}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="max-w-sm rounded-lg border border-border-default bg-background/82 p-5 text-center shadow-[var(--shadow-xs)] backdrop-blur">
@@ -1882,12 +2174,6 @@ export function BrowserPreviewPanel({
           </div>
         )}
       </div>
-
-      {error && (
-        <div className="border-destructive/30 bg-destructive/10 shrink-0 border-t px-2 py-1">
-          <p className="text-destructive text-xs">{error}</p>
-        </div>
-      )}
     </div>
   );
 }
