@@ -27,6 +27,16 @@ _FRAME_CHAR_FASTPASS = _FRAME_BYTE_LIMIT // 4
 _FRAME_TRUNC_MARK = "…(字段过大已截断以保住连接)"
 _FRAME_TRUNCATED_KEY = "_frameTruncated"
 
+# Inbound anti-abuse ceiling, mirroring the team-rooms WS handler
+# (``team_rooms_ws.py``). The outbound guard above bounds what WE emit;
+# this bounds what a client can push at us. A single oversized frame is
+# dropped before parsing (``decode_message`` never sees it), and a
+# per-connection rate limiter sheds sustained floods. Lenient — a legit
+# JSON-RPC frame is a few KB — so only a runaway or hostile client trips
+# them. Set the gateway constructor args to 0 to disable.
+_INBOUND_FRAME_BYTE_LIMIT = 64 * 1024
+_INBOUND_MSG_PER_SEC = 30
+
 
 def _iter_string_leaves(obj: Any) -> list[tuple[Any, Any, int]]:
     """Every (container, key, length) for string leaves, so the largest can

@@ -58,6 +58,16 @@ from typing import Any
 from uuid import uuid4
 
 from runtime.platform.io import atomic_write_json, read_json_with_backup
+from runtime.platform.process.sliding_window_limiter import SlidingWindowLimiter
+
+# Inbound anti-abuse ceiling on the relayed client WS, mirroring the
+# team-rooms handler. The relay forwards every frame to the remote
+# backend, so an unbounded local client could push arbitrary memory at
+# the upstream; bounding the frame size and rate keeps a single bad
+# client from amplifying a flood. Lenient — legit JSON-RPC frames are a
+# few KB.
+_PROXY_WS_MAX_INBOUND_BYTES = 256 * 1024
+_PROXY_WS_MSG_PER_SEC = 30
 
 _LOG = logging.getLogger("octopus.remote_transport")
 
@@ -480,6 +490,14 @@ async def proxy_websocket(
 
     try:
         async with connect as upstream:
+            # Per-connection inbound guard, local to this pump so it's
+            # freed when the connection closes. Oversized frames are
+            # dropped before relay; a runaway client's sustained flood is
+            # shed without forwarding. Mirrors ``team_rooms_ws``.
+            _inbound_limiter = SlidingWindowLimiter(
+                limit=_PROXY_WS_MSG_PER_SEC,
+                window_s=1.0,
+            )
 
             async def _client_to_remote() -> None:
                 while True:
@@ -488,6 +506,16 @@ async def proxy_websocket(
                     except Exception as exc:
                         _LOG.debug("client_ws receive_text broke: %s", exc)
                         break
+                    if len(msg) > _PROXY_WS_MAX_INBOUND_BYTES:
+                        _LOG.warning(
+                            "proxy: dropping %d-byte inbound frame (limit %d)",
+                            len(msg),
+                            _PROXY_WS_MAX_INBOUND_BYTES,
+                        )
+                        continue
+                    if not _inbound_limiter.allow("inbound"):
+                        _LOG.debug("proxy: shedding over-rate inbound frame")
+                        continue
                     try:
                         await upstream.send(msg)
                     except Exception as exc:

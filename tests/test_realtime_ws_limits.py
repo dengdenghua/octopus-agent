@@ -117,3 +117,58 @@ def test_turn_rate_limit_skipped_for_anonymous_actor():
 def test_turn_rate_disabled_when_zero():
     gw = _gateway(max_turns_per_minute_per_actor=0)
     assert gw._turn_rate_limiter is None
+
+
+# ── inbound frame size + rate (per-connection, mirrors team_rooms_ws) ──
+
+
+def test_inbound_oversized_frame_is_dropped_and_connection_survives():
+    """A single oversized frame must be dropped before decode — the
+    connection stays usable (outbound guard was already symmetric)."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from runtime.protocol import Notification, decode_message, encode_message
+    from runtime.sensing.gateway._realtime_gateway_frame import (
+        _INBOUND_FRAME_BYTE_LIMIT,
+    )
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    gateway = RealtimeGateway(runtime=object())
+    app = FastAPI()
+    app.include_router(gateway.router)
+    with (
+        TestClient(app) as client,
+        client.websocket_connect("/api/realtime") as ws,
+    ):
+        ws.send_text("x" * (_INBOUND_FRAME_BYTE_LIMIT + 1))
+        ws.send_text(encode_message(Notification(method="ping", params={})))
+        reply = decode_message(ws.receive_text())
+    assert isinstance(reply, Notification)
+    assert reply.method == "pong"
+
+
+def test_inbound_rate_limit_sheds_flood():
+    """A sustained flood over the per-connection cap is shed; the ping
+    keepalive still gets its pong (so the limit is not a kill switch)."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from runtime.protocol import Notification, decode_message, encode_message
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    gateway = RealtimeGateway(runtime=object(), max_inbound_msgs_per_sec=2)
+    app = FastAPI()
+    app.include_router(gateway.router)
+    with (
+        TestClient(app) as client,
+        client.websocket_connect("/api/realtime") as ws,
+    ):
+        for _ in range(4):
+            ws.send_text(encode_message(Notification(method="ping", params={})))
+        pongs = []
+        for _ in range(2):
+            reply = decode_message(ws.receive_text())
+            if isinstance(reply, Notification) and reply.method == "pong":
+                pongs.append(reply)
+    assert len(pongs) == 2  # first two allowed; the rest shed

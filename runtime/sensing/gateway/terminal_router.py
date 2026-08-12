@@ -47,9 +47,19 @@ from runtime.execution.arms.output_buffer import ByteStreamBuffer, LineBuffer
 from runtime.execution.arms.safe_rm import SafeRmConfig, SafeRmProtector
 from runtime.execution.arms.shell_state import ShellEnvState
 from runtime.execution.arms.shell_state_manager import ShellStateManager
+from runtime.platform.process.sliding_window_limiter import SlidingWindowLimiter
 from runtime.safety.env_scrub import scrub_credential_env
 
 _logger = logging.getLogger(__name__)
+
+# Inbound anti-abuse ceiling on the terminal WS, mirroring the team-rooms
+# handler. Terminal input is user data (typed commands / pastes), so the
+# frame cap is generous — a legit paste is far under it — while still
+# bounding memory, and the per-connection rate limiter sheds a runaway
+# client's sustained flood. Oversized/over-rate frames are dropped before
+# they reach the PTY.
+_TERMINAL_WS_MAX_INBOUND_BYTES = 256 * 1024
+_TERMINAL_WS_MSG_PER_SEC = 30
 
 # ── Session store ──────────────────────────────────────────────
 # PLACEHOLDER_SESSIONS
@@ -548,9 +558,28 @@ def mount_terminal_routes(
                     await asyncio.sleep(0.02)
 
         output_task = asyncio.create_task(_send_output())
+        # Per-connection inbound anti-flood guard (mirrors team_rooms_ws).
+        # Local to this handler so it's freed when the connection closes.
+        _inbound_limiter = SlidingWindowLimiter(
+            limit=_TERMINAL_WS_MSG_PER_SEC,
+            window_s=1.0,
+        )
         try:
             while True:
                 raw = await ws.receive_text()
+                if len(raw) > _TERMINAL_WS_MAX_INBOUND_BYTES:
+                    _logger.warning(
+                        "terminal: dropping %d-byte inbound frame (limit %d) session=%s",
+                        len(raw),
+                        _TERMINAL_WS_MAX_INBOUND_BYTES,
+                        session_id,
+                    )
+                    continue
+                if not _inbound_limiter.allow(actor_id or "<anon>"):
+                    _logger.debug(
+                        "terminal: shedding over-rate inbound frame session=%s", session_id
+                    )
+                    continue
                 try:
                     msg = json.loads(raw)
                 except json.JSONDecodeError:

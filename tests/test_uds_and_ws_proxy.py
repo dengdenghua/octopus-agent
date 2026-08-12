@@ -131,6 +131,24 @@ async def test_proxy_websocket_relays_client_to_remote() -> None:
 
 
 @pytest.mark.asyncio
+async def test_proxy_websocket_drops_oversized_inbound_frame() -> None:
+    """A frame over the inbound cap is dropped before relay; a later
+    legit frame still passes — one bad client can't push unbounded
+    memory at the remote backend."""
+    from runtime.sensing.gateway.remote_transport import _PROXY_WS_MAX_INBOUND_BYTES
+
+    backend = RemoteBackend(id="x", name="x", url="https://example.com")
+    upstream = _FakeUpstream([])
+    client = _FakeClientWs(["x" * (_PROXY_WS_MAX_INBOUND_BYTES + 1), "small frame"])
+
+    def factory(url: str) -> _FakeUpstream:
+        return upstream
+
+    await proxy_websocket(backend, client, upstream_factory=factory)
+    assert upstream.sent == ["small frame"]
+
+
+@pytest.mark.asyncio
 async def test_proxy_websocket_sends_error_on_upstream_failure() -> None:
     backend = RemoteBackend(id="x", name="x", url="https://example.com")
     client = _FakeClientWs([])

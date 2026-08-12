@@ -67,6 +67,8 @@ from runtime.sensing.gateway._realtime_gateway_connection import RpcConnection
 from runtime.sensing.gateway._realtime_gateway_frame import (
     _FRAME_BYTE_LIMIT,
     _FRAME_TRUNC_MARK,
+    _INBOUND_FRAME_BYTE_LIMIT,
+    _INBOUND_MSG_PER_SEC,
     _bound_oversized_frame,
 )
 from runtime.sensing.gateway._realtime_gateway_types import (
@@ -114,6 +116,13 @@ class RealtimeGateway:
         max_in_flight_requests_per_connection: int = 32,
         max_connections_per_actor: int = 64,
         max_turns_per_minute_per_actor: int = 120,
+        # Per-connection inbound anti-abuse ceilings (mirror team_rooms_ws):
+        # a single frame over ``max_inbound_msg_bytes`` is dropped before
+        # parsing, and a sustained flood over ``max_inbound_msgs_per_sec``
+        # is shed. Set either to 0 to disable. Lenient defaults — a legit
+        # JSON-RPC frame is a few KB and clients send a few frames/sec.
+        max_inbound_msg_bytes: int = _INBOUND_FRAME_BYTE_LIMIT,
+        max_inbound_msgs_per_sec: int = _INBOUND_MSG_PER_SEC,
     ) -> None:
         self._runtime = runtime
         self._approval_timeout = approval_timeout
@@ -129,6 +138,8 @@ class RealtimeGateway:
             1,
             max_in_flight_requests_per_connection,
         )
+        self._max_inbound_msg_bytes = max(0, int(max_inbound_msg_bytes))
+        self._max_inbound_msgs_per_sec = max(0, int(max_inbound_msgs_per_sec))
         # Lenient per-actor anti-abuse ceilings (auth-on only — a local
         # single-user server with actor_id None is never limited). Sized
         # so many tabs/devices and bursty use pass freely; only a runaway
@@ -314,12 +325,33 @@ class RealtimeGateway:
         # ``_handle_payload`` blocks the only coroutine that could
         # ever resolve it — classic deadlock.
         in_flight: set[asyncio.Task[None]] = set()
+        # Per-connection inbound guard, local to this handler so it's freed
+        # when the connection closes — no shared map to leak. Over-sized
+        # frames are dropped before decode; a runaway client's sustained
+        # flood is shed without parsing. Mirrors ``team_rooms_ws``.
+        _inbound_limiter = (
+            SlidingWindowLimiter(limit=self._max_inbound_msgs_per_sec, window_s=1.0)
+            if self._max_inbound_msgs_per_sec > 0
+            else None
+        )
         try:
             while True:
                 try:
                     payload = await ws.receive_text()
                 except WebSocketDisconnect:
                     break
+                if self._max_inbound_msg_bytes > 0 and len(payload) > self._max_inbound_msg_bytes:
+                    _logger.warning(
+                        "realtime: dropping %d-byte inbound frame (limit %d)",
+                        len(payload),
+                        self._max_inbound_msg_bytes,
+                    )
+                    continue
+                if _inbound_limiter is not None and not _inbound_limiter.allow(
+                    actor_id or "<anon>"
+                ):
+                    _logger.debug("realtime: shedding over-rate inbound frame")
+                    continue
                 task = asyncio.create_task(self._handle_payload(conn, payload))
                 in_flight.add(task)
                 task.add_done_callback(in_flight.discard)
