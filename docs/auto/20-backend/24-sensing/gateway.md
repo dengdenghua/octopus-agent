@@ -232,6 +232,7 @@ tier: "standard"
 | `turn_session.py` | Turn session metadata assembly for realtime execution. |
 | `uploads_router.py` | Thread uploads / artifacts router. |
 | `verify_router.py` | Verification router · ``/api/verify/*``. |
+| `waiting_escalation.py` | Waiting-user escalation watchdog — side-channel notifications when an operator approval blocks longer than a threshold. |
 | `wiki_generic.py` | Project-agnostic wiki generator · scans an arbitrary user-selected folder and writes a navigable static documentation tree under ``<root>/.octopus-wiki/``. |
 | `wiki_router.py` | — |
 | `workspace_api_router.py` | Workspace HTTP API · ``/api/workspaces/*``. |
@@ -587,7 +588,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_computer_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| func | `def create_computer_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, escalation)` |  |
 
 ### `computer_router_state.py`
 
@@ -1117,6 +1118,13 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def create_verify_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+
+### `waiting_escalation.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class EscalationPolicy` |  |
+| class | `class WaitingEscalationWatchdog` | Tracks actions in ``waiting_user`` and calls a sink when they stall. |
 
 ### `wiki_generic.py`
 

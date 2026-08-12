@@ -50,6 +50,7 @@ tier: "core"
 | `capability_router.py` | — |
 | `checkpoint_integrity.py` | — |
 | `checkpoint_mirror.py` | Distributed checkpoint mirror — P3 fourth slice. |
+| `completion_decision.py` | — |
 | `completion_receipt.py` | — |
 | `env_health.py` | Startup execution-health canary. |
 | `guard_model_policy.py` | Model-aware guard routing — apply code-smell guards only to cheap models. |
@@ -215,6 +216,13 @@ tier: "core"
 | class | `class CheckpointMirror` | Best-effort distributed mirror of latest checkpoint per task. |
 | func | `def build_checkpoint_mirror_from_url(url)` | Build a CheckpointMirror backed by a real Redis client at ``url``. |
 
+### `completion_decision.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class CompletionDecision` | Canonical semantic outcome for one ReAct turn. |
+| func | `def decide_completion(terminated_reason, effective_success, blocked_on_user)` | Resolve raw loop signals into one stable, protocol-facing outcome. |
+
 ### `completion_receipt.py`
 
 | Kind | Symbol | Doc |
@@ -325,6 +333,12 @@ tier: "core"
 | func | `def build_evidence_digest(decision, steps, max_chars_per_target)` | Build a bounded per-target digest for the direct-answer round. |
 | func | `def build_direct_answer_directive(goal, decision, steps)` | Keep the original task next to bounded evidence during synthesis. |
 | func | `def evidence_answer_conflicts_with_goal(goal, answer)` | Reject a synthesis answer that falsely claims there was no task. |
+
+### `react_goal_analysis.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def derive_effective_execution_goal(current_goal, conversation_messages)` | Carry an explicitly requested unfinished execution contract across turns. |
 
 ### `react_guard_types.py`
 

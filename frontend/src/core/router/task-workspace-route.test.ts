@@ -25,10 +25,10 @@ describe("task workspace route", () => {
   test("carries a workspace path for a new workspace-bound task", () => {
     expect(
       taskWorkspaceRoute({
-        workspacePath: "/Users/dangbei/Public/octopus-agent",
+        workspacePath: "/Users/example/Public/octopus-agent",
       }),
     ).toBe(
-      "/workspace/realtime/new?workspace_path=%2FUsers%2Fdangbei%2FPublic%2Foctopus-agent",
+      "/workspace/realtime/new?workspace_path=%2FUsers%2Fexample%2FPublic%2Foctopus-agent",
     );
   });
 });

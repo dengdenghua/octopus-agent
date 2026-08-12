@@ -1,6 +1,6 @@
 # Kimi Replay 流式 UX/UI 走查
 
-素材来源：`/Users/dangbei/Public/octopus/octopus-agent/kimi_replay_capture/`
+素材来源：仓库内的 `kimi_replay_capture/`。
 
 > 勘误 / 修正说明
 >

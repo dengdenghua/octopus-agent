@@ -80,12 +80,12 @@ describe("<WorkspaceLayout /> stub response banner", () => {
     act(() => {
       eventBus.emit("task:new", {
         agentId: "coder",
-        workspacePath: "/Users/dangbei/Public/octopus-agent",
+        workspacePath: "/Users/example/Public/octopus-agent",
       });
     });
 
     expect(screen.getByTestId("workspace-location").textContent).toBe(
-      "/workspace/realtime/new?agent=coder&workspace_path=%2FUsers%2Fdangbei%2FPublic%2Foctopus-agent",
+      "/workspace/realtime/new?agent=coder&workspace_path=%2FUsers%2Fexample%2FPublic%2Foctopus-agent",
     );
   });
 });
