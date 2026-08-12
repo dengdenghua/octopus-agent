@@ -125,6 +125,18 @@ export interface WorkspaceFocus {
   previewUrl?: string | null;
 }
 
+export interface EvidenceReference {
+  id: string;
+  kind: "file" | "web" | "verification" | "artifact";
+  title: string;
+  uri?: string | null;
+  status: "observed" | "pending" | "passed" | "failed";
+  origin: "grounding" | "tool" | "verification" | "artifact";
+  sourceItemId?: string | null;
+  phaseId?: string | null;
+  detail?: string | null;
+}
+
 export interface WorkbenchSnapshotV2 {
   schemaVersion: 2;
   version: number;
@@ -133,6 +145,7 @@ export interface WorkbenchSnapshotV2 {
   currentPhaseId?: string | null;
   currentItemId?: string | null;
   workspaceFocus?: WorkspaceFocus | null;
+  evidence?: EvidenceReference[];
   updatedAt: string;
 }
 
@@ -382,6 +395,23 @@ export interface Turn {
   taskId?: string | null;
   checkpointId?: number | null;
   outcomeReason?: string | null;
+  /** Canonical semantic completion result from the runtime. Unlike the
+   * transport status, this distinguishes partial and warning deliveries. */
+  completionDecision?: {
+    outcome:
+      | "completed"
+      | "completed_with_warning"
+      | "partial"
+      | "blocked_on_user"
+      | "paused"
+      | "cancelled"
+      | "failed";
+    reason: string;
+    success: boolean;
+    terminal: boolean;
+    resumable: boolean;
+    retryable: boolean;
+  } | null;
 }
 
 // Lightweight thread metadata for ``thread/list`` responses. Keeps the

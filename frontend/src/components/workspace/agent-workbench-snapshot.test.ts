@@ -24,6 +24,64 @@ function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
 const deriveAgentTiles = () => [];
 
 describe("agent workbench snapshot", () => {
+  test("uses the latest todo statuses when the workbench snapshot is stale", () => {
+    const snapshot = buildAgentWorkbenchSnapshot(
+      [
+        event({
+          id: "todo-live",
+          name: "todo_write",
+          status: "running",
+          input: {
+            items: [
+              { content: "定位入口", status: "completed" },
+              { content: "实现看门狗", status: "completed" },
+              { content: "接入路由", status: "in_progress" },
+            ],
+            workbenchSnapshot: {
+              schemaVersion: 2,
+              version: 1,
+              status: "running",
+              phases: [
+                {
+                  id: "server-locate",
+                  index: 1,
+                  total: 3,
+                  title: "定位入口",
+                  status: "running",
+                },
+                {
+                  id: "server-watchdog",
+                  index: 2,
+                  total: 3,
+                  title: "实现看门狗",
+                  status: "pending",
+                },
+                {
+                  id: "server-route",
+                  index: 3,
+                  total: 3,
+                  title: "接入路由",
+                  status: "pending",
+                },
+              ],
+              currentPhaseId: "server-locate",
+              currentItemId: null,
+              updatedAt: "2026-08-11T00:00:00.000Z",
+            },
+          },
+        }),
+      ],
+      { deriveAgentTiles, isLoading: true },
+    );
+
+    expect(snapshot.phases.map((phase) => phase.status)).toEqual([
+      "done",
+      "done",
+      "running",
+    ]);
+    expect(snapshot.currentPhase?.title).toBe("接入路由");
+  });
+
   test("keeps the same version for duplicate visible state", () => {
     const events = [
       event({
@@ -381,7 +439,7 @@ describe("agent workbench snapshot", () => {
     expect(snapshot.phases.map((phase) => phase.status)).toContain("done");
   });
 
-  test("settled final answers ignore stale server current phase ids", () => {
+  test("settled final answers preserve explicit server phase truth", () => {
     const snapshot = buildAgentWorkbenchSnapshot(
       [
         event({
@@ -434,10 +492,62 @@ describe("agent workbench snapshot", () => {
 
     expect(snapshot.phases.map((phase) => phase.status)).toEqual([
       "done",
-      "done",
-      "done",
+      "running",
+      "pending",
     ]);
-    expect(snapshot.currentPhase?.id).toBe("phase-3");
+    expect(snapshot.currentPhase?.id).toBe("phase-2");
+  });
+
+  test("ignores a stale current item from a terminal pending snapshot", () => {
+    const eventsWithCurrentItem = (currentItemId: string | null) => [
+      event({
+        id: "server-snapshot",
+        name: "todo_write",
+        input: {
+          workbenchSnapshot: {
+            schemaVersion: 2,
+            version: 3,
+            status: "pending",
+            phases: [
+              {
+                id: "phase-1",
+                index: 1,
+                total: 2,
+                title: "Inspect",
+                status: "done",
+              },
+              {
+                id: "phase-2",
+                index: 2,
+                total: 2,
+                title: "Optional follow-up",
+                status: "pending",
+              },
+            ],
+            currentPhaseId: "phase-2",
+            // Older backends persisted the last tool here after the turn
+            // had settled. It is history, not an active selection.
+            currentItemId,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      }),
+      event({ id: "read-old", name: "read_file", startedAt: 1500 }),
+      event({ id: "read-latest", name: "read_file", startedAt: 2000 }),
+    ];
+    const stale = buildAgentWorkbenchSnapshot(
+      eventsWithCurrentItem("read-old"),
+      { deriveAgentTiles, hasAnswer: true, runSettled: true },
+    );
+    const clean = buildAgentWorkbenchSnapshot(eventsWithCurrentItem(null), {
+      deriveAgentTiles,
+      hasAnswer: true,
+      runSettled: true,
+    });
+
+    expect(stale.currentBlock?.id).toBe(clean.currentBlock?.id);
+    expect(stale.currentPhase?.id).toBe(clean.currentPhase?.id);
+    expect(stale.currentPhase?.id).toBe("phase-2");
   });
 
   test("treats generated final artifacts as completed output", () => {
@@ -507,7 +617,7 @@ describe("agent workbench snapshot", () => {
     ]);
     expect(snapshot.phases.map((phase) => phase.status)).toEqual([
       "done",
-      "done",
+      "running",
     ]);
     expect(snapshot.currentPhase?.id).toBe("phase-2");
   });

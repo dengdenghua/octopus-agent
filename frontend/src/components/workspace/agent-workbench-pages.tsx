@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 import type { OutlineRound } from "@/core/threads/progress-outline";
+import type { GroundingSource } from "@/core/realtime/items";
 import {
   type AgentTile,
   type DiffEntry,
@@ -91,9 +92,9 @@ export function WorkbenchEmptyPage({
   title: string;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center bg-muted/30 p-6 text-center">
-      <div className="flex max-w-xs flex-col items-center gap-3">
-        <div className="relative">
+    <div className="workbench-empty-page flex min-h-0 flex-1 items-center justify-center bg-muted/30 p-6 text-center">
+      <div className="workbench-empty-page-content flex max-w-xs flex-col items-center gap-3">
+        <div className="workbench-empty-page-icon relative">
           <div className="relative flex size-12 items-center justify-center rounded-lg border border-border bg-card">
             <MonitorIcon
               className="size-5 text-muted-foreground/60"
@@ -102,7 +103,7 @@ export function WorkbenchEmptyPage({
           </div>
         </div>
         <div className="text-sm font-medium text-foreground/90">{title}</div>
-        <p className="text-xs leading-relaxed text-muted-foreground/70">
+        <p className="workbench-empty-page-description text-xs leading-relaxed text-muted-foreground/70">
           {description}
         </p>
       </div>
@@ -122,7 +123,7 @@ function SummaryDiffEntryList({
   const { t } = useI18n();
   const Icon = kind === "artifact" ? FilePlus2Icon : FileTextIcon;
   return (
-    <ul className="max-h-48 overflow-y-auto">
+    <ul className="stable-scroll-viewport max-h-48 overflow-y-auto">
       {entries.map((entry) => (
         <li key={entry.id}>
           <button
@@ -262,6 +263,7 @@ function referenceTabForBlock(block: WorkBlock): ObservedReferenceTabId {
     return "memory";
   }
   if (block.kind === "file" || block.kind === "read") return "files";
+  if (isLocalFileSearchBlock(block)) return "files";
   if (
     (block.kind === "search" || block.kind === "browser") &&
     hasHttpReference(block)
@@ -285,6 +287,13 @@ function referenceItemsForBlock(
     const fileItems = fileReferenceItems(block, blockTitle);
     if (fileItems.length > 0) return fileItems;
   }
+  if (isLocalFileSearchBlock(block)) {
+    const fileItems = localFileSearchReferenceItems(block, blockTitle);
+    if (fileItems.length > 0) return fileItems;
+    // A pattern with no returned path is an attempted lookup, not confirmed
+    // context. Do not inflate the evidence count with the query itself.
+    return [];
+  }
   if (block.kind === "search" || block.kind === "browser") {
     const webItems = webReferenceItems(block);
     if (webItems.length > 0) return webItems;
@@ -305,6 +314,71 @@ function referenceItemsForBlock(
       tag: referenceStatusLabel(block.status, t),
     },
   ];
+}
+
+function isLocalFileSearchBlock(block: WorkBlock): boolean {
+  if (block.kind !== "search" || hasHttpReference(block)) return false;
+  return /(?:^|[_:\s-])(grep|glob|list|search)(?:_?(?:text|file|files|cwd|dir|directory))?(?:$|[_:\s-])/i.test(
+    block.event.name,
+  );
+}
+
+function localFileSearchReferenceItems(
+  block: WorkBlock,
+  blockTitle: string,
+): ObservedReferenceItem[] {
+  const paths = uniqueStrings([
+    ...filePathsFromSearchOutput(block.event.output),
+    ...filePathsFromSearchOutput(block.event.input?.output),
+  ]);
+  return paths.slice(0, 50).map((path, index) => {
+    const name = basename(path);
+    return {
+      id: `${block.id}:local-search:${index}:${path}`,
+      title: compactReference(name || path, 120),
+      subtitle: path !== name ? compactReference(path, 140) : blockTitle,
+      tag: fileKindLabel(path),
+    };
+  });
+}
+
+function filePathsFromSearchOutput(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) =>
+      typeof entry === "string" && isConcreteLocalReference(entry)
+        ? [entry.trim()]
+        : filePathsFromSearchOutput(entry),
+    );
+  }
+  if (isRecord(value)) {
+    const direct = stringValuesFromInput(value, [
+      "path",
+      "file_path",
+      "filepath",
+      "filename",
+    ]).filter(isConcreteLocalReference);
+    return [
+      ...direct,
+      ...["results", "items", "files", "matches", "data"].flatMap((key) =>
+        filePathsFromSearchOutput(value[key]),
+      ),
+    ];
+  }
+  if (typeof value !== "string" || !value.trim()) return [];
+
+  const parsed = parsedJsonValuesFromText(value);
+  // Never regex filenames out of arbitrary prose. CSS values, versions and
+  // truncated words routinely resemble paths ("oklch(0.55", "globals.cs").
+  // Legacy compatibility accepts JSON embedded in text; new runs use typed
+  // workbench evidence and never enter this fallback.
+  return parsed.flatMap(filePathsFromSearchOutput);
+}
+
+function isConcreteLocalReference(value: string): boolean {
+  const path = value.trim();
+  if (!path || path === "." || path === "./" || path === "../") return false;
+  if (/[*?{}\[\]]/.test(path) || /^https?:\/\//i.test(path)) return false;
+  return /[\\/]/.test(path) || /\.[A-Za-z0-9]{1,12}$/.test(path);
 }
 
 function fileReferenceItems(
@@ -581,7 +655,19 @@ function dedupeReferenceItems(
   const seen = new Set<string>();
   const result: ObservedReferenceItem[] = [];
   for (const item of items) {
-    const key = `${item.title}\u0000${item.subtitle ?? ""}`;
+    const pathLike = item.subtitle || item.url || item.title;
+    const normalizedPath = pathLike
+      .trim()
+      .replace(/\\/g, "/")
+      .replace(/:\d+(?::\d+)?$/, "")
+      .replace(/^\.\//, "")
+      .toLocaleLowerCase();
+    // The compact list only displays the basename. Showing several visually
+    // identical rows is not actionable; detailed paths remain available in
+    // typed evidence and file/diff views.
+    const key = item.tag
+      ? `file:${item.title.trim().toLocaleLowerCase()}`
+      : normalizedPath;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(item);
@@ -840,6 +926,8 @@ export function AgentSummaryPage({
   focusedProcessEvent,
   progressOutline,
   userInput,
+  groundingSources = [],
+  preferStructuredReferences = false,
   terminalState,
   contextTokens,
   maxContextTokens,
@@ -862,6 +950,9 @@ export function AgentSummaryPage({
     uploadedFiles: Array<{ filename: string; path: string }>;
     attachments: Array<{ filename: string }>;
   } | null;
+  groundingSources?: GroundingSource[];
+  /** Ignore legacy tool-text inference once the server supplies evidence. */
+  preferStructuredReferences?: boolean;
   terminalState?: "interrupted" | "failed" | null;
   contextTokens?: number;
   maxContextTokens?: number;
@@ -872,7 +963,7 @@ export function AgentSummaryPage({
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    () => new Set(["progress", "artifacts"]),
+    () => new Set(["progress", "artifacts", "references"]),
   );
   const [refTab, setRefTab] = useState<ObservedReferenceTabId>("files");
   const artifactDiffEntries = useMemo(
@@ -911,9 +1002,7 @@ export function AgentSummaryPage({
   const hasTodoPlan =
     phases.length > 0 && blocks.some((block) => block.kind === "todo");
   const interruptedTaskIndex =
-    terminalState === "interrupted" && hasTodoPlan
-      ? interruptedPhaseIndex(phases)
-      : -1;
+    terminalState === "interrupted" ? interruptedPhaseIndex(phases) : -1;
   const displayedDonePhaseCount =
     donePhaseCount -
     (interruptedTaskIndex >= 0 &&
@@ -966,20 +1055,41 @@ export function AgentSummaryPage({
     }
     return dedupeReferenceItems(items);
   }, [userInput]);
+  const injectedGroundingItems = useMemo(
+    () =>
+      dedupeReferenceItems(
+        groundingSources.map((source, index) => {
+          const path = source.path.trim();
+          const title = source.title.trim() || basename(path);
+          return {
+            id: `grounding:${index}:${path}`,
+            title: compactReference(title || path, 120),
+            subtitle:
+              path && path !== title ? compactReference(path, 140) : undefined,
+            tag: source.kind === "doc" ? "DOC" : fileKindLabel(path),
+          };
+        }),
+      ),
+    [groundingSources],
+  );
 
   const observedReferenceTabs = useMemo<ObservedReferenceTab[]>(() => {
-    const tabs = buildObservedReferenceTabs(blocks, t);
-    if (inputReferenceItems.length === 0) return tabs;
+    const tabs = buildObservedReferenceTabs(
+      preferStructuredReferences ? [] : blocks,
+      t,
+    );
+    const directFiles = dedupeReferenceItems([
+      ...injectedGroundingItems,
+      ...inputReferenceItems,
+    ]);
+    if (directFiles.length === 0) return tabs;
     const filesTab = tabs.find((tab) => tab.id === "files");
     if (filesTab) {
       return tabs.map((tab) =>
         tab.id === "files"
           ? {
               ...tab,
-              items: dedupeReferenceItems([
-                ...tab.items,
-                ...inputReferenceItems,
-              ]),
+              items: dedupeReferenceItems([...directFiles, ...tab.items]),
             }
           : tab,
       );
@@ -988,11 +1098,17 @@ export function AgentSummaryPage({
       {
         id: "files",
         label: t.agentWorkbenchPages.reference.files,
-        items: inputReferenceItems,
+        items: directFiles,
       },
       ...tabs,
     ];
-  }, [blocks, t, inputReferenceItems]);
+  }, [
+    blocks,
+    t,
+    injectedGroundingItems,
+    inputReferenceItems,
+    preferStructuredReferences,
+  ]);
   const activeRefTab = observedReferenceTabs.some((tab) => tab.id === refTab)
     ? refTab
     : (observedReferenceTabs[0]?.id ?? "files");
@@ -1013,11 +1129,6 @@ export function AgentSummaryPage({
       next.add("progress");
       if (diffEntries.length > 0) {
         next.add("artifacts");
-        next.delete("references");
-      } else if (phases.length === 0 && totalReferenceItems > 0) {
-        next.add("references");
-      } else if (phases.length > 0) {
-        next.delete("references");
       }
       if (
         next.size === previous.size &&
@@ -1027,7 +1138,7 @@ export function AgentSummaryPage({
       }
       return next;
     });
-  }, [diffEntries.length, phases.length, runActive, totalReferenceItems]);
+  }, [diffEntries.length, runActive]);
   const agentHealth = useMemo(() => {
     const total = agentTiles.length;
     const done = agentTiles.filter((agent) => agent.status === "done").length;
@@ -1059,7 +1170,7 @@ export function AgentSummaryPage({
       other: 0,
     };
 
-    for (const block of blocks) {
+    for (const block of preferStructuredReferences ? [] : blocks) {
       if (isAgentLifecycleBlock(block)) continue;
       const referenceItems = referenceItemsForBlock(block, t);
       if (referenceItems.length === 0) continue;
@@ -1084,6 +1195,12 @@ export function AgentSummaryPage({
 
     // 对话开始时喂入的上下文文件（上传文件/附件）同样占用上下文，计入 files 统计。
     for (const item of inputReferenceItems) {
+      const tokens =
+        estimateTokens(item.title || "") + estimateTokens(item.subtitle || "");
+      fileTokens += tokens;
+      tokenByTab.files += tokens;
+    }
+    for (const item of injectedGroundingItems) {
       const tokens =
         estimateTokens(item.title || "") + estimateTokens(item.subtitle || "");
       fileTokens += tokens;
@@ -1119,7 +1236,13 @@ export function AgentSummaryPage({
       otherPercentage,
       segments,
     };
-  }, [blocks, t, inputReferenceItems]);
+  }, [
+    blocks,
+    t,
+    injectedGroundingItems,
+    inputReferenceItems,
+    preferStructuredReferences,
+  ]);
 
   // Prefer the same real conversation-window estimate used by the composer.
   // Falling back to observed reference text keeps the standalone workbench
@@ -1157,7 +1280,7 @@ export function AgentSummaryPage({
     totalReferenceItems === 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
+    <div className="stable-scroll-viewport flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
         {/* 思考/执行详情均在对话框内完整展示，右侧不再重复渲染。
             The task plan stays visible even when a transcript process event is
@@ -1209,7 +1332,7 @@ export function AgentSummaryPage({
               (phases.length > 0 ? (
                 <ul
                   className={cn(
-                    "mt-3 overflow-y-auto pr-0.5",
+                    "stable-scroll-viewport mt-3 overflow-y-auto pr-0.5",
                     hasTodoPlan ? "max-h-72 space-y-0.5" : "space-y-1",
                   )}
                   data-testid={
@@ -1623,7 +1746,7 @@ export function AgentSummaryPage({
                   </div>
                 </div>
                 {/* 上下文列表 */}
-                <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto pr-0.5">
+                <ul className="stable-scroll-viewport mt-2 max-h-64 space-y-1 overflow-y-auto pr-0.5">
                   {observedReferenceTabs.length === 0 ? (
                     <li className="py-4 text-center text-xs text-muted-foreground">
                       {t.agentWorkbenchPages.noObservableReferences}

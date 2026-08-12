@@ -3813,6 +3813,7 @@ function RealtimePageContent({
                     events={agentDisplayEvents}
                     progressOutline={progressOutline}
                     userInput={lastTurnUserInput}
+                    groundingSources={thread.values.latest_grounding ?? []}
                     focusedAgentId={focusedWorkbenchAgentId}
                     focusedAgentView={focusedWorkbenchAgentView}
                     focusedAgentNonce={focusedWorkbenchAgentNonce}

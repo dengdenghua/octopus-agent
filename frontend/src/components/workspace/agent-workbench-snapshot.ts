@@ -1,6 +1,9 @@
 import { useMemo, useRef } from "react";
 
-import type { WorkbenchSnapshotV2 } from "@/core/realtime/items";
+import type {
+  EvidenceReference,
+  WorkbenchSnapshotV2,
+} from "@/core/realtime/items";
 import {
   businessAgentPhaseKey,
   deriveAgentPhases,
@@ -42,6 +45,7 @@ export type AgentWorkbenchSnapshot = {
   deferOutputSurfaces: boolean;
   diffEntries: DiffEntry[];
   displayEvents: LiveToolEvent[];
+  evidence: EvidenceReference[];
   fingerprint: string;
   focusedTab: AgentWorkbenchTabId | null;
   hasContent: boolean;
@@ -115,13 +119,15 @@ export function buildAgentWorkbenchSnapshot(
     displayEvents,
     blocks,
   );
-  const phases =
+  const phases = reconcileTodoPhases(
     serverSnapshotToAgentPhases(
       serverSnapshot,
       blocks,
       options,
       observedPhaseBlockIds,
-    ) ?? derived.phases;
+    ),
+    derived.phases,
+  );
   const optimisticPhase =
     phases.length === 0 && isLiveRunInProgress(options)
       ? optimisticPlanningPhase()
@@ -154,6 +160,7 @@ export function buildAgentWorkbenchSnapshot(
     deferOutputSurfaces,
     diffEntries,
     displayEvents,
+    evidence: serverSnapshot?.evidence ?? [],
     fingerprint: "",
     focusedTab:
       tabFromServerWorkbenchSnapshot(serverSnapshot) ??
@@ -172,13 +179,60 @@ export function buildAgentWorkbenchSnapshot(
   };
 }
 
+/**
+ * The todo_write payload is the state shown by the inline checklist and is
+ * updated more frequently than the optional workbench snapshot embedded in
+ * the same event stream. Keep the snapshot's block associations, but let the
+ * newest todo payload own item order and status so the two surfaces cannot
+ * disagree (for example inline 4/7 complete while the workbench still says
+ * 0/7).
+ */
+function reconcileTodoPhases(
+  serverPhases: AgentPhase[] | null,
+  derivedPhases: AgentPhase[],
+): AgentPhase[] {
+  if (!serverPhases) return derivedPhases;
+  if (
+    derivedPhases.length === 0 ||
+    !derivedPhases.every((phase) => phase.id.startsWith("todo-phase:"))
+  ) {
+    return serverPhases;
+  }
+
+  const unusedServerPhases = new Set(serverPhases);
+  return derivedPhases.map((phase, index) => {
+    const normalizedTitle = normalizeAgentPhaseTitle(
+      phase.title,
+    ).toLocaleLowerCase();
+    const matchingServerPhase =
+      serverPhases.find((candidate) => candidate.id === phase.id) ??
+      serverPhases.find(
+        (candidate) =>
+          unusedServerPhases.has(candidate) &&
+          normalizeAgentPhaseTitle(candidate.title).toLocaleLowerCase() ===
+            normalizedTitle,
+      ) ??
+      serverPhases[index];
+    if (matchingServerPhase) unusedServerPhases.delete(matchingServerPhase);
+    return {
+      ...matchingServerPhase,
+      ...phase,
+      detail: phase.detail ?? matchingServerPhase?.detail,
+      blockIds: uniqueBlockIds([
+        ...(matchingServerPhase?.blockIds ?? []),
+        ...phase.blockIds,
+      ]),
+    };
+  });
+}
+
 function isLiveRunInProgress(options: AgentWorkbenchSnapshotOptions): boolean {
   return Boolean(
     options.isLoading &&
-      !options.runSettled &&
-      !options.runFailed &&
-      !options.paused &&
-      !options.hasAnswer,
+    !options.runSettled &&
+    !options.runFailed &&
+    !options.paused &&
+    !options.hasAnswer,
   );
 }
 
@@ -212,10 +266,13 @@ function serverSnapshotToAgentPhases(
 ): AgentPhase[] | null {
   if (!snapshot || snapshot.phases.length === 0) return null;
   const blockIds = new Set(blocks.map((block) => block.id));
+  const acceptsCurrentItem = snapshotHasActionableCurrentItem(snapshot);
   return snapshot.phases.map((phase, index) => {
     const activeItemId =
       phase.activeItemId ??
-      (phase.id === snapshot.currentPhaseId ? snapshot.currentItemId : null);
+      (acceptsCurrentItem && phase.id === snapshot.currentPhaseId
+        ? snapshot.currentItemId
+        : null);
     const activeBlockIds =
       activeItemId && blockIds.has(activeItemId)
         ? [activeItemId]
@@ -265,6 +322,7 @@ function observedPhaseBlockIdsFromSnapshots(
     if (
       snapshot.currentPhaseId &&
       snapshot.currentItemId &&
+      snapshotHasActionableCurrentItem(snapshot) &&
       blockIds.has(snapshot.currentItemId)
     ) {
       appendPhaseBlockId(
@@ -337,8 +395,16 @@ function currentBlockFromServerSnapshot(
   snapshot: WorkbenchSnapshotV2 | null,
   blocks: WorkBlock[],
 ): WorkBlock | null {
-  if (!snapshot?.currentItemId) return null;
+  if (!snapshot?.currentItemId || !snapshotHasActionableCurrentItem(snapshot)) {
+    return null;
+  }
   return blocks.find((block) => block.id === snapshot.currentItemId) ?? null;
+}
+
+function snapshotHasActionableCurrentItem(
+  snapshot: WorkbenchSnapshotV2,
+): boolean {
+  return ["running", "waiting_approval", "error"].includes(snapshot.status);
 }
 
 function tabFromServerWorkbenchSnapshot(
@@ -357,18 +423,12 @@ function tabFromServerWorkbenchSnapshot(
 
 function serverPhaseStatus(
   status: WorkbenchSnapshotV2["phases"][number]["status"],
-  options: AgentWorkbenchSnapshotOptions,
+  _options: AgentWorkbenchSnapshotOptions,
 ): AgentPhase["status"] {
   if (status === "done") return "done";
   if (status === "error") return "error";
-  if (
-    options.runSettled &&
-    options.hasAnswer &&
-    !options.runFailed &&
-    !options.paused
-  ) {
-    return "done";
-  }
+  // Workbench snapshots already carry the authoritative task state. A final
+  // answer must not manufacture completion for pending/running plan rows.
   if (status === "waiting_approval") return "waiting_approval";
   if (status === "running") return "running";
   return "pending";
@@ -487,6 +547,15 @@ function fingerprintWorkbenchSnapshot(
       workDir: options.workDir ?? "",
     },
     focusedTab: snapshot.focusedTab,
+    evidence: snapshot.evidence.map((item) => [
+      item.id,
+      item.kind,
+      item.title,
+      item.uri ?? "",
+      item.status,
+      item.sourceItemId ?? "",
+      item.phaseId ?? "",
+    ]),
     phases: snapshot.phases.map((phase) => [
       phase.id,
       phase.title,
