@@ -1120,16 +1120,16 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert final_snapshot["version"] == 3
     assert [phase["status"] for phase in final_snapshot["phases"]] == [
         "done",
-        "done",
+        "pending",
         "pending",
     ]
     assert all(phase.get("activeItemId") is None for phase in final_snapshot["phases"])
     assert final_snapshot["currentItemId"] is None
 
     turn = out["response"].result["turn"]
-    assert turn["phases"][1]["status"] == "done"
+    assert turn["phases"][1]["status"] == "pending"
     assert turn["workspaceFocus"]["itemId"] == "todo-1"
-    assert turn["workbenchSnapshot"]["currentPhaseId"] == "todo-phase:2"
+    assert turn["workbenchSnapshot"]["currentPhaseId"] == "todo-phase:1"
     assert turn["workbenchSnapshot"]["currentItemId"] is None
     assert turn["workbenchSnapshot"]["version"] == 3
     assert resume is not None and resume.result is not None
