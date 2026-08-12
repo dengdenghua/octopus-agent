@@ -1045,7 +1045,9 @@ def test_agentic_stream_requires_todo_before_complex_final():
 
     # A checklist is a UI projection, not a prerequisite for delivery.
     assert router.calls == 1
-    assert not any(event[0] == "tool_start" and event[1]["name"] == "todo_write" for event in events)
+    assert not any(
+        event[0] == "tool_start" and event[1]["name"] == "todo_write" for event in events
+    )
     assert events[-1] == ("done", "", "premature")
 
     assert events[-1] == ("done", "", "premature")

@@ -30,7 +30,15 @@ _OUTCOME_ROWS = [
 
 
 @pytest.mark.parametrize(
-    ("terminated_reason", "effective_success", "blocked_on_user", "outcome", "success", "resumable", "retryable"),
+    (
+        "terminated_reason",
+        "effective_success",
+        "blocked_on_user",
+        "outcome",
+        "success",
+        "resumable",
+        "retryable",
+    ),
     _OUTCOME_ROWS,
 )
 def test_decide_completion_outcome_table(

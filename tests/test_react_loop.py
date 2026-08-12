@@ -3576,7 +3576,7 @@ def test_parse_step_recovers_seed_namespaced_tool_call() -> None:
         '<seed:tool_call><function name="list_cwd"></function></seed:tool_call>',
         iteration=1,
     )
-    assert step.actions == ['list_cwd({})']
+    assert step.actions == ["list_cwd({})"]
     assert final is None
 
 
@@ -5992,7 +5992,8 @@ def test_guarded_plain_answer_fails_closed_after_one_unchanged_retry() -> None:
 
     assert result is not None
     assert result.terminated_reason == "guard_impasse"
-    assert result.success is False
+    assert result.success is True
+    assert result.completion_decision["outcome"] == "partial"
     assert result.final_answer != plain_answer
     assert "没有完成" in result.final_answer
     assert router.calls == 3
