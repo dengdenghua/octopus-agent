@@ -10,13 +10,20 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
 from runtime.memory.threads.event_log import EventLog
 from runtime.platform.models import ParsedIntent
-from runtime.protocol import TurnStatus
+from runtime.protocol import (
+    ItemMarker,
+    ItemStatus,
+    McpToolCallItem,
+    ServerMethod,
+    TurnStatus,
+)
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.sensing.gateway._realtime_react_stream_apply import (
     _apply_react_event,
@@ -48,6 +55,189 @@ def _lease_renewal_interval_s(lease_ttl_seconds: float) -> float:
     keep their TaskSupervisor lease alive without hammering the store.
     """
     return max(0.1, min(float(lease_ttl_seconds) / 3.0, 30.0))
+
+
+# ── Sub-agent lifecycle journal → workbench bridge ────────────────────
+# ``run_orchestration`` (the audit.ultracode fan-out) spawns its parallel
+# sub-agents via ``_call_agent_parallel`` → ``call_subagent`` WITHOUT an
+# in-memory ``event_emitter``, so their ``subagent_spawned`` /
+# ``subagent_finished`` events never reach any live stream — only the
+# journal mirror (``bridge._safe_journal_emit``) carries them, and only
+# when the bound ``Session.metadata`` injects a journal. The realtime WS —
+# the only stream the workbench reads — has no journal→WS consumer, so
+# the audit's parallel sub-agents render as one opaque
+# ``run_orchestration`` row instead of live agent tiles.
+#
+# These helpers are that missing consumer: a per-turn journal subscription
+# that lifts the marker events onto the turn as the same ``McpToolCallItem``
+# the wired paths emit, which the frontend's ``mcpItemToLiveEvent`` already
+# translates into lifecycle tiles (zero frontend changes).
+
+_AGENT_LIFECYCLE_MARKERS: frozenset[str] = frozenset(
+    {
+        ItemMarker.SUBAGENT_SPAWNED.value,
+        ItemMarker.SUBAGENT_FINISHED.value,
+    }
+)
+
+
+def _parse_lifecycle_preview(preview: Any) -> dict[str, Any]:
+    """Parse the bridge's JSON preview blob back into a dict.
+
+    ``bridge.py`` serialises the spawn/finish payloads into
+    ``args_preview`` / ``output_preview`` JSON strings before writing the
+    journal event; the WS item needs them as a dict again.
+    """
+    if not isinstance(preview, str) or not preview.strip():
+        return {}
+    try:
+        parsed = json.loads(preview)
+    except (ValueError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _subagent_lifecycle_item_from_journal(event: Any) -> McpToolCallItem | None:
+    """Synthesise a marker ``McpToolCallItem`` from a journal SubTool event.
+
+    Fires only for the sub-agent lifecycle markers the bridge mirrors onto
+    the journal (``__subagent_spawned__`` / ``__subagent_finished__``);
+    every other journal event returns ``None``.
+    """
+    kind = getattr(event, "event_type", None)
+    if kind not in ("sub_tool_start", "sub_tool_end"):
+        return None
+    tool_name = getattr(event, "tool_name", "") or ""
+    if tool_name not in _AGENT_LIFECYCLE_MARKERS:
+        return None
+    spawned = kind == "sub_tool_start"
+    preview = (
+        getattr(event, "args_preview", None) if spawned else getattr(event, "output_preview", None)
+    )
+    payload = _parse_lifecycle_preview(preview)
+    parent_id = getattr(event, "parent_tool_use_id", None)
+    if parent_id:
+        payload["parent_tool_use_id"] = str(parent_id)
+    event_id = str(getattr(event, "event_id", "") or "")
+    if len(event_id) > 16:
+        event_id = event_id.replace("-", "")[:16]
+    created = getattr(event, "ts", None)
+    if spawned:
+        return McpToolCallItem(
+            id=f"subagent_spawn_{event_id}" if event_id else "subagent_spawn",
+            server="runtime",
+            tool=ItemMarker.SUBAGENT_SPAWNED.value,
+            arguments=payload,
+            status=ItemStatus.IN_PROGRESS,
+            created_at=created,
+        )
+    ok = bool(payload.get("ok", True))
+    return McpToolCallItem(
+        id=f"subagent_finish_{event_id}" if event_id else "subagent_finish",
+        server="runtime",
+        tool=ItemMarker.SUBAGENT_FINISHED.value,
+        arguments={"parent_tool_use_id": str(parent_id)} if parent_id else {},
+        result=payload,
+        status=ItemStatus.COMPLETED if ok else ItemStatus.FAILED,
+        created_at=created,
+    )
+
+
+def _subagent_lifecycle_matches(event: Any, task_id: str) -> bool:
+    """True when ``event`` is this turn's sub-agent lifecycle marker."""
+    if not task_id:
+        return False
+    return str(getattr(event, "task_id", None) or "") == str(task_id)
+
+
+async def _emit_subagent_lifecycle_item(
+    turn: Any,
+    log: EventLog,
+    emitter: EventEmitter,
+    item: McpToolCallItem,
+    *,
+    terminal: bool,
+) -> None:
+    """Append + notify a synthesised lifecycle item on the driver's loop.
+
+    Runs on the same asyncio loop as the react driver's consumer so
+    ``turn.items`` is only mutated there — the same no-race rule
+    ``_start_orchestrator_bridge`` documents.
+    """
+    turn.items.append(item)
+    method = ServerMethod.ITEM_COMPLETED if terminal else ServerMethod.ITEM_STARTED
+    logged = (
+        log.item_completed(turn.thread_id, turn.id, item)
+        if terminal
+        else log.item_started(turn.thread_id, turn.id, item)
+    )
+    with contextlib.suppress(Exception):
+        await emitter.notify(
+            method,
+            {
+                "threadId": turn.thread_id,
+                "turnId": turn.id,
+                "item": item.model_dump(by_alias=True, mode="json"),
+                "eventId": logged.event_id,
+            },
+        )
+
+
+def _start_subagent_lifecycle_bridge(
+    runtime: Any,
+    turn: Any,
+    log: EventLog,
+    emitter: EventEmitter,
+    loop: asyncio.AbstractEventLoop,
+    task_id: str,
+) -> Callable[[], None] | None:
+    """Subscribe the genome journal for this turn's sub-agent lifecycle.
+
+    Returns the unsubscribe callable, or ``None`` when the stack's journal
+    isn't a live ``StreamingJournal`` (the base ``Journal.subscribe`` is a
+    documented no-op that still returns an unsubscribe — mirror
+    ``stream_handler._has_live_subscribe``'s guard).
+    """
+    journal = getattr(getattr(runtime, "_stack", None), "journal", None)
+    if journal is None:
+        return None
+    from runtime.memory.journal.journal import Journal as _JournalBase
+
+    subscribe = getattr(type(journal), "subscribe", None)
+    if subscribe is None or subscribe is _JournalBase.subscribe:
+        return None
+    task_id = str(task_id or "").strip()
+
+    def _on_journal_event(event: Any) -> None:
+        if not _subagent_lifecycle_matches(event, task_id):
+            return
+        item = _subagent_lifecycle_item_from_journal(event)
+        if item is None:
+            return
+        terminal = item.status in {
+            ItemStatus.COMPLETED,
+            ItemStatus.FAILED,
+        }
+        try:
+            asyncio.run_coroutine_threadsafe(
+                _emit_subagent_lifecycle_item(
+                    turn,
+                    log,
+                    emitter,
+                    item,
+                    terminal=terminal,
+                ),
+                loop,
+            )
+        except (RuntimeError, ValueError):
+            # Loop already closed / task cancelled — drop the frame rather
+            # than leak it into a torn-down turn.
+            return
+
+    try:
+        return journal.subscribe(_on_journal_event)
+    except Exception:  # noqa: BLE001 — telemetry bridge never breaks the turn
+        return None
 
 
 async def _drive_react(
@@ -141,6 +331,15 @@ async def _drive_react(
 
         session_metadata = dict(intent.user_context or {})
         _apply_orchestration_grant(session_metadata)
+        # Sub-agents spawned inside the turn (run_orchestration fan-out,
+        # call_agent_parallel, ...) mirror their lifecycle/tool events onto
+        # the journal ONLY when the bound Session carries one
+        # (see _ephemeral_events._emit_subagent_lifecycle_event). The
+        # realtime WS is not a journal subscriber, so this injection is what
+        # lets the per-turn bridge below lift those events onto the workbench.
+        _stack_journal = getattr(getattr(runtime, "_stack", None), "journal", None)
+        if _stack_journal is not None:
+            session_metadata.setdefault("journal", _stack_journal)
         if runtime._workspaces is not None:
             session_metadata["_artifact_output_root"] = str(
                 runtime._workspaces.layout(turn.thread_id).final,
@@ -176,6 +375,10 @@ async def _drive_react(
             scoped_cancellation(cancel_source.token),
             orchestration_progress_scope(_orchestration_progress),
         ):
+            # Per-turn sub-agent lifecycle bridge. Launched once the react
+            # boot yields ``react_started`` — the task_id it carries is the
+            # only reliable key for the journal events sub-agents mirror.
+            unsubscribe_lifecycle: Callable[[], None] | None = None
             try:
                 _planning_mode = bool(
                     (intent.user_context or {}).get("planning_mode", False),
@@ -237,6 +440,28 @@ async def _drive_react(
                         on_auto_parallel_batch=_on_auto_parallel_batch,
                     )
                     for evt in events:
+                        if (
+                            isinstance(evt, dict)
+                            and evt.get("type") == "react_started"
+                            and unsubscribe_lifecycle is None
+                        ):
+                            _react_task_id = str(evt.get("task_id") or "").strip()
+                            if _react_task_id:
+                                # Stamp task_id onto the session so sub-agent
+                                # journal events carry it (they read
+                                # session.metadata, and the react boot
+                                # generates the id after this session was
+                                # created).
+                                with contextlib.suppress(Exception):
+                                    turn_session.metadata["task_id"] = _react_task_id
+                                unsubscribe_lifecycle = _start_subagent_lifecycle_bridge(
+                                    runtime,
+                                    turn,
+                                    log,
+                                    emitter,
+                                    loop,
+                                    _react_task_id,
+                                )
                         _safe_put(evt)
             except Exception as exc:
                 _safe_put(
@@ -247,6 +472,9 @@ async def _drive_react(
                     }
                 )
             finally:
+                if unsubscribe_lifecycle is not None:
+                    with contextlib.suppress(Exception):
+                        unsubscribe_lifecycle()
                 _safe_put(None, timeout=5.0)
 
     worker = asyncio.create_task(asyncio.to_thread(producer))
