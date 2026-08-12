@@ -470,43 +470,6 @@ def create_stub_router(
     def _obs_health() -> dict[str, Any]:
         return {"status": "ok", "components": {}}
 
-    # ─── Background tasks ──────────────────────────────
-    @router.get("/api/background/tasks")
-    def _bg_tasks() -> list[Any]:
-        return []
-
-    @router.get("/api/background/active-count")
-    def _bg_active_count() -> dict[str, int]:
-        return {"count": 0}
-
-    @router.post("/api/background/submit")
-    def _bg_submit(body: dict[str, Any] | None = None) -> dict[str, Any]:
-        return {"task_id": "", "status": "pending"}
-
-    @router.get("/api/background/tasks/{task_id}")
-    def _bg_task_get(task_id: str) -> dict[str, Any]:
-        return {"task_id": task_id, "status": "unknown"}
-
-    @router.post("/api/background/tasks/{task_id}/pause")
-    def _bg_pause(task_id: str) -> dict[str, Any]:
-        return {"ok": True}
-
-    @router.post("/api/background/tasks/{task_id}/resume")
-    def _bg_resume(task_id: str) -> dict[str, Any]:
-        return {"ok": True}
-
-    @router.post("/api/background/tasks/{task_id}/cancel")
-    def _bg_cancel(task_id: str) -> dict[str, Any]:
-        return {"ok": True}
-
-    @router.delete("/api/background/tasks/{task_id}")
-    def _bg_delete(task_id: str) -> dict[str, Any]:
-        return {"ok": True}
-
-    @router.get("/api/background/tasks/{task_id}/output/poll")
-    def _bg_output(task_id: str) -> dict[str, Any]:
-        return {"events": [], "cursor": 0}
-
     # ─── Skills extras (market removed · meta-skills moved to /api/skills/packs) ──
 
     @router.get("/api/skills/custom")

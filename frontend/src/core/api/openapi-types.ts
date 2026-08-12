@@ -2031,143 +2031,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/background/active-count": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Bg Active Count */
-        get: operations["_bg_active_count_api_background_active_count_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/background/submit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Bg Submit */
-        post: operations["_bg_submit_api_background_submit_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/background/tasks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Bg Tasks */
-        get: operations["_bg_tasks_api_background_tasks_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/background/tasks/{task_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Bg Task Get */
-        get: operations["_bg_task_get_api_background_tasks__task_id__get"];
-        put?: never;
-        post?: never;
-        /** Bg Delete */
-        delete: operations["_bg_delete_api_background_tasks__task_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/background/tasks/{task_id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Bg Cancel */
-        post: operations["_bg_cancel_api_background_tasks__task_id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/background/tasks/{task_id}/output/poll": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Bg Output */
-        get: operations["_bg_output_api_background_tasks__task_id__output_poll_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/background/tasks/{task_id}/pause": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Bg Pause */
-        post: operations["_bg_pause_api_background_tasks__task_id__pause_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/background/tasks/{task_id}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Bg Resume */
-        post: operations["_bg_resume_api_background_tasks__task_id__resume_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/blackboard": {
         parameters: {
             query?: never;
@@ -2201,14 +2064,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Serve Browser Artifact
-         * @description Serve a browser screenshot saved by ``live_browser_screenshot``.
-         *
-         *     Files land in ``data/browser_artifacts/<filename>``. Only ``.png``
-         *     files are served (screenshots only); directory traversal is
-         *     blocked by the simple name check.
-         */
+        /** Serve Browser Artifact */
         get: operations["serve_browser_artifact_api_browser_artifacts__filename__get"];
         put?: never;
         post?: never;
@@ -11167,6 +11023,8 @@ export interface paths {
          * @description MCP 消息接收端点.
          *
          *     客户端通过此端点发送 JSON-RPC 请求，服务端处理后通过 SSE 推送响应。
+         *     与 ``/mcp/sse`` 一致要求账号凭证；若会话已绑定账号，则必须由
+         *     同一账号携带相同凭证调用。
          */
         post: operations["mcp_message_api_tentacle_mcp_message_post"];
         delete?: never;
@@ -11188,6 +11046,11 @@ export interface paths {
          *
          *     客户端连接此端点获取 SSE 事件流，服务端首先发送 endpoint 事件
          *     告知客户端消息发送 URL，然后持续推送 JSON-RPC 响应。
+         *
+         *     账号登录鉴权：网关开启 ``require_auth`` 时，Claude Desktop /
+         *     Cursor 等 MCP 客户端必须携带账号登录后的 Bearer Token
+         *     （``Authorization`` 请求头或 ``?token=`` 查询参数）。会话会
+         *     绑定到该账号，后续 ``/mcp/message`` 也要求同一账号凭证。
          */
         get: operations["mcp_sse_api_tentacle_mcp_sse_get"];
         put?: never;
@@ -13108,6 +12971,8 @@ export interface components {
             ok: boolean;
             /** Provider */
             provider: string;
+            /** Supports Vision */
+            supports_vision?: boolean | null;
         };
         /** CustomModelsList */
         CustomModelsList: {
@@ -19168,283 +19033,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
-                };
-            };
-        };
-    };
-    _bg_active_count_api_background_active_count_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
-                };
-            };
-        };
-    };
-    _bg_submit_api_background_submit_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                } | null;
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    _bg_tasks_api_background_tasks_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown[];
-                };
-            };
-        };
-    };
-    _bg_task_get_api_background_tasks__task_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    _bg_delete_api_background_tasks__task_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    _bg_cancel_api_background_tasks__task_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    _bg_output_api_background_tasks__task_id__output_poll_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    _bg_pause_api_background_tasks__task_id__pause_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    _bg_resume_api_background_tasks__task_id__resume_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
