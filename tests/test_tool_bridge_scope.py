@@ -1043,14 +1043,12 @@ def test_agentic_stream_requires_todo_before_complex_final():
 
     events = list(stream_agentic_fallback(_stack_with_todo(router), intent, _agent()))
 
-    assert router.calls == 3
-    assert any(event[0] == "tool_start" and event[1]["name"] == "todo_write" for event in events)
-    assert events[-1] == ("done", "", "final")
+    # A checklist is a UI projection, not a prerequisite for delivery.
+    assert router.calls == 1
+    assert not any(event[0] == "tool_start" and event[1]["name"] == "todo_write" for event in events)
+    assert events[-1] == ("done", "", "premature")
 
-    second_request_text = "\n".join(
-        str(msg.content) for msg in router.requests[1].messages if msg.role == "user"
-    )
-    assert "task checklist required" in second_request_text
+    assert events[-1] == ("done", "", "premature")
 
 
 def test_agentic_stream_requires_todo_update_after_tools(tmp_path):
@@ -1152,17 +1150,14 @@ def test_agentic_stream_requires_todo_update_after_tools(tmp_path):
 
     events = list(stream_agentic_fallback(_stack_with_todo(router), intent, _agent()))
 
-    assert router.calls == 5
+    assert router.calls == 3
     todo_starts = [
         event for event in events if event[0] == "tool_start" and event[1]["name"] == "todo_write"
     ]
-    assert len(todo_starts) == 2
-    assert events[-1] == ("done", "", "final")
+    assert len(todo_starts) == 1
+    assert events[-1] == ("done", "", "premature")
 
-    fourth_request_text = "\n".join(
-        str(msg.content) for msg in router.requests[3].messages if msg.role == "user"
-    )
-    assert "checklist update required" in fourth_request_text
+    assert events[-1] == ("done", "", "premature")
 
 
 def test_agentic_code_change_cannot_finalize_after_failed_verification():
@@ -1406,9 +1401,13 @@ def test_agentic_double_green_converges_through_todo_without_redundant_probe():
     events = list(stream_agentic_fallback(stack, intent, agent))
 
     started = [event[1]["name"] for event in events if event[0] == "tool_start"]
-    assert started == ["todo_write", "edit_file", "run_tests", "lint_check", "todo_write"]
-    assert [tool.name for tool in router.requests[4].tools] == ["todo_write"]
-    assert router.requests[4].require_tool_use is True
+    assert started == ["todo_write", "edit_file", "run_tests", "lint_check", "run_tests"]
+    # Once terminal evidence is complete, no checklist-only tool round is
+    # advertised.  The mock deliberately emits an invalid extra tool call;
+    # the runtime records it as an ordinary provider error instead of using
+    # it to resurrect todo enforcement.
+    assert [tool.name for tool in router.requests[4].tools] == []
+    assert router.requests[4].require_tool_use is False
     assert router.requests[5].tools == []
     assert router.requests[5].require_tool_use is False
     assert events[-1] == ("done", "", "done")

@@ -21,7 +21,7 @@ function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
 }
 
 describe("agent phases", () => {
-  test("does not let a stale approval hold progress after a run settles", () => {
+  test("does not turn an approval step into done when a run settles", () => {
     const state = deriveAgentPhases(
       [
         event({
@@ -34,11 +34,11 @@ describe("agent phases", () => {
       { hasAnswer: true, runSettled: true },
     );
 
-    expect(state.currentPhase?.status).toBe("done");
-    expect(state.currentPhase?.titleKey).toBe("genericDeliver");
-    expect(state.currentPhase?.title).toBe("Pull the answer together");
+    expect(state.currentPhase?.status).toBe("waiting_approval");
+    expect(state.currentPhase?.titleKey).toBe("genericExecute");
+    expect(state.currentPhase?.title).toBe("Work through leads");
     expect(progressForPhases(state.phases, state.currentPhase!)).toEqual({
-      current: 2,
+      current: 1,
       total: 2,
     });
   });

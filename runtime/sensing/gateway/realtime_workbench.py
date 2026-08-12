@@ -83,14 +83,18 @@ def _terminal_workbench_phases(
     terminal_status: TurnStatus,
 ) -> list[AgentPhaseSnapshot]:
     if terminal_status == TurnStatus.COMPLETED:
-        # Completion closes the phase that was actively executing, but it is
-        # not permission to rewrite untouched pending/approval rows as done.
-        # Those statuses are checklist evidence and must survive refresh for
-        # lifecycle reconciliation and honest receipts.
+        # A final answer closes the turn, not necessarily the current task.
+        # Only an explicit todo/phase receipt may turn a phase into ``done``.
+        # In particular, a model can deliver a partial answer without having
+        # emitted its last checklist update; painting the running row green
+        # here creates the false "everything completed" state users reported.
         return [
-            phase.model_copy(update={"status": "done", "active_item_id": None})
-            if phase.status == "running"
-            else phase.model_copy(update={"active_item_id": None})
+            phase.model_copy(
+                update={
+                    "status": "pending" if phase.status == "running" else phase.status,
+                    "active_item_id": None,
+                }
+            )
             for phase in phases
         ]
     if terminal_status == TurnStatus.FAILED:

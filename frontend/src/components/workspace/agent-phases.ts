@@ -205,13 +205,10 @@ function statusFromBlockList(
   blocks: WorkBlock[],
   options: DeriveAgentPhasesOptions,
 ): AgentPhaseStatus {
-  if (
-    options.runSettled &&
-    blocks.some((block) => block.status === "waiting_approval") &&
-    !blocks.some((block) => block.status === "running")
-  ) {
-    return "done";
-  }
+  // A settled turn is not completion evidence for a blocked/approval step.
+  // Keep the waiting state visible until an explicit receipt (or a later
+  // todo/phase update) marks it done. Otherwise an interrupted run paints the
+  // last spinner green merely because the assistant emitted a final sentence.
   if (blocks.some((block) => block.status === "waiting_approval")) {
     return "waiting_approval";
   }

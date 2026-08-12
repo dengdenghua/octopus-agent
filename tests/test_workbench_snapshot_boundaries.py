@@ -62,14 +62,16 @@ def _phase(
     )
 
 
-def test_terminal_phases_completed_preserves_unstarted_todo_truth() -> None:
+def test_terminal_phases_completed_preserves_unfinished_todo_truth() -> None:
     phases = [
         _phase(pid="p1", index=1, status="done"),
         _phase(pid="p2", index=2, status="running", active="cmd-1"),
         _phase(pid="p3", index=3, status="pending"),
     ]
     out = _terminal_workbench_phases(phases, TurnStatus.COMPLETED)
-    assert [p.status for p in out] == ["done", "done", "pending"]
+    # Final-answer delivery does not prove the currently running checklist
+    # row completed; only its explicit todo receipt can do that.
+    assert [p.status for p in out] == ["done", "pending", "pending"]
     assert all(p.active_item_id is None for p in out), (
         "all active_item_id must clear on terminal completion"
     )
@@ -281,11 +283,11 @@ async def test_finalize_workbench_emits_terminal_snapshot_even_with_pending_tool
     assert "workbench/snapshot" in methods
     # Turn now carries a terminal snapshot.
     assert turn.workbench_snapshot is not None
-    assert turn.workbench_snapshot.status == "done"
+    assert turn.workbench_snapshot.status == "pending"
     # active_item_id cleared on the phase even though the watcher tool
     # is still in self.tools — this is the whole point of the fix.
     assert turn.workbench_snapshot.phases[0].active_item_id is None
-    assert turn.workbench_snapshot.phases[0].status == "done"
+    assert turn.workbench_snapshot.phases[0].status == "pending"
 
 
 @pytest.mark.asyncio

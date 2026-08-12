@@ -98,7 +98,7 @@ class TestCompletionPhraseGuard:
             is None
         )
 
-    def test_completion_phrase_after_real_action_triggers(self) -> None:
+    def test_completion_phrase_after_real_action_is_not_a_gate(self) -> None:
         steps = [
             _step(
                 1,
@@ -116,8 +116,7 @@ class TestCompletionPhraseGuard:
             steps,
             todo_protocol_required=True,
         )
-        assert msg is not None
-        assert "todo_write" in msg
+        assert msg is None
 
     def test_completion_phrase_followed_by_todo_write_silent(self) -> None:
         # The model already did the right thing — guard MUST stay quiet.

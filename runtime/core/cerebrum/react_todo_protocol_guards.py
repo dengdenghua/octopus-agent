@@ -268,8 +268,9 @@ def _completion_phrase_without_todo_guard(
     when the next action IS ``todo_write`` — that's the desired
     behaviour and shouldn't generate noise.
 
-    ``todo_protocol_required`` lets the loop turn this off for
-    free-form chat where checklists aren't expected.
+    Kept as a compatibility hook for older callers.  It is intentionally
+    telemetry-only: a checklist can describe progress, but it cannot veto
+    a turn or force another model round.
     """
     # A checklist is a projection of execution state, never a gate on the
     # model's prose.  Completion words are especially unreliable across
