@@ -63,6 +63,24 @@ def _clear_cheap_model_env(monkeypatch):
     monkeypatch.delenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _no_custom_models(monkeypatch):
+    """Deterministic baseline: no custom_models.json present, so cheap
+    routing falls back to the hard-coded default. A real custom_models.json
+    on a dev box would otherwise inject a self-configured model and change
+    the asserted defaults; tests that exercise the custom-models picker
+    override this fixture per-test."""
+    from runtime.platform.models import custom_model_flags
+
+    monkeypatch.setattr(custom_model_flags, "read_custom_models", lambda: None)
+
+
+def _install_custom_models(monkeypatch, data):
+    from runtime.platform.models import custom_model_flags
+
+    monkeypatch.setattr(custom_model_flags, "read_custom_models", lambda: data)
+
+
 # ── _resolve_cheap_subagent_model ────────────────────────────
 
 
@@ -79,6 +97,109 @@ def test_resolve_strips_whitespace_and_ignores_blank(monkeypatch) -> None:
 
 def test_resolve_returns_default_when_no_env() -> None:
     assert bridge._resolve_cheap_subagent_model() == "glm-4-flash"
+
+
+def test_resolve_picks_generic_custom_model_over_agent_plan(monkeypatch) -> None:
+    """When the operator has self-configured OpenAI-compatible endpoints, the
+    cheap model picks a real generic one instead of a single-model Agent-Plan
+    endpoint (which 404s for any model id outside its allowlist)."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "plan": {
+                "id": "kimi-k3",
+                "provider": "openai",
+                "base_url": "https://ark.cn-beijing.volces.com/api/plan/v3",
+            },
+            "deepseek": {
+                "id": "deepseek-v4-flash",
+                "provider": "openai",
+                "base_url": "https://opencode.ai/zen/go/v1",
+            },
+            "agnes": {
+                "id": "agnes-2.5-flash",
+                "provider": "openai",
+                "base_url": "https://apihub.agnes-ai.com/v1",
+            },
+        },
+    )
+    # Agent-Plan endpoint excluded; deterministic sorted pick = agnes.
+    assert bridge._resolve_cheap_subagent_model() == "agnes-2.5-flash"
+
+
+def test_resolve_falls_back_when_only_agent_plan_endpoints(monkeypatch) -> None:
+    """If every custom endpoint is a single-model Agent-Plan one, do not
+    return any of them (every cheap call would 404) — keep the hard-coded
+    default instead."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "kimi": {
+                "id": "kimi-k3",
+                "provider": "openai",
+                "base_url": "https://ark.cn-beijing.volces.com/api/plan/v3",
+            },
+            "ark": {
+                "id": "ark-code-latest",
+                "provider": "openai",
+                "base_url": "https://ark.cn-beijing.volces.com/api/plan/v3",
+            },
+        },
+    )
+    assert bridge._resolve_cheap_subagent_model() == "glm-4-flash"
+
+
+def test_resolve_ignores_non_openai_provider(monkeypatch) -> None:
+    """Non-OpenAI-compatible providers are not candidate cheap models."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "claude": {
+                "id": "claude-sonnet",
+                "provider": "anthropic",
+                "base_url": "https://api.anthropic.com/v1",
+            },
+        },
+    )
+    assert bridge._resolve_cheap_subagent_model() == "glm-4-flash"
+
+
+def test_resolve_falls_back_when_custom_models_empty(monkeypatch) -> None:
+    _install_custom_models(monkeypatch, {})
+    assert bridge._resolve_cheap_subagent_model() == "glm-4-flash"
+
+
+def test_agent_plan_endpoint_marker() -> None:
+    from runtime.execution.subagents._bridge_identity import _is_agent_plan_endpoint
+
+    assert _is_agent_plan_endpoint("https://ark.cn-beijing.volces.com/api/plan/v3") is True
+    assert _is_agent_plan_endpoint("https://ark.cn-beijing.volces.com/api/plan/v3/") is True
+    assert _is_agent_plan_endpoint("https://opencode.ai/zen/go/v1") is False
+    assert _is_agent_plan_endpoint("") is False
+
+
+def test_call_subagent_uses_resolved_custom_model_when_cheap(
+    monkeypatch,
+    capture_runner,
+) -> None:
+    """With a generic custom endpoint configured, cheap-routed researcher
+    runs land on it — not on the hard-coded glm-4-flash."""
+    _install_custom_models(
+        monkeypatch,
+        {
+            "deepseek": {
+                "id": "deepseek-v4-flash",
+                "provider": "openai",
+                "base_url": "https://opencode.ai/zen/go/v1",
+            },
+        },
+    )
+    bridge.call_subagent(
+        agent_id="researcher",
+        prompt="dig into X",
+        use_cheap_model=True,
+    )
+    assert capture_runner["context"].get("model_name") == "deepseek-v4-flash"
 
 
 # ── call_subagent + use_cheap_model ──────────────────────────
