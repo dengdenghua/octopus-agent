@@ -74,6 +74,71 @@ _logger = logging.getLogger(__name__)
 # the model for work that is genuinely still finishing.
 _BACKGROUND_VERIFY_WAIT_S = 180.0
 
+# Item markers that are one half of a deliberate pair: the spawn tile is
+# never completed, its sibling ``__subagent_finished__`` carries the outcome.
+# Sweeping these would emit a completion the frontend reads as a second,
+# phantom result for the same lane.
+_UNPAIRED_ITEM_MARKERS = frozenset({"__subagent_spawned__"})
+
+
+def _item_outlives_turn(item: Any) -> bool:
+    """True when this item is *meant* to still be running at turn end.
+
+    ``background_exec`` hands work to a task that deliberately outlives the
+    turn; a watcher completes the item minutes later. Sweeping it would
+    overwrite a real result that is still coming.
+    """
+    preview = getattr(item, "input_preview", None) or getattr(item, "inputPreview", None)
+    if isinstance(preview, dict) and preview.get("background") is True:
+        return True
+    return bool(getattr(item, "task_id", None))
+
+
+def _close_turn(
+    log: Any,
+    thread_id: str,
+    turn: Any,
+    *,
+    error: dict[str, Any] | None = None,
+) -> None:
+    """Terminate any still-running item, then log the turn as completed.
+
+    Every path out of a turn goes through here so no path can forget. An item
+    left at ``inProgress`` spins in the UI forever: in thread
+    teD7hPf9dkGOExwO0dIiBE an interrupted turn stranded three ``bb_read``
+    calls and one ``call_agent_parallel``, and the interrupt path logged
+    ``turn_completed`` without touching them.
+
+    The sweep runs *before* ``turn_completed`` so the journal keeps its
+    chronology -- a completion appended after the turn closed would replay out
+    of order.
+    """
+    for item in getattr(turn, "items", None) or []:
+        if getattr(item, "status", None) is not ItemStatus.IN_PROGRESS:
+            continue
+        if str(getattr(item, "tool", "") or "") in _UNPAIRED_ITEM_MARKERS:
+            continue
+        if _item_outlives_turn(item):
+            continue
+        item.status = ItemStatus.FAILED
+        # Say why it stopped rather than leaving a bare failure: the turn's own
+        # outcome is the cause, and without it the item looks like the command
+        # itself broke. Item models carry a message in different fields and
+        # ``CommandExecutionItem`` -- the type that actually leaked here -- has
+        # no ``error`` at all, so route by declared field. Assigning to a field
+        # a pydantic model does not declare raises ValueError, not
+        # AttributeError, so ask the model rather than catching.
+        detail = f"turn ended while this was still running ({turn.status.value})"
+        fields = getattr(type(item), "model_fields", {})
+        if "error" in fields and not getattr(item, "error", None):
+            item.error = detail
+        elif "aggregated_output" in fields:
+            existing = getattr(item, "aggregated_output", None) or ""
+            item.aggregated_output = f"{existing}\n[{detail}]".lstrip()
+        with contextlib.suppress(Exception):
+            log.item_completed(thread_id, turn.id, item)
+    log.turn_completed(thread_id, turn.id, turn.status, error)
+
 
 async def _start_turn(
     runtime: CerebrumRuntime,
@@ -272,7 +337,7 @@ async def _start_turn(
             err.status = ItemStatus.FAILED
             await runtime._emit_item_completed(turn, log, emitter, err)
             turn.status = TurnStatus.FAILED
-            log.turn_completed(thread_id, turn.id, turn.status)
+            _close_turn(log, thread_id, turn)
             # ``intent`` isn't built yet on the prompt-rejected path;
             # the snapshot helper accepts None so the legacy thread
             # store still records the failed turn for the sidebar.
@@ -291,7 +356,7 @@ async def _start_turn(
             await runtime._emit_item_started(turn, log, emitter, err)
             await runtime._emit_item_completed(turn, log, emitter, err)
             turn.status = TurnStatus.FAILED
-            log.turn_completed(thread_id, turn.id, turn.status)
+            _close_turn(log, thread_id, turn)
             runtime._record_failed_turn_proposal(
                 turn,
                 intent=None,
@@ -392,7 +457,7 @@ async def _start_turn(
                 _resume_confirmation_text(resume_intent),
             )
             turn.status = TurnStatus.COMPLETED
-            log.turn_completed(thread_id, turn.id, turn.status)
+            _close_turn(log, thread_id, turn)
             await runtime._maybe_compact(thread_id, log, emitter)
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
@@ -578,7 +643,7 @@ async def _start_turn(
             await runtime._emit_item_started(turn, log, emitter, err)
             await runtime._emit_item_completed(turn, log, emitter, err)
             turn.status = TurnStatus.FAILED
-            log.turn_completed(thread_id, turn.id, turn.status)
+            _close_turn(log, thread_id, turn)
             runtime._record_failed_turn_proposal(
                 turn,
                 intent=intent,
@@ -636,11 +701,11 @@ async def _start_turn(
             # Preserve the concrete terminal/waiting outcome.  In particular,
             # a resumable checkpoint must never be flattened back to completed
             # or to a generic transport interruption.
-            log.turn_completed(thread_id, turn.id, turn.status)
+            _close_turn(log, thread_id, turn)
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
         if turn.status == TurnStatus.FAILED:
-            log.turn_completed(thread_id, turn.id, turn.status)
+            _close_turn(log, thread_id, turn)
             # A "blocked_on_user" disposition is a genuine hand-off, not a
             # failure — do not feed it to the failure-sampling evolution
             # ledger as a turn_failure sample.
@@ -697,7 +762,7 @@ async def _start_turn(
                 await runtime._emit_item_started(turn, log, emitter, degrade_item)
                 await runtime._emit_item_completed(turn, log, emitter, degrade_item)
                 turn.status = TurnStatus.COMPLETED
-                log.turn_completed(thread_id, turn.id, turn.status)
+                _close_turn(log, thread_id, turn)
                 runtime._snapshot_to_thread_store(thread_id, log, intent)
                 return turn
             if repair_limit:
@@ -746,11 +811,11 @@ async def _start_turn(
                     model=validated.model,
                 )
                 if turn.status == TurnStatus.INTERRUPTED:
-                    log.turn_completed(thread_id, turn.id, turn.status)
+                    _close_turn(log, thread_id, turn)
                     runtime._snapshot_to_thread_store(thread_id, log, intent)
                     return turn
                 if turn.status == TurnStatus.FAILED:
-                    log.turn_completed(thread_id, turn.id, turn.status)
+                    _close_turn(log, thread_id, turn)
                     runtime._record_failed_turn_proposal(
                         turn,
                         intent=intent,
@@ -760,7 +825,7 @@ async def _start_turn(
                     return turn
             else:
                 turn.status = TurnStatus.FAILED
-                log.turn_completed(thread_id, turn.id, turn.status)
+                _close_turn(log, thread_id, turn)
                 runtime._record_failed_turn_proposal(
                     turn,
                     intent=intent,
@@ -797,7 +862,7 @@ async def _start_turn(
                 if any(not task.done() for task in pending_bg_tasks):
                     turn.status = TurnStatus.COMPLETED
                     turn.outcome_reason = "completed_with_background"
-                    log.turn_completed(thread_id, turn.id, turn.status)
+                    _close_turn(log, thread_id, turn)
                     runtime._snapshot_to_thread_store(thread_id, log, intent)
                     return turn
 
@@ -848,7 +913,7 @@ async def _start_turn(
                     if not auto_items:
                         break
                     turn.status = TurnStatus.COMPLETED
-                    log.turn_completed(thread_id, turn.id, turn.status)
+                    _close_turn(log, thread_id, turn)
                     runtime._record_successful_turn_example(turn, intent=intent)
                     await runtime._maybe_compact(thread_id, log, emitter)
                     runtime._snapshot_to_thread_store(thread_id, log, intent)
@@ -893,7 +958,7 @@ async def _start_turn(
                     model=validated.model,
                 )
                 if turn.status == TurnStatus.INTERRUPTED:
-                    log.turn_completed(thread_id, turn.id, turn.status)
+                    _close_turn(log, thread_id, turn)
                     runtime._snapshot_to_thread_store(thread_id, log, intent)
                     return turn
                 verification_plan = _verification_plan_for_code_paths(
@@ -928,12 +993,12 @@ async def _start_turn(
                     await runtime._emit_item_started(turn, log, emitter, degrade_item)
                     await runtime._emit_item_completed(turn, log, emitter, degrade_item)
                     turn.status = TurnStatus.COMPLETED
-                    log.turn_completed(thread_id, turn.id, turn.status)
+                    _close_turn(log, thread_id, turn)
                     runtime._snapshot_to_thread_store(thread_id, log, intent)
                     return turn
 
                 turn.status = TurnStatus.FAILED
-                log.turn_completed(thread_id, turn.id, turn.status)
+                _close_turn(log, thread_id, turn)
                 runtime._record_failed_turn_proposal(
                     turn,
                     intent=intent,
@@ -967,11 +1032,11 @@ async def _start_turn(
             # of failing the turn on an environment problem.
             if _turn_verification_environment_blocked(turn):
                 turn.status = TurnStatus.COMPLETED
-                log.turn_completed(thread_id, turn.id, turn.status)
+                _close_turn(log, thread_id, turn)
                 runtime._snapshot_to_thread_store(thread_id, log, intent)
                 return turn
             turn.status = TurnStatus.FAILED
-            log.turn_completed(thread_id, turn.id, turn.status)
+            _close_turn(log, thread_id, turn)
             runtime._record_failed_turn_proposal(
                 turn,
                 intent=intent,
@@ -994,7 +1059,7 @@ async def _start_turn(
             await runtime._emit_item_started(turn, log, emitter, err)
             await runtime._emit_item_completed(turn, log, emitter, err)
             turn.status = TurnStatus.FAILED
-            log.turn_completed(thread_id, turn.id, turn.status)
+            _close_turn(log, thread_id, turn)
             runtime._record_failed_turn_proposal(
                 turn,
                 intent=intent,
@@ -1014,7 +1079,7 @@ async def _start_turn(
                 outcome_reason=turn.outcome_reason,
             )
         turn.status = TurnStatus.COMPLETED
-        log.turn_completed(thread_id, turn.id, turn.status)
+        _close_turn(log, thread_id, turn)
         runtime._record_successful_turn_example(turn, intent=intent)
         await runtime._maybe_compact(thread_id, log, emitter)
         runtime._snapshot_to_thread_store(thread_id, log, intent)
@@ -1031,7 +1096,7 @@ async def _start_turn(
         if turn.status == TurnStatus.IN_PROGRESS:
             turn.status = TurnStatus.INTERRUPTED
             with contextlib.suppress(Exception):
-                log.turn_completed(thread_id, turn.id, turn.status)
+                _close_turn(log, thread_id, turn)
         if turn.completed_at is None:
             turn.completed_at = now_utc()
         # Record the concrete interrupt reason so the frontend can
@@ -1073,10 +1138,10 @@ async def _start_turn(
         if turn.status == TurnStatus.IN_PROGRESS:
             turn.status = TurnStatus.FAILED
             with contextlib.suppress(Exception):
-                log.turn_completed(
+                _close_turn(
+                    log,
                     thread_id,
-                    turn.id,
-                    turn.status,
+                    turn,
                     error={"message": str(exc) or exc.__class__.__name__},
                 )
             # Mirror the driver-crash handler's bypass records: the

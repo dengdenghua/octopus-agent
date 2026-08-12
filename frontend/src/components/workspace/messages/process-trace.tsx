@@ -52,6 +52,10 @@ type MessageAgentRow = {
   avatar?: string;
   currentTool?: string;
   eventCount: number;
+  /** Failure cause for a lane that ended in error. Without it a failed lane
+   * was only a red tint, leaving no way to tell a network drop from a round
+   * cap from a refused route. */
+  error?: string;
 };
 
 type TraceSectionKind = "thinking" | "action" | "verification";
@@ -314,8 +318,19 @@ function AgentClusterRow({
             <span className="sr-only">{statusLabel}</span>
           </div>
           <div className="mt-1 flex items-end gap-2">
-            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              {agent.task}
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-xs",
+                // Show the cause in place of the task once a lane fails: the
+                // task was already stated at dispatch, while the reason is the
+                // only thing that tells the user what to do next.
+                agent.error
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              )}
+              title={agent.error ?? undefined}
+            >
+              {agent.error ?? agent.task}
             </span>
             <div className="flex shrink-0 flex-col items-end gap-1">
               <span className="font-mono text-xs leading-none text-foreground">
@@ -384,6 +399,13 @@ function AgentHoverPreview({
           </div>
         </div>
       </div>
+      {agent.error && (
+        // The row truncates to one line, so the full cause lives here. An SSL
+        // trace or a round-cap message is routinely longer than the row.
+        <div className="mt-4 whitespace-pre-wrap break-words rounded-lg border border-destructive/35 bg-destructive/10 p-3 text-sm leading-6 text-destructive">
+          {agent.error}
+        </div>
+      )}
       <div className="mt-4 max-h-80 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/35 p-3 text-sm leading-6 text-foreground">
         {body}
       </div>
@@ -730,6 +752,9 @@ function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
       avatar: event.subagentAvatar ?? existing?.avatar,
       currentTool: event.name.replace(/[_-]+/g, " "),
       eventCount: (existing?.eventCount ?? 0) + 1,
+      // Keep the first cause seen: later events for the same lane (a spawn
+      // echo, a trailing tool call) carry no error and would erase it.
+      error: event.error ?? existing?.error,
     });
   }
   if (byId.size > 0) return Array.from(byId.values()).slice(0, 12);

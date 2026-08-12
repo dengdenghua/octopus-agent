@@ -563,6 +563,70 @@ describe("liveToolEventsFromConversation", () => {
     });
   });
 
+  it("carries a failed sub-agent's reason onto the event", () => {
+    // Regression: this mapper whitelists fields off `result` by name, and
+    // `error` was not on the list. The backend had always sent a concrete
+    // cause, but a failed lane reached the UI as `status: "error"` and
+    // nothing else -- in thread teD7hPf9dkGOExwO0dIiBE the user asked
+    // "why did it fail" three times because the screen could not say.
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "finish-fail",
+          status: "completed",
+          tool: "__subagent_finished__",
+          server: "subagent",
+          arguments: {},
+          result: {
+            codename: "Kite-1ae",
+            avatar: "\u{1F50D}",
+            role: "researcher",
+            agent_id: "researcher",
+            ok: false,
+            duration_s: 132.75,
+            iteration_count: 7,
+            files_touched: [],
+            error:
+              "ConnectError: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1010)",
+          },
+          durationMs: null,
+        }),
+      ]),
+    ]);
+
+    const events = liveToolEventsFromConversation(conv);
+    expect(events).toHaveLength(1);
+    expect(events[0].status).toBe("error");
+    expect(events[0].error).toContain("UNEXPECTED_EOF_WHILE_READING");
+  });
+
+  it("leaves error unset when a sub-agent succeeded", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "finish-ok",
+          status: "completed",
+          tool: "__subagent_finished__",
+          server: "subagent",
+          arguments: {},
+          result: {
+            codename: "Halo-59c",
+            role: "researcher",
+            agent_id: "researcher",
+            ok: true,
+            duration_s: 143.15,
+            error: null,
+          },
+          durationMs: null,
+        }),
+      ]),
+    ]);
+
+    const events = liveToolEventsFromConversation(conv);
+    expect(events[0].status).toBe("done");
+    expect(events[0].error).toBeUndefined();
+  });
+
   it("translates a __subagent_finished__ marker into a lifecycle=finished event", () => {
     const conv = makeConversation([
       makeTurn([

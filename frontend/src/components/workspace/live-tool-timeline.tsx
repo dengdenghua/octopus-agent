@@ -158,6 +158,10 @@ export interface LiveToolEvent {
   id: string;
   name: string;
   status: "running" | "done" | "error" | "waiting_approval";
+  /** Why this failed, when the source event carried a reason. Kept separate
+   * from `output` so a renderer can show the cause without stringifying and
+   * truncating a whole payload. Only meaningful with status "error". */
+  error?: string;
   startedAt: number;
   durationMs?: number;
   finishedAt?: number;

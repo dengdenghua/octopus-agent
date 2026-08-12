@@ -471,6 +471,13 @@ function workSubtitle(event: LiveToolEvent, fallbackTarget: string): string {
   if (isManualVerificationRequiredEvent(event)) {
     return statusText(workBlockStatus(event));
   }
+  // A failed block's one useful subtitle is why it failed. Without this the
+  // subtitle fell through to the agent name / target, so a lane that died on an
+  // SSL disconnect or a round cap read as "Researcher" and nothing else — the
+  // cause was on the wire and in the event, just never on screen.
+  if (event.status === "error" && event.error?.trim()) {
+    return compact(event.error.trim(), 120);
+  }
   const progress = progressSubtitleText(event);
   if (progress) return compact(progress, 88);
   if (event.name === "todo_write") {

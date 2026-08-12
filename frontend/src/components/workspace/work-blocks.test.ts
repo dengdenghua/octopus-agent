@@ -275,6 +275,39 @@ describe("work blocks", () => {
     expect(blocks[0].subtitle).not.toContain("/Users/");
   });
 
+  test("shows the failure cause as the subtitle of a failed agent block", () => {
+    // Regression: the real session teD7hPf9dkGOExwO0dIiBE lost three lanes to
+    // an SSL disconnect and a round cap. Both causes were on the wire; the
+    // subtitle fell through to the agent name, so the screen said nothing.
+    const blocks = toWorkBlocks([
+      event({
+        id: "finished-ssl",
+        name: "subagent",
+        lifecycle: "finished",
+        status: "error",
+        agentName: "Researcher",
+        error:
+          "ConnectError: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1010)",
+      }),
+    ]);
+
+    expect(blocks[0].subtitle).toContain("UNEXPECTED_EOF_WHILE_READING");
+  });
+
+  test("keeps the normal subtitle when a finished agent block succeeded", () => {
+    const blocks = toWorkBlocks([
+      event({
+        id: "finished-ok",
+        name: "subagent",
+        lifecycle: "finished",
+        status: "done",
+        agentName: "Researcher",
+      }),
+    ]);
+
+    expect(blocks[0].subtitle).toBe("Researcher");
+  });
+
   test("classifies swarm dispatch and document skills as workflow blocks", () => {
     const blocks = toWorkBlocks([
       event({

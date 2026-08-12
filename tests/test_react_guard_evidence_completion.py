@@ -318,3 +318,54 @@ def test_pre_emit_ignores_dynamic_exec_inside_fenced_code_block() -> None:
         "我准备执行 exec('print(1)') 来验证。",
         is_code_mode=True,
     )
+
+
+def test_incomplete_final_answer_rejects_wo_lai_announcement() -> None:
+    """Regression: ``我来`` announces an action exactly as ``我将`` does.
+
+    Thread teD7hPf9dkGOExwO0dIiBE burned three consecutive turns on
+    "我来查看黑板…" / "我先查看…" / "我将读取…" -- each emitted zero tool
+    calls and each was recorded as a clean completion, so the user asked
+    "为什么失败" three times and got another announcement every time.
+    ``我来`` was simply missing from the preparatory-verb list.
+    """
+    message = _incomplete_final_answer_guard(
+        "我来查看黑板上的实际键列表，确认刚才并行调研哪些子任务写回了结果、哪些缺失，以此定位失败环节。"
+    )
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_rejects_result_as_inspection_target() -> None:
+    """A result word naming what will be looked at is not a delivered result.
+
+    "确认哪些子任务写回了结果" made 结果 the object of a pending inspection,
+    but the bare keyword scored it as a delivered conclusion and cancelled
+    the guard.
+    """
+    message = _incomplete_final_answer_guard(
+        "我先查看黑板与任务清单的当前状态，确认哪些并行调研子任务有结果、哪些缺失，再做下一步处理。"
+    )
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_rejects_apology_then_another_promise() -> None:
+    message = _incomplete_final_answer_guard(
+        "抱歉，刚才绕了圈子。我现在直接查黑板上并行调研的实际结果和任务清单，给你一个明确的失败定位。"
+    )
+
+    assert message is not None
+
+
+def test_incomplete_final_answer_still_accepts_delivered_failure_analysis() -> None:
+    """The fix must not block the answer the user actually wanted."""
+    assert (
+        _incomplete_final_answer_guard(
+            "3 个方向成功，2 个失败。失败原因是 SSL 断连（competitive）"
+            "和超出 25 轮上限（tech），与研究方向本身无关。"
+        )
+        is None
+    )

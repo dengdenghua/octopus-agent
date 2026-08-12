@@ -27,9 +27,13 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
             "The proposed Final Answer is empty or only contains an internal "
             "control marker. Produce the actual user-facing result now."
         )
+    # ``我来``/``我这就``/``我直接`` announce an action exactly as ``我将`` does.
+    # Their absence let "我来查看黑板…" through as a terminal answer three turns
+    # running (thread teD7hPf9dkGOExwO0dIiBE), each time with zero tool calls.
     preparatory_start = re.match(
-        r"^(?:我(?:会|将|先|接下来|这就开始|马上开始|现在(?:立刻|马上)?|开始)|接下来|下一步|准备|"
-        r"let me|i(?:'ll| will| first)|next[,：:]?)",
+        r"^(?:我(?:会|将|先|来|要|想|这就|马上|直接|接下来|这就开始|马上开始|"
+        r"现在(?:立刻|马上|直接)?|开始)|接下来|下一步|准备|"
+        r"let me|i(?:'ll| will| first| am going to)|next[,：:]?)",
         visible,
         re.IGNORECASE,
     )
@@ -40,12 +44,27 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
         visible,
         re.IGNORECASE,
     )
-    result_signal = re.search(
+    # A result word only counts as delivery when it names something produced,
+    # not something about to be looked at. "确认哪些子任务写回了结果" makes 结果
+    # the *object of the pending inspection*, yet the bare keyword scored it as
+    # a delivered conclusion and cancelled the guard (thread
+    # teD7hPf9dkGOExwO0dIiBE, three consecutive no-op turns).
+    inspected_result = re.search(
+        r"(?:哪些|是否|有没有|有无|什么|多少|如何|怎样)"
+        r"[^。.!！；;\n]{0,24}(?:结论|结果|答案|状态|数据)|"
+        r"(?:确认|核对|核实|查看|检查|读取|定位|梳理|盘点)"
+        r"[^。.!！；;\n]{0,24}(?:的)?(?:实际)?(?:结论|结果|答案|状态)|"
+        r"(?:结论|结果|答案|状态)(?:与|和|、)?[^。.!！；;\n]{0,12}(?:缺失|齐不齐|对不对)",
+        visible,
+        re.IGNORECASE,
+    )
+    raw_result_signal = re.search(
         r"(?:结论|结果|区别|差异|一致|不同|表明|因此|所以|答案)|"
         r"\b(?:result|conclusion|difference|same|therefore|because|answer)\b",
         visible,
         re.IGNORECASE,
     )
+    result_signal = None if inspected_result else raw_result_signal
     negated_completion = re.search(
         r"(?:还|尚|仍)?(?:没有|未|没能)(?:给出|得到|形成|完成|确认|核对)?"
         r"[^。.!！；;\n]{0,24}(?:结论|结果|答案|比较|差异)|"
@@ -83,10 +102,14 @@ def _incomplete_final_answer_guard(final_answer: str) -> str | None:
     # the whole answer: headings, enumerated findings, and a substantial body
     # are strong delivery evidence.  This keeps the guard focused on genuinely
     # plan-only candidates while preserving its protection for one-line plans.
+    # Length plus real markdown structure is delivery evidence on its own, so
+    # this escape hatch reads the raw keyword rather than the disambiguated
+    # ``result_signal``: an inspection-target mention inside a long structured
+    # report must not revoke the exemption a roadmap opening depends on.
     delivered_report = (
         len(visible) >= 120
         and bool(re.search(r"(?:^|\n)\s*(?:#{1,6}\s|\d+[.)、]\s|[-*]\s)", raw))
-        and bool(result_signal)
+        and bool(raw_result_signal)
         and not negated_completion
     )
     if delivered_report:

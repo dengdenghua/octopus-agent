@@ -290,10 +290,19 @@ function mcpItemToLiveEvent(
         : undefined;
     const finishedAt =
       durationMs !== undefined ? startedAt + durationMs : startedAt;
+    // The backend has always sent a concrete cause here (an SSL disconnect, a
+    // round cap, a routing refusal), but this mapper whitelists fields by name
+    // and `error` was not on the list -- so a failed lane reached the UI as a
+    // red tint and nothing else. Users could only ask "why did it fail".
+    const errorText =
+      typeof result.error === "string" && result.error.trim()
+        ? result.error.trim()
+        : undefined;
     return {
       id: item.id,
       name: "subagent",
       status: ok ? "done" : "error",
+      error: errorText,
       lifecycle: "finished",
       startedAt,
       finishedAt,
