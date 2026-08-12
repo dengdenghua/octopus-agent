@@ -46,6 +46,11 @@ dev = [
     # `type` statement, so allowing 2.5+ makes the type gate abort before it
     # checks our code when CI itself happens to run on Python 3.12.
     "numpy>=1.26,<2.5",
+    # The lsp_* skills resolve a server beside this interpreter first, so a
+    # declared pyright makes them work after a plain `make install`. Undeclared,
+    # they degraded to "no language server installed" on a fresh clone and the
+    # end-to-end test in tests/test_lsp_real_server.py skipped itself.
+    "pyright>=1.1.400",
 ]
 tracing = [
     "opentelemetry-api>=1.25",

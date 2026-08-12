@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -330,10 +329,11 @@ def test_dependency_missing_when_no_server_on_path(
 ) -> None:
     f = tmp_path / "x.py"
     f.write_text("x = 1\n", encoding="utf-8")
-    # No server resolves; the bare 'pyright-langserver' executable check returns None,
-    # and we patch sys.executable too so the pylsp fallback also fails.
+    # No server resolves anywhere: nothing on PATH, no interpreter-adjacent
+    # install, and no importable module for the ``-m`` candidate.
     monkeypatch.setattr(lsp_skills.shutil, "which", lambda _exe: None)
-    monkeypatch.setattr(lsp_skills.sys, "executable", "/no/such/python/no_lsp")
+    monkeypatch.setattr(lsp_skills, "_local_bin_dirs", list)
+    monkeypatch.setattr(lsp_skills, "_module_importable", lambda _module: False)
 
     result = _lsp_definition(path=str(f), line=1, column=1, sandbox_dir=str(tmp_path))
     assert result["ok"] is False
@@ -449,7 +449,8 @@ def test_resolve_server_argv_returns_none_when_nothing_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(lsp_skills.shutil, "which", lambda _exe: None)
-    monkeypatch.setattr(lsp_skills.sys, "executable", "/nope/python_no_lsp")
+    monkeypatch.setattr(lsp_skills, "_local_bin_dirs", list)
+    monkeypatch.setattr(lsp_skills, "_module_importable", lambda _module: False)
     assert _resolve_server_argv("python") is None
 
 
@@ -458,9 +459,12 @@ def test_resolve_server_argv_finds_pyright(monkeypatch: pytest.MonkeyPatch) -> N
         return "/usr/bin/" + name if name == "pyright-langserver" else None
 
     monkeypatch.setattr(lsp_skills.shutil, "which", which)
+    # Resolution prefers an interpreter-adjacent server, and this repo pins one
+    # in .venv/bin, so the PATH answer only shows through once that is empty.
+    monkeypatch.setattr(lsp_skills, "_local_bin_dirs", list)
     argv = _resolve_server_argv("python")
     assert argv is not None
-    assert argv[0] == "pyright-langserver"
+    assert argv[0] == "/usr/bin/pyright-langserver"
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -482,8 +486,8 @@ def test_register_lsp_skills_registers_four() -> None:
 
 
 @pytest.mark.skipif(
-    shutil.which("pyright-langserver") is None,
-    reason="pyright-langserver not on PATH",
+    lsp_skills._resolve_server_argv("python") is None,
+    reason="no python language server resolvable",
 )
 def test_real_pyright_definition_lookup(tmp_path: Path) -> None:
     f = tmp_path / "demo.py"

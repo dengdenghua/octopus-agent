@@ -33,6 +33,7 @@ the boundary.
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import json
 import logging
 import os
@@ -44,6 +45,9 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+from ._lsp_candidates import MAX_CANDIDATE_FILES
+from ._lsp_candidates import candidate_files as _candidate_files
+from ._lsp_candidates import identifier_at as _identifier_at
 from .registry import Skill, SkillRegistry
 
 _log = logging.getLogger(__name__)
@@ -180,9 +184,14 @@ class _LSPClient:
 
     INIT_TIMEOUT = 8.0
     REQUEST_TIMEOUT = 5.0
+    _STDERR_TAIL_LINES = 20
+    # Sentinel parked in ``_pending`` when the transport dies, so a woken
+    # waiter can tell "the server is gone" from "the server said nothing".
+    _TRANSPORT_CLOSED: dict[str, Any] = {"__transport_closed__": True}
 
     def __init__(self, language: str) -> None:
         self.language = language
+        self._transport_closed = False
         self._proc: subprocess.Popen[bytes] | None = None
         self._next_id = 1
         self._id_lock = threading.Lock()
@@ -191,6 +200,9 @@ class _LSPClient:
         self._events: dict[int, threading.Event] = {}
         self._opened: set[str] = set()  # uris for which didOpen has been sent
         self._reader: threading.Thread | None = None
+        self._stderr_reader: threading.Thread | None = None
+        self._stderr_tail: list[str] = []
+        self._stderr_lock = threading.Lock()
         self._stopped = threading.Event()
         self._capabilities: dict[str, Any] = {}
 
@@ -251,6 +263,15 @@ class _LSPClient:
             daemon=True,
         )
         self._reader.start()
+        # stderr is a pipe, so something must drain it: a verbose server
+        # (rust-analyzer logs freely) otherwise fills the buffer and blocks
+        # on its own write while we wait forever for a reply on stdout.
+        self._stderr_reader = threading.Thread(
+            target=self._drain_stderr,
+            name=f"lsp-stderr-{self.language}",
+            daemon=True,
+        )
+        self._stderr_reader.start()
 
         root_uri = _path_to_uri(workspace_root)
         try:
@@ -274,9 +295,49 @@ class _LSPClient:
                 timeout=self.INIT_TIMEOUT,
             )
             self.notify("initialized", {})
-        except _LSPError:
+        except _LSPError as exc:
+            # A binary that exists but refuses to run -- a rustup shim for an
+            # uninstalled component, a wrapper missing its runtime -- reports
+            # only "server not running" from the reader thread, while the real
+            # reason sits in stderr. Attach it, or the caller is told nothing.
+            detail = self._startup_detail(exc)
             self.shutdown()
-            raise
+            raise _LSPTransportError(detail) from exc
+
+    def _drain_stderr(self) -> None:
+        proc = self._proc
+        if proc is None or proc.stderr is None:
+            return
+        try:
+            for raw in proc.stderr:
+                line = raw.decode("utf-8", errors="replace").rstrip()
+                if not line:
+                    continue
+                with self._stderr_lock:
+                    self._stderr_tail.append(line)
+                    if len(self._stderr_tail) > self._STDERR_TAIL_LINES:
+                        del self._stderr_tail[: -self._STDERR_TAIL_LINES]
+        except (OSError, ValueError):  # noqa: BLE001 — pipe closed on shutdown
+            return
+
+    def stderr_tail(self, limit: int = 3) -> str:
+        with self._stderr_lock:
+            return " | ".join(self._stderr_tail[-limit:])
+
+    def _startup_detail(self, exc: Exception) -> str:
+        parts = [str(exc)]
+        proc = self._proc
+        if proc is not None:
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                # Let the stderr pump finish the line, or the message is empty.
+                proc.wait(timeout=2.0)
+            code = proc.poll()
+            if code is not None:
+                parts.append(f"exit={code}")
+        detail = self.stderr_tail()
+        if detail:
+            parts.append(f"stderr: {detail}")
+        return " · ".join(parts)
 
     def is_alive(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
@@ -345,6 +406,8 @@ class _LSPClient:
 
         msg = self._pending.pop(rid, {})
         self._events.pop(rid, None)
+        if msg is self._TRANSPORT_CLOSED or (not msg and self._transport_closed):
+            raise _LSPTransportError(f"{method} unanswered: server closed the connection")
         if "error" in msg:
             err = msg["error"] or {}
             raise _LSPRequestError(
@@ -399,8 +462,13 @@ class _LSPClient:
                 except json.JSONDecodeError:
                     continue
                 self._dispatch(msg)
-        # Wake up everyone still waiting.
-        for evt in list(self._events.values()):
+        # The stream ended, so no pending request will ever be answered. Wake
+        # the waiters with a reason: woken-and-empty is indistinguishable from
+        # a legitimate "no result" reply, which turns a dead server into
+        # "no definition found" at the call site.
+        self._transport_closed = True
+        for rid, evt in list(self._events.items()):
+            self._pending.setdefault(rid, self._TRANSPORT_CLOSED)
             evt.set()
 
     def _dispatch(self, msg: dict[str, Any]) -> None:
@@ -476,13 +544,54 @@ _LSP_CLIENTS: dict[tuple[str, str], _LSPClient] = {}
 _LSP_CLIENTS_LOCK = threading.Lock()
 
 
+def _local_bin_dirs() -> list[str]:
+    """Interpreter-adjacent script dirs, searched before PATH.
+
+    A server pinned next to the interpreter running us is the one matching
+    this project's dependencies. It is also, on this repo, not on PATH at
+    all unless the venv was activated -- so PATH-only lookup made every
+    Python LSP skill silently unavailable.
+    """
+    return [str(Path(sys.executable).parent)]
+
+
+def _resolve_executable(exe: str) -> str | None:
+    for directory in _local_bin_dirs():
+        candidate = Path(directory) / exe
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return shutil.which(exe)
+
+
+def _module_importable(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def _resolve_server_argv(language: str) -> list[str] | None:
-    """First candidate whose ``argv[0]`` is on PATH (or is sys.executable)."""
+    """First candidate that is actually runnable, in preference order.
+
+    ``sys.executable`` used to count as always-usable, so a ``-m pylsp``
+    candidate was selected whether or not pylsp was installed -- and being
+    selected, it shadowed the pyright candidate behind it. The result was a
+    server that spawned, died on ``No module named pylsp``, and reported the
+    installed alternative as missing. Check the module, not the interpreter.
+    """
     for candidate in _SERVER_CANDIDATES.get(language, []):
         exe = candidate[0]
-        # sys.executable is always considered usable.
-        if exe == sys.executable or shutil.which(exe):
+        if exe == sys.executable:
+            if (
+                len(candidate) >= 3
+                and candidate[1] == "-m"
+                and not _module_importable(candidate[2])
+            ):
+                continue
             return list(candidate)
+        resolved = _resolve_executable(exe)
+        if resolved:
+            return [resolved, *candidate[1:]]
     return None
 
 
@@ -708,9 +817,14 @@ def _lsp_references(
     assert resolved is not None and language is not None
 
     workspace = _workspace_root_for(resolved, sandbox_dir)
+    seeded = 0
+    truncated = False
     try:
         client = _get_or_start_client(language, workspace)
         client.ensure_open(str(resolved))
+        seeded, truncated = _seed_reference_candidates(
+            client, resolved, Path(workspace), int(line), int(column)
+        )
         result = client.request(
             "textDocument/references",
             {
@@ -732,11 +846,59 @@ def _lsp_references(
         return {"ok": False, "error": str(exc), "error_type": "transport"}
 
     refs = _normalize_locations(result)
-    return {
+    payload: dict[str, Any] = {
         "ok": True,
         "count": len(refs),
         "references": refs,
     }
+    if seeded:
+        payload["searched_files"] = seeded
+    if truncated:
+        payload["incomplete"] = (
+            f"candidate set capped at {MAX_CANDIDATE_FILES} files — results may be incomplete"
+        )
+    return payload
+
+
+def _seed_reference_candidates(
+    client: _LSPClient,
+    target: Path,
+    workspace: Path,
+    line: int,
+    column: int,
+) -> tuple[int, bool]:
+    """Open every file that mentions the symbol before asking for references.
+
+    Servers that answer only from open documents otherwise report zero
+    references for a symbol used across the whole project, and report it as a
+    success. See ``_lsp_candidates`` for why the name is used as a filter
+    rather than as the answer.
+    """
+    name = _identifier_at(target, line, column)
+    if not name:
+        return 0, False
+    # TypeScript and JavaScript are one server but two language keys, so a
+    # .ts definition must still seed .js callers.
+    languages = (
+        {"typescript", "javascript"}
+        if client.language in ("typescript", "javascript")
+        else {client.language}
+    )
+    extensions = frozenset(ext for ext, lang in _EXT_TO_LANGUAGE.items() if lang in languages)
+    if not extensions:
+        return 0, False
+    files, truncated = _candidate_files(name, workspace, extensions)
+    opened = 0
+    for path in files:
+        if path == target:
+            continue
+        try:
+            client.ensure_open(str(path))
+            opened += 1
+        except _LSPError:
+            # One unreadable candidate must not sink the whole query.
+            continue
+    return opened, truncated
 
 
 def _extract_hover_contents(contents: Any) -> str:
