@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime.memory.control_sessions import ControlSessionStore
+from runtime.sensing.gateway.waiting_escalation import WaitingEscalationWatchdog
 
 # Shared with computer_control_session.py's _cleanup_pending — lives here
 # (not in computer_router.py) so both can import it without a circular
@@ -34,6 +35,11 @@ class ComputerRouterState:
         default_factory=lambda: Path("data/computer_automation/screenshots").resolve()
     )
     control_sessions: ControlSessionStore = field(default_factory=ControlSessionStore)
+    # Optional side-channel: waiting_user escalation watchdog. When set,
+    # computer_control_session records waiting_user entries / resolutions so a
+    # stalled operator approval can be pushed out-of-band (e.g. IM phone
+    # notification). Pure side-effect; None keeps existing behavior.
+    escalation: WaitingEscalationWatchdog | None = field(default=None, compare=False, repr=False)
     # Serializes lease claim/release. The router's endpoints are sync ``def``,
     # so FastAPI runs them in a threadpool and concurrent requests race on the
     # ``lease`` dict's check-then-act. Reentrant so the lease helpers can nest

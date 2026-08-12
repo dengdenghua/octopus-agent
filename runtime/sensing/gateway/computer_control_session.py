@@ -82,9 +82,11 @@ def _record_control_action(
             surface="computer",
             target_id="local-pc",
         )
-        return str(action.get("action_id") or "")
+        action_id = str(action.get("action_id") or "")
     except Exception:  # noqa: BLE001
         return ""
+    _sync_escalation(state, action_id, status)
+    return action_id
 
 
 def _update_control_action(
@@ -107,7 +109,31 @@ def _update_control_action(
             result=result or {},
             error=error,
         )
+        _sync_escalation(state, action_id, status)
     except Exception:  # noqa: BLE001
+        return
+
+
+def _sync_escalation(
+    state: ComputerRouterState,
+    action_id: str,
+    status: str,
+) -> None:
+    """Side-channel bridge to the waiting-user watchdog.
+
+    Never raises: escalation is best-effort and must not break control-session
+    bookkeeping or the approval path.
+    """
+    watchdog = state.escalation
+    if watchdog is None or not action_id:
+        return
+    try:
+        if status == "waiting_user":
+            watchdog.on_waiting(action_id)
+        else:
+            watchdog.on_resolved(action_id)
+        watchdog.poll()
+    except Exception:  # noqa: BLE001 - escalation is best-effort only
         return
 
 

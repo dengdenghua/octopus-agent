@@ -75,6 +75,7 @@ def create_computer_router(
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    escalation: Any = None,
 ) -> APIRouter:
     def _auth_dep(request: Request) -> str | None:
         # Desktop automation can click/type on the host machine. Keep
@@ -108,7 +109,7 @@ def create_computer_router(
         tags=["computer"],
         dependencies=[Depends(_auth_dep)],
     )
-    state = ComputerRouterState()
+    state = ComputerRouterState(escalation=escalation)
 
     @router.get("/status")
     def status() -> dict[str, Any]:
