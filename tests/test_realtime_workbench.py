@@ -24,6 +24,7 @@ from runtime.protocol import (
 from runtime.sensing.gateway.realtime_workbench import (
     _grounding_evidence,
     _phase_kind,
+    _phases_from_plan_md,
     _phases_from_todo_preview,
     _tool_evidence,
     _workbench_snapshot,
@@ -192,6 +193,95 @@ def test_phases_from_todo_preview_phase_kind_survives_machine_prefix() -> None:
     assert phases[0].title == "Deploy the service"
     assert phases[1].phase_kind == "testing"
     assert phases[1].title == "验证行为"
+
+
+# ── _phases_from_plan_md: plan.md → phases ─────────────────────────
+
+
+def test_phases_from_plan_md_checkbox_list_marks_first_incomplete_running() -> None:
+    preview = {
+        "path": "plan.md",
+        "content": "- [x] Investigate the issue\n- [ ] Implement the fix\n- [ ] Run the tests",
+    }
+    phases = _phases_from_plan_md(preview, active_item_id="tool-1")
+    assert phases is not None
+    assert [p.title for p in phases] == [
+        "Investigate the issue",
+        "Implement the fix",
+        "Run the tests",
+    ]
+    assert [p.status for p in phases] == ["done", "running", "pending"]
+    assert [p.active_item_id for p in phases] == [None, "tool-1", None]
+    assert [p.phase_kind for p in phases] == ["exploring", "implementing", "testing"]
+
+
+def test_phases_from_plan_md_ordered_list() -> None:
+    preview = {
+        "path": "PLAN.md",
+        "content": "1. Collect evidence\n2. Cross-check sources\n3. Write the report",
+    }
+    phases = _phases_from_plan_md(preview)
+    assert phases is not None
+    assert [p.title for p in phases] == [
+        "Collect evidence",
+        "Cross-check sources",
+        "Write the report",
+    ]
+    # First incomplete item is the current step; the rest stay pending.
+    assert [p.status for p in phases] == ["running", "pending", "pending"]
+
+
+def test_phases_from_plan_md_unordered_list() -> None:
+    preview = {
+        "path": "plan_final.md",
+        "content": "- Gather market data\n- Analyze competitors\n- Draft findings",
+    }
+    phases = _phases_from_plan_md(preview)
+    assert phases is not None
+    assert [p.title for p in phases] == [
+        "Gather market data",
+        "Analyze competitors",
+        "Draft findings",
+    ]
+
+
+def test_phases_from_plan_md_heading_fallback_drops_section_words() -> None:
+    preview = {
+        "path": "plan.md",
+        "content": ("## Steps\n## Investigate root cause\n## Deliverable\n## Verify the fix\n"),
+    }
+    phases = _phases_from_plan_md(preview)
+    assert phases is not None
+    # "Steps" and "Deliverable" are organizational section words, dropped.
+    assert [p.title for p in phases] == ["Investigate root cause", "Verify the fix"]
+
+
+def test_phases_from_plan_md_ignores_non_plan_file() -> None:
+    preview = {
+        "path": "notes.md",
+        "content": "- [ ] Collect evidence\n- [ ] Write report",
+    }
+    assert _phases_from_plan_md(preview) is None
+
+
+def test_phases_from_plan_md_requires_two_items() -> None:
+    preview = {"path": "plan.md", "content": "- [ ] Only one step"}
+    assert _phases_from_plan_md(preview) is None
+
+
+def test_phases_from_plan_md_skips_code_fences() -> None:
+    preview = {
+        "path": "plan.md",
+        "content": ("- [ ] First step\n```\n- [ ] Not a real step\n```\n- [ ] Second step\n"),
+    }
+    phases = _phases_from_plan_md(preview)
+    assert phases is not None
+    assert [p.title for p in phases] == ["First step", "Second step"]
+
+
+def test_phases_from_plan_md_returns_none_for_missing_content() -> None:
+    assert _phases_from_plan_md({"path": "plan.md"}) is None
+    assert _phases_from_plan_md({"path": "plan.md", "content": ""}) is None
 
 
 def test_grounding_sources_become_replayable_workbench_evidence() -> None:

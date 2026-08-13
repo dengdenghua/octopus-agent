@@ -56,6 +56,7 @@ from runtime.sensing.gateway._event_bridge_tool_items import (
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 from runtime.sensing.gateway.realtime_workbench import (
     _grounding_evidence,
+    _phases_from_plan_md,
     _phases_from_todo_preview,
     _phases_with_active_item,
     _terminal_workbench_phases,
@@ -539,6 +540,8 @@ class _ReactBridgeState:
         turn.items.append(item)
         await self._emit_started(turn, log, emitter, item)
         phases = _phases_from_todo_preview(item.input_preview, active_item_id=item.id)
+        if phases is None:
+            phases = _phases_from_plan_md(item.input_preview, active_item_id=item.id)
         if phases is not None:
             self.phases = phases
         await self._emit_turn_update(

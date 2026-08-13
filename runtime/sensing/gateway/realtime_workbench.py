@@ -64,6 +64,122 @@ def _phases_from_todo_preview(
     ]
 
 
+_PLAN_FILE_RE = re.compile(r"^plan(?:[-_.].*)?\.md$", re.IGNORECASE)
+_PLAN_CHECKBOX_RE = re.compile(r"^\s*[-*+]\s*\[([ xX])\]\s*(.+)$")
+_PLAN_ORDERED_RE = re.compile(r"^\s*\d+[.)]\s+(.+)$")
+_PLAN_UNORDERED_RE = re.compile(r"^\s*[-*+]\s+(.+)$")
+_PLAN_HEADING_RE = re.compile(r"^\s*#{2,6}\s+(.+)$")
+_PLAN_SECTION_WORDS_RE = re.compile(
+    r"plan|计划|steps?|步骤|deliverables?|交付物?|goals?|目标|objectives?|目的"
+    r"|overview|概述|summary|摘要|conclusions?|结论",
+    re.IGNORECASE,
+)
+
+
+def _is_plan_file(path: Any) -> bool:
+    if not isinstance(path, str):
+        return False
+    basename = path.replace("\\", "/").rsplit("/", 1)[-1]
+    return bool(_PLAN_FILE_RE.match(basename))
+
+
+def _is_plan_section_heading(title: str) -> bool:
+    """Drop organizational section headers (``## Plan``, ``## Deliverable``)
+    so the heading fallback only keeps task-shaped headings."""
+    cleaned = re.sub(r"^[\d一二三四五六七八九十]+[.)、:：\s]*", "", title).strip()
+    return bool(_PLAN_SECTION_WORDS_RE.fullmatch(cleaned))
+
+
+def _parse_plan_md(content: str) -> list[tuple[str, str]]:
+    """Extract structured checklist items from a ``plan.md`` body.
+
+    Returns ``(title, status)`` pairs with status ``done`` (checked box) or
+    ``pending`` (everything else). Prefers checkbox items, then ordered /
+    unordered list items, then level-2+ headings. Code fences are skipped and
+    the first non-empty category wins — the three are not mixed.
+    """
+    categories: list[list[tuple[str, str]]] = [[], [], []]
+    in_code_block = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block or not stripped:
+            continue
+
+        checkbox = _PLAN_CHECKBOX_RE.match(line)
+        if checkbox:
+            status = "done" if checkbox.group(1).lower() == "x" else "pending"
+            categories[0].append((checkbox.group(2).strip(), status))
+            continue
+
+        ordered = _PLAN_ORDERED_RE.match(line)
+        if ordered:
+            categories[1].append((ordered.group(1).strip(), "pending"))
+            continue
+
+        unordered = _PLAN_UNORDERED_RE.match(line)
+        if unordered:
+            categories[1].append((unordered.group(1).strip(), "pending"))
+            continue
+
+        heading = _PLAN_HEADING_RE.match(line)
+        if heading:
+            title = heading.group(1).strip()
+            if not _is_plan_section_heading(title):
+                categories[2].append((title, "pending"))
+            continue
+
+    for items in categories:
+        if items:
+            return items
+    return []
+
+
+def _phases_from_plan_md(
+    preview: Any,
+    *,
+    active_item_id: str | None = None,
+) -> list[AgentPhaseSnapshot] | None:
+    """Project a ``plan.md`` (``write_text_file`` payload) into phases.
+
+    Research/planning turns write their plan as a ``plan.md`` file instead of
+    ``todo_write`` entries. This mirrors ``_phases_from_todo_preview`` so the
+    workbench「进展」panel shows the plan structure rather than falling back to
+    the raw turn-iteration outline. The plan is a static snapshot — the first
+    incomplete item is marked ``running`` so the outline has a current step.
+    """
+    data = _coerce_preview_record(preview)
+    if data is None:
+        return None
+    if not _is_plan_file(data.get("path")):
+        return None
+    content = data.get("content") or data.get("text") or ""
+    if not isinstance(content, str) or not content.strip():
+        return None
+    parsed = _parse_plan_md(content)
+    if len(parsed) < 2:
+        return None
+    total = len(parsed)
+    first_incomplete = next(
+        (index for index, (_, status) in enumerate(parsed) if status != "done"),
+        None,
+    )
+    return [
+        AgentPhaseSnapshot(
+            id=f"plan-phase:{index}",
+            index=index + 1,
+            total=total,
+            title=_phase_title(title),
+            phase_kind=_phase_kind(title),
+            status=("running" if index == first_incomplete else status),  # type: ignore[arg-type]
+            active_item_id=active_item_id if index == first_incomplete else None,
+        )
+        for index, (title, status) in enumerate(parsed)
+    ]
+
+
 def _phases_with_active_item(
     phases: list[AgentPhaseSnapshot],
     workspace_focus: WorkspaceFocus | None,
