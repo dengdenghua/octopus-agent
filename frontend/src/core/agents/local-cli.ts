@@ -5,7 +5,6 @@ import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
 import { listLocalAgentPartners, type LocalAgentPartner } from "./api";
-import { localPartnerLogoUrl } from "./partner-brand";
 import type { Agent } from "./types";
 
 /** A coding-agent CLI detected on this machine (from `/api/cli-team/status`). */
@@ -75,9 +74,7 @@ function partnerToAgent(p: DetectedPartner): Agent {
     display_name: label,
     description: `本机 ${label} · 用你的订阅，在隔离 worktree 里跑、共享团队黑板`,
     icon: PARTNER_ICON[p.partner_id] ?? "🖥️",
-    // Prefer the partner's brand logo; the emoji icon stays as the fallback.
-    avatar_url:
-      localPartnerLogoUrl(p.partner_id) ?? `/api/agents/${p.agent_id}/avatar`,
+    avatar_url: `/api/agents/${p.agent_id}/avatar`,
     model: null,
     tool_groups: null,
     capabilities: {
@@ -107,9 +104,7 @@ function localPartnerToAgent(
       partner.id === "claude-code"
         ? "CC"
         : (partner.icon ?? PARTNER_ICON[partnerId] ?? "CLI"),
-    avatar_url:
-      localPartnerLogoUrl(partnerId, partner.avatar_url) ??
-      `/api/agents/${partner.agent_id}/avatar`,
+    avatar_url: `/api/agents/${partner.agent_id}/avatar`,
     model: null,
     tool_groups: null,
     capabilities: {

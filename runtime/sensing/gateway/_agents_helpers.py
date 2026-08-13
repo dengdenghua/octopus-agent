@@ -28,9 +28,6 @@ except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     HTTPException = None  # type: ignore[assignment, misc]
 
-from runtime.sensing.gateway.agents_local_partner import (
-    LOCAL_PARTNER_SPECS as _LOCAL_PARTNER_SPECS,
-)
 from runtime.sensing.gateway.agents_models import (
     AgentDetailWire,
     AgentWire,
@@ -146,13 +143,6 @@ def _avatar_url_for(agent_id: str) -> str | None:
                 return None
         except (OSError, ValueError, TypeError):  # noqa: BLE001 — best-effort profile parse; fall through to file-extension detection
             pass
-    capabilities = profile_data.get("capabilities") if isinstance(profile_data, dict) else None
-    if isinstance(capabilities, dict) and capabilities.get("local_partner"):
-        partner_id = str(capabilities.get("local_partner_id") or "")
-        spec = _LOCAL_PARTNER_SPECS.get(partner_id) if partner_id else None
-        avatar_url = str((spec or {}).get("avatar_url") or "")
-        if avatar_url:
-            return avatar_url
     for ext in ("png", "webp", "jpg", "jpeg", "svg"):
         path = agent_dir / f"avatar.{ext}"
         if path.is_file():

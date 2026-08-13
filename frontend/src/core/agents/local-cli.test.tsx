@@ -83,7 +83,7 @@ describe("useLocalCliAgents", () => {
     expect(result.current.cliAgents).toEqual([]);
   });
 
-  it("keeps supported but missing partners visible with their brand avatar", async () => {
+  it("keeps supported but missing partners visible with their local avatar", async () => {
     fetchMock.mockImplementation((url: string) => {
       if (url.includes("/api/cli-team/status")) {
         return Promise.resolve(
@@ -162,7 +162,7 @@ describe("useLocalCliAgents", () => {
       fixHint: "安装对应官方 CLI，并确认命令在 PATH 中。",
     });
     expect(result.current.partners[1]?.agent.avatar_url).toBe(
-      "https://www.kimi.com/favicon.ico",
+      "/api/agents/local_kimi_cli/avatar",
     );
   });
 });

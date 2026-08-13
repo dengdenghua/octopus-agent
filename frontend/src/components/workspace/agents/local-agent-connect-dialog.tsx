@@ -32,7 +32,6 @@ import {
   type LocalAgentPartner,
   type LocalAgentPartnerProbeResponse,
 } from "@/core/agents/api";
-import { localPartnerLogoUrl } from "@/core/agents/partner-brand";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import {
@@ -378,9 +377,7 @@ export function LocalAgentConnectDialog({
                 )
                 .map((partner) => {
                 const Icon = PARTNER_ICONS[partner.id] ?? BotIcon;
-                const avatarUrl =
-                  localPartnerLogoUrl(partner.id, partner.avatar_url) ??
-                  undefined;
+                const avatarUrl = `/api/agents/${partner.agent_id}/avatar`;
                 const checked = selectedSet.has(partner.id);
                 const disabled =
                   !partner.detected ||

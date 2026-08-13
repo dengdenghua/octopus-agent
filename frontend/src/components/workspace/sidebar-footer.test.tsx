@@ -6,12 +6,12 @@ import type { Agent } from "@/core/agents";
 import { AgentAvatar } from "./sidebar-footer";
 
 describe("AgentAvatar", () => {
-  it("keeps bundled partner logos on the frontend origin", () => {
+  it("resolves a local partner's API avatar to the backend origin", () => {
     const agent: Agent = {
       name: "local_claude_code",
       display_name: "Claude Code",
       description: "Local CLI partner",
-      avatar_url: "/assets/claude-code.png",
+      avatar_url: "/api/agents/local_claude_code/avatar",
       icon: "CC",
       model: null,
       tool_groups: null,
@@ -21,7 +21,7 @@ describe("AgentAvatar", () => {
 
     expect(container.querySelector("img")).toHaveAttribute(
       "src",
-      "/assets/claude-code.png",
+      expect.stringContaining("/api/agents/local_claude_code/avatar"),
     );
   });
 

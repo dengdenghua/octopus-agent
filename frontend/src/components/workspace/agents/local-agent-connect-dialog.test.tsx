@@ -215,12 +215,8 @@ describe("LocalAgentConnectDialog", () => {
     expect(apiMocks.doctor).toHaveBeenCalledTimes(2);
   });
 
-  it("falls back to the provider icon when a remote logo fails", async () => {
-    apiMocks.list.mockResolvedValue([
-      partner("codebuddy-cli", {
-        avatar_url: "https://invalid.example/codebuddy.svg",
-      }),
-    ]);
+  it("falls back to the provider icon when the local avatar fails to load", async () => {
+    apiMocks.list.mockResolvedValue([partner("codebuddy-cli")]);
     renderWithProviders(
       <LocalAgentConnectDialog open onOpenChange={vi.fn()} />,
       { locale: "zh-CN" },
@@ -228,12 +224,12 @@ describe("LocalAgentConnectDialog", () => {
 
     await screen.findByText("CodeBuddy CLI");
     const image = document.querySelector<HTMLImageElement>(
-      'img[src*="invalid.example"]',
+      'img[src*="/api/agents/local_codebuddy_cli/avatar"]',
     );
     expect(image).not.toBeNull();
     fireEvent.error(image!);
     expect(
-      document.querySelector('img[src*="invalid.example"]'),
+      document.querySelector('img[src*="/api/agents/local_codebuddy_cli/avatar"]'),
     ).not.toBeInTheDocument();
   });
 });

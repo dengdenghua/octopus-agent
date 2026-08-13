@@ -1489,7 +1489,7 @@ class TestLocalPartners:
         assert '"local_partner_command": "trae-cli"' in text
         agents = TestClient(app).get("/api/agents").json()
         local_agent = next(a for a in agents if a["name"] == "local_trae_cli")
-        assert "traecdn" in local_agent["avatar_url"]
+        assert local_agent["avatar_url"].startswith("/api/agents/local_trae_cli/avatar?v=")
 
     def test_local_partner_model_reports_domestic_cli_defaults(
         self,
