@@ -64,6 +64,7 @@ from runtime.core.cerebrum.react_parsing import (
 from runtime.core.cerebrum.react_types import (
     _native_tool_calls_missing_required_args,
 )
+from runtime.platform.models.rescue_policy import note_model_stall
 
 _logger = logging.getLogger(__name__)
 
@@ -197,6 +198,12 @@ def _phase_6c_parse_and_guard(
             and maybe_final is None
             and (not step.action or _evidence_convergence_active is not None)
         ):
+            # Remember this model as recently stalled BEFORE the failover/break
+            # decision so the next turn's rescue no longer re-selects the exact
+            # model (or its same-upstream sibling) that just overran its
+            # deadline — this is the cross-turn escalation that breaks the
+            # "primary stalls → same fallback stalls → fail" loop.
+            note_model_stall(str(state.effective_model or ""))
             _model_timeout_recoveries += 1
             if _model_timeout_recoveries >= 2:
                 if _evidence_convergence_active is not None:

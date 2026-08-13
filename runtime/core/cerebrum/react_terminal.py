@@ -57,6 +57,7 @@ from runtime.core.cerebrum.react_types import (
     _safe_react_error_message,
 )
 from runtime.platform.models.llm import Message, ModelRequest
+from runtime.platform.models.rescue_policy import note_model_stall
 
 _logger = logging.getLogger(__name__)
 
@@ -220,6 +221,7 @@ def _finalize_react_turn(
             if convergence_result is _MODEL_STREAM_DEADLINE:
                 final_answer = _stage_update_timeout_fallback(steps)
                 terminated_reason = "model_stall"
+                note_model_stall(str(effective_model or ""))
                 _logger.warning(
                     "react_loop forced convergence stream exceeded deadline; "
                     "preserving public stage conclusions",

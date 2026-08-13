@@ -2971,10 +2971,12 @@ def test_repeated_hidden_reasoning_timeout_is_reported_as_failure(monkeypatch) -
     assert result.success is False
     assert completed["success"] is False
     # Graceful degradation: instead of a hard react_error banner, the
-    # loop now surfaces a friendly handoff answer so the user can resume
-    # from the preserved progress rather than seeing a system error.
+    # loop now surfaces a friendly handoff answer. It must be honest — a
+    # retry hint, not a dead "点击继续" resume promise the runtime cannot
+    # honor.
     assert not any(event["type"] == "react_error" for event in events)
-    assert "点击继续" in (result.final_answer or "")
+    assert "重试" in (result.final_answer or "")
+    assert "点击继续" not in (result.final_answer or "")
 
 
 def test_forced_convergence_salvages_plain_report_without_protocol_label() -> None:

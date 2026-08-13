@@ -225,13 +225,12 @@ def _stage_update_timeout_fallback(steps: list[ReActStep]) -> str:
     if not updates:
         return (
             "最终汇总模型在收尾时超过了单轮时限。已完成的工具结果和来源仍保留在"
-            "过程记录中，但这次无法可靠生成最终答复；点击继续即可从现有进度重新收敛。"
+            "过程记录中，但这次无法可靠生成最终答复；请稍后重试收尾，或换一个模型再试。"
         )
     joined = "\n\n".join(updates[-6:])
     return (
         "最终汇总模型在收尾时超过了单轮时限。以下阶段结论已经在执行过程中确认，"
-        "相关来源和工具结果仍保留在过程记录中；这不是完整最终报告，点击继续可直接"
-        "从现有进度重新收敛。\n\n"
+        "相关来源和工具结果仍保留在过程记录中；这不是完整最终报告，请稍后重试收尾。\n\n"
         f"{joined}"
     )
 
@@ -241,9 +240,10 @@ def _model_stall_handoff_answer(steps: list[ReActStep]) -> str:
 
     Instead of emitting a ``react_error`` event (which the gateway treats as a
     turn failure and shows a system error banner), surface a friendly handoff
-    as ordinary answer text.  The turn still ends, but the user sees a natural
-    message — like a thoughtful person pausing mid-conversation — and can click
-    "继续" to resume from the preserved progress.
+    as ordinary answer text.  The turn still ends as a retryable failure — the
+    message is honest about that: progress is preserved in the timeline, but
+    the next attempt is a fresh run, so it must never promise a "click 继续"
+    resume button that the runtime does not provide.
     """
     # Collect any public stage conclusions so the handoff carries real content,
     # not just an apology.  A turn that already did substantial work should
@@ -262,17 +262,17 @@ def _model_stall_handoff_answer(steps: list[ReActStep]) -> str:
     if updates:
         joined = "\n\n".join(updates[-4:])
         return (
-            "我正在思考下一步，但这一轮响应比较慢。前面已经做了一些工作，"
+            "这一轮模型响应过慢，我先停下来了。前面已经做了一些工作，"
             "以下是目前的进展：\n\n"
             f"{joined}\n\n"
-            "点击继续，我会从当前进度接着完成。"
+            "已完成的步骤都保留在过程记录里。请稍后重试，或换一个模型再让我继续。"
         )
     if completed_tools > 0:
         return (
-            f"我正在思考下一步，但这一轮响应比较慢。前面已经完成了 {completed_tools} 步操作，"
-            "结果都已保留。点击继续，我会从当前进度接着完成。"
+            f"这一轮模型响应过慢，我先停下来了。前面已经完成了 {completed_tools} 步操作，"
+            "结果都保留在过程记录里。请稍后重试，或换一个模型再让我继续。"
         )
-    return "我正在思考，但这一轮响应比较慢。点击继续，我会重新梳理并给出回复。"
+    return "这一轮模型响应过慢，我先停下来了。请稍后重试，或换一个模型再让我继续。"
 
 
 def _finish_reason_is_length_limited(reason: str | None) -> bool:

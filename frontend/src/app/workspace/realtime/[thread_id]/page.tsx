@@ -120,6 +120,7 @@ import {
   type ThreadStreamOptions,
 } from "@/core/threads/hooks";
 import { buildProgressOutline } from "@/core/threads/progress-outline";
+import { deriveThreadTitle } from "@/core/threads/sidebar";
 import {
   consumePendingNewSession,
   isThreadStale,
@@ -1251,6 +1252,16 @@ function RealtimePageContent({
     refetchOnWindowFocus: false,
     retry: false,
   });
+  // The live stream state has no ``title`` (the realtime adapter maps only the
+  // turn stream), so resolve the header/browser-tab title from the persisted
+  // thread record — same derivation the sidebar uses.
+  const headerThreadTitle = useMemo(
+    () =>
+      threadIdentityQuery.data
+        ? deriveThreadTitle(threadIdentityQuery.data)
+        : undefined,
+    [threadIdentityQuery.data],
+  );
   const coworkGroupQuery = useCoworkGroup(isNewThread ? null : threadId);
   const collabSessionQuery = useCollabSession(isNewThread ? null : threadId);
   const inviteCoworkMemberMutation = useInviteCoworkMember();
@@ -3486,6 +3497,7 @@ function RealtimePageContent({
                     <ThreadTitle
                       threadId={threadId}
                       thread={thread}
+                      title={headerThreadTitle}
                       className="border-0 bg-transparent px-0 py-0 text-sm"
                     />
                     {isOctopusAssistant && connectedChannels.length > 0 && (
