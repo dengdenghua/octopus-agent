@@ -46,7 +46,6 @@ export function FollowUpSuggestions({
   });
 
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const [generating, setGenerating] = useState(false);
 
   // Filter to pending suggestions, exclude dismissed in this session
   const suggestions = useMemo(() => {
@@ -56,23 +55,18 @@ export function FollowUpSuggestions({
       .slice(0, 3); // Max 3 chips, Trae-style
   }, [bucket?.suggestions, dismissed]);
 
-  // Auto-generate when conversation finishes (transitions from loading → idle)
-  const wasLoadingRef = useRef(isLoading);
+  // Auto-generate once per mount. The parent only renders this component
+  // while the conversation is idle (see message-list.tsx), so mounting IS
+  // the "conversation just finished" signal. We can't watch a loading→idle
+  // transition here because the component is unmounted during loading.
+  const didGenerateRef = useRef(false);
   useEffect(() => {
-    if (!agentId || !project) return;
-    const wasLoading = wasLoadingRef.current;
-    wasLoadingRef.current = isLoading;
-
-    if (wasLoading && !isLoading && !generating) {
-      // Conversation just finished, generate suggestions
-      setGenerating(true);
-      generate(agentId, { turnWindow: 5 })
-        .catch(() => {
-          // Silently fail, suggestions are optional
-        })
-        .finally(() => setGenerating(false));
-    }
-  }, [isLoading, agentId, project, generate, generating]);
+    if (!agentId || !project || didGenerateRef.current) return;
+    didGenerateRef.current = true;
+    generate(agentId, { turnWindow: 5 }).catch(() => {
+      // Silently fail, suggestions are optional
+    });
+  }, [agentId, project, generate]);
 
   const handleSelect = useCallback(
     async (suggestion: AmbientSuggestion) => {

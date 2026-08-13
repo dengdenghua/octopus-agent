@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 
+import type { MessageGroup } from "@/core/messages/utils";
 import type { LiveToolEvent } from "../live-tool-timeline";
-import { failureKind } from "./message-list";
+import { failureKind, isLatestMessageGroup } from "./message-list";
 import {
   shouldOpenProcessTraceByDefault,
   shouldShowProcessTrace,
@@ -285,5 +286,35 @@ describe("message-list: failureKind classification", () => {
     expect(
       failureKind("boom", "agent_response_failed"),
     ).toBe("error");
+  });
+});
+
+describe("message-list: clarification card activity", () => {
+  function makeGroup(type: MessageGroup["type"], id: string): MessageGroup {
+    return { type, id, messages: [] } as MessageGroup;
+  }
+
+  test("only the newest group is active", () => {
+    const clarification = makeGroup("assistant:clarification", "g1");
+    const human = makeGroup("human", "g2");
+    const groups = [clarification, human];
+
+    expect(isLatestMessageGroup(groups, clarification)).toBe(false);
+    expect(isLatestMessageGroup(groups, human)).toBe(true);
+  });
+
+  test("a stale clarification card goes inert once the user moves on", () => {
+    const clarification = makeGroup("assistant:clarification", "g1");
+    const laterAssistant = makeGroup("assistant", "g2");
+
+    expect(
+      isLatestMessageGroup([clarification, laterAssistant], clarification),
+    ).toBe(false);
+  });
+
+  test("the newest clarification card stays active", () => {
+    const clarification = makeGroup("assistant:clarification", "g1");
+
+    expect(isLatestMessageGroup([clarification], clarification)).toBe(true);
   });
 });

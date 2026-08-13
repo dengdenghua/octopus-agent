@@ -456,6 +456,17 @@ function isLastAssistantGroupOfTurn(
   return true;
 }
 
+// A clarification card should only auto-answer (its 20s countdown) while it
+// is the newest group in the conversation. Once the user moves on, stale
+// cards must stay inert — otherwise every idle moment re-arms every old
+// card and fires its default choice as a spurious user turn.
+export function isLatestMessageGroup(
+  groupedMessages: CoreMessageGroup[],
+  group: CoreMessageGroup,
+): boolean {
+  return groupedMessages[groupedMessages.length - 1] === group;
+}
+
 function hasVisibleAssistantText(group: CoreMessageGroup): boolean {
   return group.messages.some(
     (message) =>
@@ -1690,7 +1701,9 @@ export function MessageList({
             )}
             <ClarificationChoiceCard
               content={content}
-              active={!thread.isLoading}
+              active={
+                !thread.isLoading && isLatestMessageGroup(groupedMessages, group)
+              }
               messageId={message.id}
             />
           </div>
