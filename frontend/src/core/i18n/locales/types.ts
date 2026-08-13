@@ -227,8 +227,6 @@ export interface Translations {
     assignReviewTo: string;
     moreFiles: (n: number) => string;
     downloadStillInArtifactsPanel: string;
-    fileCreated: string;
-    fileEdited: string;
     diffTruncated: string;
     diffTruncatedTooltip: string;
     hunkReverted: string;

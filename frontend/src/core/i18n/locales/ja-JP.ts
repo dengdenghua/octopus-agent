@@ -287,8 +287,6 @@ export const jaJP: Translations = {
       `さらに ${n} 件のファイルがあります。展開して表示`,
     downloadStillInArtifactsPanel:
       "ダウンロードは右側の成果物パネルから引き続き利用できます",
-    fileCreated: "新規",
-    fileEdited: "編集",
     diffTruncated: "diff が切り捨てられました",
     diffTruncatedTooltip:
       "diff はサーバーの出力制限により切り捨てられました。行数の統計は不完全で、全体の差し戻しはできません",

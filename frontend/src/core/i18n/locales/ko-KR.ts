@@ -286,8 +286,6 @@ export const koKR: Translations = {
     moreFiles: (n: number) => `파일 ${n}개 더 있음, 펼쳐서 보기`,
     downloadStillInArtifactsPanel:
       "다운로드는 오른쪽 산출물 패널에서 계속 사용할 수 있습니다",
-    fileCreated: "생성",
-    fileEdited: "편집",
     diffTruncated: "diff 잘림",
     diffTruncatedTooltip:
       "diff가 서버 출력 제한으로 잘렸습니다. 줄 수 통계가 불완전하며 전체 되돌리기는 불가능합니다",

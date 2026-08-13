@@ -369,7 +369,7 @@ describe("MessageOutputSummary", () => {
     expect(screen.getByText("已完成改动")).toBeInTheDocument();
     expect(screen.getByText("已生成 1 个产物")).toBeInTheDocument();
     expect(screen.queryByText("已编辑 1 个文件")).not.toBeInTheDocument();
-    expect(screen.getByText("新建")).toBeInTheDocument();
+    expect(screen.queryByText("新建")).not.toBeInTheDocument();
     expect(
       screen.queryByText(
         "data/workspaces/thread-1/output/final/nas_market_research_plan.md",

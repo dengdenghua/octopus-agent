@@ -924,9 +924,6 @@ function ChangeRow({
             presentation === "final" ? "size-4" : "size-3.5",
           )}
         />
-        <span className="shrink-0 font-medium text-muted-foreground/90">
-          {change.created ? t.message.fileCreated : t.message.fileEdited}
-        </span>
         {onOpen ? (
           <button
             type="button"

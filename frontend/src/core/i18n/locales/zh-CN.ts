@@ -281,8 +281,6 @@ export const zhCN: Translations = {
     assignReviewTo: "审核交给",
     moreFiles: (n: number) => `还有 ${n} 个文件，展开查看`,
     downloadStillInArtifactsPanel: "下载入口仍在右侧产物面板保留",
-    fileCreated: "新建",
-    fileEdited: "编辑",
     diffTruncated: "diff 已截断",
     diffTruncatedTooltip:
       "diff 超过服务端输出上限被截断，行数统计不完整，且不可整体撤销",

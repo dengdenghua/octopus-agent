@@ -292,8 +292,6 @@ export const enUS: Translations = {
       `${n} more file${n === 1 ? "" : "s"}, expand to view`,
     downloadStillInArtifactsPanel:
       "Download entry is still available in the right artifacts panel",
-    fileCreated: "created",
-    fileEdited: "edited",
     diffTruncated: "diff truncated",
     diffTruncatedTooltip:
       "Diff was truncated by the server output limit; line counts are incomplete and full revert is unavailable",
