@@ -2983,6 +2983,7 @@ export const jaJP: Translations = {
     clarificationChoose: "選択して続行",
     clarificationAutoSubmit: (seconds: number) =>
       `${seconds}s 後にデフォルトで続行`,
+    clarificationOtherPlaceholder: "その他（自由入力）…",
   },
 
   // Chats

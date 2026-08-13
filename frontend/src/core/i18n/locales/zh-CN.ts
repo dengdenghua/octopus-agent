@@ -2777,6 +2777,7 @@ export const zhCN: Translations = {
     strategyCache: "⚡ 缓存",
     clarificationChoose: "点击选择后继续",
     clarificationAutoSubmit: (seconds: number) => `${seconds}s 后默认继续`,
+    clarificationOtherPlaceholder: "其他（输入自定义答案）…",
   },
 
   // Chats

@@ -1,4 +1,4 @@
-import { MessageSquareTextIcon, SparklesIcon } from "lucide-react";
+import { MessageSquareTextIcon, SendIcon, SparklesIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 const QUESTIONNAIRE_TYPE = "clarification_questionnaire";
 const OPTION_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const AUTO_SUBMIT_SECONDS = 20;
 
 export interface ClarificationQuestionnaireOption {
   description?: string;
@@ -242,9 +243,12 @@ export function ClarificationQuestionnaire({
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [dismissed, setDismissed] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(AUTO_SUBMIT_SECONDS);
+  const [otherText, setOtherText] = useState("");
   const current = payload.questions[step] ?? payload.questions[0];
   const selected = current ? answers[current.id] : undefined;
   const isLast = step >= payload.questions.length - 1;
+  const isSingleQuestion = payload.questions.length === 1;
   const submitLabel =
     payload.submitLabel ?? t.clarificationQuestionnaire.continueLabel;
 
@@ -253,7 +257,56 @@ export function ClarificationQuestionnaire({
     setStep(0);
     setAnswers({});
     setDismissed(false);
+    setSecondsLeft(AUTO_SUBMIT_SECONDS);
+    setOtherText("");
   }, [active, payload]);
+
+  // A single-decision question auto-answers with the recommended (first)
+  // option after a short pause, mirroring the plain-text choice card. A
+  // multi-question research form keeps waiting for explicit input.
+  useEffect(() => {
+    if (!active || !isSingleQuestion || dismissed || !current || selected) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setSecondsLeft((value) => Math.max(0, value - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [active, isSingleQuestion, dismissed, current, selected]);
+
+  useEffect(() => {
+    if (!active || !isSingleQuestion || dismissed || !current || selected) {
+      return;
+    }
+    if (secondsLeft !== 0) return;
+    const fallback = current.options[0];
+    if (!fallback) return;
+    setAnswers({ [current.id]: fallback.value });
+    setDismissed(true);
+    const reply = [
+      t.clarificationQuestionnaire.completedHeader,
+      `- ${current.title.replace(/[?？]$/, "")}: ${fallback.label}`,
+      "",
+      t.clarificationQuestionnaire.continuePrompt,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    if (onSubmitText) {
+      onSubmitText(reply);
+    } else {
+      submitQuickReply(reply, sourceMessageId);
+    }
+  }, [
+    secondsLeft,
+    active,
+    isSingleQuestion,
+    dismissed,
+    current,
+    selected,
+    t,
+    onSubmitText,
+    sourceMessageId,
+  ]);
 
   if (!active || dismissed || !current) return null;
 
@@ -288,6 +341,12 @@ export function ClarificationQuestionnaire({
   const submit = () => {
     if (!selected) return;
     sendText(buildClarificationReply());
+  };
+
+  const submitOther = () => {
+    const text = otherText.trim();
+    if (!text) return;
+    sendText(text);
   };
 
   const continueOrSubmit = () => {
@@ -377,10 +436,38 @@ export function ClarificationQuestionnaire({
         })}
       </div>
 
+      {isSingleQuestion && (
+        <div className="mt-4 flex items-center gap-2 sm:pl-11">
+          <input
+            type="text"
+            value={otherText}
+            onChange={(event) => setOtherText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") submitOther();
+            }}
+            placeholder={t.conversation.clarificationOtherPlaceholder}
+            className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <Button
+            type="button"
+            size="sm"
+            disabled={!otherText.trim()}
+            onClick={submitOther}
+            className="size-9 shrink-0 p-0"
+          >
+            <SendIcon className="size-4" />
+          </Button>
+        </div>
+      )}
+
       <div className="mt-auto flex flex-col gap-3 pt-8 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <SparklesIcon className="size-4 text-foreground" />
-          <span>{t.clarificationQuestionnaire.recommended}</span>
+          {isSingleQuestion ? (
+            <span>{t.conversation.clarificationAutoSubmit(secondsLeft)}</span>
+          ) : (
+            <span>{t.clarificationQuestionnaire.recommended}</span>
+          )}
         </div>
         <div className="flex items-center justify-end gap-2">
           {step > 0 && (

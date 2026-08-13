@@ -2389,6 +2389,7 @@ export interface Translations {
     strategyCache: string;
     clarificationChoose: string;
     clarificationAutoSubmit: (seconds: number) => string;
+    clarificationOtherPlaceholder: string;
   };
 
   // Chats

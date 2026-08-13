@@ -2998,6 +2998,7 @@ export const enUS: Translations = {
     clarificationChoose: "Choose to continue",
     clarificationAutoSubmit: (seconds: number) =>
       `Default continues in ${seconds}s`,
+    clarificationOtherPlaceholder: "Other (type your own answer)…",
   },
 
   // Chats

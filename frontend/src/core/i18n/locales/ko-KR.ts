@@ -2928,6 +2928,7 @@ export const koKR: Translations = {
     clarificationChoose: "선택하여 계속",
     clarificationAutoSubmit: (seconds: number) =>
       `${seconds}초 후 기본값으로 계속`,
+    clarificationOtherPlaceholder: "기타 (직접 입력)…",
   },
 
   // Chats

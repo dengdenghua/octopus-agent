@@ -123,10 +123,12 @@ export function ClarificationChoiceCard({
   );
   const [secondsLeft, setSecondsLeft] = useState(AUTO_SUBMIT_SECONDS);
   const [submitted, setSubmitted] = useState(false);
+  const [otherText, setOtherText] = useState("");
 
   useEffect(() => {
     setSecondsLeft(AUTO_SUBMIT_SECONDS);
     setSubmitted(false);
+    setOtherText("");
   }, [messageId, content]);
 
   useEffect(() => {
@@ -159,6 +161,13 @@ export function ClarificationChoiceCard({
   }
 
   if (!parsed) return null;
+
+  const submitOther = () => {
+    const text = otherText.trim();
+    if (!text) return;
+    setSubmitted(true);
+    submitQuickReply(text, messageId);
+  };
 
   return (
     <div
@@ -198,6 +207,28 @@ export function ClarificationChoiceCard({
             </span>
           </Button>
         ))}
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          type="text"
+          value={otherText}
+          disabled={submitted}
+          onChange={(event) => setOtherText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") submitOther();
+          }}
+          placeholder={t.conversation.clarificationOtherPlaceholder}
+          className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+        <Button
+          type="button"
+          size="sm"
+          disabled={submitted || !otherText.trim()}
+          onClick={submitOther}
+          className="size-9 shrink-0 p-0"
+        >
+          <SendIcon className="size-4" />
+        </Button>
       </div>
     </div>
   );
