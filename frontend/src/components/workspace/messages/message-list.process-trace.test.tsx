@@ -1260,6 +1260,89 @@ describe("MessageList reasoning privacy", () => {
 });
 
 describe("MessageList output summaries", () => {
+  test("keeps intermediate file changes on the process lane until the turn ends", () => {
+    const planChange: AIMessage = {
+      id: "assistant-plan",
+      type: "ai",
+      content: `调研计划已写入 plan.md。${"下一步继续核查市场证据。".repeat(30)}`,
+      tool_calls: [
+        {
+          id: "change-plan",
+          name: "file_change",
+          args: {
+            changes: [
+              {
+                path: "data/workspaces/thread-1/output/final/plan.md",
+                op: "create",
+                diff: [
+                  "--- /dev/null",
+                  "+++ b/data/workspaces/thread-1/output/final/plan.md",
+                  "@@ -0,0 +1,2 @@",
+                  "+# 调研计划",
+                  "+继续收集证据",
+                ].join("\n"),
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const checkpoint: AIMessage = {
+      id: "assistant-checkpoint",
+      type: "ai",
+      content: "我现在核查市场规模与增长预测。",
+      additional_kwargs: { public_progress: true },
+    };
+    const activeSearch: AIMessage = {
+      id: "assistant-search",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "search-market",
+          name: "web_search",
+          args: { query: "智能睡眠市场规模 2025 2026" },
+        },
+      ],
+    };
+    const activeMessages: Message[] = [
+      message("user-process-change", "human", "调研智能睡眠市场"),
+      planChange,
+      checkpoint,
+      activeSearch,
+    ];
+    const { rerender } = renderMessageList({
+      thread: mockThread({
+        messages: activeMessages,
+        streamingMessage: activeSearch,
+        isLoading: true,
+      }),
+      locale: "zh-CN",
+    });
+
+    expect(screen.queryByText("已完成改动")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("output-change-set")).not.toBeInTheDocument();
+    const processChange = screen.getByTestId("process-change-summary");
+    expect(processChange.className).not.toMatch(/\b(?:rounded|border)\b/);
+    expect(processChange.querySelector(".group\\/process-row")).not.toBeNull();
+    expect(screen.getByText("plan.md")).toBeInTheDocument();
+
+    const finalAnswer = message(
+      "assistant-final",
+      "ai",
+      "调研已完成，完整结果和计划文件已经交付。",
+    );
+    const settledMessages = [...activeMessages, finalAnswer];
+    rerender(
+      messageListTree({
+        thread: mockThread({ messages: settledMessages }),
+      }),
+    );
+
+    expect(screen.getByText("已完成改动")).toBeInTheDocument();
+    expect(screen.getByTestId("output-change-set")).toBeInTheDocument();
+  });
+
   test("defers current-turn file summaries until streaming finishes", () => {
     const reportWithChange: AIMessage = {
       id: "assistant-report",
@@ -1316,14 +1399,22 @@ describe("MessageList output summaries", () => {
     const settledThread = mockThread({ messages });
     rerender(messageListTree({ thread: settledThread }));
 
-    // Settled inline changes render like tool/thinking timeline rows. The
-    // old “已编辑 1 个文件” receipt bubble was intentionally removed.
+    // The completed change set appears only after streaming settles. It is a
+    // review surface beneath the answer, separate from tool/thinking rows.
+    expect(screen.getByText("已完成改动")).toBeInTheDocument();
     expect(
-      screen.queryByText(/\u5df2\u7f16\u8f91 1 \u4e2a\u6587\u4ef6/),
-    ).not.toBeInTheDocument();
+      screen.getByText(/\u5df2\u7f16\u8f91 1 \u4e2a\u6587\u4ef6/),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("output-change-set")).toBeInTheDocument();
     expect(
       screen.getByText("data/workspaces/thread-1/nas_market_research_plan.md"),
     ).toBeInTheDocument();
+    const changeSet = screen.getByTestId("output-change-set");
+    const feedbackAction = screen.getByRole("button", { name: "好的回复" });
+    expect(
+      changeSet.compareDocumentPosition(feedbackAction) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
 

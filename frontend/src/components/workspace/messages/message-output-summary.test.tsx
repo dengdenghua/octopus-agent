@@ -7,6 +7,7 @@ import type { AgentThreadState } from "@/core/threads";
 import { SubtasksProvider } from "@/core/tasks/context";
 import { renderWithProviders } from "@/test/harness";
 
+import { AGENT_WORKBENCH_OPEN_EVENT } from "../agent-workbench-events";
 import { ThreadProviders } from "./context";
 import { MessageList } from "./message-list";
 import {
@@ -216,7 +217,7 @@ describe("MessageOutputSummary", () => {
     expect(setArtifactsOpen).not.toHaveBeenCalled();
   });
 
-  it("summarizes file changes with diff counts", () => {
+  it("renders file changes as a reviewable completed change set", () => {
     const message: AIMessage = {
       id: "ai-1",
       type: "ai",
@@ -258,20 +259,28 @@ describe("MessageOutputSummary", () => {
       locale: "zh-CN",
     });
 
-    expect(screen.queryByText("已编辑 1 个文件")).not.toBeInTheDocument();
+    const opened: CustomEvent[] = [];
+    const handleOpen = (event: Event) => opened.push(event as CustomEvent);
+    window.addEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+
+    expect(screen.getByText("已完成改动")).toBeInTheDocument();
+    expect(screen.getByText("已编辑 1 个文件")).toBeInTheDocument();
     expect(screen.queryByText("任务产物")).not.toBeInTheDocument();
-    const diffTimeline = screen.getByRole("region", {
+    const changeSet = screen.getByRole("region", {
       name: "文件变更汇总",
     });
-    expect(diffTimeline.className).not.toMatch(/\b(?:rounded|border|bg-)/);
-    expect(diffTimeline.querySelector("li")?.className).not.toMatch(
-      /\b(?:rounded|border|bg-)/,
-    );
+    expect(changeSet).toHaveAttribute("data-testid", "output-change-set");
+    expect(changeSet.className).toMatch(/\brounded-xl\b/);
+    expect(changeSet.className).toMatch(/\bborder\b/);
     expect(
       screen.getByText("runtime/safety/regeneration/native_llm_replay.py"),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("+2").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("-1").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("+2 -1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "文件变更汇总" })[0]);
+
+    expect(opened.at(-1)?.detail).toEqual({ tab: "diff" });
+    window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
   });
 
   it("puts the hunk disclosure at the end of the file row", () => {
@@ -357,6 +366,8 @@ describe("MessageOutputSummary", () => {
     expect(
       screen.queryByText(/任务完成 · 已生成 1 个产物/),
     ).not.toBeInTheDocument();
+    expect(screen.getByText("已完成改动")).toBeInTheDocument();
+    expect(screen.getByText("已生成 1 个产物")).toBeInTheDocument();
     expect(screen.queryByText("已编辑 1 个文件")).not.toBeInTheDocument();
     expect(screen.getByText("新建")).toBeInTheDocument();
     expect(
@@ -384,7 +395,7 @@ describe("MessageOutputSummary", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders only compact file rows for an inline diff", () => {
+  it("keeps review controls out of the completed change set", () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true }),
@@ -430,7 +441,8 @@ describe("MessageOutputSummary", () => {
       screen.queryByText("需要先审核这次产物变更"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("任务产物")).not.toBeInTheDocument();
-    expect(screen.queryByText("已生成 1 个产物")).not.toBeInTheDocument();
+    expect(screen.getByText("已完成改动")).toBeInTheDocument();
+    expect(screen.getByText("已编辑 1 个文件")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /撤销/ }),
     ).not.toBeInTheDocument();

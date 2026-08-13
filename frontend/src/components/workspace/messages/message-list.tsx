@@ -33,6 +33,7 @@ import {
   hasContent,
   hasPresentFiles,
   hasReasoning,
+  hasToolCalls,
   isSettledAssistantAnswer,
   type MessageGroup as CoreMessageGroup,
 } from "@/core/messages/utils";
@@ -140,7 +141,7 @@ export interface MessageTurnSlice {
 interface GroupTurnRenderInfo {
   /** Deduped message slice of the whole turn (matches turnMessagesForGroup). */
   turnMessages: Message[];
-  /** True when no later plain "assistant" group exists in the same turn. */
+  /** True when this is the terminal plain assistant group for the turn. */
   isLastAssistantOfTurn: boolean;
   /** assistantFrameIdentity of this group (null for non-assistant types). */
   assistantIdentity: string | null;
@@ -438,10 +439,11 @@ function turnMessagesForGroup(
   return slice;
 }
 
-// A turn can contain several plain assistant groups (a long final answer
-// is dual-mounted after a processing group, consecutive text replies,
-// ...). Only the last one gets the turn-wide receipt scan — otherwise
-// every group would render an identical full receipt for the same turn.
+// A turn can contain several plain assistant groups, with more processing
+// appended after an intermediate answer/checkpoint. Only an assistant group
+// with no later assistant or processing activity may host the final receipt.
+// This keeps in-progress file writes on the execution timeline and prevents a
+// completed-change card from appearing in the middle of a still-running turn.
 function isLastAssistantGroupOfTurn(
   groupedMessages: CoreMessageGroup[],
   group: CoreMessageGroup,
@@ -451,9 +453,37 @@ function isLastAssistantGroupOfTurn(
   for (let i = index + 1; i < groupedMessages.length; i++) {
     const later = groupedMessages[i]!;
     if (later.type === "human") break;
-    if (later.type === "assistant") return false;
+    if (
+      later.type === "assistant" ||
+      later.type === "assistant:processing" ||
+      later.type === "assistant:clarification" ||
+      later.type === "assistant:subagent"
+    ) {
+      return false;
+    }
   }
   return true;
+}
+
+function hasLaterProcessActivity(
+  turnMessages: Message[],
+  group: CoreMessageGroup,
+): boolean {
+  const hostMessage = [...group.messages]
+    .reverse()
+    .find((message) => message.type === "ai");
+  if (!hostMessage) return false;
+  const hostIndex = turnMessages.indexOf(hostMessage);
+  if (hostIndex < 0) return false;
+  return turnMessages
+    .slice(hostIndex + 1)
+    .some(
+      (message) =>
+        message.type === "ai" &&
+        (message.additional_kwargs?.public_progress === true ||
+          hasToolCalls(message) ||
+          hasReasoning(message)),
+    );
 }
 
 // A clarification card should only auto-answer (its 20s countdown) while it
@@ -1504,6 +1534,7 @@ export function MessageList({
     keyPrefix: string | undefined,
     beforeContent?: ReactNode,
     suppressReasoningPanel = false,
+    afterContent?: ReactNode,
   ) => {
     const key = `${keyPrefix}/${msg.id}`;
     return (
@@ -1520,6 +1551,7 @@ export function MessageList({
             !thread.isLoading && messages[messages.length - 1] === msg
           }
           isLastMessage={messages[messages.length - 1] === msg}
+          afterContent={afterContent}
         />
       </div>
     );
@@ -1530,6 +1562,7 @@ export function MessageList({
     keyPrefix: string | undefined,
     beforeContent?: ReactNode,
     suppressReasoningPanel = false,
+    afterContent?: ReactNode,
   ) => {
     const key = `${keyPrefix}/${msg.id}`;
     const content = (
@@ -1546,6 +1579,7 @@ export function MessageList({
             !thread.isLoading && messages[messages.length - 1] === msg
           }
           isLastMessage={messages[messages.length - 1] === msg}
+          afterContent={afterContent}
         />
       </>
     );
@@ -1638,6 +1672,38 @@ export function MessageList({
         }
         return false;
       })();
+      const isTerminalAssistantGroup =
+        group.type === "assistant" &&
+        isLastAssistantGroupOfTurn(groupedMessages, group) &&
+        !hasLaterProcessActivity(
+          turnMessagesForGroup(groupedMessages, group),
+          group,
+        );
+      const isProcessChangeGroup =
+        group.type === "assistant" &&
+        !isTerminalAssistantGroup &&
+        hasMessageOutputSummary(group.messages);
+      const outputSummary =
+        isTerminalAssistantGroup && !deferOutputs ? (
+          <MessageOutputSummary
+            auditNotice={auditNotice}
+            messages={group.messages}
+            turnMessages={turnMessagesForGroup(groupedMessages, group)}
+            threadId={threadId}
+            onOpenArtifact={onOpenArtifact}
+            failure={failure}
+          />
+        ) : isProcessChangeGroup ? (
+          <MessageOutputSummary
+            messages={group.messages}
+            threadId={threadId}
+            onOpenArtifact={onOpenArtifact}
+            presentation="process"
+          />
+        ) : null;
+      const outputHostMessage = outputSummary
+        ? [...group.messages].reverse().find((message) => message.type === "ai")
+        : undefined;
       let injectedBeforeContent = false;
       const renderedMessages = group.messages.map((msg) => {
         const beforeContent =
@@ -1651,12 +1717,14 @@ export function MessageList({
               group.id,
               beforeContent,
               turnHasProcessingLane,
+              msg === outputHostMessage ? outputSummary : undefined,
             )
           : renderMessageContent(
               msg,
               group.id,
               beforeContent,
               turnHasProcessingLane,
+              msg === outputHostMessage ? outputSummary : undefined,
             );
       });
       return (
@@ -1666,21 +1734,7 @@ export function MessageList({
           ) : (
             renderedMessages
           )}
-          {group.type === "assistant" && !deferOutputs && (
-            <MessageOutputSummary
-              auditNotice={auditNotice}
-              messages={group.messages}
-              turnMessages={
-                isLastAssistantGroupOfTurn(groupedMessages, group)
-                  ? turnMessagesForGroup(groupedMessages, group)
-                  : undefined
-              }
-              threadId={threadId}
-              onOpenArtifact={onOpenArtifact}
-              failure={failure}
-              className="ml-11 w-auto"
-            />
-          )}
+          {outputSummary && !outputHostMessage && outputSummary}
         </>
       );
     }
@@ -1852,10 +1906,17 @@ export function MessageList({
       // group before the next human one.
       const seen = new Set<Message>();
       const turnMessages: Message[] = [];
-      let lastAssistantIndex = -1;
+      let lastAssistantActivityIndex = -1;
       for (let index = start; index <= end; index += 1) {
         const group = groupedMessages[index]!;
-        if (group.type === "assistant") lastAssistantIndex = index;
+        if (
+          group.type === "assistant" ||
+          group.type === "assistant:processing" ||
+          group.type === "assistant:clarification" ||
+          group.type === "assistant:subagent"
+        ) {
+          lastAssistantActivityIndex = index;
+        }
         for (const message of group.messages) {
           if (seen.has(message)) continue;
           seen.add(message);
@@ -1869,7 +1930,10 @@ export function MessageList({
         const assistantIdentity = assistantFrameIdentity(group);
         info.set(index, {
           turnMessages,
-          isLastAssistantOfTurn: index === lastAssistantIndex,
+          isLastAssistantOfTurn:
+            group.type === "assistant" &&
+            index === lastAssistantActivityIndex &&
+            !hasLaterProcessActivity(turnMessages, group),
           assistantIdentity,
           previousAssistantGroupCount,
           previousAssistantIdentity,

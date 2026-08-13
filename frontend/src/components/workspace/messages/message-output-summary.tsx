@@ -28,8 +28,10 @@ import {
   AlertTriangleIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
+  ChevronRightIcon,
   ExternalLinkIcon,
   FilePenLineIcon,
+  FilesIcon,
   LinkIcon,
   Loader2Icon,
   WandSparklesIcon,
@@ -39,6 +41,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { useArtifacts } from "../artifacts";
+import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 
 type OutputArtifact = {
   path: string;
@@ -160,6 +163,13 @@ function isFinalOutputArtifactPath(path: string): boolean {
     normalized.includes("/output/final/") ||
     normalized.startsWith("output/final/")
   );
+}
+
+function changeDisplayPath(path: string): string {
+  const displayPath = artifactDisplayPath(path);
+  return isFinalOutputArtifactPath(path)
+    ? getFileName(displayPath)
+    : displayPath;
 }
 
 function artifactFromToolCall(toolCall: ToolCall): OutputArtifact | null {
@@ -450,6 +460,7 @@ export function MessageOutputSummary({
   onOpenArtifact: onOpenArtifactProp,
   failure,
   className,
+  presentation = "final",
 }: {
   auditNotice?: string | null;
   messages: Message[];
@@ -463,6 +474,7 @@ export function MessageOutputSummary({
   onOpenArtifact?: (path: string) => void;
   failure?: FailurePresentation | null;
   className?: string;
+  presentation?: "final" | "process";
 }) {
   const { t } = useI18n();
   const { select, setOpen } = useArtifacts();
@@ -546,22 +558,50 @@ export function MessageOutputSummary({
     (sum, item) => sum + item.removed,
     0,
   );
-  const createdChanges = reviewableChanges.filter((change) => change.created);
-  const editedChanges = reviewableChanges.filter((change) => !change.created);
-  const hasOnlyCreatedChanges =
-    createdChanges.length > 0 && editedChanges.length === 0;
-  const changeSummaryLabel = hasOnlyCreatedChanges
-    ? t.message.artifactsCreated(createdChanges.length)
-    : createdChanges.length > 0
-      ? t.message.artifactsCreatedAndFilesEdited(
-          createdChanges.length,
-          editedChanges.length,
-        )
-      : t.message.filesEdited(editedChanges.length);
-  // Inline code changes already communicate the useful receipt in each file
-  // row. Do not stack a second "任务产物 / 已编辑 N 个文件" banner above them;
-  // keep the banner only for failures or turns without a diff.
+  const sourceChanges = reviewableChanges.filter(
+    (change) => !finalOutputChanges.includes(change),
+  );
+  const changeSummaryLabel =
+    finalOutputChanges.length > 0 && sourceChanges.length === 0
+      ? t.message.artifactsCreated(finalOutputChanges.length)
+      : finalOutputChanges.length > 0
+        ? t.message.artifactsCreatedAndFilesEdited(
+            finalOutputChanges.length,
+            sourceChanges.length,
+          )
+        : t.message.filesEdited(sourceChanges.length);
+  // File changes are a completed change set, not another execution step.
+  // They receive their own review surface below; keep the generic receipt
+  // banner only for failures or turns without a diff.
   const showReceiptBanner = isFailure || reviewableChanges.length === 0;
+  const openChangesReview = () => emitOpenAgentWorkbench({ tab: "diff" });
+
+  if (presentation === "process") {
+    if (reviewableChanges.length === 0) return null;
+    return (
+      <section
+        aria-label={t.message.changesSummary}
+        className={cn("min-w-0", className)}
+        data-testid="process-change-summary"
+      >
+        <ul className="max-h-72 space-y-0.5 overflow-y-auto">
+          {reviewableChanges.map((change) => (
+            <ChangeRow
+              key={change.path}
+              change={change}
+              threadId={threadId}
+              onOpen={
+                finalOutputChanges.includes(change)
+                  ? () => openArtifact(change.path)
+                  : undefined
+              }
+              presentation="process"
+            />
+          ))}
+        </ul>
+      </section>
+    );
+  }
 
   return (
     <div
@@ -748,18 +788,55 @@ export function MessageOutputSummary({
       )}
 
       {reviewableChanges.length > 0 && (
-        <section aria-label={t.message.changesSummary} className="min-w-0">
-          <ul className="max-h-72 space-y-0.5 overflow-y-auto">
+        <section
+          aria-label={t.message.changesSummary}
+          className="mt-3 min-w-0 overflow-hidden rounded-xl border border-border-default bg-muted/[0.12]"
+          data-testid="output-change-set"
+        >
+          <div className="flex min-w-0 items-center gap-3 border-b border-border-default bg-muted/25 px-3 py-2.5">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-[var(--shadow-xs)]">
+              <FilesIcon className="size-4" aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-foreground/90">
+                {t.message.completedChanges}
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {changeSummaryLabel}
+              </span>
+            </span>
+            <span
+              className="shrink-0 font-mono text-xs"
+              aria-label={`+${totalAdded} -${totalRemoved}`}
+            >
+              <span className="text-success">+{totalAdded}</span>
+              <span className="mx-1 text-muted-foreground/40"> </span>
+              <span className="text-destructive">-{totalRemoved}</span>
+            </span>
+            <button
+              type="button"
+              onClick={openChangesReview}
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+              aria-label={t.message.changesSummary}
+            >
+              <span className="hidden sm:inline">
+                {t.message.changesSummary}
+              </span>
+              <ChevronRightIcon className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
+          <ul className="max-h-72 divide-y divide-border-default overflow-y-auto">
             {reviewableChanges.map((change) => (
               <ChangeRow
                 key={change.path}
                 change={change}
                 threadId={threadId}
-                onOpenArtifact={
+                onOpen={
                   finalOutputChanges.includes(change)
                     ? () => openArtifact(change.path)
-                    : undefined
+                    : openChangesReview
                 }
+                presentation="final"
               />
             ))}
           </ul>
@@ -780,11 +857,13 @@ export function MessageOutputSummary({
 function ChangeRow({
   change,
   threadId,
-  onOpenArtifact,
+  onOpen,
+  presentation,
 }: {
   change: OutputChange;
   threadId?: string;
-  onOpenArtifact?: () => void;
+  onOpen?: () => void;
+  presentation: "final" | "process";
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -825,24 +904,41 @@ function ChangeRow({
   };
 
   return (
-    <li className="min-w-0 text-sm">
-      <div className="group/process-row flex min-w-0 items-center gap-2 py-1 text-[13px] leading-5 text-muted-foreground">
-        <FilePenLineIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+    <li
+      className={cn(
+        "min-w-0 text-sm",
+        presentation === "final" && "bg-background/35",
+      )}
+    >
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-2 text-[13px] leading-5 text-muted-foreground transition-colors",
+          presentation === "final"
+            ? "group/change-row px-3 py-2.5 hover:bg-muted/20"
+            : "group/process-row py-1",
+        )}
+      >
+        <FilePenLineIcon
+          className={cn(
+            "shrink-0 text-muted-foreground/70",
+            presentation === "final" ? "size-4" : "size-3.5",
+          )}
+        />
         <span className="shrink-0 font-medium text-muted-foreground/90">
           {change.created ? t.message.fileCreated : t.message.fileEdited}
         </span>
-        {onOpenArtifact ? (
+        {onOpen ? (
           <button
             type="button"
             title={change.path}
-            onClick={onOpenArtifact}
-            className="min-w-0 flex-1 truncate text-left font-mono text-muted-foreground transition-colors hover:text-foreground hover:underline"
+            onClick={onOpen}
+            className="min-w-0 flex-1 truncate text-left font-mono text-foreground/80 transition-colors hover:text-foreground hover:underline"
           >
-            {getFileName(artifactDisplayPath(change.path))}
+            {changeDisplayPath(change.path)}
           </button>
         ) : (
-          <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
-            {change.path}
+          <span className="min-w-0 flex-1 truncate font-mono text-foreground/80">
+            {changeDisplayPath(change.path)}
           </span>
         )}
         {change.diffTruncated && (

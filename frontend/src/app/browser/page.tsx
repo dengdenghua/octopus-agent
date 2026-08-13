@@ -367,7 +367,7 @@ function BrowserShell() {
   useEffect(() => clearSidePanelCloseTimer, [clearSidePanelCloseTimer]);
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-[linear-gradient(135deg,hsl(var(--muted))_0%,hsl(var(--background))_42%,hsl(var(--muted))_100%)]">
+    <div className="relative flex h-screen overflow-hidden bg-[linear-gradient(135deg,var(--muted)_0%,var(--background)_42%,var(--muted)_100%)] text-foreground">
       <BrowserSidePanel
         open={sidePanelOpen}
         pinned={sidePanelPinned}
@@ -465,7 +465,7 @@ function BrowserShell() {
                 "relative min-w-0 overflow-hidden bg-background",
                 renderDevice === "desktop"
                   ? "flex-1"
-                  : "flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,hsl(var(--muted))_0%,hsl(var(--background))_58%)] p-5",
+                  : "flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,var(--muted)_0%,var(--background)_58%)] p-5",
               )}
             >
               <div

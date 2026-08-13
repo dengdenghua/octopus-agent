@@ -15,6 +15,7 @@ import {
   useMemo,
   type ComponentProps,
   type ImgHTMLAttributes,
+  type ReactNode,
 } from "react";
 import { toast } from "sonner";
 
@@ -221,6 +222,7 @@ export const MessageListItem = memo(function MessageListItem({
   suppressReasoningPanel = false,
   enableClarificationActions = false,
   isLastMessage = true,
+  afterContent,
 }: {
   className?: string;
   message: Message;
@@ -229,6 +231,7 @@ export const MessageListItem = memo(function MessageListItem({
   suppressReasoningPanel?: boolean;
   enableClarificationActions?: boolean;
   isLastMessage?: boolean;
+  afterContent?: ReactNode;
 }) {
   const { t } = useI18n();
   const isHuman = message.type === "human";
@@ -303,6 +306,7 @@ export const MessageListItem = memo(function MessageListItem({
         suppressReasoningPanel={suppressReasoningPanel}
         enableClarificationActions={enableClarificationActions}
       />
+      {afterContent}
       {showMessageActions && (
         <div
           className={cn(

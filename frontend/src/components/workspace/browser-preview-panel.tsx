@@ -1435,7 +1435,7 @@ export function BrowserPreviewPanel({
     return (
       <div
         className={cn(
-          "relative flex h-full flex-col items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.10),transparent_38%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.42))] p-6 text-center",
+          "relative flex h-full flex-col items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,color-mix(in_oklch,var(--primary)_10%,transparent),transparent_38%),linear-gradient(180deg,var(--background),color-mix(in_oklch,var(--muted)_42%,transparent))] p-6 text-center",
           className,
         )}
       >
@@ -1728,7 +1728,7 @@ export function BrowserPreviewPanel({
       )}
 
       {/* Screenshot area */}
-      <div className="relative flex-1 overflow-auto bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.08),transparent_34%),linear-gradient(180deg,hsl(var(--muted)/0.34),hsl(var(--background)))] [&::-webkit-scrollbar]:size-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80 [&::-webkit-scrollbar-track]:bg-transparent">
+      <div className="relative flex-1 overflow-auto bg-[radial-gradient(circle_at_top,color-mix(in_oklch,var(--primary)_8%,transparent),transparent_34%),linear-gradient(180deg,color-mix(in_oklch,var(--muted)_34%,transparent),var(--background))] [&::-webkit-scrollbar]:size-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80 [&::-webkit-scrollbar-track]:bg-transparent">
         {annotationMode && (
           <div className="absolute inset-x-3 top-3 z-40 flex items-center gap-2 rounded-lg border border-primary/20 bg-background/95 p-2 shadow-[var(--shadow-floating)] backdrop-blur">
             <PencilIcon className="size-3.5 shrink-0 text-primary" />
