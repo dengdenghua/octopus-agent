@@ -128,6 +128,13 @@ def orchestration_budget_scope(max_spawns: int) -> Iterator[OrchestrationBudget]
 # tool specs + a few tool rounds). Used to translate an opt-in token budget into
 # a spawn count so a deep run scales its parallelism to the budget it was
 # actually given, instead of the fixed ``n*rounds`` guess.
+#
+# Honest caveat: this is a SINGLE high-variance heuristic, not a measured cost.
+# A cheap vote may cost ~2k tokens while a full-tool researcher doing 10 tool
+# rounds can burn 50k+. There is NO runtime token accounting — the "token
+# budget" is converted to a spawn cap ONCE at entry and never re-checked, so it
+# bounds fan-out SIZE, not actual token spend. Treat the env vars below as
+# "spawn-scale budget", not a token ceiling.
 _TOKENS_PER_SPAWN = 8_000
 
 
@@ -144,7 +151,11 @@ def max_spawns_for_token_budget(
     Clamped to ``[floor, ceiling]`` so a tiny budget still does *some* work and
     a huge one can't run away; a missing / non-positive budget falls back to
     ``floor``. This is the opt-in lever only — callers that don't supply a
-    budget keep the conservative default (``n*rounds`` / 48) behaviour."""
+    budget keep the conservative default (``n*rounds`` / 48) behaviour.
+
+    Note the budget is a SPAWN cap derived from a rough per-spawn token
+    estimate (``_TOKENS_PER_SPAWN``), not a runtime token ceiling — actual
+    token spend is never measured against it after this one conversion."""
     try:
         tokens = int(token_budget or 0)
     except (TypeError, ValueError):
@@ -190,6 +201,9 @@ def ultracode_token_budget() -> int:
     of silently keeping the conservative default. The value is granted by
     the GATEWAY into ``session.metadata`` — clients and models never set it
     (the gateway scrubs any client-supplied copy first).
+
+    Like the operator budget above, this is a fan-out SIZE grant (converted to
+    a spawn cap via ``_TOKENS_PER_SPAWN``), not a hard token spend ceiling.
     """
     raw = os.environ.get(_ULTRACODE_TOKEN_BUDGET_ENV, "").strip()
     if raw:
@@ -247,6 +261,21 @@ def check_absolute_cap(
         return (0, True)
     cur = _TURN_DELEGATIONS.get(turn_id, 0)
     return (cur, cur < _PER_TURN_ABSOLUTE_LIMIT)
+
+
+def remaining_flat_delegations(turn_id: str | None) -> int | None:
+    """Slots left under the flat per-turn cap (non-orchestration path).
+
+    Returns ``None`` when enforcement is off (``turn_id`` is ``None`` — no
+    ambient Session), so callers can distinguish "unlimited" from "zero left".
+    This is the batch-side complement to :func:`check_absolute_cap`: a
+    parallel fan-out truncates its spec list to this many BEFORE spawning, so
+    one big call can't overshoot the cap the way a single pre-check would (the
+    pre-check reads the counter once, then every spec runs unconditionally).
+    """
+    if not turn_id:
+        return None
+    return max(0, _PER_TURN_ABSOLUTE_LIMIT - _TURN_DELEGATIONS.get(turn_id, 0))
 
 
 def record_delegation(

@@ -651,3 +651,40 @@ def test_notes_wording_lists_count_and_reasons(monkeypatch):
     assert "transport" in note
     # the note tells the agent what to do
     assert "Synthesise" in note or "synthesise" in note.lower()
+
+
+def test_parallel_cannot_overshoot_flat_per_turn_cap(monkeypatch):
+    """A single ``call_agent_parallel`` must not spawn past the flat per-turn
+    cap (5): the batch is truncated to the remaining slots, so a model can't
+    pack N specs into one call to dodge the cap. Dropped lanes are surfaced so
+    the lead doesn't silently claim they ran."""
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+    from runtime.platform.process.session import Session, session_scope
+
+    _patch_bridge(monkeypatch, {})
+
+    sess = Session(turn_id="turn-cap-overshoot")
+    with session_scope(sess):
+        r = _call_agent_parallel(specs=_specs(*[f"p{i}" for i in range(20)]))
+
+    assert r["ok"] is True
+    assert r["success_count"] == 5
+    assert r["total"] == 5
+    assert r["dropped"] == 15
+    assert any("budget-clipped" in n for n in r["notes"])
+
+
+def test_parallel_no_turn_id_keeps_enforcement_off(monkeypatch):
+    """With no ambient Session the flat cap is OFF (unchanged behaviour), so a
+    batch larger than the cap is NOT truncated — matching ``check_absolute_cap``'s
+    documented no-turn semantics."""
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+
+    _patch_bridge(monkeypatch, {})
+
+    r = _call_agent_parallel(specs=_specs(*[f"p{i}" for i in range(20)]))
+
+    assert r["ok"] is True
+    assert r["success_count"] == 20
+    assert r["total"] == 20
+    assert "dropped" not in r

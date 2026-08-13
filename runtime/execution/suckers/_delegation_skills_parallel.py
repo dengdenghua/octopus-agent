@@ -35,6 +35,9 @@ from .delegation_budget import (
 from .delegation_budget import (
     current_orchestration_budget as _current_orchestration_budget,
 )
+from .delegation_budget import (
+    remaining_flat_delegations as _remaining_flat_delegations,
+)
 
 
 def _coerce_parallel_specs(specs: Any) -> list[dict[str, Any]] | None:
@@ -219,6 +222,18 @@ def _call_agent_parallel(
                 action="Do the rest yourself · do NOT call_agent again.",
             ),
         )
+
+    # Guardrail: the flat per-turn cap is a per-SPAWN budget, but the pre-check
+    # above only reads it once. On the flat (non-orchestration) path, truncate
+    # the batch to the remaining slots so a single call can't pack N specs past
+    # the cap. (Under an orchestration budget, per-spec ``try_charge`` already
+    # enforces this inside ``_run_one``.)
+    dropped_specs = 0
+    if orch_budget is None:
+        slots = _remaining_flat_delegations(turn_id)
+        if slots is not None and len(cleaned) > slots:
+            dropped_specs = len(cleaned) - slots
+            cleaned = cleaned[:slots]
 
     # Concurrent fan-out · one worker thread per spec. Each worker
     # binds the parent's Session into its own ContextVar so
@@ -424,7 +439,15 @@ def _call_agent_parallel(
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
-    return _build_parallel_envelope(results, total=len(cleaned))
+    envelope = _build_parallel_envelope(results, total=len(cleaned))
+    if dropped_specs:
+        # Honesty: the lead must know it did NOT run every requested lane.
+        envelope["dropped"] = dropped_specs
+        envelope.setdefault("notes", []).append(
+            f"[budget-clipped] {dropped_specs} spec(s) not spawned "
+            "(per-turn delegation cap reached)."
+        )
+    return envelope
 
 
 def _build_parallel_envelope(
