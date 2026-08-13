@@ -360,7 +360,8 @@ def test_get_returns_disabled_shape_when_flag_off(
     project: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS", raising=False)
+    # Default is now True, so "off" must be explicit.
+    monkeypatch.setenv("OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS", "0")
     ff.reload()
     r = client.get("/api/ambient-suggestions", params={"project": project})
     assert r.status_code == 200
@@ -394,7 +395,8 @@ def test_run_endpoint_is_403_when_flag_off(
     project: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS", raising=False)
+    # Default is now True, so "off" must be explicit.
+    monkeypatch.setenv("OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS", "0")
     ff.reload()
     r = client.post(
         "/api/ambient-suggestions/run",

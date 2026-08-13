@@ -371,11 +371,11 @@ _BUILTIN: list[FlagSpec] = [
     # ─── Experimental surfaces ────────────────────────────
     FlagSpec(
         name="ui.ambient_suggestions",
-        default=False,
+        default=True,
         description=(
             "Surface AI-generated follow-up tasks based on recent "
-            "conversations. Experimental; default off until the "
-            "retrieval quality is benchmarked."
+            "conversations. Experimental; enabled by default. Degrades "
+            "to an empty bucket until scored turn history exists."
         ),
         experimental=True,
     ),
