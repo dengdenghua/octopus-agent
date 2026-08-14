@@ -44,6 +44,7 @@ def _emit_sub_text_delta(
     round: int,
     delta: str,
     *,
+    session_id: str = "",
     emitter: Any = None,
 ) -> None:
     """Best-effort forward of one streamed role-prose chunk.
@@ -97,6 +98,7 @@ def _emit_sub_text_delta(
         journal.write(
             SubTextDeltaEvent(
                 task_id=meta.get("task_id"),
+                session_id=session_id,
                 role_id=role_id,
                 round=int(round),
                 delta=delta,

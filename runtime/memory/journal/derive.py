@@ -181,9 +181,7 @@ def assert_logged_assistant_reconstructs(
     """
 
     actual = derive_assistant_stream(journal, iteration=iteration)
-    assert actual == expected, (
-        f"derived {len(actual)} iteration-streams, expected {len(expected)}"
-    )
+    assert actual == expected, f"derived {len(actual)} iteration-streams, expected {len(expected)}"
 
 
 @dataclass(frozen=True)
@@ -193,49 +191,60 @@ class SubagentRoundStream:
     ``text`` is the exact concatenation of that round's
     ``sub_text_delta`` deltas in journal order; ``chunk_count`` is how
     many chunks the log recorded (proves per-chunk fidelity, not just
-    an opaque final string).
+    an opaque final string). ``session_id`` is the durable sub-agent
+    session the chunks belong to (empty for one-shot/remote children).
     """
 
     role_id: str
     round: int
     text: str
     chunk_count: int
+    session_id: str = ""
 
 
 def derive_subagent_streams(
     journal: Journal,
     *,
+    session_id: str | None = None,
     role_id: str | None = None,
 ) -> list[SubagentRoundStream]:
     """Reconstruct each role's streamed prose from ``SubTextDeltaEvent`` rows.
 
     The dsh session-log invariant applied to sub-agent turns: the
     prose a role streamed is recoverable from the append-only journal
-    alone, in journal order, grouped by ``(role_id, round)``. Rounds
-    that streamed no text contribute nothing; roles are returned in
-    first-seen order.
+    alone, in journal order, grouped by ``(session_id, role_id, round)``.
+    Rounds that streamed no text contribute nothing; groups are returned
+    in first-seen order.
+
+    ``session_id`` narrows to one durable session (``role_id`` alone is
+    ambiguous because every session of the same role shares its id);
+    ``role_id`` narrows to one role. Either or both may be supplied.
     """
 
-    streams: dict[tuple[str, int], list[str]] = {}
-    order: list[tuple[str, int]] = []
+    streams: dict[tuple[str, str, int], list[str]] = {}
+    order: list[tuple[str, str, int]] = []
     for event in journal.read_all():
         if event.event_type != "sub_text_delta":
             continue
         # ``getattr`` guards against an untyped fallback row (unknown
         # event_type decodes to the base JournalEvent).
+        event_session = getattr(event, "session_id", "") or ""
         event_role = getattr(event, "role_id", "") or ""
         event_round = int(getattr(event, "round", 0) or 0)
+        if session_id is not None and event_session != session_id:
+            continue
         if role_id is not None and event_role != role_id:
             continue
-        key = (event_role, event_round)
+        key = (event_session, event_role, event_round)
         if key not in streams:
             streams[key] = []
             order.append(key)
         streams[key].append(getattr(event, "delta", "") or "")
     return [
         SubagentRoundStream(
-            role_id=key[0],
-            round=key[1],
+            session_id=key[0],
+            role_id=key[1],
+            round=key[2],
             text="".join(streams[key]),
             chunk_count=len(streams[key]),
         )
@@ -247,6 +256,7 @@ def assert_logged_stream_reconstructs(
     journal: Journal,
     expected: list[SubagentRoundStream],
     *,
+    session_id: str | None = None,
     role_id: str | None = None,
 ) -> None:
     """Assert the journal reconstructs the given streamed prose — round-trip.
@@ -256,10 +266,12 @@ def assert_logged_stream_reconstructs(
     stream a role produced is fully recoverable from the log.
     """
 
-    actual = derive_subagent_streams(journal, role_id=role_id)
-    assert actual == expected, (
-        f"derived {len(actual)} round-streams, expected {len(expected)}"
+    actual = derive_subagent_streams(
+        journal,
+        session_id=session_id,
+        role_id=role_id,
     )
+    assert actual == expected, f"derived {len(actual)} round-streams, expected {len(expected)}"
 
 
 def assert_logged_history_reconstructs(
@@ -292,3 +304,54 @@ def assert_logged_history_reconstructs(
         assert block["id"] == str(call.call_id)
         assert block["name"] == str(call.sucker_id)
         assert block["input"] == call.args
+
+
+def surface_events_from_journal(
+    journal: Journal,
+    *,
+    session_id: str,
+    prompts: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Build a dsh surface for one sub-agent session from real journal events.
+
+    The dsh session-log invariant applied to the reference seam: the
+    assistant lane is reconstructed from the session's journaled
+    ``sub_text_delta`` rows (per-chunk fidelity) instead of the in-memory
+    turn store; the user lane comes from ``prompts`` because the journal
+    has no per-session ``user/message`` rows today (parent-level user
+    messages carry a conversation id, not a session id). Rounds interleave
+    with prompts (turn ``i``'s prompt pairs with round ``i+1``'s prose);
+    extra prompts or streams beyond the other side are still emitted so no
+    text is dropped.
+
+    Returns events in the dsh surface shape consumable by
+    ``retain_session_reference`` — ``user/message`` + ``assistant/message``.
+    """
+    streams_by_round = {
+        stream.round: stream for stream in derive_subagent_streams(journal, session_id=session_id)
+    }
+    prompts_list = list(prompts or [])
+    num_rounds = max(len(prompts_list), max(streams_by_round, default=0))
+    events: list[dict[str, Any]] = []
+    for index in range(num_rounds):
+        if index < len(prompts_list):
+            prompt = (prompts_list[index] or "").strip()
+            if prompt:
+                events.append(
+                    {
+                        "type": "user/message",
+                        "data": {
+                            "source": {"kind": "user"},
+                            "content": [{"type": "text", "text": prompt}],
+                        },
+                    }
+                )
+        stream = streams_by_round.get(index + 1)
+        if stream is not None and stream.text:
+            events.append(
+                {
+                    "type": "assistant/message",
+                    "data": {"message": {"content": [{"type": "text", "text": stream.text}]}},
+                }
+            )
+    return events

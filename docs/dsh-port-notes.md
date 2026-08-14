@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 三十个差距点已落地为可测试代码(1-30 节)
+**状态**: 三十三个差距点已落地为可测试代码(1-33 节)
 
 ---
 
@@ -860,7 +860,7 @@ dsh session 日志的不变式是「模型可见即入日志」:回合内流式�
 - 取消信号:沿用的 ``AbortSignal`` 取消边界仍未移植;长读 surface 如需
   可中断再补。
 
-## 29. chunk 存储压缩 (`runtime/memory/journal/_chunk_rows.py`)
+## 31. chunk 存储压缩 (`runtime/memory/journal/_chunk_rows.py`)
 
 第 28 节把可见文本逐 chunk 入日志,代价是长答案产生数百行近似雷同的
 JSONL——dsh 实测过 ~56 倍信封开销,并用 ``chunk-rows`` 把连续同块
@@ -907,7 +907,7 @@ delta 打包成一行存储、读时无损展开。本轮把这套存储编码�
   器不流式工具参数,工具调用以完整块到达,无增量可记。
 - goal 分页/流式 surface、title provider 优先级链、远端 SpillStore
   (e2b)——仍待补。
-## 30. reasoning-delta 泳道 (`thinking_delta` → journal)
+## 32. reasoning-delta 泳道 (`thinking_delta` → journal)
 
 第 28/29 节闭合了可见文本泳道;dsh 的 ``assistant/chunk`` 还有
 ``reasoning-delta``(推理块)与 ``tool-call-delta``(工具参数流)两条
@@ -938,6 +938,43 @@ delta 打包成一行存储、读时无损展开。本轮把这套存储编码�
   片段);若未来接入增量工具参数流,事件模型与打包层已就绪。
 - goal 分页/流式 surface、title provider 优先级链、远端 SpillStore
   (e2b)。
+## 33. journal sub-agent 流式事件加会话关联键 + journal→投影桥
+
+第 30 节落地 host mention 接线时,「真实 journal 喂投影」被判为被关联键
+问题阻塞:``sub_text_delta`` 事件只有 ``role_id``(= agent/角色 id,同
+角色的每个会话都共享),journal 里无法按 subagent 会话区分。本轮补根因
+——给流式事件加 ``session_id`` 关联键,并让投影吃真实 journal 散文:
+
+- ``_journal_models.py``:``SubTextDeltaEvent`` 新增 ``session_id: str =
+  ""``(纯 schema 追加,JSONL 回环无损,旧事件按空串兼容,无需迁移)。
+- ``_ephemeral_events.py``:``_emit_sub_text_delta(role_id, round, delta,
+  *, session_id="", emitter=None)``——journal 镜像写入 ``session_id``;
+  SSE emitter payload 保持不变,不把 session_id 泄给前端。
+- ``ephemeral_runner.py`` 三处发射点从 ``call.context["subagent_session_id"]``
+  取 ``session_id`` 传入(单发、agentic 循环、截断通知);一次性/远端
+  子进程无该 key 则为空串,telemetry 损失绝不打断 runner。
+- ``derive.py``:``derive_subagent_streams(journal, *, session_id=None,
+  role_id=None)`` 可按会话过滤——``role_id`` 不再歧义;
+  ``SubagentRoundStream`` 携带 ``session_id``(默认空串,旧构造兼容);
+  ``assert_logged_stream_reconstructs`` 同步支持 ``session_id``。
+- ``derive.py``:新增 ``surface_events_from_journal(journal, *,
+  session_id, prompts=None)``——把真实 journal 散文桥成 dsh surface 形状
+  (assistant 泳道从日志逐 chunk 重建、user 泳道由调用方提供,journal
+  目前没有 per-session ``user/message`` 行),输出可直接喂
+  ``retain_session_reference``。第 24/28 节留的「journal 喂投影」缺口
+  由此闭合。
+- 测试:``tests/test_sub_text_delta_event.py`` 新增 4 用例(emitter 不泄
+  session_id、按 session 过滤、prompt/round 交错、桥→投影端到端),全套
+  13 用例通过;journal/ephemeral/session/reference 回归 92 项通过,
+  ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- per-session ``user/message``:subagent 的 prompt 仍不在 journal 里
+  (``user/message`` 写的是父会话/goal 维度),所以投影的 user 泳道仍由
+  turn 提供,纯 journal 表面尚缺 user 侧;后续可让桥在 subagent 会话
+  生命周期里补齐。
+
 ## 用法速查
 
 ```bash

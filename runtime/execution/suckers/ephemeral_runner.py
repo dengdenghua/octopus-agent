@@ -209,6 +209,13 @@ def _handle_report_tool(
             "the parent was not woken (the consecutive-wake budget is spent). "
             "Do not keep reporting — the parent will read this on its next turn."
         )
+    elif effective == "queued":
+        note = (
+            "Delivered to the parent's report lane, queued into its running "
+            "turn: the parent is busy and was not woken. Do not keep reporting "
+            "— the parent will read this when it next continues this session "
+            "or starts a turn."
+        )
     else:
         note = "The parent has been woken to read this."
     return (
@@ -426,6 +433,7 @@ def make_llm_ephemeral_runner(
             # we can forward role text as ``sub_text_delta`` chunks the
             # parent gateway can render live.
             _ctx_emitter_single = call.context.get("event_emitter") if call.context else None
+            _ctx_session_id_single = call.context.get("subagent_session_id") if call.context else ""
             stream_fn_single = getattr(router, "call_stream", None)
             if callable(stream_fn_single):
                 accumulated = ""
@@ -439,6 +447,7 @@ def make_llm_ephemeral_runner(
                                     call.role.id,
                                     1,
                                     chunk,
+                                    session_id=_ctx_session_id_single,
                                     emitter=_ctx_emitter_single,
                                 )
                         elif event.type == "done":
@@ -526,6 +535,7 @@ def make_llm_ephemeral_runner(
         # Pull the optional event_emitter injected by the bridge.
         # It's a plain Callable[[dict], None] — fire-and-forget.
         _ctx_emitter = call.context.get("event_emitter") if call.context else None
+        _ctx_session_id = call.context.get("subagent_session_id") if call.context else ""
 
         # Role-specific round cap (align with Claude Code depth for research tasks)
         max_rounds = EPHEMERAL_MAX_ROUNDS_BY_ROLE.get(call.role.id, EPHEMERAL_MAX_ROUNDS)
@@ -608,6 +618,7 @@ def make_llm_ephemeral_runner(
                                     call.role.id,
                                     round_i + 1,
                                     chunk,
+                                    session_id=_ctx_session_id,
                                     emitter=_ctx_emitter,
                                 )
                         elif etype == "tool_use" and event.tool_call is not None:
@@ -687,6 +698,7 @@ def make_llm_ephemeral_runner(
                         call.role.id,
                         round_i + 1,
                         notice,
+                        session_id=_ctx_session_id,
                         emitter=_ctx_emitter,
                     )
                     return accumulated_text + notice

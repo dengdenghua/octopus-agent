@@ -399,9 +399,15 @@ class SubTextDeltaEvent(JournalEvent):
     sub-agent's streaming prose reconstructable from the log —
     the dsh session-log invariant "model-visible means logged" —
     instead of living only in the in-memory emitter callback.
+
+    ``session_id`` carries the durable sub-agent session (when the child
+    is continuable) so a session's streamed prose is filterable per
+    session, not only per ``role_id`` — ``role_id`` is the agent/role id
+    shared by every session of the same role.
     """
 
     event_type: Literal["sub_text_delta"] = "sub_text_delta"
+    session_id: str = ""
     role_id: str = ""
     round: int = 0
     delta: str = ""
