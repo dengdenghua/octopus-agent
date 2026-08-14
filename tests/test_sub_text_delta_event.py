@@ -12,6 +12,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from runtime.execution.subagents._ambient import (
+    current_subagent_session_id,
+    subagent_session_scope,
+)
 from runtime.execution.suckers._ephemeral_events import (
     _emit_sub_session_summary,
     _emit_sub_text_delta,
@@ -23,6 +27,7 @@ from runtime.memory.journal import (
     SubSessionSummaryEvent,
     SubTextDeltaEvent,
 )
+from runtime.memory.journal._journal_models import TokenUsageEvent
 from runtime.memory.journal._journal_parse import _EVENT_CLASSES
 from runtime.memory.journal.derive import (
     SessionSummary,
@@ -364,6 +369,9 @@ def test_sub_session_summary_registered_and_roundtrips(tmp_path: Path) -> None:
             rounds=3,
             success=False,
             error="round cap",
+            input_tokens=100,
+            output_tokens=40,
+            cost_usd=0.0012,
         )
     )
     ev = journal.read_all()[0]
@@ -372,37 +380,81 @@ def test_sub_session_summary_registered_and_roundtrips(tmp_path: Path) -> None:
     assert ev.rounds == 3
     assert ev.success is False
     assert ev.error == "round cap"
+    assert ev.input_tokens == 100
+    assert ev.output_tokens == 40
+    assert ev.cost_usd == 0.0012
 
 
 def test_emit_sub_session_summary_writes_row() -> None:
     journal = InMemoryJournal()
     sid = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    other = "ffffffffffffffffffffffffffffffff"
+    # Pre-seed usage rows: two attributed to this session, one to a different
+    # session and one unattributed — only the matching rows are summed.
+    journal.write(
+        TokenUsageEvent(session_id=sid, input_tokens=100, output_tokens=30, cost_usd=0.001)
+    )
+    journal.write(
+        TokenUsageEvent(session_id=sid, input_tokens=50, output_tokens=10, cost_usd=0.0005)
+    )
+    journal.write(
+        TokenUsageEvent(session_id=other, input_tokens=900, output_tokens=900, cost_usd=0.9)
+    )
+    journal.write(TokenUsageEvent(session_id="", input_tokens=500, output_tokens=500, cost_usd=0.5))
     with session_scope(_scoped_session_with_journal(journal)):
         _emit_sub_session_summary(sid, agent_id="critic", rounds=2, success=True)
         _emit_sub_session_summary("", agent_id="critic", rounds=1)  # skipped
 
-    events = journal.read_all()
-    assert len(events) == 1
-    assert events[0].event_type == "sub_session_summary"
-    assert events[0].session_id == sid
-    assert events[0].agent_id == "critic"
-    assert events[0].rounds == 2
-    assert events[0].success is True
+    summaries = [e for e in journal.read_all() if e.event_type == "sub_session_summary"]
+    assert len(summaries) == 1
+    assert summaries[0].session_id == sid
+    assert summaries[0].agent_id == "critic"
+    assert summaries[0].rounds == 2
+    assert summaries[0].success is True
+    assert summaries[0].input_tokens == 150
+    assert summaries[0].output_tokens == 40
+    assert summaries[0].cost_usd == 0.0015
 
 
 def test_derive_session_summaries_filters_by_session() -> None:
     journal = InMemoryJournal()
     sid1 = "11112222333344445555666677778888"
     sid2 = "88887777666655554444333322221111"
-    journal.write(SubSessionSummaryEvent(session_id=sid1, agent_id="r", rounds=3, success=True))
+    journal.write(
+        SubSessionSummaryEvent(
+            session_id=sid1,
+            agent_id="r",
+            rounds=3,
+            success=True,
+            input_tokens=120,
+            output_tokens=30,
+            cost_usd=0.0012,
+        )
+    )
     journal.write(
         SubSessionSummaryEvent(session_id=sid2, agent_id="c", rounds=1, success=False, error="x")
     )
-    journal.write(SubSessionSummaryEvent(session_id=sid1, agent_id="r", rounds=5, success=True))
+    journal.write(
+        SubSessionSummaryEvent(
+            session_id=sid1, agent_id="r", rounds=5, success=True, input_tokens=60
+        )
+    )
 
     all_summaries = derive_session_summaries(journal)
     assert [(s.session_id, s.rounds) for s in all_summaries] == [(sid1, 3), (sid2, 1), (sid1, 5)]
+    assert all_summaries[0].input_tokens == 120
+    assert all_summaries[0].output_tokens == 30
+    assert all_summaries[0].cost_usd == 0.0012
+    assert all_summaries[2].input_tokens == 60
+    assert all_summaries[2].output_tokens == 0
     filtered = derive_session_summaries(journal, session_id=sid2)
     assert filtered == [
         SessionSummary(session_id=sid2, agent_id="c", rounds=1, success=False, error="x")
     ]
+
+
+def test_subagent_session_scope_ambient_context() -> None:
+    assert current_subagent_session_id() == ""
+    with subagent_session_scope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"):
+        assert current_subagent_session_id() == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    assert current_subagent_session_id() == ""

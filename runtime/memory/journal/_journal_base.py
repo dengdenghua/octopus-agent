@@ -545,12 +545,14 @@ class Journal:
         output_tokens: int,
         cost_usd: float = 0.0,
         model: str = "",
+        session_id: str = "",
     ) -> None:
         if input_tokens == 0 and output_tokens == 0:
             return  # Implementation note.
         self.write(
             TokenUsageEvent(
                 task_id=task_id,
+                session_id=session_id,
                 iteration=iteration,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,

@@ -504,15 +504,20 @@ def call_subagent(
                         **(context or {}),
                         "subagent_session_id": _active_session["session_id"],
                     }
-                return _dispatch(
-                    agent_id=agent_id,
-                    prompt=prompt,
-                    context=dispatch_context,
-                    timeout_s=timeout_s,
-                    session=run_session,
-                    event_emitter=_tracking_emitter,
-                    use_cheap_model=use_cheap_model,
+                from runtime.execution.subagents._ambient import (
+                    subagent_session_scope,
                 )
+
+                with subagent_session_scope(_active_session["session_id"]):
+                    return _dispatch(
+                        agent_id=agent_id,
+                        prompt=prompt,
+                        context=dispatch_context,
+                        timeout_s=timeout_s,
+                        session=run_session,
+                        event_emitter=_tracking_emitter,
+                        use_cheap_model=use_cheap_model,
+                    )
         finally:
             if scope_token is not None:
                 from runtime.platform.process.session import _current_session

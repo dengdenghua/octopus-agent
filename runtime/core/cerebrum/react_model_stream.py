@@ -112,6 +112,21 @@ def _stream_has_protocol(text: str) -> bool:
     return _has_react_protocol_stream_prefix(text) or _looks_like_protocol_leak(text)
 
 
+def _ambient_subagent_session_id() -> str:
+    """Return the sub-agent session id scoped by the bridge's worker thread.
+
+    Lazily imports the ambient ContextVar so the core stream never hard-depends
+    on the sub-agent runtime; unset (parent turn / one-shot child) is ``""`` and
+    the usage row simply goes unattributed.
+    """
+    try:
+        from runtime.execution.subagents._ambient import current_subagent_session_id
+
+        return current_subagent_session_id()
+    except Exception:  # noqa: BLE001 - optional attribution, never breaks streaming
+        return ""
+
+
 def _phase_6b_model_stream(
     state: _LoopState,
     *,
@@ -714,6 +729,7 @@ def _phase_6b_model_stream(
                 with contextlib.suppress(Exception):
                     _journal.write_token_usage(
                         task_id=str(react_task_id),
+                        session_id=_ambient_subagent_session_id(),
                         iteration=i + 1,
                         input_tokens=_in_tok,
                         output_tokens=_out_tok,

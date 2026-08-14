@@ -261,6 +261,9 @@ class SessionSummary:
     rounds: int
     success: bool
     error: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
 
 
 def derive_session_summaries(
@@ -291,6 +294,9 @@ def derive_session_summaries(
                 rounds=int(getattr(event, "rounds", 0) or 0),
                 success=bool(getattr(event, "success", True)),
                 error=getattr(event, "error", "") or "",
+                input_tokens=int(getattr(event, "input_tokens", 0) or 0),
+                output_tokens=int(getattr(event, "output_tokens", 0) or 0),
+                cost_usd=float(getattr(event, "cost_usd", 0.0) or 0.0),
             )
         )
     return summaries

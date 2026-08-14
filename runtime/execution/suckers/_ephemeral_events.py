@@ -205,6 +205,22 @@ def _emit_sub_session_summary(
     try:
         from runtime.memory.journal._journal_models import SubSessionSummaryEvent
 
+        # Sum the usage rows attributed to this session (dsh session-log
+        # invariant extended to spend): the bridge scoped the child's react
+        # loop so its ``token_usage`` rows carry this ``session_id``. Rows
+        # with no attribution (parent turns / one-shot children) never match.
+        _in_tok = 0
+        _out_tok = 0
+        _cost = 0.0
+        for _event in journal.read_all():
+            if (
+                getattr(_event, "event_type", "") == "token_usage"
+                and (_event.session_id or "") == session_id
+            ):
+                _in_tok += int(_event.input_tokens or 0)
+                _out_tok += int(_event.output_tokens or 0)
+                _cost += float(_event.cost_usd or 0.0)
+
         journal.write(
             SubSessionSummaryEvent(
                 task_id=meta.get("task_id"),
@@ -213,6 +229,9 @@ def _emit_sub_session_summary(
                 rounds=int(rounds or 0),
                 success=bool(success),
                 error=error or "",
+                input_tokens=_in_tok,
+                output_tokens=_out_tok,
+                cost_usd=round(_cost, 6),
             )
         )
     except (OSError, TypeError, ValueError):  # noqa: BLE001

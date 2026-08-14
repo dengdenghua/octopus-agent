@@ -220,6 +220,7 @@ class TaskResumedEvent(JournalEvent):
 
 class TokenUsageEvent(JournalEvent):
     event_type: Literal["token_usage"] = "token_usage"
+    session_id: str = ""
     iteration: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -437,6 +438,9 @@ class SubSessionSummaryEvent(JournalEvent):
     rounds: int = 0
     success: bool = True
     error: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
 
 
 class BrowserArtifactEvent(JournalEvent):
