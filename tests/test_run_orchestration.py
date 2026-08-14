@@ -132,6 +132,52 @@ def test_dry_stop(monkeypatch):
     assert r["stopped_reason"] == "dry"
 
 
+def test_subagent_failures_are_reported_not_masked(monkeypatch):
+    """A total sub-agent crash must surface in the return — not be swallowed
+    into ``stopped_reason == "dry"`` / ``count == 0`` (the masking that made a
+    real all-crash read as "nothing found")."""
+
+    def fake(specs: Any = None, **_kw: Any) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "successes": [],
+            "failures": [
+                {
+                    "role": "reviewer",
+                    "agent_id": "reviewer",
+                    "error": "exceeded round cap (5) without converging",
+                    "error_type": "round_cap_exceeded",
+                }
+            ],
+            "success_count": 0,
+        }
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    r = ds._run_orchestration(goal="g", n=1, rounds=2, patience=1)
+    assert r["collected"] == []
+    assert r["count"] == 0
+    assert r["stopped_reason"] == "dry"  # loop-level reason unchanged
+    # two rounds, one failure each → raw count 2, de-duplicated to one summary
+    assert r["failure_count"] == 2
+    assert r["failures"] == [
+        {
+            "role": "reviewer",
+            "error": "exceeded round cap (5) without converging",
+            "error_type": "round_cap_exceeded",
+        }
+    ]
+    assert "SUBAGENT FAILURES" in r["note"]
+    assert "round cap" in r["note"]
+
+
+def test_no_failures_leaves_failure_fields_empty(monkeypatch):
+    monkeypatch.setattr(ds, "_call_agent_parallel", _fake_parallel_seq([["a"]]))
+    r = ds._run_orchestration(goal="g", n=1, rounds=1)
+    assert r["failure_count"] == 0
+    assert r["failures"] == []
+    assert r["note"] == ""
+
+
 def test_dedupe_across_rounds(monkeypatch):
     monkeypatch.setattr(
         ds,

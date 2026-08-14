@@ -225,6 +225,29 @@ def _coerce_roles(agent_id: Any) -> list[str]:
     return roles or ["researcher"]
 
 
+def _summarise_failures(failures: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Distil the envelope's ``failures`` lane into concise, de-duplicated
+    summaries so the orchestration can honestly report *why* its sub-agents
+    failed — instead of silently swallowing them (which is exactly what made a
+    total sub-agent crash read as "nothing found / dry")."""
+    seen: set[tuple[str, str]] = set()
+    out: list[dict[str, str]] = []
+    for f in failures:
+        if not isinstance(f, dict):
+            continue
+        role = str(f.get("role") or f.get("agent_id") or "?").strip() or "?"
+        error = str(f.get("error") or f.get("error_type") or "unknown failure").strip()
+        key = (role, error)
+        if key in seen:
+            continue
+        seen.add(key)
+        summary: dict[str, str] = {"role": role, "error": error}
+        if f.get("error_type"):
+            summary["error_type"] = str(f["error_type"])
+        out.append(summary)
+    return out
+
+
 def _run_orchestration(
     goal: str = "",
     *,
@@ -343,6 +366,9 @@ def _run_orchestration(
     per_round: list[int] = []
     dry = 0
     stopped = "rounds"
+    # Every sub-agent failure is accumulated (not just successes) so the return
+    # can honestly report a total crash instead of masking it as "dry".
+    subagent_failures: list[dict[str, Any]] = []
 
     # Blackboard coordination: publish the evolving findings to the turn's
     # shared blackboard so sibling agents — and a later orchestration on the
@@ -399,6 +425,7 @@ def _run_orchestration(
             items: list[str] = []
             for s in env.get("successes", []):
                 items.extend(_findings_from_success(s))
+            subagent_failures.extend(env.get("failures", []))
             fresh = _dedupe_findings(items, seen_norms)
             per_round.append(len(fresh))
             _emit_orchestration_progress(
@@ -494,6 +521,7 @@ def _run_orchestration(
                 session=session,
             )
             synth_succ = synth_env.get("successes", [])
+            subagent_failures.extend(synth_env.get("failures", []))
             if synth_succ:
                 synthesis = str(synth_succ[0].get("output") or "").strip()
         if synthesize and synthesis:
@@ -504,6 +532,18 @@ def _run_orchestration(
         budget_used = budget.used
         _emit_orchestration_progress(
             f"[orchestration] done · {len(confirmed)} confirmed · spawns {budget_used}/{max_spawns}"
+        )
+
+    failure_count = len(subagent_failures)
+    failure_summaries = _summarise_failures(subagent_failures)
+    note = ""
+    if failure_count:
+        reasons = "; ".join(f"{s['role']}: {s['error']}" for s in failure_summaries)
+        note = (
+            f"SUBAGENT FAILURES: {failure_count} delegated sub-agent run(s) failed "
+            f"({reasons}). Do not present these as a completed multi-agent pass — "
+            "the delegated finders failed (round cap / connection / model cannot "
+            "converge), not that nothing was found."
         )
 
     return {
@@ -522,4 +562,7 @@ def _run_orchestration(
         "stopped_reason": stopped,
         "budget_used": budget_used,
         "max_spawns": int(max_spawns),
+        "failures": failure_summaries,
+        "failure_count": failure_count,
+        "note": note,
     }
