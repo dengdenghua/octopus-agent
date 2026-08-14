@@ -10,7 +10,13 @@ isolation, live fan-out, malformed-row tolerance, and lifecycle parity.
 
 from __future__ import annotations
 
-from runtime.memory.goals import GoalProjection, GoalProjectionCache, GoalService
+from runtime.memory.goals import (
+    GoalProjection,
+    GoalProjectionCache,
+    GoalService,
+    GoalTimelineEntry,
+    derive_goal_timeline,
+)
 from runtime.memory.journal import InMemoryJournal, Journal
 from runtime.memory.journal._journal_models import GoalChangeEvent
 from runtime.sensing.gateway.streaming_journal import StreamingJournal
@@ -206,3 +212,76 @@ def test_apply_change_rejects_invalid_change_silently() -> None:
     )
     assert cache.current().as_of == 0
     assert cache.current().folded.goal is None
+
+
+def test_timeline_archives_full_lifecycle_in_order() -> None:
+    journal = InMemoryJournal()
+    svc = GoalService(journal)
+    svc.create("第一个目标")
+    svc.complete()
+    svc.create("第二个目标", max_goal_rounds=2)
+    svc.block(code="needs-user", message="等待")
+    svc.resume()
+    svc.complete()
+    svc.create("第三个目标")
+    svc.clear()
+
+    entries = derive_goal_timeline(journal)
+    assert [e.objective for e in entries] == ["第一个目标", "第二个目标", "第三个目标"]
+    assert [e.final_phase for e in entries] == ["complete", "complete", "cleared"]
+    assert [e.final_revision for e in entries] == [2, 4, 2]
+    assert all(isinstance(e, GoalTimelineEntry) for e in entries)
+    assert entries[0].cleared_at is None
+    assert entries[2].cleared_at is not None
+    assert entries[2].rounds_started == 0
+    assert entries[0].created_at <= entries[0].updated_at
+
+
+def test_timeline_scopes_across_writers() -> None:
+    journal = StreamingJournal(InMemoryJournal())
+    svc_a = GoalService(journal, agent_id="agent-a")
+    svc_b = GoalService(journal, agent_id="agent-b")
+    svc_a.create("A 的目标")
+    svc_b.create("B 的目标")
+
+    assert [e.objective for e in derive_goal_timeline(journal, agent_id="agent-a")] == [
+        "A 的目标"
+    ]
+    assert [e.objective for e in derive_goal_timeline(journal, agent_id="agent-b")] == [
+        "B 的目标"
+    ]
+    assert len(derive_goal_timeline(journal)) == 2
+
+
+def test_timeline_skips_malformed_rows_and_unrelated_events() -> None:
+    journal = InMemoryJournal()
+    journal.write_user_message("普通消息")
+    svc = GoalService(journal)
+    svc.create("目标")
+    # A malformed row after the fold's last strict read must not break the
+    # archive derivation (the strict service fold itself stays fail-loud).
+    journal.write(GoalChangeEvent(change={"kind": "bogus"}))
+
+    entries = derive_goal_timeline(journal)
+    assert len(entries) == 1
+    assert entries[0].objective == "目标"
+
+
+def test_timeline_tombstone_without_create_still_archives() -> None:
+    from runtime.memory.goals.domain import GoalClearChange, GoalRef
+
+    journal = InMemoryJournal()
+    journal.write(
+        GoalChangeEvent(
+            change=GoalClearChange(
+                cleared=GoalRef(id="a" * 32, revision=3),
+                cleared_at=100,
+            ).to_dict()
+        )
+    )
+    entries = derive_goal_timeline(journal)
+    assert len(entries) == 1
+    assert entries[0].goal_id == "a" * 32
+    assert entries[0].final_phase == "cleared"
+    assert entries[0].final_revision == 3
+    assert entries[0].cleared_at == 100

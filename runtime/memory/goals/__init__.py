@@ -27,7 +27,12 @@ from .fold import (
     fold_goal,
     goal_change_ref,
 )
-from .projection import GoalProjection, GoalProjectionCache
+from .projection import (
+    GoalProjection,
+    GoalProjectionCache,
+    GoalTimelineEntry,
+    derive_goal_timeline,
+)
 from .service import GoalChanged, GoalService
 
 __all__ = [
@@ -39,8 +44,10 @@ __all__ = [
     "GoalRef",
     "GoalProjection",
     "GoalProjectionCache",
+    "GoalTimelineEntry",
     "GoalChanged",
     "GoalService",
+    "derive_goal_timeline",
     "GoalSnapshot",
     "apply_goal_change",
     "apply_goal_event",

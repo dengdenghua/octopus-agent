@@ -20,7 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from runtime.memory.goals.domain import FoldedGoal
+from runtime.memory.goals.domain import FoldedGoal, GoalClearChange, GoalSnapshotChange
 from runtime.memory.goals.fold import apply_goal_change, decode_goal_change, empty_goal_fold_state
 
 _logger = logging.getLogger("octopus.goals.projection")
@@ -40,6 +40,111 @@ class GoalProjection:
 
     folded: FoldedGoal
     as_of: int
+
+
+@dataclass(frozen=True)
+class GoalTimelineEntry:
+    """One archived goal's lifecycle summary, derived from the change log.
+
+    dsh retains a durable tombstone and history after a goal clears; this is
+    the timeline view over the append-only ``goal_change`` rows — one entry
+    per goal id, with its final objective/phase and lifecycle timestamps.
+    ``final_phase`` is ``"cleared"`` when the goal ended in a clear
+    tombstone, otherwise the last committed phase (``complete`` etc.).
+    """
+
+    goal_id: str
+    objective: str
+    final_phase: str
+    created_at: int
+    updated_at: int
+    rounds_started: int
+    final_revision: int
+    cleared_at: int | None = None
+
+
+def derive_goal_timeline(
+    journal: Any,
+    *,
+    agent_id: str | None = None,
+    conversation_id: str | None = None,
+) -> list[GoalTimelineEntry]:
+    """Reconstruct the goal history archive from one journal, in order.
+
+    Scoped like ``GoalProjectionCache`` (agent/conversation filter); a goal
+    without a scope filter is global. Malformed rows are skipped — a bad
+    row never breaks the archive (dsh projection posture). Entries are
+    returned in first-created order.
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for event in journal.read_all():
+        if getattr(event, "event_type", "") != _GOAL_EVENT_TYPE:
+            continue
+        if agent_id is not None and getattr(event, "agent_id", None) != agent_id:
+            continue
+        if (
+            conversation_id is not None
+            and getattr(event, "conversation_id", None) != conversation_id
+        ):
+            continue
+        try:
+            change = decode_goal_change(getattr(event, "change", None))
+        except Exception:  # noqa: BLE001 — malformed row is skipped
+            _logger.warning(
+                "goal timeline: malformed goal_change row skipped (event_id=%s)",
+                getattr(event, "event_id", None),
+                exc_info=True,
+            )
+            continue
+        if change is None:
+            continue
+        if isinstance(change, GoalSnapshotChange):
+            goal_id = change.goal.id
+            if goal_id not in by_id:
+                by_id[goal_id] = {
+                    "goal_id": goal_id,
+                    "objective": change.goal.objective,
+                    "final_phase": change.goal.phase,
+                    "created_at": change.created_at,
+                    "updated_at": change.updated_at,
+                    "rounds_started": change.rounds_started,
+                    "final_revision": change.goal.revision,
+                    "cleared_at": None,
+                }
+                order.append(goal_id)
+            else:
+                entry = by_id[goal_id]
+                entry["objective"] = change.goal.objective
+                entry["final_phase"] = change.goal.phase
+                entry["updated_at"] = change.updated_at
+                entry["rounds_started"] = change.rounds_started
+                entry["final_revision"] = change.goal.revision
+        elif isinstance(change, GoalClearChange):
+            # Clear tombstone: mark the goal archived with a cleared edge.
+            goal_id = change.cleared.id
+            entry = by_id.get(goal_id)
+            if entry is None:
+                # A tombstone for a goal we never saw (partial log) still
+                # archives the ref; keep it minimal and never crash.
+                entry = {
+                    "goal_id": goal_id,
+                    "objective": "",
+                    "final_phase": "cleared",
+                    "created_at": change.cleared_at,
+                    "updated_at": change.cleared_at,
+                    "rounds_started": 0,
+                    "final_revision": change.cleared.revision,
+                    "cleared_at": change.cleared_at,
+                }
+                order.append(goal_id)
+                by_id[goal_id] = entry
+            else:
+                entry["final_phase"] = "cleared"
+                entry["updated_at"] = change.cleared_at
+                entry["final_revision"] = change.cleared.revision
+                entry["cleared_at"] = change.cleared_at
+    return [GoalTimelineEntry(**by_id[goal_id]) for goal_id in order]
 
 
 class GoalProjectionCache:
@@ -151,4 +256,4 @@ class GoalProjectionCache:
         )
 
 
-__all__ = ["GoalProjection", "GoalProjectionCache"]
+__all__ = ["GoalProjection", "GoalProjectionCache", "GoalTimelineEntry", "derive_goal_timeline"]

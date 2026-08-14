@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十二个差距点已落地为可测试代码(1-42 节)
+**状态**: 四十三个差距点已落地为可测试代码(1-43 节)
 
 ---
 
@@ -1289,7 +1289,33 @@ dsh 把当前目标作为 session projection 提供:last-wins fold 由
 ### 尚未覆盖(dsh 有而这里没有)
 
 - 多目标历史归档:目前 fold 只投影当前目标,已 complete/clear 的目标
-  时间线视图未接(可后续从 goal_change 行派生历史列表)。
+  时间线视图未接(可后续从 goal_change 行派生历史列表)。(已由
+  第 43 节收口。)
+
+## 43. goal 历史归档时间线 (`goals/projection.derive_goal_timeline`)
+
+第 42 节补了「流式 surface」,但历史归档仍缺:dsh 在 clear 后保留
+durable tombstone 与 history。本轮从 append-only ``goal_change`` 行
+派生时间线视图——一个目标一条档案,resume/审计可回答「此前完成过
+哪些目标、各花了多少轮」:
+
+- ``derive_goal_timeline(journal, *, agent_id=None, conversation_id=None)``:
+  按日志顺序逐行解码 scope 内 ``goal_change``,按 goal id 归组——create
+  建档(objective/created_at/phase),后续变更推进最终 objective/phase/
+  updated_at/rounds/revision,clear tombstone 标记 ``final_phase="cleared"``
+  + ``cleared_at``(只见过 tombstone 的部分日志也归档该 ref,绝不 crash);
+  malformed 行跳过;返回按建档顺序的 ``GoalTimelineEntry`` 列表。
+- 与第 42 节的投影缓存互补:缓存是「当前目标 O(1) 读面」,时间线是
+  「历史目标只读归档」;两者都 scope-aware、都容忍坏行、都不改写入面。
+- 测试:``tests/test_goal_projection.py`` 新增 3 用例(全生命周期三目标
+  归档顺序与 final_phase/revision/cleared_at、跨 writer scope 隔离、
+  malformed/无关事件跳过、无 create 的 tombstone 仍归档);goal 全套
+  55 用例通过,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 目标历史的分页读取:时间线目前全量派生,大日志多目标时无分页游标;
+  单会话目标数量天然有限,列为后续。
 
 ## 用法速查
 
