@@ -257,7 +257,7 @@ def _execute_action_via_beak(
         fallback_call=call,
         prune_middle=TOOL_RESULT_PRUNE_MIDDLE,
         spill_oversized=TOOL_RESULT_SPILL_ENABLED,
-        spill_tool_name=skill_name,
+        tool_name=skill_name,
     )
     status = normalized_result.status
     output = normalized_result.output
@@ -272,7 +272,7 @@ def _execute_action_via_beak(
             max_chars=TOOL_OBSERVATION_MAX_CHARS,
             prune_middle=TOOL_RESULT_PRUNE_MIDDLE,
             spill_oversized=TOOL_RESULT_SPILL_ENABLED,
-            spill_tool_name=skill_name,
+            tool_name=skill_name,
         )
         return (
             "(tool failed) status=command_failed error=non_zero_exit\n"

@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十一个差距点已落地为可测试代码(1-21 节)
+**状态**: 二十二个差距点已落地为可测试代码(1-22 节)
 
 ---
 
@@ -284,7 +284,7 @@ append-only 日志里,剪的只是渲染面。
   未点亮(避免动主路径的高风险面);接入点已备好,`prune_middle=True`
   一行即可开启,留给性能/上下文预算实测后决定默认值。
 - dsh 的 shadow-price 记账(每次修剪在日志里补一条定价事件,消费方可
-  无状态扣除)——我们尚无 token meter 事件桥,列为后续。
+  无状态扣除)——已落地,见第 22 节。
 ## 14. 会话标题自动再生接线 (auto-title)
 
 第 9 节的标题原语只有端点与变量,缺 dsh ``ctx.sessionTitle`` 的
@@ -416,8 +416,8 @@ dsh ``tool-subagent-report`` 的「子→父」投递通道:continuable 子代�
 
 - `_tool_bridge_exec`(realtime native tool 路径)仍未默认点亮——接入点
   已备好(`prune_middle=True` 一行),与主路径同一开关可后续统一。
-- dsh 的 shadow-price 记账(每次修剪在日志里补定价事件)——尚无 token
-  meter 事件桥,列为后续。
+- dsh 的 shadow-price 记账(每次修剪在日志里补定价事件)——已落地,
+  见第 22 节。
 ## 18. Pruner 开关统一 + native tool bridge 点亮
 
 第 17 点只点亮了 react 主路径;realtime native 路径(`_tool_bridge_exec`)
@@ -533,6 +533,40 @@ bridge 附加 pending_reports」;本轮把 ``report`` 做成子代理回合中
 - 回合级真实 transcript 订阅:子代理回合内事件流
   (``sub_tool_start``/``sub_text_delta``)尚未落到 session 日志的
   逐事件桥,父代理拿到的仍是摘要级 report。
+## 22. shadow-price 修剪记账 (`tool_engine/tool_shadow_price.py`)
+
+dsh 的 ``compaction/prune`` shadow-price 协议:每次修剪替换时,在替换
+前同步追加一条 log-only 定价事件,声明被遮蔽 span 的启发式 token 价,
+纯消费方可无状态扣除。第 13/17/18 点的 pruner 剪掉中段后,模型少看了
+多少 token 一直没被计量;本轮补上事件桥:
+
+- `estimate_shadowed_tokens(chars)` — dsh 固定密度估算器
+  (``CHARS_PER_TOKEN = 4``,``ceil(chars/4)``),与 dsh
+  ``token-meter/estimate.ts`` 同源。
+- `PruneShadowPrice` 记录:tool_name / call_id / chars_before / chars_after
+  / chars_removed / tokens_shadowed;`prune_tool_result_text` 每次真正
+  剪中段时发射一条(预算内、invariant 短路不发)。
+- `set_shadow_price_sink(sink)` 注册面(默认进进程级
+  ``ShadowPriceLedger`` 计数器,``None`` 关闭);sink 抛异常只告警、
+  绝不影响修剪。**Shadow price 是观测不是账单**:模型没看到的上下文
+  绝不能混入 ``UsagePricing`` 真实记账,ledger 快照只用于报
+  「修剪节省的估算 token」。
+- 归因:`render_tool_output` 的 ``spill_tool_name`` 泛化为 ``tool_name``
+  (spill 命名与 shadow-price 归因共用),``normalize_tool_result``
+  自动带出调用 id;react 主路径与 native bridge 两个调用点自动获得
+  归因。
+- 测试:`tests/test_tool_shadow_price.py` 11 用例(估算器、发射载荷与
+  归因、预算内/短路不发射、sink 关闭、sink 失败隔离、ledger 累计与
+  reset、render/normalize 归因);回归 pruner/bridge/react/spill 393 项
+  全绿,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 日志内 adjacency 协议:我们无 dsh 的 session 日志 surface fold,
+  「定价事件紧跟替换事件」的时序约束不适用;ledger 计数器是等价但
+  更松的桥,将来若引入 priced surface 可把 sink 换成 fold。
+- 角色/块级结构开销(dsh ``BLOCK_OVERHEAD`` / ``ROLE_OVERHEAD``):
+  我们按纯文本 span 计价,整条消息框架开销不适用。
 ## 用法速查
 
 ```bash

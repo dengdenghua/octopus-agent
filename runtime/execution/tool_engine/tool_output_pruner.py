@@ -17,8 +17,18 @@ Invariants (mirroring dsh):
 
 from __future__ import annotations
 
+import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
+
+from .tool_shadow_price import (
+    PruneShadowPrice,
+    default_shadow_price_sink,
+    estimate_shadowed_tokens,
+)
+
+LOGGER = logging.getLogger(__name__)
 
 PRUNE_MARKER = "\n\n[... tool result middle pruned ...]\n\n"
 
@@ -30,6 +40,47 @@ DEFAULT_PRUNE_TAIL_CHARS = 1024
 # paths. On by default (dsh compaction default); set
 # ``OCTOPUS_TOOL_PRUNE_MIDDLE=0`` to restore head-only truncation.
 TOOL_RESULT_PRUNE_ENABLED = os.environ.get("OCTOPUS_TOOL_PRUNE_MIDDLE", "1") != "0"
+
+# Shadow-price sink (dsh ``compaction/prune`` protocol): called with one
+# ``PruneShadowPrice`` per actual prune. Defaults to the process ledger
+# (observability counters only — never billing); ``set_shadow_price_sink(None)``
+# disables emission. Best-effort: a failing sink never breaks pruning.
+_shadow_price_sink: Callable[[PruneShadowPrice], None] | None = default_shadow_price_sink
+
+
+def set_shadow_price_sink(
+    sink: Callable[[PruneShadowPrice], None] | None,
+) -> None:
+    """Install the shadow-price sink (``None`` disables emission)."""
+    global _shadow_price_sink
+    _shadow_price_sink = sink
+
+
+def _emit_shadow_price(
+    text_before: str,
+    text_after: str,
+    *,
+    tool_name: str | None,
+    call_id: str | None,
+) -> None:
+    """Best-effort emission of one shadow-price record (dsh protocol)."""
+    sink = _shadow_price_sink
+    if sink is None:
+        return
+    chars_removed = max(0, len(text_before) - len(text_after))
+    try:
+        sink(
+            PruneShadowPrice(
+                tool_name=tool_name,
+                call_id=call_id,
+                chars_before=len(text_before),
+                chars_after=len(text_after),
+                chars_removed=chars_removed,
+                tokens_shadowed=estimate_shadowed_tokens(chars_removed),
+            )
+        )
+    except Exception:  # noqa: BLE001 — observability must never break pruning
+        LOGGER.warning("shadow-price sink failed", exc_info=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +148,8 @@ def prune_tool_result_text(
     head_chars: int = DEFAULT_PRUNE_HEAD_CHARS,
     tail_chars: int = DEFAULT_PRUNE_TAIL_CHARS,
     marker: str = PRUNE_MARKER,
+    tool_name: str | None = None,
+    call_id: str | None = None,
 ) -> str | None:
     """Return a pruned copy of ``text``, or ``None`` when it is within budget.
 
@@ -128,6 +181,9 @@ def prune_tool_result_text(
     # guarantees this for valid budgets, but callers may hand us odd values).
     if len(pruned) >= len(text):
         return None
+    # dsh shadow-price protocol: price the shadowed span at emission time so a
+    # pure consumer can subtract it without retaining per-node prices.
+    _emit_shadow_price(text, pruned, tool_name=tool_name, call_id=call_id)
     return pruned
 
 
@@ -139,5 +195,6 @@ __all__ = [
     "TOOL_RESULT_PRUNE_ENABLED",
     "ToolResultPrunePolicy",
     "prune_tool_result_text",
+    "set_shadow_price_sink",
     "validate_prune_budgets",
 ]

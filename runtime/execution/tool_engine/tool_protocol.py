@@ -251,7 +251,8 @@ def render_tool_output(
     prune_middle: bool = False,
     prune_policy: ToolResultPrunePolicy | None = None,
     spill_oversized: bool = False,
-    spill_tool_name: str | None = None,
+    tool_name: str | None = None,
+    call_id: str | None = None,
 ) -> str:
     """Render arbitrary tool output into a bounded string.
 
@@ -280,14 +281,19 @@ def render_tool_output(
         # the switch lives in exactly one place.
         spilled = maybe_spill_text(
             rendered,
-            tool_name=spill_tool_name or "tool",
+            tool_name=tool_name or "tool",
             enabled=True,
         )
         if spilled is not None:
             rendered = spilled
 
     if prune_middle:
-        pruned = prune_tool_result_text(rendered, policy=prune_policy)
+        pruned = prune_tool_result_text(
+            rendered,
+            policy=prune_policy,
+            tool_name=tool_name,
+            call_id=call_id,
+        )
         if pruned is not None:
             rendered = pruned
 
@@ -310,7 +316,8 @@ def normalize_tool_result(
     prune_middle: bool = False,
     prune_policy: ToolResultPrunePolicy | None = None,
     spill_oversized: bool = False,
-    spill_tool_name: str | None = None,
+    tool_name: str | None = None,
+    call_id: str | None = None,
 ) -> NormalizedToolResult:
     """Convert tool output into the shared result envelope."""
     normalized_call = normalize_tool_call(call, origin=origin)
@@ -326,7 +333,8 @@ def normalize_tool_result(
             prune_middle=prune_middle,
             prune_policy=prune_policy,
             spill_oversized=spill_oversized,
-            spill_tool_name=spill_tool_name,
+            tool_name=tool_name,
+            call_id=call_id if call_id is not None else normalized_call.id,
         ),
         is_error=bool(is_error),
         status=status,
@@ -344,7 +352,7 @@ def normalize_step_tool_result(
     prune_middle: bool = False,
     prune_policy: ToolResultPrunePolicy | None = None,
     spill_oversized: bool = False,
-    spill_tool_name: str | None = None,
+    tool_name: str | None = None,
 ) -> NormalizedToolResult:
     """Convert an execution ``Step`` into the shared result envelope."""
     action = getattr(step, "action", None) or fallback_call
@@ -360,7 +368,7 @@ def normalize_step_tool_result(
         prune_middle=prune_middle,
         prune_policy=prune_policy,
         spill_oversized=spill_oversized,
-        spill_tool_name=spill_tool_name,
+        tool_name=tool_name,
     )
 
 

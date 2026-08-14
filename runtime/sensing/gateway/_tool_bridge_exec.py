@@ -106,7 +106,7 @@ def _execute_tool_call(
                     max_chars=TOOL_OUTPUT_MAX_CHARS,
                     prune_middle=TOOL_RESULT_PRUNE_ENABLED,
                     spill_oversized=TOOL_RESULT_SPILL_ENABLED,
-                    spill_tool_name=normalized.name,
+                    tool_name=normalized.name,
                 )
                 reason = step.result.error_type or step.result.status
                 return (result.rendered or f"({reason})", True)
@@ -139,7 +139,7 @@ def _execute_tool_call(
         max_chars=TOOL_OUTPUT_MAX_CHARS,
         prune_middle=TOOL_RESULT_PRUNE_ENABLED,
         spill_oversized=TOOL_RESULT_SPILL_ENABLED,
-        spill_tool_name=normalized.name,
+        tool_name=normalized.name,
     )
     return (result.rendered, result.is_error)
 
