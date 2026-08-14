@@ -2281,6 +2281,12 @@ function RealtimePageContent({
         stageThreadRoute(targetPath);
       },
       onFinish: () => {
+        // Drop the locally-started marker once the turn is terminal. It exists
+        // only to keep identity/workspace queries paused during the first turn
+        // (the server-issued id may not be queryable yet); leaving it set would
+        // permanently disable threadIdentityQuery, pinning the header/browser
+        // title to "未命名" on every thread the user has messaged this session.
+        localStartedThreadIdRef.current = null;
         void qc.invalidateQueries({ queryKey: ["threads", "search"] });
         commitThreadRoute();
       },
