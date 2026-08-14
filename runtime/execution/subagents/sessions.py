@@ -691,8 +691,9 @@ class SubagentSessionStore:
             retain_session_reference,
         )
 
+        events = _surface_events_prefer_journal(session)
         result = retain_session_reference(
-            _surface_events_from_turns(session),
+            events,
             session_id=session.session_id,
             label=f"{session.agent_id or 'subagent'} session",
             max_bytes=max_projection_bytes or MAX_TRANSCRIPT_PROJECTION_BYTES,
@@ -748,6 +749,72 @@ def _surface_events_from_turns(session: SubagentSession) -> list[dict[str, Any]]
             }
         )
     return events
+
+
+def _surface_events_prefer_journal(session: SubagentSession) -> list[dict[str, Any]]:
+    """Build the dsh surface from the real session journal when it has rows.
+
+    The journal now carries the session's true story (``user/message`` +
+    ``sub_text_delta`` rows, section 36/41) — the streamed prose the model
+    actually produced, not the coarser Q/A pair. Prefer that as the
+    projection source (dsh checkpoint-event posture: feed real session
+    journal events to the projection instead of rebuilding from turn
+    records); fall back to the turn-store reconstruction when no journal is
+    reachable or the journal has no rows for this session (legacy/one-shot).
+    """
+    journal = _current_journal()
+    if journal is not None and _journal_has_session_rows(journal, session.session_id):
+        try:
+            from runtime.memory.journal.derive import surface_events_from_journal
+
+            events = surface_events_from_journal(
+                journal,
+                session_id=session.session_id,
+                prompts=[(turn.prompt or "").strip() for turn in session.turns],
+            )
+            if events:
+                return events
+        except Exception:  # noqa: BLE001 — best-effort, fall back to turns
+            logger.debug("journal surface projection failed", exc_info=True)
+    return _surface_events_from_turns(session)
+
+
+def _journal_has_session_rows(journal: Any, session_id: str) -> bool:
+    """True when the journal already carries this session's prose lanes."""
+    try:
+        for event in journal.read_all():
+            if getattr(event, "session_id", "") != session_id:
+                continue
+            if getattr(event, "event_type", "") in ("user/message", "sub_text_delta"):
+                return True
+    except Exception:  # noqa: BLE001 — a broken read falls back to turns
+        logger.debug("journal session-row scan failed", exc_info=True)
+        return False
+    return False
+
+
+def _current_journal() -> Any | None:
+    """Best-effort journal bound to the current process session (or None)."""
+    try:
+        from runtime.platform.process.session import current_session
+
+        sess = current_session()
+    except Exception:  # noqa: BLE001 — optional, never breaks transcripts
+        return None
+    if sess is None:
+        return None
+    meta = getattr(sess, "metadata", None) or {}
+    if not isinstance(meta, dict):
+        return None
+    journal = meta.get("journal")
+    if journal is None:
+        try:
+            stack = meta.get("stack")
+            if stack is not None:
+                journal = getattr(stack, "journal", None)
+        except (AttributeError, TypeError):  # noqa: BLE001
+            journal = None
+    return journal
 
 
 _VALID_SESSION_ID_RE = re.compile(r"^[0-9a-f]{32}$")

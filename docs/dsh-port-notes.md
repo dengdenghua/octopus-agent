@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十四个差距点已落地为可测试代码(1-44 节)
+**状态**: 四十五个差距点已落地为可测试代码(1-45 节)
 
 ---
 
@@ -644,7 +644,8 @@ dsh 的 ``@dsh-session-reference`` 在把**别的会话**的上下文注入当�
   注入」解析面;如需完整跨会话引用可再补 resolver。
 - checkpoint 事件源:当前只把 subagent turn 拍成 dsh surface 事件形状;
   若 executor 主路径也走会话面,应把真实 session journal 事件直接喂给
-  投影,而非从 turn 重建。
+  投影,而非从 turn 重建。(已由第 45 节收口:journal 有该会话行时
+  bounded 投影直接吃真实日志事件。)
 ## 25. report 唤醒预算 (`subagents/sessions.py` + `suckers/ephemeral_runner.py`)
 
 第 21 节把 ``report`` 工具接进了进程内 runner,但每次 ``wakeup`` 报告都会
@@ -1342,7 +1343,33 @@ per-turn 预算,超出部分留在 durable ``pending_reports``,下次唤醒/
   steering/realtime_cerebrum/subagent_report/sessions/react_loop/goal 共
   539 项通过,ruff/invariant 干净。
 
-## 用法速查
+## 45. bounded 投影吃真实 journal 事件(checkpoint 事件源)
+
+第 24 节落地投影算法时,``transcript_prompt(bounded=True)`` 仍从 turn
+store 重建表面事件(Q/A 对)——而第 36/41 节已经把会话的真实故事
+(``user/message`` + 逐 chunk ``sub_text_delta``)写进 journal。本轮把
+投影源切到真实日志,收口「checkpoint 事件源」:
+
+- ``sessions._surface_events_prefer_journal(session)``:有当前进程
+  session 的 journal 且其中存在该会话的 ``user/message`` 或
+  ``sub_text_delta`` 行时,调 ``surface_events_from_journal`` 直接喂
+  ``retain_session_reference``——模型续会话看到的是它真正流式产出
+  过的散文(round 交错),不是压缩后的 Q/A;journal 不可达/无该会话
+  行(legacy/一次性)回退 turn-store 重建,行为零变化。
+- ``_current_journal()`` / ``_journal_has_session_rows()``:沿用
+  ``_ephemeral_events`` 的 current_session→metadata/stack 取 journal
+  模式;读失败/坏行一律回退,绝不把转录路径变成错误来源。
+- 测试:``tests/test_transcript_journal_projection.py`` 新增 5 用例
+  (journal 行优先且 turn 文案不泄漏、无 journal 回退、journal 无本会话
+  行回退且不串别会话、journal 路径尊重投影预算、多轮交错);subagent/
+  projection/reference/journal 关联 119 项全绿,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 通用 ``@session-reference`` resolver 面(任意 session URI → 投影注入,
+  非 subagent 专用):第 27/30 节已建 resolver + host mention 接线,
+  通用 URI 解码仍留作后续。
+
 ## 用法速查
 
 ```bash
