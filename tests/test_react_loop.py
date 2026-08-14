@@ -4519,6 +4519,11 @@ def test_execute_action_keeps_medium_tool_observation() -> None:
 
 def test_execute_action_uses_normalized_result_truncation() -> None:
     from runtime.core.cerebrum.react_execution import TOOL_OBSERVATION_MAX_CHARS
+    from runtime.execution.tool_engine.tool_output_pruner import (
+        DEFAULT_PRUNE_HEAD_CHARS,
+        DEFAULT_PRUNE_TAIL_CHARS,
+        PRUNE_MARKER,
+    )
 
     reg = SkillRegistry()
     reg.register(
@@ -4543,6 +4548,42 @@ def test_execute_action_uses_normalized_result_truncation() -> None:
     assert step is not None
     assert observation is not None
     assert "(real tool execution succeeded) large_output" in observation
+    # dsh head+marker+tail pruning keeps both ends instead of a head-only cut.
+    assert PRUNE_MARKER in observation
+    assert "x" * DEFAULT_PRUNE_HEAD_CHARS in observation
+    assert "x" * DEFAULT_PRUNE_TAIL_CHARS in observation
+
+
+def test_execute_action_prune_can_be_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.core.cerebrum import _react_execution_dispatch as _dispatch
+    from runtime.core.cerebrum.react_execution import TOOL_OBSERVATION_MAX_CHARS
+
+    monkeypatch.setattr(_dispatch, "TOOL_RESULT_PRUNE_MIDDLE", False)
+
+    reg = SkillRegistry()
+    reg.register(
+        Skill(
+            name="large_output",
+            description="Return a large payload.",
+            trusted_source="skill://public/large_output",
+            handler=lambda **_kwargs: "x" * (TOOL_OBSERVATION_MAX_CHARS + 7),
+        ),
+        verify_tests=False,
+    )
+    stack = _FakeStack(None)
+    stack.executor = ToolExecutor(reg, TrustEngine())
+
+    observation, step = _execute_action_via_beak(
+        stack,
+        "large_output({})",
+        react_task_id=TaskId(uuid4()),
+        react_step_counter=1,
+    )
+
+    assert step is not None
+    assert observation is not None
     assert "(truncated, 7 more chars)" in observation
 
 
