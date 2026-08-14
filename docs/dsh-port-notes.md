@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 三十七个差距点已落地为可测试代码(1-37 节)
+**状态**: 三十八个差距点已落地为可测试代码(1-38 节)
 
 ---
 
@@ -1050,7 +1050,8 @@ report 泳道,「父回合是否在跑」由调度器外部决定,预算只管�
   调度器接入。
 - 回合内「下一步」注入(同第 34 节):``queued`` 报告等下一次续会话/
   新回合读取,不保证同回合可见;steering 通道(``_turn_steering`` 队列)
-  是现成的注入位,但需要轮询报告泳道并喂给 react 的 step 边界。
+  是现成的注入位——已由第 38 节落地:``queued`` 报告会直接进正在跑的
+  父回合下一步,不再等新回合。
 
 ## 36. per-session ``user/message`` 进 journal + 纯 journal 投影
 
@@ -1120,6 +1121,46 @@ turn store。本轮补上 dsh 的会话结果面:每完成一轮 turn 落一条
 - token/cost 汇总:目前汇总行只有轮次与成败,没有实际 token/成本——
   dsh 会在会话日志里带 usage 行;若 resume 要报「此前花了多少 token」,
   需从模型响应/成本记账里取数再补一列。
+
+## 38. 回合内注入:``queued`` 报告直进正在跑的父回合(steering 通道)
+
+第 34/35 节把「忙碌 owner → ``queued`` 排队」接进了生产,但排队报告仍
+要等父进程下一次续会话/新回合才被读到——dsh 的 ``inject`` 是排进正在
+跑的回合下一步,同回合可见。本轮用现成的 steering 队列补上这条 live
+通道:
+
+- 网关注册表(``_realtime_cerebrum_steering.py``):新增线程级
+  ``thread_id → (runtime, turn_id)`` 映射(``_THREAD_TURN_REGISTRY`` +
+  锁),``_register_active_turn`` 注册、``_unregister_active_turn`` 注销
+  (按 (runtime, turn_id) 精确匹配,不误删新回合)。
+- ``_inject_thread_steering(thread_id, text)``:把文本作为
+  ``SteeringUserMessageItem`` 塞进该线程活跃回合的 ``_turn_steering``
+  SimpleQueue(``put`` 线程安全,子代理报告落在 worker 线程也能投),
+  并 append 到 ``turn.items`` 让最终快照可见;``_turn_steering_accepting
+  = False``(回合收尾中)或无线程活跃回合时返回 False 不投。react loop
+  的 ``steering_drain`` 在最近的 step 边界取走——正是 dsh inject 的
+  「下一次 step 消费」。
+- store 桥接(``sessions.py``):``append_report`` 判定为 ``queued`` 时
+  落盘后 best-effort 调 ``_try_inject_queued_report(thread_id, content)``
+  ——内容截断到 1500 字符并加 ``[子代理报告]`` 前缀,懒加载网关模块、
+  异常吞掉;无网关/无活跃回合/回合已收尾一律 no-op。持久副本仍在
+  ``pending_reports``,回合没来得及消费也不丢(不是「要么注入要么丢」,
+  而是「live 加速 + durable 兜底」)。
+- 测试:``tests/test_realtime_cerebrum.py`` 新增 4 用例(注册→注入→
+  drain 取回、非 accepting/未知线程不投、空线程 no-op、注入→
+  ``_drain_turn_steering`` 配对);``tests/test_subagent_report.py`` 新增
+  4 用例(queued 触发注入、wakeup/quiet 不注入、截断、注入失败不破坏
+  落盘);回归 react 358 + gateway 99 + report/session 134 全绿,
+  ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 注入的持久化可见性:live 注入只进 ``turn.items`` 与 steering 队列,
+  不写 EventLog(worker 线程写日志的线程安全未验证),所以重放/重连
+  客户端看不到这条注入;durable 侧仍由 ``pending_reports`` 兜底,父
+  进程续会话时会读到。
+- 注入上限:每次 queued 报告都会注入(与 dsh 每个完成通知都 inject
+  一致),靠报告工具引导与单条截断防刷屏,没有 per-turn 注入次数预算。
 
 ## 用法速查
 

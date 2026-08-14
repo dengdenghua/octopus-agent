@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 from queue import Empty, SimpleQueue
@@ -34,6 +35,65 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
+# thread_id → (runtime, turn_id) for the single active turn per thread.
+# Written by the asyncio RPC thread on turn register/unregister; read by
+# worker threads (subagent report lane) so a queued child report can be
+# injected into the running turn's next step (dsh ``inject``).
+_THREAD_TURN_REGISTRY: dict[str, tuple[Any, str]] = {}
+_THREAD_TURN_REGISTRY_LOCK = threading.Lock()
+
+
+def _register_thread_turn(thread_id: str, runtime: CerebrumRuntime, turn_id: str) -> None:
+    if not thread_id:
+        return
+    with _THREAD_TURN_REGISTRY_LOCK:
+        _THREAD_TURN_REGISTRY[thread_id] = (runtime, turn_id)
+
+
+def _unregister_thread_turn(thread_id: str, runtime: CerebrumRuntime, turn_id: str) -> None:
+    if not thread_id:
+        return
+    with _THREAD_TURN_REGISTRY_LOCK:
+        entry = _THREAD_TURN_REGISTRY.get(thread_id)
+        if entry is not None and entry == (runtime, turn_id):
+            del _THREAD_TURN_REGISTRY[thread_id]
+
+
+def _inject_thread_steering(thread_id: str, text: str) -> bool:
+    """Queue ``text`` into the thread's running turn's next step (dsh inject).
+
+    The react loop drains the turn's steering queue at its nearest step
+    boundary (``steering_drain``), so a queued subagent report lands
+    in-session while the parent is mid-turn — exactly dsh's busy-owner
+    ``inject``. The durable copy stays in the subagent store
+    (``pending_reports``), so a turn that ends before draining loses
+    nothing; this is a live-only best-effort fast path.
+
+    Returns True when queued into an accepting active turn, False when the
+    thread has no such turn (report stays queued in the store until the
+    next wake or continuation, as before).
+    """
+    with _THREAD_TURN_REGISTRY_LOCK:
+        entry = _THREAD_TURN_REGISTRY.get(thread_id)
+        if entry is None:
+            return False
+        runtime, turn_id = entry
+        if not runtime._turn_steering_accepting.get(turn_id):
+            return False
+        queue = runtime._turn_steering.get(turn_id)
+        if queue is None:
+            return False
+        active = runtime._active_turns.get(turn_id)
+        item = SteeringUserMessageItem(text=text, targetTurnId=turn_id)
+        if active is not None:
+            # Make the injection visible in the final turn snapshot. Appending
+            # to a list is atomic under the GIL; the loop only reads this list
+            # for steering sync, so a concurrent append is safe.
+            active[0].items.append(item)
+        queue.put((item.id, item.text))
+    return True
+
+
 def _register_active_turn(runtime: CerebrumRuntime, turn: Turn, log: EventLog) -> None:
     runtime._active_turns[turn.id] = (turn, log)
     runtime._turn_steering[turn.id] = SimpleQueue()
@@ -47,6 +107,7 @@ def _register_active_turn(runtime: CerebrumRuntime, turn: Turn, log: EventLog) -
     except OSError:
         runtime._turn_steering_log_offsets[turn.id] = 0
     runtime._turn_steering_accepting[turn.id] = True
+    _register_thread_turn(turn.thread_id, runtime, turn.id)
     previous = max(
         (item for item in turn.items if item.timeline_sequence is not None),
         key=lambda item: item.timeline_sequence or 0,
@@ -70,7 +131,9 @@ def _register_active_turn(runtime: CerebrumRuntime, turn: Turn, log: EventLog) -
 
 
 def _unregister_active_turn(runtime: CerebrumRuntime, turn_id: str) -> None:
-    runtime._active_turns.pop(turn_id, None)
+    active = runtime._active_turns.pop(turn_id, None)
+    if active is not None:
+        _unregister_thread_turn(active[0].thread_id, runtime, turn_id)
     runtime._turn_steering.pop(turn_id, None)
     runtime._turn_steering_seen.pop(turn_id, None)
     runtime._turn_steering_notified.pop(turn_id, None)

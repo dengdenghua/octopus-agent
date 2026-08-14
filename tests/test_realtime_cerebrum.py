@@ -432,6 +432,126 @@ def test_user_turn_refills_subagent_wake_budget(gateway: Any, tmp_path: Path) ->
         set_subagent_session_store(previous)
 
 
+# ─── queued-report → running-turn steering injection (dsh ``inject``) ────
+
+
+class _TurnLike:
+    thread_id = "th-inject"
+
+    def __init__(self) -> None:
+        self.items: list[Any] = []
+
+
+class _SteeringRuntime:
+    def __init__(self) -> None:
+        import threading
+        from queue import SimpleQueue
+
+        self._turn_steering: dict[str, Any] = {}
+        self._turn_steering_accepting: dict[str, bool] = {}
+        self._active_turns: dict[str, tuple[Any, Any]] = {}
+        self._turn_steering_seen: dict[str, set[str]] = {}
+        self._turn_steering_notified: dict[str, set[str]] = {}
+        self._turn_steering_last_sync: dict[str, float] = {}
+        self._turn_steering_log_offsets: dict[str, int] = {}
+        self._turn_timeline: dict[str, tuple[int, Any]] = {}
+        self._turn_steering_lock = threading.Lock()
+        self._queue_factory = SimpleQueue
+
+
+def test_thread_steering_injection_into_running_turn() -> None:
+    from runtime.sensing.gateway._realtime_cerebrum_steering import (
+        _inject_thread_steering,
+        _register_thread_turn,
+        _unregister_thread_turn,
+    )
+
+    runtime = _SteeringRuntime()
+    turn = _TurnLike()
+    runtime._turn_steering["turn-1"] = runtime._queue_factory()
+    runtime._turn_steering_accepting["turn-1"] = True
+    runtime._active_turns["turn-1"] = (turn, None)
+
+    _register_thread_turn("th-inject", runtime, "turn-1")
+    try:
+        assert _inject_thread_steering("th-inject", "报告文本") is True
+        item_id, text = runtime._turn_steering["turn-1"].get_nowait()
+        assert text == "报告文本"
+        assert item_id
+        assert len(turn.items) == 1
+        assert turn.items[0].text == "报告文本"
+    finally:
+        _unregister_thread_turn("th-inject", runtime, "turn-1")
+
+    # After the turn ends the same thread has no accepting turn → no-op.
+    assert _inject_thread_steering("th-inject", "之后") is False
+
+
+def test_thread_steering_injection_skips_not_accepting_or_unknown() -> None:
+    from runtime.sensing.gateway._realtime_cerebrum_steering import (
+        _inject_thread_steering,
+        _register_thread_turn,
+        _unregister_thread_turn,
+    )
+
+    runtime = _SteeringRuntime()
+    turn = _TurnLike()
+    runtime._turn_steering["turn-1"] = runtime._queue_factory()
+    runtime._turn_steering_accepting["turn-1"] = False
+    runtime._active_turns["turn-1"] = (turn, None)
+    _register_thread_turn("th-inject", runtime, "turn-1")
+    try:
+        assert _inject_thread_steering("th-inject", "x") is False
+        assert _inject_thread_steering("th-unknown", "x") is False
+        assert runtime._turn_steering["turn-1"].qsize() == 0
+        assert turn.items == []
+    finally:
+        _unregister_thread_turn("th-inject", runtime, "turn-1")
+
+
+def test_thread_turn_registry_ignores_empty_thread() -> None:
+    from runtime.sensing.gateway._realtime_cerebrum_steering import (
+        _register_thread_turn,
+        _unregister_thread_turn,
+    )
+
+    runtime = _SteeringRuntime()
+    _register_thread_turn("", runtime, "turn-1")  # no raise
+    _unregister_thread_turn("", runtime, "turn-1")  # no raise
+
+
+def test_drain_returns_injected_steering_text() -> None:
+    from runtime.sensing.gateway._realtime_cerebrum_steering import (
+        _drain_turn_steering,
+        _inject_thread_steering,
+        _register_thread_turn,
+        _unregister_thread_turn,
+    )
+
+    class _FakeLog:
+        def tail_events(self, offset: int) -> tuple[list[Any], int]:
+            return [], offset
+
+    runtime = _SteeringRuntime()
+    turn = _TurnLike()
+    runtime._turn_steering["turn-1"] = runtime._queue_factory()
+    runtime._turn_steering_accepting["turn-1"] = True
+    runtime._active_turns["turn-1"] = (turn, _FakeLog())
+    runtime._turn_steering_seen["turn-1"] = set()
+    runtime._turn_steering_notified["turn-1"] = set()
+    runtime._turn_steering_last_sync["turn-1"] = 0.0
+    runtime._turn_steering_log_offsets["turn-1"] = 0
+
+    _register_thread_turn("th-inject", runtime, "turn-1")
+    try:
+        assert _inject_thread_steering("th-inject", "[子代理报告] 中途发现") is True
+        # This is the exact function the react loop's steering_drain calls at
+        # its nearest step boundary — the injected text reaches the model.
+        assert _drain_turn_steering(runtime, "turn-1") == ["[子代理报告] 中途发现"]
+    finally:
+        _unregister_thread_turn("th-inject", runtime, "turn-1")
+
+
 def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> None:
     client, _ = gateway
     _set_script(

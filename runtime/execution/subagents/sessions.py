@@ -43,6 +43,10 @@ MAX_REPORTS_PROMPT_CHARS = 4000
 # Off by default (dsh hosts opt into the session-reference service).
 TRANSCRIPT_PROJECTION_ENABLED = os.environ.get("OCTOPUS_SESSION_REFERENCE_BOUNDED", "0") != "0"
 MAX_TRANSCRIPT_PROJECTION_BYTES = 16000
+# Max chars of a queued report injected into the running parent turn's next
+# step (dsh ``inject``). Matches the per-report prompt bound so a chatty
+# child cannot flood the live model context.
+QUEUED_REPORT_INJECT_MAX_CHARS = 1500
 
 # dsh ``tool-jobs`` bounded consecutive-wake budget: how many wakeup reports
 # may open a parent turn in a row before the lane goes quiet. Mirrors dsh
@@ -431,6 +435,12 @@ class SubagentSessionStore:
                 self._on_report(session_id, report)
             except Exception:  # noqa: BLE001 — notification is best-effort
                 logger.warning("subagent report wakeup hook failed", exc_info=True)
+        elif effective_delivery == "queued":
+            # dsh ``inject`` live half: while the parent turn runs, push the
+            # report into its steering queue so the next step sees it. The
+            # durable copy is already persisted above — this is best-effort
+            # and never blocks or fails the report.
+            _try_inject_queued_report(session.thread_id, report.content)
         return delivered
 
     def mark_owner_busy(self, session_id: str) -> None:
@@ -732,6 +742,28 @@ def _normalize_report_delivery(value: Any) -> Literal["wakeup", "quiet", "queued
     if value in ("wakeup", "quiet", "queued"):
         return value  # type: ignore[return-value]
     return "wakeup"
+
+
+def _try_inject_queued_report(thread_id: str, content: str) -> None:
+    """Best-effort dsh ``inject``: queue a report into the running turn.
+
+    The realtime gateway keeps a thread→active-turn registry; when the
+    parent is mid-turn the text lands in its steering queue and the react
+    loop drains it at the nearest step boundary. Missing gateway, no active
+    turn, or any failure degrades to a no-op — the durable report stays in
+    ``pending_reports`` for the next wake or continuation.
+    """
+    if not thread_id or not content:
+        return
+    try:
+        from runtime.sensing.gateway._realtime_cerebrum_steering import (
+            _inject_thread_steering,
+        )
+
+        text = _truncate(content, QUEUED_REPORT_INJECT_MAX_CHARS)
+        _inject_thread_steering(thread_id, f"[子代理报告] {text}")
+    except Exception:  # noqa: BLE001 — injection is best-effort
+        logger.debug("queued report injection failed", exc_info=True)
 
 
 def _truncate(text: str, max_chars: int) -> str:

@@ -511,6 +511,83 @@ def test_react_loop_early_close_clears_busy(
     assert seen == ["after-close"]
 
 
+# ─── queued-report live injection (dsh ``inject`` via steering) ──────────
+
+
+def _patch_injector(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    import runtime.sensing.gateway._realtime_cerebrum_steering as steering
+
+    captured: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        steering,
+        "_inject_thread_steering",
+        lambda thread_id, text: captured.append((thread_id, text)) or True,
+    )
+    return captured
+
+
+def test_queued_report_injects_into_running_turn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _patch_injector(monkeypatch)
+    store = _store(tmp_path)
+    session = store.create(agent_id="researcher", thread_id="th-parent")
+    store.mark_thread_busy("th-parent")
+    store.append_report(session.session_id, content="中途发现", delivery="wakeup")
+
+    assert captured == [("th-parent", "[子代理报告] 中途发现")]
+
+
+def test_wakeup_and_quiet_reports_never_inject(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _patch_injector(monkeypatch)
+    store = _store(tmp_path)
+    session = store.create(agent_id="researcher", thread_id="th-parent")
+    store.append_report(session.session_id, content="唤醒报告", delivery="wakeup")
+    store.append_report(session.session_id, content="静默报告", delivery="quiet")
+    store.mark_thread_busy("th-parent")
+    store.append_report(session.session_id, content="忙碌时静默", delivery="quiet")
+    assert captured == []
+
+
+def test_queued_report_injection_is_truncated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from runtime.execution.subagents.sessions import QUEUED_REPORT_INJECT_MAX_CHARS
+
+    captured = _patch_injector(monkeypatch)
+    store = _store(tmp_path)
+    session = store.create(agent_id="researcher", thread_id="th-parent")
+    store.mark_thread_busy("th-parent")
+    store.append_report(
+        session.session_id,
+        content="长" * (QUEUED_REPORT_INJECT_MAX_CHARS + 100),
+        delivery="wakeup",
+    )
+    assert len(captured) == 1
+    text = captured[0][1]
+    assert text.startswith("[子代理报告] ")
+    assert len(text) <= QUEUED_REPORT_INJECT_MAX_CHARS + len("[子代理报告] ")
+
+
+def test_queued_report_injection_failure_never_breaks_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import runtime.sensing.gateway._realtime_cerebrum_steering as steering
+
+    def boom(thread_id, text):  # noqa: ANN001 — test stub
+        raise RuntimeError("injector down")
+
+    monkeypatch.setattr(steering, "_inject_thread_steering", boom)
+    store = _store(tmp_path)
+    session = store.create(agent_id="researcher", thread_id="th-parent")
+    store.mark_thread_busy("th-parent")
+    delivered = store.append_report(session.session_id, content="仍要落盘", delivery="wakeup")
+    assert delivered is not None
+    assert delivered.reports[-1].delivery == "queued"
+
+
 def test_legacy_session_without_reports_loads(tmp_path: Path) -> None:
     store = _store(tmp_path)
     session = store.create(agent_id="researcher", thread_id="th-1")
