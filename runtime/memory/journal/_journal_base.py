@@ -723,11 +723,18 @@ class Journal:
         delta: str,
         kind: str = "text-delta",
         task_id: TaskId | None = None,
+        index: int | None = None,
+        call_id: str = "",
+        name: str = "",
     ) -> None:
         """Append one streamed parent-reply chunk (dsh ``assistant/chunk``).
 
         ``iteration`` is the react-loop turn number; ``kind`` mirrors
-        dsh's ``StreamChunk`` lane (``"text-delta"`` today).
+        dsh's ``StreamChunk`` lane (``"text-delta"`` today,
+        ``"reasoning-delta"`` / ``"tool-call-delta"`` when the producer
+        streams those lanes). ``index`` / ``call_id`` / ``name`` carry
+        the optional call identity for ``kind == "tool-call-delta"``
+        fragments and default to unset otherwise.
         """
         self.write(
             AssistantChunkEvent(
@@ -735,6 +742,9 @@ class Journal:
                 iteration=int(iteration),
                 kind=kind,
                 delta=delta,
+                index=index,
+                call_id=call_id,
+                name=name,
                 agent_id=current_agent_id(),
                 conversation_id=current_conversation_id(),
             )

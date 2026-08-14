@@ -94,6 +94,17 @@ def _agentic_stream_event_to_react_event(
         }
     if kind == "reasoning":
         return {"type": "thinking_delta", "delta": str(delta or "")}
+    if kind == "tool-call-delta" and isinstance(delta, dict):
+        # Live assembly preview (dsh ``tool-call-delta`` lane): the
+        # bridge forwards raw fragments before the completed call's
+        # tool_start. Never executed — preview only.
+        return {
+            "type": "tool_call_delta",
+            "tool_call_id": str(delta.get("id") or ""),
+            "tool_name": str(delta.get("name") or ""),
+            "index": delta.get("index"),
+            "argumentsDelta": str(delta.get("argumentsDelta") or ""),
+        }
     if kind == "tool_start" and isinstance(delta, dict):
         return tool_lifecycle_event_to_react_event(
             normalize_tool_lifecycle_event(

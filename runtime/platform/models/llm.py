@@ -143,6 +143,30 @@ def model_supports_thinking(model_name: str) -> bool:
 _model_supports_thinking = model_supports_thinking
 
 
+def default_reasoning_effort(model_name: str) -> str | None:
+    """Per-model default reasoning effort (dsh-style per-provider default).
+
+    Returns ``None`` when the model has no default — callers that do not
+    ask for reasoning never surprise a strict endpoint. The operator's
+    ``default_reasoning_effort`` declaration on a ``custom_models.json``
+    entry wins over the built-in name patterns ("none" disables injection
+    entirely). Built-in patterns cover DeepSeek's reasoning lineup, whose
+    V4 models deliberate by default; everything else stays opt-in.
+    """
+
+    from runtime.platform.models.custom_model_flags import (
+        custom_model_default_reasoning_effort,
+    )
+
+    declared = custom_model_default_reasoning_effort(model_name)
+    if declared is not None:
+        return declared if declared != "none" else None
+    m = (model_name or "").lower()
+    if "deepseek-v4" in m or "deepseek-reasoner" in m:
+        return "high"
+    return None
+
+
 class ToolSpec(BaseModel):
     """One tool definition handed to the model provider's tool-use API.
 
@@ -260,6 +284,7 @@ EventType = Literal[
     "text_delta",
     "thinking_delta",
     "tool_use",
+    "tool_call_delta",
     "done",
 ]
 
@@ -275,6 +300,17 @@ class ModelStreamEvent(BaseModel):
     # consumer can execute it directly without tracking partial
     # input_json_delta frames.
     tool_call: ToolCall | None = None
+    # Populated on ``type == "tool_call_delta"`` — one fragment of a
+    # tool call while it is still assembling (dsh ``tool-call-delta``
+    # lane). ``index`` is the parallel-call slot, ``call_id`` the
+    # stable provider call id, ``name`` the function name once known,
+    # ``arguments_delta`` the raw JSON fragment. The final assembled
+    # call still arrives as a ``tool_use`` event; consumers must not
+    # execute anything on the delta lane alone.
+    index: int | None = None
+    call_id: str = ""
+    name: str = ""
+    arguments_delta: str = ""
     # Only populated on ``type == "done"`` events. Carries the
     # aggregated response shape so downstream cost / trace logic
     # gets the same data as the non-streaming ``call()`` path.

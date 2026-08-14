@@ -398,6 +398,14 @@ class AssistantChunkEvent(JournalEvent):
     iteration: int = 0
     kind: str = "text-delta"
     delta: str = ""
+    # dsh ``tool-call-delta`` lane: optional call identity on the raw
+    # fragments (parallel-call slot, stable provider call id, function
+    # name once known). Only populated for ``kind == "tool-call-delta"``
+    # and kept out of the packable common/extra shape when unset, so
+    # text/reasoning runs pack exactly as before.
+    index: int | None = None
+    call_id: str = ""
+    name: str = ""
 
 
 class HookInvokedEvent(JournalEvent):

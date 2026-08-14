@@ -79,8 +79,25 @@ def test_iter_openai_sse_emits_streamed_tool_call():
 
     events = list(iter_openai_sse(response, model="gpt-4o-mini"))
 
-    assert [event.type for event in events] == ["tool_use", "done"]
-    tool_event = events[0]
+    assert [event.type for event in events] == [
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_use",
+        "done",
+    ]
+    name_delta, first_args, second_args = events[0], events[1], events[2]
+    assert name_delta.index == 0
+    assert name_delta.call_id == "call_1"
+    assert name_delta.name == "read_file"
+    assert name_delta.arguments_delta == ""
+    assert first_args.index == 0
+    assert first_args.call_id == "call_1"
+    assert first_args.arguments_delta == '{"path"'
+    assert second_args.index == 0
+    assert second_args.call_id == "call_1"
+    assert second_args.arguments_delta == ':"README.md"}'
+    tool_event = events[3]
     assert tool_event.tool_call is not None
     assert tool_event.tool_call.id == "call_1"
     assert tool_event.tool_call.name == "read_file"
@@ -103,8 +120,18 @@ def test_iter_openai_sse_accepts_python_repr_tool_arguments():
 
     events = list(iter_openai_sse(response, model="glm-4.6"))
 
-    assert events[0].tool_call is not None
-    assert events[0].tool_call.input == {"path": "README.md"}
+    assert [event.type for event in events] == [
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_use",
+        "done",
+    ]
+    name_delta, args_delta = events[0], events[1]
+    assert name_delta.name == "read_file"
+    assert name_delta.arguments_delta == ""
+    assert args_delta.arguments_delta == "{'path': 'README.md'}"
+    assert events[2].tool_call is not None
+    assert events[2].tool_call.input == {"path": "README.md"}
 
 
 def test_iter_openai_sse_accepts_legacy_function_call_delta():
@@ -121,13 +148,31 @@ def test_iter_openai_sse_accepts_legacy_function_call_delta():
 
     events = list(iter_openai_sse(response, model="glm-4.6"))
 
-    assert [event.type for event in events] == ["tool_use", "done"]
-    assert events[0].tool_call is not None
-    assert events[0].tool_call.id == "function_call_0"
-    assert events[0].tool_call.name == "read_file"
-    assert events[0].tool_call.input == {"path": "README.md"}
+    assert [event.type for event in events] == [
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_use",
+        "done",
+    ]
+    name_delta, first_args, second_args = events[0], events[1], events[2]
+    assert name_delta.index == 0
+    assert name_delta.call_id == "function_call_0"
+    assert name_delta.name == "read_file"
+    assert name_delta.arguments_delta == ""
+    assert first_args.index == 0
+    assert first_args.call_id == "function_call_0"
+    assert first_args.arguments_delta == '{"path"'
+    assert second_args.index == 0
+    assert second_args.call_id == "function_call_0"
+    assert second_args.arguments_delta == ':"README.md"}'
+    tool_event = events[3]
+    assert tool_event.tool_call is not None
+    assert tool_event.tool_call.id == "function_call_0"
+    assert tool_event.tool_call.name == "read_file"
+    assert tool_event.tool_call.input == {"path": "README.md"}
     assert events[-1].final is not None
-    assert events[-1].final.tool_calls == [events[0].tool_call]
+    assert events[-1].final.tool_calls == [tool_event.tool_call]
 
 
 def test_iter_openai_sse_preserves_finish_reason():
@@ -244,3 +289,52 @@ def test_iter_openai_sse_keeps_plain_content_byte_identical():
     assert events[-1].final is not None
     assert events[-1].final.text == "a < b and c > d"
     assert events[-1].final.thinking == ""
+
+
+def test_iter_openai_sse_streams_parallel_tool_call_deltas():
+    response = _FakeSSE(
+        [
+            (
+                'data: {"choices":[{"delta":{"tool_calls":['
+                '{"index":0,"id":"call_a","type":"function",'
+                '"function":{"name":"read_file","arguments":"{\\"path\\":\\""}},'
+                '{"index":1,"id":"call_b","type":"function",'
+                '"function":{"name":"grep","arguments":"{\\"pattern\\":\\""}}'
+                "]}}]}"
+            ),
+            (
+                'data: {"choices":[{"delta":{"tool_calls":['
+                '{"index":0,"function":{"arguments":"a.txt\\"}"}},'
+                '{"index":1,"function":{"arguments":"TODO\\"}"}}'
+                "]}}]}"
+            ),
+            "data: [DONE]",
+        ]
+    )
+
+    events = list(iter_openai_sse(response, model="deepseek-v4-pro"))
+
+    assert [event.type for event in events] == [
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_call_delta",
+        "tool_use",
+        "tool_use",
+        "done",
+    ]
+    deltas = [e for e in events if e.type == "tool_call_delta"]
+    assert [(d.index, d.call_id, d.name, d.arguments_delta) for d in deltas] == [
+        (0, "call_a", "read_file", ""),
+        (0, "call_a", "read_file", '{"path":"'),
+        (1, "call_b", "grep", ""),
+        (1, "call_b", "grep", '{"pattern":"'),
+        (0, "call_a", "read_file", 'a.txt"}'),
+        (1, "call_b", "grep", 'TODO"}'),
+    ]
+    tool_events = [e for e in events if e.type == "tool_use"]
+    assert [t.tool_call.id for t in tool_events] == ["call_a", "call_b"]
+    assert tool_events[0].tool_call.input == {"path": "a.txt"}
+    assert tool_events[1].tool_call.input == {"pattern": "TODO"}

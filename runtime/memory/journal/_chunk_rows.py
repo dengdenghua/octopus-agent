@@ -49,7 +49,10 @@ _COMMON_KEYS = (
 
 # Per-event-type keys that must be identical across a packed run.
 _EXTRA_KEYS: dict[str, tuple[str, ...]] = {
-    "assistant/chunk": ("iteration", "kind"),
+    # ``tool-call-delta`` fragments carry optional call identity
+    # (index/call_id/name); including them keeps packed rows lossless.
+    # Defaults keep text/reasoning runs identical to before.
+    "assistant/chunk": ("iteration", "kind", "index", "call_id", "name"),
     "sub_text_delta": ("role_id", "round", "parent_tool_use_id"),
 }
 

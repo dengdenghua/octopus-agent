@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 五十四个差距点已落地为可测试代码(1-54 节)
+**状态**: 五十五个差距点已落地为可测试代码(1-55 节)
 
 ---
 
@@ -1676,6 +1676,62 @@ dsh ``repeat-tool-reminder`` 的忠实移植(原实现 ``guard/repeat-tool-remin
   开关)+ ``tests/test_react_loop.py`` 5 例集成(温和提醒 mid-turn 注入、
   详细升级且零拦截、与硬 guard 共存、exclude、disabled);react_loop
   全量 360 项通过,ruff/invariant 干净。
+
+## 55. tool-call-delta 泳道(工具参数流式增量)
+
+dsh ``StreamChunk`` lane ``'tool-call-delta'`` 的忠实移植:工具调用
+参数不再是「完整块一次到达」,而是随 SSE 分片**边组装边流式**——形状
+``{type, index, id, name?, argumentsDelta}``(index 为并行调用槽位,
+id 为稳定 call id,argumentsDelta 为原始 JSON 分片)。
+
+- **事件模型**(``runtime/platform/models/llm.py``):
+  ``EventType`` 新增 ``"tool_call_delta"``;``ModelStreamEvent`` 新增
+  可选字段 ``index`` / ``call_id`` / ``name`` / ``arguments_delta``,
+  仅在 delta 事件填充;最终组装完整的调用仍以 ``tool_use`` 事件到达,
+  **delta 泳道永不执行**(消费方只预览)。
+- **生产者**(``openai_compat_stream.py``):``dispatch_payload`` 在
+  ``tool_calls``(现代)与 ``function_call``(legacy)两条路径上,每当
+  name 首次出现或收到 arguments 分片即 yield 一个 delta 事件——
+  name-only 分片(``arguments_delta=""``)与参数分片分开成事件;
+  dict 参数分片整段序列化,str 分片原样追加。并行调用按 index 交错
+  出流,每个事件带各自槽位身份。
+- **native 桥转发**(``_tool_bridge_loop.py``):流循环新增
+  ``tool_call_delta`` 分支,原样转成 ``("tool-call-delta", {index, id,
+  name, argumentsDelta}, None)`` 元组;direct fallback 不涉及(该路径
+  无工具)。``pooled_router`` / ``multi_router`` / deadline / breaker
+  包装器全部透传,无白名单拦截。
+- **react 流式桥**:``_agentic_stream_event_to_react_event`` 把该元组
+  转成 ``{"type": "tool_call_delta", tool_call_id, tool_name, index,
+  argumentsDelta}``;``_apply_react_event`` 路由到新的
+  ``state.append_tool_call_delta``。
+- **bridge state**(``realtime_event_bridge.py``):
+  ``append_tool_call_delta`` 按 provider call id 累积到
+  ``_tool_call_delta_buffers``(工具项尚未创建时静默缓冲——native 桥
+  在回合的调用全部完成才发 ``tool_start``);已开工具项则把累积参数
+  打进展 ``input_preview``(``{name, arguments, streaming: true}``)并
+  以 ``ITEM_STARTED`` 重发,**按 64 字符步长节流**(首个分片立即发,
+  TTFT);``start_tool`` 把缓冲合并进 ``input_preview``(提供方完整
+  ``input`` 仍在,两者并存),``complete_tool`` 清理缓冲,无泄漏。
+- **journal schema 就绪**(``_journal_models.py`` +
+  ``_chunk_rows.py``):``AssistantChunkEvent`` 新增可选
+  ``index/call_id/name``,``_EXTRA_KEYS["assistant/chunk"]`` 同步加入
+  使打包行无损(旧行无这些键,读侧默认值兼容);``write_assistant_chunk``
+  透传三个新参数。native 桥无 journal 句柄,日志写面留给未来把增量
+  生产接进 journal 持有路径(react_model_stream 目前忽略 delta)。
+- 测试:``tests/test_openai_compat_stream_reasoning.py`` 更新 2 例 +
+  新增并行交错 1 例(6 个 delta 事件按槽位交错、最终 tool_use 完整);
+  ``tests/test_realtime_native_tool_loop.py`` 2 例(转换形状、非 dict
+  载荷忽略);``tests/test_realtime_event_bridge.py`` 2 例(缓冲→合并、
+  节流重发);关联回归 openai_router / journal / chunk-rows / realtime
+  cerebrum / tool-bridge 500+ 项全绿,ruff/invariant 干净。
+
+### 尚未覆盖
+
+- journal 写面:桥循环无 journal 句柄,``assistant/chunk`` 的
+  ``tool-call-delta`` 行未在生产接线(见上);schema 与打包已就绪。
+- 前端 live-tool-timeline 的实时参数预览渲染(``input_preview`` 已带
+  ``arguments``/``streaming`` 标记,渲染留给前端侧)。
+- ReAct 文本 ``Action:`` 增量的拆分不属 dsh 语义,不做。
 
 ## 用法速查
 

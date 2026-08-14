@@ -465,3 +465,28 @@ def test_agentic_session_metadata_preserves_chrome_surface_context():
     assert metadata["browser_track_preference"] == "extension"
     assert "thread-native external Chrome operation" in guidance
     assert "browser_state" in guidance
+
+
+def test_agentic_tool_call_delta_maps_to_react_shape():
+    evt = _agentic_stream_event_to_react_event(
+        "tool-call-delta",
+        {
+            "index": 0,
+            "id": "call_1",
+            "name": "read_file",
+            "argumentsDelta": '{"path":',
+        },
+        None,
+    )
+
+    assert evt == {
+        "type": "tool_call_delta",
+        "tool_call_id": "call_1",
+        "tool_name": "read_file",
+        "index": 0,
+        "argumentsDelta": '{"path":',
+    }
+
+
+def test_agentic_tool_call_delta_ignores_non_dict_payload():
+    assert _agentic_stream_event_to_react_event("tool-call-delta", "oops", None) is None

@@ -82,6 +82,13 @@ def _safe_list_remove(bucket: list[Any], item: Any) -> None:
 # ── Bridge state — open agentMessage / reasoning / tool items ─
 
 
+# Re-emit ITEM_STARTED for a live tool-call preview at most once per
+# this many accumulated argument chars (dsh ``tool-call-delta`` lane).
+# Fragments are token-sized, so emitting on every one would hammer the
+# socket; the first fragment always goes out immediately (TTFT).
+_TOOL_CALL_DELTA_EMIT_STRIDE = 64
+
+
 class _ReactBridgeState:
     """Tracks which items are currently open per (turn, kind).
 
@@ -141,6 +148,17 @@ class _ReactBridgeState:
         # completed in start order instead of overwriting/orphaning one item.
         self.tool_call_queues: dict[str, list[str]] = {}
         self.tool_public_narrative_started: dict[str, bool] = {}
+        # dsh ``tool-call-delta`` lane: raw argument fragments arrive
+        # while the model is still assembling a call, BEFORE the bridge
+        # emits tool_start (which only happens once the round's calls
+        # complete). Buffer per provider call id, then merge into the
+        # item's input_preview on start_tool for a live "arguments
+        # filling in" preview. Preview only — never executed.
+        self._tool_call_delta_buffers: dict[str, dict[str, str]] = {}
+        # Last argument length already pushed into an open item's
+        # input_preview, per call id — throttles ITEM_STARTED re-emits
+        # so token-sized fragments don't hammer the socket.
+        self._tool_call_delta_emitted: dict[str, int] = {}
         self.phases: list[AgentPhaseSnapshot] = []
         self.evidence: list[EvidenceReference] = []
         self.workbench_snapshot_version = 0
@@ -500,6 +518,61 @@ class _ReactBridgeState:
             # else: the item was already finalized — drop the tail; the
             # item/completed snapshot carries the full text regardless.
 
+    async def append_tool_call_delta(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        evt: dict[str, Any],
+    ) -> None:
+        """Merge one raw tool-call fragment into the live preview.
+
+        dsh ``tool-call-delta`` lane: fragments arrive while the model
+        is still assembling the call, BEFORE ``tool_start`` (the bridge
+        emits start only once a round's calls complete). They buffer
+        per provider call id; once the item exists, the accumulated
+        arguments patch ``input_preview`` with a throttled
+        ``ITEM_STARTED`` re-emit so the UI shows the call filling in.
+        Nothing on this lane is ever executed — the completed call
+        drives the real ``start_tool``.
+        """
+        call_id = str(evt.get("tool_call_id") or evt.get("id") or "")
+        if not call_id:
+            return
+        buf = self._tool_call_delta_buffers.setdefault(
+            call_id,
+            {"name": "", "arguments": ""},
+        )
+        name = str(evt.get("tool_name") or evt.get("name") or "")
+        if name:
+            buf["name"] = name
+        args_delta = str(evt.get("argumentsDelta") or "")
+        if args_delta:
+            buf["arguments"] += args_delta
+        if not buf["name"] and not buf["arguments"]:
+            return
+        call_key = self._resolve_open_tool_key(call_id)
+        item = self.tools.get(call_key) if call_key is not None else None
+        if item is None:
+            # Still assembling — ``start_tool`` merges the buffer later.
+            return
+        total = len(buf["arguments"])
+        emitted = self._tool_call_delta_emitted.get(call_id, 0)
+        if emitted > 0 and total - emitted < _TOOL_CALL_DELTA_EMIT_STRIDE:
+            return
+        preview = item.input_preview if isinstance(item.input_preview, dict) else {}
+        item.input_preview = {
+            **preview,
+            "name": buf["name"],
+            "arguments": buf["arguments"],
+            "streaming": True,
+        }
+        self._tool_call_delta_emitted[call_id] = total
+        await emitter.notify(
+            ServerMethod.ITEM_STARTED,
+            self._item_payload(turn, item),
+        )
+
     async def start_tool(
         self,
         turn: Turn,
@@ -541,6 +614,21 @@ class _ReactBridgeState:
         # retain the empty id only as an alias queue key.
         call_key = call_id or item.id
         self.tool_call_queues.setdefault(provider_call_id, []).append(call_key)
+        # Merge any buffered tool-call deltas (dsh ``tool-call-delta``
+        # lane) so the item opens with the arguments the UI watched
+        # assemble; the provider's parsed ``input`` (if any) still wins
+        # when the model sent it on the start payload.
+        pending_delta = self._tool_call_delta_buffers.get(provider_call_id)
+        if pending_delta and (pending_delta["arguments"] or pending_delta["name"]):
+            preview = item.input_preview if isinstance(item.input_preview, dict) else {}
+            item.input_preview = {
+                **preview,
+                "name": pending_delta["name"],
+                "arguments": pending_delta["arguments"],
+            }
+            self._tool_call_delta_emitted[provider_call_id] = len(
+                pending_delta["arguments"]
+            )
         start_narrative = None if has_open_public_prose else _tool_start_public_narrative(evt)
         self.tool_public_narrative_started[call_key] = bool(start_narrative)
         if start_narrative:
@@ -766,6 +854,8 @@ class _ReactBridgeState:
             return
         assert call_key is not None
         self._consume_tool_alias(call_id, call_key)
+        self._tool_call_delta_buffers.pop(call_id, None)
+        self._tool_call_delta_emitted.pop(call_id, None)
         emitted_start_narrative = self.tool_public_narrative_started.pop(call_key, False)
         status = evt.get("status", "success")
         if status == "rejected":

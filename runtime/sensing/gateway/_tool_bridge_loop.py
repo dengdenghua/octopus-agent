@@ -147,6 +147,11 @@ def stream_agentic_fallback(
 
     Extra event kinds vs the direct fallback:
 
+    * ``("tool-call-delta", {index, id, name, argumentsDelta}, None)``
+      — one raw fragment of a tool call while it is still assembling
+      (dsh ``tool-call-delta`` lane). Purely a live preview; the
+      completed call arrives as ``tool_start`` and nothing executes
+      on the delta lane.
     * ``("tool_start", {id, name, input, iteration}, None)``
     * ``("tool_end",   {id, name, output, is_error, iteration}, None)``
 
@@ -1133,6 +1138,21 @@ def stream_agentic_fallback(
                     # emits it, pass through so the UI stays sane.
                     accumulated_reasoning += event.delta
                     yield ("reasoning", event.delta, None)
+                elif etype == "tool_call_delta":
+                    # Stream the raw fragments while the call is still
+                    # assembling so the UI can show arguments filling
+                    # in live. The final assembled ``tool_use`` event
+                    # still arrives below; this lane never executes.
+                    yield (
+                        "tool-call-delta",
+                        {
+                            "index": event.index,
+                            "id": event.call_id,
+                            "name": event.name,
+                            "argumentsDelta": event.arguments_delta,
+                        },
+                        None,
+                    )
                 elif etype == "tool_use":
                     if event.tool_call is not None:
                         round_tool_calls.append(event.tool_call)

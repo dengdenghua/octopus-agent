@@ -63,8 +63,10 @@ def iter_openai_sse(
     Yields
     ------
     ModelStreamEvent
-        ``text_delta`` for each content fragment, ``done`` once at the
-        end with the aggregated ``ModelResponse``.
+        ``text_delta`` for each content fragment, ``tool_call_delta``
+        for each tool-call fragment while it assembles, ``tool_use``
+        once per completed call, ``done`` once at the end with the
+        aggregated ``ModelResponse``.
     """
     accumulated: list[str] = []
     accumulated_reasoning: list[str] = []
@@ -155,16 +157,38 @@ def iter_openai_sse(
                     slot["id"] = str(raw_call["id"])
                 fn = raw_call.get("function")
                 if isinstance(fn, dict):
-                    if fn.get("name"):
+                    if fn.get("name") and str(fn["name"]) != slot["name"]:
                         slot["name"] = str(fn["name"])
+                        yield ModelStreamEvent(
+                            type="tool_call_delta",
+                            index=index,
+                            call_id=slot["id"],
+                            name=slot["name"],
+                        )
                     args_piece = fn.get("arguments")
                     if isinstance(args_piece, dict):
-                        slot["arguments"] = json.dumps(
+                        args_json = json.dumps(
                             args_piece,
                             ensure_ascii=False,
                         )
+                        slot["arguments"] = args_json
+                        yield ModelStreamEvent(
+                            type="tool_call_delta",
+                            index=index,
+                            call_id=slot["id"],
+                            name=slot["name"],
+                            arguments_delta=args_json,
+                        )
                     elif args_piece:
-                        slot["arguments"] += str(args_piece)
+                        args_fragment = str(args_piece)
+                        slot["arguments"] += args_fragment
+                        yield ModelStreamEvent(
+                            type="tool_call_delta",
+                            index=index,
+                            call_id=slot["id"],
+                            name=slot["name"],
+                            arguments_delta=args_fragment,
+                        )
 
         legacy_function_call = delta.get("function_call")
         if isinstance(legacy_function_call, dict):
@@ -172,16 +196,40 @@ def iter_openai_sse(
                 0,
                 {"id": "function_call_0", "name": "", "arguments": ""},
             )
-            if legacy_function_call.get("name"):
+            if legacy_function_call.get("name") and str(
+                legacy_function_call["name"]
+            ) != slot["name"]:
                 slot["name"] = str(legacy_function_call["name"])
+                yield ModelStreamEvent(
+                    type="tool_call_delta",
+                    index=0,
+                    call_id=slot["id"],
+                    name=slot["name"],
+                )
             args_piece = legacy_function_call.get("arguments")
             if isinstance(args_piece, dict):
-                slot["arguments"] = json.dumps(
+                args_json = json.dumps(
                     args_piece,
                     ensure_ascii=False,
                 )
+                slot["arguments"] = args_json
+                yield ModelStreamEvent(
+                    type="tool_call_delta",
+                    index=0,
+                    call_id=slot["id"],
+                    name=slot["name"],
+                    arguments_delta=args_json,
+                )
             elif args_piece:
-                slot["arguments"] += str(args_piece)
+                args_fragment = str(args_piece)
+                slot["arguments"] += args_fragment
+                yield ModelStreamEvent(
+                    type="tool_call_delta",
+                    index=0,
+                    call_id=slot["id"],
+                    name=slot["name"],
+                    arguments_delta=args_fragment,
+                )
         return False
 
     def dispatch_or_buffer(value: str):

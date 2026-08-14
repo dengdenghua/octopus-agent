@@ -310,3 +310,113 @@ async def test_adaptive_batching_default_on_single_chunk_message_unchanged() -> 
     await state.flush(turn, log, emitter)
 
     assert "".join(emitter.deltas()) == "hello"
+
+
+# ── tool-call-delta live assembly preview (dsh lane) ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_tool_call_delta_buffers_before_start_and_merges_into_preview() -> None:
+    state, turn, emitter, log = _new_state()
+
+    await state.append_tool_call_delta(
+        turn,
+        log,
+        emitter,
+        {
+            "tool_call_id": "call_1",
+            "tool_name": "read_file",
+            "argumentsDelta": '{"path":',
+        },
+    )
+    # No item exists yet — fragments buffer silently for start_tool.
+    assert emitter.notified == []
+    assert state._tool_call_delta_buffers["call_1"] == {
+        "name": "read_file",
+        "arguments": '{"path":',
+    }
+
+    await state.append_tool_call_delta(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "call_1", "argumentsDelta": '"README.md"}'},
+    )
+    assert state._tool_call_delta_buffers["call_1"]["arguments"] == '{"path":"README.md"}'
+
+    await state.start_tool(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "call_1", "tool_name": "read_file", "input_preview": None},
+    )
+    item = state.tools["call_1"]
+    assert item.input_preview == {
+        "name": "read_file",
+        "arguments": '{"path":"README.md"}',
+    }
+
+    await state.complete_tool(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "call_1", "output_preview": "ok", "status": "success"},
+    )
+    assert "call_1" not in state._tool_call_delta_buffers
+    assert "call_1" not in state._tool_call_delta_emitted
+
+
+@pytest.mark.asyncio
+async def test_tool_call_delta_reemits_throttled_on_open_item() -> None:
+    state, turn, emitter, log = _new_state()
+    await state.start_tool(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "call_1", "tool_name": "read_file"},
+    )
+    item = state.tools["call_1"]
+    assert item.input_preview is None
+
+    def _started_count() -> int:
+        return sum(1 for m, _ in emitter.notified if m == "item/started")
+
+    baseline = _started_count()
+
+    # First fragment re-emits immediately (time-to-first-preview).
+    await state.append_tool_call_delta(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "call_1", "argumentsDelta": '{"path":'},
+    )
+    assert _started_count() == baseline + 1
+    assert item.input_preview == {
+        "name": "",
+        "arguments": '{"path":',
+        "streaming": True,
+    }
+
+    # Small fragment inside the emit stride → silent update only.
+    await state.append_tool_call_delta(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "call_1", "argumentsDelta": "ab"},
+    )
+    assert _started_count() == baseline + 1
+    # Inside the stride the buffer advances but the preview stays at the
+    # last emitted snapshot.
+    assert state._tool_call_delta_buffers["call_1"]["arguments"] == '{"path":ab'
+    assert item.input_preview["arguments"] == '{"path":'
+
+    # Past the stride → one more re-emit with the accumulated preview.
+    await state.append_tool_call_delta(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "call_1", "argumentsDelta": "x" * 100},
+    )
+    assert _started_count() == baseline + 2
+    assert item.input_preview["arguments"] == '{"path":ab' + "x" * 100
+    assert item.input_preview["streaming"] is True

@@ -146,6 +146,9 @@ async def _apply_react_event(
         if delta:
             await state.append_reasoning(turn, log, emitter, str(delta))
         return
+    if kind == "tool_call_delta":
+        await state.append_tool_call_delta(turn, log, emitter, evt)
+        return
     if kind == "tool_start":
         await state.start_tool(turn, log, emitter, evt)
         return
