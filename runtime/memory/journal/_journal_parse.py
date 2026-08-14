@@ -97,9 +97,18 @@ def _migrate_event(data: dict) -> dict:
     return data
 
 
-def _parse_event(line: str) -> JournalEvent:
-    data = json.loads(line)
-    data = _migrate_event(data)
+def _parse_event_data(data: dict) -> JournalEvent:
+    """Validate one decoded event dict (migration + class resolution).
+
+    Shared by ``_parse_event`` (JSONL lines) and the chunk-row
+    expansion path, so packed storage rows decode through the exact
+    same validation as verbatim lines.
+    """
+    data = _migrate_event(dict(data))
     event_type = data.get("event_type")
     cls = _EVENT_CLASSES.get(event_type, JournalEvent)
     return cls.model_validate(data)
+
+
+def _parse_event(line: str) -> JournalEvent:
+    return _parse_event_data(json.loads(line))

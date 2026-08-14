@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十八个差距点已落地为可测试代码(1-28 节)
+**状态**: 二十九个差距点已落地为可测试代码(1-29 节)
 
 ---
 
@@ -815,13 +815,12 @@ dsh session 日志的不变式是「模型可见即入日志」:回合内流式�
   重建、按迭代过滤、空日志、跳过非 chunk 事件、round-trip 断言),
   全部绿;react 全量回归 1360 项通过,ruff/invariant 干净。
 
-### 尚未覆盖(dsh 有而这里没有)
+### 已收口
 
-- 存储压缩:dsh 把连续同块 delta 打包成一行存储
-  (``chunk-rows``,token 边界仍是数据、展开无损);我们逐 chunk 一行
-  JSONL,长答案日志体积约为 dsh 打包前的量级,后续可加等价压缩。
+- 存储压缩:第 29 节已落地(``_chunk_rows`` 打包,连续 delta 合并为
+  一行存储、token 边界仍是数据、展开无损)。
 - ``reasoning-delta`` / ``tool-call-delta`` 泳道:目前只 journal 可见
-  ``text-delta``;dsh 连推理块与工具参数流也逐块落盘。
+  ``text-delta``;dsh 连推理块与工具参数流也逐块落盘(仍待补)。
 ## 30. host 侧 session mention 接线 (`tool_engine/session_reference.py`)
 
 第 27 节落地了 resolver 的 ``list_candidates`` / ``prepare``,但 dsh 由
@@ -861,6 +860,52 @@ dsh session 日志的不变式是「模型可见即入日志」:回合内流式�
 - 取消信号:沿用的 ``AbortSignal`` 取消边界仍未移植;长读 surface 如需
   可中断再补。
 
+## 29. chunk 存储压缩 (`runtime/memory/journal/_chunk_rows.py`)
+
+第 28 节把可见文本逐 chunk 入日志,代价是长答案产生数百行近似雷同的
+JSONL——dsh 实测过 ~56 倍信封开销,并用 ``chunk-rows`` 把连续同块
+delta 打包成一行存储、读时无损展开。本轮把这套存储编码搬过来:
+
+- ``_chunk_rows.py``(纯编解码,零 IO):
+  - ``classify_chunk``:结构化白名单——只有 ``assistant/chunk`` 与
+    ``sub_text_delta`` 且 envelope/extra 字段形状精确匹配才可打包;
+    未知字段或变体一律退回逐行存储(丢压缩不丢数据)。
+  - ``continues_chunk_run``:同事件类型 + 同 envelope(common/extra
+    字典相等)+ 时间严格递增——对应 dsh 的 seq/block 连续性检查。
+  - ``pack_chunk_row``:一行存储 ``{__chunk_row__: 1, event_type,
+    count, ts0_us, dt_us[], common, extra, members[{event_id,
+    delta}]}``——token 边界是数据,只存增量不拼接。
+  - ``expand_chunk_row``:按 ``dt`` 间隙精确还原每个事件的
+    event_id/ts/delta;畸形行 fail-loud(dsh 语义:静默丢半条 run
+    会重建出错误的会话)。
+  - ``MIN_RUN = 3``(同 dsh):短 run 保持逐行,信封开销不值得打包。
+- ``journal.py`` 接线:
+  - ``write``:可打包事件先入内存 run(``_pending_chunk_run``),非
+    chunk 事件 / 读 / run 断开时 ``_flush_pending_chunks_locked``
+    落盘——所以任意时刻至多缓冲尾部一条 chunk run;SIGKILL 窗口与
+    dsh 的 write-behind 同级。
+  - 落盘:``>= MIN_RUN`` 写一行打包行,否则逐事件原样写;redactor
+    对打包行走同一 JSON 合法性守卫;audit chain + trace store 在
+    flush 时逐成员镜像,顺序与文件一致。
+  - ``read_all``:先 flush 再看文件;``__chunk_row__`` 行展开成 N 个
+    事件入缓存(``_parse_event_data`` 与普通行同一条校验路径)。
+  - ``__len__`` 改为事件数(不再按行数);跨进程写入的行各自自洽,
+    交错无害。
+  - 逃生阀:``OCTOPUS_JOURNAL_CHUNK_PACKING=0`` 关闭写侧打包
+    (读侧两种编码都支持,纯回滚旋钮)。
+- 测试:``tests/test_chunk_rows.py`` 19 用例(classify 白名单、
+  continues 边界、byte-identical 无损回环、畸形行 fail-loud、长 run
+  一行、短 run 原样、run 断开续打、env 旋钮、双 journal 互读、
+  sub_text_delta 打包、InMemory 不打包),全部绿;回归
+  journal/sse/resume/subagent/audit/realtime/checkpoint 1522 项通过,
+  ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- ``reasoning-delta`` / ``tool-call-delta`` 泳道:推理块与工具参数流
+  尚未逐块落盘(第 28 节遗留);打包层已就绪,事件模型补上即可复用。
+- goal 分页/流式 surface、title provider 优先级链、远端 SpillStore
+  (e2b)。
 ## 用法速查
 
 ```bash

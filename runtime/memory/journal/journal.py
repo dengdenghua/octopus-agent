@@ -22,6 +22,15 @@ from runtime.safety.auth.scope import TenantScope
 from runtime.safety.invariants import AppendOnlyList
 from runtime.safety.invariants.enforce import enforces
 
+from ._chunk_rows import (
+    MIN_RUN,
+    chunk_packing_enabled,
+    classify_chunk,
+    continues_chunk_run,
+    expand_chunk_row,
+    is_chunk_row,
+    pack_chunk_row,
+)
 from ._journal_base import Journal
 from ._journal_models import (
     CURRENT_SCHEMA_VERSION,
@@ -55,7 +64,7 @@ from ._journal_models import (
     ToolEffectReconciliationEvent,
     TrajectoryEvent,
 )
-from ._journal_parse import _parse_event
+from ._journal_parse import _parse_event, _parse_event_data
 
 __all__ = [
     "CURRENT_SCHEMA_VERSION",
@@ -202,6 +211,8 @@ class JSONLJournal(Journal):
         self._audit_chain = audit_chain
         self._redactor = redactor
         self._trace_store = trace_store
+        # Buffered chunk run awaiting packing (list of (entry, event) pairs).
+        self._pending_chunk_run: list[tuple[dict, JournalEvent]] | None = None
 
     def attach_trace_store(self, trace_store: Any) -> None:
         """Attach or replace the optional SQLite trace sidecar."""
@@ -266,6 +277,30 @@ class JSONLJournal(Journal):
     @enforces("CC-5")
     def write(self, event: JournalEvent) -> None:
         event = self._apply_context(event)
+        with self._lock:
+            entry = classify_chunk(event)
+            if entry is not None and chunk_packing_enabled():
+                # Defer the file write: hold the chunk run in memory so a
+                # run of token-sized deltas lands as ONE packed storage row
+                # (dsh ``chunk-rows``). Any non-chunk event, an explicit
+                # read, or a run break flushes it first — so at most the
+                # trailing chunk run is buffered at any moment.
+                run = self._pending_chunk_run
+                if run is not None and continues_chunk_run(run[-1][0], entry):
+                    run.append((entry, event))
+                else:
+                    self._flush_pending_chunks_locked()
+                    self._pending_chunk_run = [(entry, event)]
+                return
+            self._flush_pending_chunks_locked()
+            self._append_event_locked(event)
+
+    def _append_event_locked(self, event: JournalEvent) -> None:
+        """Serialize + redact + append + mirror one event.
+
+        Caller must hold ``self._lock`` (the interprocess lock is taken
+        inside ``_append_raw_locked``).
+        """
         line = event.model_dump_json()
         # Optional secret/PII scrubbing. Done on the serialised JSON
         # string so we cover every nested ``output`` / ``args`` field
@@ -291,18 +326,23 @@ class JSONLJournal(Journal):
                     except (json.JSONDecodeError, ValueError):
                         redacted = line
                 line = redacted
-        line = line + "\n"
-        with self._lock, self._interprocess_lock():
-            # Cross-process lock. ``self._lock`` only serialises writers
-            # inside this Python process — with ``uvicorn --workers N``
-            # two processes can interleave ``write`` + ``flush`` cycles.
-            # POSIX ``O_APPEND`` is atomic only for writes ≤ PIPE_BUF
-            # (~4 KB); trajectory dumps routinely blow past that. On
-            # Windows ``"a"`` mode is never atomic across processes.
-            # Wrap the actual ``write/flush`` in an OS-level file lock
-            # keyed on the journal path so one writer at a time touches
-            # the JSONL. Falls back silently when ``fcntl``/``msvcrt``
-            # aren't importable (e.g. WASM build).
+        self._append_raw_locked(line + "\n")
+        self._mirror_event_effects(event)
+
+    def _append_raw_locked(self, line: str) -> None:
+        """Append one storage line under the interprocess lock, then rotate.
+
+        Caller must hold ``self._lock``. ``self._interprocess_lock()``
+        serialises writers across processes — with ``uvicorn --workers N``
+        two processes can interleave ``write`` + ``flush`` cycles.
+        POSIX ``O_APPEND`` is atomic only for writes ≤ PIPE_BUF (~4 KB);
+        trajectory dumps routinely blow past that. On Windows ``"a"``
+        mode is never atomic across processes. Wrap the actual
+        ``write/flush`` in an OS-level file lock keyed on the journal
+        path so one writer at a time touches the JSONL. Falls back
+        silently when ``fcntl``/``msvcrt`` aren't importable (e.g. WASM).
+        """
+        with self._interprocess_lock():
             import os as _os
 
             with self._path.open("a", encoding="utf-8") as f:
@@ -358,39 +398,76 @@ class JSONLJournal(Journal):
                                 _fcntl.flock(fd, _fcntl.LOCK_UN)
                         except OSError:  # noqa: BLE001 — file lock/seek/fsync best-effort
                             pass
-            # Mirror the event into the audit chain. Best-effort —
-            # an audit-chain write failure must NOT take down the
-            # journal write path (which is on every step).
-            if self._audit_chain is not None:
-                try:
-                    self._audit_chain.append(
-                        kind=type(event).__name__,
-                        payload={
-                            "event_type": getattr(event, "event_type", None),
-                            "ts": (
-                                event.ts.isoformat()
-                                if hasattr(event, "ts") and event.ts is not None
-                                else None
-                            ),
-                        },
-                    )
-                except Exception:  # noqa: BLE001 — audit mirror is best-effort; never break the hot write path
-                    import logging
+        # Rotate if we've blown past the cap. Cheap check (stat call) ·
+        # only triggers rewrite when actually needed.
+        if self._max_size_bytes is not None:
+            try:
+                size = self._path.stat().st_size
+            except OSError:
+                return
+            if size > self._max_size_bytes:
+                self._rotate_locked()
 
-                    logging.getLogger(__name__).warning(
-                        "journal %s: audit chain append failed",
-                        self._path,
-                    )
-            # Rotate if we've blown past the cap. Cheap check (stat
-            # call) · only triggers rewrite when actually needed.
-            if self._max_size_bytes is not None:
-                try:
-                    size = self._path.stat().st_size
-                except OSError:
-                    return
-                if size > self._max_size_bytes:
-                    self._rotate_locked()
+    def _mirror_event_effects(self, event: JournalEvent) -> None:
+        """Best-effort side mirrors (audit chain + trace store) for one event.
+
+        Runs at flush time so the chain's order matches the file's line
+        order. A mirror failure must NOT take down the journal write
+        path (which is on every step).
+        """
+        if self._audit_chain is not None:
+            try:
+                self._audit_chain.append(
+                    kind=type(event).__name__,
+                    payload={
+                        "event_type": getattr(event, "event_type", None),
+                        "ts": (
+                            event.ts.isoformat()
+                            if hasattr(event, "ts") and event.ts is not None
+                            else None
+                        ),
+                    },
+                )
+            except Exception:  # noqa: BLE001 — audit mirror is best-effort; never break the hot write path
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "journal %s: audit chain append failed",
+                    self._path,
+                )
         self._mirror_trace_event(event)
+
+    def _flush_pending_chunks_locked(self) -> None:
+        """Flush the buffered chunk run: one packed row, or verbatim lines.
+
+        Caller must hold ``self._lock``. A run of ``>= MIN_RUN``
+        consecutive chunks writes a single packed row (lossless on
+        read); shorter runs fall back to per-event lines. Every member
+        still gets its audit/trace mirror at flush time.
+        """
+        run = self._pending_chunk_run
+        if not run:
+            return
+        self._pending_chunk_run = None
+        if len(run) >= MIN_RUN:
+            row = pack_chunk_row([entry for entry, _event in run])
+            line = json.dumps(row, ensure_ascii=False)
+            if self._redactor is not None:
+                with contextlib.suppress(Exception):
+                    redacted = self._redactor.redact(line)
+                    if redacted != line:
+                        try:
+                            json.loads(redacted)
+                        except (json.JSONDecodeError, ValueError):
+                            redacted = line
+                    line = redacted
+            self._append_raw_locked(line + "\n")
+            for _entry, event in run:
+                self._mirror_event_effects(event)
+        else:
+            for _entry, event in run:
+                self._append_event_locked(event)
+
 
     def _mirror_trace_event(self, event: JournalEvent) -> None:
         if self._trace_store is None:
@@ -526,6 +603,9 @@ class JSONLJournal(Journal):
 
     def read_all(self, *, scope: TenantScope | None = None) -> list[JournalEvent]:
         with self._lock:
+            # Make buffered chunk runs visible to readers: flush them to
+            # disk first so the cache is always a complete prefix.
+            self._flush_pending_chunks_locked()
             if not self._path.exists():
                 # File gone entirely → reset cache (a fresh file may
                 # appear later and we want to parse it from scratch).
@@ -561,7 +641,14 @@ class JSONLJournal(Journal):
                 if not line:
                     continue
                 try:
-                    self._cache.append(_parse_event(line))
+                    data = json.loads(line)
+                    if is_chunk_row(data):
+                        # Packed storage row (dsh chunk-rows): expand to the
+                        # exact original events, same ids and timestamps.
+                        for event_data in expand_chunk_row(data):
+                            self._cache.append(_parse_event_data(event_data))
+                    else:
+                        self._cache.append(_parse_event(line))
                 except (json.JSONDecodeError, TypeError, ValueError) as exc:
                     self._skipped_total += 1
                     if self._skipped_total == 1:
@@ -579,7 +666,6 @@ class JSONLJournal(Journal):
             return [event for event in events if self._visible(event, scope)]
 
     def __len__(self) -> int:
-        if not self._path.exists():
-            return 0
-        with self._path.open("r", encoding="utf-8") as f:
-            return sum(1 for _ in f)
+        # Event count, not line count: a packed chunk row is one line but
+        # N events. ``read_all`` flushes the pending run, so this is exact.
+        return len(self.read_all())
