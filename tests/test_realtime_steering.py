@@ -249,3 +249,47 @@ async def test_turn_steer_rejects_a_finished_turn(tmp_path: Path) -> None:
             },
             emitter,
         )
+
+
+@pytest.mark.asyncio
+async def test_per_turn_injection_budget_limits_report_flood(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from runtime.sensing.gateway._realtime_cerebrum_steering import _inject_thread_steering
+
+    monkeypatch.setattr(
+        "runtime.sensing.gateway._realtime_cerebrum_steering._max_turn_steering_injections",
+        lambda: 2,
+    )
+    runtime = CerebrumRuntime(stack=object(), logs_root=str(tmp_path / "threads"))
+    emitter = _Emitter()
+    log = await runtime._ensure_thread("thread-budget", emitter)
+    turn = Turn(thread_id="thread-budget")
+    log.turn_started(turn.thread_id, turn)
+    runtime._active_turn_ids.add(turn.id)
+    runtime._register_active_turn(turn, log)
+    try:
+        # Only the per-turn budget of injections is accepted; the rest stay
+        # durable in the store (returned False → injected next wake/turn).
+        assert _inject_thread_steering("thread-budget", "r1") is True
+        assert _inject_thread_steering("thread-budget", "r2") is True
+        assert _inject_thread_steering("thread-budget", "r3") is False
+        assert runtime._drain_turn_steering(turn.id) == ["r1", "r2"]
+
+        # A human's explicit steering is NOT throttled by the report budget:
+        # it is a separate user-initiated lane, not a sub-agent report.
+        result = await runtime.handle_request(
+            "turn/steer",
+            {
+                "threadId": "thread-budget",
+                "turnId": turn.id,
+                "itemId": "itm_human_1",
+                "text": "先确认根因再改",
+            },
+            emitter,
+        )
+        assert result["accepted"] is True
+        assert runtime._drain_turn_steering(turn.id) == ["先确认根因再改"]
+    finally:
+        runtime._active_turn_ids.discard(turn.id)
+        runtime._unregister_active_turn(turn.id)

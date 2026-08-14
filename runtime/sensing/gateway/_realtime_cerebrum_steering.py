@@ -35,6 +35,26 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
+# Per-turn cap on sub-agent report injections into a running parent turn
+# (dsh busy-owner ``inject`` flood guard). Reports beyond the budget stay in
+# the durable ``pending_reports`` store and are delivered on the next wake or
+# continuation instead of flooding the current turn's context with unbounded
+# injected messages. Overridable via OCTOPUS_MAX_TURN_STEERING_INJECTIONS.
+_DEFAULT_MAX_TURN_STEERING_INJECTIONS = 20
+
+
+def _max_turn_steering_injections() -> int:
+    raw = os.environ.get("OCTOPUS_MAX_TURN_STEERING_INJECTIONS", "").strip()
+    if raw:
+        try:
+            value = int(raw)
+            if value >= 0:
+                return value
+        except ValueError:  # expected · malformed env leaves the default
+            pass
+    return _DEFAULT_MAX_TURN_STEERING_INJECTIONS
+
+
 # thread_id → (runtime, turn_id) for the single active turn per thread.
 # Written by the asyncio RPC thread on turn register/unregister; read by
 # worker threads (subagent report lane) so a queued child report can be
@@ -83,6 +103,17 @@ def _inject_thread_steering(thread_id: str, text: str) -> bool:
         queue = runtime._turn_steering.get(turn_id)
         if queue is None:
             return False
+        budget = getattr(runtime, "_turn_steering_budget", None)
+        if budget is None:
+            # Runtime without budgeting configured (legacy / hand-rolled test
+            # harness) → no per-turn cap, preserving prior behavior.
+            remaining = _max_turn_steering_injections()
+        else:
+            remaining = budget.get(turn_id, _max_turn_steering_injections())
+        if remaining <= 0:
+            return False
+        if budget is not None:
+            budget[turn_id] = remaining - 1
         active = runtime._active_turns.get(turn_id)
         item = SteeringUserMessageItem(text=text, targetTurnId=turn_id)
         if active is not None:
@@ -124,6 +155,10 @@ def _register_active_turn(runtime: CerebrumRuntime, turn: Turn, log: EventLog) -
     except OSError:
         runtime._turn_steering_log_offsets[turn.id] = 0
     runtime._turn_steering_accepting[turn.id] = True
+    budget = getattr(runtime, "_turn_steering_budget", None)
+    if budget is None:
+        budget = runtime._turn_steering_budget = {}
+    budget[turn.id] = _max_turn_steering_injections()
     _register_thread_turn(turn.thread_id, runtime, turn.id)
     previous = max(
         (item for item in turn.items if item.timeline_sequence is not None),
@@ -157,6 +192,7 @@ def _unregister_active_turn(runtime: CerebrumRuntime, turn_id: str) -> None:
     runtime._turn_steering_last_sync.pop(turn_id, None)
     runtime._turn_steering_log_offsets.pop(turn_id, None)
     runtime._turn_steering_accepting.pop(turn_id, None)
+    getattr(runtime, "_turn_steering_budget", {}).pop(turn_id, None)
     runtime._turn_timeline.pop(turn_id, None)
     task = runtime._active_turn_lease_tasks.pop(turn_id, None)
     if task is not None:

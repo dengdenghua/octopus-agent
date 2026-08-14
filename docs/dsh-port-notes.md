@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十三个差距点已落地为可测试代码(1-43 节)
+**状态**: 四十四个差距点已落地为可测试代码(1-44 节)
 
 ---
 
@@ -1159,7 +1159,7 @@ turn store。本轮补上 dsh 的会话结果面:每完成一轮 turn 落一条
 
 - 注入上限:每次 queued 报告都会注入(与 dsh 每个完成通知都 inject
   一致),靠报告工具引导与单条截断防刷屏,没有 per-turn 注入次数预算。
-  (注入持久化可见性已由第 40 节收口。)
+  (已由第 44 节收口;注入持久化可见性已由第 40 节收口。)
 
 ## 39. host 会话候选 API 端点(subagent mention 自动补全后端面)
 
@@ -1215,7 +1215,7 @@ turn store。本轮补上 dsh 的会话结果面:每完成一轮 turn 落一条
 
 ### 尚未覆盖(dsh 有而这里没有)
 
-- 注入上限:与第 38 节同一限制,per-turn 注入次数预算仍无。
+- 注入上限:与第 38 节同一限制,per-turn 注入次数预算仍无。(已由第 44 节收口。)
 
 ## 41. 会话级 token/cost 归因与汇总行 (`_ambient` + journal)
 
@@ -1317,6 +1317,32 @@ durable tombstone 与 history。本轮从 append-only ``goal_change`` 行
 - 目标历史的分页读取:时间线目前全量派生,大日志多目标时无分页游标;
   单会话目标数量天然有限,列为后续。
 
+## 44. 回合内注入 per-turn 预算(防报告刷屏的生产收口)
+
+第 38/40 节把 ``queued`` 报告直进正在跑的父回合,但每次报告都会注入,
+没有次数上限——子代理多/吵时会把单个回合的上下文与模型调用次数打爆。
+本轮补上 dsh 语义的生产防刷闸:每个活跃回合给子代理报告注入一个
+per-turn 预算,超出部分留在 durable ``pending_reports``,下次唤醒/
+续会话再投,而不是一次性淹没当前回合。
+
+- 预算面(``_realtime_cerebrum_steering.py``):新增
+  ``_max_turn_steering_injections()``(``OCTOPUS_MAX_TURN_STEERING_
+  INJECTIONS`` 环境可覆盖,默认 20);``_register_active_turn`` 为该回合
+  初始化 ``runtime._turn_steering_budget[turn.id]``,
+  ``_unregister_active_turn`` 注销。
+- 闸口(``_inject_thread_steering``):报告专用注入入口在入队前检查预算,
+  剩余 ≤ 0 直接返回 False——报告仍在 ``pending_reports`` 持久副本,不
+  会丢;每次成功注入递减。只作用于子代理报告注入:用户的显式
+  ``turn/steer`` 走另一路径(``_realtime_cerebrum_requests``),不受报告
+  预算约束,手动指令永远即时注入。
+- 兼容:无预算字典的运行时(旧代码/手搓测试 harness)走 legacy 无上限
+  路径,回归不受影响。
+- 测试:``tests/test_realtime_steering.py`` 新增 1 用例(预算=2 时第 3 条
+  注入被拒、drain 只取回预算内两条、预算耗尽后用户 steer 仍即时注入);
+  steering/realtime_cerebrum/subagent_report/sessions/react_loop/goal 共
+  539 项通过,ruff/invariant 干净。
+
+## 用法速查
 ## 用法速查
 
 ```bash
