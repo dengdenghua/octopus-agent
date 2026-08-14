@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十个差距点已落地为可测试代码(1-40 节)
+**状态**: 四十一个差距点已落地为可测试代码(1-41 节)
 
 ---
 
@@ -1120,7 +1120,7 @@ turn store。本轮补上 dsh 的会话结果面:每完成一轮 turn 落一条
 
 - token/cost 汇总:目前汇总行只有轮次与成败,没有实际 token/成本——
   dsh 会在会话日志里带 usage 行;若 resume 要报「此前花了多少 token」,
-  需从模型响应/成本记账里取数再补一列。
+  需从模型响应/成本记账里取数再补一列。(已由第 41 节收口。)
 
 ## 38. 回合内注入:``queued`` 报告直进正在跑的父回合(steering 通道)
 
@@ -1214,6 +1214,43 @@ turn store。本轮补上 dsh 的会话结果面:每完成一轮 turn 落一条
 ### 尚未覆盖(dsh 有而这里没有)
 
 - 注入上限:与第 38 节同一限制,per-turn 注入次数预算仍无。
+
+## 41. 会话级 token/cost 归因与汇总行 (`_ambient` + journal)
+
+第 37 节汇总行只有轮次与成败,resume 报不出「该会话此前花了多少
+token」;同时子代理的模型消耗虽然进了进程级 ``UsagePricing``(cost
+ceiling 可 gate),但会话日志里没有任何 usage 行。本轮把 dsh 的
+「会话日志带 usage」补齐到整条链路:
+
+- 环境归因(``runtime/execution/subagents/_ambient.py``):新增
+  ``subagent_session_scope(session_id)`` ContextVar——bridge 在
+  ``_do_call`` 里把 durable 会话 id 包在子代理运行外(worker 线程
+  各自持有 context,并发子代理互不串);未设置时(父回合/一次性/
+  远端子进程)取 ``""``,usage 行不带归因,优雅降级。
+- 生产侧(``react_model_stream._phase_6b_model_stream``):子代理的
+  react loop 每次模型调用写 ``token_usage`` 行时带上
+  ``session_id=_ambient_subagent_session_id()``——同一行事件模型
+  新增字段(纯 schema 追加,旧事件按空串兼容);进程级 ledger 记账
+  不变(cost ceiling 照旧 gate)。
+- 汇总侧(``_ephemeral_events._emit_sub_session_summary``):写
+  ``sub_session_summary`` 行前扫日志中该 ``session_id`` 的
+  ``token_usage`` 行,累加 input/output/cost 进汇总行——resume
+  从日志一行拿到「该会话累计 token/成本」,无需逐 chunk 重放;
+  无归因行(父回合/一次性)永不匹配。
+- 派生面(``derive.derive_session_summaries``):``SessionSummary``
+  新增 ``input_tokens`` / ``output_tokens`` / ``cost_usd`` 字段,
+  旧汇总行(无 usage 字段)按 0/0/0.0 兼容。
+- 测试:``tests/test_subagent_usage_attribution.py`` 新增 11 用例
+  (ambient 设置/复位、线程隔离、core stream helper 读 scope、
+  ``write_token_usage`` 归因 JSONL 回环、零 token no-op、无归因
+  保持空、汇总只累加本会话行、无会话 no-op、derive 带 usage +
+  legacy 零值、汇总行 JSONL 回环、无 journal best-effort)。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 回合内逐行 usage 事件:我们只落回合结束的汇总行,不落每次模型
+  调用的独立 usage 事件行(token_usage 行带归因但消费方只看汇总);
+  dsh 的 token-meter 逐次事件流若要精确到调用粒度可再补。
 
 ## 用法速查
 
