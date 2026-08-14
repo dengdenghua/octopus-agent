@@ -27,6 +27,7 @@ from .fold import (
     fold_goal,
     goal_change_ref,
 )
+from .projection import GoalProjection, GoalProjectionCache
 from .service import GoalChanged, GoalService
 
 __all__ = [
@@ -36,6 +37,8 @@ __all__ = [
     "GoalOperation",
     "GoalPhase",
     "GoalRef",
+    "GoalProjection",
+    "GoalProjectionCache",
     "GoalChanged",
     "GoalService",
     "GoalSnapshot",

@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十一个差距点已落地为可测试代码(1-41 节)
+**状态**: 四十二个差距点已落地为可测试代码(1-42 节)
 
 ---
 
@@ -600,6 +600,8 @@ agent(`agentEvents(ctx, agent).emit('goal/changed', ...)`),并让目标状态
 
 - 分页/流式 goal surface:dsh 的目标在 session surface 上有 fold 与
   时间线视图;我们目前只有单目标 fold + 广播,多目标历史归档未接。
+  (流式 surface 已由第 42 节收口:增量投影缓存 + as-of 水位;多目标
+  历史归档仍留作后续。)
 - ``replay`` 无跨 writer wildcard 语义:回放仍读全量事件再按订阅过滤,
   与 live 桥的 wildcard 行为一致;若将来要把服务绑定死单 agent,可把
   回放也切到 ``_scoped_goal_events``。
@@ -1251,6 +1253,43 @@ ceiling 可 gate),但会话日志里没有任何 usage 行。本轮把 dsh 的
 - 回合内逐行 usage 事件:我们只落回合结束的汇总行,不落每次模型
   调用的独立 usage 事件行(token_usage 行带归因但消费方只看汇总);
   dsh 的 token-meter 逐次事件流若要精确到调用粒度可再补。
+
+## 42. goal 流式 surface:增量投影缓存 + as-of 水位
+    (`goals/projection.py`)
+
+dsh 把当前目标作为 session projection 提供:last-wins fold 由
+``goal/change`` 行增量维护,消费方通过 ``useProjection('goal')`` 拿到
+带 ``asOfSeq`` 水位的视图,不需要每次全量重放。我们此前
+``GoalService.current()`` 每次读都 O(n) fold(正确的 CAS 真相源,但
+作为读面太贵)。本轮把 dsh 的 projection 读面搬过来:
+
+- ``GoalProjectionCache``(``goals/projection.py``):seed-once 缓存——
+  构造时从 journal 全量播种一次(跳过 malformed 行,绝不让坏行破坏
+  读面),之后 ``current()`` O(1) 返回 ``GoalProjection``
+  (``folded`` + ``as_of`` 水位 = 已应用的 scope 内 goal_change 行数,
+  消费方可按水位排序帧);live journal(``StreamingJournal``)经事件桥
+  订阅增量推进,base journal 由 service 自身写入 push 推进(不双推,
+  双推会触发严格转移校验失败)。
+- ``GoalService.surface()``:service 构造时自动建缓存并接入——每个
+  verb 提交后缓存同步推进,``surface()`` 读 O(1);``current()`` 保持
+  全量 fold 作为 CAS 权威(缓存只做读面,永不当写入真相)。
+- 顺带修掉一个与 dsh 对齐的真实 bug:``_transition`` 之前把当前
+  ``blocked_reason`` 复制进 pause/resume/complete 的下一快照,而严格
+  解码器要求非 blocked 快照不得携带 reason(dsh ``withPhase`` 只在
+  ``block`` 附加 reason),导致 blocked→complete 触发
+  ``GOAL_INVALID_BLOCK_REASON``;现在转移快照一律不带 reason,
+  blocked→complete 可正常完成且回放严格解码通过。
+- 测试:``tests/test_goal_projection.py`` 新增 11 用例(播种与
+  current 一致、base journal 不重读的 O(1) 读面、水位只计 scope 内
+  goal_change、共享 journal 的 scope 隔离、live 订阅同步推进且跨
+  writer 隔离、malformed 行跳过、全生命周期 parity、close 停止更新、
+  非法 push 静默拒绝、blocked→complete 无 reason + 严格解码回放);
+  goal 域回归 40 项 + 关联 158 项全绿,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 多目标历史归档:目前 fold 只投影当前目标,已 complete/clear 的目标
+  时间线视图未接(可后续从 goal_change 行派生历史列表)。
 
 ## 用法速查
 

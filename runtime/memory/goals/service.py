@@ -14,7 +14,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from .domain import (
@@ -32,6 +32,9 @@ from .domain import (
     GoalSnapshotChange,
 )
 from .fold import decode_goal_change, fold_goal
+
+if TYPE_CHECKING:
+    from runtime.memory.goals.projection import GoalProjection
 
 GOAL_EVENT_TYPE = "goal_change"
 
@@ -153,6 +156,17 @@ class GoalService:
         self._journal_unsub: Callable[[], None] = lambda: None
         if self._bridge_live:
             self._journal_unsub = journal.subscribe(self._on_journal_event)
+        # Read surface (dsh session-surface goal fold): a seed-once,
+        # advance-incrementally projection cache so frequent readers do not
+        # pay an O(n) journal fold per read. ``current()`` stays the
+        # authoritative full fold for CAS; this is the cheap view.
+        from runtime.memory.goals.projection import GoalProjectionCache
+
+        self._projection = GoalProjectionCache(
+            journal,
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+        )
 
     def subscribe(
         self,
@@ -222,6 +236,17 @@ class GoalService:
     def get(self) -> GoalSnapshot | None:
         """Current goal snapshot, or ``None`` when none is active/complete."""
         return self.current().goal
+
+    def surface(self) -> GoalProjection:
+        """O(1) projected view of this service's goal (dsh surface fold).
+
+        The projection cache seeds from the journal once and advances on
+        every committed goal change — live journals through the event
+        bridge, base journals through the service's own writes. The
+        ``as_of`` watermark lets consumers order frames; ``current()``
+        remains the authoritative full fold for CAS writes.
+        """
+        return self._projection.current()
 
     # ─── lifecycle verbs ─────────────────────────────────────────────────
 
@@ -353,7 +378,12 @@ class GoalService:
                     objective=current.objective,
                     phase=target_phase,  # type: ignore[arg-type]
                     max_goal_rounds=current.max_goal_rounds,
-                    blocked_reason=(None if operation == "resume" else current.blocked_reason),
+                    # dsh ``withPhase``: a phase-transition snapshot never
+                    # carries blockedReason — only ``block`` attaches one,
+                    # and the strict decoder requires non-blocked snapshots
+                    # to omit it. Copying the current reason here made
+                    # blocked→complete fail its own validation.
+                    blocked_reason=None,
                 ),
                 rounds_started=folded.rounds_started,
                 created_at=folded.created_at if folded.created_at is not None else _now_ms(),
@@ -374,8 +404,11 @@ class GoalService:
         )
         if self._bridge_live:
             # The journal broadcast already notified listeners synchronously
-            # inside ``write`` via ``_on_journal_event``; avoid a duplicate.
+            # inside ``write`` via ``_on_journal_event`` (and advanced the
+            # projection cache through its own subscription); avoid a
+            # duplicate notification and a double change application.
             return
+        self._projection.apply_change(change)
         self._notify(self._to_changed(change, None))
 
     def _on_journal_event(self, event: Any) -> None:
