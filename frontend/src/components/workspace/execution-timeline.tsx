@@ -3,9 +3,13 @@ import {
   BrainCircuitIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CircleCheckBigIcon,
   CircleDotIcon,
   ClockIcon,
   CpuIcon,
+  FlagIcon,
+  ListTreeIcon,
+  LoaderCircleIcon,
   SearchIcon,
   RefreshCwIcon,
   WrenchIcon,
@@ -50,6 +54,19 @@ interface TimelineEvent {
   latency_ms?: number;
   model?: string;
   provider?: string;
+  job_id?: string;
+  kind?: string;
+  label?: string;
+  status?: string;
+  detail?: string;
+  run_id?: string;
+  name?: string;
+  description?: string;
+  text?: string;
+  agent_seq?: number;
+  agent_label?: string;
+  stop_reason?: string;
+  agents_started?: number;
 }
 
 interface TimelineResponse {
@@ -78,6 +95,22 @@ const EVENT_STYLE: Record<string, { icon: React.ReactNode; color: string }> = {
     icon: <ZapIcon className="size-3.5" />,
     color: "bg-success",
   },
+  "workflow/start": {
+    icon: <FlagIcon className="size-3.5" />,
+    color: "bg-chart-4",
+  },
+  "workflow/progress": {
+    icon: <ListTreeIcon className="size-3.5" />,
+    color: "bg-info",
+  },
+  "workflow/end": {
+    icon: <CircleCheckBigIcon className="size-3.5" />,
+    color: "bg-success",
+  },
+  "job/change": {
+    icon: <LoaderCircleIcon className="size-3.5" />,
+    color: "bg-chart-5",
+  },
 };
 
 function eventStyle(type: string) {
@@ -87,6 +120,45 @@ function eventStyle(type: string) {
       color: "bg-muted-foreground",
     }
   );
+}
+
+function eventSummary(ev: TimelineEvent): string | null {
+  switch (ev.event_type) {
+    case "job/change":
+      return ev.label
+        ? `${ev.label}${ev.detail ? ` — ${ev.detail}` : ""}`
+        : `${ev.kind ?? "job"} · ${ev.status ?? ""}`;
+    case "workflow/start":
+      return ev.description || ev.name || null;
+    case "workflow/progress":
+      if (ev.kind === "agent_start") {
+        return `agent ${ev.agent_seq ?? ""} ${ev.agent_label ?? ""} started`;
+      }
+      if (ev.kind === "agent_end") {
+        return `agent ${ev.agent_seq ?? ""} ${ev.agent_label ?? ""}: ${
+          ev.text ?? ""
+        }`;
+      }
+      return ev.text || (ev.kind ? `${ev.kind} ${ev.name ?? ""}` : null);
+    case "workflow/end":
+      return `${ev.stop_reason ?? "ended"} · ${ev.agents_started ?? 0} agents`;
+    default:
+      return null;
+  }
+}
+
+function jobStatusTone(status: string): "success" | "error" | "paused" | "running" {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+    case "killed":
+      return "error";
+    case "stopping":
+      return "paused";
+    default:
+      return "running";
+  }
 }
 
 /* ── main component ────────────────────────────────── */
@@ -292,6 +364,25 @@ export function ExecutionTimeline() {
                                 {new Date(ev.ts).toLocaleTimeString()}
                               </span>
                             </div>
+                            {(() => {
+                              const summary = eventSummary(ev);
+                              return summary ? (
+                                <div className="mt-1 flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+                                  {ev.event_type === "job/change" &&
+                                    ev.status && (
+                                      <StatusBadge
+                                        tone={jobStatusTone(ev.status)}
+                                        className="h-5 text-xs"
+                                      >
+                                        {ev.status}
+                                      </StatusBadge>
+                                    )}
+                                  <span className="min-w-0 truncate">
+                                    {summary}
+                                  </span>
+                                </div>
+                              ) : null;
+                            })()}
                             {ev.thought && (
                               <div className="mt-1 rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
                                 {stripTraceLabelPrefixes(ev.thought).slice(

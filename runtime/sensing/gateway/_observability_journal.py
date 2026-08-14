@@ -186,6 +186,47 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
                 ):
                     if k in payload:
                         entry[k] = payload[k]
+            # Direct field passthrough for structured events — the
+            # settlement bridge (workflow/start·progress·end, job/change)
+            # and other typed events carry their payload as model fields,
+            # not a nested ``payload`` dict. Whitelisted only: the journal
+            # envelope (event_id / actor / tenant / agent / conversation…)
+            # is never leaked into the timeline.
+            for k in (
+                "skill_name",
+                "strategy",
+                "strategy_id",
+                "thought",
+                "action",
+                "observation",
+                "iteration",
+                "final_answer",
+                "error",
+                "tokens_in",
+                "tokens_out",
+                "usd",
+                "latency_ms",
+                "model",
+                "provider",
+                "job_id",
+                "kind",
+                "label",
+                "status",
+                "detail",
+                "run_id",
+                "name",
+                "description",
+                "text",
+                "agent_seq",
+                "agent_label",
+                "stop_reason",
+                "agents_started",
+            ):
+                if k in entry:
+                    continue
+                value = getattr(e, k, None)
+                if value is not None and not isinstance(value, (dict, list)):
+                    entry[k] = value
             grouped.setdefault(tid, []).append(entry)
         task_ids = sorted(
             grouped.keys(), key=lambda k: grouped[k][0]["ts"] if grouped[k] else "", reverse=True

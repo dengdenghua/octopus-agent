@@ -16,6 +16,7 @@ from ._journal_models import (
     HookInvokedEvent,
     HookResultEvent,
     ImmuneEvent,
+    JobChangeEvent,
     JournalEvent,
     McpProposalDecisionEvent,
     NodeStartedEvent,
@@ -38,6 +39,9 @@ from ._journal_models import (
     ToolEffectReconciliationEvent,
     TrajectoryEvent,
     UserMessageEvent,
+    WorkflowEndEvent,
+    WorkflowProgressEvent,
+    WorkflowStartEvent,
 )
 
 _EVENT_CLASSES: dict[str, type[JournalEvent]] = {
@@ -74,6 +78,10 @@ _EVENT_CLASSES: dict[str, type[JournalEvent]] = {
     "sub_text_delta": SubTextDeltaEvent,
     "sub_session_summary": SubSessionSummaryEvent,
     "browser_artifact": BrowserArtifactEvent,
+    "workflow/start": WorkflowStartEvent,
+    "workflow/progress": WorkflowProgressEvent,
+    "workflow/end": WorkflowEndEvent,
+    "job/change": JobChangeEvent,
 }
 
 

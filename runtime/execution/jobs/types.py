@@ -50,6 +50,7 @@ class JobStart:
     owner: str | None = None
     owner_cleanup: Callable[[], Awaitable[None] | None] | None = None
     notify: Callable[[JobSnapshot], None] | None = None
+    on_settle: Callable[[JobSnapshot], None] | None = None
 
 
 @dataclass(frozen=True)

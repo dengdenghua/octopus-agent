@@ -54,6 +54,10 @@ JournalEventType = Literal[
     "assistant/chunk",
     "hook/invoked",
     "hook/result",
+    "workflow/start",
+    "workflow/progress",
+    "workflow/end",
+    "job/change",
 ]
 
 
@@ -514,3 +518,51 @@ class BrowserArtifactEvent(JournalEvent):
     width: int | None = None
     height: int | None = None
     thread_id: str = ""
+
+
+class WorkflowStartEvent(JournalEvent):
+    """A model-authored orchestration script started (dsh workflow
+    ``on_start``). ``run_id`` correlates every later row of the same run;
+    the event groups under the parent thread's ``task_id`` so the
+    conversation timeline carries the run's lifecycle."""
+
+    event_type: Literal["workflow/start"] = "workflow/start"
+    run_id: str = ""
+    name: str = ""
+    description: str = ""
+
+
+class WorkflowProgressEvent(JournalEvent):
+    """One workflow narration row (dsh workflow observer): a phase, a log
+    line, or an agent start/end. ``kind`` is one of ``phase`` / ``log`` /
+    ``agent_start`` / ``agent_end``; agent rows carry ``seq`` and ``label``."""
+
+    event_type: Literal["workflow/progress"] = "workflow/progress"
+    run_id: str = ""
+    kind: str = ""
+    text: str = ""
+    agent_seq: int = 0
+    agent_label: str = ""
+
+
+class WorkflowEndEvent(JournalEvent):
+    """A workflow run settled (dsh workflow ``on_end`` / settlement)."""
+
+    event_type: Literal["workflow/end"] = "workflow/end"
+    run_id: str = ""
+    stop_reason: str = ""
+    agents_started: int = 0
+    error: str = ""
+
+
+class JobChangeEvent(JournalEvent):
+    """One background-job lifecycle transition (dsh ``tool-jobs``): start,
+    stop request, or terminal settlement. ``status`` mirrors the registry's
+    ``running`` / ``stopping`` / ``completed`` / ``killed`` / ``failed``."""
+
+    event_type: Literal["job/change"] = "job/change"
+    job_id: str = ""
+    kind: str = ""
+    label: str = ""
+    status: str = ""
+    detail: str = ""

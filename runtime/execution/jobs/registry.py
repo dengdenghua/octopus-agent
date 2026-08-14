@@ -41,6 +41,7 @@ class _TrackedJob:
         "output_limit_bytes",
         "owner",
         "notify",
+        "on_settle",
         "cancel",
         "read_output",
         "status",
@@ -64,6 +65,7 @@ class _TrackedJob:
         output_limit_bytes: int | None,
         owner: str | None,
         notify: Callable[[JobSnapshot], None] | None,
+        on_settle: Callable[[JobSnapshot], None] | None,
         cancel: Callable[[str | None], None],
         read_output: Callable[[], str] | None,
         loop: asyncio.AbstractEventLoop,
@@ -74,6 +76,7 @@ class _TrackedJob:
         self.output_limit_bytes = output_limit_bytes
         self.owner = owner
         self.notify = notify
+        self.on_settle = on_settle
         self.cancel = cancel
         self.read_output = read_output
         self.status = "running"
@@ -170,6 +173,7 @@ class LocalJobRegistry:
                 output_limit_bytes=spec.output_limit_bytes,
                 owner=spec.owner,
                 notify=spec.notify,
+                on_settle=spec.on_settle,
                 cancel=hooks.cancel,
                 read_output=hooks.read_output,
                 loop=loop,
@@ -466,6 +470,13 @@ class LocalJobRegistry:
         self._notify_changed(job.owner)
         if self._listeners_closed:
             return
+        if job.on_settle is not None:
+            try:
+                job.on_settle(snapshot)
+            except Exception:  # noqa: BLE001 — observer containment
+                _log.warning(
+                    "jobs: onSettle observer threw for %s", job.id, exc_info=True
+                )
         if not snapshot.reported and job.notify is not None:
             try:
                 job.notify(snapshot)

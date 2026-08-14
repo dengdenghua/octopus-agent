@@ -40,30 +40,91 @@ def set_workflow_engine(engine: WorkflowEngine | None) -> None:
 
 
 class _ProgressObserver(WorkflowObserver):
-    """Narrate the run into the orchestration progress lane."""
+    """Narrate the run into the orchestration progress lane and the durable
+    journal timeline (dsh settlement bridge: workflow lifecycle rows land in
+    the conversation's journal even when no realtime client is attached)."""
+
+    def __init__(self) -> None:
+        from runtime.memory.journal.activity import capture_attribution
+
+        # The engine may invoke observer callbacks from a worker thread;
+        # journal context is task-local, so snapshot it at construction.
+        self._journal_attribution = capture_attribution()
 
     def on_start(self, info: Any) -> None:
         _emit_orchestration_progress(f"[workflow] start {info.meta.name}")
+        from runtime.memory.journal.activity import write_workflow_start
+
+        write_workflow_start(
+            run_id=info.run_id,
+            name=getattr(info.meta, "name", "workflow"),
+            description=getattr(info.meta, "description", ""),
+            **self._journal_attribution,
+        )
 
     def on_phase(self, info: Any, title: str) -> None:
         _emit_orchestration_progress(f"[workflow] phase {title}")
+        from runtime.memory.journal.activity import write_workflow_progress
+
+        write_workflow_progress(
+            run_id=info.run_id,
+            kind="phase",
+            text=title,
+            **self._journal_attribution,
+        )
 
     def on_log(self, info: Any, message: str) -> None:
         _emit_orchestration_progress(f"[workflow] {message}")
+        from runtime.memory.journal.activity import write_workflow_progress
+
+        write_workflow_progress(
+            run_id=info.run_id,
+            kind="log",
+            text=message,
+            **self._journal_attribution,
+        )
 
     def on_agent_start(self, info: Any, agent: Any) -> None:
         _emit_orchestration_progress(
             f"[workflow] agent {agent.seq} {agent.label} started"
+        )
+        from runtime.memory.journal.activity import write_workflow_progress
+
+        write_workflow_progress(
+            run_id=info.run_id,
+            kind="agent_start",
+            agent_seq=agent.seq,
+            agent_label=agent.label,
+            **self._journal_attribution,
         )
 
     def on_agent_end(self, info: Any, agent: Any) -> None:
         _emit_orchestration_progress(
             f"[workflow] agent {agent.seq} {agent.label}: {agent.outcome}"
         )
+        from runtime.memory.journal.activity import write_workflow_progress
+
+        write_workflow_progress(
+            run_id=info.run_id,
+            kind="agent_end",
+            text=str(agent.outcome),
+            agent_seq=agent.seq,
+            agent_label=agent.label,
+            **self._journal_attribution,
+        )
 
     def on_end(self, info: Any, result: Any) -> None:
         _emit_orchestration_progress(
             f"[workflow] end {result.stop_reason} ({result.agents_started} agents)"
+        )
+        from runtime.memory.journal.activity import write_workflow_end
+
+        write_workflow_end(
+            run_id=info.run_id,
+            stop_reason=result.stop_reason,
+            agents_started=result.agents_started,
+            error=result.error or "",
+            **self._journal_attribution,
         )
         # Emit workflow completion notification (dsh ``settlement`` analog)
         _emit_workflow_settlement(

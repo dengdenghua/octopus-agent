@@ -100,9 +100,16 @@ def build_subagent_job_start(
             _log.debug("background job completion notice failed", exc_info=True)
 
     def run() -> JobHooks:
+        from runtime.memory.journal.activity import (
+            capture_attribution,
+        )
         from runtime.platform.process.session import current_session, session_scope
 
         parent = current_session()
+        # The settle observer runs outside this turn (possibly on the
+        # registry's settle path); snapshot the attribution here while the
+        # session is live and hand it over via the shared holder.
+        holder["attribution"] = capture_attribution()
         thread_id = getattr(parent, "thread_id", None) or ""
         if owner and thread_id:
             try:
@@ -161,7 +168,28 @@ def build_subagent_job_start(
 
         return JobHooks(cancel=cancel, done=done, read_output=None)
 
-    return JobStart(kind=kind, label=effective_label, owner=owner, run=run, notify=notify)
+    def on_settle(snapshot: JobSnapshot) -> None:
+        """Journal the terminal transition (durable timeline row)."""
+        from runtime.memory.journal.activity import write_job_change
+
+        attribution = holder.get("attribution") or {}
+        write_job_change(
+            job_id=snapshot.id,
+            kind=snapshot.kind,
+            label=snapshot.label,
+            status=snapshot.status,
+            detail=snapshot.detail or "",
+            **attribution,
+        )
+
+    return JobStart(
+        kind=kind,
+        label=effective_label,
+        owner=owner,
+        run=run,
+        notify=notify,
+        on_settle=on_settle,
+    )
 
 
 def _set_done(done: asyncio.Future[JobOutcome], outcome: JobOutcome) -> None:
