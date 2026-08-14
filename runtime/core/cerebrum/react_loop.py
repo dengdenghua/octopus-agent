@@ -132,7 +132,87 @@ __all__ = _reexports.__all__ + [
 ]
 
 
+def _mark_subagent_owner_thread(thread_id: str, *, busy: bool) -> None:
+    """Mirror the parent turn's running/idle state to the report lane.
+
+    dsh ``agent.status``: the driver marks the owning agent busy for the
+    duration of its turn so a child ``report`` landing mid-turn is queued
+    (``delivery='queued'``, dsh ``inject``) instead of being recorded as a
+    wakeup that never fires. Best-effort: a missing store or a failed call
+    never breaks or delays the turn.
+    """
+    if not thread_id:
+        return
+    try:
+        from runtime.execution.subagents.sessions import (
+            get_subagent_session_store,
+        )
+
+        store = get_subagent_session_store()
+        if store is None:
+            return
+        if busy:
+            store.mark_thread_busy(thread_id)
+        else:
+            store.mark_thread_idle(thread_id)
+    except Exception:  # noqa: BLE001 — owner-status mirroring is best-effort
+        _logger.debug("subagent owner-status mirror failed", exc_info=True)
+
+
 def stream_react_loop(
+    stack: StackProtocol,
+    intent: ParsedIntent,
+    agent: Agent | None,
+    *,
+    model: str | None = None,
+    max_iterations: int = 30,
+    temperature: float = 0.3,
+    enable_tools: bool = True,
+    resume_task_id: TaskId | None = None,
+    thread_id: str = "",
+    max_tokens_budget: int = BUDGET_DEFAULT_MAX_TOKENS,
+    max_usd_budget: float = BUDGET_DEFAULT_MAX_USD,
+    approval_provider: ApprovalProvider | None = None,
+    output_chunk_sink: Callable[[str, str, str], None] | None = None,
+    step_evaluator: Callable[[dict[str, Any]], float | None] | None = None,
+    planning_mode: bool = False,
+    reasoning_effort: str | None = None,
+    steering_drain: Callable[[], list[str]] | None = None,
+    on_auto_parallel_batch: Callable[[str], None] | None = None,
+) -> Generator[dict[str, Any], None, ReActResult | None]:
+    """Drive one parent ReAct turn (see ``_stream_react_loop_impl``).
+
+    Thin lifecycle wrapper: marks the turn's thread busy in the subagent
+    report lane while the turn runs (dsh ``agent.status``) and always clears
+    it on exit — normal completion, failure, or early generator close.
+    """
+    _mark_subagent_owner_thread(thread_id, busy=True)
+    try:
+        return (yield from _stream_react_loop_impl(
+            stack,
+            intent,
+            agent,
+            model=model,
+            max_iterations=max_iterations,
+            temperature=temperature,
+            enable_tools=enable_tools,
+            resume_task_id=resume_task_id,
+            thread_id=thread_id,
+            max_tokens_budget=max_tokens_budget,
+            max_usd_budget=max_usd_budget,
+            approval_provider=approval_provider,
+            output_chunk_sink=output_chunk_sink,
+            step_evaluator=step_evaluator,
+            planning_mode=planning_mode,
+            reasoning_effort=reasoning_effort,
+            steering_drain=steering_drain,
+            on_auto_parallel_batch=on_auto_parallel_batch,
+        ))
+    finally:
+        _mark_subagent_owner_thread(thread_id, busy=False)
+
+
+def _stream_react_loop_impl(
     stack: StackProtocol,
     intent: ParsedIntent,
     agent: Agent | None,

@@ -387,6 +387,51 @@ def test_text_delta_maps_to_agent_message(gateway: Any) -> None:
     assert agent_items[0]["status"] == "completed"
 
 
+def test_user_turn_refills_subagent_wake_budget(gateway: Any, tmp_path: Path) -> None:
+    from runtime.execution.subagents.sessions import (
+        SubagentSessionStore,
+        get_subagent_session_store,
+        set_subagent_session_store,
+    )
+
+    client, logs_root = gateway
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=Path(logs_root) / "subagent_sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+        max_consecutive_wakes=1,
+    )
+    previous = get_subagent_session_store()
+    set_subagent_session_store(store)
+    try:
+        session = store.create(agent_id="researcher", thread_id="th-refill")
+        store.append_report(session.session_id, content="w1", delivery="wakeup")
+        assert seen == ["w1"]
+        # Budget spent → the next wakeup report degrades to quiet.
+        store.append_report(session.session_id, content="w2", delivery="wakeup")
+        assert seen == ["w1"]
+        assert store.get(session.session_id).reports[-1].delivery == "quiet"
+
+        # A human turn on the same thread refills the budget (dsh
+        # ``agent/inbox/claimed`` with a user-authored message).
+        _set_script([{"type": "react_completed"}])
+        with client.websocket_connect("/api/realtime") as ws:
+            out = _drive(
+                ws,
+                {
+                    "threadId": "th-refill",
+                    "input": [{"type": "text", "text": "继续"}],
+                    "approvalPolicy": "never",
+                },
+            )
+        assert out["response"].result["turn"]["threadId"] == "th-refill"
+
+        store.append_report(session.session_id, content="w3", delivery="wakeup")
+        assert seen == ["w1", "w3"]
+    finally:
+        set_subagent_session_store(previous)
+
+
 def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> None:
     client, _ = gateway
     _set_script(

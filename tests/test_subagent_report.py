@@ -331,6 +331,186 @@ def test_queued_report_round_trips_across_instances(tmp_path: Path) -> None:
     assert loaded.reports[-1].delivery == "queued"
 
 
+# ─── thread-scoped busy state (react-loop production wiring) ─────────────
+
+
+def test_thread_busy_queues_reports_for_all_sessions(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    first = store.create(agent_id="researcher", thread_id="th-parent")
+    second = store.create(agent_id="coder", thread_id="th-parent")
+    other = store.create(agent_id="researcher", thread_id="th-other")
+
+    store.mark_thread_busy("th-parent")
+    store.append_report(first.session_id, content="busy-a", delivery="wakeup")
+    store.append_report(second.session_id, content="busy-b", delivery="wakeup")
+    store.append_report(other.session_id, content="other-c", delivery="wakeup")
+
+    assert seen == ["other-c"]
+    assert [r.delivery for r in store.get(first.session_id).reports] == ["queued"]
+    assert [r.delivery for r in store.get(second.session_id).reports] == ["queued"]
+
+
+def test_thread_busy_applies_to_sessions_created_during_turn(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.mark_thread_busy("th-parent")
+    session = store.create(agent_id="researcher", thread_id="th-parent")
+    store.append_report(session.session_id, content="created-mid-turn", delivery="wakeup")
+    assert store.get(session.session_id).reports[-1].delivery == "queued"
+
+
+def test_thread_idle_restores_wakeup_for_all_sessions(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    session = store.create(agent_id="researcher", thread_id="th-parent")
+    store.mark_thread_busy("th-parent")
+    store.append_report(session.session_id, content="queued-1", delivery="wakeup")
+    assert seen == []
+
+    store.mark_thread_idle("th-parent")
+    store.append_report(session.session_id, content="woken-2", delivery="wakeup")
+    assert seen == ["woken-2"]
+
+
+def test_empty_thread_never_queues_and_markers_are_noop(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    session = store.create(agent_id="researcher", thread_id="")
+    store.mark_thread_busy("")  # no raise
+    store.mark_thread_idle("")  # no raise
+    store.append_report(session.session_id, content="no-thread", delivery="wakeup")
+    assert seen == ["no-thread"]
+    assert store.get(session.session_id).reports[-1].delivery == "wakeup"
+
+
+def test_refill_thread_wake_budget_resets_all_sessions_on_thread(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+        max_consecutive_wakes=1,
+    )
+    first = store.create(agent_id="researcher", thread_id="th-parent")
+    second = store.create(agent_id="coder", thread_id="th-parent")
+    store.append_report(first.session_id, content="a1", delivery="wakeup")
+    store.append_report(second.session_id, content="b1", delivery="wakeup")
+    assert seen == ["a1", "b1"]
+    # Budgets are spent for both sessions → both go quiet.
+    store.append_report(first.session_id, content="a2", delivery="wakeup")
+    store.append_report(second.session_id, content="b2", delivery="wakeup")
+    assert seen == ["a1", "b1"]
+
+    store.refill_thread_wake_budget("th-parent")
+    store.append_report(first.session_id, content="a3", delivery="wakeup")
+    store.append_report(second.session_id, content="b3", delivery="wakeup")
+    assert seen == ["a1", "b1", "a3", "b3"]
+
+
+def test_refill_thread_wake_budget_unknown_thread_noop(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+        max_consecutive_wakes=1,
+    )
+    session = store.create(agent_id="researcher", thread_id="th-parent")
+    store.refill_thread_wake_budget("th-other")  # no raise, no reset
+    store.refill_thread_wake_budget("")  # no raise
+    store.append_report(session.session_id, content="a1", delivery="wakeup")
+    store.append_report(session.session_id, content="a2", delivery="wakeup")
+    assert seen == ["a1"]
+    assert store.get(session.session_id).reports[-1].delivery == "quiet"
+
+
+# ─── react-loop lifecycle wiring ─────────────────────────────────────────
+
+
+def _monkeypatched_react_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    import runtime.core.cerebrum.react_loop as rl
+
+    def fake_impl(stack, intent, agent, **kwargs):  # noqa: ANN001 — test stub
+        yield {"type": "react_started", "task_id": "t", "thread_id": kwargs["thread_id"]}
+        return None
+
+    monkeypatch.setattr(rl, "_stream_react_loop_impl", fake_impl)
+
+
+def test_react_loop_marks_thread_busy_during_turn_and_idle_after(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from runtime.core.cerebrum import react_loop as rl
+
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    previous = get_subagent_session_store()
+    set_subagent_session_store(store)
+    try:
+        session = store.create(agent_id="researcher", thread_id="th-loop")
+        observed: list[str] = []
+
+        def busy_probe(stack, intent, agent, **kwargs):  # noqa: ANN001 — test stub
+            store.append_report(
+                session.session_id, content="mid-turn", delivery="wakeup"
+            )
+            observed.append(store.get(session.session_id).reports[-1].delivery)
+            yield {"type": "react_started", "task_id": "t", "thread_id": kwargs["thread_id"]}
+            return None
+
+        monkeypatch.setattr(rl, "_stream_react_loop_impl", busy_probe)
+        gen = rl.stream_react_loop(None, None, None, thread_id="th-loop")
+        list(gen)
+    finally:
+        set_subagent_session_store(previous)
+
+    # Mid-turn wakeup reports queued; after the turn a wakeup fires again.
+    assert observed == ["queued"]
+    assert seen == []
+    store.append_report(session.session_id, content="after-turn", delivery="wakeup")
+    assert seen == ["after-turn"]
+
+
+def test_react_loop_early_close_clears_busy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from runtime.core.cerebrum import react_loop as rl
+
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    previous = get_subagent_session_store()
+    set_subagent_session_store(store)
+    try:
+        session = store.create(agent_id="researcher", thread_id="th-loop")
+
+        def endless(stack, intent, agent, **kwargs):  # noqa: ANN001 — test stub
+            while True:
+                yield {"type": "react_started", "task_id": "t", "thread_id": kwargs["thread_id"]}
+
+        monkeypatch.setattr(rl, "_stream_react_loop_impl", endless)
+        gen = rl.stream_react_loop(None, None, None, thread_id="th-loop")
+        next(gen)
+        gen.close()  # GeneratorExit must still clear the busy flag
+    finally:
+        set_subagent_session_store(previous)
+
+    store.append_report(session.session_id, content="after-close", delivery="wakeup")
+    assert seen == ["after-close"]
+
+
 def test_legacy_session_without_reports_loads(tmp_path: Path) -> None:
     store = _store(tmp_path)
     session = store.create(agent_id="researcher", thread_id="th-1")

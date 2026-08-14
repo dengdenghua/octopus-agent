@@ -211,6 +211,12 @@ class SubagentSessionStore:
         # Live state only — a store restart always starts owners idle, matching
         # dsh's restart-into-idle lifecycle.
         self._owner_busy: set[str] = set()
+        # Threads whose parent turn is running (dsh ``agent.status`` keyed by
+        # the parent thread instead of one exact session). Also live-only; the
+        # react-loop driver marks its thread busy for the turn's duration so a
+        # report landing mid-turn queues for every session that thread owns,
+        # including ones created during the turn.
+        self._busy_threads: set[str] = set()
 
     def _path_for(self, session_id: str) -> Path | None:
         if self._base_dir is None:
@@ -392,7 +398,10 @@ class SubagentSessionStore:
                 return None
             effective_delivery = "wakeup" if delivery != "quiet" else "quiet"
             if effective_delivery == "wakeup":
-                if session_id in self._owner_busy:
+                owner_busy = session_id in self._owner_busy or bool(
+                    session.thread_id and session.thread_id in self._busy_threads
+                )
+                if owner_busy:
                     # dsh ``inject``: a busy owner must not be woken mid-turn;
                     # the report waits in the running turn's queue and neither
                     # fires the hook nor spends the wake budget.
@@ -445,6 +454,47 @@ class SubagentSessionStore:
         """
         with self._lock:
             self._owner_busy.discard(session_id)
+
+    def mark_thread_busy(self, thread_id: str) -> None:
+        """Mark every session of a parent thread mid-turn (thread-scoped busy).
+
+        The react-loop driver calls this when a parent turn starts so reports
+        landing during the turn queue (``delivery='queued'``) for all sessions
+        the thread owns — including ones created later in the same turn.
+        Live state only; an empty thread id is a no-op.
+        """
+        if not thread_id:
+            return
+        with self._lock:
+            self._busy_threads.add(thread_id)
+
+    def mark_thread_idle(self, thread_id: str) -> None:
+        """Clear a parent thread's busy state (thread-scoped idle).
+
+        Called when the parent turn ends (normal, error, or early close) so
+        the next ``wakeup`` report may open a parent turn again. Queued
+        reports are not retroactively woken — they are consumed via
+        ``pending_reports`` / ``reports_prompt``. Empty id is a no-op.
+        """
+        if not thread_id:
+            return
+        with self._lock:
+            self._busy_threads.discard(thread_id)
+
+    def refill_thread_wake_budget(self, thread_id: str) -> None:
+        """Refill wake budgets for every session a parent thread owns.
+
+        dsh refills ``spentWakes`` when the owner claims a human turn; the
+        realtime gateway calls this at turn start so a parent that just took
+        real input may be woken a fresh budget's worth of times. Only sessions
+        with a live budget are touched; empty id is a no-op.
+        """
+        if not thread_id:
+            return
+        with self._lock:
+            for session in list(self._memory.values()):
+                if session.thread_id == thread_id:
+                    self._spent_wakes.pop(session.session_id, None)
 
     def refill_wake_budget(self, session_id: str) -> None:
         """Refill the consecutive-wake budget when the parent claims a human turn.
