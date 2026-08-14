@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十个差距点已落地为可测试代码(1-20 节)
+**状态**: 二十一个差距点已落地为可测试代码(1-21 节)
 
 ---
 
@@ -501,6 +501,38 @@ dsh 的 spill 能力家族(`@deepseek-ai/dsh-spill` / `spill-local` /
   同机消费方才有意义;e2b 等可移植执行世界列为后续。
 - 会话生命周期清理:spill 文件持久留存直到外部清理(与 dsh 相同,
   续会话/分支会话仍可能引用)。
+## 21. report 工具进进程内 runner (`suckers/ephemeral_runner.py`)
+
+dsh 的 ``tool-subagent-report``:续会话子代理的回合内主动上报,而不是
+父代理在下次 call 时被动拉取。第 16 点的 report 闭环是「回合结束后
+bridge 附加 pending_reports」;本轮把 ``report`` 做成子代理回合中
+可调用的真工具,部分发现可立即送达父代理。
+
+- 注入面与 dsh 一致:**只在续会话进程内子代理**可见——bridge 在
+  ``_do_call`` 里把 ``subagent_session_id`` 盖进 dispatch context,
+  runner 检测到才暴露工具;一次性子代理、外部 CLI backend、无会话
+  执行永远看不到。
+- ``report`` 工具规格与 dsh 相同:唯一参数 ``output``(必填,自包含
+  结论),返回 messageId;系统提示追加 dsh 引导段(「用 report 交付
+  结果、报告不结束回合、父代理不会自动拿到 transcript、失败可能已
+  送达不要盲目重试」)。
+- 执行:``_handle_report_tool`` 调 ``append_report``(delivery 策略
+  默认 ``wakeup``,可从 context ``subagent_report_delivery`` 覆盖为
+  ``quiet``);失败(无 store/无会话/空内容)返回 is_error 结果但不
+  中断子代理回合——与 dsh 的 at-least-once 语义一致。
+- 测试:`tests/test_ephemeral_report_tool.py` 8 用例(无会话不暴露、
+  有会话暴露 + 引导段、回合中送达 + ack 回灌、quiet 策略、失败隔离、
+  空 output 拒绝、bridge 盖 session id、端到端 pending_reports);
+  回归 ephemeral/subagent 295 项全绿,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 后台 continuable settlement 通知(事件桥):报告送达后的
+  wakeup 排队目前只在 ``on_report`` 钩子里,没有独立的调度器
+  事件桥接层;``quiet``/``wakeup`` 的父代理离线排队列为后续。
+- 回合级真实 transcript 订阅:子代理回合内事件流
+  (``sub_tool_start``/``sub_text_delta``)尚未落到 session 日志的
+  逐事件桥,父代理拿到的仍是摘要级 report。
 ## 用法速查
 
 ```bash
