@@ -105,6 +105,7 @@ async def drive_local_partner(
         timeout=timeout,
         env=env,
         model=partner_model or None,
+        capabilities=getattr(agent, "capabilities", None),
     )
 
     if result.unsupported:

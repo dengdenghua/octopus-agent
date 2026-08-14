@@ -1,0 +1,50 @@
+// Octopus local partner profile · local_codebuddy_cli
+// Created by local partner registration
+
+{
+  "id": "local_codebuddy_cli",
+  "templateId": "codebuddy-cli",
+  "templateVersion": "1.0.0",
+  "name": "CodeBuddy CLI 伙伴",
+  "icon": "CB",
+  "did": "DID-38EBEF46CCAD-67DBD8",
+  "description": "检测本机腾讯 CodeBuddy CLI，注册为可被团队指派的本地工程伙伴。官方 codebuddy 命令支持 headless 输出；桌面版 buddy 启动器仅作为发现兜底。",
+  "avatar": "avatar.svg",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local_partner",
+  "creator": "user",
+  "category": "automation",
+  "tags": [
+    "local",
+    "partner",
+    "coding",
+    "codebuddy",
+    "tencent"
+  ],
+  "defaultProject": {
+    "dir": "project"
+  },
+  "capabilities": {
+    "local_partner": true,
+    "local_partner_id": "codebuddy-cli",
+    "local_partner_command": "codebuddy",
+    "local_partner_executable": "/Users/dangbei/.local/node/lib/node_modules/@tencent-ai/codebuddy-code/bin/codebuddy",
+    "local_partner_invocation": {
+      "args_template": [
+        "{command}",
+        "-p",
+        {
+          "if": "model",
+          "then": ["--model", "{model}"]
+        },
+        "--output-format",
+        "text",
+        "-y",
+        "{prompt}"
+      ]
+    }
+  }
+}

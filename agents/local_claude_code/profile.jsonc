@@ -30,6 +30,17 @@
     "local_partner": true,
     "local_partner_id": "claude-code",
     "local_partner_command": "claude",
-    "local_partner_executable": "claude"
+    "local_partner_executable": "/Users/dangbei/.local/node/bin/claude",
+    "local_partner_invocation": {
+      "args_template": [
+        "{command}",
+        "-p",
+        {
+          "if": "model",
+          "then": ["--model", "{model}"]
+        },
+        "{prompt}"
+      ]
+    }
   }
 }

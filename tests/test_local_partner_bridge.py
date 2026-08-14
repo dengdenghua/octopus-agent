@@ -54,6 +54,7 @@ def test_argv_for_known_clis() -> None:
     review_this = build_partner_prompt("review this")
     fix_imports = build_partner_prompt("fix imports")
     codebuddy_task = build_partner_prompt("explain this repo")
+    opencode_task = build_partner_prompt("inspect the failure")
     assert build_partner_argv("claude-code", "claude", "fix the bug") == [
         "claude",
         "-p",
@@ -84,6 +85,12 @@ def test_argv_for_known_clis() -> None:
         "text",
         codebuddy_task,
     ]
+    assert build_partner_argv("opencode-cli", "opencode", "inspect the failure") == [
+        "opencode",
+        "run",
+        "--auto",
+        opencode_task,
+    ]
 
 
 def test_argv_model_override_passes_through_m() -> None:
@@ -111,6 +118,16 @@ def test_argv_model_override_passes_through_m() -> None:
         "hunyuan-code",
         "--output-format",
         "text",
+        go,
+    ]
+    assert build_partner_argv(
+        "opencode-cli", "opencode", "go", model="anthropic/claude-sonnet-4"
+    ) == [
+        "opencode",
+        "run",
+        "-m",
+        "anthropic/claude-sonnet-4",
+        "--auto",
         go,
     ]
     # Trae CLI's print mode does not expose a stable model flag; keep its own
@@ -163,6 +180,10 @@ def test_prompt_is_a_separate_argv_element_not_a_shell_string() -> None:
     assert codebuddy_argv is not None
     assert codebuddy_argv[:-1] == ["codebuddy", "-p", "--output-format", "text"]
     assert codebuddy_argv[-1] == build_partner_prompt(nasty)
+    opencode_argv = build_partner_argv("opencode-cli", "opencode", nasty)
+    assert opencode_argv is not None
+    assert opencode_argv[:-1] == ["opencode", "run", "--auto"]
+    assert opencode_argv[-1] == build_partner_prompt(nasty)
 
 
 def test_slash_commands_are_wrapped_as_plain_task_content() -> None:

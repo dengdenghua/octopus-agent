@@ -393,6 +393,67 @@ def _control_slash_guidance(
     )
 
 
+def _expand_args_template(
+    template: list[Any],
+    *,
+    command: str,
+    prompt: str,
+    model: str | None,
+) -> list[str] | None:
+    """Expand an ``args_template`` from profile.jsonc into a real argv list.
+
+    Template syntax:
+      * ``"{command}"`` → the CLI command
+      * ``"{prompt}"`` → the wrapped prompt
+      * ``"{model}"`` → the model name (or empty string if None)
+      * ``{"if": "model", "then": [...]}`` → conditional block, expanded only if
+        model is set
+      * ``{"if": "model", "then": [...], "else": [...]}`` → conditional with
+        fallback
+      * Plain strings → literal argv elements
+
+    Returns ``None`` if the template is malformed or produces an empty argv.
+    """
+    result: list[str] = []
+    context = {"command": command, "prompt": prompt, "model": model or ""}
+
+    def expand(item: Any) -> list[str]:
+        if isinstance(item, str):
+            # Simple string: substitute placeholders
+            expanded = item
+            for key, value in context.items():
+                expanded = expanded.replace(f"{{{key}}}", value)
+            return [expanded] if expanded else []
+
+        if isinstance(item, dict):
+            # Conditional block
+            condition = item.get("if")
+            if condition == "model":
+                if model:
+                    then_branch = item.get("then", [])
+                    if isinstance(then_branch, list):
+                        out: list[str] = []
+                        for sub in then_branch:
+                            out.extend(expand(sub))
+                        return out
+                else:
+                    else_branch = item.get("else", [])
+                    if isinstance(else_branch, list):
+                        out = []
+                        for sub in else_branch:
+                            out.extend(expand(sub))
+                        return out
+            return []
+
+        # Unknown type: skip
+        return []
+
+    for item in template:
+        result.extend(expand(item))
+
+    return result if result else None
+
+
 def partner_identity(capabilities: Any) -> tuple[str, str] | None:
     """Read ``(partner_id, command)`` from an agent's capabilities, or ``None``
     when this isn't a drivable local partner. Prefers the resolved executable
@@ -545,13 +606,18 @@ def build_partner_argv(
     prompt: str,
     model: str | None = None,
     adapter_notes: list[str] | tuple[str, ...] = (),
+    capabilities: dict[str, Any] | None = None,
 ) -> list[str] | None:
     """Map ``(partner_id, command, prompt[, model])`` to the CLI's own
     non-interactive invocation, or ``None`` for partners we can't drive headless
     yet.
 
-    The flags are best-effort for the known CLIs and intentionally isolated
-    here so a single edit fixes a tool whose interface drifts:
+    Prefers declarative ``args_template`` from the agent's ``profile.jsonc``
+    capabilities (when provided), falling back to hardcoded rules for backward
+    compatibility and for partners without a template yet.
+
+    The hardcoded flags are best-effort for the known CLIs and intentionally
+    isolated here so a single edit fixes a tool whose interface drifts:
       * ``claude-code`` → ``claude -p [--model <m>] "<prompt>"`` (headless)
       * ``codex-cli``   → ``codex exec [-m <m>] --skip-git-repo-check "<prompt>"``
         (non-interactive exec; the skip flag lets it run in any chosen workspace
@@ -578,6 +644,26 @@ def build_partner_argv(
         return None
     prompt_arg = build_partner_prompt(prompt, adapter_notes=adapter_notes)
     m = _clean_model(model)
+
+    # Try declarative template first (if capabilities provided)
+    if capabilities:
+        invocation = capabilities.get("local_partner_invocation")
+        if isinstance(invocation, dict):
+            args_template = invocation.get("args_template")
+            if isinstance(args_template, list):
+                try:
+                    argv = _expand_args_template(
+                        args_template,
+                        command=command,
+                        prompt=prompt_arg,
+                        model=m,
+                    )
+                    if argv:
+                        return argv
+                except Exception:  # noqa: BLE001 — fall back to hardcoded on any template error
+                    pass
+
+    # Fallback to hardcoded rules
     if partner_id == "claude-code":
         return [command, "-p", *(["--model", m] if m else []), prompt_arg]
     if partner_id == "codex-cli":
@@ -666,12 +752,15 @@ def run_local_partner(
     env: dict[str, str] | None = None,
     runner: Runner | None = None,
     model: str | None = None,
+    capabilities: dict[str, Any] | None = None,
 ) -> LocalPartnerResult:
     """Drive the partner CLI once. Best-effort and total — never raises; every
     failure mode (unsupported tool, missing binary, non-zero exit, timeout) is
     reflected in the returned :class:`LocalPartnerResult`. ``env`` is layered over
     the inherited environment for the default runner (custom runners ignore it).
-    ``model`` (a CLI-valid name) overrides the CLI's configured default."""
+    ``model`` (a CLI-valid name) overrides the CLI's configured default.
+    ``capabilities`` (the agent's profile capabilities dict) enables declarative
+    ``args_template`` expansion."""
     plan = normalize_partner_request(partner_id, prompt, model=model, native_command=command)
     if plan.handled_output is not None:
         return LocalPartnerResult(ok=True, output=plan.handled_output)
@@ -682,6 +771,7 @@ def run_local_partner(
         plan.prompt,
         plan.model,
         adapter_notes=plan.notices,
+        capabilities=capabilities,
     )
     if argv is None:
         return LocalPartnerResult(ok=False, unsupported=True)

@@ -1,0 +1,47 @@
+// Octopus local partner profile · local_opencode_cli
+// Created by local partner registration
+
+{
+  "id": "local_opencode_cli",
+  "templateId": "opencode-cli",
+  "templateVersion": "1.0.0",
+  "name": "OpenCode CLI 伙伴",
+  "icon": "OC",
+  "did": "DID-B9BD89A9EEB5-2AF330",
+  "description": "检测本机 OpenCode CLI，注册为可被团队指派的本地工程伙伴。",
+  "avatar": "avatar.svg",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local_partner",
+  "creator": "user",
+  "category": "automation",
+  "tags": [
+    "local",
+    "partner",
+    "coding",
+    "opencode"
+  ],
+  "defaultProject": {
+    "dir": "project"
+  },
+  "capabilities": {
+    "local_partner": true,
+    "local_partner_id": "opencode-cli",
+    "local_partner_command": "/Users/dangbei/.opencode/bin/opencode",
+    "local_partner_executable": "/Users/dangbei/.opencode/bin/opencode",
+    "local_partner_invocation": {
+      "args_template": [
+        "{command}",
+        "run",
+        {
+          "if": "model",
+          "then": ["-m", "{model}"]
+        },
+        "--auto",
+        "{prompt}"
+      ]
+    }
+  }
+}
