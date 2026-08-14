@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 五十二个差距点已落地为可测试代码(1-52 节)
+**状态**: 五十三个差距点已落地为可测试代码(1-53 节)
 
 ---
 
@@ -1586,6 +1586,43 @@ dsh 的 hooks 家族把 Claude Code / Codex 的 ``hooks.json`` 方言桥接到
   三页翻完、has_more/next_cursor 语义、limit 钳制、scope 过滤、未知
   cursor 空页);goal projection/domain/invariant 共 80 项通过,
   ruff/invariant 干净。
+
+## 53. on_report 生产调度机制:线程级唤醒钩子注册表(`subagents/sessions.py`)
+
+第 35 节留下的缺口是「on_report 唤醒钩子生产接线」:存储层的
+``append_report`` 只在构造时收到的单个 ``on_report`` 回调上撬回合,
+而生产网关从不传它,``wakeup`` 报告只落盘不真撬回合。本轮补上生产可
+用的**调度机制层**——线程级唤醒钩子注册表,让持有线程活动连接/发射器
+的宿主按线程登记自己的唤醒回调,``append_report`` 在预算允许的
+``wakeup`` 送达时把它派发过去:
+
+- ``register_thread_wake_handler(thread_id, handler)`` /
+  ``unregister_thread_wake_handler(thread_id)`` /
+  ``registered_thread_wake_handler(thread_id)``:按线程登记的唤醒回调
+  (线程安全、幂等、同线程替换),与 dsh 的 owner(线程级生命周期对象)
+  一致——不是绑在某一个具体子会话上,而是绑在父线程上。
+- ``append_report`` 的 ``wakeup`` 派发改为:先查该会话所属线程的注册
+  回调,命中则调用它(优先级最高);否则回退到构造时传入的单个
+  ``on_report``。仍在锁外 best-effort 调用(回调失败只告警,报告已
+  持久化,绝不阻断),``queued``(忙碌线程注入)与预算耗尽的 ``quiet``
+  依旧不触发唤醒回调。
+- 语义不变:忙碌 owner 仍只 ``queued`` 不撬回合、预算耗尽仍降级
+  ``quiet``、``quiet`` 从不耗预算——注册表只改**派发目标**,不改判定。
+- 测试:``tests/test_subagent_report.py`` 新增 10 用例(注册命中、
+  优先级盖过构造回调、未注册回退构造回调、注销后不触发、异线程不触发、
+  ``quiet`` 不触发、幂等替换、回调异常吞掉、预算耗尽不触发、线程忙碌
+  ``queued`` 不触发 + 空闲恢复触发);report 域 52 项全绿,ruff 干净。
+
+### 尚未覆盖
+
+- **真实回合撬起**(生产接线终点):回调只到达宿主,宿主(网关)要
+  真正开新父回合,仍需持有该线程的活动连接/发射器并调度一个新回合;
+  属于网关连接生命周期接线热区(与 ``dispatch_stop`` /
+  ``dispatch_session_start`` 同区),与并行开发中的实时网关文件
+  重叠,留待独立的回合调度器接入时一并接通。回调接口已定
+  ``(session_id, report)``,接入方只需 ``register_thread_wake_handler``。
+- 事件桥层的 settlement 通知(子代理结束时通知父代理)仍待独立的
+  事件桥接层。
 
 ## 用法速查
 

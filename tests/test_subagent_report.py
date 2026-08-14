@@ -787,3 +787,125 @@ def test_call_subagent_attaches_pending_reports_and_acks(tmp_path: Path) -> None
     assert "最终结论" in second.get("reports_prompt", "")
     # Acked: the next call no longer sees them.
     assert store.pending_reports(session_id) == []
+
+
+# ─── thread wake-handler registry (on_report production wiring) ──────────
+
+
+def test_registered_thread_handler_fires_on_wakeup(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    seen: list[tuple[str, str]] = []
+    store.register_thread_wake_handler(
+        "th-1", lambda sid, report: seen.append((sid, report.content))
+    )
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.append_report(session.session_id, content="结果在这")
+    assert seen == [(session.session_id, "结果在这")]
+
+
+def test_registered_thread_handler_takes_precedence_over_ctor_hook(
+    tmp_path: Path,
+) -> None:
+    ctor_calls: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: ctor_calls.append(report.content),
+    )
+    thread_calls: list[str] = []
+    store.register_thread_wake_handler(
+        "th-1", lambda sid, report: thread_calls.append(report.content)
+    )
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.append_report(session.session_id, content="wake")
+    assert thread_calls == ["wake"]
+    assert ctor_calls == []
+
+
+def test_unregistered_thread_falls_back_to_ctor_hook(tmp_path: Path) -> None:
+    ctor_calls: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: ctor_calls.append(report.content),
+    )
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.append_report(session.session_id, content="fallback")
+    assert ctor_calls == ["fallback"]
+
+
+def test_unregister_thread_handler_stops_wakeup(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    seen: list[str] = []
+    store.register_thread_wake_handler("th-1", lambda sid, r: seen.append(r.content))
+    store.unregister_thread_wake_handler("th-1")
+    assert store.registered_thread_wake_handler("th-1") is None
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.append_report(session.session_id, content="quietly")
+    assert seen == []
+
+
+def test_thread_handler_not_fired_for_other_thread(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    seen: list[str] = []
+    store.register_thread_wake_handler("th-1", lambda sid, r: seen.append(r.content))
+    session = store.create(agent_id="researcher", thread_id="th-other")
+    store.append_report(session.session_id, content="elsewhere")
+    assert seen == []
+
+
+def test_thread_handler_not_fired_on_quiet_delivery(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    seen: list[str] = []
+    store.register_thread_wake_handler("th-1", lambda sid, r: seen.append(r.content))
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.append_report(session.session_id, content="no wake", delivery="quiet")
+    assert seen == []
+
+
+def test_thread_handler_replaced_idempotently(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    first: list[str] = []
+    second: list[str] = []
+    store.register_thread_wake_handler("th-1", lambda sid, r: first.append(r.content))
+    store.register_thread_wake_handler("th-1", lambda sid, r: second.append(r.content))
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.append_report(session.session_id, content="latest")
+    assert second == ["latest"]
+    assert first == []
+
+
+def test_thread_handler_failure_is_swallowed(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    def boom(sid: str, report: SubagentReport) -> None:
+        raise RuntimeError("wake scheduler down")
+
+    store.register_thread_wake_handler("th-1", boom)
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    delivered = store.append_report(session.session_id, content="still saved")
+    assert delivered is not None
+    assert delivered.reports[-1].content == "still saved"
+
+
+def test_thread_handler_not_fired_when_budget_exhausted(tmp_path: Path) -> None:
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions", max_consecutive_wakes=1
+    )
+    seen: list[str] = []
+    store.register_thread_wake_handler("th-1", lambda sid, r: seen.append(r.content))
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.append_report(session.session_id, content="wake-1")
+    store.append_report(session.session_id, content="wake-2")
+    assert seen == ["wake-1"]
+
+
+def test_thread_handler_queued_while_thread_busy(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    seen: list[str] = []
+    store.register_thread_wake_handler("th-1", lambda sid, r: seen.append(r.content))
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.mark_thread_busy("th-1")
+    store.append_report(session.session_id, content="mid-turn")
+    assert seen == []
+    store.mark_thread_idle("th-1")
+    store.append_report(session.session_id, content="after")
+    assert seen == ["after"]

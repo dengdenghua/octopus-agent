@@ -248,6 +248,15 @@ class SubagentSessionStore:
         # report landing mid-turn queues for every session that thread owns,
         # including ones created during the turn.
         self._busy_threads: set[str] = set()
+        # Per-thread wakeup hook registry (dsh ``reportDelivery: 'wakeup'``
+        # production half): a host that holds a thread's active connection /
+        # emitter registers here; ``append_report`` dispatches a wakeup report
+        # to the registered handler so the parent can plan a new turn. Falls
+        # back to the single constructor ``on_report`` when no per-thread
+        # handler is registered. Live state only; best-effort on failure.
+        self._thread_wake_handlers: dict[
+            str, Callable[[str, SubagentReport], None]
+        ] = {}
 
     def _path_for(self, session_id: str) -> Path | None:
         if self._base_dir is None:
@@ -471,6 +480,34 @@ class SubagentSessionStore:
         except OSError:
             logger.warning("subagent session %s write failed", session.session_id, exc_info=True)
 
+    def register_thread_wake_handler(
+        self,
+        thread_id: str,
+        handler: Callable[[str, SubagentReport], None],
+    ) -> None:
+        """Register the parent turn's wakeup hook for one thread.
+
+        The host (realtime gateway / controller) that owns a thread's active
+        connection registers here so a ``wakeup`` child report can reach it.
+        Replaces any prior handler for the thread; ``None`` is not accepted
+        (use :meth:`unregister_thread_wake_handler`). Idempotent and
+        thread-safe.
+        """
+        with self._lock:
+            self._thread_wake_handlers[thread_id] = handler
+
+    def unregister_thread_wake_handler(self, thread_id: str) -> None:
+        """Drop the thread's wakeup hook (no-op when not registered)."""
+        with self._lock:
+            self._thread_wake_handlers.pop(thread_id, None)
+
+    def registered_thread_wake_handler(
+        self, thread_id: str
+    ) -> Callable[[str, SubagentReport], None] | None:
+        """Return the thread's registered wakeup hook, or ``None``."""
+        with self._lock:
+            return self._thread_wake_handlers.get(thread_id)
+
     def append_report(
         self,
         session_id: str,
@@ -526,10 +563,17 @@ class SubagentSessionStore:
             self._write_locked(session)
             delivered = _copy_session(session)
         # A wake fires only when the report actually woke the parent (budget
-        # allowed) — a budget-exhausted downgrade stays quiet.
-        if effective_delivery == "wakeup" and self._on_report is not None:
+        # allowed) — a budget-exhausted downgrade stays quiet. A per-thread
+        # handler registered by the host (dsh production wiring) takes
+        # precedence; the single constructor ``on_report`` is the fallback.
+        wake_handler = None
+        if effective_delivery == "wakeup":
+            wake_handler = self.registered_thread_wake_handler(session.thread_id)
+            if wake_handler is None:
+                wake_handler = self._on_report
+        if wake_handler is not None:
             try:
-                self._on_report(session_id, report)
+                wake_handler(session_id, report)
             except Exception:  # noqa: BLE001 — notification is best-effort
                 logger.warning("subagent report wakeup hook failed", exc_info=True)
         elif effective_delivery == "queued":
