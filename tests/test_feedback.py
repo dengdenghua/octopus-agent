@@ -12,7 +12,6 @@ import pytest
 from runtime.memory.threads.feedback import (
     FEEDBACK_TAGS,
     FeedbackStore,
-    FeedbackType,
     MessageFeedback,
 )
 

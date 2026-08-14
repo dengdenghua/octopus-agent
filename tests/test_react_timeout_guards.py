@@ -6,8 +6,6 @@ tools are timing out repeatedly and suggest policy adjustments.
 
 from __future__ import annotations
 
-import pytest
-
 from runtime.core.cerebrum.react_timeout_guards import (
     _consecutive_timeout_guard,
     _timeout_policy_guard,
@@ -211,7 +209,10 @@ class TestIntegration:
             {"action": "exec_shell(make build)", "observation": "Compilation timed out after 120s"},
             {"action": "read_file(config.mk)", "observation": "content..."},
             {"action": "exec_shell(make build --jobs=1)", "observation": "timed out"},
-            {"action": "exec_shell(make build --quiet)", "observation": "Command exceeded time limit"},
+            {
+                "action": "exec_shell(make build --quiet)",
+                "observation": "Command exceeded time limit",
+            },
         ]
 
         # Should detect the pattern (3 exec_shell timeouts in window of 5)

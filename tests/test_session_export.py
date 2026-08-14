@@ -5,10 +5,6 @@ DSH P2 feature parity: export tests.
 
 from __future__ import annotations
 
-import json
-
-import pytest
-
 from runtime.memory.threads.session_export import export_thread_to_markdown
 
 
@@ -221,9 +217,7 @@ class TestExportMultipart:
             },
             {
                 "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "The server runs on port 8000."}
-                ],
+                "content": [{"type": "text", "text": "The server runs on port 8000."}],
             },
         ]
 

@@ -5,12 +5,11 @@ DSH P2 feature parity: session-query tests.
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from runtime.memory.threads.session_search import SearchResult, SessionSearchIndex
+from runtime.memory.threads.session_search import SessionSearchIndex
 
 
 class TestSessionSearchIndex:
