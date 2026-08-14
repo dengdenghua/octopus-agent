@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十五个差距点已落地为可测试代码(1-25 节)
+**状态**: 二十六个差距点已落地为可测试代码(1-26 节)
 
 ---
 
@@ -359,12 +359,12 @@ dsh ``@deepseek-ai/dsh-goal`` 的完整移植:目标是一等公民的持久化�
   其升级路径——目标从「决策事件」变成「可暂停/阻塞/恢复/完成的
   durable 对象」,后续可把 curriculum 决策接到 ``GoalService`` 上。
 
-### 尚未覆盖(dsh 有而这里没有)
+### 已收口
 
-- dsh 的 ``goal/changed`` 实时事件广播(scope-filtered)——需要事件桥接
-  层配合,列为后续。
-- 轮次记账尚未接真实 human 消息事件(本项目 journal 没有 dsh 的
-  ``user/message`` 事件类型;fold 的校验已就位,接上即可启用)。
+- dsh 的 ``goal/changed`` 实时事件广播(scope-filtered)——第 19/23 节
+  已落地(``GoalChanged`` 事件桥 + 按 agent/会话过滤的分发)。
+- 轮次记账接真实 human 消息事件——第 26 节已落地
+  (``user/message`` journal 事件 + fold 轮次校验打通)。
 ## 16. Subagent report 闭环 (`subagents/sessions.py` + `bridge.py`)
 
 dsh ``tool-subagent-report`` 的「子→父」投递通道:continuable 子代理共享
@@ -680,6 +680,35 @@ dsh 的 ``@dsh-session-reference`` 在把**别的会话**的上下文注入当�
 - 弱引用生命周期:dsh 的 ``spentWakes`` 是 ``WeakMap``(session 替换即
   满预算);我们用 ``dict`` 按 session_id 记,会话结束由调用方决定是否
   清除。
+## 26. durable ``user/message`` journal 事件 (`runtime/memory/journal/`)
+
+第 15 节留下的最后一块缺环:fold 早就能校验「goal 来源消息必须是当前
+revision 的下一个轮次」,但 journal 一直没有 dsh 的 ``user/message``
+事件类型,轮次记账无从写入。本轮补上事件模型与写入路径,goal 回合
+计数从「理论校验」变成「真实可审计的事件流」:
+
+- ``_journal_models.py``:``JournalEventType`` 新增 ``"user/message"``;
+  ``UserMessageEvent(event_type="user/message", text="", goal_source=None)``
+  ——``goal_source`` 承载 dsh ``GoalMessageSource`` 形状
+  (``{"kind":"goal","goalId":...,"revision":...,"round":...}``),无归属的
+  普通消息 fold 忽略、只当转录条目。
+- ``_journal_parse.py``:``_EVENT_CLASSES["user/message"]`` 注册,JSONL
+  写入→读回无损,重启重放可重建轮次。
+- ``_journal_base.py``:``Journal.write_user_message(text, *,
+  goal_source=None)``,仿 ``write_goal_change`` 带
+  ``agent_id/conversation_id`` 自动填充。
+- ``fold.py``:``apply_goal_event`` 的 ``user/message`` 分支在
+  ``data.source`` 缺失时回退读 ``getattr(event, "goal_source", None)``,
+  同时兼容带类型事件对象与裸 dict 两种入参。
+- 测试:``tests/test_user_message_event.py`` 7 用例(事件类注册、JSONL
+  回环、轮次记账 1→2→3、乱序第 3 轮拒绝 GOAL_INVALID_TRANSITION、
+  无归属忽略、非 goal source 忽略、超 maxGoalRounds 拒绝)。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 回合级 transcript 逐事件桥:sub_tool_start/sub_text_delta 等回合内
+  子事件还没喂 session 日志;目前 step/tool 粒度是有的,回合内流式
+  细节仍是调用方直接拼 prompt,未全部入日志。
 ## 用法速查
 
 ```bash

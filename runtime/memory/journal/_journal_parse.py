@@ -11,6 +11,7 @@ from ._journal_models import (
     CurriculumGoalDecisionEvent,
     FileOpEvent,
     FileRollbackEvent,
+    GoalChangeEvent,
     ImmuneEvent,
     JournalEvent,
     McpProposalDecisionEvent,
@@ -31,6 +32,7 @@ from ._journal_models import (
     ToolEffectIntentEvent,
     ToolEffectReconciliationEvent,
     TrajectoryEvent,
+    UserMessageEvent,
 )
 
 _EVENT_CLASSES: dict[str, type[JournalEvent]] = {
@@ -57,6 +59,8 @@ _EVENT_CLASSES: dict[str, type[JournalEvent]] = {
     "mcp_proposal_decision": McpProposalDecisionEvent,
     "protocol_drift_decision": ProtocolDriftDecisionEvent,
     "file_rollback": FileRollbackEvent,
+    "goal_change": GoalChangeEvent,
+    "user/message": UserMessageEvent,
     "sub_tool_start": SubToolStartEvent,
     "sub_tool_end": SubToolEndEvent,
     "browser_artifact": BrowserArtifactEvent,

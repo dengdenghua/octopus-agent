@@ -47,6 +47,8 @@ JournalEventType = Literal[
     "sub_tool_start",
     "sub_tool_end",
     "browser_artifact",
+    "goal_change",
+    "user/message",
 ]
 
 
@@ -275,6 +277,33 @@ class SkillProposalDecisionEvent(JournalEvent):
     decision: str = ""
     reason: str = ""
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class GoalChangeEvent(JournalEvent):
+    """Durable CAS-guarded goal mutation (dsh ``goal/change``).
+
+    ``change`` carries the raw dsh change dict — full next snapshot or clear
+    tombstone with kind/version/operation — so the pure fold in
+    ``runtime.memory.goals.fold`` can decode it losslessly on replay.
+    """
+
+    event_type: Literal["goal_change"] = "goal_change"
+    change: dict[str, Any] = Field(default_factory=dict)
+
+
+class UserMessageEvent(JournalEvent):
+    """Durable human message (dsh ``user/message``).
+
+    ``goal_source`` carries dsh ``GoalMessageSource`` attribution
+    (``{"kind": "goal", "goalId": ..., "revision": ..., "round": ...}``)
+    when the message continues an active goal; the goal fold validates
+    it as the exact next admitted round. Messages without a source are
+    plain transcript entries the fold ignores.
+    """
+
+    event_type: Literal["user/message"] = "user/message"
+    text: str = ""
+    goal_source: dict[str, Any] | None = None
 
 
 class CurriculumGoalDecisionEvent(JournalEvent):

@@ -20,6 +20,7 @@ from ._journal_models import (
     BudgetEvent,
     CurriculumGoalDecisionEvent,
     FileOpEvent,
+    GoalChangeEvent,
     ImmuneEvent,
     JournalEvent,
     JournalEventType,
@@ -39,6 +40,7 @@ from ._journal_models import (
     ToolEffectIntentEvent,
     ToolEffectReconciliationEvent,
     TrajectoryEvent,
+    UserMessageEvent,
 )
 from .journal_context import (
     current_agent_id,
@@ -696,6 +698,36 @@ class Journal:
                 actor=actor,
                 component=component,
                 reason=reason,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
+
+    def write_goal_change(self, change: dict[str, Any]) -> None:
+        """Append one CAS-guarded goal mutation (dsh ``goal/change``)."""
+        self.write(
+            GoalChangeEvent(
+                change=change,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
+
+    def write_user_message(
+        self,
+        text: str,
+        *,
+        goal_source: dict[str, Any] | None = None,
+    ) -> None:
+        """Append one human message (dsh ``user/message``).
+
+        ``goal_source`` (optional dsh ``GoalMessageSource``) lets the goal
+        fold count this message as the next admitted continuation round.
+        """
+        self.write(
+            UserMessageEvent(
+                text=text,
+                goal_source=goal_source,
                 agent_id=current_agent_id(),
                 conversation_id=current_conversation_id(),
             )
