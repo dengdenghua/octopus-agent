@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十二个差距点已落地为可测试代码(1-22 节)
+**状态**: 二十三个差距点已落地为可测试代码(1-23 节)
 
 ---
 
@@ -567,6 +567,42 @@ dsh 的 ``compaction/prune`` shadow-price 协议:每次修剪替换时,在替换
   更松的桥,将来若引入 priced surface 可把 sink 换成 fold。
 - 角色/块级结构开销(dsh ``BLOCK_OVERHEAD`` / ``ROLE_OVERHEAD``):
   我们按纯文本 span 计价,整条消息框架开销不适用。
+## 23. goal scope-filtered 分发 + journal 事件桥 (`goals/service.py`)
+
+收口第 19 节「尚未覆盖」的两块:dsh 把 ``goal/changed`` 定向路由给目标
+agent(`agentEvents(ctx, agent).emit('goal/changed', ...)`),并让目标状态
+对同 journal 上的其他 writer 可读(事件桥)。本轮补上:
+
+- `GoalChanged` 增 ``agent_id`` / ``conversation_id`` 字段:载荷携带
+  owning scope,与 dsh 一致;服务构造时传入自身 scope,并镜像到每条
+  写入的 ``goal_change`` 事件与每条广播。
+- `GoalService.subscribe(callback, *, agent_id, conversation_id, replay)`
+  :``_GoalFilter``(frozen dataclass)按 scope 过滤,命中才投递;
+  无过滤的订阅者是 wildcard,仍收全量事件。``replay=True`` 时对新订阅
+  者按 journal 顺序补发已提交的 ``goal_change``(晚订阅/重启后追平)。
+- journal 事件桥:构造时用 ``type(journal).subscribe is not Journal.subscribe``
+  判断 live fan-out(``StreamingJournal`` 覆写了 ``subscribe``,基类是
+  no-op);live 时经 ``journal.subscribe(self._on_journal_event)`` 订阅,
+  ``_write`` 不再自行 notify(靠广播,避免重复),同一 journal 上任何
+  writer 的 goal 变更都广播到本服务订阅者;基类 journal 回退到进程内
+  直接 notify。malformed 的 ``goal_change`` 由 ``_decode_journal_change``
+  捕获跳过,绝不影响桥或后续事件。
+- `current()`(CAS 守卫)改用 ``_scoped_goal_events()``:按服务自身
+  scope 过滤事件后再 fold,共享 journal 上其他 writer 的目标不与该服务
+  的 CAS 冲突;无 scope 服务保留原全局 fold。
+- 测试:`tests/test_goal_domain.py` 新增 8 用例(scope 过滤命中/跳过的
+  create/edit/clear 载荷、跨 writer 定向分发、跨 writer scope 隔离、
+  自身写入不重复通知、replay 追平顺序、replay 尊重 scope 过滤、桥容忍
+  malformed 事件)+ 既有 33 用例全绿;ruff/invariant 干净;``-k "goal or
+  journal"`` 回归 268 项通过。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 分页/流式 goal surface:dsh 的目标在 session surface 上有 fold 与
+  时间线视图;我们目前只有单目标 fold + 广播,多目标历史归档未接。
+- ``replay`` 无跨 writer wildcard 语义:回放仍读全量事件再按订阅过滤,
+  与 live 桥的 wildcard 行为一致;若将来要把服务绑定死单 agent,可把
+  回放也切到 ``_scoped_goal_events``。
 ## 用法速查
 
 ```bash
