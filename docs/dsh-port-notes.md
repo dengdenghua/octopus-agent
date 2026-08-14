@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 五十个差距点已落地为可测试代码(1-50 节)
+**状态**: 五十一个差距点已落地为可测试代码(1-51 节)
 
 ---
 
@@ -1510,6 +1510,55 @@ URI 原语就绪后,差的最后一环是宿主 UI:键入 ``@`` 弹层里没有�
   降级、assembly frame 在问题之前、空白 frame 跳过);
   reference/projection/react/realtime 关联 510 项全绿,ruff/invariant
   干净。
+
+## 51. 外部 hooks.json 桥(`runtime/safety/hooks/external_bridge.py`)
+
+dsh 的 hooks 家族把 Claude Code / Codex 的 ``hooks.json`` 方言桥接到
+宿主拦截点,让用户**不改配置**就能复用已有外部 shell 钩子。我们已有
+进程内 hook 注册表(``register_hook``)与自定义声明式配置,但没有行业
+方言兼容。本轮移植 dsh ``hook-protocol`` + 两个方言桥的核心:
+
+- **matcher 语义**(``matcher_diagnostic`` / ``matches_matcher``):缺省/
+  空/``*`` 匹配全部;claude 方言把纯 ``[A-Za-z0-9_|]+`` 当字面量管道
+  备选、其余当非锚定 regex;codex 方言一律非锚定 regex;非法 regex
+  永不匹配、解析期以稳定诊断拒绝。
+- **codec**(``parse_hook_output``):exit 2 以 stderr 阻塞;其他非零
+  exit 是非阻塞错误;仅干净退出时解析结构化 stdout(malformed JSON
+  宽松忽略);legacy 顶层 ``decision`` 只认 ``approve``/``block``,
+  ``permissionDecision``(allow/deny/ask)覆盖之。
+- **执行**(``run_external_hook``):JSON 载荷进 stdin(claude 尾随换行、
+  codex 无),``${CLAUDE_PROJECT_DIR}``/``${CLAUDE_PLUGIN_ROOT}`` 替换
+  与 ``CLAUDE_PROJECT_DIR`` 导出,per-hook 超时(默认 600s,dsh
+  ``DEFAULT_HOOK_TIMEOUT_MS``),超时/基础设施故障一律非阻塞,永不
+  向 agent 循环抛错。
+- **配置面**(``parse_external_hooks``):``{"version":1,"hooks":
+  {"PreToolUse":[{"matcher":...,"hooks":[{"type":"command","command":
+  ...}]}]}}`` 双方言同形;只跑 ``command`` 钩子,其余类型/非法 matcher/
+  未知事件带原因跳过(fail-soft)。
+- **决策映射**:block/deny → ``HookDecision.cancel``;ask → 交给运行时
+  自己的审批管线;``modifiedPrompt``/``modifiedInput`` 直接生效(dsh
+  暂缓 input 改写,我们注册表原生支持);UserPromptSubmit 的
+  ``additionalDirectives`` 追加进 prompt(Claude 续写接缝),其余事件
+  记录警告不注入。
+- **接线**:``register_external_hooks`` 发现顺序 env
+  ``OCTOPUS_HOOKS_JSON`` → home/进程 cwd 的 ``.claude/hooks.json`` 与
+  ``.codex/hooks.json``(按路径猜方言),按 (resolved path, dialect)
+  去重;``create_app`` 启动时注册一次,坏配置只告警不挡启动。
+- 测试:``tests/test_external_hooks_bridge.py`` 20 用例(matcher 双方言
+  语义、codec 全部出口、配置解析与跳过原因、payload 形状、全局注册表
+  端到端 dispatch(UserPromptSubmit block/modifiedPrompt、PreToolUse
+  modifiedInput + matcher 不匹配不触发、PostToolUse exit2 阻塞、失败
+  钩子降级 pass-through)、超时非阻塞、claude 尾随换行、env 发现去重);
+  hooks/safety/tool-edge 关联 59 项全绿,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- ``hook/invoked`` + ``hook/result`` 会话日志事件:dsh 把每次钩子调用
+  落进 session 日志(带 stderr 摘要截断);我们尚未写事件行。
+- ``dispatch_stop`` / ``dispatch_session_start`` 仍无生产调用方(网关
+  生命周期接线,与 ``on_report`` 同属热区);桥已注册处理器,触发点
+  接通即生效。
+- detached 运行链的 quiescence drain(dsh ``createDetachedRuns``)。
 
 ## 用法速查
 

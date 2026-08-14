@@ -111,6 +111,21 @@ def create_app(
         oct_jwt_secret=oct_jwt_secret,
         local_auth_config=local_auth_config,
     )
+    # Industry hooks.json bridges (dsh hook-protocol): load unmodified
+    # Claude Code / Codex hooks.json files into the hook registry so
+    # existing external shell hooks keep working. Best-effort — a missing
+    # or malformed config never blocks startup.
+    try:
+        from runtime.safety.hooks.external_bridge import register_external_hooks
+
+        register_external_hooks()
+    except Exception:  # noqa: BLE001 — external hooks are optional
+        import logging
+
+        logging.getLogger("runtime.safety.hooks").debug(
+            "external hooks registration skipped",
+            exc_info=True,
+        )
     wire_stack(ctx, journal_path=journal_path, subagent_registry=subagent_registry)
     mount_health(
         ctx,
