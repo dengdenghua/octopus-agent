@@ -218,10 +218,18 @@ export const jaJP: Translations = {
     todoAndContext: "ToDo とコンテキスト",
     expandable: "展開可能",
     agentCluster: "Agent クラスタ",
+    agentProgressSummary: (total, completed, errors) =>
+      [
+        `${total} 個のサブ Agent`,
+        completed > 0 ? `${completed} 完了` : "",
+        errors > 0 ? `${errors} エラー` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "詳細を開く",
     completedSteps: (n: number) => `${n} 件のステップを完了`,
     completedThings: (n: number) => `${n} 件完了`,
-    statusViewing: "表示中",
+    statusViewing: "実行中",
     statusCompleted: "完了",
     statusError: "エラー",
     statusWaiting: "待機中",
@@ -617,6 +625,7 @@ export const jaJP: Translations = {
     },
     thinkingDuration: (value: string) => `${value} 考えました`,
     thinking: "考え中",
+    thinkingProcess: "思考プロセス",
     deepThinking: "深い思考",
   },
 
@@ -1257,6 +1266,7 @@ export const jaJP: Translations = {
     noneYet: "まだありません",
     eventsCount: (count) => `${count} 件`,
     agentClusterCreateAssistant: "Agent クラスター - アシスタント作成",
+    roleCard: "ロールカード",
     backToRoleCard: "ロールカードに戻る",
     roleDescription: "役割の説明",
     noFullRoleDescription: "完全な役割説明はまだありません。",
@@ -1330,6 +1340,8 @@ export const jaJP: Translations = {
     noTaskDescription: "タスク説明がまだありません。",
     waitingForSubagentOutput: "サブエージェントの出力を待機中",
     processReplay: "プロセスリプレイ",
+    subagentConversation: "サブエージェントの会話",
+    mainDelegatedTask: "メインエージェントから委任されたタスク",
     processRecords: (count) => `${count} 件のプロセス記録`,
     iterationRounds: (count) => `${count} ラウンド`,
     computerViewSubtitle: "サブエージェントを選択してコンピュータを表示",

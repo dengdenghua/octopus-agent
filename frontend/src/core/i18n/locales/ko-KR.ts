@@ -218,10 +218,18 @@ export const koKR: Translations = {
     todoAndContext: "할 일 및 컨텍스트",
     expandable: "펼칠 수 있음",
     agentCluster: "Agent 클러스터",
+    agentProgressSummary: (total, completed, errors) =>
+      [
+        `하위 Agent ${total}개`,
+        completed > 0 ? `${completed}개 완료` : "",
+        errors > 0 ? `${errors}개 오류` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "자세히 열기",
     completedSteps: (n: number) => `${n}개 단계 완료`,
     completedThings: (n: number) => `${n}건 완료`,
-    statusViewing: "보기 중",
+    statusViewing: "실행 중",
     statusCompleted: "완료됨",
     statusError: "오류",
     statusWaiting: "대기 중",
@@ -613,6 +621,7 @@ export const koKR: Translations = {
     },
     thinkingDuration: (value: string) => `${value} 생각했습니다`,
     thinking: "생각 중",
+    thinkingProcess: "사고 과정",
     deepThinking: "심층 사고",
   },
 
@@ -1244,6 +1253,7 @@ export const koKR: Translations = {
     noneYet: "아직 없음",
     eventsCount: (count) => `${count}건`,
     agentClusterCreateAssistant: "Agent 클러스터 - 어시스턴트 만들기",
+    roleCard: "역할 카드",
     backToRoleCard: "역할 카드로 돌아가기",
     roleDescription: "역할 설명",
     noFullRoleDescription: "전체 역할 설명이 아직 없습니다.",
@@ -1316,6 +1326,8 @@ export const koKR: Translations = {
     noTaskDescription: "작업 설명이 없습니다.",
     waitingForSubagentOutput: "서브 에이전트 출력 대기 중",
     processReplay: "프로세스 다시 보기",
+    subagentConversation: "서브 에이전트 대화",
+    mainDelegatedTask: "메인 에이전트가 위임한 작업",
     processRecords: (count) => `${count}건 과정 기록`,
     iterationRounds: (count) => `${count}회`,
     computerViewSubtitle: "서브에이전트를 선택하여 컴퓨터 보기",

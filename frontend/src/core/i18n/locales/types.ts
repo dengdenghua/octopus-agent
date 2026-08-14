@@ -162,6 +162,11 @@ export interface Translations {
     todoAndContext: string;
     expandable: string;
     agentCluster: string;
+    agentProgressSummary: (
+      total: number,
+      completed: number,
+      errors: number,
+    ) => string;
     processDetails: string;
     completedSteps: (n: number) => string;
     completedThings: (n: number) => string;
@@ -535,6 +540,7 @@ export interface Translations {
     };
     thinkingDuration: (value: string) => string;
     thinking: string;
+    thinkingProcess: string;
     deepThinking: string;
   };
 
@@ -1073,6 +1079,7 @@ export interface Translations {
     noneYet: string;
     eventsCount: (count: number) => string;
     agentClusterCreateAssistant: string;
+    roleCard: string;
     backToRoleCard: string;
     roleDescription: string;
     noFullRoleDescription: string;
@@ -1138,6 +1145,8 @@ export interface Translations {
     noTaskDescription: string;
     waitingForSubagentOutput: string;
     processReplay: string;
+    subagentConversation: string;
+    mainDelegatedTask: string;
     processRecords: (count: number) => string;
     iterationRounds: (count: number) => string;
     computerViewSubtitle: string;

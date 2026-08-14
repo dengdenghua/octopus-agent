@@ -214,10 +214,18 @@ export const zhCN: Translations = {
     todoAndContext: "待办与上下文",
     expandable: "可展开",
     agentCluster: "Agent 集群",
+    agentProgressSummary: (total, completed, errors) =>
+      [
+        `${total} 个子 Agent`,
+        completed > 0 ? `${completed} 已完成` : "",
+        errors > 0 ? `${errors} 异常` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "展开线索",
     completedSteps: (n: number) => `已完成 ${n} 个步骤`,
     completedThings: (n: number) => `完成了 ${n} 件事`,
-    statusViewing: "查看中",
+    statusViewing: "运行中",
     statusCompleted: "已完成",
     statusError: "异常",
     statusWaiting: "等待中",
@@ -597,6 +605,7 @@ export const zhCN: Translations = {
     },
     thinkingDuration: (value: string) => `思考了 ${value}`,
     thinking: "思考中",
+    thinkingProcess: "思考过程",
     deepThinking: "深度思考",
   },
 
@@ -1220,6 +1229,7 @@ export const zhCN: Translations = {
     noneYet: "暂无",
     eventsCount: (count) => `${count} 条`,
     agentClusterCreateAssistant: "Agent 集群 - 创建助手",
+    roleCard: "角色卡",
     backToRoleCard: "返回角色卡",
     roleDescription: "角色说明",
     noFullRoleDescription: "暂无完整角色说明。",
@@ -1290,6 +1300,8 @@ export const zhCN: Translations = {
     noTaskDescription: "暂无任务说明。",
     waitingForSubagentOutput: "等待子智能体开始输出",
     processReplay: "过程回放",
+    subagentConversation: "子智能体对话",
+    mainDelegatedTask: "主控委派的任务",
     processRecords: (count) => `${count} 条过程记录`,
     iterationRounds: (count) => `${count} 轮`,
     computerViewSubtitle: "选择子智能体查看其独立电脑",

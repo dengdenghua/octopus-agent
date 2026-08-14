@@ -1,10 +1,8 @@
 import {
   ArrowLeftIcon,
   BotIcon,
-  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  CircleIcon,
   BrainCircuitIcon,
   FilePlus2Icon,
   FileTextIcon,
@@ -14,10 +12,9 @@ import {
   Loader2Icon,
   MonitorIcon,
   MoreHorizontalIcon,
-  PaperclipIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   agentPhaseDisplayTitle,
@@ -44,6 +41,7 @@ import {
   statusIcon,
   agentEventGroupId,
   DIFF_TAB_LABEL,
+  roleDescription,
 } from "./agent-workbench-utils";
 import {
   type AgentWorkbenchProcessEventSnapshot,
@@ -51,7 +49,6 @@ import {
 } from "./agent-workbench-events";
 import { useSubtask } from "@/core/tasks/context";
 import { SubtaskHoverPreview } from "./messages/parallel-subtasks-grid";
-import { MarkdownContent } from "./messages/markdown-content";
 import {
   Tooltip,
   TooltipContent,
@@ -835,7 +832,7 @@ function SummaryAgentRow({ tile }: { tile: AgentTile }) {
     emitAgentWorkbenchFocus({
       agentId: tile.id,
       tab: "agent",
-      view: "summary",
+      view: "role",
     });
   };
 
@@ -1833,11 +1830,22 @@ export function AgentCreationCard({
   const { t } = useI18n();
   const [showBrief, setShowBrief] = useState(false);
   const displayName = agent.codename ?? agent.name;
-  const roleName = friendlyRoleName(agent.role ?? agent.name);
-  const fullBrief = agent.prompt ?? agent.task ?? agent.lastThought ?? "";
+  // The role's name/说明 come from the backend built-in role catalog
+  // (BUILTIN_ROLES) when the spawn resolved to a known role; free-form role
+  // labels fall back to the frontend name/description maps. The delegated
+  // brief (task/prompt) is work info — only a last-resort fill so the card
+  // never renders empty.
+  const roleName =
+    agent.roleDisplayName ?? friendlyRoleName(agent.role ?? agent.name);
+  const roleBrief =
+    agent.roleDescription ?? roleDescription(agent.role ?? agent.name);
+  const fullBrief =
+    roleBrief ?? agent.prompt ?? agent.task ?? agent.lastThought ?? "";
   const motto =
-    agent.lastThought ??
+    roleBrief ??
     agent.task ??
+    agent.prompt ??
+    agent.lastThought ??
     agent.currentTool ??
     t.agentWorkbenchPages.defaultMotto;
   const active = agent.status === "running";

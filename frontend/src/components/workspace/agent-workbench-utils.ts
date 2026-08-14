@@ -38,6 +38,13 @@ export interface AgentTile {
   codename?: string;
   /** Sub-agent role label ("researcher" / "critic" / ...). */
   role?: string;
+  /** Authoritative display name from the backend built-in role catalog
+   * (BUILTIN_ROLES), e.g. "Code Reviewer". Absent for free-form labels the
+   * catalog doesn't recognise. */
+  roleDisplayName?: string;
+  /** Authoritative responsibility blurb from BUILTIN_ROLES. Absent when the
+   * role label is free-form. */
+  roleDescription?: string;
   specIndex?: number;
   taskLabel?: string;
   parentToolUseId?: string;
@@ -158,6 +165,46 @@ export const ROLE_AVATAR: Record<string, string> = {
   generator: "✨",
 };
 export const DEFAULT_AVATAR = "🐙";
+
+// Role → one-line description of what the role does. The nameplate
+// (角色卡) is each role's 说明 (identity/responsibility), not the turn's
+// work brief — so this is the primary copy, and the delegated task/prompt
+// only fills in as a fallback for roles we don't recognise.
+export const ROLE_DESCRIPTION: Record<string, string> = {
+  researcher:
+    "Investigates the question, gathers evidence, and reports findings.",
+  research:
+    "Investigates the question, gathers evidence, and reports findings.",
+  explorer: "Maps the unknown — explores the space and surfaces what is there.",
+  fact_checker: "Verifies claims against sources and flags inaccuracies.",
+  "fact-checker": "Verifies claims against sources and flags inaccuracies.",
+  critic: "Reviews work against the requirements and challenges weak points.",
+  reviewer: "Reviews work against the requirements and challenges weak points.",
+  security: "Audits for security risks and unsafe patterns.",
+  "security-review": "Audits for security risks and unsafe patterns.",
+  performance: "Profiles and tunes for speed, memory, and throughput.",
+  style: "Polishes prose and presentation for clarity and tone.",
+  synthesizer: "Synthesizes many findings into one coherent conclusion.",
+  writer: "Drafts clear, well-structured prose and deliverables.",
+  architect: "Designs the structure and breaks the work into parts.",
+  designer: "Shapes interfaces and visual decisions.",
+  implementer: "Writes and wires up the actual implementation.",
+  coder: "Writes and wires up the actual implementation.",
+  reproducer: "Reproduces reported issues into minimal failing cases.",
+  hypothesizer: "Forms testable hypotheses from the evidence.",
+  verifier: "Runs checks and tests to confirm a change actually works.",
+  debugger: "Isolates and fixes defects.",
+  planner: "Lays out the plan, steps, and task breakdown.",
+  evaluator: "Judges results against criteria and scores them.",
+  generator: "Generates content and artifacts on demand.",
+};
+
+export function roleDescription(
+  role: string | undefined | null,
+): string | undefined {
+  if (!role || typeof role !== "string") return undefined;
+  return ROLE_DESCRIPTION[role.trim().toLowerCase()];
+}
 
 // ── Utility functions ─────────────────────────────────────────────────
 

@@ -221,11 +221,19 @@ export const enUS: Translations = {
     todoAndContext: "Todo & Context",
     expandable: "Expandable",
     agentCluster: "Agent Cluster",
+    agentProgressSummary: (total, completed, errors) =>
+      [
+        `${total} sub-agent${total === 1 ? "" : "s"}`,
+        completed > 0 ? `${completed} completed` : "",
+        errors > 0 ? `${errors} error${errors === 1 ? "" : "s"}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "Open details",
     completedSteps: (n: number) => `Completed ${n} step${n === 1 ? "" : "s"}`,
     completedThings: (n: number) =>
       `Completed ${n} ${n === 1 ? "thing" : "things"}`,
-    statusViewing: "Viewing",
+    statusViewing: "Running",
     statusCompleted: "Completed",
     statusError: "Error",
     statusWaiting: "Waiting",
@@ -632,6 +640,7 @@ export const enUS: Translations = {
     },
     thinkingDuration: (value: string) => `Thought for ${value}`,
     thinking: "Thinking",
+    thinkingProcess: "Thinking process",
     deepThinking: "Deep thinking",
   },
 
@@ -1277,6 +1286,7 @@ export const enUS: Translations = {
     noneYet: "None yet",
     eventsCount: (count) => `${count} events`,
     agentClusterCreateAssistant: "Agent Cluster - Create Assistant",
+    roleCard: "Role card",
     backToRoleCard: "Back to role card",
     roleDescription: "Role description",
     noFullRoleDescription: "No full role description available.",
@@ -1349,6 +1359,8 @@ export const enUS: Translations = {
     noTaskDescription: "No task description yet.",
     waitingForSubagentOutput: "Waiting for subagent output",
     processReplay: "Process replay",
+    subagentConversation: "Subagent conversation",
+    mainDelegatedTask: "Task delegated by the main agent",
     processRecords: (count) =>
       `${count} process record${count === 1 ? "" : "s"}`,
     iterationRounds: (count) => `${count} round${count === 1 ? "" : "s"}`,

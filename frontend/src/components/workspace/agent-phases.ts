@@ -51,8 +51,7 @@ export function deriveAgentPhases(
 } {
   const blocks = toWorkBlocks(events);
   const phases =
-    extractTodoPhases(events, blocks, options) ??
-    buildGenericPhases(blocks, options);
+    extractTodoPhases(events, blocks, options) ?? buildGenericPhases(blocks);
   const normalizedPhases = normalizePhaseOrdering(phases);
   const currentPhase = pickCurrentPhase(normalizedPhases);
   return { blocks, phases: normalizedPhases, currentPhase };
@@ -152,10 +151,7 @@ function extractTodoPhases(
   return markFailedTodoPhase(phases, options);
 }
 
-function buildGenericPhases(
-  blocks: WorkBlock[],
-  options: DeriveAgentPhasesOptions,
-): AgentPhase[] {
+function buildGenericPhases(blocks: WorkBlock[]): AgentPhase[] {
   if (blocks.length === 0) return [];
   const buckets: Array<{
     id: string;
@@ -196,15 +192,12 @@ function buildGenericPhases(
       id: bucket.id,
       title: bucket.title,
       titleKey: bucket.titleKey,
-      status: statusFromBlockList(bucket.blocks, options),
+      status: statusFromBlockList(bucket.blocks),
       blockIds: bucket.blocks.map((block) => block.id),
     }));
 }
 
-function statusFromBlockList(
-  blocks: WorkBlock[],
-  options: DeriveAgentPhasesOptions,
-): AgentPhaseStatus {
+function statusFromBlockList(blocks: WorkBlock[]): AgentPhaseStatus {
   // A settled turn is not completion evidence for a blocked/approval step.
   // Keep the waiting state visible until an explicit receipt (or a later
   // todo/phase update) marks it done. Otherwise an interrupted run paints the
@@ -298,11 +291,11 @@ export type BusinessAgentPhaseKey =
  * ("Analyzing requirements") instead of the raw technical wording. Returns
  * null when nothing matches — the raw title is shown unchanged.
  */
-export function businessAgentPhaseKey(title: string): BusinessAgentPhaseKey | null {
+export function businessAgentPhaseKey(
+  title: string,
+): BusinessAgentPhaseKey | null {
   const text = title.toLowerCase();
-  if (
-    /deploy|release|publish|ship|部署|上线|发布/.test(text)
-  ) {
+  if (/deploy|release|publish|ship|部署|上线|发布/.test(text)) {
     return "deploying";
   }
   if (

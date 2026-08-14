@@ -16,9 +16,10 @@ export type AgentWorkbenchTab =
   | "terminal"
   | "browser";
 
-/** Sub-view of the per-agent workbench page: "summary" is the activity
- * trace, "screen" is the agent's computer view. Omitted = panel default. */
-export type AgentWorkbenchFocusView = "summary" | "screen";
+/** Sub-view of the per-agent workbench page: "summary" is the overview,
+ * "screen" is the agent's independent process, "role" is the role card
+ * (工牌). Omitted = panel default. */
+export type AgentWorkbenchFocusView = "summary" | "screen" | "role";
 export type AgentWorkbenchEventView = "summary" | "trace" | "screen";
 export type AgentWorkbenchProcessEventKind = "thinking" | "execution";
 

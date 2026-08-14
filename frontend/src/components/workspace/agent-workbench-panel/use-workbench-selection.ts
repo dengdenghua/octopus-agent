@@ -12,12 +12,8 @@ import {
   getTimelineLinkageState,
   subscribeTimelineLinkage,
 } from "@/core/threads/timeline-linkage";
+import { pickCurrentWorkBlock, progressForWorkBlocks } from "../work-blocks";
 import {
-  pickCurrentWorkBlock,
-  progressForWorkBlocks,
-} from "../work-blocks";
-import {
-  isAgentCreationBlock,
   agentTileForBlock,
   findAgentTileByFocusId,
 } from "../agent-workbench-pages";
@@ -42,7 +38,7 @@ type WorkbenchSelectionInput = {
   phases: AgentPhase[];
   agentTiles: AgentTile[];
   focusedAgentId?: string | null;
-  focusedAgentView?: "summary" | "screen" | null;
+  focusedAgentView?: "summary" | "screen" | "role" | null;
   focusedAgentNonce?: number;
   focusedEventId?: string | null;
   focusedEventKind?: AgentWorkbenchProcessEventKind | null;
@@ -77,7 +73,7 @@ export function useWorkbenchSelection({
   );
   const [manualBlockSelection, setManualBlockSelection] = useState(false);
   const [activityView, setActivityView] = useState<
-    "summary" | "trace" | "screen"
+    "summary" | "trace" | "screen" | "role"
   >("summary");
 
   const phaseBlocks = useMemo(
@@ -112,9 +108,6 @@ export function useWorkbenchSelection({
     selectedAgentId && selectableAgentIds.has(selectedAgentId)
       ? (agentTiles.find((agent) => agent.id === selectedAgentId) ?? null)
       : null;
-  const creationFocusAgent = isAgentCreationBlock(selectedBlock)
-    ? agentTileForBlock(selectedBlock, agentTiles)
-    : undefined;
   const screenBlocks = useMemo(
     () => screenBlocksForAgent(blocks, selectedAgent?.id ?? null),
     [blocks, selectedAgent?.id],
@@ -201,7 +194,9 @@ export function useWorkbenchSelection({
       setSelectedEffectKey(null);
       setSelectedAgentId(agentId);
       setSelectedRosterSeatId(null);
-      setActivityView("screen");
+      // Workbench roster clicks introduce the role. Conversation clicks carry
+      // an explicit screen intent and land on the independent conversation.
+      setActivityView("role");
       setManualBlockSelection(false);
       onSelectTab?.("agent");
     },
@@ -365,7 +360,6 @@ export function useWorkbenchSelection({
     selectedBlock,
     locatableTranscriptEventId,
     selectedAgent,
-    creationFocusAgent,
     screenBlocks,
     mainBlocks,
     mainPhases,

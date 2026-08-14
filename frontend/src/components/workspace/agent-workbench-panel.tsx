@@ -2,7 +2,6 @@ import {
   ArrowLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
-  EyeIcon,
   GlobeIcon,
   PackageIcon,
   SparklesIcon,
@@ -44,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { CoworkCollabBar } from "./cowork-collab-bar";
 import { CollaborationSessionPanel } from "./collaboration-session-view";
 import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
+import type { StreamdownProps } from "streamdown";
 import type { AgentWorkbenchTabId, DiffEntry } from "./agent-workbench-utils";
 import { useAgentWorkbenchI18n } from "./use-agent-workbench-i18n";
 import { AgentDiffPage } from "./agent-workbench-pages";
@@ -60,7 +60,6 @@ import { BrowserTabPage } from "./agent-workbench-panel/browser-tab-page";
 import { AgentKanbanView } from "./agent-workbench-panel/agent-kanban-view";
 import type { WorkbenchRosterSeat } from "./agent-workbench-panel/helpers";
 import { useWorkbenchSelection } from "./agent-workbench-panel/use-workbench-selection";
-import { ArtifactPanel } from "./artifacts/artifact-panel";
 
 // Re-export items that were exported from the original file
 export { hasAgentWorkbenchContent, __testing } from "./agent-workbench-utils";
@@ -118,7 +117,7 @@ function AgentWorkbenchPanelImpl({
   focusedAgentId?: string | null;
   /** Which activity view a focusedAgentId intent lands on; defaults to the
    * live computer screen when the caller doesn't say. */
-  focusedAgentView?: "summary" | "screen" | null;
+  focusedAgentView?: "summary" | "screen" | "role" | null;
   /** Bumped by the parent on every focus emission. Without it, a second
    * intent for the same agent (e.g. 查看过程 then 查看电脑 on one row) would be
    * swallowed by the consume-once guard below. */
@@ -238,7 +237,6 @@ function AgentWorkbenchPanelImpl({
     setActivityView,
     locatableTranscriptEventId,
     selectedAgent,
-    creationFocusAgent,
     screenBlocks,
     mainBlocks,
     mainPhases,
@@ -459,29 +457,16 @@ function AgentWorkbenchPanelImpl({
       browserPreviewBlocks={browserPreviewBlocks}
     />
   );
-  // "电脑视图" is a visual replay surface, not another spelling of the
-  // activity list. Do not show it for ordinary file/search work merely
-  // because the agent has run some tools.
-  const hasComputerActivity =
-    Boolean(selectedAgent) ||
-    Boolean(selectedRosterSeat) ||
-    activeScreenBlocks.some((block) => block.kind === "browser") ||
-    canShowDeployedPreview ||
-    canShowInlinePreview;
-  // The main conversation is already the narrative timeline. A second,
-  // identical tool-by-tool trace in the workbench only earns its place once
-  // the user enters an independent agent's workstation.
-  const hasIndependentTrace = Boolean(
-    selectedAgent || (selectedRosterSeat && activeScreenBlocks.length > 0),
-  );
-  const effectiveActivityView =
-    activityView === "screen" && hasComputerActivity
-      ? "screen"
+  // The main conversation owns the global execution narrative. A selected
+  // sub-agent may still open its own computer: a complete, isolated streaming
+  // conversation rather than a duplicate mixed activity trace.
+  const effectiveActivityView: "summary" | "screen" | "role" = selectedAgent
+    ? activityView === "role"
+      ? "role"
       : activityView === "screen"
-        ? "summary"
-        : activityView === "trace" && !hasIndependentTrace
-          ? "summary"
-          : activityView;
+        ? "screen"
+        : "summary"
+    : "summary";
 
   // Workbench view: summary / computer view.
   if (emptyShell && !selectedEffectKey && !focusedProcessEvent) {
@@ -520,29 +505,21 @@ function AgentWorkbenchPanelImpl({
   const agentKanbanPage = (
     <AgentKanbanView
       effectiveActivityView={effectiveActivityView}
-      hasIndependentTrace={hasIndependentTrace}
-      hasComputerActivity={hasComputerActivity}
       selectedRosterSeat={selectedRosterSeat}
       selectedAgent={selectedAgent}
-      creationFocusAgent={creationFocusAgent}
+      screenBlocks={screenBlocks}
+      currentScreenBlockId={screenFrame.block?.id ?? null}
       phases={phases}
       blocks={blocks}
       agentTiles={agentTiles}
       visibleDiffEntries={visibleDiffEntries}
-      rosterBlocks={rosterBlocks}
-      screenBlocks={screenBlocks}
-      screenFrame={screenFrame}
       focusedProcessEvent={focusedProcessEvent ?? null}
       focusedEventId={focusedEventId}
       progressOutline={progressOutline}
       userInput={userInput ?? null}
       groundingSources={effectiveGroundingSources}
       preferStructuredReferences={evidence.length > 0}
-      mainPhases={mainPhases}
-      mainRunState={mainRunState}
-      screenProgress={screenProgress}
       mainAgentName={mainAgentName}
-      currentPhaseTitle={currentPhase?.title ?? t.agentWorkbench.activityTrace}
       terminalState={
         runInterrupted ? "interrupted" : runFailed ? "failed" : null
       }
@@ -554,7 +531,6 @@ function AgentWorkbenchPanelImpl({
       onSelectTab={onSelectTab}
       onOpenArtifact={onOpenArtifact}
       openMainProcess={openMainProcess}
-      openSubagentProcess={openSubagentProcess}
       setSelectedBlockId={setSelectedBlockId}
       setManualBlockSelection={setManualBlockSelection}
       visibilityEvents={visibilityEvents}
@@ -814,10 +790,7 @@ function PreviewPane({
 }: {
   filepath: string;
   threadId: string;
-  streamdownPlugins: Pick<
-    import("streamdown").StreamdownProps,
-    "remarkPlugins" | "rehypePlugins"
-  >;
+  streamdownPlugins: Pick<StreamdownProps, "remarkPlugins" | "rehypePlugins">;
   onBack: () => void;
 }) {
   const { t } = useI18n();
