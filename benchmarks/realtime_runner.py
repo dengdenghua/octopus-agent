@@ -67,6 +67,8 @@ async def probe_realtime_endpoint(
                 additional_headers=headers,
                 open_timeout=timeout_seconds,
                 close_timeout=2.0,
+                ping_interval=None,
+                ping_timeout=None,
             ):
                 return
     except RealtimeEndpointError:
@@ -195,6 +197,14 @@ class RealtimeTrialRunner:
                     open_timeout=min(self.timeout_seconds, 30.0),
                     close_timeout=5.0,
                     max_size=16 * 1024 * 1024,
+                    # Default keepalive pings (20s/20s) turn a transient
+                    # server stall — GC pause, CPU saturation, a long tool
+                    # running on the same box — into a spurious 1011
+                    # disconnect mid-turn. Keep liveness detection but give
+                    # the server a generous pong grace period; the trial's
+                    # own timeout still bounds the whole turn.
+                    ping_interval=30.0,
+                    ping_timeout=90.0,
                 ) as websocket:
                     connected = True
                     await websocket.send(json.dumps(request, ensure_ascii=False))

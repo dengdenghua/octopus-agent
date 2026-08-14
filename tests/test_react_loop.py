@@ -2554,6 +2554,18 @@ def test_shell_command_location_is_not_misclassified_as_project_inspection() -> 
     assert _goal_requests_project_inspection(inspection_goal)
 
 
+def test_evaluation_request_is_project_inspection() -> None:
+    # Regression (thread tPO8mDlhtQev_grzsY1etH): "如何评价这个项目前端 UI UX 设计"
+    # was not recognized as a project-inspection request. 评价/点评/评审 and 这个
+    # 项目/这个仓库/这个代码库/前端/界面 were missing from the verb/target lists, so
+    # _code_mode_missing_inspection_tool_guard never armed and seven announce-only
+    # turns completed with zero tool calls.
+    assert _goal_requests_project_inspection("如何评价这个项目前端UI UX设计")
+    assert _goal_requests_project_inspection("评价一下这个仓库的代码质量")
+    assert _goal_requests_project_inspection("点评这个项目的架构与工程实践")
+    assert _goal_requests_project_inspection("评审一下这个代码库的整体设计")
+
+
 def test_read_only_progress_updates_do_not_require_code_mutation() -> None:
     goal = (
         "只读分析 runtime/core/cerebrum/react_loop.py 与 "
@@ -8779,6 +8791,37 @@ def test_guard_impasse_failed_retries_do_not_count_as_progress() -> None:
     assert _note_guard_impasse(state, "todo-protocol guard", fresh, rejection_limit=2) is True
 
 
+def test_guard_impasse_noop_actions_do_not_count_as_progress() -> None:
+    from runtime.core.cerebrum.react_loop import _note_guard_impasse
+
+    state: dict = {}
+    # The model keeps emitting ``Action: none`` plus a rejected final answer:
+    # one step per round but zero evidence. Before the fix those no-op steps
+    # reset the impasse counter, so the same guard rejected until the whole
+    # token budget burned. Now the third consecutive rejection trips.
+    noop = [
+        ReActStep(
+            iteration=i,
+            action="none",
+            observation="[language-verification guard] Cannot finish yet: ...",
+        )
+        for i in (1, 2, 3)
+    ]
+    assert _note_guard_impasse(state, "language-verification guard", noop) is False
+    assert _note_guard_impasse(state, "language-verification guard", noop) is False
+    assert _note_guard_impasse(state, "language-verification guard", noop) is True
+
+    # A genuinely new real action between rejections is still progress.
+    state.clear()
+    mixed = [
+        *noop,
+        ReActStep(iteration=4, action='write_text_file({"path": "a.py", "content": "x"})'),
+    ]
+    assert _note_guard_impasse(state, "language-verification guard", mixed) is False
+    assert _note_guard_impasse(state, "language-verification guard", mixed) is False
+    assert _note_guard_impasse(state, "language-verification guard", mixed) is True
+
+
 def test_soft_land_never_exposes_environment_or_guard_diagnostics() -> None:
     from runtime.core.cerebrum.react_final_answer_guards import _guard_soft_landing_answer
 
@@ -8859,6 +8902,68 @@ def test_effective_goal_does_not_resurrect_cancelled_execution() -> None:
         {"role": "user", "content": "不用继续了"},
     ]
     assert derive_effective_execution_goal("不用继续了", history) == "不用继续了"
+
+
+def test_effective_goal_carries_inspection_contract_across_announce_only_turns() -> None:
+    # Regression (thread tPO8mDlhtQev_grzsY1etH): 第 1 轮用户问"如何评价这个项目前端
+    # UI UX 设计",助手只回预告句("我先实际看一下前端代码再下结论…"),后续"再深度一点/
+    # 动手啊"等 steering 轮全部因为 _assistant_left_execution_open 不认这些口语化预告
+    # 动词(看/列/拆/摸/进入/动手),而接不回原目标,于是每轮都 announce-only 被标 completed。
+    from runtime.core.cerebrum.react_goal_analysis import (
+        _assistant_left_execution_open,
+        derive_effective_execution_goal,
+    )
+
+    announce_only = [
+        "我先实际看一下前端代码再下结论——扫一遍 `frontend/` 的结构、样式体系和关键页面，"
+        "给出有依据的评价。",
+        "抱歉，刚才只发了预告没动手。现在实际来看 `frontend/` 的结构、样式体系和关键页面。",
+        "好，往深挖。这次我看五个层面：① globals.css 的 token 细节；② workspace 布局壳。",
+        "直接推进：先把 `frontend/src` 的真实结构列出来，再锁定要深读的几个文件。",
+        "你说得对，前几轮我一直在准备深读而没有真正读——现在直接动手。先列出 `frontend/src` "
+        "的完整结构，再逐层拆 token、布局壳、会话页、可达性。",
+        "执行阶段前先进入理解阶段：当前 git 有 10 个未提交改动，同时摸清两个巨石文件的真实结构。",
+    ]
+    for text in announce_only:
+        assert _assistant_left_execution_open(text), text
+
+    original = "如何评价这个项目前端UI UX设计"
+    for steer in ("？", "再深度一点", "为什么不动手", "动手啊"):
+        history = [
+            {"role": "user", "content": original},
+            {"role": "assistant", "content": announce_only[0]},
+            {"role": "user", "content": steer},
+        ]
+        effective = derive_effective_execution_goal(steer, history)
+        assert original in effective
+        assert f"当前用户补充：{steer}" in effective
+
+
+def test_effective_goal_does_not_resurrect_after_delivered_report() -> None:
+    # A past-tense delivered report must not read as "execution left open", even
+    # though it contains 看/扫/摸清 and 再/然后. Otherwise the next steering turn
+    # would resurrect a contract the agent already fulfilled.
+    from runtime.core.cerebrum.react_goal_analysis import (
+        _assistant_left_execution_open,
+        derive_effective_execution_goal,
+    )
+
+    for delivered in (
+        "我看了代码，发现整体结构清晰。",
+        "我看过代码后，发现结构清晰，因此评价为良好。",
+        "结论：我摸清了仓库结构，共 40 个包，核心逻辑在 runtime/core。",
+        "结论：我把两端定义过了一遍，开始、字段命名与类型完全一致。",
+        "我先快速扫了一眼目录，然后开始逐项确认，结论是结构统一。",
+    ):
+        assert not _assistant_left_execution_open(delivered), delivered
+
+    history = [
+        {"role": "user", "content": "如何评价这个项目前端UI UX设计"},
+        {"role": "assistant", "content": "结论：我摸清了仓库结构，共 40 个包，核心逻辑清晰。"},
+        {"role": "user", "content": "再深度一点"},
+    ]
+    effective = derive_effective_execution_goal("再深度一点", history)
+    assert effective == "再深度一点"
 
 
 def test_soft_land_does_not_append_runtime_policy_note() -> None:

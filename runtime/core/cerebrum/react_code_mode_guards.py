@@ -23,6 +23,7 @@ from runtime.core.cerebrum.react_goal_analysis import (
     _normalize_evidence_path,
     _path_evidence_matches,
     _successful_read_paths,
+    _successful_write_paths,
 )
 from runtime.core.cerebrum.react_parsing import (
     _has_code_verification,
@@ -246,6 +247,7 @@ def _code_mode_missing_inspection_tool_guard(
             if _normalize_evidence_path(path)
         }
         observed_paths.update(_successful_read_paths(steps))
+        observed_paths.update(_successful_write_paths(steps))
         missing_paths = [
             path
             for path in requested_paths

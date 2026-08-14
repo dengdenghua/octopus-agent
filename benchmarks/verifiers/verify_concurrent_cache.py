@@ -46,7 +46,11 @@ def _load_module(workspace: Path):
     if spec is None or spec.loader is None:
         raise RuntimeError("cannot load cache.py")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(spec.name, None)
     return module
 
 

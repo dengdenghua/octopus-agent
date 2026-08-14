@@ -22,6 +22,9 @@ import logging
 from collections.abc import Callable, Generator
 from typing import Any
 
+from runtime.core.cerebrum.react_auto_verify import (
+    _try_auto_verification_salvage,
+)
 from runtime.core.cerebrum.react_convergence import (
     build_direct_answer_directive,
 )
@@ -360,6 +363,20 @@ def _phase_6c_parse_and_guard(
                 _guard_label, _guard_message = _guard_hit
                 _guard_outcome = _guard_rejection_outcome(_guard_impasse_state, _guard_label, steps)
                 if _guard_outcome == "hard_stop":
+                    _auto_verify_step = _try_auto_verification_salvage(
+                        _guard_label,
+                        steps,
+                        iteration=i + 1,
+                        cwd=effective_wp if isinstance(effective_wp, str) else None,
+                    )
+                    if _auto_verify_step is not None:
+                        step.thought = _auto_verify_step.thought
+                        step.public_update = _auto_verify_step.public_update
+                        step.action = _auto_verify_step.action
+                        step.actions = _auto_verify_step.actions
+                        _final_stream_started = False
+                        maybe_final = None
+                        return _LoopControl.CONTINUE
                     # Same loop-level bound as the main guard site: the
                     # chat-flush path rejects and continues too, so an
                     # unsatisfiable guard here would livelock identically.
@@ -525,6 +542,20 @@ def _phase_6c_parse_and_guard(
                             _guard_impasse_state, _guard_label, steps
                         )
                         if _guard_outcome == "hard_stop":
+                            _auto_verify_step = _try_auto_verification_salvage(
+                                _guard_label,
+                                steps,
+                                iteration=i + 1,
+                                cwd=effective_wp if isinstance(effective_wp, str) else None,
+                            )
+                            if _auto_verify_step is not None:
+                                step.thought = _auto_verify_step.thought
+                                step.public_update = _auto_verify_step.public_update
+                                step.action = _auto_verify_step.action
+                                step.actions = _auto_verify_step.actions
+                                _final_stream_started = False
+                                maybe_final = None
+                                return _LoopControl.CONTINUE
                             _logger.warning(
                                 "react_loop guard impasse (plain-answer recovery) · "
                                 "%s repeatedly rejected with no intervening tool execution — "

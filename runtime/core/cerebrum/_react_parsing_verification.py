@@ -576,7 +576,10 @@ _RED_PHRASE_RE = re.compile(
     r"\bnpm\s+err!|"
     r"\bassertion\s*error\b|"
     r"\b(?:build|compilation|type-?check|typecheck|lint|tests?)\s+failed\b|"
-    r"\btimeout after\b|\btimed[_ -]?out\b|\btool failed\b|"
+    r"\btimeout after\b|"
+    r'"(?:is_)?timed_out"\s*:\s*(?:true|1)\b|'
+    r"(?<![\"'\w])timed[_ -]?out\b(?!\s*[\"']?\s*[:=]\s*(?:false|0)\b)|"
+    r"\btool failed\b|"
     r'"success"\s*:\s*false|'
     r"\bexit\s+code\s+[1-9]|"
     r"\breturned\s+non-?zero|"

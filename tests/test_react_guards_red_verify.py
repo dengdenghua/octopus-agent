@@ -34,6 +34,12 @@ class TestRedDetector:
             "All checks passed!",
             "Found 0 errors.",
             "ok  github.com/x/y  0.02s",
+            # A successful exec_shell receipt always carries the
+            # execution-policy schema, whose ``"timed_out": false`` field
+            # name previously tripped the red detector.
+            '{"argv": ["python3", "-m", "py_compile", "hello.py"], '
+            '"exit_code": 0, "stdout": "", "stderr": "", "timed_out": false}',
+            '{"timed_out":false,"exit_code":0}',
         ):
             assert not _verification_observation_is_red(green), green
 
@@ -45,6 +51,8 @@ class TestRedDetector:
             "src/a.ts(5,3): error TS2345: bad arg",
             "AssertionError: expected 5 got 4",
             "构建失败",
+            '{"timed_out": true, "exit_code": 124}',
+            "command timed out after 30s",
         ):
             assert _verification_observation_is_red(red), red
 

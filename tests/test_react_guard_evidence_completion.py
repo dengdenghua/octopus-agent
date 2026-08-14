@@ -81,6 +81,60 @@ def test_named_file_guard_accepts_successful_reads_for_each_file() -> None:
     )
 
 
+def test_named_file_guard_accepts_successful_writes_for_named_file() -> None:
+    # Regression: "Create a file hello.py ..." is classified as a
+    # project-inspection goal because it names hello.py; the model's own
+    # successful write is real grounding, so a redundant read_file must
+    # not be demanded — previously the loop rejected the final answer
+    # three times and died with guard_impasse.
+    steps = [
+        ReActStep(
+            iteration=1,
+            action='write_text_file({"path":"hello.py","content":"print(42)\\n"})',
+            observation='(real tool execution succeeded) write_text_file',
+            action_results=[{"ok": True}],
+        ),
+        ReActStep(
+            iteration=2,
+            action='exec_shell({"command":"python3 hello.py"})',
+            observation='(real tool execution succeeded) exec_shell',
+            action_results=[{"ok": True}],
+        ),
+    ]
+
+    assert (
+        _code_mode_missing_inspection_tool_guard(
+            steps,
+            "文件已创建并运行,输出 42。",
+            goal="Create a file hello.py that prints 42, then run it and report the output.",
+            file_tools_visible=True,
+        )
+        is None
+    )
+
+
+def test_named_file_guard_still_rejects_unwritten_read_target() -> None:
+    steps = [
+        ReActStep(
+            iteration=1,
+            action='write_text_file({"path":"other.py","content":"x"})',
+            observation='(real tool execution succeeded) write_text_file',
+            action_results=[{"ok": True}],
+        ),
+    ]
+
+    message = _code_mode_missing_inspection_tool_guard(
+        steps,
+        "hello.py 没看过,先不答。",
+        goal=("比较 hello.py 与 other.py"),
+        file_tools_visible=True,
+    )
+
+    assert message is not None
+    assert "hello.py" in message
+    assert "other.py" not in message
+
+
 def test_incomplete_final_answer_rejects_future_action_not_result() -> None:
     message = _incomplete_final_answer_guard("我先 grep 确认这三个字段在两端的具体定义。")
 
@@ -196,6 +250,36 @@ def test_incomplete_final_answer_rejects_deferred_conclusion_announcement() -> N
 
     assert message is not None
     assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_rejects_look_scan_announcement() -> None:
+    # Regression (thread tPO8mDlhtQev_grzsY1etH): announce-then-stop turns phrased
+    # as "我先实际看一下前端代码再下结论" / "我来看看这个仓库的代码再点评" slipped
+    # through. 看一下/看看/扫一遍 (future-intent 看/扫) were not evidence-action
+    # verbs, and 下结论 ("draw a conclusion") was not a deferred-conclusion marker,
+    # so the bare 结论 scored as a delivered result and the turn completed.
+    assert (
+        _incomplete_final_answer_guard(
+            "我先实际看一下前端代码再下结论——扫一遍 frontend/ 的结构、样式体系和关键页面，"
+            "给出有依据的评价。"
+        )
+        is not None
+    )
+    assert _incomplete_final_answer_guard("我来看看这个仓库的代码再点评。") is not None
+    assert _incomplete_final_answer_guard("我先看下代码再给结论。") is not None
+
+
+def test_incomplete_final_answer_accepts_past_tense_look_report() -> None:
+    # The intent forms 看一下/看看 are future actions; the past-tense 看了/看过 must
+    # keep passing as a delivered report even though the same 看 character appears.
+    assert (
+        _incomplete_final_answer_guard("我先看了代码，发现这个项目状态管理用了 Zustand，整体清晰。")
+        is None
+    )
+    assert (
+        _incomplete_final_answer_guard("我看过代码后，发现整体结构清晰，因此评价为良好。")
+        is None
+    )
 
 
 def test_incomplete_final_answer_accepts_delivered_conclusion_still() -> None:

@@ -49,13 +49,24 @@ def _assistant_left_execution_open(text: str) -> bool:
         r"(?:会|将|先|接下来|下一步|随后|马上|这就|开始|继续|准备)"
         r"(?:会|将|先)?\s*)"
         r"(?:检查|查看|读取|搜索|定位|核对|验证|测试|运行|执行|修改|修复|实现|补充|提交|审查)|"
+        # 口语化"先/现在/这次 + 看/列/拆/摸/进入/动手/锁定/读/扫"的预告(排除过去式)。
+        # 这些非正式动词不在上面的窄动词表里,导致"我先实际看一下…再下结论"这类
+        # 预告句不被识别为"执行未闭环",下一轮 steering 就接不回原目标(thread
+        # tPO8mDlhtQev_grzsY1etH,6 轮 announce-only 全漏)。这里不加句首/标点边界,
+        # 因为"执行阶段前先进入理解阶段"的"先"就嵌在句中;过去式仍靠"了/过/完"排除。
+        r"(?:我)?(?:现在|这次|先|接下来|下一步|马上|这就|开始|继续|准备)"
+        r"[^。.!！；;\n]{0,24}?"
+        r"(?:看(?!了|过|完|见|似|法|起来|上去)|列出|列出来|拆|拆分|拆解|"
+        r"摸清|摸透|摸底|进入|动手|动工|锁定|读(?!了|过|完|取|者)|扫(?!描|把|尾))"
+        r"(?!了|过|完)|"
         r"\b(?:i(?:'ll| will)|let me|next i(?:'ll| will))\b[^.!?]{0,80}"
         r"\b(?:inspect|read|search|locate|verify|test|run|execute|edit|fix|implement|commit|review)\b",
         visible,
         re.IGNORECASE,
     )
     unfinished = re.search(
-        r"(?:尚未|还没|未完成|没有完成|准备|然后|再|下一步|接下来)|"
+        r"(?:尚未|还没|未完成|没有完成|准备|然后|再|下一步|接下来|"
+        r"没动手|没执行|没做|往深挖|深挖|理解阶段|执行阶段前|阶段前)|"
         r"\b(?:not yet|not completed|next|then|after that|ready to)\b",
         visible,
         re.IGNORECASE,
@@ -154,8 +165,9 @@ def _goal_requests_project_inspection(goal: str) -> bool:
         r"\b(?:inspect|read|review|check|open|analy[sz]e)\b[^.!?\n]{0,48}"
         r"\b(?:files?|config(?:uration)?|project|repo(?:sitory)?|workspace|"
         r"codebase|source\s+code)\b|"
-        r"(?:检查|查看|读取|分析|调研|审计|梳理|了解|评估|摸清|研究)"
-        r"[^。.!！；;\n]{0,48}(?:当前项目|项目目录|本地仓库|工作区|代码库)|"
+        r"(?:检查|查看|读取|分析|调研|审计|梳理|了解|评估|摸清|研究|评价|点评|评审)"
+        r"[^。.!！；;\n]{0,48}(?:当前项目|这个项目|项目目录|本地仓库|这个仓库|"
+        r"工作区|代码库|这个代码库|前端|界面)|"
         r"(?:^|[\s'\"`(])[^\s'\"`()]+\."
         r"(?:py|ts|tsx|js|jsx|json|ya?ml|toml|md|css|html|go|rs)\b",
         lowered,
@@ -169,6 +181,32 @@ def _goal_requests_project_inspection(goal: str) -> bool:
             "配置文件",
             "源代码",
             "源码",
+        )
+    )
+
+
+def _goal_requests_research_lookup(goal: str) -> bool:
+    """Whether a non-code (research/chat) goal demands external lookup.
+
+    Complements ``_goal_requests_project_inspection`` (code mode): that one
+    recognises project/repo/code vocabulary, this one recognises "go find out
+    / verify against the outside world" vocabulary. A pure knowledge question
+    ("什么是 X" / "解释一下" / "翻译") is legitimately answered from memory with
+    zero tool calls, so only an explicit lookup/verify verb arms the guard that
+    consumes this classifier. Deliberately avoids the bare 查/找/验证 roots —
+    too common in prose, and 验证 would false-match 验证码.
+    """
+    lowered = _inspection_goal_text(goal)
+    if not lowered:
+        return False
+    return bool(
+        re.search(
+            r"(?:查一下|查查|查一查|查证|核查|核实|查询|查资料|上网查|联网查|"
+            r"搜索|搜一下|搜搜|检索|调研|找一下|找找|谷歌|百度|"
+            r"\b(?:search|look\s*up|find\s*out|research|verify|"
+            r"check\s+(?:whether|if|the\s+latest)|fetch|retrieve|scrape)\b)",
+            lowered,
+            re.IGNORECASE,
         )
     )
 
@@ -393,6 +431,52 @@ def _successful_read_paths(steps: list[ReActStep]) -> set[str]:
             paths.update(
                 normalized for value in raw_paths if (normalized := _normalize_evidence_path(value))
             )
+    return paths
+
+
+def _successful_write_paths(steps: list[ReActStep]) -> set[str]:
+    """Collect file paths backed by successful write/edit receipts.
+
+    A file the model just created or edited is as grounded as a read:
+    the content came from the model's own successful write receipt, so
+    demanding a redundant read_file blocks create/edit tasks behind the
+    inspection-evidence guard.
+    """
+    from runtime.core.cerebrum._react_parsing_core import _is_code_write_step
+
+    paths: set[str] = set()
+    for step in steps:
+        if not _is_code_write_step(step):
+            continue
+        if step.action_results and not any(
+            result.get("ok") is True for result in step.action_results
+        ):
+            continue
+        observation = (step.observation or "").lower()
+        if not step.action_results and (
+            not observation
+            or any(
+                marker in observation
+                for marker in (
+                    "未执行观察",
+                    "not executed",
+                    "工具失败",
+                    "工具执行异常",
+                    '"error":',
+                    "timed_out",
+                )
+            )
+        ):
+            continue
+        parsed = _parse_action(step.action)
+        if parsed is None:
+            continue
+        _name, args = parsed
+        raw_path = args.get("path") or args.get("file_path") or args.get("file")
+        if isinstance(raw_path, str) and raw_path.strip():
+            normalized = _normalize_evidence_path(raw_path.strip())
+            if normalized:
+                paths.add(normalized)
     return paths
 
 

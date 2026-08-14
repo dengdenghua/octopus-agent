@@ -319,8 +319,11 @@ def _note_guard_impasse(
     progress = sum(
         1
         for s in steps
-        if ((getattr(s, "action", "") or "").strip() or getattr(s, "action_results", None))
-        and not _step_is_failed_execution(s)
+        if (
+            (getattr(s, "action", "") or "").strip().lower() not in {"", "none", "n/a", "na"}
+            and not _step_is_failed_execution(s)
+        )
+        or bool(getattr(s, "action_results", None))
     )
     if state.get("label") == label and state.get("progress") == progress:
         state["count"] = state.get("count", 0) + 1

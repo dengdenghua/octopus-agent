@@ -81,6 +81,81 @@ def test_concurrent_cache_verifier_rejects_unrelated_diff(tmp_path) -> None:
     assert "unrelated files" in str(result["reason"])
 
 
+def test_concurrent_cache_verifier_loads_dataclass_generic_candidate(tmp_path) -> None:
+    """Candidates using ``@dataclass`` on a ``Generic`` must not crash the
+    verifier's module loader (the loader must register the module in
+    ``sys.modules`` so dataclass annotation introspection can resolve it)."""
+    workspace = tmp_path / "cache"
+    shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / "coding.concurrent-cache", workspace)
+    (workspace / "cache.py").write_text(
+        """
+from __future__ import annotations
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Generic, TypeVar
+
+V = TypeVar("V")
+
+
+@dataclass
+class _Pending(Generic[V]):
+    event: threading.Event = field(default_factory=threading.Event)
+    result: V | None = None
+    error: BaseException | None = None
+
+
+class TTLCache(Generic[V]):
+    def __init__(
+        self,
+        ttl_seconds: float,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive")
+        self.ttl_seconds = ttl_seconds
+        self._clock = clock
+        self._values: dict[str, tuple[float, V]] = {}
+        self._pending: dict[str, _Pending[V]] = {}
+        self._lock = threading.Lock()
+
+    def get_or_load(self, key: str, loader: Callable[[], V]) -> V:
+        while True:
+            with self._lock:
+                live = self._values.get(key)
+                if live is not None and live[0] > self._clock():
+                    return live[1]
+                pending = self._pending.get(key)
+                if pending is None:
+                    pending = _Pending()
+                    self._pending[key] = pending
+                    break
+            pending.event.wait(timeout=10)
+        try:
+            value = loader()
+        except BaseException as exc:
+            with self._lock:
+                self._pending.pop(key, None)
+                pending.error = exc
+                pending.event.set()
+            raise
+        with self._lock:
+            self._values[key] = (self._clock() + self.ttl_seconds, value)
+            self._pending.pop(key, None)
+            pending.event.set()
+        return value
+""".lstrip(),
+        encoding="utf-8",
+    )
+    (workspace / "tests" / "test_cache.py").write_text("def test_regression(): assert True\n")
+
+    result = _verify("verify_concurrent_cache.py", workspace)
+
+    assert result["passed"] is True, result
+
+
 def test_path_boundary_fixture_has_a_satisfiable_hidden_verifier(tmp_path) -> None:
     workspace = tmp_path / "paths"
     shutil.copytree(REPO_ROOT / "benchmarks" / "fixtures" / "coding.path-boundary", workspace)

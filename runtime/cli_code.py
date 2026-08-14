@@ -107,6 +107,14 @@ def run_code_command(args: Any, *, color: bool = True) -> int:  # noqa: ARG001
         mock_response=getattr(args, "mock_response", None),
         allow_untrusted=True,
     )
+    # Shell is opt-in everywhere else (``register_all`` excludes it): the
+    # headless coding CLI is the surface where compile/test/run commands
+    # are the point, and the approval provider still gates dangerous
+    # invocations. Without it the model cannot verify or run anything and
+    # SWE-bench-style tasks end with empty patches.
+    from runtime.execution.suckers.write_skills import register_exec_skill
+
+    register_exec_skill(executor.registry)
     stack = SimpleNamespace(planner=planner, executor=executor, journal=journal)
     agent = _CliCodeAgent(model=model)
     metadata = {
