@@ -749,7 +749,7 @@ revision 的下一个轮次」,但 journal 一直没有 dsh 的 ``user/message``
   (dsh 由 host 解析 mentions 后调 ``prepare``)。
 - 取消信号:我们省略了 dsh 的 ``AbortSignal`` 取消边界;长读 surface
   时如需可中断再补。
-## 27. 回合级 transcript 逐事件桥 (`sub_text_delta` → journal)
+## 28. 回合级 transcript 逐事件桥 (`sub_text_delta` → journal)
 
 dsh session 日志的不变式是「模型可见即入日志」:回合内流式细节也逐
 事件落盘,transcript 可从日志逐事件重建。我们此前 sub_tool_start/end
@@ -783,7 +783,7 @@ dsh session 日志的不变式是「模型可见即入日志」:回合内流式�
 - 父级 assistant 流式文本逐 chunk 入日志——第 28 节已落地
   (``assistant/chunk`` 事件 + react loop 全部 ``text_delta`` 发射点
   接线);父泳道与 subagent 泳道现在都有逐 chunk 保真。
-## 28. 父级 ``assistant/chunk`` 流式入日志 (`runtime/core/cerebrum/`)
+## 29. 父级 ``assistant/chunk`` 流式入日志 (`runtime/core/cerebrum/`)
 
 第 27 节闭合了 subagent 泳道,父泳道仍只有 ``react_checkpoint`` 快照
 (按迭代)与 ``step`` 事件,回合内流式文本不进日志。dsh 的
@@ -822,6 +822,45 @@ dsh session 日志的不变式是「模型可见即入日志」:回合内流式�
   JSONL,长答案日志体积约为 dsh 打包前的量级,后续可加等价压缩。
 - ``reasoning-delta`` / ``tool-call-delta`` 泳道:目前只 journal 可见
   ``text-delta``;dsh 连推理块与工具参数流也逐块落盘。
+## 30. host 侧 session mention 接线 (`tool_engine/session_reference.py`)
+
+第 27 节落地了 resolver 的 ``list_candidates`` / ``prepare``,但 dsh 由
+宿主端先解析 mention 再调 ``prepare`` 的那段「接线」没搬——这是第 27 节
+「尚未覆盖」清单里明说缺的那一环。本轮补上:宿主在 user prompt 里用
+``@session:<id>`` / ``@subagent:<id>`` 提及历史子代理会话,解析器自动
+解析→投影→聚合 frame,替换进本轮请求,源文本永远拼不出 framing 标签。
+
+- ``extract_session_mentions(prompt)``:按首现顺序去重提取被引用的
+  session id,只认 ``[0-9a-f]{32}`` 全小写十六进制 id + 词边界,无效
+  token(``@session:nothex``、超长 id)一律忽略——陈旧/拼错的提及绝不
+  hard-fail 整轮。
+- ``SessionReferenceResolver.resolve_mentions(prompt, *, target_id,
+  read_surface, sessions=None, strip_mentions=True)``:dsh 的 host
+  mention-parse → ``prepare`` 一键通路。引用按首现顺序封顶到
+  ``max_references``(取前 N,超出静默丢弃,mention 是便利面不是硬契约);
+  自引用与 ``sessions`` 里查不到的陈旧 id 跳过;读到/预算不足仍抛
+  ``SessionReferenceError``。返回 ``PreparedReferencedMessage``:
+  ``content`` 为剥掉 mention 的 prompt(内联提及留下的连续空格被折叠,
+  不再留双空格),``additional_context`` 承载渲染好的 frame 与
+  ``session-reference`` 溯源,宿主自行决定注入时机。
+- 适配器:``SubagentSessionStore.resolve_session_mentions(prompt, *,
+  target_id, ...)`` 把内存 store 当 session 源、``surface_events`` 当
+  read_surface,store 调用方一条语句完成「提及→上下文」。
+- 测试:``tests/test_session_reference.py`` 新增 7 用例(提取去重/别名/
+  无效 id 忽略、空 prompt 与无提及原样返回、投影+剥提及、陈旧+自引用
+  跳过、max_references 封顶、store 适配器命中原样解析、store 陈旧
+  mention 静默降级);``tests/test_session_reference.py`` 全套 25 用例
+  通过,reference/projection/spill/report/subagent 回归 106 项通过,
+  ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 前端自动补全弹层:解析/注入面已接好,但宿主 UI 的「键入
+  ``@session:`` 时弹出候选」没有做——那属于前端 host 侧,需要的话再搬
+  dsh 的 candidate autocomplete 交互。
+- 取消信号:沿用的 ``AbortSignal`` 取消边界仍未移植;长读 surface 如需
+  可中断再补。
+
 ## 用法速查
 
 ```bash

@@ -31,6 +31,7 @@ Design mirrors dsh:
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any
@@ -194,6 +195,33 @@ def render_reference_prompt(data: list[ReferencedSessionData]) -> str:
     return f"{_PROMPT_PREFIX}{stringify_tag_safe_json(_asdict_deep(data))}{_PROMPT_SUFFIX}"
 
 
+_MENTION_RE = re.compile(r"@(?:session|subagent):([0-9a-f]{32})\b")
+
+
+def extract_session_mentions(prompt: str) -> list[str]:
+    """Distinct referenced session ids from host mention tokens.
+
+    Recognizes ``@session:<id>`` and ``@subagent:<id>`` (octopus alias)
+    mention tokens — the dsh host mention-parse seam for this port. Returns
+    ids in first-mention order, deduplicated; unknown/non-session ids are
+    simply absent from the result so a stale mention never hard-fails a turn.
+    """
+    seen: list[str] = []
+    for match in _MENTION_RE.finditer(prompt or ""):
+        session_id = match.group(1)
+        if session_id not in seen:
+            seen.append(session_id)
+    return seen
+
+
+def _strip_session_mentions(prompt: str) -> str:
+    """Remove recognized mention tokens from a prompt (host seam)."""
+    stripped = _MENTION_RE.sub("", prompt or "")
+    # Collapse runs of whitespace left by an inline mention so stripping a
+    # mid-sentence ``@session:...`` never leaves a double space.
+    return re.sub(r"[ \t]{2,}", " ", stripped).strip()
+
+
 class SessionReferenceResolver:
     """Resolve session references into an aggregated durable context."""
 
@@ -268,6 +296,56 @@ class SessionReferenceResolver:
             )
             for record in ranked[:limit]
         ]
+
+    # ── Host mention wiring (dsh host mention-parse → prepare) ─────────────
+
+    def resolve_mentions(
+        self,
+        prompt: str,
+        *,
+        target_id: str,
+        read_surface: Callable[[str], list[dict[str, Any]]],
+        sessions: list[SessionReferenceRecord] | None = None,
+        strip_mentions: bool = True,
+    ) -> PreparedReferencedMessage:
+        """Host-side mention wiring (dsh host mention-parse → ``prepare``).
+
+        Scans ``@session:<id>`` / ``@subagent:<id>`` mentions in a host
+        prompt, resolves the referenced sessions (capped at
+        ``max_references`` in first-mention order), reads each surface, and
+        projects them into one aggregated context frame. Stale mentions
+        (ids not in ``sessions``) and self-references are skipped rather
+        than failing the turn — a mention is a convenience seam, not a hard
+        contract; read/budget failures still propagate as
+        ``SessionReferenceError``.
+
+        Returns ``PreparedReferencedMessage`` with ``content`` = the prompt
+        (mentions stripped when ``strip_mentions``) and, when any reference
+        resolved, ``additional_context`` carrying the rendered frame and
+        ``session-reference`` provenance for the host to inject.
+        """
+        ids = extract_session_mentions(prompt)
+        if not ids:
+            return PreparedReferencedMessage(content=prompt)
+        known = {record.session_id for record in sessions} if sessions else None
+        resolved: list[SessionReferenceInput] = []
+        for session_id in ids:
+            if session_id == target_id:
+                continue  # self-reference → skip (host-friendly)
+            if known is not None and session_id not in known:
+                continue  # stale mention → skip
+            resolved.append(SessionReferenceInput(session_id=session_id))
+            if len(resolved) >= self._max_references:
+                break
+        content = _strip_session_mentions(prompt) if strip_mentions else prompt
+        if not resolved:
+            return PreparedReferencedMessage(content=content)
+        return self.prepare(
+            target_id=target_id,
+            content=content,
+            references=resolved,
+            read_surface=read_surface,
+        )
 
     # ── Reference preparation (dsh prepare) ───────────────────────────────
 
@@ -353,6 +431,7 @@ __all__ = [
     "SessionReferenceRecord",
     "SessionReferenceResolver",
     "candidate_rank",
+    "extract_session_mentions",
     "normalize_references",
     "render_reference_prompt",
 ]

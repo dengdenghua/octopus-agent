@@ -477,6 +477,51 @@ class SubagentSessionStore:
             total += len(block)
         return "\n".join(lines)
 
+    def resolve_session_mentions(
+        self,
+        prompt: str,
+        *,
+        target_id: str,
+        max_references: int | None = None,
+        strip_mentions: bool = True,
+    ) -> Any:
+        """Resolve ``@session:<id>`` / ``@subagent:<id>`` mentions in a prompt.
+
+        Thin store adapter over the resolver's host mention wiring: builds
+        the candidate record list from the in-memory store and reads each
+        referenced session's surface via ``self.surface_events``. Returns
+        the resolver's ``PreparedReferencedMessage``; stale / self mentions
+        are skipped, read/budget failures raise ``SessionReferenceError``.
+        """
+        from runtime.execution.tool_engine.session_reference import (
+            SessionReferenceRecord,
+            SessionReferenceResolver,
+        )
+
+        records: list[SessionReferenceRecord] = []
+        with self._lock:
+            for session in self._memory.values():
+                records.append(
+                    SessionReferenceRecord(
+                        session_id=session.session_id,
+                        label=session.agent_id or session.session_id,
+                        created_at=int(session.created_at[:10].replace("-", ""))
+                        if len(session.created_at) >= 10
+                        else None,
+                    )
+                )
+        kwargs: dict[str, Any] = {}
+        if max_references is not None:
+            kwargs["max_references"] = max_references
+        resolver = SessionReferenceResolver(**kwargs)
+        return resolver.resolve_mentions(
+            prompt,
+            target_id=target_id,
+            read_surface=self.surface_events,
+            sessions=records,
+            strip_mentions=strip_mentions,
+        )
+
     def transcript_prompt(
         self,
         session: SubagentSession,

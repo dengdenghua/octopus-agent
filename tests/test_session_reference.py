@@ -273,3 +273,151 @@ def test_store_surface_events_and_candidates(tmp_path: Path) -> None:
     ids = [c["sessionId"] for c in candidates]
     assert s2.session_id in ids
     assert s1.session_id not in ids
+
+
+def test_extract_session_mentions() -> None:
+    from runtime.execution.tool_engine.session_reference import (
+        extract_session_mentions,
+    )
+
+    sid1 = "00112233445566778899aabbccddeeff"
+    sid2 = "aabbccddeeff00112233445566778899"
+    assert extract_session_mentions("") == []
+    assert extract_session_mentions("no mentions here") == []
+    assert extract_session_mentions("@session:nothex") == []
+    assert extract_session_mentions(f"see @session:{sid1} and @subagent:{sid2}") == [sid1, sid2]
+    # Dedupe keeps first-mention order.
+    assert extract_session_mentions(f"a @session:{sid1} b @session:{sid1} c") == [sid1]
+    # Non-matching (invalid length) tokens are ignored.
+    assert extract_session_mentions(f"@session:{sid1}x") == []
+
+
+def test_resolve_mentions_empty_prompt_and_no_mentions() -> None:
+    resolver = SessionReferenceResolver()
+
+    def read_surface(_sid: str) -> list[dict]:
+        return []
+
+    out = resolver.resolve_mentions("", target_id="target", read_surface=read_surface)
+    assert out.content == ""
+    assert out.additional_context is None
+    out = resolver.resolve_mentions("plain prompt", target_id="target", read_surface=read_surface)
+    assert out.content == "plain prompt"
+    assert out.additional_context is None
+
+
+def test_resolve_mentions_projects_and_strips() -> None:
+    resolver = SessionReferenceResolver()
+    sid = "00112233445566778899aabbccddeeff"
+
+    def read_surface(session_id: str) -> list[dict]:
+        return [
+            {
+                "type": "user/message",
+                "data": {
+                    "source": {"kind": "user"},
+                    "content": [{"type": "text", "text": f"prompt-{session_id}"}],
+                },
+            }
+        ]
+
+    out = resolver.resolve_mentions(
+        f"research @session:{sid} deeper",
+        target_id="target",
+        read_surface=read_surface,
+    )
+    assert out.content == "research deeper"
+    assert out.additional_context is not None
+    rendered = out.additional_context["content"][0]["text"]
+    assert "<referenced-sessions>" in rendered
+    assert sid in rendered
+    assert "prompt-00112233445566778899aabbccddeeff" in rendered
+
+
+def test_resolve_mentions_stale_and_self_skipped() -> None:
+    resolver = SessionReferenceResolver()
+    known = "00112233445566778899aabbccddeeff"
+    stale = "ffffffffffffffffffffffffffffffff"
+    record = SessionReferenceRecord(session_id=known, label="researcher")
+
+    def read_surface(session_id: str) -> list[dict]:
+        return [
+            {
+                "type": "user/message",
+                "data": {
+                    "source": {"kind": "user"},
+                    "content": [{"type": "text", "text": f"prompt-{session_id}"}],
+                },
+            }
+        ]
+
+    target = "55aa55aa55aa55aa55aa55aa55aa55aa"
+    # Self-reference (target) is skipped, stale is skipped, known resolves.
+    out = resolver.resolve_mentions(
+        f"@session:{target} @subagent:{stale} @session:{known}",
+        target_id=target,
+        read_surface=read_surface,
+        sessions=[record],
+    )
+    assert out.content == ""
+    assert out.additional_context is not None
+
+    # All-stale → no context, prompt stripped.
+    out = resolver.resolve_mentions(
+        f"@session:{stale}",
+        target_id="target",
+        read_surface=read_surface,
+        sessions=[record],
+    )
+    assert out.additional_context is None
+    assert out.content == ""
+
+
+def test_resolve_mentions_caps_at_max_references() -> None:
+    resolver = SessionReferenceResolver(max_references=2)
+    sid1 = "00112233445566778899aabbccddeeff"
+    sid2 = "aabbccddeeff00112233445566778899"
+    sid3 = "ffeeddccbbaa99887766554433221100"
+    seen: list[str] = []
+
+    def read_surface(session_id: str) -> list[dict]:
+        seen.append(session_id)
+        return [
+            {
+                "type": "user/message",
+                "data": {
+                    "source": {"kind": "user"},
+                    "content": [{"type": "text", "text": f"prompt-{session_id}"}],
+                },
+            }
+        ]
+
+    out = resolver.resolve_mentions(
+        f"@session:{sid1} @session:{sid2} @session:{sid3}",
+        target_id="target",
+        read_surface=read_surface,
+    )
+    assert out.additional_context is not None
+    assert sid1 in seen and sid2 in seen and sid3 not in seen
+
+
+def test_store_resolve_session_mentions(tmp_path: Path) -> None:
+    store = SubagentSessionStore(base_dir=tmp_path / "sessions")
+    s1 = store.create(agent_id="researcher", thread_id="t1")
+    s2 = store.create(agent_id="writer", thread_id="t2")
+    store.append_turn(s1.session_id, prompt="p1", output="o1", success=True)
+
+    out = store.resolve_session_mentions(
+        f"use @session:{s1.session_id}",
+        target_id=s2.session_id,
+    )
+    assert out.content == "use"
+    assert out.additional_context is not None
+    rendered = out.additional_context["content"][0]["text"]
+    assert "<referenced-sessions>" in rendered
+
+    # Stale mention against a store with no matching session → no context.
+    stale = "ffffffffffffffffffffffffffffffff"
+    out = store.resolve_session_mentions(f"@session:{stale}", target_id=s2.session_id)
+    assert out.additional_context is None
+    assert out.content == ""
