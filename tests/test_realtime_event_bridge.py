@@ -265,3 +265,48 @@ async def test_text_delta_strips_tool_call_and_function_tags() -> None:
     # leaving their inner text intact — matching the frontend's per-tag
     # strip rather than dropping the content.
     assert "".join(emitter.deltas()) == "ok read_file bar end"
+
+
+# ── Adaptive delta batching wiring ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_adaptive_batching_flushes_small_burst_at_low_throughput_threshold() -> None:
+    """Default adaptive batching coalesces at 32 chars with no history."""
+    state = _ReactBridgeState(enable_adaptive_batching=True)
+    turn, emitter, log = _make_turn(), _StubEmitter(), _StubLog()
+
+    await state.append_agent_message(turn, log, emitter, "a")  # first → flush_now
+    await state.append_agent_message(turn, log, emitter, "b" * 30)  # 30 < 32 → buffered
+    assert len(emitter.deltas()) == 1
+    await state.append_agent_message(turn, log, emitter, "c" * 5)  # 35 ≥ 32 → flush
+    assert len(emitter.deltas()) == 2
+    await state.flush(turn, log, emitter)
+    assert "".join(emitter.deltas()) == "a" + "b" * 30 + "c" * 5
+
+
+@pytest.mark.asyncio
+async def test_adaptive_batching_disabled_keeps_fixed_threshold() -> None:
+    """``enable_adaptive_batching=False`` falls back to the 64-char cap."""
+    state = _ReactBridgeState(enable_adaptive_batching=False)
+    turn, emitter, log = _make_turn(), _StubEmitter(), _StubLog()
+
+    await state.append_agent_message(turn, log, emitter, "a")  # first → flush_now
+    await state.append_agent_message(turn, log, emitter, "b" * 30)  # 30 < 64
+    await state.append_agent_message(turn, log, emitter, "c" * 5)  # 35 < 64 → buffered
+    assert len(emitter.deltas()) == 1
+    await state.append_agent_message(turn, log, emitter, "d" * 30)  # 65 ≥ 64 → flush
+    assert len(emitter.deltas()) == 2
+    await state.flush(turn, log, emitter)
+    assert "".join(emitter.deltas()) == "a" + "b" * 30 + "c" * 5 + "d" * 30
+
+
+@pytest.mark.asyncio
+async def test_adaptive_batching_default_on_single_chunk_message_unchanged() -> None:
+    """Default-constructed bridge (adaptive on) keeps single-chunk prose."""
+    state, turn, emitter, log = _new_state()
+
+    await state.append_agent_message(turn, log, emitter, "hello")
+    await state.flush(turn, log, emitter)
+
+    assert "".join(emitter.deltas()) == "hello"

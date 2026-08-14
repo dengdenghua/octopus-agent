@@ -53,6 +53,7 @@ from runtime.sensing.gateway._event_bridge_tool_items import (
     _tool_start_public_narrative,
     _verification_item_from_tool_evt,
 )
+from runtime.sensing.gateway.adaptive_delta_buffer import AdaptiveDeltaBuffer
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 from runtime.sensing.gateway.realtime_workbench import (
     _grounding_evidence,
@@ -93,12 +94,13 @@ class _ReactBridgeState:
     # Streaming text/reasoning chunks arrive per-token from the LLM.
     # One WS frame + one journal write per token is pure overhead —
     # the frontend coalesces per animation frame anyway. Buffer and
-    # flush on whichever comes first: ~64 chars or 32ms. 32ms keeps the
-    # transport to roughly two display frames while still collapsing the
-    # many tiny chunks produced by token streaming. The FIRST
-    # chunk of each item is never buffered (time-to-first-token), and
-    # any kind switch / item finalization drains the buffer, so
+    # flush adaptively based on throughput: ~64 chars or 32ms for normal
+    # speed, up to 256 chars or 100ms for high throughput bursts.
+    # The FIRST chunk of each item is never buffered (time-to-first-token),
+    # and any kind switch / item finalization drains the buffer, so
     # ordering and final content are byte-identical to unbuffered.
+
+    # Fallback constants (used if adaptive batching is disabled)
     _DELTA_FLUSH_INTERVAL_S = 0.032
     _DELTA_FLUSH_MAX_CHARS = 64
 
@@ -110,10 +112,13 @@ class _ReactBridgeState:
         agent_display_name: str | None = None,
         agent_avatar_url: str | None = None,
         agent_icon: str | None = None,
+        enable_adaptive_batching: bool = True,
     ) -> None:
         self._agent_display_name = agent_display_name
         self._agent_avatar_url = agent_avatar_url
         self._agent_icon = agent_icon
+        self._enable_adaptive_batching = enable_adaptive_batching
+        self._adaptive_buffer = AdaptiveDeltaBuffer() if enable_adaptive_batching else None
         self.agent_message: AgentMessageItem | None = None
         self.commentary_message: AgentMessageItem | None = None
         self.last_public_commentary_key: str | None = None
@@ -408,7 +413,16 @@ class _ReactBridgeState:
         self._delta_ctx = (turn, log, emitter)
         self._delta_buf.append(delta)
         self._delta_buf_chars += len(delta)
-        if flush_now or self._delta_buf_chars >= self._DELTA_FLUSH_MAX_CHARS:
+
+        # 自适应批处理：根据吞吐量动态调整阈值
+        if self._enable_adaptive_batching and self._adaptive_buffer:
+            self._adaptive_buffer.append(delta)
+            should_flush = flush_now or self._adaptive_buffer.should_flush()
+        else:
+            # 回退到固定批处理
+            should_flush = flush_now or self._delta_buf_chars >= self._DELTA_FLUSH_MAX_CHARS
+
+        if should_flush:
             await self._flush_pending_delta()
             return
         if self._delta_flush_task is None or self._delta_flush_task.done():
@@ -418,6 +432,7 @@ class _ReactBridgeState:
             self._delta_flush_task = asyncio.create_task(self._delayed_delta_flush())
 
     async def _delayed_delta_flush(self) -> None:
+        # 固定延迟刷新（自适应逻辑在 should_flush 中）
         await asyncio.sleep(self._DELTA_FLUSH_INTERVAL_S)
         await self._flush_pending_delta()
 
@@ -432,6 +447,11 @@ class _ReactBridgeState:
             combined = "".join(self._delta_buf)
             self._delta_buf.clear()
             self._delta_buf_chars = 0
+
+            # 清空自适应缓冲区
+            if self._enable_adaptive_batching and self._adaptive_buffer:
+                self._adaptive_buffer.clear()
+
             kind = self._delta_kind
             turn, log, emitter = self._delta_ctx
             if kind == "agentMessage" and self.agent_message is not None:
