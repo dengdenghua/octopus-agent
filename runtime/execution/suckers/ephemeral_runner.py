@@ -62,6 +62,7 @@ from collections.abc import Callable
 from typing import Any
 
 from runtime.execution.suckers._ephemeral_events import (
+    _emit_sub_text_delta,
     _emit_sub_tool_event,
     _emit_subagent_lifecycle_event,
     _safe_ctx_emit,
@@ -434,14 +435,11 @@ def make_llm_ephemeral_runner(
                             chunk = event.delta or ""
                             if chunk:
                                 accumulated += chunk
-                                _safe_ctx_emit(
-                                    _ctx_emitter_single,
-                                    {
-                                        "type": "sub_text_delta",
-                                        "agent_id": call.role.id,
-                                        "round": 1,
-                                        "delta": chunk,
-                                    },
+                                _emit_sub_text_delta(
+                                    call.role.id,
+                                    1,
+                                    chunk,
+                                    emitter=_ctx_emitter_single,
                                 )
                         elif event.type == "done":
                             fin = event.final
@@ -604,15 +602,13 @@ def make_llm_ephemeral_runner(
                                 # swarm consumers can render the role's
                                 # prose live. ``sub_text_delta`` is the
                                 # role-scoped equivalent of react_loop's
-                                # ``text_delta``.
-                                _safe_ctx_emit(
-                                    _ctx_emitter,
-                                    {
-                                        "type": "sub_text_delta",
-                                        "agent_id": call.role.id,
-                                        "round": round_i + 1,
-                                        "delta": chunk,
-                                    },
+                                # ``text_delta``; the journal mirror
+                                # keeps the stream reconstructable.
+                                _emit_sub_text_delta(
+                                    call.role.id,
+                                    round_i + 1,
+                                    chunk,
+                                    emitter=_ctx_emitter,
                                 )
                         elif etype == "tool_use" and event.tool_call is not None:
                             tool_calls.append(event.tool_call)
@@ -687,14 +683,11 @@ def make_llm_ephemeral_runner(
                     continue
                 if _is_length_limited_finish(finish_reason_round):
                     notice = "\n\n[response truncated: model stopped at the output length limit]"
-                    _safe_ctx_emit(
-                        _ctx_emitter,
-                        {
-                            "type": "sub_text_delta",
-                            "agent_id": call.role.id,
-                            "round": round_i + 1,
-                            "delta": notice,
-                        },
+                    _emit_sub_text_delta(
+                        call.role.id,
+                        round_i + 1,
+                        notice,
+                        emitter=_ctx_emitter,
                     )
                     return accumulated_text + notice
                 return accumulated_text

@@ -20,6 +20,7 @@ from typing import Any
 from runtime.protocol.text_limits import MAX_SUBAGENT_ANSWER_CHARS
 
 __all__ = [
+    "_emit_sub_text_delta",
     "_emit_sub_tool_event",
     "_emit_subagent_lifecycle_event",
     "_safe_ctx_emit",
@@ -36,6 +37,75 @@ def _safe_ctx_emit(emitter: Any, event: dict) -> None:
         return
     with contextlib.suppress(Exception):
         emitter(event)
+
+
+def _emit_sub_text_delta(
+    role_id: str,
+    round: int,
+    delta: str,
+    *,
+    emitter: Any = None,
+) -> None:
+    """Best-effort forward of one streamed role-prose chunk.
+
+    Pushes the ``sub_text_delta`` event to the caller-supplied
+    ``emitter`` (parent gateway render path) AND mirrors it onto the
+    genome journal as a ``SubTextDeltaEvent`` row, so the sub-agent's
+    streaming prose is reconstructable from the log alone (dsh
+    session-log invariant: model-visible means logged). The parent
+    only stitches role text into prompts after the fact; journaling
+    each chunk keeps the audit trail at the same fidelity as the SSE
+    stream.
+
+    Silently no-ops when no session / journal is bound — unit tests
+    calling the runner directly stay green, and telemetry loss never
+    breaks the runner.
+    """
+    _safe_ctx_emit(
+        emitter,
+        {
+            "type": "sub_text_delta",
+            "agent_id": role_id,
+            "round": round,
+            "delta": delta,
+        },
+    )
+    try:
+        from runtime.platform.process.session import current_session
+
+        sess = current_session()
+    except (ImportError, TypeError, AttributeError, OSError):  # noqa: BLE001
+        return
+    if sess is None:
+        return
+    meta = getattr(sess, "metadata", None) or {}
+    if not isinstance(meta, dict):
+        return
+    journal = meta.get("journal")
+    if journal is None:
+        try:
+            stack = meta.get("stack")
+            if stack is not None:
+                journal = getattr(stack, "journal", None)
+        except (AttributeError, TypeError):  # noqa: BLE001
+            journal = None
+    if journal is None:
+        return
+    try:
+        from runtime.memory.journal import SubTextDeltaEvent
+
+        journal.write(
+            SubTextDeltaEvent(
+                task_id=meta.get("task_id"),
+                role_id=role_id,
+                round=int(round),
+                delta=delta,
+                parent_tool_use_id=meta.get("_active_parent_tool_use_id") or None,
+            )
+        )
+    except (OSError, TypeError, ValueError):  # noqa: BLE001
+        # Mirroring is best-effort; never break the runner.
+        pass
 
 
 def _emit_sub_tool_event(

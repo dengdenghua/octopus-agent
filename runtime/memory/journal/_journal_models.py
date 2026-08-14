@@ -46,6 +46,7 @@ JournalEventType = Literal[
     "protocol_drift_decision",
     "sub_tool_start",
     "sub_tool_end",
+    "sub_text_delta",
     "browser_artifact",
     "goal_change",
     "user/message",
@@ -368,6 +369,23 @@ class SubToolEndEvent(JournalEvent):
     is_error: bool = False
     duration_ms: int = 0
     output_preview: str = ""
+    parent_tool_use_id: str | None = None
+
+
+class SubTextDeltaEvent(JournalEvent):
+    """One streamed role-prose chunk (dsh ``assistant/chunk``).
+
+    Mirrors the ``sub_text_delta`` shape the SSE pump streams to the
+    UI (see ``ephemeral_runner``). Journaling every chunk makes the
+    sub-agent's streaming prose reconstructable from the log —
+    the dsh session-log invariant "model-visible means logged" —
+    instead of living only in the in-memory emitter callback.
+    """
+
+    event_type: Literal["sub_text_delta"] = "sub_text_delta"
+    role_id: str = ""
+    round: int = 0
+    delta: str = ""
     parent_tool_use_id: str | None = None
 
 

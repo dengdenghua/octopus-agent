@@ -704,11 +704,11 @@ revision 的下一个轮次」,但 journal 一直没有 dsh 的 ``user/message``
   回环、轮次记账 1→2→3、乱序第 3 轮拒绝 GOAL_INVALID_TRANSITION、
   无归属忽略、非 goal source 忽略、超 maxGoalRounds 拒绝)。
 
-### 尚未覆盖(dsh 有而这里没有)
+### 已收口
 
 - 回合级 transcript 逐事件桥:sub_tool_start/sub_text_delta 等回合内
-  子事件还没喂 session 日志;目前 step/tool 粒度是有的,回合内流式
-  细节仍是调用方直接拼 prompt,未全部入日志。
+  子事件喂 session 日志——第 27 节已落地(``sub_text_delta`` journal
+  事件 + 逐 chunk 镜像 + 逐事件重建)。
 ## 27. session-reference resolver (`tool_engine/session_reference.py`)
 
 第 24 节落地了 dsh 的投影算法,但只有 subagent 续会话一个调用点,没有
@@ -749,6 +749,40 @@ revision 的下一个轮次」,但 journal 一直没有 dsh 的 ``user/message``
   (dsh 由 host 解析 mentions 后调 ``prepare``)。
 - 取消信号:我们省略了 dsh 的 ``AbortSignal`` 取消边界;长读 surface
   时如需可中断再补。
+## 27. 回合级 transcript 逐事件桥 (`sub_text_delta` → journal)
+
+dsh session 日志的不变式是「模型可见即入日志」:回合内流式细节也逐
+事件落盘,transcript 可从日志逐事件重建。我们此前 sub_tool_start/end
+已入日志,但角色流式文本(``sub_text_delta``)只走内存 emitter,父
+进程拼 prompt 后日志里没有原文。本轮补上最后一环:
+
+- ``_journal_models.py``:``JournalEventType`` 新增 ``"sub_text_delta"``;
+  ``SubTextDeltaEvent(event_type="sub_text_delta", role_id, round, delta,
+  parent_tool_use_id)``——镜像 SSE pump 的 ``sub_text_delta`` 形状
+  (dsh 对应 ``assistant/chunk``),字段与 ``sub_tool_*`` 事件一致。
+- ``_journal_parse.py`` 注册 + JSONL 回环,重启重放可重建流式文本。
+- ``_ephemeral_events.py``:``_emit_sub_text_delta(role_id, round, delta,
+  *, emitter=None)``——先 ``_safe_ctx_emit`` 转发父网关渲染路径,再按
+  ``_emit_sub_tool_event`` 同一查找模式镜像 journal(带 task_id /
+  parent_tool_use_id);无 session/journal 时静默 no-op,telemetry 损失
+  绝不打断 runner。
+- ``ephemeral_runner.py`` 三处发射点全部切换:单发流式、agentic 循环
+  流式、截断通知——每 chunk 都落盘,不只最终文本。
+- ``derive.py``:``derive_subagent_streams(journal, *, role_id=None)``
+  按 ``(role_id, round)`` 分组、按 journal 顺序拼接重建每轮 prose
+  (``SubagentRoundStream``,带 ``chunk_count`` 证明逐 chunk 保真);
+  ``assert_logged_stream_reconstructs`` 提供 round-trip 断言——与
+  ``assert_logged_history_reconstructs`` 对应,审计路径可证明「角色
+  流过的文本日志里全有」。
+- 测试:``tests/test_sub_text_delta_event.py`` 9 用例(事件注册、JSONL
+  回环、emitter+journal 双写、无 session no-op、多轮重建、按角色
+  过滤、空日志、跳过非 delta 事件、round-trip 断言),全部绿。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 父级 assistant 流式文本同样未逐 chunk 入日志(parent 主路径走
+  ``react_checkpoint`` 快照 + ``step`` 事件,没有 ``assistant/chunk``
+  等价事件);subagent 泳道已闭合,父泳道如需同等保真可再补。
 ## 用法速查
 
 ```bash

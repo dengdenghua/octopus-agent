@@ -20,6 +20,7 @@ caller until a user-message event type lands.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from runtime.memory.journal._journal_base import Journal
@@ -105,6 +106,82 @@ def derive_model_messages(
             )
         )
     return messages
+
+
+@dataclass(frozen=True)
+class SubagentRoundStream:
+    """One role's streamed prose for one round, rebuilt from the journal.
+
+    ``text`` is the exact concatenation of that round's
+    ``sub_text_delta`` deltas in journal order; ``chunk_count`` is how
+    many chunks the log recorded (proves per-chunk fidelity, not just
+    an opaque final string).
+    """
+
+    role_id: str
+    round: int
+    text: str
+    chunk_count: int
+
+
+def derive_subagent_streams(
+    journal: Journal,
+    *,
+    role_id: str | None = None,
+) -> list[SubagentRoundStream]:
+    """Reconstruct each role's streamed prose from ``SubTextDeltaEvent`` rows.
+
+    The dsh session-log invariant applied to sub-agent turns: the
+    prose a role streamed is recoverable from the append-only journal
+    alone, in journal order, grouped by ``(role_id, round)``. Rounds
+    that streamed no text contribute nothing; roles are returned in
+    first-seen order.
+    """
+
+    streams: dict[tuple[str, int], list[str]] = {}
+    order: list[tuple[str, int]] = []
+    for event in journal.read_all():
+        if event.event_type != "sub_text_delta":
+            continue
+        # ``getattr`` guards against an untyped fallback row (unknown
+        # event_type decodes to the base JournalEvent).
+        event_role = getattr(event, "role_id", "") or ""
+        event_round = int(getattr(event, "round", 0) or 0)
+        if role_id is not None and event_role != role_id:
+            continue
+        key = (event_role, event_round)
+        if key not in streams:
+            streams[key] = []
+            order.append(key)
+        streams[key].append(getattr(event, "delta", "") or "")
+    return [
+        SubagentRoundStream(
+            role_id=key[0],
+            round=key[1],
+            text="".join(streams[key]),
+            chunk_count=len(streams[key]),
+        )
+        for key in order
+    ]
+
+
+def assert_logged_stream_reconstructs(
+    journal: Journal,
+    expected: list[SubagentRoundStream],
+    *,
+    role_id: str | None = None,
+) -> None:
+    """Assert the journal reconstructs the given streamed prose — round-trip.
+
+    Mirrors ``assert_logged_history_reconstructs`` for the sub-agent
+    prose lane: call from tests and audit paths that must prove the
+    stream a role produced is fully recoverable from the log.
+    """
+
+    actual = derive_subagent_streams(journal, role_id=role_id)
+    assert actual == expected, (
+        f"derived {len(actual)} round-streams, expected {len(expected)}"
+    )
 
 
 def assert_logged_history_reconstructs(
