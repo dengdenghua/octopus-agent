@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 四十八个差距点已落地为可测试代码(1-48 节)
+**状态**: 四十九个差距点已落地为可测试代码(1-49 节)
 
 ---
 
@@ -1421,10 +1421,9 @@ octopus 自造的 ``@session:<id>`` 语法,缺 dsh 的宿主无关 canonical URI
 
 ### 尚未覆盖(dsh 有而这里没有)
 
-- 前端自动补全弹层渲染 canonical mention:第 39 节后端候选端点 +
-  本节的 ``format_session_reference_mention`` 已就绪,弹层 UI 待前端
-  接入;非 subagent store 的 ``list_candidates``/``read_surface`` 适配器
-  同理是纯接入点。
+- 前端自动补全弹层渲染 canonical mention:已由第 49 节收口(``session``
+  泳道 + canonical URI 插入);非 subagent store 的
+  ``list_candidates``/``read_surface`` 适配器同理是纯接入点。
 
 ## 48. 会话引用取消边界 (`SESSION_REFERENCE_CANCELLED`)
 
@@ -1454,6 +1453,35 @@ dsh 的 resolver 把 ``AbortSignal`` 作为一等边界:``listCandidates`` /
   read_surface、读取中途取消停在首个引用、读取后取消在渲染前拦截);
   reference/projection/subagent/report/journal/goal 关联 135 项全绿,
   ruff/invariant 干净。
+
+## 49. 前端 session mention 自动补全弹层
+    (`mention-autocomplete.tsx` `session` 泳道)
+
+第 39 节后端候选端点(``/api/subagents/sessions``)与第 47 节 canonical
+URI 原语就绪后,差的最后一环是宿主 UI:键入 ``@`` 弹层里没有会话候选。
+本轮在既有 mention 自动补全里加 ``session`` 泳道,纯前端接入、后端零改动:
+
+- 类型面:``MentionCategory`` 新增 ``session``(图标/配色/合法前缀),
+  ``@se`` 前缀输入弹出「会话」分类行,Enter/Tab 续出 ``session:``;
+  输入 ``@session:<查询>`` 时实时拉
+  ``/api/subagents/sessions?query=&target=&limit=20``(target 传当前
+  thread id,后端排除自引用),候选按 label/session id 展示。
+- 插入面:选中候选插入 **canonical mention**
+  ``@[label](dsh-session:<base64url>)`` 而非 legacy ``@session:<id>``——
+  TS 侧镜像 ``uri.ts`` 的严格编码(ASCII 转义 JSON + base64url 去 padding
+  + label 转义 ``\\``/``]``),与后端 ``encode_session_reference_uri``
+  逐字节一致,保证后端 strict canonical 复编码校验放行;backend resolver
+  的 canonical 泳道直接命中。
+- 测试:``mention-autocomplete.uri.test.ts`` 4 用例,fixtures 全部取自已
+  验证的 Python 编码器输出(ASCII/中文/标点/空格/转义 label),编码不一致
+  立即红;typecheck/eslint/prettier 干净,chat-input-box 33 用例回归通过。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 宿主生产接线:``resolve_session_mentions``(``sessions.py``)仍无生产
+  调用方——用户 prompt 里的 mention 目前不会被 gateway 解析注入;弹层
+  插入 canonical mention 后,这步是端到端的最后一段(与 ``on_report``
+  同属网关热区,留待专门一轮)。
 
 ## 用法速查
 

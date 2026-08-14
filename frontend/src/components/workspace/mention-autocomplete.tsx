@@ -27,6 +27,7 @@ import {
   FolderIcon,
   GitBranchIcon,
   GlobeIcon,
+  HistoryIcon,
   Loader2Icon,
   PackageIcon,
   PuzzleIcon,
@@ -69,7 +70,8 @@ export type MentionCategory =
   | "agent"
   | "plugin"
   | "skill"
-  | "pack";
+  | "pack"
+  | "session";
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   file: FileIcon,
@@ -86,6 +88,7 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   skill: ZapIcon,
   pack: PackageIcon,
   database: DatabaseIcon,
+  session: HistoryIcon,
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -101,7 +104,103 @@ const CATEGORY_COLORS: Record<string, string> = {
   skill: "text-warning",
   pack: "text-chart-5",
   database: "text-success",
+  session: "text-chart-2",
 };
+
+// dsh ``uri.ts`` mention encoding — canonical ``dsh-session:`` URI of the
+// session id (base64url of ASCII-escaped JSON), mirrored from
+// ``session_reference_uri.py`` so the backend's strict canonical re-encode
+// check accepts what the UI inserts.
+function ensureAsciiJson(value: string): string {
+  const json = JSON.stringify(value);
+  let out = "";
+  for (const ch of json) {
+    const code = ch.charCodeAt(0);
+    // Keep JSON's short escapes for control chars; escape anything ≥ 0x7F
+    // as \uXXXX (surrogate pairs stay paired, matching Python's
+    // ``json.dumps(..., ensure_ascii=True)``).
+    out += code < 0x7f ? ch : `\\u${code.toString(16).padStart(4, "0")}`;
+  }
+  return out;
+}
+
+export function encodeSessionReferenceUri(sessionId: string): string {
+  const bytes = new TextEncoder().encode(ensureAsciiJson(sessionId));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  const payload = btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `dsh-session:${payload}`;
+}
+
+function escapeMentionLabel(label: string): string {
+  return label.replace(/[\\\]]/g, (ch) => `\\${ch}`);
+}
+
+export function formatSessionReferenceMention(
+  sessionId: string,
+  label?: string,
+): string {
+  const safeLabel = escapeMentionLabel(label ?? sessionId);
+  return `@[${safeLabel}](${encodeSessionReferenceUri(sessionId)})`;
+}
+
+const SESSION_CATEGORY_ITEM: MentionItem = {
+  type: "session",
+  label: "会话",
+  value: "session:",
+  description: "引用此前子代理会话的转录,只读注入上下文",
+  icon: "session",
+};
+
+type SessionAutocomplete =
+  | { mode: "none" }
+  | { mode: "category-only" }
+  | { mode: "candidates"; search: string };
+
+/** Classify an @-query into the session lane: prefix → category row,
+ * ``session:`` → live candidates from the backend seam. */
+function sessionAutocompleteState(query: string): SessionAutocomplete {
+  const q = query.trim().toLowerCase();
+  if (q.startsWith("session:")) {
+    return { mode: "candidates", search: q.slice("session:".length).trim() };
+  }
+  if (q.length <= "session".length && "session".startsWith(q) && q !== "") {
+    return { mode: "category-only" };
+  }
+  return { mode: "none" };
+}
+
+async function fetchSessionCandidates(
+  search: string,
+  target: string | undefined,
+  signal: AbortSignal,
+): Promise<MentionItem[]> {
+  const params = new URLSearchParams({ query: search, limit: "20" });
+  if (target) params.set("target", target);
+  try {
+    const res = await fetch(`${BASE_URL}/api/subagents/sessions?${params}`, {
+      signal,
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+    return candidates.map(
+      (candidate: { session_id?: string; label?: string }) => ({
+        type: "session",
+        label: candidate.label || candidate.session_id || "会话",
+        value: candidate.session_id || "",
+        description: `会话 ${candidate.session_id || ""}`,
+        icon: "session",
+      }),
+    );
+  } catch (e) {
+    swallow(e);
+    return [];
+  }
+}
 
 const LOCAL_FILE_AGENT_MENTION: MentionItem = {
   type: "agent",
@@ -359,6 +458,7 @@ export function useMentionAutocomplete({
         "plugin",
         "skill",
         "pack",
+        "session",
       ];
       if (validTypes.includes(typeStr.toLowerCase())) {
         // For @web: allow spaces in the query
@@ -420,25 +520,46 @@ export function useMentionAutocomplete({
       const controller = new AbortController();
       abortRef.current = controller;
 
-      fetchMentionAutocomplete(
-        mentionQuery,
-        workDir || ".",
-        controller.signal,
-        threadId,
-        actor,
-      )
-        .then((results) => {
-          if (!controller.signal.aborted) {
-            setItems(
-              withMemberMentions(
-                mentionQuery,
-                membersRef.current,
-                withLocalFileAgentMention(mentionQuery, results),
-              ),
+      Promise.all([
+        fetchMentionAutocomplete(
+          mentionQuery,
+          workDir || ".",
+          controller.signal,
+          threadId,
+          actor,
+        ),
+        (async () => {
+          const state = sessionAutocompleteState(mentionQuery);
+          if (state.mode === "candidates") {
+            return fetchSessionCandidates(
+              state.search,
+              threadId,
+              controller.signal,
             );
-            setSelectedIndex(0);
-            setIsLoading(false);
           }
+          return [];
+        })(),
+      ])
+        .then(([genericResults, sessionResults]) => {
+          if (controller.signal.aborted) return;
+          const state = sessionAutocompleteState(mentionQuery);
+          let merged = genericResults;
+          if (state.mode !== "none") {
+            merged = [
+              SESSION_CATEGORY_ITEM,
+              ...sessionResults,
+              ...genericResults,
+            ];
+          }
+          setItems(
+            withMemberMentions(
+              mentionQuery,
+              membersRef.current,
+              withLocalFileAgentMention(mentionQuery, merged),
+            ),
+          );
+          setSelectedIndex(0);
+          setIsLoading(false);
         })
         .catch(() => {
           if (!controller.signal.aborted) {
@@ -469,8 +590,13 @@ export function useMentionAutocomplete({
       const atPos = triggerPosRef.current;
       if (atPos < 0) return;
 
-      // Build the mention text to insert
-      const mentionText = `@${item.value} `;
+      // Build the mention text to insert. Session candidates insert the
+      // host-neutral canonical mention ``@[label](dsh-session:...)`` so the
+      // backend resolver's canonical lane picks them up.
+      const mentionText =
+        item.type === "session" && !item.value.endsWith(":")
+          ? `${formatSessionReferenceMention(item.value, item.label)} `
+          : `@${item.value} `;
 
       // Replace from @ to current cursor position
       const before = value.slice(0, atPos);
@@ -788,15 +914,11 @@ export function MentionAutocompletePopup({
             {t.mentions.navigate}
           </span>
           <span>
-            <kbd className="bg-muted rounded px-1 font-mono text-xs">
-              Tab
-            </kbd>{" "}
+            <kbd className="bg-muted rounded px-1 font-mono text-xs">Tab</kbd>{" "}
             {t.mentions.select}
           </span>
           <span>
-            <kbd className="bg-muted rounded px-1 font-mono text-xs">
-              Esc
-            </kbd>{" "}
+            <kbd className="bg-muted rounded px-1 font-mono text-xs">Esc</kbd>{" "}
             {t.mentions.close}
           </span>
         </div>
