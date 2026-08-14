@@ -282,7 +282,8 @@ append-only 日志里,剪的只是渲染面。
 
 - 主循环默认开启:`_tool_bridge_exec` 仍用旧的头部截断,prune 开关
   未点亮(避免动主路径的高风险面);接入点已备好,`prune_middle=True`
-  一行即可开启,留给性能/上下文预算实测后决定默认值。
+  一行即可开启,留给性能/上下文预算实测后决定默认值。(已由第 17/18 节
+  收口:``OCTOPUS_TOOL_PRUNE_MIDDLE`` 默认开,realtime native 路径已点亮。)
 - dsh 的 shadow-price 记账(每次修剪在日志里补一条定价事件,消费方可
   无状态扣除)——已落地,见第 22 节。
 ## 14. 会话标题自动再生接线 (auto-title)
@@ -392,8 +393,9 @@ dsh ``tool-subagent-report`` 的「子→父」投递通道:continuable 子代�
 ### 尚未覆盖(dsh 有而这里没有)
 
 - 进程内子代理 runner 注册真正的 ``report`` **工具**(子代理回合中主动
-  调用,而不是父代理在下次 call 时拉取)——需要动 ephemeral runner 的
-  消息构造,风险高,暂缓;当前实现是等价的「拉取 + ack」闭环。
+  调用,而不是父代理在下次 call 时拉取)。(已由第 21 节收口:runner 已
+  注册可调用的 ``report`` 工具,``_handle_report_tool`` 走
+  ``append_report``,回合中即可送达,见 ``tests/test_ephemeral_report_tool.py``。)
 - ``quiet``/``wakeup`` 的调度器(父代理离线时 wakeup 排队)——需要
   事件桥接层配合,列为后续。
 ## 17. Tool-result pruner 接入主路径 (`core/cerebrum/_react_execution_dispatch.py`)
@@ -415,7 +417,8 @@ dsh ``tool-subagent-report`` 的「子→父」投递通道:continuable 子代�
 ### 尚未覆盖(dsh 有而这里没有)
 
 - `_tool_bridge_exec`(realtime native tool 路径)仍未默认点亮——接入点
-  已备好(`prune_middle=True` 一行),与主路径同一开关可后续统一。
+  已备好(`prune_middle=True` 一行),与主路径同一开关可后续统一。(已由
+  第 18 节收口:``TOOL_RESULT_PRUNE_ENABLED`` 默认开并已点亮。)
 - dsh 的 shadow-price 记账(每次修剪在日志里补定价事件)——已落地,
   见第 22 节。
 ## 18. Pruner 开关统一 + native tool bridge 点亮
