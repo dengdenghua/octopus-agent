@@ -118,6 +118,24 @@ def test_report_quiet_delivery_policy(tmp_path) -> None:
     assert report.delivery == "quiet"
 
 
+def test_report_queued_while_parent_busy(tmp_path) -> None:
+    store = _store(tmp_path)
+    session = store.create(agent_id="researcher", thread_id="t-1")
+    store.mark_owner_busy(session.session_id)
+    runner, router, call = _make_runner(
+        [[{"name": "report", "input": {"output": "busy finding"}}], "done"],
+        context={"subagent_session_id": session.session_id},
+    )
+    assert runner(call) == "done"
+
+    _index, report = store.pending_reports(session.session_id)[0]
+    assert report.delivery == "queued"
+    user_msg = router.call_log[1].messages[-1].content
+    assert user_msg[0]["type"] == "tool_result"
+    assert "parent is busy" in user_msg[0]["content"]
+    assert "was not woken" in user_msg[0]["content"]
+
+
 def test_report_failure_is_error_but_round_continues(tmp_path) -> None:
     _store(tmp_path)  # store exists but the session id does not
     runner, router, call = _make_runner(

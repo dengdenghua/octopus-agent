@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 三十三个差距点已落地为可测试代码(1-33 节)
+**状态**: 三十四个差距点已落地为可测试代码(1-34 节)
 
 ---
 
@@ -674,9 +674,8 @@ dsh 的 ``@dsh-session-reference`` 在把**别的会话**的上下文注入当�
 
 ### 尚未覆盖(dsh 有而这里没有)
 
-- 忙碌 owner 语义:dsh 区分 owner 空闲(``followup`` 唤醒)与忙碌
-  (``inject`` 排队);我们只有 report 泳道,父回合是否在跑由调度器外部
-  决定,预算只管「连续唤醒次数」,不管 owner 忙碌状态。
+- 忙碌 owner 语义已由第 34 节收口;当时缺的「owner 忙碌判定」现在是
+  ``mark_owner_busy/mark_owner_idle`` 显式状态。
 - 弱引用生命周期:dsh 的 ``spentWakes`` 是 ``WeakMap``(session 替换即
   满预算);我们用 ``dict`` 按 session_id 记,会话结束由调用方决定是否
   清除。
@@ -974,6 +973,43 @@ delta 打包成一行存储、读时无损展开。本轮把这套存储编码�
   (``user/message`` 写的是父会话/goal 维度),所以投影的 user 泳道仍由
   turn 提供,纯 journal 表面尚缺 user 侧;后续可让桥在 subagent 会话
   生命周期里补齐。
+## 34. 忙碌 owner 语义(`subagents/sessions.py` + `suckers/ephemeral_runner.py`)
+
+第 25 节留的缺口:dsh 的 ``tool-jobs`` 调度器在通知完成时先看 owner
+状态——空闲(``followup`` 唤醒开回合)与忙碌(``inject`` 排进当前回合
+的下一步队列)是两条不同路径,且 ``inject`` 不消耗唤醒预算;我们只有
+report 泳道,「父回合是否在跑」由调度器外部决定,预算只管连续唤醒次数。
+本轮把 owner 忙碌判定搬进 store:
+
+- ``mark_owner_busy(session_id)`` / ``mark_owner_idle(session_id)``:新增
+  owner 生命周期状态(dsh ``agent.status === 'running'/'idle'``)。纯内存
+  状态、不落盘——store 重启一律从 idle 开始(dsh 重启即 idle),未知
+  session 为 no-op。
+- ``append_report(delivery="wakeup")`` 决策表与 dsh ``onJobDone`` 对齐:
+  owner 忙碌 → 持久化为 ``queued``(dsh ``inject``:不唤醒、不扣预算,
+  等当前回合的下一次读/续会话消费);owner 空闲且预算未花完 → 唤醒 +
+  扣预算(dsh ``followup``);预算耗尽 → 降级 ``quiet``。``quiet`` 输入
+  在忙碌时也保持 ``quiet``,不升级。
+- ``SubagentReport.delivery`` 新增 ``"queued"`` 字面量,``from_dict``
+  兼容旧 JSON(wakeup/quiet 原样,未知值回退 wakeup),跨实例重载无损。
+- runner 反馈闭环:``_handle_report_tool`` 现在区分三种生效 delivery——
+  ``queued`` 明确告诉子代理「父进程正在跑、没被唤醒,会在下一次续会话
+  或新回合读到」,避免它以为父进程已被撬起而重复汇报。
+- 测试:``tests/test_subagent_report.py`` 新增 8 用例(忙碌时排队不唤醒、
+  不扣预算、quiet 不升级、idle 恢复唤醒、忙碌态不落盘、未知 session
+  no-op、queued 跨实例重载、prompt 标注 queued);
+  ``tests/test_ephemeral_report_tool.py`` 新增 1 用例(忙碌时子代理收到
+  「父进程忙」反馈);既有 48 项全绿,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 回合内「下一步」注入:dsh 的 ``inject`` 会被正在跑的回合在最近的
+  step 边界直接消费;我们没有 per-step inbox,``queued`` 报告实际靠
+  ``pending_reports``/``reports_prompt`` 在父进程下一次续会话或新回合
+  读到(近似、不保证同回合可见)。
+- 生产接线:``mark_owner_busy/mark_owner_idle`` 与 ``on_report`` 唤醒钩子
+  一样由调度器负责调用(目前默认 store 未接钩子,wakeup 只落盘不真的
+  撬回合);父回合起止处调用这两个方法是接线方的职责。
 
 ## 用法速查
 

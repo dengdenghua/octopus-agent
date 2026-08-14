@@ -218,6 +218,119 @@ def test_zero_wake_budget_never_wakes(tmp_path: Path) -> None:
     assert store.get(session.session_id).reports[-1].delivery == "quiet"
 
 
+# ─── busy owner semantics (dsh ``inject`` vs ``followup``) ───────────────
+
+
+def test_wakeup_while_owner_busy_is_queued_not_woken(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.mark_owner_busy(session.session_id)
+    store.append_report(session.session_id, content="mid-turn finding", delivery="wakeup")
+
+    # No wake while the owner is mid-turn; the report is injected as queued.
+    assert seen == []
+    report = store.get(session.session_id).reports[-1]
+    assert report.delivery == "queued"
+    prompt = store.reports_prompt(store.get(session.session_id))
+    assert "(queued)" in prompt
+
+
+def test_busy_owner_does_not_consume_wake_budget(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+        max_consecutive_wakes=1,
+    )
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.mark_owner_busy(session.session_id)
+    store.append_report(session.session_id, content="busy-1", delivery="wakeup")
+    store.append_report(session.session_id, content="busy-2", delivery="wakeup")
+    assert seen == []
+    assert [r.delivery for r in store.get(session.session_id).reports] == [
+        "queued",
+        "queued",
+    ]
+
+    # The single budget slot was untouched: once the owner is idle again a
+    # wakeup report still wakes (dsh ``inject`` never spends ``spentWakes``).
+    store.mark_owner_idle(session.session_id)
+    store.append_report(session.session_id, content="after-idle", delivery="wakeup")
+    assert seen == ["after-idle"]
+
+
+def test_quiet_while_owner_busy_stays_quiet(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.mark_owner_busy(session.session_id)
+    store.append_report(session.session_id, content="quiet note", delivery="quiet")
+    assert seen == []
+    assert store.get(session.session_id).reports[-1].delivery == "quiet"
+
+
+def test_mark_owner_idle_restores_wakeup(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.mark_owner_busy(session.session_id)
+    store.append_report(session.session_id, content="queued-1", delivery="wakeup")
+    assert seen == []
+    store.mark_owner_idle(session.session_id)
+    store.append_report(session.session_id, content="woken-2", delivery="wakeup")
+    assert seen == ["woken-2"]
+
+
+def test_owner_busy_state_is_live_not_persisted(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.mark_owner_busy(session.session_id)
+    store.append_report(session.session_id, content="queued-1", delivery="wakeup")
+    assert seen == []
+
+    # A restarted store starts every owner idle (dsh restart-into-idle): the
+    # queued report stays queued, but a new wakeup may open a parent turn.
+    fresh = SubagentSessionStore(
+        base_dir=tmp_path / "sessions",
+        on_report=lambda sid, report: seen.append(report.content),
+    )
+    assert fresh.get(session.session_id).reports[-1].delivery == "queued"
+    fresh.append_report(session.session_id, content="after-restart", delivery="wakeup")
+    assert seen == ["after-restart"]
+
+
+def test_mark_owner_unknown_session_noop(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.mark_owner_busy("not-a-real-session")  # no raise
+    store.mark_owner_idle("not-a-real-session")  # no raise
+
+
+def test_queued_report_round_trips_across_instances(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    session = store.create(agent_id="researcher", thread_id="th-1")
+    store.mark_owner_busy(session.session_id)
+    store.append_report(session.session_id, content="queued finding", delivery="wakeup")
+
+    fresh = SubagentSessionStore(base_dir=tmp_path / "sessions")
+    loaded = fresh.get(session.session_id)
+    assert loaded is not None
+    assert loaded.reports[-1].delivery == "queued"
+
+
 def test_legacy_session_without_reports_loads(tmp_path: Path) -> None:
     store = _store(tmp_path)
     session = store.create(agent_id="researcher", thread_id="th-1")

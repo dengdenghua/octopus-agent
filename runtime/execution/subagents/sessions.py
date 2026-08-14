@@ -85,18 +85,20 @@ class SubagentReport:
 
     ``delivery`` mirrors dsh ``reportDelivery``: ``wakeup`` (default)
     schedules a parent turn so the report is not missed, ``quiet`` only
-    adds context that the parent sees on its next wake.
+    adds context that the parent sees on its next wake, ``queued`` means
+    the parent was busy when the report landed so it was injected into the
+    running turn's queue instead of waking a second turn.
     """
 
     content: str
-    delivery: Literal["wakeup", "quiet"] = "wakeup"
+    delivery: Literal["wakeup", "quiet", "queued"] = "wakeup"
     timestamp: str = field(default_factory=_utc_now_iso)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SubagentReport:
         return cls(
             content=str(data.get("content") or ""),
-            delivery="wakeup" if data.get("delivery") != "quiet" else "quiet",
+            delivery=_normalize_report_delivery(data.get("delivery")),
             timestamp=str(data.get("timestamp") or _utc_now_iso()),
         )
 
@@ -205,6 +207,10 @@ class SubagentSessionStore:
         self._max_consecutive_wakes = budget
         # Per-session spent wakes since the parent last claimed a human turn.
         self._spent_wakes: dict[str, int] = {}
+        # Parent owners currently mid-turn (dsh ``agent.status === 'running'``).
+        # Live state only — a store restart always starts owners idle, matching
+        # dsh's restart-into-idle lifecycle.
+        self._owner_busy: set[str] = set()
 
     def _path_for(self, session_id: str) -> Path | None:
         if self._base_dir is None:
@@ -225,6 +231,7 @@ class SubagentSessionStore:
         with self._lock:
             self._memory[session.session_id] = session
             self._spent_wakes.pop(session.session_id, None)
+            self._owner_busy.discard(session.session_id)
             self._write_locked(session)
         return session
 
@@ -369,11 +376,13 @@ class SubagentSessionStore:
         ``delivery`` mirrors dsh ``reportDelivery``: ``wakeup`` (default)
         schedules a parent turn via the optional ``on_report`` hook, ``quiet``
         only adds context the parent sees on its next wake. A ``wakeup`` report
-        still opens a parent turn only while the consecutive-wake budget is
-        unspent (dsh ``maxConsecutiveWakes``); once exhausted it is persisted
-        as ``quiet`` so a chatty child cannot spin an unbounded chain of parent
-        turns. An empty content is rejected (dsh requires a self-contained
-        result).
+        opens a parent turn only when the owner is idle AND the consecutive-wake
+        budget is unspent (dsh ``maxConsecutiveWakes``): a busy owner is
+        injected as ``queued`` without spending budget (dsh ``inject`` — the
+        running turn claims it at its next boundary), and an exhausted budget
+        degrades to ``quiet`` so a chatty child cannot spin an unbounded chain
+        of parent turns. An empty content is rejected (dsh requires a
+        self-contained result).
         """
         if not isinstance(content, str) or not content.strip():
             raise ValueError("subagent report content must be non-empty")
@@ -382,15 +391,21 @@ class SubagentSessionStore:
             if session is None:
                 return None
             effective_delivery = "wakeup" if delivery != "quiet" else "quiet"
-            wakes = self._spent_wakes.get(session_id, 0)
             if effective_delivery == "wakeup":
-                if wakes >= self._max_consecutive_wakes:
+                if session_id in self._owner_busy:
+                    # dsh ``inject``: a busy owner must not be woken mid-turn;
+                    # the report waits in the running turn's queue and neither
+                    # fires the hook nor spends the wake budget.
+                    effective_delivery = "queued"
+                elif self._spent_wakes.get(session_id, 0) >= self._max_consecutive_wakes:
                     effective_delivery = "quiet"
                 else:
                     # The budget is spent the moment we decide to wake — a
                     # concurrent or repeated report must not re-wake the parent.
                     # Mirrors dsh ``spentWakes.set(owner, spent + 1)``.
-                    self._spent_wakes[session_id] = wakes + 1
+                    self._spent_wakes[session_id] = (
+                        self._spent_wakes.get(session_id, 0) + 1
+                    )
             report = SubagentReport(
                 content=content.strip(),
                 delivery=effective_delivery,
@@ -408,6 +423,28 @@ class SubagentSessionStore:
             except Exception:  # noqa: BLE001 — notification is best-effort
                 logger.warning("subagent report wakeup hook failed", exc_info=True)
         return delivered
+
+    def mark_owner_busy(self, session_id: str) -> None:
+        """Mark the parent owner mid-turn (dsh ``agent.status === 'running'``).
+
+        While busy, a ``wakeup`` report is injected as ``queued`` instead of
+        waking a second turn over an in-flight one. Live state only: a store
+        restart starts every owner idle. Unknown sessions are a no-op.
+        """
+        with self._lock:
+            if session_id in self._memory or self._path_for(session_id) is not None:
+                self._owner_busy.add(session_id)
+
+    def mark_owner_idle(self, session_id: str) -> None:
+        """Mark the parent owner idle again (dsh ``agent.status === 'idle'``).
+
+        The next ``wakeup`` report may open a parent turn again. Queued reports
+        are not retroactively woken (dsh ``inject`` parks them until the next
+        wake or in-turn read), they are consumed via ``pending_reports`` /
+        ``reports_prompt``. No-op for unknown sessions.
+        """
+        with self._lock:
+            self._owner_busy.discard(session_id)
 
     def refill_wake_budget(self, session_id: str) -> None:
         """Refill the consecutive-wake budget when the parent claims a human turn.
@@ -639,6 +676,12 @@ def _copy_session(session: SubagentSession) -> SubagentSession:
         reports=[SubagentReport(**asdict(report)) for report in session.reports],
         reports_delivered_up_to=session.reports_delivered_up_to,
     )
+
+
+def _normalize_report_delivery(value: Any) -> Literal["wakeup", "quiet", "queued"]:
+    if value in ("wakeup", "quiet", "queued"):
+        return value  # type: ignore[return-value]
+    return "wakeup"
 
 
 def _truncate(text: str, max_chars: int) -> str:
