@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from contextlib import suppress
 from typing import Any
 
@@ -155,6 +156,15 @@ class RealtimeGateway:
         # reclaimed when a thread goes idle instead of leaking one lock
         # per thread_id for the process lifetime.
         self._turn_locks = KeyedLock()
+        # Subagent wakeup auto-turn (dsh report lane): a ``wakeup`` report
+        # arriving while the owning thread is idle and watched by a live
+        # connection schedules a NEW parent turn that claims the parked
+        # reports. Refcounts keep the store handler registered exactly as
+        # long as at least one connection watches the thread.
+        self._wake_watch_refs: dict[str, int] = {}
+        self._active_turn_threads: set[str] = set()
+        self._auto_turn_tasks: dict[str, asyncio.Task[None]] = {}
+        self._loop: asyncio.AbstractEventLoop | None = None
         # Cross-connection state: the shared interrupt registry (see
         # SharedTurnInterrupts) plus the live-connection set used to
         # fan terminal turn events out to same-thread watchers.
@@ -357,6 +367,8 @@ class RealtimeGateway:
                 task.add_done_callback(in_flight.discard)
         finally:
             self._connections.discard(conn)
+            for watched in list(getattr(conn, "watched_threads", ())):
+                self._unwatch_thread(watched)
             self._release_connection(actor_id)
             for task in list(in_flight):
                 task.cancel()
@@ -485,62 +497,187 @@ class RealtimeGateway:
             resumed_thread = params.get("threadId")
             if isinstance(resumed_thread, str) and resumed_thread:
                 conn.last_resumed_thread_id = resumed_thread
+                self._watch_thread(resumed_thread, conn)
         return result
 
-    async def _invoke_turn_start(
-        self,
-        params: dict[str, Any],
-        conn: RpcConnection,
-    ) -> dict[str, Any]:
-        """Run a turn to completion, streaming events on ``conn``.
+    # ── Subagent wakeup auto-turn (dsh report lane) ─────────────────
 
-        Returns the final ``Turn`` snapshot to the caller as the RPC
-        result. The same turn lifecycle was already broadcast over
-        notifications, so this return value is for callers that prefer
-        a synchronous "wait for done" answer over watching the stream.
+    def _capture_loop(self) -> asyncio.AbstractEventLoop:
+        if self._loop is None:
+            self._loop = asyncio.get_running_loop()
+        return self._loop
+
+    def _watch_thread(self, thread_id: str, conn: RpcConnection) -> None:
+        """Register the auto-wake watcher for a thread this connection watches.
+
+        Idempotent per connection; refcounted across connections so the
+        store handler lives exactly as long as a live watcher exists.
+        Best-effort: a missing subagent store never raises.
         """
-        # Lenient per-actor turn-rate ceiling (auth-on only). Bursts pass;
-        # only a sustained flood trips SERVER_BUSY, which clients treat as
-        # "back off and retry". Different threads still run concurrently —
-        # this caps how fast one actor may *start* turns, not how many run.
-        if (
-            self._turn_rate_limiter is not None
-            and conn.actor_id is not None
-            and not self._turn_rate_limiter.allow(conn.actor_id)
-        ):
-            raise _RpcError(
-                JsonRpcErrorCode.SERVER_BUSY,
-                "rate limit: too many turns started; slow down and retry",
-            )
-        thread_id = params.get("threadId")
-        if not isinstance(thread_id, str):
-            raise _RpcError(
-                JsonRpcErrorCode.INVALID_PARAMS,
-                "turn/start requires threadId",
-            )
-        try:
-            from runtime.memory.threads.event_log import validate_thread_id
+        if not thread_id:
+            return
+        conn.watched_threads.add(thread_id)
+        refs = self._wake_watch_refs.get(thread_id, 0)
+        if refs == 0:
+            try:
+                from runtime.execution.subagents.sessions import (
+                    get_subagent_session_store,
+                )
 
-            thread_id = validate_thread_id(thread_id)
-        except ValueError as exc:
-            raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc)) from exc
-        params = self._sanitize_turn_params(params, conn)
+                store = get_subagent_session_store()
+                if store is not None:
+                    store.register_thread_wake_handler(
+                        thread_id,
+                        self._make_wake_handler(thread_id),
+                    )
+            except Exception:  # noqa: BLE001 — watcher registration is best-effort
+                _logger.debug("subagent wake watcher register failed", exc_info=True)
+        self._wake_watch_refs[thread_id] = refs + 1
+
+    def _unwatch_thread(self, thread_id: str) -> None:
+        """Drop one connection's watch; unregister the store handler at zero."""
+        if not thread_id:
+            return
+        refs = self._wake_watch_refs.get(thread_id, 0)
+        if refs <= 1:
+            self._wake_watch_refs.pop(thread_id, None)
+            try:
+                from runtime.execution.subagents.sessions import (
+                    get_subagent_session_store,
+                )
+
+                store = get_subagent_session_store()
+                if store is not None:
+                    store.unregister_thread_wake_handler(thread_id)
+            except Exception:  # noqa: BLE001 — best-effort
+                _logger.debug("subagent wake watcher unregister failed", exc_info=True)
+        else:
+            self._wake_watch_refs[thread_id] = refs - 1
+
+    def _make_wake_handler(self, thread_id: str) -> Callable[[str, Any], None]:
+        """Build the store wake handler hopping onto this gateway's loop.
+
+        ``append_report`` invokes the handler synchronously on the
+        reporting (worker) thread; the handler only schedules the
+        auto-turn coroutine on the event loop and returns immediately.
+        """
+        loop = self._capture_loop()
+
+        def _wake(session_id: str, report: Any) -> None:
+            try:
+                loop.call_soon_threadsafe(self._schedule_auto_turn, thread_id)
+            except RuntimeError:
+                _logger.debug(
+                    "subagent wake scheduling skipped (event loop closed)",
+                    exc_info=True,
+                )
+
+        return _wake
+
+    def _schedule_auto_turn(self, thread_id: str) -> None:
+        """Dedupe rapid wakeups: one pending task claims every parked report."""
+        if thread_id in self._auto_turn_tasks:
+            return
+        task = asyncio.create_task(self._maybe_auto_turn(thread_id))
+        self._auto_turn_tasks[thread_id] = task
+        task.add_done_callback(lambda _t: self._auto_turn_tasks.pop(thread_id, None))
+
+    def _watching_connection(self, thread_id: str) -> RpcConnection | None:
+        for conn in list(self._connections):
+            if (
+                thread_id in conn.watched_threads
+                and not getattr(conn, "_closed", False)
+            ):
+                return conn
+        return None
+
+    async def _maybe_auto_turn(self, thread_id: str) -> None:
+        """Open a new parent turn when a wakeup report finds the thread idle.
+
+        dsh report lane: a ``wakeup`` report spends wake budget at the
+        store (``maxConsecutiveWakes``); the gateway half is turning that
+        wake into an actual parent turn. Guards, in order:
+
+        * an active turn on the thread → the report is already queued
+          (busy-owner ``inject``) and this is a no-op;
+        * no live connection watching the thread → the report stays
+          parked until the next resume surfaces it;
+        * no undelivered reports left by the time the per-thread turn
+          lock is held → a racing user turn already claimed them.
+
+        The auto-turn input is a neutral stub; ``_start_turn`` surfaces
+        every parked report via the steering lane (``[子代理报告] …``) and
+        acks it, and the ``auto_wake`` metadata marker keeps this turn
+        from refilling the consecutive-wake budget (only human input
+        resets dsh ``spentWakes``).
+        """
+        if thread_id in self._active_turn_threads:
+            return
+        conn = self._watching_connection(thread_id)
+        if conn is None:
+            return
         try:
-            async with self._turn_locks.hold(thread_id):
-                turn = await self._runtime.start_turn(params, conn)
-        except _RpcError:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            _logger.exception("realtime: turn/start crashed")
-            await conn.notify(
-                ServerMethod.ERROR,
-                {
-                    "threadId": thread_id,
-                    "error": {"message": str(exc) or exc.__class__.__name__},
-                    "willRetry": False,
-                },
+            from runtime.execution.subagents.sessions import (
+                get_subagent_session_store,
             )
-            raise _RpcError(JsonRpcErrorCode.INTERNAL_ERROR, str(exc)) from exc
+
+            store = get_subagent_session_store()
+        except Exception:  # noqa: BLE001 — store is optional
+            store = None
+        if store is None or not store.pending_thread_reports(thread_id):
+            return
+        async with self._turn_locks.hold(thread_id):
+            if thread_id in self._active_turn_threads:
+                return
+            if not store.pending_thread_reports(thread_id):
+                return
+            params = {
+                "threadId": thread_id,
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "[子代理报告]",
+                        "metadata": {"context": {"auto_wake": True}},
+                    }
+                ],
+            }
+            self._active_turn_threads.add(thread_id)
+            try:
+                turn = await self._runtime.start_turn(params, conn)
+            except Exception as exc:  # noqa: BLE001 — surface, never crash the loop
+                _logger.warning(
+                    "subagent auto-wake turn failed for thread %s: %s",
+                    thread_id,
+                    exc,
+                )
+                with suppress(Exception):
+                    await conn.notify(
+                        ServerMethod.ERROR,
+                        {
+                            "threadId": thread_id,
+                            "error": {
+                                "message": str(exc) or exc.__class__.__name__,
+                            },
+                            "willRetry": False,
+                        },
+                    )
+                return
+            finally:
+                self._active_turn_threads.discard(thread_id)
+        await self._emit_turn_completed(conn, thread_id, turn)
+
+    async def _emit_turn_completed(
+        self,
+        conn: RpcConnection,
+        thread_id: str,
+        turn: Turn,
+    ) -> None:
+        """Emit the terminal TURN_COMPLETED snapshot plus sibling fan-out.
+
+        Shared by RPC-initiated and auto-woken turns so both paths keep
+        the same fail-closed invariants (terminal status, completedAt,
+        same-thread watcher fan-out).
+        """
         # A runtime return without a terminal outcome is a lifecycle protocol
         # violation, never evidence of success.  Fail closed so the client can
         # offer a truthful retry instead of persisting a fabricated completion.
@@ -581,6 +718,70 @@ class RealtimeGateway:
                     continue
                 with suppress(Exception):
                     await watcher.notify(ServerMethod.TURN_COMPLETED, completed_params)
+
+    async def _invoke_turn_start(
+        self,
+        params: dict[str, Any],
+        conn: RpcConnection,
+    ) -> dict[str, Any]:
+        """Run a turn to completion, streaming events on ``conn``.
+
+        Returns the final ``Turn`` snapshot to the caller as the RPC
+        result. The same turn lifecycle was already broadcast over
+        notifications, so this return value is for callers that prefer
+        a synchronous "wait for done" answer over watching the stream.
+        """
+        # Lenient per-actor turn-rate ceiling (auth-on only). Bursts pass;
+        # only a sustained flood trips SERVER_BUSY, which clients treat as
+        # "back off and retry". Different threads still run concurrently —
+        # this caps how fast one actor may *start* turns, not how many run.
+        if (
+            self._turn_rate_limiter is not None
+            and conn.actor_id is not None
+            and not self._turn_rate_limiter.allow(conn.actor_id)
+        ):
+            raise _RpcError(
+                JsonRpcErrorCode.SERVER_BUSY,
+                "rate limit: too many turns started; slow down and retry",
+            )
+        thread_id = params.get("threadId")
+        if not isinstance(thread_id, str):
+            raise _RpcError(
+                JsonRpcErrorCode.INVALID_PARAMS,
+                "turn/start requires threadId",
+            )
+        try:
+            from runtime.memory.threads.event_log import validate_thread_id
+
+            thread_id = validate_thread_id(thread_id)
+        except ValueError as exc:
+            raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc)) from exc
+        params = self._sanitize_turn_params(params, conn)
+        # A turn makes the thread live-watched (wakeup reports may open
+        # further parent turns while this connection stays open) and
+        # marks it busy for the auto-wake lane.
+        self._watch_thread(thread_id, conn)
+        self._active_turn_threads.add(thread_id)
+        try:
+            try:
+                async with self._turn_locks.hold(thread_id):
+                    turn = await self._runtime.start_turn(params, conn)
+            except _RpcError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                _logger.exception("realtime: turn/start crashed")
+                await conn.notify(
+                    ServerMethod.ERROR,
+                    {
+                        "threadId": thread_id,
+                        "error": {"message": str(exc) or exc.__class__.__name__},
+                        "willRetry": False,
+                    },
+                )
+                raise _RpcError(JsonRpcErrorCode.INTERNAL_ERROR, str(exc)) from exc
+        finally:
+            self._active_turn_threads.discard(thread_id)
+        await self._emit_turn_completed(conn, thread_id, turn)
         return {"turn": turn.model_dump(by_alias=True, mode="json")}
 
     def _sanitize_turn_params(

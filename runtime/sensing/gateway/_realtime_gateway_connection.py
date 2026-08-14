@@ -75,6 +75,10 @@ class RpcConnection:
         # uses it to fan terminal turn events out to sibling
         # connections watching the same thread.
         self.last_resumed_thread_id: str | None = None
+        # Every thread this connection currently live-watches (resume or
+        # turn start). The gateway refcounts subagent wake watchers per
+        # thread and unwatches them all when this connection closes.
+        self.watched_threads: set[str] = set()
         # Per-turn interrupt flags. The runtime registers each turn id
         # before any awaitable that could be cancelled; the dispatcher
         # for ``turn/interrupt`` flips the flag; the runtime polls

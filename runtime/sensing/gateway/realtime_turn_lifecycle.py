@@ -217,17 +217,25 @@ async def _start_turn(
     # ── PHASE 1 · validation + slash/topology/model routing ────────
     validated = TurnParams.model_validate(params)
     thread_id = runtime._require_thread_id(validated.thread_id)
-    # dsh ``agent/inbox/claimed``: a human-initiated turn refills every
+    # dsh ``agent/inbox/claimed``: a HUMAN-initiated turn refills every
     # subagent wake budget owned by this thread so a fresh budget's worth of
     # wakeup reports may open parent turns again (report lane, dsh
-    # ``maxConsecutiveWakes``). Best-effort: a missing store never blocks.
+    # ``maxConsecutiveWakes``). An auto-woken parent turn (gateway
+    # ``auto_wake`` marker) deliberately does NOT refill — otherwise a
+    # chatty child could chain an unbounded sequence of parent turns.
+    # Best-effort: a missing store never blocks.
+    _input_meta = _input_metadata(validated)
+    _auto_wake = bool(
+        isinstance(_input_meta.get("context"), dict)
+        and bool(_input_meta["context"].get("auto_wake"))
+    )
     try:
         from runtime.execution.subagents.sessions import (
             get_subagent_session_store,
         )
 
         store = get_subagent_session_store()
-        if store is not None:
+        if store is not None and not _auto_wake:
             store.refill_thread_wake_budget(thread_id)
     except Exception:  # noqa: BLE001 — budget refill is best-effort
         _logger.debug("subagent wake-budget refill skipped", exc_info=True)

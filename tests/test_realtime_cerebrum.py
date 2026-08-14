@@ -2975,6 +2975,69 @@ def test_explicit_chat_turn_does_not_inherit_personal_code_metadata(tmp_path: Pa
     assert "workflow_preset" not in metadata
 
 
+def test_existing_thread_keeps_its_agent_when_turn_context_disagrees() -> None:
+    from runtime.sensing.gateway.turn_session import build_turn_metadata
+
+    class Store:
+        def get(self, thread_id: str) -> dict[str, object]:
+            assert thread_id == "th-opencode"
+            return {"metadata": {"agent": "local_opencode_cli", "mode": "react"}}
+
+    metadata = build_turn_metadata(
+        thread_id="th-opencode",
+        body={"context": {"agent_name": "general", "mode": "code"}},
+        store=Store(),
+    )
+
+    assert metadata["agent"] == "local_opencode_cli"
+    assert metadata["agent_name"] == "local_opencode_cli"
+
+
+def test_agent_resolution_prefers_existing_thread_owner() -> None:
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway._realtime_cerebrum_thread import _resolve_agent
+
+    owner = object()
+    requested = object()
+
+    class Registry:
+        agents = {
+            "local_opencode_cli": owner,
+            "general": requested,
+        }
+
+        def has(self, agent_id: str) -> bool:
+            return agent_id in self.agents
+
+        def get(self, agent_id: str) -> object:
+            return self.agents[agent_id]
+
+    class Store:
+        def get(self, thread_id: str) -> dict[str, object]:
+            assert thread_id == "th-opencode"
+            return {"metadata": {"agent": "local_opencode_cli"}}
+
+    class Runtime:
+        _thread_store = Store()
+        _agent_registry = Registry()
+        _default_agent = object()
+
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-opencode",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "continue",
+                    "metadata": {"context": {"agent_name": "general"}},
+                }
+            ],
+        }
+    )
+
+    assert _resolve_agent(Runtime(), params) is owner
+
+
 def test_turn_metadata_preserves_declared_write_scope(tmp_path: Path) -> None:
     from runtime.sensing.gateway.turn_session import build_turn_metadata
 
@@ -5113,3 +5176,141 @@ def test_failed_turn_dispatches_stop_with_success_false(
     assert [name for name, _ in calls] == ["session_start", "stop"]
     assert calls[1][1]["success"] is False
     assert calls[1][1]["thread_id"] == "th-hooks-err"
+
+
+# ─── subagent wakeup → auto parent turn (dsh report lane) ─────────────
+
+
+def _recv_deadline(ws: Any, timeout_s: float = 6.0) -> Any:
+    """Receive one WS frame with a hard deadline (TestClient has none)."""
+    import concurrent.futures
+
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = ex.submit(ws.receive_text)
+        return decode_message(future.result(timeout=timeout_s))
+    finally:
+        # A timed-out receive stays blocked in the worker thread; do not
+        # wait for it (the context-manager shutdown would deadlock).
+        ex.shutdown(wait=False, cancel_futures=True)
+
+
+def _wait_for_turn_event(ws: Any, method: str, timeout_s: float = 6.0) -> Notification:
+    """Read frames until a ``turn/started`` / ``turn/completed`` arrives."""
+    for _ in range(40):
+        msg = _recv_deadline(ws, timeout_s=timeout_s)
+        if isinstance(msg, Notification) and msg.method == method:
+            return msg
+    raise AssertionError(f"{method} never arrived")
+
+
+def test_wakeup_report_opens_idle_parent_turn(gateway: Any, tmp_path: Path) -> None:
+    from runtime.execution.subagents.sessions import (
+        SubagentSessionStore,
+        get_subagent_session_store,
+        set_subagent_session_store,
+    )
+
+    client, logs_root = gateway
+    store = SubagentSessionStore(
+        base_dir=Path(logs_root) / "subagent_sessions",
+        max_consecutive_wakes=2,
+    )
+    previous = get_subagent_session_store()
+    set_subagent_session_store(store)
+    try:
+        session = store.create(agent_id="researcher", thread_id="th-auto")
+        _set_script([{"type": "react_completed"}])
+        with client.websocket_connect("/api/realtime") as ws:
+            _drive(
+                ws,
+                {
+                    "threadId": "th-auto",
+                    "input": [{"type": "text", "text": "开始"}],
+                    "approvalPolicy": "never",
+                },
+            )
+            # Human turn registered the thread watcher.
+            assert store.registered_thread_wake_handler("th-auto") is not None
+
+            # A wakeup report while the thread is idle opens a NEW parent
+            # turn with no client RPC — the report lane's production half.
+            store.append_report(session.session_id, content="研究完成", delivery="wakeup")
+            started = _wait_for_turn_event(ws, "turn/started")
+            assert started.params["turn"]["threadId"] == "th-auto"
+            auto_input = started.params["turn"]["params"]["input"][0]
+            assert auto_input["text"] == "[子代理报告]"
+            assert auto_input["metadata"]["context"]["auto_wake"] is True
+            # The auto turn completes on its own.
+            completed = _wait_for_turn_event(ws, "turn/completed")
+            assert completed.params["turn"]["id"] == started.params["turn"]["id"]
+
+            # The auto turn did NOT refill the consecutive-wake budget: a
+            # second wakeup (budget 2, one spent) still wakes, but the third
+            # degrades to quiet instead of chaining another turn.
+            store.append_report(session.session_id, content="w2", delivery="wakeup")
+            _wait_for_turn_event(ws, "turn/started")
+            store.append_report(session.session_id, content="w3", delivery="wakeup")
+            assert store.get(session.session_id).reports[-1].delivery == "quiet"
+        # Connection close unwatches the thread: the store handler is gone.
+        assert store.registered_thread_wake_handler("th-auto") is None
+    finally:
+        set_subagent_session_store(previous)
+
+
+def test_auto_wake_turn_does_not_refill_budget(gateway: Any, tmp_path: Path) -> None:
+    from runtime.execution.subagents.sessions import (
+        SubagentSessionStore,
+        get_subagent_session_store,
+        set_subagent_session_store,
+    )
+
+    client, logs_root = gateway
+    store = SubagentSessionStore(
+        base_dir=Path(logs_root) / "subagent_sessions",
+        max_consecutive_wakes=1,
+    )
+    previous = get_subagent_session_store()
+    set_subagent_session_store(store)
+    try:
+        session = store.create(agent_id="researcher", thread_id="th-norefill")
+        _set_script([{"type": "react_completed"}])
+        with client.websocket_connect("/api/realtime") as ws:
+            _drive(
+                ws,
+                {
+                    "threadId": "th-norefill",
+                    "input": [{"type": "text", "text": "开始"}],
+                    "approvalPolicy": "never",
+                },
+            )
+            # Wake 1 fires an auto turn and spends the only wake slot.
+            store.append_report(session.session_id, content="w1", delivery="wakeup")
+            _wait_for_turn_event(ws, "turn/started")
+            _wait_for_turn_event(ws, "turn/completed")
+
+            # Budget spent → next wakeup degrades to quiet, no auto turn.
+            store.append_report(session.session_id, content="w2", delivery="wakeup")
+            assert store.get(session.session_id).reports[-1].delivery == "quiet"
+            # Quiet delivery is decided synchronously at the store and never
+            # fires the wake handler, so the next human turn must be the only
+            # turn on the stream (no stray auto turn ahead of it).
+            out = _drive(
+                ws,
+                {
+                    "threadId": "th-norefill",
+                    "input": [{"type": "text", "text": "人工继续"}],
+                    "approvalPolicy": "never",
+                },
+            )
+            started_count = sum(
+                1 for n in out["notifications"] if n.method == "turn/started"
+            )
+            assert started_count == 1
+
+            # A HUMAN turn refills the budget; the next wakeup wakes again.
+            store.append_report(session.session_id, content="w3", delivery="wakeup")
+            started = _wait_for_turn_event(ws, "turn/started")
+            assert started.params["turn"]["threadId"] == "th-norefill"
+    finally:
+        set_subagent_session_store(previous)

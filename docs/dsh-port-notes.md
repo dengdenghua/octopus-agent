@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 五十五个差距点已落地为可测试代码(1-55 节)
+**状态**: 五十六个差距点已落地为可测试代码(1-56 节)
 
 ---
 
@@ -1732,6 +1732,47 @@ id 为稳定 call id,argumentsDelta 为原始 JSON 分片)。
 - 前端 live-tool-timeline 的实时参数预览渲染(``input_preview`` 已带
   ``arguments``/``streaming`` 标记,渲染留给前端侧)。
 - ReAct 文本 ``Action:`` 增量的拆分不属 dsh 语义,不做。
+
+## 56. 子代理报告生产接线 — 网关自动撬父回合(on_report 真回合)
+
+第 16 节(store 层 report 闭环)补上生产半场:空闲父线程收到
+``wakeup`` 报告时,realtime 网关自动开一个**新父回合**承载
+``[子代理报告]``,而不是只把报告停在 store 等人来。
+
+- **宿主接线**(``realtime_gateway.py``):回合开始(``turn/start`` /
+  ``THREAD_RESUME`` 成功)即 ``_watch_thread`` 注册 store 级
+  ``register_thread_wake_handler``(refcount 管理,连接断开逐个
+  ``_unwatch_thread`` 注销);worker 线程触发 handler 时只做
+  ``loop.call_soon_threadsafe`` 调度,不阻塞报告写入。
+- **自动回合**(``_schedule_auto_turn`` + ``_maybe_auto_turn``):
+  按 thread 去重(``_auto_turn_tasks``),护栏依次是——线程有活跃回合
+  (报告已 ``queued`` 注入,直接 no-op)→ 无活连接监视(报告停靠,
+  下次 resume 浮现)→ 锁内复查 pending reports(防与用户回合竞争)。
+  输入是中性占位文本,``metadata.context.auto_wake=True`` 标记自动
+  回合;``_start_turn`` 的 steering lane 会把全部停靠报告并进同一回合
+  并 ack,完成后再发 ``turn/completed`` 快照(与 RPC 回合共用
+  ``_emit_turn_completed`` 的 fail-closed 收尾:非终态强制 FAILED +
+  completedAt + 同线程 watcher 扇出)。
+- **预算不回流**(``realtime_turn_lifecycle.py``):只有**人工**回合
+  refill dsh ``spentWakes``;自动撬起的回合不 refill——防止子代理
+  用报告无限链出新父回合。budget 耗尽的下一个 ``wakeup`` 由 store
+  同步降级 ``quiet``(第 16 节语义),handler 不被调用。
+- **锁与并发**:网关层 ``_turn_locks.hold`` 同时保护 RPC 与自动两条
+  路径;``_active_turn_threads`` 忙集合双查(调度时 + 锁内)防重入;
+  自动回合失败只 ``notify`` 错误,不崩事件循环。
+- 测试:``tests/test_realtime_cerebrum.py`` 2 例——① 人工回合后报告
+  自动出回合、预算 2 逐次消耗、第三条降 quiet、断连后 handler 注销;
+  ② budget=1 自动回合不 refill(quiet 后人工回合唯一、refill 后再次
+  自动出回合)。配套 ``_recv_deadline``(TestClient 无超时,超时不阻塞
+  shutdown)与 ``_wait_for_turn_event`` helper。网关 + lifecycle +
+  connection 三文件 ruff 干净,209 项 realtime cerebrum 回归全绿。
+
+### 尚未覆盖
+
+- workflow 编排(dsh ``packages/workflow``)、jobs 后台任务、settlement
+  通知事件桥、quiet/wakeup 独立调度器、permission-presets、credential
+  references/identity、ACP 协议、e2b 远端 SpillStore、detached
+  quiescence drain、replay 跨 writer wildcard。
 
 ## 用法速查
 
