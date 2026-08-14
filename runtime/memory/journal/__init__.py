@@ -1,4 +1,5 @@
 from .journal import (
+    AssistantChunkEvent,
     BrowserArtifactEvent,
     BudgetBreakerResetEvent,
     BudgetEvent,
@@ -45,6 +46,7 @@ from .resume import CompletedNode, ResumeInfo, resume_info
 from .sqlite_index import JournalIndex
 
 __all__ = [
+    "AssistantChunkEvent",
     "BrowserArtifactEvent",
     "BudgetEvent",
     "BudgetBreakerResetEvent",

@@ -23,6 +23,7 @@ from runtime.core.cerebrum.react_final_answer_guards import (
     _final_answer_needs_pre_emit_guard,
     _looks_like_observation_echo,
 )
+from runtime.core.cerebrum.react_loop_controls import _emit_assistant_chunk
 from runtime.core.cerebrum.react_loop_state import _LoopControl, _LoopState
 from runtime.core.cerebrum.react_model_deadlines import (
     _MODEL_STREAM_DEADLINE,
@@ -339,6 +340,12 @@ def _phase_6b_model_stream(
                             safe_end = _safe_stream_end(answer_so_far)
                             if safe_end > _streamed_final_chars:
                                 delta_out = answer_so_far[_streamed_final_chars:safe_end]
+                                _emit_assistant_chunk(
+                                    stack,
+                                    iteration=i + 1,
+                                    delta=delta_out,
+                                    task_id=react_task_id,
+                                )
                                 yield {
                                     "type": "text_delta",
                                     "delta": delta_out,
@@ -431,6 +438,12 @@ def _phase_6b_model_stream(
                                 safe_end = _safe_stream_end(answer_so_far)
                                 if safe_end:
                                     delta_out = answer_so_far[:safe_end]
+                                    _emit_assistant_chunk(
+                                        stack,
+                                        iteration=i + 1,
+                                        delta=delta_out,
+                                        task_id=react_task_id,
+                                    )
                                     yield {
                                         "type": "text_delta",
                                         "delta": delta_out,
@@ -488,6 +501,12 @@ def _phase_6b_model_stream(
                             safe_end = _safe_stream_end(joined)
                             if safe_end > _streamed_final_chars:
                                 delta_out = joined[_streamed_final_chars:safe_end]
+                                _emit_assistant_chunk(
+                                    stack,
+                                    iteration=i + 1,
+                                    delta=delta_out,
+                                    task_id=react_task_id,
+                                )
                                 yield {
                                     "type": "text_delta",
                                     "delta": delta_out,
@@ -546,6 +565,12 @@ def _phase_6b_model_stream(
                             _final_stream_started = False
                         elif len(answer_so_far) > _streamed_final_chars:
                             delta_out = answer_so_far[_streamed_final_chars:]
+                            _emit_assistant_chunk(
+                                stack,
+                                iteration=i + 1,
+                                delta=delta_out,
+                                task_id=react_task_id,
+                            )
                             yield {
                                 "type": "text_delta",
                                 "delta": delta_out,

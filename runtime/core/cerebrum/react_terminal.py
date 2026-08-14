@@ -41,6 +41,7 @@ from runtime.core.cerebrum.react_final_answer_guards import (
 from runtime.core.cerebrum.react_goal_analysis import (
     _final_answer_requests_user_help,
 )
+from runtime.core.cerebrum.react_loop_controls import _emit_assistant_chunk
 from runtime.core.cerebrum.react_model_deadlines import (
     _MODEL_STREAM_DEADLINE,
     _collect_model_stream_text_with_deadline,
@@ -339,6 +340,12 @@ def _finalize_react_turn(
 
     if final_answer and not final_answer_emitted:
         # ── finalization + react_completed yield ─────────────
+        _emit_assistant_chunk(
+            stack,
+            iteration=(steps[-1].iteration + 1) if steps else 1,
+            delta=final_answer,
+            task_id=react_task_id,
+        )
         yield {
             "type": "text_delta",
             "delta": final_answer,

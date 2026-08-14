@@ -50,6 +50,7 @@ JournalEventType = Literal[
     "browser_artifact",
     "goal_change",
     "user/message",
+    "assistant/chunk",
 ]
 
 
@@ -370,6 +371,24 @@ class SubToolEndEvent(JournalEvent):
     duration_ms: int = 0
     output_preview: str = ""
     parent_tool_use_id: str | None = None
+
+
+class AssistantChunkEvent(JournalEvent):
+    """One streamed parent-reply chunk (dsh ``assistant/chunk``).
+
+    Mirrors the react loop's ``text_delta`` events: every user-visible
+    final-answer fragment the loop releases lands here, so the
+    assistant's streamed text is reconstructable from the journal
+    alone (dsh session-log invariant). ``kind`` mirrors dsh's
+    ``StreamChunk`` lane — ``"text-delta"`` today; future
+    ``"reasoning-delta"`` / ``"tool-call-delta"`` lanes slot in
+    without a schema change.
+    """
+
+    event_type: Literal["assistant/chunk"] = "assistant/chunk"
+    iteration: int = 0
+    kind: str = "text-delta"
+    delta: str = ""
 
 
 class SubTextDeltaEvent(JournalEvent):

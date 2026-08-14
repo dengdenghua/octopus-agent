@@ -16,6 +16,7 @@ from runtime.platform.models import (
 from runtime.safety.auth.scope import TenantScope
 
 from ._journal_models import (
+    AssistantChunkEvent,
     BudgetBreakerResetEvent,
     BudgetEvent,
     CurriculumGoalDecisionEvent,
@@ -708,6 +709,30 @@ class Journal:
         self.write(
             GoalChangeEvent(
                 change=change,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
+
+    def write_assistant_chunk(
+        self,
+        *,
+        iteration: int,
+        delta: str,
+        kind: str = "text-delta",
+        task_id: TaskId | None = None,
+    ) -> None:
+        """Append one streamed parent-reply chunk (dsh ``assistant/chunk``).
+
+        ``iteration`` is the react-loop turn number; ``kind`` mirrors
+        dsh's ``StreamChunk`` lane (``"text-delta"`` today).
+        """
+        self.write(
+            AssistantChunkEvent(
+                task_id=task_id,
+                iteration=int(iteration),
+                kind=kind,
+                delta=delta,
                 agent_id=current_agent_id(),
                 conversation_id=current_conversation_id(),
             )

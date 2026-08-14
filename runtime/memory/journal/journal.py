@@ -25,6 +25,7 @@ from runtime.safety.invariants.enforce import enforces
 from ._journal_base import Journal
 from ._journal_models import (
     CURRENT_SCHEMA_VERSION,
+    AssistantChunkEvent,
     BrowserArtifactEvent,
     BudgetBreakerResetEvent,
     BudgetEvent,
@@ -71,6 +72,7 @@ __all__ = [
     "Journal",
     "JournalEvent",
     "JournalEventType",
+    "AssistantChunkEvent",
     "StepEvent",
     "TrajectoryEvent",
     "ImmuneEvent",

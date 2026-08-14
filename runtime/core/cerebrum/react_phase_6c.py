@@ -44,6 +44,7 @@ from runtime.core.cerebrum.react_final_answer_guards import (
     _try_clean_downgrade,
     _unfinished_implementation_recovery_needed,
 )
+from runtime.core.cerebrum.react_loop_controls import _emit_assistant_chunk
 from runtime.core.cerebrum.react_loop_state import (
     _LoopControl,
     _LoopState,
@@ -305,6 +306,12 @@ def _phase_6c_parse_and_guard(
             # parsed final once. When _final_stream_started is true the
             # user has already seen these tokens live, so skip to avoid
             # duplicate text in the transcript.
+            _emit_assistant_chunk(
+                stack,
+                iteration=i + 1,
+                delta=maybe_final,
+                task_id=react_task_id,
+            )
             yield {
                 "type": "text_delta",
                 "delta": maybe_final,
@@ -433,6 +440,12 @@ def _phase_6c_parse_and_guard(
                 # Surface the partial text so the user sees streaming
                 # progress; don't count it against bail-at.
                 if text and not maybe_final and not _final_stream_started:
+                    _emit_assistant_chunk(
+                        stack,
+                        iteration=i + 1,
+                        delta=text,
+                        task_id=react_task_id,
+                    )
                     yield {
                         "type": "text_delta",
                         "delta": text,
@@ -585,6 +598,12 @@ def _phase_6c_parse_and_guard(
                         # the gateway still marked a visibly complete reply as
                         # interrupted. Finish the turn normally instead.
                         if not _final_stream_started:
+                            _emit_assistant_chunk(
+                                stack,
+                                iteration=i + 1,
+                                delta=text,
+                                task_id=react_task_id,
+                            )
                             yield {
                                 "type": "text_delta",
                                 "delta": text,

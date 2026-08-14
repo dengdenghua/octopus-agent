@@ -109,6 +109,77 @@ def derive_model_messages(
 
 
 @dataclass(frozen=True)
+class AssistantChunkStream:
+    """One iteration's streamed parent-reply text, rebuilt from the journal.
+
+    ``text`` is the exact concatenation of that iteration's
+    ``assistant/chunk`` deltas in journal order; ``chunk_count`` is how
+    many chunks the log recorded (proves per-chunk fidelity, not just
+    an opaque final string).
+    """
+
+    iteration: int
+    text: str
+    chunk_count: int
+
+
+def derive_assistant_stream(
+    journal: Journal,
+    *,
+    iteration: int | None = None,
+) -> list[AssistantChunkStream]:
+    """Reconstruct the parent's streamed reply from ``assistant/chunk`` rows.
+
+    The dsh session-log invariant applied to the main turn: the
+    user-visible assistant text is recoverable from the append-only
+    journal alone, in journal order, grouped by iteration. Iterations
+    that streamed no text contribute nothing.
+    """
+
+    chunks: dict[int, list[str]] = {}
+    order: list[int] = []
+    for event in journal.read_all():
+        if event.event_type != "assistant/chunk":
+            continue
+        # ``getattr`` guards against an untyped fallback row (unknown
+        # event_type decodes to the base JournalEvent).
+        event_iter = int(getattr(event, "iteration", 0) or 0)
+        if iteration is not None and event_iter != iteration:
+            continue
+        if event_iter not in chunks:
+            chunks[event_iter] = []
+            order.append(event_iter)
+        chunks[event_iter].append(getattr(event, "delta", "") or "")
+    return [
+        AssistantChunkStream(
+            iteration=key,
+            text="".join(chunks[key]),
+            chunk_count=len(chunks[key]),
+        )
+        for key in order
+    ]
+
+
+def assert_logged_assistant_reconstructs(
+    journal: Journal,
+    expected: list[AssistantChunkStream],
+    *,
+    iteration: int | None = None,
+) -> None:
+    """Assert the journal reconstructs the given streamed reply — round-trip.
+
+    Mirrors ``assert_logged_stream_reconstructs`` for the parent reply
+    lane: call from tests and audit paths that must prove the text a
+    turn streamed is fully recoverable from the log.
+    """
+
+    actual = derive_assistant_stream(journal, iteration=iteration)
+    assert actual == expected, (
+        f"derived {len(actual)} iteration-streams, expected {len(expected)}"
+    )
+
+
+@dataclass(frozen=True)
 class SubagentRoundStream:
     """One role's streamed prose for one round, rebuilt from the journal.
 

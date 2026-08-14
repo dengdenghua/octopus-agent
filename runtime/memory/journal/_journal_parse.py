@@ -5,6 +5,7 @@ from typing import Any
 
 from ._journal_models import (
     CURRENT_SCHEMA_VERSION,
+    AssistantChunkEvent,
     BrowserArtifactEvent,
     BudgetBreakerResetEvent,
     BudgetEvent,
@@ -62,6 +63,7 @@ _EVENT_CLASSES: dict[str, type[JournalEvent]] = {
     "file_rollback": FileRollbackEvent,
     "goal_change": GoalChangeEvent,
     "user/message": UserMessageEvent,
+    "assistant/chunk": AssistantChunkEvent,
     "sub_tool_start": SubToolStartEvent,
     "sub_tool_end": SubToolEndEvent,
     "sub_text_delta": SubTextDeltaEvent,

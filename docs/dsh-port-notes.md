@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十七个差距点已落地为可测试代码(1-27 节)
+**状态**: 二十八个差距点已落地为可测试代码(1-28 节)
 
 ---
 
@@ -778,11 +778,50 @@ dsh session 日志的不变式是「模型可见即入日志」:回合内流式�
   回环、emitter+journal 双写、无 session no-op、多轮重建、按角色
   过滤、空日志、跳过非 delta 事件、round-trip 断言),全部绿。
 
+### 已收口
+
+- 父级 assistant 流式文本逐 chunk 入日志——第 28 节已落地
+  (``assistant/chunk`` 事件 + react loop 全部 ``text_delta`` 发射点
+  接线);父泳道与 subagent 泳道现在都有逐 chunk 保真。
+## 28. 父级 ``assistant/chunk`` 流式入日志 (`runtime/core/cerebrum/`)
+
+第 27 节闭合了 subagent 泳道,父泳道仍只有 ``react_checkpoint`` 快照
+(按迭代)与 ``step`` 事件,回合内流式文本不进日志。dsh 的
+``assistant/chunk`` 是「模型可见即入日志」在主回合的对应物:模型
+流出的每个可见 fragment 都是 session 事件。本轮把 react loop 的全部
+``text_delta`` 发射点接到 journal:
+
+- ``_journal_models.py``:``JournalEventType`` 新增 ``"assistant/chunk"``;
+  ``AssistantChunkEvent(iteration, kind="text-delta", delta)``——
+  ``kind`` 镜像 dsh ``StreamChunk`` 泳道,未来
+  ``reasoning-delta`` / ``tool-call-delta`` 无需改 schema。
+- ``_journal_parse.py`` 注册 + JSONL 回环。
+- ``_journal_base.py``:``Journal.write_assistant_chunk(*, iteration,
+  delta, kind="text-delta", task_id=None)``,agent/conversation id 走
+  contextvars(与 checkpoint 帮手一致)。
+- ``react_loop_controls.py``:``_emit_assistant_chunk(stack, *,
+  iteration, delta, task_id)``——best-effort,无 journal 或写入失败
+  静默 no-op,telemetry 损失绝不打断 loop。
+- 接线 9 个发射点(4 模块):``react_model_stream`` 的 4 处 post-anchor
+  增量、``react_phase_6c`` 的 fall-through/截断/受守卫 prose 3 处、
+  ``react_terminal`` 收尾补发、``react_final_answer_guards`` 延迟
+  emit——全部先落 journal 再 yield,用户看到的每段文本日志里都有。
+- ``derive.py``:``derive_assistant_stream(journal, *, iteration=None)``
+  按迭代分组、按日志顺序拼接重建(``AssistantChunkStream`` 带
+  ``chunk_count``);``assert_logged_assistant_reconstructs`` 提供
+  round-trip 断言,审计路径可证明「回合流过的文本日志里全有」。
+- 测试:``tests/test_assistant_chunk_event.py`` 11 用例(事件注册、
+  JSONL 回环、write 帮手、无 journal no-op、空 delta 跳过、多迭代
+  重建、按迭代过滤、空日志、跳过非 chunk 事件、round-trip 断言),
+  全部绿;react 全量回归 1360 项通过,ruff/invariant 干净。
+
 ### 尚未覆盖(dsh 有而这里没有)
 
-- 父级 assistant 流式文本同样未逐 chunk 入日志(parent 主路径走
-  ``react_checkpoint`` 快照 + ``step`` 事件,没有 ``assistant/chunk``
-  等价事件);subagent 泳道已闭合,父泳道如需同等保真可再补。
+- 存储压缩:dsh 把连续同块 delta 打包成一行存储
+  (``chunk-rows``,token 边界仍是数据、展开无损);我们逐 chunk 一行
+  JSONL,长答案日志体积约为 dsh 打包前的量级,后续可加等价压缩。
+- ``reasoning-delta`` / ``tool-call-delta`` 泳道:目前只 journal 可见
+  ``text-delta``;dsh 连推理块与工具参数流也逐块落盘。
 ## 用法速查
 
 ```bash

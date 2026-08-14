@@ -38,6 +38,35 @@ _GUARD_TELEMETRY_SEEN_LOCK = threading.Lock()
 _GUARD_TELEMETRY_SEEN_LIMIT = 4096
 
 
+def _emit_assistant_chunk(
+    stack: Any,
+    *,
+    iteration: int,
+    delta: str,
+    task_id: Any = None,
+) -> None:
+    """Best-effort mirror of one loop ``text_delta`` as ``assistant/chunk``.
+
+    The react loop streams the user-visible final answer through
+    ``text_delta`` events; this journals each fragment so the
+    assistant's streamed text is reconstructable from the log alone
+    (dsh session-log invariant). No journal on ``stack`` → no-op;
+    write failures are swallowed — telemetry loss never breaks the
+    loop.
+    """
+    if not delta:
+        return
+    journal = getattr(stack, "journal", None)
+    if journal is None:
+        return
+    with contextlib.suppress(Exception):
+        journal.write_assistant_chunk(
+            iteration=iteration,
+            delta=delta,
+            task_id=task_id,
+        )
+
+
 def _guard_hit_recorder(
     *,
     dedupe_key: str = "",

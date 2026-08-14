@@ -22,6 +22,7 @@ from runtime.core.cerebrum.react_guards import (
 )
 from runtime.core.cerebrum.react_loop_controls import (
     _disabled_guard_labels,
+    _emit_assistant_chunk,
     _guard_hit_recorder,
 )
 from runtime.core.cerebrum.react_loop_state import _LoopControl, _LoopState
@@ -809,6 +810,12 @@ def _phase_6e_guards_and_step_emit(
             elif _deferred_final_emit:
                 _delta = (
                     maybe_final[_streamed_final_chars:] if _streamed_final_chars else maybe_final
+                )
+                _emit_assistant_chunk(
+                    state.stack,
+                    iteration=i + 1,
+                    delta=_delta,
+                    task_id=react_task_id,
                 )
                 yield {
                     "type": "text_delta",
