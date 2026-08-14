@@ -77,6 +77,7 @@ from runtime.core.cerebrum.react_final_answer_content_guards import (  # noqa: F
     _answer_item_count_guard,
     _fabricated_citation_guard,
     _incomplete_final_answer_guard,
+    _research_missing_lookup_guard,
     _ungrounded_external_fact_guard,
 )
 from runtime.core.cerebrum.react_goal_analysis import (  # noqa: F401 — re-exported for tool_bridge / react_convergence / react_explicit_reads / react_prompt_assembly / tests
@@ -85,6 +86,7 @@ from runtime.core.cerebrum.react_goal_analysis import (  # noqa: F401 — re-exp
     _final_answer_requests_user_help,
     _goal_requests_code_mutation,
     _goal_requests_project_inspection,
+    _goal_requests_research_lookup,
     _goal_requires_file_content,
     _normalize_evidence_path,
     _path_evidence_matches,
@@ -141,21 +143,41 @@ from runtime.core.cerebrum.react_verification_guards import (  # noqa: F401 — 
     _unverified_write_followup_guard,
     _wire_schema_change_without_compat_test_guard,
 )
+from runtime.core.cerebrum.react_repeat_tool_guards import (  # noqa: F401 — re-exported
+    _consecutive_same_tool_guard,
+    _repeat_tool_reminder_guard,
+)
+from runtime.core.cerebrum.react_timeout_guards import (  # noqa: F401 — re-exported
+    _consecutive_timeout_guard,
+    _timeout_policy_guard,
+)
 
 
 def _invoke_missing_inspection(ctx: GuardContext) -> str | None:
-    if not ctx.is_code_mode:
+    if ctx.is_code_mode:
+        if ctx.browser_operation_mode and _browser_goal_is_ui_only(ctx.goal):
+            # Browser turns inspect the app through browser_state/browser_get;
+            # the file-inspection requirement belongs to workspace code tasks.
+            return None
+        return _code_mode_missing_inspection_tool_guard(
+            ctx.steps,
+            ctx.final_answer,
+            goal=ctx.goal,
+            file_tools_visible=ctx.file_inspection_tools_visible,
+            grounded_source_paths=ctx.grounded_source_paths,
+        )
+    if ctx.browser_operation_mode:
+        # Browser turns prove their work through browser-action evidence
+        # (_browser_interaction_completion_guard), not a lookup.
         return None
-    if ctx.browser_operation_mode and _browser_goal_is_ui_only(ctx.goal):
-        # Browser turns inspect the app through browser_state/browser_get;
-        # the file-inspection requirement belongs to workspace code tasks.
-        return None
-    return _code_mode_missing_inspection_tool_guard(
+    # Non-code (research/chat) turns: the same "goal demands work → require a
+    # successful tool observation" contract as code mode, keyed to lookup
+    # vocabulary and gated on any tools being present (pure chat has none).
+    return _research_missing_lookup_guard(
         ctx.steps,
         ctx.final_answer,
         goal=ctx.goal,
-        file_tools_visible=ctx.file_inspection_tools_visible,
-        grounded_source_paths=ctx.grounded_source_paths,
+        tools_active=ctx.tools_active,
     )
 
 
@@ -267,6 +289,34 @@ def _invoke_mixed_mode_completion(ctx: GuardContext) -> str | None:
     return _mixed_mode_completion_guard(ctx)
 
 
+def _invoke_repeat_tool_reminder(ctx: GuardContext) -> str | None:
+    """Check for repeated tool calls within a window."""
+    if not ctx.tools_active:
+        return None
+    return _repeat_tool_reminder_guard(ctx.steps, ctx.final_answer, threshold=3, window=5)
+
+
+def _invoke_consecutive_same_tool(ctx: GuardContext) -> str | None:
+    """Check for consecutive identical tool calls (stricter)."""
+    if not ctx.tools_active:
+        return None
+    return _consecutive_same_tool_guard(ctx.steps, ctx.final_answer, threshold=3)
+
+
+def _invoke_timeout_policy(ctx: GuardContext) -> str | None:
+    """Check for repeated tool timeouts within a window."""
+    if not ctx.tools_active:
+        return None
+    return _timeout_policy_guard(ctx.steps, ctx.final_answer, threshold=2, window=5)
+
+
+def _invoke_consecutive_timeout(ctx: GuardContext) -> str | None:
+    """Check for consecutive tool timeouts (stricter)."""
+    if not ctx.tools_active:
+        return None
+    return _consecutive_timeout_guard(ctx.steps, ctx.final_answer, threshold=2)
+
+
 def _preview_labels(labels: list[str], limit: int = 3) -> str:
     preview = ", ".join(labels[:limit])
     if len(labels) > limit:
@@ -355,6 +405,12 @@ GUARD_REGISTRY: list[GuardSpec] = [
     _spec_security("shell-injection guard", "security", _shell_injection_guard),
     _spec_security("unsafe-deser guard", "security", _unsafe_deser_guard),
     _spec_code_mode("path-boundary decode guard", "security", _path_boundary_decode_guard),
+    # ── Loop detection (DSH P1: repeat-tool-reminder) ──
+    GuardSpec("consecutive-same-tool guard", "protocol", _invoke_consecutive_same_tool),
+    GuardSpec("repeat-tool-reminder guard", "protocol", _invoke_repeat_tool_reminder),
+    # ── Timeout detection (DSH P1: timeout-policy) ──
+    GuardSpec("consecutive-timeout guard", "protocol", _invoke_consecutive_timeout),
+    GuardSpec("timeout-policy guard", "protocol", _invoke_timeout_policy),
     # ── Tool-availability / inspection-evidence ──
     GuardSpec("final-answer completeness guard", "protocol", _invoke_incomplete_final),
     GuardSpec("answer-item-count guard", "protocol", _invoke_answer_item_count),
@@ -634,6 +690,7 @@ __all__ = [
     "_final_answer_requests_user_help",
     "_goal_requests_code_mutation",
     "_goal_requests_project_inspection",
+    "_goal_requests_research_lookup",
     "_goal_requires_file_content",
     "_normalize_evidence_path",
     "_path_evidence_matches",
@@ -672,6 +729,7 @@ __all__ = [
     "_answer_item_count_guard",
     "_fabricated_citation_guard",
     "_incomplete_final_answer_guard",
+    "_research_missing_lookup_guard",
     "_ungrounded_external_fact_guard",
     # ── Security guards (re-exported) ──
     "_dynamic_exec_guard",
