@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-14
 **来源**: [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (2026-08-13 开源, MIT)
-**状态**: 二十三个差距点已落地为可测试代码(1-23 节)
+**状态**: 二十四个差距点已落地为可测试代码(1-24 节)
 
 ---
 
@@ -603,6 +603,46 @@ agent(`agentEvents(ctx, agent).emit('goal/changed', ...)`),并让目标状态
 - ``replay`` 无跨 writer wildcard 语义:回放仍读全量事件再按订阅过滤,
   与 live 桥的 wildcard 行为一致;若将来要把服务绑定死单 agent,可把
   回放也切到 ``_scoped_goal_events``。
+## 24. executor render/materialize 投影 (`tool_engine/session_projection.py`)
+
+dsh 的 ``@dsh-session-reference`` 在把**别的会话**的上下文注入当前模型
+请求前,先把目标会话的会话面 materialize 成一个只读快照,并精确压进
+字节预算(dsh ``retainReferencedSession`` + ``stringifyTagSafeJson``)。
+我们此前对「跨会话引用」只有 subagent 续会话的逐轮 head 截断;本轮
+把 dsh 投影算法整体移植:
+
+- `project_session_conversation(events)` — 会话面投影:只保留直接
+  user(或 compaction checkpoint)与 assistant 文本消息,跳过
+  tool/result、推理、注入上下文与空文本,非文本块忽略。
+- `retain_session_reference(...)` — 两阶段保留:先整条丢弃非
+  checkpoint 消息(最旧先丢、保最新),再对最长保留消息做 head/tail
+  二分截断 + 精确 ``[… omitted N UTF-8 bytes …]`` 通知;固定字段单独
+  放不下返回 ``None``(dsh 预算契约,绝不返回半截上下文)。
+- `truncate_with_notice(text, max_bytes)` — 二分 head/tail 预览,
+  检索候选 ``{preview}\n[… omitted N …]`` 不超过预算时取最优;
+  `head_tail_preview_bytes` 从 spill 模块抽出复用(整数字节对齐)。
+- `stringify_tag_safe_json` — 每个 ``<`` 转义为 ``\u003c``,源文本
+  永远无法拼出 framing 标签(dsh 防注入)。
+- `is_compact_checkpoint_source` — ``{kind:'plugin',plugin:'compact'}``
+  判定 compaction checkpoint(dsh ``isCompactCheckpointSource``)。
+- 集成:subagent 续会话 ``transcript_prompt(..., bounded=...)`` 新增
+  bounded 分支,把 dsh 投影渲染为续接前缀;``bridge.py`` 注入 transcript
+  的调用点通过 ``OCTOPUS_SESSION_REFERENCE_BOUNDED=1`` 开关启用,
+  默认关(保持旧行为,host 按需 opt-in,与 dsh 一样是显式服务)。
+- 测试:`tests/test_session_projection.py` 14 用例(投影过滤、checkpoint
+  保最新、丢弃计数、截断通知、固定字段预算、tag-safe 转义、空输入)
+  + `tests/test_subagent_sessions.py` 3 个 bounded 用例,均绿;回归
+  subagent/ephemeral/tool_output/pruner 539 项通过,ruff/invariant 干净。
+
+### 尚未覆盖(dsh 有而这里没有)
+
+- 跨会话引用解析层:dsh 有 ``@dsh-session-reference`` 服务、URI 解码、
+  候选限制(candidateLimit)与 reference 包裹前缀/后缀,我们只落地了
+  投影算法与 subagent 续会话集成,没有通用的「任意 session URI → 投影
+  注入」解析面;如需完整跨会话引用可再补 resolver。
+- checkpoint 事件源:当前只把 subagent turn 拍成 dsh surface 事件形状;
+  若 executor 主路径也走会话面,应把真实 session journal 事件直接喂给
+  投影,而非从 turn 重建。
 ## 用法速查
 
 ```bash

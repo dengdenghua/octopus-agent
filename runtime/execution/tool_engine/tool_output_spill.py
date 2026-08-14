@@ -190,13 +190,38 @@ def head_tail_preview(text: str, budget_bytes: int) -> tuple[str, int]:
     """
     if budget_bytes <= 0:
         return "", len(text.encode("utf-8"))
-    data = text.encode("utf-8")
-    total = len(data)
-    if total <= budget_bytes:
-        return text, 0
     head_bytes = math.ceil(budget_bytes / 2)
     tail_bytes = math.floor(budget_bytes / 2)
-    head = data[:head_bytes]
+    return head_tail_preview_bytes(
+        text,
+        head_bytes=head_bytes,
+        tail_bytes=tail_bytes,
+    )
+
+
+def head_tail_preview_bytes(
+    text: str,
+    *,
+    head_bytes: int,
+    tail_bytes: int,
+) -> tuple[str, int]:
+    """Return ``(preview, omitted_bytes)`` keeping ``head_bytes + tail_bytes``.
+
+    The head keeps the first ``head_bytes`` and the tail the final
+    ``tail_bytes``. UTF-8 boundaries are preserved at each cut (the head is
+    trimmed of a trailing partial codepoint and the tail of leading
+    continuation bytes), so the preview never carries a replacement char from
+    the cut itself. ``omitted_bytes`` is exact (total minus actually returned
+    bytes, after boundary trims). Shared by the spill preview and the
+    session-reference projection (dsh ``output-retention`` TextRetainer).
+    """
+    if head_bytes <= 0 and tail_bytes <= 0:
+        return "", len(text.encode("utf-8"))
+    data = text.encode("utf-8")
+    total = len(data)
+    if total <= head_bytes + tail_bytes:
+        return text, 0
+    head = data[:head_bytes] if head_bytes else b""
     tail = data[total - tail_bytes :] if tail_bytes else b""
     head_text = head.decode("utf-8", errors="ignore")
     tail_text = _decode_tail_slice(tail)

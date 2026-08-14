@@ -292,7 +292,7 @@ def test_render_tool_output_spills_before_prune(tmp_path, monkeypatch) -> None:
             max_chars=16000,
             prune_middle=True,
             spill_oversized=True,
-            spill_tool_name="exec_shell",
+            tool_name="exec_shell",
         )
         pruned = render_tool_output(
             long_output,
@@ -316,7 +316,7 @@ def test_normalize_result_passes_spill_through(tmp_path, monkeypatch) -> None:
             max_chars=16000,
             prune_middle=True,
             spill_oversized=True,
-            spill_tool_name="exec_shell",
+            tool_name="exec_shell",
         )
     assert "Full formatted result stored at:" in result.rendered
     assert result.is_error is False
@@ -332,7 +332,7 @@ def test_normalize_result_passes_spill_through(tmp_path, monkeypatch) -> None:
             max_chars=16000,
             prune_middle=True,
             spill_oversized=True,
-            spill_tool_name="exec_shell",
+            tool_name="exec_shell",
         )
     assert "Full formatted result stored at:" in step_result.rendered
 
