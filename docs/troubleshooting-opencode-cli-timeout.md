@@ -1,4 +1,4 @@
-# 本地 CLI 伙伴兼容性问题诊断
+# 本地 CLI 伙伴兼容性问题诊断与修复
 
 ## 问题描述
 
@@ -13,54 +13,88 @@ Local partner "OpenCode CLI 伙伴" timed out (no result within 240s).
 
 ## 根本原因
 
-**OpenCode CLI 未配置 AI 提供商凭证**
+**OpenCode CLI 缺少 `--auto` 标志**
+
+OpenCode `run` 命令在非交互模式下需要 `--auto` 标志来自动批准权限请求。
+没有这个标志，CLI 会等待用户交互确认，导致超时。
 
 验证：
 ```bash
-$ /Users/dangbei/.opencode/bin/opencode providers list
-┌  Credentials ~/.local/share/opencode/auth.json
-│
-└  0 credentials  # ← 没有配置任何提供商！
+# ❌ 会卡住等待权限确认
+$ opencode run "你是谁"
+
+# ✅ 正常工作
+$ opencode run --auto "你是谁"
+> build · big-pickle
+我是 opencode，一个命令行 AI 编程助手...
 ```
 
-当 OpenCode 没有凭证时，`opencode run` 命令会：
-1. 启动但无法调用 AI 模型
-2. 可能等待用户交互配置
-3. 最终超时（240秒后）
+## 修复方案
 
-## 解决方案
+### 已修复
 
-### 方案 1：配置 OpenCode 凭证（推荐）
+在 `runtime/execution/agents/local_partner_bridge.py` 中添加 `--auto` 标志：
 
-```bash
-# 添加提供商凭证
-opencode providers add
-
-# 或者使用环境变量
-export ANTHROPIC_API_KEY="sk-ant-..."
-# 或
-export OPENAI_API_KEY="sk-..."
+```python
+if partner_id == "opencode-cli":
+    return [
+        command,
+        "run",
+        *(["-m", m] if m else []),
+        "--auto",  # ← 添加此标志
+        prompt_arg,
+    ]
 ```
 
-### 方案 2：在 Octopus 中禁用 OpenCode 伙伴
-
-如果不需要使用 OpenCode CLI，可以在 Octopus 中禁用该伙伴：
-
+修复后的命令：
 ```bash
-# 查找 OpenCode 伙伴 agent 配置
-find agents -name "*opencode*" -type f
-
-# 编辑或删除 agents/local_opencode_cli/profile.jsonc
+opencode run --auto "你是谁"
 ```
 
-### 方案 3：增加超时时间（临时方案）
+### OpenCode 模型格式
+
+OpenCode 使用自己的模型命名空间：
+```bash
+# 可用的模型
+opencode/big-pickle                    # 默认
+opencode/deepseek-v4-flash-free        # DeepSeek 免费版
+opencode/hy3-free
+opencode/laguna-s-2.1-free
+opencode/mimo-v2.5-free
+opencode/nemotron-3-ultra-free
+opencode/nemotron-3.5-lightning-free
+```
+
+使用示例：
+```bash
+opencode run -m opencode/deepseek-v4-flash-free --auto "分析代码"
+```
+
+## 测试验证
+
+### 1. 直接测试 OpenCode CLI
 
 ```bash
-# 设置更长的超时时间
-export OCTOPUS_LOCAL_PARTNER_TIMEOUT=600  # 10分钟
+# 测试默认模型
+$ opencode run --auto "echo hello"
+> build · big-pickle
+$ echo hello
+hello
 
+# 测试指定模型
+$ opencode run -m opencode/deepseek-v4-flash-free --auto "你是谁"
+我是 opencode，一个命令行 AI 编程助手...
+```
+
+### 2. 在 Octopus 中测试
+
+```bash
 # 重启 Octopus
 make dev-full
+
+# 访问 http://localhost:3000
+# 创建新对话，选择 "OpenCode CLI 伙伴"
+# 发送消息，应该能在 240 秒内正常响应
 ```
 
 ## 技术细节

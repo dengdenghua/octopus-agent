@@ -1,5 +1,6 @@
 """Execution bridge for LocalPartner agents — drive an official coding-agent
-CLI (Claude Code, Codex, Trae, Qoder) directly, with the user's own login/subscription.
+CLI (Claude Code, Codex, Trae, Qoder, OpenCode) directly, with the user's own
+login/subscription.
 
 LocalPartner registration (``agents_local_partner.write_partner_agent``) detects
 an installed CLI and writes an agent whose ``profile.jsonc`` carries::
@@ -52,7 +53,9 @@ _DEFAULT_TIMEOUT_S = 240.0
 _MAX_OUTPUT_CHARS = 20_000
 
 _SLASH_COMMAND_RE = re.compile(r"^/([A-Za-z][A-Za-z0-9_-]*)(?:\s+(.*))?$")
-_MODEL_FLAG_PARTNERS = frozenset({"claude-code", "codex-cli", "codebuddy-cli"})
+_MODEL_FLAG_PARTNERS = frozenset(
+    {"claude-code", "codex-cli", "codebuddy-cli", "opencode-cli"}
+)
 _CONTROL_ONLY_SLASH_COMMANDS = frozenset(
     {
         "clear",
@@ -78,6 +81,7 @@ _PARTNER_LABELS = {
     "qoder-cli": "Qoder CLI",
     "kimi-cli": "Kimi CLI",
     "codebuddy-cli": "CodeBuddy CLI",
+    "opencode-cli": "OpenCode CLI",
 }
 
 
@@ -560,6 +564,8 @@ def build_partner_argv(
         (official CodeBuddy CLI headless mode). The desktop/IDE ``buddy``
         launcher is intentionally not driven headless here because it opens UI
         chat sessions rather than returning an answer on stdout.
+      * ``opencode-cli`` → ``opencode run [-m <provider/model>] "<prompt>"``
+        (one-shot non-interactive run; output is returned on stdout).
 
     ``model`` (when set to a CLI-valid name) overrides the CLI's configured
     default. ``None`` / ``"auto"`` → the CLI keeps its own default.
@@ -599,6 +605,14 @@ def build_partner_argv(
             *(["--model", m] if m else []),
             "--output-format",
             "text",
+            prompt_arg,
+        ]
+    if partner_id == "opencode-cli":
+        return [
+            command,
+            "run",
+            *(["-m", m] if m else []),
+            "--auto",  # auto-approve permissions (non-interactive mode)
             prompt_arg,
         ]
     return None
